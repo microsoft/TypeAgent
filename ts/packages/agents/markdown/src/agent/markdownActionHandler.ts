@@ -205,10 +205,8 @@ export async function createViewServiceHost(filePath: string) {
         },
     );
 
-    return Promise.race([viewServicePromise, timeoutPromise]).then(
-        (result) => {
-            clearTimeout(timeoutHandle);
-            return result;
-        },
-    );
+    return Promise.race([viewServicePromise, timeoutPromise]).then((result) => {
+        clearTimeout(timeoutHandle);
+        return result;
+    });
 }

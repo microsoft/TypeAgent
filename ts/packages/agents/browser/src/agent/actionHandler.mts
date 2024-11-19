@@ -297,7 +297,9 @@ export async function createAutomationBrowser(isVisible?: boolean) {
           new URL(path.join("..", "./puppeteer/index.mjs"), import.meta.url),
         );
 
-        const childProcess = fork(expressService, [isVisible? "true": "false"]);
+        const childProcess = fork(expressService, [
+          isVisible ? "true" : "false",
+        ]);
 
         childProcess.on("message", function (message) {
           if (message === "Success") {
