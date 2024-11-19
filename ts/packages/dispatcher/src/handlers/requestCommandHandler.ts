@@ -264,7 +264,7 @@ async function translateRequestWithTranslator(
     let streamFunction: IncrementalJsonValueCallBack | undefined;
     systemContext.streamingActionContext = undefined;
     const onProperty: IncrementalJsonValueCallBack | undefined =
-        systemContext.session.getConfig().stream
+        systemContext.session.getConfig().translation.stream
             ? (prop: string, value: any, delta: string | undefined) => {
                   // TODO: streaming currently doesn't not support multiple actions
                   if (prop === "actionName" && delta === undefined) {
@@ -388,7 +388,8 @@ async function getNextTranslation(
         return undefined;
     }
 
-    return context.sessionContext.agentContext.session.getConfig().switch.search
+    const config = context.sessionContext.agentContext.session.getConfig();
+    return config.translation.switch.search
         ? findAssistantForRequest(request, translatorName, context)
         : undefined;
 }
@@ -502,8 +503,8 @@ function getChatHistoryForTranslation(
         role: "system",
     });
     const entities = context.chatHistory.getTopKEntities(20);
-    const additionalInstructions = context.session.getConfig().promptConfig
-        .additionalInstructions
+    const additionalInstructions = context.session.getConfig().translation
+        .promptConfig.additionalInstructions
         ? context.chatHistory.getCurrentInstructions()
         : undefined;
     return { promptSections, entities, additionalInstructions };
@@ -929,7 +930,8 @@ export class RequestCommandHandler implements CommandHandler {
                 }
             }
 
-            const history = systemContext.session.getConfig().history
+            const history = systemContext.session.getConfig().translation
+                .history
                 ? getChatHistoryForTranslation(systemContext)
                 : undefined;
             if (history) {

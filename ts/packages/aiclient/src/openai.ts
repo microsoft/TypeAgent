@@ -9,7 +9,7 @@ import {
     ImageModel,
     ImageGeneration,
 } from "./models";
-import { FetchThrottler, callApi, callJsonApi } from "./restClient";
+import { callApi, callJsonApi, FetchThrottler } from "./restClient";
 import { getEnvSetting } from "./common";
 import {
     PromptSection,
@@ -22,17 +22,19 @@ import {
 } from "typechat";
 import { readServerEventStream } from "./serverEvents";
 import { priorityQueue } from "async";
-import {
-    AuthTokenProvider,
-    AzureTokenScopes,
-    createAzureTokenProvider,
-} from "./auth";
 import registerDebug from "debug";
 import { TokenCounter } from "./tokenCounter";
+import {
+    createOllamaChatModel,
+    OllamaApiSettings,
+    ollamaApiSettingsFromEnv,
+} from "./ollamaModels";
+import { OpenAIApiSettings, openAIApiSettingsFromEnv } from "./openaiSettings";
+import { AzureApiSettings, azureApiSettingsFromEnv } from "./azureSettings";
+
+export { azureApiSettingsFromEnv };
 
 const debugOpenAI = registerDebug("typeagent:openai");
-
-const IdentityApiKey = "identity";
 
 export enum ModelType {
     Chat = "chat",
@@ -47,28 +49,24 @@ export type ModelInfo<T> = {
     maxTokens: number;
 };
 
+export type ModelProviders = "openai" | "azure" | "ollama";
+
+export type CommonApiSettings = {
+    provider: ModelProviders;
+    modelType: ModelType;
+    endpoint: string;
+    maxRetryAttempts?: number;
+    retryPauseMs?: number;
+    maxConcurrency?: number | undefined;
+    throttler?: FetchThrottler;
+};
 /**
  * Settings used by OpenAI clients
  */
-export type ApiSettings = {
-    isAzure: boolean; // calling an Azure Open API endpoint
-    modelType: ModelType;
-    endpoint: string;
-    apiKey: string;
-    modelName?: string;
-    organization?: string;
-    maxRetryAttempts?: number;
-    retryPauseMs?: number;
-    supportsResponseFormat?: boolean; // only apply to chat models
-    maxConcurrency?: number | undefined;
-    throttler?: FetchThrottler;
-    azureSettings?: AzureApiSettings | undefined;
-    maxPromptChars?: number | undefined; // Maximum # of allowed prompt chars to send
-};
-
-export type AzureApiSettings = {
-    tokenProvider?: AuthTokenProvider;
-};
+export type ApiSettings =
+    | OllamaApiSettings
+    | AzureApiSettings
+    | OpenAIApiSettings;
 
 /**
  * Environment variables used to configure OpenAI clients
@@ -95,6 +93,8 @@ export enum EnvVars {
 
     AZURE_OPENAI_API_KEY_DALLE = "AZURE_OPENAI_API_KEY_DALLE",
     AZURE_OPENAI_ENDPOINT_DALLE = "AZURE_OPENAI_ENDPOINT_DALLE",
+
+    OLLAMA_ENDPOINT = "OLLAMA_ENDPOINT",
 }
 
 export const MAX_PROMPT_LENGTH_DEFAULT = 1000 * 60;
@@ -117,213 +117,6 @@ export function apiSettingsFromEnv(
     }
 
     return azureApiSettingsFromEnv(modelType, env, endpointName);
-}
-
-/**
- * Load settings for the OpenAI services from env
- * @param modelType Chat or Embedding
- * @param env Environment variables
- * @param endpointName Name of endpoint, e.g. GPT_35_TURBO or PHI3. This is appended as a suffix to base environment key
- * @param requireEndpoint If false (default), falls back to using non-endpoint specific settings
- * @returns
- */
-
-export function openAIApiSettingsFromEnv(
-    modelType: ModelType,
-    env?: Record<string, string | undefined>,
-    endpointName?: string,
-    requireEndpoint: boolean = false,
-): ApiSettings {
-    env ??= process.env;
-    return {
-        isAzure: false,
-        modelType: modelType,
-        apiKey: getEnvSetting(env, EnvVars.OPENAI_API_KEY, endpointName),
-        endpoint: getEnvSetting(
-            env,
-            modelType === ModelType.Chat
-                ? EnvVars.OPENAI_ENDPOINT
-                : EnvVars.OPENAI_ENDPOINT_EMBEDDING,
-            endpointName,
-            undefined,
-            requireEndpoint,
-        ),
-        modelName: getEnvSetting(
-            env,
-            modelType === ModelType.Chat
-                ? EnvVars.OPENAI_MODEL
-                : EnvVars.OPENAI_MODEL_EMBEDDING,
-            endpointName,
-        ),
-        organization: getEnvSetting(
-            env,
-            EnvVars.OPENAI_ORGANIZATION,
-            endpointName,
-        ),
-        supportsResponseFormat:
-            getEnvSetting(
-                env,
-                EnvVars.OPENAI_RESPONSE_FORMAT,
-                endpointName,
-                "0",
-            ) === "1",
-        maxConcurrency: getMaxConcurrencyFromEnv(
-            env,
-            EnvVars.OPENAI_MAX_CONCURRENCY,
-            endpointName,
-        ),
-    };
-}
-const azureTokenProvider = createAzureTokenProvider(
-    AzureTokenScopes.CogServices,
-);
-/**
- * Load settings for the Azure OpenAI services from env
- * @param modelType
- * @param env
- * @returns
- */
-export function azureApiSettingsFromEnv(
-    modelType: ModelType,
-    env?: Record<string, string | undefined>,
-    endpointName?: string,
-): ApiSettings {
-    env ??= process.env;
-    const settings =
-        modelType == ModelType.Chat
-            ? azureChatApiSettingsFromEnv(env, endpointName)
-            : modelType == ModelType.Image
-              ? azureImageApiSettingsFromEnv(env, endpointName)
-              : azureEmbeddingApiSettingsFromEnv(env, endpointName);
-
-    if (settings.apiKey.toLowerCase() === IdentityApiKey) {
-        settings.azureSettings = {
-            tokenProvider: azureTokenProvider,
-        };
-    }
-
-    return settings;
-}
-
-/**
- * Load settings for the Azure OpenAI Chat Api from env
- * @param env
- * @returns
- */
-function azureChatApiSettingsFromEnv(
-    env: Record<string, string | undefined>,
-    endpointName?: string,
-): ApiSettings {
-    return {
-        isAzure: true,
-        modelType: ModelType.Chat,
-        apiKey: getEnvSetting(env, EnvVars.AZURE_OPENAI_API_KEY, endpointName),
-        endpoint: getEnvSetting(
-            env,
-            EnvVars.AZURE_OPENAI_ENDPOINT,
-            endpointName,
-        ),
-        supportsResponseFormat:
-            getEnvSetting(
-                env,
-                EnvVars.AZURE_OPENAI_RESPONSE_FORMAT,
-                endpointName,
-                "0",
-            ) === "1",
-        maxConcurrency: getMaxConcurrencyFromEnv(
-            env,
-            EnvVars.AZURE_OPENAI_MAX_CONCURRENCY,
-            endpointName,
-        ),
-        maxPromptChars: getIntFromEnv(
-            env,
-            EnvVars.AZURE_OPENAI_MAX_CHARS,
-            endpointName,
-        ),
-    };
-}
-
-function getMaxConcurrencyFromEnv(
-    env: Record<string, string | undefined>,
-    envName: string,
-    endpointName?: string,
-) {
-    const maxConcurrencyEnv = getEnvSetting(env, envName, endpointName, "");
-    const maxConcurrency = maxConcurrencyEnv
-        ? parseInt(maxConcurrencyEnv)
-        : undefined;
-
-    if (
-        maxConcurrency !== undefined &&
-        (maxConcurrency.toString() !== maxConcurrencyEnv || maxConcurrency <= 0)
-    ) {
-        throw new Error(`Invalid value for ${envName}: ${maxConcurrencyEnv}`);
-    }
-    return maxConcurrency;
-}
-
-function getIntFromEnv(
-    env: Record<string, string | undefined>,
-    envName: string,
-    endpointName?: string,
-): number | undefined {
-    const numString = getEnvSetting(env, envName, endpointName, "");
-    const num = numString ? parseInt(numString) : undefined;
-
-    if (num !== undefined && num <= 0) {
-        throw new Error(`Invalid value for ${envName}`);
-    }
-    return num;
-}
-
-/**
- * Load settings for the Azure OpenAI Embedding service from env
- * @param env
- * @returns
- */
-function azureEmbeddingApiSettingsFromEnv(
-    env: Record<string, string | undefined>,
-    endpointName?: string,
-): ApiSettings {
-    return {
-        isAzure: true,
-        modelType: ModelType.Embedding,
-        apiKey: getEnvSetting(
-            env,
-            EnvVars.AZURE_OPENAI_API_KEY_EMBEDDING,
-            endpointName,
-        ),
-        endpoint: getEnvSetting(
-            env,
-            EnvVars.AZURE_OPENAI_ENDPOINT_EMBEDDING,
-            endpointName,
-        ),
-    };
-}
-
-/**
- * Load settings for the Azure OpenAI Image service from env
- * @param env
- * @returns
- */
-function azureImageApiSettingsFromEnv(
-    env: Record<string, string | undefined>,
-    endpointName?: string,
-): ApiSettings {
-    return {
-        isAzure: true,
-        modelType: ModelType.Image,
-        apiKey: getEnvSetting(
-            env,
-            EnvVars.AZURE_OPENAI_API_KEY_DALLE,
-            endpointName,
-        ),
-        endpoint: getEnvSetting(
-            env,
-            EnvVars.AZURE_OPENAI_ENDPOINT_DALLE,
-            endpointName,
-        ),
-    };
 }
 
 /**
@@ -362,10 +155,9 @@ export function localOpenAIApiSettingsFromEnv(
  */
 async function createApiHeaders(settings: ApiSettings): Promise<Result<any>> {
     let apiHeaders;
-    if (settings.isAzure) {
-        if (settings.azureSettings?.tokenProvider) {
-            const tokenResult =
-                await settings.azureSettings.tokenProvider.getAccessToken();
+    if (settings.provider === "azure") {
+        if (settings.tokenProvider) {
+            const tokenResult = await settings.tokenProvider.getAccessToken();
             if (!tokenResult.success) {
                 return tokenResult;
             }
@@ -375,12 +167,13 @@ async function createApiHeaders(settings: ApiSettings): Promise<Result<any>> {
         } else {
             apiHeaders = { "api-key": settings.apiKey };
         }
-    } else {
+    } else if (settings.provider === "openai") {
         apiHeaders = {
             Authorization: `Bearer ${settings.apiKey}`,
             "OpenAI-Organization": settings.organization ?? "",
         };
     }
+
     return success(apiHeaders);
 }
 
@@ -391,26 +184,36 @@ async function createApiHeaders(settings: ApiSettings): Promise<Result<any>> {
 // - Endpoint names `azure:<name>` and `openai:<name>` refers to `AZURE_OPENAI_ENDPOINT_<name>` and `OPENAI_ENDPOINT_<name>`
 // - Endpoint names without the `azure:` or `openai:` prefix will assume it is prefixed with `azure:` and uses `AZURE_OPENAI_ENDPOINT_<name>`
 
-function parseEndPointName(endpoint?: string) {
+function parseEndPointName(endpoint?: string): {
+    provider: ModelProviders;
+    name?: string;
+} {
     if (endpoint === undefined || endpoint === "") {
         return {
             provider:
                 EnvVars.OPENAI_ENDPOINT in process.env ? "openai" : "azure",
         };
     }
-    if (endpoint === "openai" || endpoint === "azure") {
+    if (
+        endpoint === "openai" ||
+        endpoint === "azure" ||
+        endpoint === "ollama"
+    ) {
         return { provider: endpoint };
     }
     if (endpoint.startsWith("openai:")) {
         return { provider: "openai", name: endpoint.substring(7) };
     }
+    if (endpoint.startsWith("ollama:")) {
+        return { provider: "ollama", name: endpoint.substring(7) };
+    }
+    if (endpoint.startsWith("azure:")) {
+        return { provider: "azure", name: endpoint.substring(6) };
+    }
     if (EnvVars.OPENAI_ENDPOINT in process.env) {
         return { provider: "openai", name: endpoint };
     }
-    return {
-        provider: "azure",
-        name: endpoint.startsWith("azure:") ? endpoint.substring(6) : endpoint,
-    };
+    return { provider: "azure", name: endpoint };
 }
 
 // Cache of the model settings
@@ -426,7 +229,9 @@ export function getChatModelSettings(endpoint?: string) {
     const getApiSettingsFromEnv =
         endpointName.provider === "openai"
             ? openAIApiSettingsFromEnv
-            : azureApiSettingsFromEnv;
+            : endpointName.provider === "azure"
+              ? azureApiSettingsFromEnv
+              : ollamaApiSettingsFromEnv;
     const settings = getApiSettingsFromEnv(
         ModelType.Chat,
         undefined,
@@ -557,6 +362,28 @@ export function createChatModel(
             ? endpoint
             : getChatModelSettings(endpoint);
 
+    if (settings.provider === "ollama") {
+        return createOllamaChatModel(
+            settings,
+            completionSettings,
+            completionCallback,
+            tags,
+        );
+    }
+    return createAzureOpenAIChatModel(
+        settings,
+        completionSettings,
+        completionCallback,
+        tags,
+    );
+}
+
+function createAzureOpenAIChatModel(
+    settings: AzureApiSettings | OpenAIApiSettings,
+    completionSettings?: CompletionSettings,
+    completionCallback?: (request: any, response: any) => void,
+    tags?: string[],
+) {
     completionSettings ??= {};
     completionSettings.n ??= 1;
     completionSettings.temperature ??= 0;
@@ -565,11 +392,12 @@ export function createChatModel(
         delete completionSettings.response_format;
     }
 
-    const defaultParams = settings.isAzure
-        ? {}
-        : {
-              model: settings.modelName,
-          };
+    const defaultParams =
+        settings.provider === "azure"
+            ? {}
+            : {
+                  model: settings.modelName,
+              };
     const model: ChatModelWithStreaming = {
         completionSettings: completionSettings,
         completionCallback,
@@ -838,11 +666,12 @@ export function createEmbeddingModel(
     const maxBatchSize = 2048;
     const settings =
         apiSettingsOrEndpoint ?? apiSettingsFromEnv(ModelType.Embedding);
-    const defaultParams: any = settings.isAzure
-        ? {}
-        : {
-              model: settings.modelName,
-          };
+    const defaultParams: any =
+        settings.provider === "azure"
+            ? {}
+            : {
+                  model: settings.modelName,
+              };
     if (dimensions && dimensions > 0) {
         defaultParams.dimensions = dimensions;
     }
@@ -911,11 +740,12 @@ export function createEmbeddingModel(
  */
 export function createImageModel(apiSettings?: ApiSettings): ImageModel {
     const settings = apiSettings ?? apiSettingsFromEnv(ModelType.Image);
-    const defaultParams = settings.isAzure
-        ? {}
-        : {
-              model: settings.modelName,
-          };
+    const defaultParams =
+        settings.provider === "azure"
+            ? {}
+            : {
+                  model: settings.modelName,
+              };
     const model: ImageModel = {
         generateImage,
     };
@@ -979,6 +809,9 @@ function verifyPromptLength(
     settings: ApiSettings,
     prompt: string | PromptSection[],
 ) {
+    if (settings.provider !== "azure") {
+        return;
+    }
     const promptLength = getPromptLength(prompt);
     if (settings.maxPromptChars && settings.maxPromptChars > 0) {
         if (promptLength > settings.maxPromptChars) {

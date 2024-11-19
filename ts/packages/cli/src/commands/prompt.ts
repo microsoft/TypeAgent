@@ -2,11 +2,11 @@
 // Licensed under the MIT License.
 
 import { Args, Command, Flags } from "@oclif/core";
-import { getChatModelNames } from "common-utils";
-import { openai } from "aiclient";
+import { openai, getChatModelNames } from "aiclient";
 import fs from "node:fs";
 import chalk from "chalk";
 
+const modelNames = await getChatModelNames();
 export default class Prompt extends Command {
     static description = "Send a prompt to GPT";
     static args = {
@@ -18,7 +18,7 @@ export default class Prompt extends Command {
     static flags = {
         model: Flags.string({
             description: "Model to use",
-            options: getChatModelNames(),
+            options: modelNames,
         }),
         stream: Flags.boolean({
             description: "Whether to stream the result",
