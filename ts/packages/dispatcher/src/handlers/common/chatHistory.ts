@@ -2,9 +2,8 @@
 // Licensed under the MIT License.
 
 import { Entity } from "@typeagent/agent-sdk";
-import { CachedImageWithDetails } from "common-utils";
+import { CachedImageWithDetails, extractRelevantExifTags } from "common-utils";
 import { PromptSection } from "typechat";
-import { extractRelevantExifTags } from "../../../../commonUtils/dist/image.js";
 type PromptRole = "user" | "assistant" | "system";
 
 export interface ChatHistoryEntry {
