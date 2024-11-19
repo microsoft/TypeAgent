@@ -24,40 +24,6 @@ importers:
         specifier: ^3.2.5
         version: 3.2.5
 
-  examples/browserHeadless:
-    dependencies:
-      chalk:
-        specifier: ^5.3.0
-        version: 5.3.0
-      debug:
-        specifier: ^4.3.4
-        version: 4.3.4(supports-color@8.1.1)
-      puppeteer:
-        specifier: ^23.8.0
-        version: 23.8.0(typescript@5.4.3)
-    devDependencies:
-      '@types/debug':
-        specifier: ^4.1.10
-        version: 4.1.10
-      '@types/jest':
-        specifier: ^29.5.7
-        version: 29.5.7
-      '@types/node':
-        specifier: ^18.18.7
-        version: 18.18.7
-      jest:
-        specifier: ^29.7.0
-        version: 29.7.0(@types/node@18.18.7)(ts-node@10.9.1(@types/node@18.18.7)(typescript@5.4.3))
-      prettier:
-        specifier: ^3.2.5
-        version: 3.2.5
-      rimraf:
-        specifier: ^5.0.5
-        version: 5.0.5
-      typescript:
-        specifier: ^5.4.2
-        version: 5.4.3
-
   examples/chat:
     dependencies:
       aiclient:
@@ -436,9 +402,15 @@ importers:
       '@types/debug':
         specifier: ^4.1.10
         version: 4.1.10
+      '@types/jest':
+        specifier: ^29.5.7
+        version: 29.5.7
       '@types/node':
         specifier: ^18.18.7
         version: 18.18.7
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@18.18.7)(ts-node@10.9.1(@types/node@18.18.7)(typescript@5.4.3))
       rimraf:
         specifier: ^5.0.5
         version: 5.0.5
@@ -1438,9 +1410,6 @@ importers:
       isomorphic-ws:
         specifier: ^5.0.0
         version: 5.0.0(ws@8.17.1)
-      mongodb:
-        specifier: ^6.3.0
-        version: 6.3.0(socks@2.8.3)
       typechat:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.3)(zod@3.23.8)
