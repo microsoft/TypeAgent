@@ -27,6 +27,7 @@ RUN apt install -y gnome-keyring
 #COPY --from=build /app/dist /app/dist
 
 EXPOSE 80:3000
+EXPOSE 8080:3000
 EXPOSE 3443
 EXPOSE 3030:3030
 EXPOSE 3734
