@@ -20,7 +20,7 @@ COPY --from=build /prod/api /prod/api
 WORKDIR /prod/api
 
 RUN apt-get update
-RUN install -y gnome-keyring
+RUN apt install -y gnome-keyring
 
 #COPY ../shell/out/renderer /app/wwwroot
 #COPY --from=prod-deps /app/node_modules /app/node_modules
