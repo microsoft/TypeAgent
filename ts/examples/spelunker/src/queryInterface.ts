@@ -277,14 +277,15 @@ export async function runQueryInterface(
         }
     }
 
-    // Define special handlers, then run the console loop.
-
+    // TODO: break up into smaller parts.
     async function inputHandler(
         input: string,
         io: iapp.InteractiveIo,
     ): Promise<void> {
-        const prompt = makePrompt(input);
-        const result = await chunkyIndex.queryMaker.translate(input, prompt);
+        const result = await chunkyIndex.queryMaker.translate(
+            input,
+            makePrompt(input),
+        );
         if (!result.success) {
             io.writer.writeLine(`[Error: ${result.message}]`);
             return;
@@ -296,30 +297,39 @@ export async function runQueryInterface(
             ScoredItem<knowLib.TextBlock<string>>[]
         > = new Map();
 
-        for (const thing of chunkyIndex.allIndexes()) {
-            const indexName = thing.name;
-            const index = thing.index;
+        for (const namedIndex of chunkyIndex.allIndexes()) {
+            const indexName = namedIndex.name;
+            const index = namedIndex.index;
             const spec: QuerySpec | undefined = (specs as any)[indexName];
             if (!spec) {
-                if (verbose) io.writer.writeLine(`[No query for ${indexName}]`);
-            } else {
-                const hits = await index.nearestNeighborsPairs(
-                    spec.query,
-                    spec.maxHits ?? 10,
-                    spec.minScore,
-                );
-                if (verbose) {
-                    io.writer.writeLine(
-                        `\nFound ${hits.length} ${indexName} for '${spec.query}':`,
-                    );
-                    for (const hit of hits) {
-                        io.writer.writeLine(
-                            `${hit.item.value} (${hit.score.toFixed(3)}) -- ${hit.item.sourceIds?.join(", ")}`,
-                        );
-                    }
-                }
-                allHits.set(indexName, hits);
+                io.writer.writeLine(`[No query for ${indexName}]`);
+                continue;
             }
+            const hits = await index.nearestNeighborsPairs(
+                spec.query,
+                spec.maxHits ?? 10,
+                spec.minScore,
+            );
+            if (!hits.length) {
+                io.writer.writeLine(`[No hits for ${indexName}]`);
+                continue;
+            }
+            allHits.set(indexName, hits);
+            if (verbose) {
+                io.writer.writeLine(
+                    `\nFound ${hits.length} ${indexName} for '${spec.query}':`,
+                );
+                for (const hit of hits) {
+                    io.writer.writeLine(
+                        `${hit.item.value} (${hit.score.toFixed(3)}) -- ${hit.item.sourceIds?.join(", ")}`,
+                    );
+                }
+            }
+            const nchunks = new Set(hits.flatMap((h) => h.item.sourceIds)).size;
+            const end = hits.length - 1;
+            io.writer.writeLine(
+                `[${indexName}: query '${spec.query}'; ${hits.length} hits; scores ${hits[0].score.toFixed(3)}--${hits[end].score.toFixed(3)}; ${nchunks} unique chunk ids]`,
+            );
         }
 
         // TODO: Move this out of allHits, make it a special case that exits early.
@@ -354,6 +364,7 @@ export async function runQueryInterface(
                 }
             }
         }
+        io.writer.writeLine(`\n[Overall ${allChunks.size} unique chunk ids]`);
 
         const nextPrompt = `
 Here is a JSON representation of a set of query results on indexes for keywords, topics, goals, etc.
@@ -387,7 +398,12 @@ ${input}
             io.writer.writeLine(`Message: ${answer.message}`);
         }
         if (answer.references.length) {
-            io.writer.writeLine(`References: ${answer.references}`);
+            io.writer.writeLine(
+                `\nReferences: ${answer.references.join(",").replace(/,/g, ", ")}`,
+            );
+            io.writer.writeLine(
+                `\n[Used ${answer.references.length} unique chunk ids out of ${allChunks.size}]`,
+            );
         }
     }
 
