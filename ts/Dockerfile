@@ -14,23 +14,13 @@ RUN pnpm run -r build
 RUN pnpm deploy --filter=agent-api --prod /prod/api
 #RUN pnpm deploy --filter=cli --prod /prod/cli
 
-
-# COPY pnpm*.yaml /app/
-# COPY packages/api/package.json /app/
-# COPY packages/api /app/
-# WORKDIR /app
-
-# FROM base AS prod-deps
-# RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --prod --no-frozen-lockfile
-
-# FROM base AS build
-# RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --no-frozen-lockfile
-# RUN pnpm run build
-
 FROM base AS api
 COPY --from=build /usr/src/app/.env /prod/api/
 COPY --from=build /prod/api /prod/api
 WORKDIR /prod/api
+
+RUN apt-get update
+RUN sudo install -y gnome-keyring
 
 #COPY ../shell/out/renderer /app/wwwroot
 #COPY --from=prod-deps /app/node_modules /app/node_modules
