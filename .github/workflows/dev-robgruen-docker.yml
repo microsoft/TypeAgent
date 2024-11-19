@@ -14,74 +14,66 @@ permissions:
   contents: read
 
 jobs:
-  build_ts:        
-    env:
-      NODE_OPTIONS: "--max_old_space_size=8192"
-    strategy:
-      fail-fast: false
-      matrix:
-        os: ["windows-latest"]
-        #os: ["ubuntu-latest", "windows-latest", "macos-latest"]
-        #version: [18, 20]
-        version: [20]
+  # build_ts:        
+  #   env:
+  #     NODE_OPTIONS: "--max_old_space_size=8192"
+  #   strategy:
+  #     fail-fast: false
+  #     matrix:
+  #       os: ["windows-latest"]
+  #       #os: ["ubuntu-latest", "windows-latest", "macos-latest"]
+  #       #version: [18, 20]
+  #       version: [20]
 
-    runs-on: ${{ matrix.os }}
-    steps:
-      - name: Setup Git LF
-        run: |
-          git config --global core.autocrlf false
-      - uses: actions/checkout@v4
-      - uses: dorny/paths-filter@v3
-        id: filter
-        with:
-          filters: |
-            ts:
-              - "ts/**"
-              - ".github/workflows/build-ts.yml"
-      - uses: pnpm/action-setup@v4
-        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts == 'true' }}
-        name: Install pnpm
-        with:
-          version: 9
-          run_install: false
-      - uses: actions/setup-node@v4
-        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts == 'true' }}
-        with:
-          node-version: ${{ matrix.version }}
-          cache: "pnpm"
-          cache-dependency-path: ts/pnpm-lock.yaml
-      - name: Install dependencies
-        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts == 'true' }}
-        working-directory: ts
-        run: |
-          pnpm install --frozen-lockfile --strict-peer-dependencies
-      - name: Build
-        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts == 'true' }}
-        working-directory: ts
-        run: |
-          npm run build
-      - name: Test
-        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts == 'true' }}
-        working-directory: ts
-        run: |
-          npm run test
-      - name: Lint
-        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts == 'true' }}
-        working-directory: ts
-        run: |
-          npm run lint   
-      # - name: Upload artifact for deployment job
-      #   uses: actions/upload-artifact@v4.4.3
-      #   with:
-      #     name: node-app
-      #     path: |
-      #       ./ts/packages/api
-      #       .ts/packages/shell
-      #     compression-level: 0
+  #   runs-on: ${{ matrix.os }}
+  #   steps:
+  #     - name: Setup Git LF
+  #       run: |
+  #         git config --global core.autocrlf false
+  #     - uses: actions/checkout@v4
+  #     - uses: dorny/paths-filter@v3
+  #       id: filter
+  #       with:
+  #         filters: |
+  #           ts:
+  #             - "ts/**"
+  #             - ".github/workflows/build-ts.yml"
+  #     - uses: pnpm/action-setup@v4
+  #       if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts == 'true' }}
+  #       name: Install pnpm
+  #       with:
+  #         version: 9
+  #         run_install: false
+  #     - uses: actions/setup-node@v4
+  #       if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts == 'true' }}
+  #       with:
+  #         node-version: ${{ matrix.version }}
+  #         cache: "pnpm"
+  #         cache-dependency-path: ts/pnpm-lock.yaml
+  #     - name: Install dependencies
+  #       if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts == 'true' }}
+  #       working-directory: ts
+  #       run: |
+  #         pnpm install --frozen-lockfile --strict-peer-dependencies
+  #     - name: Build
+  #       if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts == 'true' }}
+  #       working-directory: ts
+  #       run: |
+  #         npm run build
+  #     - name: Test
+  #       if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts == 'true' }}
+  #       working-directory: ts
+  #       run: |
+  #         npm run test
+  #     - name: Lint
+  #       if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts == 'true' }}
+  #       working-directory: ts
+  #       run: |
+  #         npm run lint   
 
   deploy:
     runs-on: ubuntu-latest # pnpm deploy does not work currently on Windows. Fails with EPERM.
-    needs: build_ts
+    # needs: build_ts
     # environment:
     #   name: 'test'
     #   url: ${{ steps.deploy-to-webapp.outputs.webapp-url }}
@@ -92,6 +84,8 @@ jobs:
         run: |
           git config --global core.autocrlf false
       - uses: actions/checkout@v4
+        with:
+          ref: dev/robgruen/android_sans_MSAL
       - uses: dorny/paths-filter@v3
         id: filter
         with:
@@ -112,40 +106,73 @@ jobs:
           cache: "pnpm"
           cache-dependency-path: ts/pnpm-lock.yaml
           
-      - name: Install dependencies
-        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts == 'true' }}
-        working-directory: ts
-        run: |
-          pnpm install --frozen-lockfile --strict-peer-dependencies 
+      # - name: Install dependencies
+      #   if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts == 'true' }}
+      #   working-directory: ts
+      #   run: |
+      #     pnpm install --frozen-lockfile --strict-peer-dependencies 
       
       # - name: Set up QEMU
       #   # Add support for more platforms with QEMU (optional)
       #   # https://github.com/docker/setup-qemu-action        
       #   uses: docker/setup-qemu-action@v3
-        
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3    
-        
-      - name: Build Docker image(s)
-        # You may pin to the exact commit or the version.
-        # uses: docker/build-push-action@4f58ea79222b3b9dc2c8bbdd6debcef730109a75
-        uses: docker/build-push-action@v6.9.0
-        with:
-          context: .
-          file: ts/Dockerfile
-          push: true
-          tags: typeagent:latest
-        
-      # - name: Docker login
-      #   uses: docker/login-action@v3.3.0
-      #   with: 
-      #     registry: typeagentcontainerregistry.azurecr.io
+
       - name: Login to Azure
         uses: azure/login@v2.2.0
         with:
           client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_5B0D2D6BA40F4710B45721D2112356DD }}
           tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_39BB903136F14B6EAD8F53A8AB78E3AA }}
-          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_F36C1F2C4B2C49CA8DD5C52FAB98FA30 }}                        
+          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_F36C1F2C4B2C49CA8DD5C52FAB98FA30 }}           
+
+      # - name: Login to Container Registry
+      #   uses: Azure/docker-login@v1
+      #   with:
+      #     # # Container registry username
+      #     username: ${{ secrets.AZUREAPPSERVICE_CLIENTID_5B0D2D6BA40F4710B45721D2112356DD }}
+      #     # # Container registry password
+      #     # password: # default is 
+      #     # # Container registry server url
+      #     login-server: typeagentcontainerregistry.azurecr.io
+          
+      # - name: Login to Container Registry
+      #   uses: docker/login-action@v3
+      #   with:
+      #     registry: typeagentcontainerregistry.azurecr.io
+        
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3    
+        
+      # - name: Build Docker image(s)
+      #   # You may pin to the exact commit or the version.
+      #   # uses: docker/build-push-action@4f58ea79222b3b9dc2c8bbdd6debcef730109a75
+      #   uses: docker/build-push-action@v6.9.0
+      #   with:
+      #     context: .
+      #     file: ts/Dockerfile
+      #     push: false
+      #     tags: typeagent:latest
+      #- run: az login
+      #- run: az acr login --name typeageintcontainerregistry
+      - run: az account show
+      - run: az account set --subscription b64471de-f2ac-4075-a3cb-7656bca768d0
+      - run: az account list
+      - run: az resource list --name typeagentContainerRegistry
+      - run: ls ${{ github.workspace }} -l
+      - run: ls ${{ github.workspace }}/ts -l
+      - run: az acr build -t typeagent:latest -r typeagentContainerRegistry --file ${{ github.workspace }}/ts/Dockerfile --subscription b64471de-f2ac-4075-a3cb-7656bca768d0 ${{ github.workspace }}/ts
+      # - name: Build docker image
+      #   uses: azure/acr-build@v1
+      #   with:
+      #     registry: typeagentcontainerregistry
+      #     branch: dev/robgruen/android_sans_MSAL
+      #     image: typeAgent:latest
+      #     folder: ./ts
+      #     dockerfile: ./ts/Dockerfile
+        
+      # - name: Docker login
+      #   uses: docker/login-action@v3.3.0
+      #   with: 
+      #     registry: typeagentcontainerregistry.azurecr.io                   
 
     # steps:
     #   - name: Download artifact from build job
