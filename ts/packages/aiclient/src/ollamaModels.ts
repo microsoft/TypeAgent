@@ -23,6 +23,7 @@ import {
     readResponseStream,
 } from "./restClient";
 import { TokenCounter } from "./tokenCounter";
+import { OpenAIApiSettings } from "./openaiSettings";
 
 export type OllamaApiSettings = CommonApiSettings & {
     provider: "ollama";
@@ -84,21 +85,37 @@ export function ollamaApiSettingsFromEnv(
     modelType: ModelType,
     env?: Record<string, string | undefined>,
     endpointName?: string,
-): OllamaApiSettings {
+): OllamaApiSettings | OpenAIApiSettings {
+    const useOAIEndpoint = process.env["OLLAMA_USE_OAI_ENDPOINT"] !== "0";
+
     if (modelType === ModelType.Image) {
         throw new Error("Image model not supported");
     }
     env ??= process.env;
     const url = getOllamaEndpointUrl(env);
-    return {
-        provider: "ollama",
-        modelType,
-        endpoint:
-            modelType === ModelType.Chat
-                ? `${url}/api/chat`
-                : `${url}/api/embed`,
-        modelName: endpointName ?? "phi3",
-    };
+    const modelName = endpointName ?? "phi3";
+    if (useOAIEndpoint) {
+        return {
+            provider: "openai",
+            modelType,
+            endpoint:
+                modelType === ModelType.Chat
+                    ? `${url}/v1/chat/completions`
+                    : `${url}/v1/embeddings`,
+            modelName,
+            apiKey: "",
+        };
+    } else {
+        return {
+            provider: "ollama",
+            modelType,
+            endpoint:
+                modelType === ModelType.Chat
+                    ? `${url}/api/chat`
+                    : `${url}/api/embed`,
+            modelName,
+        };
+    }
 }
 
 type OllamaChatCompletionUsage = {
