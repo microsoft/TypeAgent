@@ -3,15 +3,18 @@
 
 // User interface for querying the index.
 
+import * as fs from "fs";
+import path from "path";
+
 import * as iapp from "interactive-app";
 import * as knowLib from "knowledge-processor";
-import path from "path";
 import { ScoredItem } from "typeagent";
+
 import { IndexType, ChunkyIndex } from "./chunkyIndex.js";
 import { FileDocumentation } from "./fileDocSchema.js";
+import { QuerySpec } from "./makeQuerySchema.js";
 import { Chunk, ChunkId } from "./pythonChunker.js";
 import { wordWrap } from "./pythonImporter.js";
-import { QuerySpec } from "./makeQuerySchema.js";
 
 type QueryOptions = {
     maxHits: number;
@@ -24,6 +27,8 @@ export async function interactiveQueryLoop(
     verbose = false,
 ): Promise<void> {
     const handlers: Record<string, iapp.CommandHandler> = {
+        import: importHandler,
+        clearMemory,
         search,
         summaries,
         keywords,
@@ -32,6 +37,33 @@ export async function interactiveQueryLoop(
         dependencies,
     };
     iapp.addStandardHandlers(handlers);
+
+    function importDef(): iapp.CommandMetadata {
+        return {
+            // TODO
+        };
+    }
+    handlers.import.metadata = importDef();
+    async function importHandler(
+        args: string[] | iapp.NamedArgs,
+        io: iapp.InteractiveIo,
+    ): Promise<void> {
+        // TODO
+    }
+
+    handlers.clearMemory.metadata = "Clear all memory (and all indexes)";
+    async function clearMemory(
+        args: string[],
+        io: iapp.InteractiveIo,
+    ): Promise<void> {
+        await fs.promises.rm(chunkyIndex.rootDir, {
+            recursive: true,
+            force: true,
+        });
+        await chunkyIndex.reInitialize(chunkyIndex.rootDir);
+        io.writer.writeLine("[All memory and all indexes cleared]");
+        // Actually the embeddings cache isn't. But we shouldn't have to care.
+    }
 
     function searchDef(): iapp.CommandMetadata {
         return {
