@@ -19,7 +19,6 @@ export class TypeAgentServer {
 
     constructor(
         private envPath: string,
-        private wsPort: number = 3030,
     ) {
         // typeAgent config
         dotenv.config({ path: this.envPath });
@@ -37,16 +36,6 @@ export class TypeAgentServer {
             clientIO: this.webClientIO,
         });
 
-        // websocket server
-        const hostEndpoint =
-            process.env["WEBSOCKET_HOST"] ?? `ws://localhost:${this.wsPort}`;
-        const url = new URL(hostEndpoint);
-        this.webSocketServer = new TypeAgentAPIWebSocketServer(
-            url,
-            this.dispatcher,
-            this.webClientIO!,
-        );
-
         // web server config
         const config: TypeAgentAPIServerConfig = JSON.parse(
             readFileSync("data/config.json").toString(),
@@ -55,6 +44,13 @@ export class TypeAgentServer {
         // web server
         this.webServer = new TypeAgentAPIWebServer(config);
         this.webServer.start();
+
+        // websocket server
+        this.webSocketServer = new TypeAgentAPIWebSocketServer(
+            this.webServer.server,
+            this.dispatcher,
+            this.webClientIO!,
+        );
     }
 
     stop() {

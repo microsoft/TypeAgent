@@ -17,7 +17,7 @@ export type TypeAgentAPIServerConfig = {
 };
 
 export class TypeAgentAPIWebServer {
-    private server: Server<any, any>;
+    public server: Server<any, any>;
     private secureServer: SecureServer<any, any> | undefined;
 
     constructor(config: TypeAgentAPIServerConfig) {

@@ -348,7 +348,7 @@ export async function createWebSocket(
             // reconnect?
             if (autoReconnect) {
                 let url = window.location;
-                createWebSocket(`ws://${url.hostname}:3030`, true).then(
+                createWebSocket(`ws://${url.hostname}:3000`, true).then(
                     (ws) => (globalThis.ws = ws),
                 );
             }
