@@ -37,6 +37,10 @@ export function createTabTitleIndex() {
   };
 
   async function addOrUpdate(title: string, tabId: number) {
+    if (!title) {
+      return;
+    }
+
     const embedding = await generateEmbedding(embeddingModel, title);
     tabEmbeddings[tabId] = embedding;
   }
