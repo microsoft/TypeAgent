@@ -20,7 +20,7 @@ COPY --from=build /usr/src/app/.env /prod/api/
 # api bits
 COPY --from=build /prod/api/ /prod/api/
 # rendering bits
-COPY --from=build /usr/src/app/ts/packages/shell/out/ /prod/shell/out/
+COPY --from=build /usr/src/app/packages/shell/out/ /prod/shell/out/
 WORKDIR /prod/api
 
 RUN apt-get update
