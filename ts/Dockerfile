@@ -23,8 +23,10 @@ COPY --from=build /prod/api/ /prod/api/
 COPY --from=build /usr/src/app/packages/shell/out/ /prod/shell/out/
 WORKDIR /prod/api
 
+#dependencies
 RUN apt-get update
 RUN apt install -y gnome-keyring
+RUN curl -sL https://aka.ms/InstallAzureCLIDeb | bash
 
 EXPOSE 80:3000
 EXPOSE 8080:3000
