@@ -12,19 +12,20 @@ WORKDIR /usr/src/app
 RUN pnpm install --frozen-lockfile
 RUN pnpm run -r build
 RUN pnpm deploy --filter=agent-api --prod /prod/api
+RUN pnpm deploy --filter=agent-shell --prod /prod/shell
 #RUN pnpm deploy --filter=cli --prod /prod/cli
 
 FROM base AS api
+# environment file
 COPY --from=build /usr/src/app/.env /prod/api/
+# api bits
 COPY --from=build /prod/api /prod/api
+# rendering bits
+COPY --from=build /prod/shell /prod/shell
 WORKDIR /prod/api
 
 RUN apt-get update
 RUN apt install -y gnome-keyring
-
-#COPY ../shell/out/renderer /app/wwwroot
-#COPY --from=prod-deps /app/node_modules /app/node_modules
-#COPY --from=build /app/dist /app/dist
 
 EXPOSE 80:3000
 EXPOSE 8080:3000
