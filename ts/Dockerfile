@@ -35,4 +35,4 @@ EXPOSE 8083:3443
 #CMD [ "pnpm", "start" ]
 
 #azure login, then start node application
-CMD az login;pnpm start
+CMD [ "az", "login" ]
