@@ -234,7 +234,7 @@ export async function createWebSocket(
 ) {
     let url = window.location;
     let protocol = url.protocol.toLowerCase() == "https" ? "wss" : "ws";
-    let port = url.hostname.toLocaleLowerCase() == "localhost" ? ":3000" : "";
+    let port = url.hostname.toLowerCase() == "localhost" ? ":3000" : "";
 
     const endpoint = `${protocol}://${url.hostname}${port}`
 
