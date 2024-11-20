@@ -243,6 +243,7 @@ export async function interactiveQueryLoop(
         io: iapp.InteractiveIo,
         indexName: IndexType,
     ): Promise<void> {
+        const numChunks = await chunkyIndex.chunkFolder.size();
         const namedArgs = iapp.parseNamedArguments(args, keywordsDef());
         const index = chunkyIndex.getIndexByName(indexName);
         if (namedArgs.debug) {
@@ -250,6 +251,7 @@ export async function interactiveQueryLoop(
             await debugIndex(index, indexName, verbose);
             return;
         }
+
         let matches: ScoredItem<knowLib.TextBlock<ChunkId>>[] = [];
         if (namedArgs.query) {
             matches = await index.nearestNeighborsPairs(
@@ -257,41 +259,43 @@ export async function interactiveQueryLoop(
                 namedArgs.maxHits,
                 namedArgs.minScore,
             );
-            // TODO: Merge matches with the same score and item.value
         } else {
             for await (const textBlock of index.entries()) {
                 matches.push({
-                    score: 1.0,
+                    score: 1,
                     item: textBlock,
                 });
             }
         }
+
         let hits: ScoredItem<knowLib.TextBlock<ChunkId>>[] = [];
         if (!namedArgs.filter) {
             hits = matches;
         } else {
+            const filterWords: string[] = (namedArgs.filter as string)
+                .split(" ")
+                .filter(Boolean)
+                .map((w) => w.toLowerCase());
             for await (const match of matches) {
-                if (namedArgs.filter) {
-                    const valueWords: string[] = match.item.value
-                        .split(/\s+/)
-                        .filter(Boolean)
-                        .map((w) => w.toLowerCase());
-                    const filterWords: string[] = (namedArgs.filter as string)
-                        .split(/\s+/)
-                        .filter(Boolean)
-                        .map((w) => w.toLowerCase());
-                    if (
-                        filterWords.every((word) => valueWords.includes(word))
-                    ) {
-                        if (match.score === 1.0) {
-                            match.score =
-                                filterWords.length / valueWords.length;
-                        }
-                        hits.push(match);
-                    }
+                const valueWords: string[] = match.item.value
+                    .split(/\s+/)
+                    .filter(Boolean)
+                    .map((w) => w.toLowerCase());
+                if (filterWords.every((word) => valueWords.includes(word))) {
+                    hits.push(match);
                 }
             }
         }
+
+        // TFIDF = TF(t) * IDF(t) = 1 * log(N / (1 + nt))
+        // - t is a term (in other contexts, a term occurring in a given chunk)
+        // - nt the number of chunks occurring for that term in this index
+        // - N the total number of chunks in the system
+        for (const hit of hits) {
+            const numSourceIds: number = hit.item.sourceIds?.length ?? 0;
+            hit.score *= Math.log(numChunks / (1 + numSourceIds));
+        }
+
         if (!hits.length) {
             io.writer.writeLine(`No ${indexName}.`);
         } else {
