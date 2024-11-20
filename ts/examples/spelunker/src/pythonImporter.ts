@@ -197,10 +197,7 @@ async function embedChunk(
         (acc, blob) => acc + blob.lines.length,
         0,
     );
-    const promises: Promise<any>[] = [];
-    let p1: Promise<any> | undefined;
-    p1 = exponentialBackoff(chunkyIndex.chunkFolder.put, chunk, chunk.id);
-    if (p1) promises.push(p1);
+    await exponentialBackoff(chunkyIndex.chunkFolder.put, chunk, chunk.id);
 
     const summaries: string[] = [];
     const chunkDocs: ChunkDoc[] = chunk.docs?.chunkDocs ?? [];
@@ -209,32 +206,26 @@ async function embedChunk(
     }
     const combinedSummaries = summaries.join("\n").trimEnd();
     if (combinedSummaries) {
-        p1 = exponentialBackoff(
+        await exponentialBackoff(
             chunkyIndex.summariesIndex.put,
             combinedSummaries,
             [chunk.id],
         );
-        if (p1) promises.push(p1);
     }
     for (const chunkDoc of chunkDocs) {
-        p1 = writeToIndex(chunk.id, chunkDoc.topics, chunkyIndex.topicsIndex);
-        if (p1) promises.push(p1);
-        p1 = writeToIndex(
+        await writeToIndex(chunk.id, chunkDoc.topics, chunkyIndex.topicsIndex);
+        await writeToIndex(
             chunk.id,
             chunkDoc.keywords,
             chunkyIndex.keywordsIndex,
         );
-        if (p1) promises.push(p1);
-        p1 = writeToIndex(chunk.id, chunkDoc.goals, chunkyIndex.goalsIndex);
-        if (p1) promises.push(p1);
-        p1 = writeToIndex(
+        await writeToIndex(chunk.id, chunkDoc.goals, chunkyIndex.goalsIndex);
+        await writeToIndex(
             chunk.id,
             chunkDoc.dependencies,
             chunkyIndex.dependenciesIndex,
         );
-        if (p1) promises.push(p1);
     }
-    if (promises.length) await Promise.all(promises);
     const t1 = Date.now();
     if (verbose) {
         console.log(
