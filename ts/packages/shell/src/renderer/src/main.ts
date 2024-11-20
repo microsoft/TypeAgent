@@ -29,9 +29,7 @@ export function getWebSocketAPI(): ClientAPI {
     if (globalThis.webApi === undefined) {
         globalThis.webApi = webapi;
 
-        // TODO: update ws URI
-        let url = window.location;
-        createWebSocket(`ws://${url.hostname}:3000`, true).then(
+        createWebSocket(true).then(
             (ws) => (globalThis.ws = ws),
         );
     }
