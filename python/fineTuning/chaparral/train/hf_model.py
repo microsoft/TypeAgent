@@ -70,8 +70,8 @@ class HFModel:
         if not self.train_set:
             raise ValueError("No training data loaded")
 
-        data_dict = self.dataset.format(self.model_name)
-        training_data = list(map(lambda x: self.tokenize(x), data_dict["infoPairs"]))
+        data_dict = self.train_set.format(self.model_name)
+        training_data = list(map(lambda x: self.tokenize(str(x)), data_dict["infoPairs"]))
 
         trainer = Trainer(
             model = self.model,
