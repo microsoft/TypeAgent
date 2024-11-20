@@ -27,6 +27,7 @@ export async function interactiveQueryLoop(
     const handlers: Record<string, iapp.CommandHandler> = {
         import: importHandler, // Since you can't name a function "import".
         clearMemory,
+        chunk,
         search,
         summaries,
         keywords,
@@ -90,6 +91,52 @@ export async function interactiveQueryLoop(
         await chunkyIndex.reInitialize(chunkyIndex.rootDir);
         io.writer.writeLine("[All memory and all indexes cleared]");
         // Actually the embeddings cache isn't. But we shouldn't have to care.
+    }
+
+    handlers.chunk.metadata = "Print one or more chunks";
+    async function chunk(
+        args: string[],
+        io: iapp.InteractiveIo,
+    ): Promise<void> {
+        const joinedArgs = args.join(" ");
+        const splitArgs = joinedArgs.trim().split(/[\s,]+/);
+        for (const chunkId of splitArgs) {
+            const chunk = await chunkyIndex.chunkFolder.get(chunkId);
+            if (chunk) {
+                const chunkDocs = chunk.docs?.chunkDocs ?? [];
+                io.writer.writeLine(`\nCHUNK ID: ${chunkId}`);
+                for (const chunkDoc of chunkDocs) {
+                    for (const pair of chunkyIndex.allIndexes()) {
+                        if (pair.name == "summaries") {
+                            if (chunkDoc.summary) {
+                                io.writer.writeLine("SUMMARY:");
+                                io.writer.writeLine(
+                                    // Indent by two
+                                    wordWrap(chunkDoc.summary).replace(
+                                        /^/gm,
+                                        "  ",
+                                    ),
+                                );
+                            } else {
+                                io.writer.writeLine("SUMMARY: None");
+                            }
+                        } else {
+                            const docItem: string[] | undefined =
+                                chunkDoc[pair.name];
+                            if (docItem?.length) {
+                                io.writer.writeLine(
+                                    `${pair.name.toUpperCase()}: ${docItem.join(", ")}`,
+                                );
+                            }
+                        }
+                    }
+                }
+                io.writer.writeLine("CODE:");
+                writeChunkLines(chunk, io, 100);
+            } else {
+                io.writer.writeLine(`[Chunk ID ${chunkId} not found]`);
+            }
+        }
     }
 
     function searchDef(): iapp.CommandMetadata {
@@ -177,7 +224,7 @@ export async function interactiveQueryLoop(
         args: string[] | iapp.NamedArgs,
         io: iapp.InteractiveIo,
     ): Promise<void> {
-        await reportIndex(args, io, "summaries");
+        await _reportIndex(args, io, "summaries");
     }
 
     function keywordsDef(): iapp.CommandMetadata {
@@ -191,7 +238,7 @@ export async function interactiveQueryLoop(
         args: string[] | iapp.NamedArgs,
         io: iapp.InteractiveIo,
     ): Promise<void> {
-        await reportIndex(args, io, "keywords");
+        await _reportIndex(args, io, "keywords");
     }
 
     function topicsDef(): iapp.CommandMetadata {
@@ -205,7 +252,7 @@ export async function interactiveQueryLoop(
         args: string[] | iapp.NamedArgs,
         io: iapp.InteractiveIo,
     ): Promise<void> {
-        await reportIndex(args, io, "topics");
+        await _reportIndex(args, io, "topics");
     }
 
     function goalsDef(): iapp.CommandMetadata {
@@ -219,7 +266,7 @@ export async function interactiveQueryLoop(
         args: string[] | iapp.NamedArgs,
         io: iapp.InteractiveIo,
     ): Promise<void> {
-        await reportIndex(args, io, "goals");
+        await _reportIndex(args, io, "goals");
     }
 
     function dependenciesDef(): iapp.CommandMetadata {
@@ -233,10 +280,10 @@ export async function interactiveQueryLoop(
         args: string[] | iapp.NamedArgs,
         io: iapp.InteractiveIo,
     ): Promise<void> {
-        await reportIndex(args, io, "dependencies");
+        await _reportIndex(args, io, "dependencies");
     }
 
-    async function reportIndex(
+    async function _reportIndex(
         args: string[] | iapp.NamedArgs,
         io: iapp.InteractiveIo,
         indexName: IndexType,
@@ -245,7 +292,7 @@ export async function interactiveQueryLoop(
         const index = chunkyIndex.getIndexByName(indexName);
         if (namedArgs.debug) {
             io.writer.writeLine(`[Debug: ${indexName}]`);
-            await debugIndex(index, indexName, verbose);
+            await _debugIndex(index, indexName, verbose);
             return;
         }
 
@@ -312,7 +359,7 @@ export async function interactiveQueryLoop(
         }
     }
 
-    async function debugIndex(
+    async function _debugIndex(
         index: knowLib.TextIndex<string, ChunkId>,
         indexName: string,
         verbose: boolean,
@@ -343,7 +390,7 @@ export async function interactiveQueryLoop(
     }
 
     // TODO: break up into smaller parts.
-    async function inputHandler(
+    async function _inputHandler(
         input: string,
         io: iapp.InteractiveIo,
     ): Promise<void> {
@@ -351,7 +398,7 @@ export async function interactiveQueryLoop(
     }
 
     await iapp.runConsole({
-        inputHandler,
+        inputHandler: _inputHandler,
         handlers,
         prompt: "\n🤖> ",
     });
@@ -545,8 +592,7 @@ ${input}
 `;
 }
 
-// TODO: Make an @command for this
-export function writeChunkLines(
+function writeChunkLines(
     chunk: Chunk,
     io: iapp.InteractiveIo,
     lineBudget = 10,
@@ -565,7 +611,7 @@ export function writeChunkLines(
     }
 }
 
-// Wrap long lines. Still written by Github Copilot.
+// Wrap long lines. Bugs by Github Copilot.
 export function wordWrap(text: string, wrapLength: number = 80): string {
     const wrappedLines: string[] = [];
 

@@ -85,7 +85,6 @@ export class ChunkyIndex {
         }
     }
 
-    // TODO: Do this type-safe?
     getIndexByName(name: IndexType): knowLib.TextIndex<string, ChunkId> {
         for (const pair of this.allIndexes()) {
             if (pair.name === name) {
