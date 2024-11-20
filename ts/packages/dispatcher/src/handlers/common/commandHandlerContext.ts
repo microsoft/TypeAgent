@@ -132,11 +132,11 @@ export function getTranslator(
     if (translator !== undefined) {
         return translator;
     }
-    const config = context.session.getConfig();
+    const config = context.session.getConfig().translation;
     const newTranslator = loadAgentJsonTranslator(
         translatorName,
         context.agents,
-        config.models.translator,
+        config.model,
         config.switch.inline ? getActiveTranslators(context) : undefined,
         config.multipleActions,
     );
@@ -358,7 +358,10 @@ function processSetAppAgentStateResult(
     for (const [stateName, failed] of Object.entries(result.failed)) {
         for (const [translatorName, enable, e] of failed) {
             hasFailed = true;
-            const prefix = getTranslatorPrefix(translatorName, systemContext);
+            const prefix =
+                stateName === "commands"
+                    ? systemContext.agents.getEmojis()[translatorName]
+                    : getTranslatorPrefix(translatorName, systemContext);
             cbError(
                 `${prefix}: Failed to ${enable ? "enable" : "disable"} ${stateName}: ${e.message}`,
             );
@@ -412,9 +415,9 @@ export async function changeContextConfig(
 
     if (
         translatorChanged ||
-        changed.models?.translator !== undefined ||
-        changed.switch?.inline ||
-        changed.multipleActions
+        changed.translation?.model !== undefined ||
+        changed.translation?.switch?.inline ||
+        changed.translation?.multipleActions
     ) {
         // The dynamic schema for change assistant is changed.
         // Clear the cache to regenerate them.
@@ -471,8 +474,8 @@ export async function changeContextConfig(
             }
             await agentCache.constructionStore.setAutoSave(autoSave);
         }
-        if (changed.models?.explainer !== undefined) {
-            agentCache.model = changed.models.explainer;
+        if (changed.explainer?.model !== undefined) {
+            agentCache.model = changed.explainer?.model;
         }
         const builtInCache = changed.cache?.builtInCache;
         if (builtInCache !== undefined) {

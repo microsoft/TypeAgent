@@ -95,6 +95,7 @@ function toTemplateType(
             // TODO: smarter about type unions.
             return toTemplateType(type.types[0], value);
         case "type-reference":
+            // TODO: need to handle circular references (or error on circular references)
             return toTemplateType(type.definition.type, value);
         case "object":
             return toTemplateTypeObject(type, value);

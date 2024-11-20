@@ -2,16 +2,15 @@
 // Licensed under the MIT License.
 
 import {
-    ActionParamType,
+    SchemaType,
     ActionSchema,
-    ActionParamObjectFields,
-    ActionParamTypeReference,
-    ActionTypeDefinition,
+    SchemaObjectFields,
+    SchemaTypeDefinition,
 } from "./type.js";
 
 function generateSchemaType(
-    type: ActionParamType,
-    pending: ActionParamTypeReference[],
+    type: SchemaType,
+    pending: SchemaTypeDefinition[],
     indent: number,
     paren: boolean = false,
 ): string {
@@ -31,7 +30,7 @@ function generateSchemaType(
                 .join(" | ");
             return paren ? `(${typeUnion})` : typeUnion;
         case "type-reference":
-            pending.push(type);
+            pending.push(type.definition);
             return type.name;
 
         default:
@@ -39,54 +38,97 @@ function generateSchemaType(
     }
 }
 
+function generateComments(
+    lines: string[],
+    comments: string[] | undefined,
+    indentStr: string,
+) {
+    if (!comments) {
+        return;
+    }
+    for (const comment of comments) {
+        lines.push(`${indentStr}//${comment}`);
+    }
+}
 function generateSchemaParamObject(
     lines: string[],
-    fields: ActionParamObjectFields,
-    pending: ActionParamTypeReference[],
+    fields: SchemaObjectFields,
+    pending: SchemaTypeDefinition[],
     indent: number,
 ) {
     const indentStr = "    ".repeat(indent);
     for (const [key, field] of Object.entries(fields)) {
+        generateComments(lines, field.comments, indentStr);
         const optional = field.optional ? "?" : "";
-        if (field.comments) {
-            lines.push(
-                ...field.comments.map((comment) => `${indentStr}// ${comment}`),
-            );
-        }
         lines.push(
-            `${indentStr}${key}${optional}: ${generateSchemaType(field.type, pending, indent)}`,
+            `${indentStr}${key}${optional}: ${generateSchemaType(field.type, pending, indent)};${field.trailingComments ? ` //${field.trailingComments.join(" ")}` : ""}`,
         );
     }
 }
 
 function generateTypeDefinition(
     lines: string[],
-    definition: ActionTypeDefinition,
-    pending: ActionParamTypeReference[],
+    definition: SchemaTypeDefinition,
+    pending: SchemaTypeDefinition[],
+    exact: boolean,
 ) {
-    if (definition.comments) {
-        lines.push(...definition.comments.map((comment) => `// ${comment}`));
-    }
-    const prefix = definition.alias
-        ? `export type ${definition.name} = `
-        : `export interface ${definition.name} `;
-    lines.push(`${prefix}${generateSchemaType(definition.type, pending, 0)}`);
+    generateComments(lines, definition.comments, "");
+    const prefix = exact && definition.exported ? "export " : "";
+    const generatedDefinition = generateSchemaType(definition.type, pending, 0);
+    const line = definition.alias
+        ? `${prefix}type ${definition.name} = ${generatedDefinition};`
+        : `${prefix}interface ${definition.name} ${generatedDefinition}`;
+    lines.push(line);
 }
 
-export function generateSchema(actionSchemas: ActionSchema[]) {
-    const lines: string[] = [];
-
-    lines.push(
-        `export type AllAction = ${actionSchemas.map((actionInfo) => actionInfo.typeName).join("|")};`,
-    );
-
-    const pending: ActionParamTypeReference[] = [];
-    for (const actionInfo of actionSchemas) {
-        generateTypeDefinition(lines, actionInfo.definition, pending);
-    }
+export function generateSchema(
+    definitions: SchemaTypeDefinition[],
+    typeName: string = "AllAction",
+    exact: boolean = false,
+) {
+    const emitted = new Map<SchemaTypeDefinition, string[]>();
+    const pending: SchemaTypeDefinition[] = [...definitions];
 
     while (pending.length > 0) {
-        generateTypeDefinition(lines, pending.pop()!.definition, pending);
+        const definition = pending.pop()!;
+        if (!emitted.has(definition)) {
+            const lines: string[] = [];
+            emitted.set(definition, lines);
+            generateTypeDefinition(lines, definition, pending, exact);
+        }
     }
-    return lines.join("\n");
+
+    const keys = exact
+        ? Array.from(emitted.keys()).sort((a, b) => {
+              const orderA = a.order ?? 0;
+              const orderB = b.order ?? 0;
+              return orderA - orderB;
+          })
+        : Array.from(emitted.keys());
+
+    const finalLines: string[] = [];
+
+    if (definitions.length !== 1 || definitions[0].name !== typeName) {
+        // If there is only on action and it is the type name, don't need to emit the main type alias
+        finalLines.push(
+            `export type ${typeName} = ${definitions.map((definition) => definition.name).join("|")};`,
+        );
+    }
+
+    for (const key of keys) {
+        finalLines.push(...emitted.get(key)!);
+    }
+    return finalLines.join("\n");
+}
+
+export function generateActionSchema(
+    actionSchemas: ActionSchema[],
+    typeName: string = "AllAction",
+    exact: boolean = false, // for testing
+): string {
+    return generateSchema(
+        actionSchemas.map((actionInfo) => actionInfo.definition),
+        typeName,
+        exact,
+    );
 }

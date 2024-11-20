@@ -9,7 +9,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { promisify } from "util";
 
-import { CodeDocumentation } from "./codeDocSchema.js";
+import { FileDocumentation } from "./fileDocSchema.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -32,7 +32,7 @@ export interface Chunk {
     parentId: ChunkId;
     children: ChunkId[];
     filename?: string; // Set on receiving end to reduce JSON size.
-    docs?: CodeDocumentation; // Computed on receiving end from file docs.
+    docs?: FileDocumentation; // Computed on receiving end from file docs.
 }
 
 export interface ChunkedFile {

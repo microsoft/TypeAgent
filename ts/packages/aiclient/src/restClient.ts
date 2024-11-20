@@ -205,6 +205,14 @@ async function callFetch(
 
 export type FetchThrottler = (fn: () => Promise<Response>) => Promise<Response>;
 
+async function getErrorMessage(response: Response): Promise<string> {
+    let bodyMessage = "";
+    try {
+        bodyMessage = ((await response.json()) as any).error;
+    } catch (e) {}
+    return `${response.status}: ${response.statusText}${bodyMessage ? `: ${bodyMessage}` : ""}`;
+}
+
 /**
  * fetch that automatically retries transient Http errors
  * @param url
@@ -229,7 +237,7 @@ export async function fetchWithRetry(
         while (true) {
             const result = await callFetch(url, options, timeout, throttler);
             if (result === undefined) {
-                throw new Error("No Response");
+                throw new Error("fetch: No response");
             }
             debugHeader(result.headers);
             if (result.status === 200) {
@@ -239,16 +247,51 @@ export async function fetchWithRetry(
                 !isTransientHttpError(result.status) ||
                 retryCount >= retryMaxAttempts
             ) {
-                return error(
-                    `fetch error\n${result.status}: ${result.statusText}`,
-                );
+                return error(`fetch error\n${await getErrorMessage(result)}`);
             }
-            await sleep(retryPauseMs);
+            // See if the service tells how long to wait to retry
+            const pauseMs = getRetryAfterMs(result, retryPauseMs);
+            await sleep(pauseMs);
             retryCount++;
         }
     } catch (e) {
         return error(`fetch error:\n${e}`);
     }
+}
+
+/**
+ * When servers return a 429, they can include a Retry-After header that says how long the caller
+ * should wait before retrying
+ * @param result
+ * @param defaultValue
+ * @returns How many milliseconds to pause before retrying
+ */
+export function getRetryAfterMs(
+    result: Response,
+    defaultValue: number,
+): number {
+    try {
+        let pauseHeader = result.headers.get("Retry-After");
+        if (pauseHeader !== null) {
+            pauseHeader = pauseHeader.trim();
+            if (pauseHeader) {
+                let seconds = parseInt(pauseHeader);
+                let pauseMs: number;
+                if (isNaN(seconds)) {
+                    const retryDate = new Date(pauseHeader);
+                    pauseMs = retryDate.getTime() - Date.now(); // Already in ms
+                } else {
+                    pauseMs = seconds * 1000;
+                }
+                if (pauseMs > 0) {
+                    return pauseMs;
+                }
+            }
+        }
+    } catch (err: any) {
+        console.log(`Failed to parse Retry-After header ${err}`);
+    }
+    return defaultValue;
 }
 
 async function fetchWithTimeout(

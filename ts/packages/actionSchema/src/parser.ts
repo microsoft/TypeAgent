@@ -2,41 +2,41 @@
 // Licensed under the MIT License.
 
 import {
-    ActionAliasTypeDefinition,
-    ActionInterfaceTypeDefinition,
-    ActionParamObject,
-    ActionParamObjectFields,
-    ActionParamStringUnion,
-    ActionParamType,
-    ActionParamTypeReference,
-    ActionParamTypeUnion,
+    SchemaTypeAliasDefinition,
+    SchemaTypeInterfaceDefinition,
+    SchemaTypeObject,
+    SchemaObjectFields,
+    SchemaTypeStringUnion,
+    SchemaType,
+    SchemaTypeReference,
+    SchemaTypeUnion,
     ActionSchema,
     ActionSchemaTypeDefinition,
-    ActionTypeDefinition,
+    SchemaTypeDefinition,
 } from "./type.js";
 
 function toActionSchema(
     translatorName: string,
-    definition: ActionTypeDefinition,
-    name: string,
+    definition: SchemaTypeDefinition,
 ): ActionSchema {
     if (definition.type.type !== "object") {
         throw new Error("Expected object type");
     }
+    const name = definition.name;
     const { actionName, parameters } = definition.type.fields;
     if (actionName === undefined) {
-        throw new Error(
-            `Missing actionName field in type ${name ?? "<unknown>"}`,
-        );
+        throw new Error(`Missing actionName field in type ${name}`);
     }
     if (actionName.optional) {
-        throw new Error("actionName field must be required");
+        throw new Error(`actionName field must be required in type ${name}`);
     }
     if (
         actionName.type.type !== "string-union" ||
         actionName.type.typeEnum.length !== 1
     ) {
-        throw new Error("actionName field must be a string literal");
+        throw new Error(
+            `actionName field must be a string literal in type ${name}`,
+        );
     }
 
     const parameterFieldType = parameters?.type;
@@ -44,11 +44,10 @@ function toActionSchema(
         parameterFieldType !== undefined &&
         parameterFieldType.type !== "object"
     ) {
-        throw new Error("parameters field must be an object");
+        throw new Error(`parameters field must be an object in type ${name}`);
     }
     return {
-        translatorName: translatorName,
-        typeName: name,
+        translatorName,
         definition: definition as ActionSchemaTypeDefinition,
         actionName: actionName.type.typeEnum[0],
     };
@@ -58,6 +57,7 @@ export function parseActionSchemaFile(
     filename: string,
     translatorName: string,
     typeName: string,
+    strict: boolean = false,
 ): ActionSchema[] {
     const parser = new ActionParser();
     const definition = parser.parseSchema(filename, typeName);
@@ -65,24 +65,30 @@ export function parseActionSchemaFile(
         throw new Error(`Type ${typeName} not found`);
     }
 
+    if (strict && !definition.exported) {
+        throw new Error(`Type ${typeName} must be exported`);
+    }
+
     switch (definition.type.type) {
         case "object":
-            return [toActionSchema(translatorName, definition, typeName)];
+            return [toActionSchema(translatorName, definition)];
         case "type-union":
+            if (strict && definition.comments) {
+                throw new Error(
+                    `Entry type comments for '${typeName}' are not supported`,
+                );
+            }
             return definition.type.types.map((t) => {
                 if (t.type !== "type-reference") {
                     throw new Error("Expected type reference");
                 }
-                return toActionSchema(translatorName, t.definition, t.name);
+                return toActionSchema(translatorName, t.definition);
             });
         case "type-reference":
-            return [
-                toActionSchema(
-                    translatorName,
-                    definition.type.definition,
-                    typeName,
-                ),
-            ];
+            if (strict && definition.comments) {
+                throw new Error("Entry type comments are not supported");
+            }
+            return [toActionSchema(translatorName, definition.type.definition)];
         default:
             throw new Error(
                 `Expected object or type union, got ${definition.type.type}`,
@@ -90,13 +96,13 @@ export function parseActionSchemaFile(
     }
 }
 
-import ts from "typescript";
+import ts, { CommentRange } from "typescript";
 
 class ActionParser {
     public parseSchema(
         fileName: string,
         typeName: string,
-    ): ActionTypeDefinition | undefined {
+    ): SchemaTypeDefinition | undefined {
         const options: ts.CompilerOptions = {
             target: ts.ScriptTarget.ES5,
             module: ts.ModuleKind.CommonJS,
@@ -126,8 +132,8 @@ class ActionParser {
     }
 
     private fullText = "";
-    private typeMap = new Map<string, ActionTypeDefinition>();
-    private pendingReferences = new Map<string, ActionParamTypeReference>();
+    private typeMap = new Map<string, SchemaTypeDefinition>();
+    private pendingReferences = new Map<string, SchemaTypeReference>();
     private parseAST(node: ts.Node): void {
         switch (node.kind) {
             case ts.SyntaxKind.TypeAliasDeclaration:
@@ -137,6 +143,7 @@ class ActionParser {
                 this.parseInterfaceDeclaration(node as ts.InterfaceDeclaration);
                 break;
             case ts.SyntaxKind.EndOfFileToken:
+            case ts.SyntaxKind.EmptyStatement:
                 break;
             default:
                 throw new Error(
@@ -145,15 +152,18 @@ class ActionParser {
         }
     }
 
-    private checkModifiers(modifiers?: ts.NodeArray<ts.ModifierLike>): void {
+    private isExported(modifiers?: ts.NodeArray<ts.ModifierLike>): boolean {
+        let exported = false;
         if (modifiers !== undefined && modifiers.length > 0) {
             for (const modifier of modifiers) {
                 if (modifier.kind === ts.SyntaxKind.ExportKeyword) {
-                    continue;
+                    exported = true;
+                    continue; // continue to check for unsupported modifiers.
                 }
                 throw new Error(`Modifier are not supported ${modifier}`);
             }
         }
+        return exported;
     }
     private parseTypeAliasDeclaration(node: ts.TypeAliasDeclaration): void {
         const name = node.name.text;
@@ -161,13 +171,15 @@ class ActionParser {
             if (node.typeParameters) {
                 throw new Error("Generics are not supported");
             }
-            this.checkModifiers(node.modifiers);
+            const exported = this.isExported(node.modifiers);
             const type = this.parseType(node.type);
-            const definition: ActionAliasTypeDefinition = {
+            const definition: SchemaTypeAliasDefinition = {
                 alias: true,
                 name,
                 type,
-                comments: this.getCommentStrings(node),
+                comments: this.getLeadingCommentStrings(node),
+                exported,
+                order: this.typeMap.size,
             };
             this.typeMap.set(name, definition);
         } catch (e: any) {
@@ -181,16 +193,18 @@ class ActionParser {
             if (node.typeParameters) {
                 throw new Error("Generics are not supported");
             }
-            this.checkModifiers(node.modifiers);
             if (node.heritageClauses) {
                 throw new Error("Heritage clauses are not supported");
             }
+            const exported = this.isExported(node.modifiers);
             const type = this.parseObjectType(node);
-            const definition: ActionInterfaceTypeDefinition = {
+            const definition: SchemaTypeInterfaceDefinition = {
                 alias: false,
                 name,
                 type,
-                comments: this.getCommentStrings(node),
+                comments: this.getLeadingCommentStrings(node),
+                exported,
+                order: this.typeMap.size,
             };
             this.typeMap.set(name, definition);
         } catch (e: any) {
@@ -200,7 +214,7 @@ class ActionParser {
         }
     }
 
-    private parseType(node: ts.TypeNode): ActionParamType {
+    private parseType(node: ts.TypeNode): SchemaType {
         switch (node.kind) {
             case ts.SyntaxKind.StringKeyword:
                 return { type: "string" };
@@ -229,7 +243,7 @@ class ActionParser {
 
     private parseTypeReference(
         node: ts.TypeReferenceNode,
-    ): ActionParamTypeReference {
+    ): SchemaTypeReference {
         if (node.typeName.kind === ts.SyntaxKind.QualifiedName) {
             throw new Error("Qualified name not supported in type references");
         }
@@ -239,7 +253,7 @@ class ActionParser {
         if (existing) {
             return existing;
         }
-        const result: ActionParamTypeReference = {
+        const result: SchemaTypeReference = {
             type: "type-reference",
             name: typeName,
             definition: undefined!, // we will make sure this get resolved later.
@@ -247,7 +261,7 @@ class ActionParser {
         this.pendingReferences.set(typeName, result);
         return result;
     }
-    private parseArrayType(node: ts.ArrayTypeNode): ActionParamType {
+    private parseArrayType(node: ts.ArrayTypeNode): SchemaType {
         const elementType = this.parseType(node.elementType);
         return {
             type: "array",
@@ -257,7 +271,7 @@ class ActionParser {
 
     private parseStringUnionType(
         node: ts.UnionTypeNode,
-    ): ActionParamStringUnion {
+    ): SchemaTypeStringUnion {
         const typeEnum = node.types.map((type) => {
             if (
                 ts.isLiteralTypeNode(type) &&
@@ -275,7 +289,7 @@ class ActionParser {
         };
     }
 
-    private parseLiteralType(node: ts.LiteralTypeNode): ActionParamStringUnion {
+    private parseLiteralType(node: ts.LiteralTypeNode): SchemaTypeStringUnion {
         if (node.literal.kind !== ts.SyntaxKind.StringLiteral) {
             throw new Error("Only string literal types are supported");
         }
@@ -285,7 +299,7 @@ class ActionParser {
         };
     }
 
-    private parseTypeUnionType(node: ts.UnionTypeNode): ActionParamTypeUnion {
+    private parseTypeUnionType(node: ts.UnionTypeNode): SchemaTypeUnion {
         const types = node.types.map((type) => this.parseType(type));
         return {
             type: "type-union",
@@ -301,8 +315,8 @@ class ActionParser {
 
     private parseObjectType(
         node: ts.TypeLiteralNode | ts.InterfaceDeclaration,
-    ): ActionParamObject {
-        const fields: ActionParamObjectFields = {};
+    ): SchemaTypeObject {
+        const fields: SchemaObjectFields = {};
         for (const member of node.members) {
             if (ts.isPropertySignature(member)) {
                 if (member.type) {
@@ -314,7 +328,9 @@ class ActionParser {
                     fields[member.name.text] = {
                         type: this.parseType(member.type),
                         optional: member.questionToken !== undefined,
-                        comments: this.getCommentStrings(member),
+                        comments: this.getLeadingCommentStrings(member),
+                        trailingComments:
+                            this.getTrailingCommentStrings(member),
                     };
                 }
             }
@@ -325,15 +341,42 @@ class ActionParser {
         };
     }
 
-    private getCommentStrings(node: ts.Node) {
+    private getLeadingCommentStrings(node: ts.Node) {
         const commentRanges = ts.getLeadingCommentRanges(
             this.fullText,
             node.getFullStart(),
         );
-        return commentRanges?.map((r) =>
-            r.kind === ts.SyntaxKind.MultiLineCommentTrivia
-                ? "" // Not supported
-                : this.fullText.slice(r.pos + 2, r.end).trim(),
+        return this.processCommentRanges(commentRanges);
+    }
+
+    private getTrailingCommentStrings(node: ts.Node) {
+        const commentRanges = ts.getTrailingCommentRanges(
+            this.fullText,
+            node.getEnd(),
         );
+        return this.processCommentRanges(commentRanges);
+    }
+
+    private processCommentRanges(commentRanges: CommentRange[] | undefined) {
+        if (commentRanges === undefined) {
+            return undefined;
+        }
+        const comments: string[] = [];
+        for (const r of commentRanges) {
+            if (r.kind === ts.SyntaxKind.MultiLineCommentTrivia) {
+                throw new Error("Multi-line comments are not supported");
+            }
+
+            // Strip the leading //
+            const comment = this.fullText.slice(r.pos + 2, r.end);
+            if (
+                comment.startsWith(" Copyright (c) Microsoft Corporation") ||
+                comment.startsWith(" Licensed under the MIT License")
+            ) {
+                continue;
+            }
+            comments.push(comment);
+        }
+        return comments.length > 0 ? comments : undefined;
     }
 }

@@ -8,8 +8,10 @@ import {
     getBuiltinTranslatorNames,
 } from "agent-dispatcher/internal";
 import chalk from "chalk";
+import { getChatModelNames } from "aiclient";
 import { readFileSync, existsSync } from "fs";
 
+const modelNames = await getChatModelNames();
 export default class RequestCommand extends Command {
     static args = {
         request: Args.string({
@@ -33,6 +35,11 @@ export default class RequestCommand extends Command {
             description:
                 "Explainer name (defaults to the explainer associated with the translator)",
             options: getCacheFactory().getExplainerNames(),
+            required: false,
+        }),
+        model: Flags.string({
+            description: "Translation model to use",
+            options: modelNames,
         }),
     };
 
@@ -48,7 +55,12 @@ export default class RequestCommand extends Command {
             : undefined;
         const dispatcher = await createDispatcher("cli run request", {
             translators,
-            explainer: { name: flags.explainer },
+            actions: translators,
+            commands: { dispatcher: true },
+            translation: { model: flags.model },
+            explainer: flags.explainer
+                ? { enabled: true, name: flags.explainer }
+                : { enabled: false },
             cache: { enabled: false },
         });
         await dispatcher.processCommand(
@@ -56,6 +68,10 @@ export default class RequestCommand extends Command {
             undefined,
             this.loadAttachment(args.attachment),
         );
+        await dispatcher.close();
+
+        // Some background network (like monogo) might keep the process live, exit explicitly.
+        process.exit(0);
     }
 
     loadAttachment(fileName: string | undefined): string[] | undefined {

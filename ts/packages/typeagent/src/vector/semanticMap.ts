@@ -16,9 +16,21 @@ export interface SemanticMap<T> {
     entries(): IterableIterator<[EmbeddedValue<string>, T]>;
     has(text: string): boolean;
     get(text: string): T | undefined;
-    getNearest(text: string | NormalizedEmbedding): Promise<ScoredItem<T>>;
-    set(text: string, value: T): Promise<void>;
-    setMultiple(items: [string, T][], concurrency?: number): Promise<void>;
+    getNearest(
+        text: string | NormalizedEmbedding,
+    ): Promise<ScoredItem<T> | undefined>;
+    set(
+        text: string,
+        value: T,
+        retryMaxAttempts?: number,
+        retryPauseMs?: number,
+    ): Promise<void>;
+    setMultiple(
+        items: [string, T][],
+        retryMaxAttempts?: number,
+        retryPauseMs?: number,
+        concurrency?: number,
+    ): Promise<void>;
     nearestNeighbors(
         value: string | NormalizedEmbedding,
         maxMatches: number,
@@ -26,7 +38,7 @@ export interface SemanticMap<T> {
     ): Promise<ScoredItem<T>[]>;
 }
 
-export async function createSemanticMap<T>(
+export async function createSemanticMap<T = any>(
     model?: TextEmbeddingModel,
     existingValues?: [EmbeddedValue<string>, T][],
 ): Promise<SemanticMap<T>> {
@@ -68,17 +80,29 @@ export async function createSemanticMap<T>(
         return map.get(text);
     }
 
-    async function set(text: string, value: T): Promise<void> {
+    async function set(
+        text: string,
+        value: T,
+        retryMaxAttempts?: number,
+        retryPauseMs?: number,
+    ): Promise<void> {
         // If new item, have to embed.
         if (!map.has(text)) {
             // New item. Must embed
-            await semanticIndex.push(text, text);
+            await semanticIndex.push(
+                text,
+                text,
+                retryMaxAttempts,
+                retryPauseMs,
+            );
         }
         map.set(text, value);
     }
 
     async function setMultiple(
         items: [string, T][],
+        retryMaxAttempts?: number,
+        retryPauseMs?: number,
         concurrency?: number,
     ): Promise<void> {
         let newItems: string[] | undefined;
@@ -91,13 +115,18 @@ export async function createSemanticMap<T>(
             map.set(text, value);
         }
         if (newItems) {
-            await semanticIndex.pushMultiple(newItems, concurrency);
+            await semanticIndex.pushMultiple(
+                newItems,
+                retryMaxAttempts,
+                retryPauseMs,
+                concurrency,
+            );
         }
     }
 
     async function getNearest(
         text: string | NormalizedEmbedding,
-    ): Promise<ScoredItem<T>> {
+    ): Promise<ScoredItem<T> | undefined> {
         // First try an exact match
         if (typeof text === "string") {
             const exactMatch = map.get(text);
@@ -109,7 +138,11 @@ export async function createSemanticMap<T>(
             }
         }
         const key = await semanticIndex.nearestNeighbor(text);
-        return valueFromScoredKey(key);
+        if (key !== undefined) {
+            return valueFromScoredKey(key);
+        } else {
+            return undefined;
+        }
     }
 
     async function nearestNeighbors(

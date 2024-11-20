@@ -10,8 +10,8 @@ import path from "path";
 import { fileURLToPath } from "url";
 
 // Local imports
-import { importPythonFiles } from "./pythonImporter.js";
-import { runQueryInterface } from "./queryInterface.js";
+import { importAllFiles } from "./pythonImporter.js";
+import { interactiveQueryLoop } from "./queryInterface.js";
 import { ChunkyIndex } from "./chunkyIndex.js";
 
 // Set __dirname to emulate old JS behavior
@@ -23,68 +23,58 @@ const envPath = new URL("../../../.env", import.meta.url);
 dotenv.config({ path: envPath });
 
 // Sample file to load with `-` argument
-const sampleFile = path.join(__dirname, "sample.py.txt");
+const sampleFile = path.join(__dirname, "chunker.py");
+
+const usageMessage = `\
+Usage:
+Loading modules:
+    node dist/main.js file1.py [file2.py] ...  # Load files
+    node dist/main.js --files filelist.txt     # Load files listed in filelist.txt
+    node dist/main.js -  # Load sample file (${path.relative(process.cwd(), sampleFile)})
+Interactive query loop:
+    node dist/main.js    # Query previously loaded files (use @search --query 'your query')
+Verbose mode: add -v or --verbose before any of the above commands.
+You can also use 'pnpm start' instead of 'node dist/main.js'.
+Actual args: '${process.argv[0]}' '${process.argv[1]}'
+`;
 
 await main();
 
 async function main(): Promise<void> {
-    const t0 = Date.now();
+    // TODO: switch to whatever interactive-app uses to parse the command line?
 
-    // TODO: switch to whatever interactive-app does.
-    const help =
-        process.argv.includes("-h") ||
-        process.argv.includes("--help") ||
-        process.argv.includes("-?") ||
-        process.argv.includes("--?");
+    const helpFlags = ["-h", "--help", "-?", "--?"];
+    const help = helpFlags.some((arg) => process.argv.includes(arg));
     if (help) {
-        console.log(
-            "Usage:\n" +
-                "Loading modules:\n" +
-                "   node main.js file1.py [file2.py] ...  # Load files\n" +
-                "   node main.js --files filelist.txt  # Load files listed in filelist.txt\n" +
-                `   node main.js -  # Load sample file (${path.relative(process.cwd(), sampleFile)})\n` +
-                "Interactive query loop:\n" +
-                "   node main.js    # Query previously loaded files (use @search --query 'your query')\n",
-        );
+        console.log(usageMessage);
         return;
     }
 
-    const verbose =
-        process.argv.includes("-v") || process.argv.includes("--verbose");
+    const verboseFlags = ["-v", "--verbose"];
+    const verbose = verboseFlags.some((arg) => process.argv.includes(arg));
     if (verbose) {
         process.argv = process.argv.filter(
             (arg) => arg !== "-v" && arg !== "--verbose",
         );
     }
 
-    const files = processArgs();
+    const files = parseCommandLine();
 
-    let homeDir = process.platform === "darwin" ? process.env.HOME || "" : "";
-    const rootDir = path.join(homeDir, "/data/spelunker");
-    const chunkyIndex = await ChunkyIndex.createInstance(rootDir);
+    const homeDir = process.platform === "darwin" ? process.env.HOME || "" : "";
+    const databaseRootDir = path.join(homeDir, "/data/spelunker");
 
-    const t1 = Date.now();
-    console.log(`[Initialized in ${((t1 - t0) * 0.001).toFixed(3)} seconds]`);
+    const chunkyIndex = await ChunkyIndex.createInstance(databaseRootDir);
 
-    // Import all files. (TODO: Break up very long lists.)
     if (files.length > 0) {
-        console.log(`[Importing ${files.length} files]`);
-        const t0 = Date.now();
-
-        await importPythonFiles(files, chunkyIndex, true, verbose);
-
-        const t1 = Date.now();
-        console.log(
-            `[Imported ${files.length} files in ${((t1 - t0) * 0.001).toFixed(3)} seconds]`,
-        );
+        await importAllFiles(files, chunkyIndex, verbose);
     } else {
-        await runQueryInterface(chunkyIndex, verbose);
+        await interactiveQueryLoop(chunkyIndex, verbose);
     }
 }
 
-function processArgs(): string[] {
+function parseCommandLine(): string[] {
     let files: string[];
-    // TODO: Use a proper command-line parser.
+    // TODO: Use a proper command-line parser?
     if (process.argv.length > 2) {
         files = process.argv.slice(2);
         if (files.length === 1 && files[0] === "-") {

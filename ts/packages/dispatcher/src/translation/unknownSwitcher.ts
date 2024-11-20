@@ -9,18 +9,18 @@ import { getTranslatorActionSchemas } from "./actionSchema.js";
 import { Result, success } from "typechat";
 import registerDebug from "debug";
 import { TranslatorConfigProvider } from "./agentTranslators.js";
+import { generateSchema, ActionSchemaCreator as sc } from "action-schema";
 
 const debugSwitchSearch = registerDebug("typeagent:switch:search");
 
-function createSelectionSchema(
+function createSelectionActionTypeDefinition(
     translatorName: string,
     provider: TranslatorConfigProvider,
-): InlineTranslatorSchemaDef | undefined {
+) {
     const translatorConfig = provider.getTranslatorConfig(translatorName);
     // Skip injected schemas except for chat; investigate whether we can get chat always on first pass
     if (translatorConfig.injected && translatorName !== "chat") {
         // No need to select for injected schemas
-        selectSchemaCache.set(translatorName, undefined);
         return undefined;
     }
     const actionSchemas = getTranslatorActionSchemas(
@@ -31,26 +31,48 @@ function createSelectionSchema(
     const actionNames: string[] = [];
     const actionComments: string[] = [];
     for (const info of actionSchemas.values()) {
-        actionNames.push(`"${info.actionName}"`);
+        actionNames.push(info.actionName);
         actionComments.push(
-            `"${info.actionName}"${info.definition.comments ? ` - ${info.definition.comments[0]}` : ""}`,
+            ` "${info.actionName}"${info.definition.comments ? ` - ${info.definition.comments[0].trim()}` : ""}`,
         );
     }
 
     if (actionNames.length === 0) {
-        selectSchemaCache.set(translatorName, undefined);
         return undefined;
     }
-    const typeName = `${translatorConfig.schemaType}Assistant`;
-    const schema = `
-export type ${typeName} = {
-    // ${translatorConfig.description}
-    assistant: "${translatorName}";
-    // ${actionComments.join("\n    // ")}
-    action: ${actionNames.join(" | ")};
-};`;
 
-    return { kind: "inline", typeName, schema };
+    const typeName = `${translatorConfig.schemaType}Assistant`;
+
+    const schema = sc.type(
+        typeName,
+        sc.obj({
+            assistant: sc.field(
+                sc.string(translatorName),
+                ` ${translatorConfig.description}`,
+            ),
+            action: sc.field(sc.string(...actionNames), actionComments),
+        }),
+    );
+    return schema;
+}
+
+function createSelectionSchema(
+    translatorName: string,
+    provider: TranslatorConfigProvider,
+): InlineTranslatorSchemaDef | undefined {
+    const schema = createSelectionActionTypeDefinition(
+        translatorName,
+        provider,
+    );
+    if (schema === undefined) {
+        return undefined;
+    }
+    const typeName = schema.name;
+    return {
+        kind: "inline",
+        typeName,
+        schema: generateSchema([schema], typeName),
+    };
 }
 
 const selectSchemaCache = new Map<
@@ -138,13 +160,15 @@ export function loadAssistantSelectionJsonTranslator(
                 entries
                     .map((entry) => entry.schema)
                     .concat(unknownAssistantSelectionSchemaDef),
-                undefined,
-                [
-                    {
-                        role: "system",
-                        content: "Select the assistant to handle the request",
-                    },
-                ],
+                {
+                    instructions: [
+                        {
+                            role: "system",
+                            content:
+                                "Select the assistant to handle the request",
+                        },
+                    ],
+                },
             ),
         };
     });

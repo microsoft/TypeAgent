@@ -99,15 +99,19 @@ function getReservedConversation(
 }
 
 export function createModels(): Models {
-    const embeddingSettings = openai.apiSettingsFromEnv(
+    const chatModelSettings = openai.apiSettingsFromEnv(openai.ModelType.Chat);
+    chatModelSettings.retryPauseMs = 10000;
+    const embeddingModelSettings = openai.apiSettingsFromEnv(
         openai.ModelType.Embedding,
     );
-    embeddingSettings.retryPauseMs = 25 * 1000;
+    embeddingModelSettings.retryPauseMs = 25 * 1000;
 
     const models: Models = {
-        chatModel: openai.createChatModelDefault("chatMemory"),
+        chatModel: openai.createJsonChatModel(chatModelSettings, [
+            "chatMemory",
+        ]),
         embeddingModel: knowLib.createEmbeddingCache(
-            openai.createEmbeddingModel(embeddingSettings),
+            openai.createEmbeddingModel(embeddingModelSettings),
             1024,
         ),
         /*
@@ -281,6 +285,7 @@ export async function runChatMemory(): Promise<void> {
         replay,
         knowledge,
         extract,
+        compare,
         buildIndex,
         topics,
         entities,
@@ -522,12 +527,18 @@ export async function runChatMemory(): Promise<void> {
         section_title?: string;
         speaker?: string;
     }
+
     interface IExtractedData {
         knowledge: knowLib.conversation.KnowledgeResponse;
         message: string;
         id?: string | undefined;
         description?: string | undefined;
+        loss?: number | undefined;
+        simpleLoss?: number | undefined;
+        modelName?: string | undefined;
+        refModelName?: string | undefined;
     }
+
     function extractDef(): CommandMetadata {
         return {
             description:
@@ -537,6 +548,7 @@ export async function runChatMemory(): Promise<void> {
                 pause: argPause(),
                 logFile: argDestFile("Log file for extraction data"),
                 inFile: argSourceFile("Input file with messages"),
+                testLoss: argBool("Compute loss for each message"),
             },
         };
     }
@@ -556,17 +568,24 @@ export async function runChatMemory(): Promise<void> {
         // open log file for writing
         const logPath = path.join(context.storePath, logFile);
         const logStream = fs.createWriteStream(logPath);
-        const extractor = conversation.createKnowledgeExtractor(
-            context.models.chatModel,
-            {
-                maxContextLength: context.maxCharsPerChunk,
-                mergeActionKnowledge: false,
-            },
+        const chatModelSettings = openai.apiSettingsFromEnv(
+            openai.ModelType.Chat,
+            undefined,
+            "GPT_4_O",
         );
+        chatModelSettings.retryPauseMs = 10000;
+        const chatModel = openai.createJsonChatModel(chatModelSettings, [
+            "chatExtractor",
+        ]);
+        const extractor = conversation.createKnowledgeExtractor(chatModel, {
+            maxContextLength: context.maxCharsPerChunk,
+            mergeActionKnowledge: false,
+        });
         const extractedData = [] as IExtractedData[];
         // extract from each record in inData and write to the log file
         let count = 0;
         const maxTurns = namedArgs.maxTurns;
+        const testLoss = namedArgs.testLoss;
         const clock = new StopWatch();
         let totalElapsed = 0;
         clock.start();
@@ -588,8 +607,150 @@ export async function runChatMemory(): Promise<void> {
                     id: record.id,
                     description: record.section_title,
                 };
+                if (testLoss) {
+                    const loss = await conversation
+                        .knowledgeResponseLoss(
+                            knowledge,
+                            knowledge,
+                            context.models.embeddingModel,
+                        )
+                        .catch((err) => {
+                            printer.writeError(`Error computing loss: ${err}`);
+                            return 0;
+                        });
+                    const simpleLoss =
+                        await conversation.simpleKnowledgeResponseLoss(
+                            knowledge,
+                            knowledge,
+                            context.models.embeddingModel,
+                        );
+                    printer.writeError(
+                        `Loss for ${msg} is ${loss.toFixed(2)}, simple loss: ${simpleLoss.toFixed(2)}`,
+                    );
+                }
                 extractedData.push(data);
                 count++;
+            }
+            if (maxTurns && count >= maxTurns) {
+                break;
+            }
+            // write elapsed time every 10 records
+            if (count % 10 === 0) {
+                clock.stop();
+                totalElapsed += clock.elapsedMs;
+                printer.writeTiming(chalk.cyan, clock, "last 10 records");
+                // write out elapsed time in seconds
+                printer.writeLine(
+                    `Processed ${count} records with total elapsed time: ${millisecondsToString(
+                        totalElapsed,
+                        "s",
+                    )}`,
+                );
+                clock.start();
+            }
+        }
+        clock.stop();
+        const json = JSON.stringify(extractedData, null, 2);
+        logStream.write(json);
+        logStream.close();
+    }
+
+    function compareDef(): CommandMetadata {
+        return {
+            description:
+                "Extract knowledge from the messages in the current conversation",
+            options: {
+                maxTurns: argNum("Number of turns to run"),
+                pause: argPause(),
+                logFile: argDestFile("Log file for extraction data"),
+                inFile: argSourceFile("Input file with messages and KR data"),
+            },
+        };
+    }
+    commands.compare.metadata = compareDef();
+    async function compare(args: string[], _io: InteractiveIo) {
+        const namedArgs = parseNamedArguments(args, knowledgeDef());
+        const logFile = namedArgs.logFile as string;
+        const inFile = namedArgs.inFile as string;
+        if (!logFile || !inFile) {
+            printer.writeError("Missing logFile or inFile");
+            return;
+        }
+        const fullInPath = path.join(context.storePath, inFile);
+        const inData = JSON.parse(
+            fs.readFileSync(fullInPath, "utf8"),
+        ) as IExtractedData[];
+        // open log file for writing
+        const logPath = path.join(context.storePath, logFile);
+        const logStream = fs.createWriteStream(logPath);
+        /*    const chatModelSettings = openai.apiSettingsFromEnv(
+            openai.ModelType.Chat,
+            undefined,
+            "GPT_4_O_MINI",
+        );
+        */
+        const chatModelSettings = openai.localOpenAIApiSettingsFromEnv(
+            openai.ModelType.Chat,
+            process.env,
+            "LOCAL",
+        );
+        if (!chatModelSettings) {
+            return;
+        }
+        chatModelSettings.retryPauseMs = 10000;
+        const chatModel = openai.createJsonChatModel(chatModelSettings, [
+            "chatExtractor",
+        ]);
+        const extractor = conversation.createKnowledgeExtractor(chatModel, {
+            maxContextLength: context.maxCharsPerChunk,
+            mergeActionKnowledge: false,
+        });
+        const extractedData = [] as IExtractedData[];
+        // extract from each record in inData and write to the log file
+        let count = 0;
+        const maxTurns = namedArgs.maxTurns;
+        const clock = new StopWatch();
+        let totalElapsed = 0;
+        let aveLoss = 0.0;
+        let aveSimpleLoss = 0.0;
+        clock.start();
+        for (const record of inData) {
+            let msg = record.message;
+            const refKnowledge = record.knowledge;
+            let knowledge: knowLib.conversation.KnowledgeResponse | undefined;
+            knowledge = await extractor.extract(msg).catch((err) => {
+                printer.writeError(`Error extracting knowledge: ${err}`);
+                return undefined;
+            });
+
+            if (knowledge) {
+                const loss = await knowLib.conversation.knowledgeResponseLoss(
+                    knowledge,
+                    refKnowledge,
+                    context.models.embeddingModel,
+                );
+                count++;
+                aveLoss += loss;
+                const simpleLoss =
+                    await knowLib.conversation.simpleKnowledgeResponseLoss(
+                        knowledge,
+                        refKnowledge,
+                        context.models.embeddingModel,
+                    );
+                aveSimpleLoss += simpleLoss;
+                printer.writeError(
+                    `Loss for ${msg} is ${loss.toFixed(2)}, ave: ${(aveLoss / count).toFixed(2)}, simple loss: ${simpleLoss.toFixed(2)}, ave: ${(aveSimpleLoss / count).toFixed(2)}`,
+                );
+                const data = {
+                    knowledge,
+                    message: msg,
+                    id: record.id,
+                    loss,
+                    refModelName: record.modelName || "gpt_4o",
+                    modelName: "gemma2:9b-instruct-fp16",
+                    description: record.description,
+                };
+                extractedData.push(data);
             }
             if (maxTurns && count >= maxTurns) {
                 break;
@@ -1147,8 +1308,10 @@ export async function runChatMemory(): Promise<void> {
         }
         if (!namedArgs.eval) {
             // just translate user query into structured query without eval
-            const translationContext =
-                await context.searcher.buildContext(searchOptions);
+            const translationContext = await context.searcher.buildContext(
+                query,
+                searchOptions,
+            );
             const searchResult: any = namedArgs.v2
                 ? await searcher.actions.translateSearchTermsV2(
                       query,

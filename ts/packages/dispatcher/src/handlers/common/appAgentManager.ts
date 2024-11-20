@@ -44,6 +44,9 @@ export type AppAgentState = {
 
 export type AppAgentStateOptions = DeepPartialUndefinedAndNull<AppAgentState>;
 
+// For force, if the option kind is null or the app agent value is null or missing, default to false.
+// For overrides, if the options kind or app agent value is null, use the agent default.
+// If it is missing, then either use the default value based on the 'useDefault' parameter, or the current value.
 function getEffectiveValue(
     force: AppAgentStateOptions | undefined,
     overrides: AppAgentStateOptions | undefined,
@@ -65,6 +68,46 @@ function getEffectiveValue(
     }
     // null means default value
     return enabled ?? defaultValue;
+}
+
+function computeStateChange(
+    force: AppAgentStateOptions | undefined,
+    overrides: AppAgentStateOptions | undefined,
+    kind: "translators" | "actions" | "commands",
+    name: string,
+    useDefault: boolean,
+    defaultEnabled: boolean,
+    currentEnabled: boolean,
+    failed: [string, boolean, Error][],
+) {
+    const alwaysEnabled = alwaysEnabledAgents[kind].includes(name);
+    const effectiveEnabled = getEffectiveValue(
+        force,
+        overrides,
+        kind,
+        name,
+        useDefault,
+        defaultEnabled,
+        currentEnabled,
+    );
+    if (alwaysEnabled && !effectiveEnabled) {
+        // error message is user explicitly say false. (instead of using "null")
+        if (
+            force?.[kind]?.[name] === false ||
+            overrides?.[kind]?.[name] === false
+        ) {
+            failed.push([
+                name,
+                effectiveEnabled,
+                new Error(`Cannot disable ${kind} for '${name}'`),
+            ]);
+        }
+    }
+    const enableTranslator = alwaysEnabled || effectiveEnabled;
+    if (enableTranslator !== currentEnabled) {
+        return enableTranslator;
+    }
+    return undefined;
 }
 
 export type SetStateResult = {
@@ -255,45 +298,39 @@ export class AppAgentManager implements TranslatorConfigProvider {
         for (const [name, config] of this.translatorConfigs) {
             const record = this.getRecord(getAppAgentName(name));
 
-            const currentTranslatorEnabled = record.translators.has(name);
-            const enableTranslator = getEffectiveValue(
+            const enableTranslator = computeStateChange(
                 force,
                 overrides,
                 "translators",
                 name,
                 useDefault,
                 config.translationDefaultEnabled,
-                currentTranslatorEnabled,
+                record.translators.has(name),
+                failedTranslators,
             );
-
-            if (enableTranslator !== currentTranslatorEnabled) {
+            if (enableTranslator !== undefined) {
                 if (enableTranslator) {
                     record.translators.add(name);
                     changedTranslators.push([name, enableTranslator]);
-                } else if (!alwaysEnabledAgents.translators.includes(name)) {
+                    debug(`Translator enabled ${name}`);
+                } else {
                     record.translators.delete(name);
                     changedTranslators.push([name, enableTranslator]);
-                } else {
-                    failedTranslators.push([
-                        name,
-                        enableTranslator,
-                        new Error(`Cannot disable ${name} translator`),
-                    ]);
+                    debug(`Translator disnabled ${name}`);
                 }
             }
 
-            const currentActionEnabled = record.actions.has(name);
-            const enableAction = getEffectiveValue(
+            const enableAction = computeStateChange(
                 force,
                 overrides,
                 "actions",
                 name,
                 useDefault,
                 config.actionDefaultEnabled,
-                currentActionEnabled,
+                record.actions.has(name),
+                failedActions,
             );
-
-            if (enableAction !== currentActionEnabled) {
+            if (enableAction !== undefined) {
                 p.push(
                     (async () => {
                         try {
@@ -313,8 +350,7 @@ export class AppAgentManager implements TranslatorConfigProvider {
         }
 
         for (const record of this.agents.values()) {
-            const currentCommandsEnabled = record.commands;
-            const enableCommands = getEffectiveValue(
+            const enableCommands = computeStateChange(
                 force,
                 overrides,
                 "commands",
@@ -323,10 +359,11 @@ export class AppAgentManager implements TranslatorConfigProvider {
                 record.manifest.commandDefaultEnabled ??
                     record.manifest.defaultEnabled ??
                     true,
-                currentCommandsEnabled,
+                record.commands,
+                failedCommands,
             );
 
-            if (enableCommands !== currentCommandsEnabled) {
+            if (enableCommands !== undefined) {
                 if (enableCommands) {
                     p.push(
                         (async () => {
@@ -350,17 +387,9 @@ export class AppAgentManager implements TranslatorConfigProvider {
                         })(),
                     );
                 } else {
-                    if (alwaysEnabledAgents.commands.includes(record.name)) {
-                        failedCommands.push([
-                            record.name,
-                            enableCommands,
-                            new Error(`Cannot disable ${record.name} commands`),
-                        ]);
-                    } else {
-                        record.commands = false;
-                        changedCommands.push([record.name, enableCommands]);
-                        await this.checkCloseSessionContext(record);
-                    }
+                    record.commands = false;
+                    changedCommands.push([record.name, enableCommands]);
+                    await this.checkCloseSessionContext(record);
                 }
             }
         }
@@ -427,11 +456,8 @@ export class AppAgentManager implements TranslatorConfigProvider {
                 record.actions.delete(translatorName);
                 throw e;
             }
-            debug(`Enabled ${translatorName}`);
+            debug(`Action enabled ${translatorName}`);
         } else {
-            if (alwaysEnabledAgents.actions.includes(translatorName)) {
-                throw new Error(`Cannot disable ${translatorName} actions`);
-            }
             if (!record.actions.has(translatorName)) {
                 return;
             }
@@ -445,7 +471,7 @@ export class AppAgentManager implements TranslatorConfigProvider {
                 );
             } finally {
                 // Assume that it is disabled even when there is an exception
-                debug(`Disabled ${translatorName}`);
+                debug(`Action disabled ${translatorName}`);
                 await this.checkCloseSessionContext(record);
             }
         }

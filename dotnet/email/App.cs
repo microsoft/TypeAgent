@@ -123,7 +123,10 @@ public class App
             {
                 args[0] = args[0][1..];
                 var result = app._commands.Invoke(args);
-                Console.WriteLine(result);
+                if (result != 0)
+                {
+                    Console.WriteLine($"Command returned {result}");
+                }
             }
             args = ConsoleEx.GetInput("📬>");
         }
