@@ -243,7 +243,6 @@ export async function interactiveQueryLoop(
         io: iapp.InteractiveIo,
         indexName: IndexType,
     ): Promise<void> {
-        const numChunks = await chunkyIndex.chunkFolder.size();
         const namedArgs = iapp.parseNamedArguments(args, keywordsDef());
         const index = chunkyIndex.getIndexByName(indexName);
         if (namedArgs.debug) {
@@ -287,26 +286,29 @@ export async function interactiveQueryLoop(
             }
         }
 
-        // TFIDF = TF(t) * IDF(t) = 1 * log(N / (1 + nt))
-        // - t is a term (in other contexts, a term occurring in a given chunk)
-        // - nt the number of chunks occurring for that term in this index
-        // - N the total number of chunks in the system
-        for (const hit of hits) {
-            const numSourceIds: number = hit.item.sourceIds?.length ?? 0;
-            hit.score *= Math.log(numChunks / (1 + numSourceIds));
-        }
-
         if (!hits.length) {
             io.writer.writeLine(`No ${indexName}.`);
+            return;
         } else {
             io.writer.writeLine(`Found ${hits.length} ${indexName}.`);
+
+            // TFIDF = TF(t) * IDF(t) = 1 * log(N / (1 + nt))
+            // - t is a term (in other contexts, a term occurring in a given chunk)
+            // - nt the number of chunks occurring for that term in this index
+            // - N the total number of chunks in the system
+            const numChunks = await chunkyIndex.chunkFolder.size();
+            for (const hit of hits) {
+                const numSourceIds: number = hit.item.sourceIds?.length ?? 0;
+                hit.score *= Math.log(numChunks / (1 + numSourceIds));
+            }
+
             hits.sort((a, b) => {
                 if (a.score != b.score) return b.score - a.score;
                 return a.item.value.localeCompare(b.item.value);
             });
             for (const hit of hits) {
                 io.writer.writeLine(
-                    `${hit.item.value} (${hit.score.toFixed(3)}) :: ${(hit.item.sourceIds ?? []).join(", ")}`,
+                    `${hit.score.toFixed(3).padStart(7)}: ${hit.item.value} :: ${(hit.item.sourceIds ?? []).join(", ")}`,
                 );
             }
         }
@@ -386,7 +388,7 @@ export async function interactiveQueryLoop(
                 );
                 for (const hit of hits) {
                     io.writer.writeLine(
-                        `${hit.item.value} (${hit.score.toFixed(3)}) -- ${hit.item.sourceIds?.join(", ")}`,
+                        `${hit.score.toFixed(3).padStart(7)}: ${hit.item.value} -- ${hit.item.sourceIds?.join(", ")}`,
                     );
                 }
             }
@@ -557,7 +559,7 @@ async function processQuery(
         for (const hit of hits) {
             if (options.verbose) {
                 io.writer.writeLine(
-                    `  ${hit.item.value} (${hit.score.toFixed(3)}) -- ${hit.item.sourceIds}`,
+                    `  ${hit.score.toFixed(3).padStart(7)}: ${hit.item.value} -- ${hit.item.sourceIds}`,
                 );
             }
             for (const id of hit.item.sourceIds ?? []) {
@@ -632,7 +634,7 @@ function plural(s: string, n: number): string {
 }
 
 // Wrap long lines. Still written by Github Copilot.
-export function wordWrap(text: string, wrapLength: number = 100): string {
+export function wordWrap(text: string, wrapLength: number = 80): string {
     const wrappedLines: string[] = [];
 
     text.split("\n").forEach((line) => {
