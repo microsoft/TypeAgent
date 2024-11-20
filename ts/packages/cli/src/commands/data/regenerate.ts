@@ -24,12 +24,8 @@ import {
     printImportConstructionResult,
     RequestAction,
 } from "agent-cache";
-import {
-    createLimiter,
-    getElapsedString,
-    getChatModelMaxConcurrency,
-    getChatModelNames,
-} from "common-utils";
+import { createLimiter, getElapsedString } from "common-utils";
+import { getChatModelMaxConcurrency, getChatModelNames } from "aiclient";
 import { Entity } from "@typeagent/agent-sdk";
 
 function toEntities(actions: Actions): Entity[] {
@@ -50,6 +46,7 @@ function toEntities(actions: Actions): Entity[] {
     return entities;
 }
 
+const modelNames = await getChatModelNames();
 export default class ExplanationDataRegenerateCommmand extends Command {
     static strict = false;
     static args = {
@@ -91,7 +88,7 @@ export default class ExplanationDataRegenerateCommmand extends Command {
         }),
         model: Flags.string({
             description: "Model to use",
-            options: getChatModelNames(),
+            options: modelNames,
         }),
         explanation: Flags.boolean({
             description: "Regenerate explanation only",

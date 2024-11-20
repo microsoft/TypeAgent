@@ -779,7 +779,7 @@ function toPrettyString(explanation: Explanation) {
         Math.max(
             phrase.text.length,
             phrase.category.length + 2,
-            ...(hasPropertyNames(phrase)
+            ...(isPropertySubPhrase(phrase)
                 ? []
                 : phrase.synonyms.map((s) => s.length)),
             ...categories.map((c) => c.length),
@@ -814,7 +814,7 @@ function toPrettyString(explanation: Explanation) {
     // Synonyms
     const maxSynonyms = Math.max(
         ...explanation.subPhrases.map((phrase) =>
-            hasPropertyNames(phrase) ? 0 : phrase.synonyms.length,
+            isPropertySubPhrase(phrase) ? 0 : phrase.synonyms.length,
         ),
     );
 
@@ -823,7 +823,7 @@ function toPrettyString(explanation: Explanation) {
             createLine(
                 i === 0 ? "Synonyms" : "",
                 explanation.subPhrases.map((phrase) =>
-                    hasPropertyNames(phrase) ? "" : phrase.synonyms[i] ?? "",
+                    isPropertySubPhrase(phrase) ? "" : phrase.synonyms[i] ?? "",
                 ),
             ),
         );

@@ -170,16 +170,6 @@ export interface Conversation<
     ): Promise<void>;
 }
 
-export type ExtractedKnowledgeIds<
-    TopicId = any,
-    TEntityId = any,
-    TActionId = any,
-> = {
-    topicIds?: TopicId[];
-    entityIds?: TEntityId[] | undefined;
-    actionIds?: TActionId[] | undefined;
-};
-
 /**
  * Create or load a persistent conversation, using the given rootPath as the storage root.
  * - The conversation is stored in folders below the given root path
@@ -813,6 +803,16 @@ export async function createConversation(
         return createSearchResponse<MessageId, TopicId, EntityId>();
     }
 }
+
+export type ExtractedKnowledgeIds<
+    TopicId = any,
+    TEntityId = any,
+    TActionId = any,
+> = {
+    topicIds?: TopicId[];
+    entityIds?: TEntityId[] | undefined;
+    actionIds?: TActionId[] | undefined;
+};
 
 export interface ConversationTopicMerger<TTopicId = any>
     extends TopicMerger<TTopicId> {

@@ -14,6 +14,9 @@ import {
     closeCommandHandlerContext,
 } from "agent-dispatcher/internal";
 import inspector from "node:inspector";
+import { getChatModelNames } from "aiclient";
+
+const modelNames = await getChatModelNames();
 
 export default class Interactive extends Command {
     static description = "Interactive mode";
@@ -27,6 +30,10 @@ export default class Interactive extends Command {
             description:
                 "Explainer name (defaults to the explainer associated with the translator)",
             options: getCacheFactory().getExplainerNames(),
+        }),
+        model: Flags.string({
+            description: "Translation model to use",
+            options: modelNames,
         }),
         debug: Flags.boolean({
             description: "Enable debug mode",
@@ -68,6 +75,7 @@ export default class Interactive extends Command {
         try {
             context = await initializeCommandHandlerContext("cli interactive", {
                 translators,
+                translation: { model: flags.model },
                 explainer: { name: flags.explainer },
                 stdio,
                 persistSession: !flags.memory,

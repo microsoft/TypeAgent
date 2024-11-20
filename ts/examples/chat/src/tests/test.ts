@@ -16,6 +16,9 @@ import {
     collections,
     readAllText,
     dotProductSimple,
+    createSemanticMap,
+    generateEmbedding,
+    asyncArray,
 } from "typeagent";
 import * as path from "path";
 import { getData } from "typechat";
@@ -107,6 +110,41 @@ export async function testEmbeddingModel() {
             console.log("Success");
         }
     }
+}
+
+export async function testEmbeddingBasic() {
+    const model = openai.createEmbeddingModel();
+
+    const strings = ["object", "instrument", "person", "food", "pizza"];
+    for (const str of strings) {
+        const e = await model.generateEmbedding(str);
+        if (e.success) {
+            console.log("Success");
+        }
+    }
+}
+
+export async function testSemanticMap() {
+    const strings = [
+        "lunch meeting",
+        "pick up groceries",
+        "The quick brown fox",
+        "Who is a good dog?",
+        "I am so very hungry for pizza",
+    ];
+    const model = openai.createEmbeddingModel();
+    const sm = await createSemanticMap<number>(model);
+    for (let i = 0; i < strings.length; ++i) {
+        await sm.set(strings[i], i);
+    }
+    let match = await sm.getNearest("Toto is a good dog");
+    console.log(match);
+
+    match = await sm.getNearest("pepperoni and margarhita");
+    console.log(match);
+
+    match = await sm.getNearest("we should meet up for lunch");
+    console.log(match);
 }
 
 export function generateMessageLines(count: number): string[] {
@@ -264,10 +302,27 @@ export async function testPerf() {
     testDotPerf();
     testDotPerf2(1536);
 }
+
+export async function loadTestEmbeddings() {
+    const text = "The quick brown fox did something something";
+    const model = openai.createEmbeddingModel();
+    const texts: string[] = new Array(10000);
+    texts.fill(text);
+    await asyncArray.forEachAsync(texts, 4, async (t, i) => {
+        const stopWatch = new StopWatch();
+        stopWatch.start();
+        await generateEmbedding(model, t);
+        stopWatch.stop();
+        console.log(`${i} / ${stopWatch.elapsedString()}`);
+    });
+}
+
 export async function runTests(): Promise<void> {
+    //await loadTestEmbeddings();
+    //await testSemanticMap();
     //await testEmbeddingModel();
     //await runTestCases();
     // await runKnowledgeTests();
     //await testPerf();
-    testTypes<number, string>();
+    //testTypes<number, string>();
 }

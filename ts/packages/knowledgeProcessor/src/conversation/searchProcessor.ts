@@ -1,7 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { SearchOptions } from "typeagent";
+import {
+    MessageSourceRole,
+    PromptSectionProvider,
+    SearchOptions,
+} from "typeagent";
 import {
     Conversation,
     ConversationSearchOptions,
@@ -39,6 +43,10 @@ import {
 } from "./knowledgeTermSearchSchema2.js";
 import { createTopicSearchOptions } from "./topics.js";
 
+export type SearchProcessorSettings = {
+    sectionProvider?: PromptSectionProvider | undefined;
+};
+
 export type SearchProcessingOptions = {
     maxMatches: number;
     minScore: number;
@@ -52,8 +60,10 @@ export type SearchProcessingOptions = {
 };
 
 export interface ConversationSearchProcessor {
+    settings: SearchProcessorSettings;
     actions: KnowledgeActionTranslator;
     answers: AnswerGenerator;
+
     search(
         query: string,
         options: SearchProcessingOptions,
@@ -78,6 +88,7 @@ export interface ConversationSearchProcessor {
         options: SearchProcessingOptions,
     ): Promise<SearchTermsActionResponse>;
     buildContext(
+        query: string,
         options: SearchProcessingOptions,
     ): Promise<PromptSection[] | undefined>;
 }
@@ -86,11 +97,14 @@ export function createSearchProcessor(
     conversation: Conversation,
     actionModel: ChatModel,
     answerModel: ChatModel,
+    searchProcessorSettings?: SearchProcessorSettings,
 ): ConversationSearchProcessor {
+    const settings = searchProcessorSettings ?? {};
     const searchTranslator = createKnowledgeActionTranslator(actionModel);
     const answers = createAnswerGenerator(answerModel);
 
-    return {
+    const thisProcessor: ConversationSearchProcessor = {
+        settings,
         actions: searchTranslator,
         answers,
         search,
@@ -99,12 +113,13 @@ export function createSearchProcessor(
         buildContext,
         generateAnswer,
     };
+    return thisProcessor;
 
     async function search(
         query: string,
         options: SearchProcessingOptions,
     ): Promise<SearchActionResponse | undefined> {
-        const context = await buildContext();
+        const context = await buildContext(query);
         const actionResult = await searchTranslator.translateSearch(
             query,
             context,
@@ -135,7 +150,7 @@ export function createSearchProcessor(
         filters: TermFilter[] | undefined,
         options: SearchProcessingOptions,
     ): Promise<SearchTermsActionResponse | undefined> {
-        const context = await buildContext();
+        const context = await buildContext(query);
         let action: SearchTermsAction | undefined;
         if (filters && filters.length > 0) {
             // Filters already provided
@@ -177,7 +192,7 @@ export function createSearchProcessor(
         filters: TermFilterV2[] | undefined,
         options: SearchProcessingOptions,
     ): Promise<SearchTermsActionResponseV2 | undefined> {
-        const context = await buildContext();
+        const context = await buildContext(query);
         let action: SearchTermsActionV2 | undefined;
         if (filters && filters.length > 0) {
             // Filters already provided
@@ -214,16 +229,29 @@ export function createSearchProcessor(
         return rr;
     }
 
-    async function buildContext(): Promise<PromptSection[] | undefined> {
+    async function buildContext(
+        query: string,
+    ): Promise<PromptSection[] | undefined> {
+        let context: PromptSection[] | undefined;
         const timeRange = await conversation.messages.getTimeRange();
-        return timeRange
-            ? [
-                  {
-                      role: "system",
-                      content: `ONLY IF user request explicitly asks for time ranges, THEN use the CONVERSATION TIME RANGE: "${timeRange.startDate} to ${timeRange.stopDate}"`,
-                  },
-              ]
-            : undefined;
+        if (timeRange) {
+            context ??= [];
+            context.push({
+                role: MessageSourceRole.system,
+                content: `ONLY IF user request explicitly asks for time ranges, THEN use the CONVERSATION TIME RANGE: "${timeRange.startDate} to ${timeRange.stopDate}"`,
+            });
+        }
+        if (settings.sectionProvider) {
+            const sections = await settings.sectionProvider.getSections(query);
+            if (sections && sections.length > 0) {
+                if (context) {
+                    context.push(...sections);
+                } else {
+                    context = sections;
+                }
+            }
+        }
+        return context;
     }
 
     async function handleGetAnswers(

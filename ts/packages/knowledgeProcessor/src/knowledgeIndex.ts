@@ -27,63 +27,7 @@ import {
 } from "./setOperations.js";
 import { TextBlock, TextBlockType } from "./text.js";
 import { TextEmbeddingModel } from "aiclient";
-import { KeyValueIndex } from "./keyValueIndex.js";
-
-export async function createIndexFolder<TValueId>(
-    folderPath: string,
-    folderSettings?: ObjectFolderSettings,
-    fSys?: FileSystem,
-): Promise<KeyValueIndex<string, TValueId>> {
-    type TKeyId = string;
-    const indexFolder = await createObjectFolder<TValueId[]>(
-        folderPath,
-        folderSettings,
-        fSys,
-    );
-    return {
-        get,
-        getMultiple,
-        put,
-        replace,
-        remove,
-    };
-
-    async function get(id: TKeyId): Promise<TValueId[] | undefined> {
-        return indexFolder.get(id);
-    }
-
-    async function getMultiple(
-        ids: TKeyId[],
-        concurrency?: number,
-    ): Promise<TValueId[][]> {
-        const values = await asyncArray.mapAsync(ids, concurrency ?? 1, (id) =>
-            indexFolder.get(id),
-        );
-        return removeUndefined(values);
-    }
-
-    async function put(postings?: TValueId[], id?: TKeyId): Promise<TKeyId> {
-        postings = preparePostings(postings);
-        const existingPostings = id ? await indexFolder.get(id) : undefined;
-        const updatedPostings =
-            existingPostings && existingPostings.length > 0
-                ? [...union(existingPostings, postings)]
-                : postings;
-        return await indexFolder.put(updatedPostings, id);
-    }
-
-    function replace(postings: TValueId[], id: TKeyId): Promise<TKeyId> {
-        return indexFolder.put(postings, id);
-    }
-
-    function remove(id: TKeyId): Promise<void> {
-        return indexFolder.remove(id);
-    }
-
-    function preparePostings(postings?: TValueId[]): TValueId[] {
-        return postings ? postings.sort() : [];
-    }
-}
+import { createIndexFolder } from "./keyValueIndex.js";
 
 export interface TextIndex<TTextId = any, TSourceId = any> {
     text(): IterableIterator<string>;

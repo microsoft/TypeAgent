@@ -1,0 +1,15 @@
+{
+  "extends": "../../../../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "rootDir": ".",
+    "outDir": "../../dist/puppeteer", 
+    "lib": ["DOM"],
+    "module":"ESNext",
+    "moduleResolution": "node"
+  },
+  "include": ["./*"],
+  "ts-node": {
+    "esm": true
+  }
+}

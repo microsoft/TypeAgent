@@ -14,10 +14,6 @@ export {
 export { Limiter, createLimiter } from "./limiter.js";
 export * from "./print.js";
 
-export {
-    getChatModelNames,
-    getChatModelMaxConcurrency,
-} from "./modelResource.js";
 export * from "./command.js";
 
 export * from "./constraints.js";
