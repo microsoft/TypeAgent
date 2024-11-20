@@ -336,9 +336,7 @@ export function loadAgentJsonTranslator<T extends object = object>(
             activeTranslators,
             multipleActions,
         ),
-        undefined,
-        undefined,
-        model,
+        { model },
     );
 
     const streamingTranslator = enableJsonTranslatorStreaming(translator);

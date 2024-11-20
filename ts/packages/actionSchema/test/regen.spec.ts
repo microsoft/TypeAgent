@@ -8,7 +8,7 @@ import os from "node:os";
 import { parseActionSchemaFile } from "../src/parser.js";
 
 import { fileURLToPath } from "node:url";
-import { generateSchema } from "../src/generator.js";
+import { generateActionSchema } from "../src/generator.js";
 
 const dispatcherPath = fileURLToPath(
     new URL("../../../dispatcher", import.meta.url),
@@ -118,11 +118,11 @@ describe("Action Schema Regeneration", () => {
                 tempTestDir,
                 `${name}.${process.pid}.ts`,
             );
-            const regenerated = await generateSchema(actionSchemas, type);
+            const regenerated = await generateActionSchema(actionSchemas, type);
             fs.writeFileSync(tempFile, regenerated);
 
             const roundtrip = parseActionSchemaFile(tempFile, name, type);
-            const schema2 = await generateSchema(roundtrip, type);
+            const schema2 = await generateActionSchema(roundtrip, type);
             expect(schema2).toEqual(regenerated);
 
             fs.unlinkSync(tempFile);

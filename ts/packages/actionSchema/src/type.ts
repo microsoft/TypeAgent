@@ -46,7 +46,7 @@ export type ActionInterfaceTypeDefinition = {
     name: string;
     type: ActionParamObject;
     comments?: string[] | undefined;
-    exported: boolean; // for exact regen
+    exported?: boolean; // for exact regen
     order?: number; // for exact regen
 };
 
@@ -55,7 +55,7 @@ export type ActionAliasTypeDefinition<T = ActionParamType> = {
     name: string;
     type: T;
     comments?: string[] | undefined;
-    exported: boolean; // for exact regen
+    exported?: boolean; // for exact regen
     order?: number; // for exact regen
 };
 
@@ -76,7 +76,6 @@ export type ActionParamType =
 
 export type ActionSchema = {
     translatorName: string;
-    typeName: string;
     actionName: string;
     definition: ActionSchemaTypeDefinition;
 };

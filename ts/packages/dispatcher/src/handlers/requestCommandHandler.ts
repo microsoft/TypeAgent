@@ -497,11 +497,13 @@ function getChatHistoryForTranslation(
     context: CommandHandlerContext,
 ): HistoryContext {
     const promptSections = context.chatHistory.getPromptSections();
-    promptSections.unshift({
-        content:
-            "The following is a history of the conversation with the user that can be used to translate user requests",
-        role: "system",
-    });
+    if (promptSections.length !== 0) {
+        promptSections.unshift({
+            content:
+                "The following is a history of the conversation with the user that can be used to translate user requests",
+            role: "system",
+        });
+    }
     const entities = context.chatHistory.getTopKEntities(20);
     const additionalInstructions = context.session.getConfig().translation
         .promptConfig.additionalInstructions
