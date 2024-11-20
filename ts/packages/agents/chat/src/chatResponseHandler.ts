@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import fs from "node:fs";
-import { getMimeType } from "common-utils";
+import { getImageElement, getMimeType } from "common-utils";
 import { StopWatch } from "telemetry";
 import {
     ChatResponseAction,
@@ -36,7 +36,6 @@ import {
     conversation,
     conversation as Conversation,
 } from "knowledge-processor";
-import { getImageElement } from "../../../commonUtils/dist/image.js";
 
 export function instantiate(): AppAgent {
     return {
