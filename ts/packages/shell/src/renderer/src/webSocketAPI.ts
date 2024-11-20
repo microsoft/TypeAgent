@@ -233,7 +233,7 @@ export async function createWebSocket(
     autoReconnect: boolean = true,
 ) {
     let url = window.location;
-    let protocol = url.protocol.toLowerCase() == "https" ? "wss" : "ws";
+    let protocol = url.protocol.toLowerCase() == "https:" ? "wss" : "ws";
     let port = url.hostname.toLowerCase() == "localhost" ? ":3000" : "";
 
     const endpoint = `${protocol}://${url.hostname}${port}`
