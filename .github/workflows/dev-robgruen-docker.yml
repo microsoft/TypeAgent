@@ -32,12 +32,12 @@ jobs:
         with:
           ref: dev/robgruen/android_sans_MSAL
 
-      - uses: 1arp/create-a-file-action@0.4.5
-        with:
-          path: ${{ github.workspace }}/ts/
-          isAbsolutePath: true
-          file: .env
-          content: ${{ secrets.DOCKER_DOT_ENV }}
+      # - uses: 1arp/create-a-file-action@0.4.5
+      #   with:
+      #     path: ${{ github.workspace }}/ts/
+      #     isAbsolutePath: true
+      #     file: .env
+      #     content: ${{ secrets.DOCKER_DOT_ENV }}
           
       - uses: dorny/paths-filter@v3
         id: filter
