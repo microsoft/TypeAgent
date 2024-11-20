@@ -53,7 +53,7 @@ export async function createVSCODESchemaGen(
     });
 }
 
-async function genActionSchemaForNode(jsonNode: any) {
+async function genActionSchemaForNode(jsonNode: any, verbose: boolean = false) {
     const model = openai.createChatModel("GPT_4_O");
     const prompt = `
 You will be provided with a single JSON node representing a VSCode action. Your task is to generate a TypeScript type definition that meets the following rules:
@@ -112,7 +112,9 @@ ${JSON.stringify(jsonNode, null, 2)}
 TypeScript Type:
 `;
 
-    console.log("Prompt: ", prompt);
+    if (verbose) {
+        console.log("**Schema Gen Prompt**: ", prompt);
+    }
     return await getModelCompletionResponse(model, prompt, jsonNode);
 }
 
@@ -150,6 +152,8 @@ export async function processVscodeCommandsJsonFile(
     schemaFilePath: string,
     actionPrefix: string | undefined,
     output_dir: string,
+    maxNodestoProcess: number = -1,
+    verbose: boolean = false,
 ) {
     const jsonData = JSON.parse(fs.readFileSync(jsonFilePath, "utf8"));
     const embeddingModel = openai.createEmbeddingModel();
@@ -165,15 +169,25 @@ export async function processVscodeCommandsJsonFile(
                 continue;
             }
 
-            const schemaStr: string | undefined =
-                await genActionSchemaForNode(node);
+            const schemaStr: string | undefined = await genActionSchemaForNode(
+                node,
+                verbose,
+            );
             processedNodeCount++;
 
             if (schemaStr !== undefined) {
-                console.log("------------------------------------------------");
-                console.log(`JSON for node: ${JSON.stringify(node, null, 2)}:`);
-                console.log(`Schema for node:\n${schemaStr}`);
-                console.log("------------------------------------------------");
+                if (verbose) {
+                    console.log(
+                        "------------------------------------------------",
+                    );
+                    console.log(
+                        `JSON for node: ${JSON.stringify(node, null, 2)}:`,
+                    );
+                    console.log(`Schema for node:\n${schemaStr}`);
+                    console.log(
+                        "------------------------------------------------",
+                    );
+                }
 
                 schemaDefinitions.push(schemaStr);
                 schemaCount++;
@@ -215,9 +229,12 @@ export async function processVscodeCommandsJsonFile(
                 });
             }
 
-            // if(processedNodeCount == 10){
-            //     break;
-            // }
+            if (
+                maxNodestoProcess > 0 &&
+                processedNodeCount >= maxNodestoProcess
+            ) {
+                break;
+            }
 
             if (processedNodeCount % 50 === 0) {
                 console.log(
