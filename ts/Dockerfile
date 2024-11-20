@@ -12,11 +12,12 @@ WORKDIR /usr/src/app
 RUN pnpm install --frozen-lockfile
 RUN pnpm run -r build
 RUN pnpm deploy --filter=agent-api --prod /prod/api
+RUN pnpm deploy --filter=tools-scripts --prod /prod/tools
 #RUN pnpm deploy --filter=cli --prod /prod/cli
 
 FROM base AS api
-# environment file
-COPY --from=build /usr/src/app/.env /prod/api/
+## environment file
+#COPY --from=build /usr/src/app/.env /prod/api/
 # api bits
 COPY --from=build /prod/api/ /prod/api/
 # rendering bits
@@ -35,6 +36,7 @@ EXPOSE 80:3000
 
 #setup start actions
 RUN echo az login --identity >> start.sh
+RUN echo node ../tools/scripts/getKeys.mjs >> start.sh
 RUN echo pnpm start >> start.sh
 
 #azure login, then start node application
