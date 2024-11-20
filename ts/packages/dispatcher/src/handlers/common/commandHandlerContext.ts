@@ -132,11 +132,11 @@ export function getTranslator(
     if (translator !== undefined) {
         return translator;
     }
-    const config = context.session.getConfig();
+    const config = context.session.getConfig().translation;
     const newTranslator = loadAgentJsonTranslator(
         translatorName,
         context.agents,
-        config.models.translator,
+        config.model,
         config.switch.inline ? getActiveTranslators(context) : undefined,
         config.multipleActions,
     );
@@ -415,9 +415,9 @@ export async function changeContextConfig(
 
     if (
         translatorChanged ||
-        changed.models?.translator !== undefined ||
-        changed.switch?.inline ||
-        changed.multipleActions
+        changed.translation?.model !== undefined ||
+        changed.translation?.switch?.inline ||
+        changed.translation?.multipleActions
     ) {
         // The dynamic schema for change assistant is changed.
         // Clear the cache to regenerate them.
@@ -474,8 +474,8 @@ export async function changeContextConfig(
             }
             await agentCache.constructionStore.setAutoSave(autoSave);
         }
-        if (changed.models?.explainer !== undefined) {
-            agentCache.model = changed.models.explainer;
+        if (changed.explainer?.model !== undefined) {
+            agentCache.model = changed.explainer?.model;
         }
         const builtInCache = changed.cache?.builtInCache;
         if (builtInCache !== undefined) {

@@ -4,7 +4,9 @@
 import { Args, Command, Flags } from "@oclif/core";
 import { createDispatcher } from "agent-dispatcher";
 import { getBuiltinTranslatorNames } from "agent-dispatcher/internal";
+import { getChatModelNames } from "aiclient";
 
+const modelNames = await getChatModelNames();
 export default class TranslateCommand extends Command {
     static args = {
         request: Args.string({
@@ -19,6 +21,10 @@ export default class TranslateCommand extends Command {
             description: "Translator name",
             options: getBuiltinTranslatorNames(),
             multiple: true,
+        }),
+        model: Flags.string({
+            description: "Translation model to use",
+            options: modelNames,
         }),
     };
 
@@ -37,6 +43,7 @@ export default class TranslateCommand extends Command {
             translators,
             actions: null,
             commands: { dispatcher: true },
+            translation: { model: flags.model },
             cache: { enabled: false },
         });
         await dispatcher.processCommand(
