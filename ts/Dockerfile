@@ -12,7 +12,6 @@ WORKDIR /usr/src/app
 RUN pnpm install --frozen-lockfile
 RUN pnpm run -r build
 RUN pnpm deploy --filter=agent-api --prod /prod/api
-RUN pnpm deploy --filter=agent-shell --prod /prod/shell
 #RUN pnpm deploy --filter=cli --prod /prod/cli
 
 FROM base AS api
@@ -21,7 +20,7 @@ COPY --from=build /usr/src/app/.env /prod/api/
 # api bits
 COPY --from=build /prod/api /prod/api
 # rendering bits
-COPY --from=build /prod/shell /prod/shell
+COPY --from=build /usr/src/app/ts/packages/shell/out /prod/shell/out
 WORKDIR /prod/api
 
 RUN apt-get update
