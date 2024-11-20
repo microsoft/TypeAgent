@@ -38,4 +38,4 @@ RUN echo az login --identity >> start.sh
 RUN echo pnpm start >> start.sh
 
 #azure login, then start node application
-CMD [ "start.sh" ]
+CMD bash start.sh
