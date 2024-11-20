@@ -20,6 +20,7 @@ FROM base AS api
 #COPY --from=build /usr/src/app/.env /prod/api/
 # api bits
 COPY --from=build /prod/api/ /prod/api/
+COPY --from=build /prod/tools/ /prod/tools/
 # rendering bits
 COPY --from=build /usr/src/app/packages/shell/out/ /prod/shell/out/
 WORKDIR /prod/api
