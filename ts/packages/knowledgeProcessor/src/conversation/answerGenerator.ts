@@ -54,7 +54,7 @@ export function createAnswerGeneratorSettings(): AnswerGeneratorSettings {
         chunking: {
             enable: false,
             splitMessages: false,
-            fastStop: true,
+            fastStop: false,
         },
         maxCharsInContext: 1024 * 8,
     };
@@ -154,7 +154,11 @@ export function createAnswerGenerator(
                 structuredChunk,
                 false,
             );
-            if (structuredAnswer && structuredAnswer.type === "Answered") {
+            if (
+                structuredAnswer &&
+                structuredAnswer.type === "Answered" &&
+                settings.chunking.fastStop
+            ) {
                 return structuredAnswer;
             }
             chunks = chunks.slice(1);
@@ -278,9 +282,17 @@ export function createAnswerGenerator(
         answerStyle: AnswerStyle | undefined,
     ): string {
         let prompt = `The following is a user question about a conversation:\n${question}\n\n`;
+        /*
         prompt +=
             "Answer the question using only the relevant topics, entities, actions, messages and time ranges/timestamps found in CONVERSATION HISTORY.\n";
-        prompt += "Entities and topics are case-insensitive\n";
+        */
+        prompt +=
+            "The included CONVERSATION HISTORY contains information that MAY be relevant to answering the question.\n";
+        prompt +=
+            "Answer the question using only relevant topics, entities, actions, messages and time ranges/timestamps found in CONVERSATION HISTORY.\n";
+        prompt +=
+            "Use the name and type of the provided entities to select those highly relevant to answering the question.\n";
+        prompt += "Entities and topics are case-insensitive\n.";
         if (settings.hints) {
             prompt += "\n" + settings.hints;
         }

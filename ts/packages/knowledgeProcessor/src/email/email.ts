@@ -339,9 +339,9 @@ async function setupEmailConversationManager(
     cm.searchProcessor.settings.contextProvider = contextProvider;
     cm.searchProcessor.answers.settings.contextProvider = contextProvider;
     cm.searchProcessor.answers.settings.hints =
-        "messages are *emails* with headers. Also use the email headers (to, from, subject. etc) to:\n" +
-        "- determine if message is highly relevant to the question\n" +
-        "- correctly answer questions that reference names/identities";
+        "messages are *emails* with email headers such as To, From, Cc, Subject. etc. " +
+        "To answer questions correctly, use the headers to determine who the email is from and who it was sent to. " +
+        "If you are not sure, return NoAnswer.";
 }
 
 async function createEmailContextProvider(
@@ -351,10 +351,10 @@ async function createEmailContextProvider(
     const userProfile = await readJsonFile<any>(profilePath);
     if (userProfile) {
         contextSections.push({
-            role: MessageSourceRole.system,
+            role: MessageSourceRole.user,
             content:
-                `This is the Email Inbox of:\n'''${JSON.stringify(userProfile, undefined, 2)}\n'''` +
-                "\nTranslate references to first person pronouns such as 'Me', 'I' etc. explicitly to the above user",
+                `This email inbox belongs to:\n'''${JSON.stringify(userProfile, undefined, 2)}\n'''` +
+                "\nReplace first person pronouns such as 'Me', 'I' etc. *explicitly* with the user name and set isPronoun to false.",
         });
     }
     return { getSections };

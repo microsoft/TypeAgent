@@ -26,6 +26,7 @@ export type VerbsTerm = {
 
 export type SubjectTerm = {
     subject: string;
+    // true only if subject is a pronoun, such as "I", "Me", "Us", "They"
     isPronoun: boolean;
 };
 

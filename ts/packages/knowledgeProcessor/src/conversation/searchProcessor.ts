@@ -347,7 +347,7 @@ export function createSearchProcessor(
         const searchOptions = createSearchOptions(
             topLevelTopicSummary,
             options,
-            true,
+            false,
         );
         const response = await conversation.searchTermsV2(
             action.parameters.filters,
