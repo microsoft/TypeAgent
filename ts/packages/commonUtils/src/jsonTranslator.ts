@@ -9,6 +9,7 @@ import {
     Result,
     success,
     TypeChatJsonTranslator,
+    TypeChatJsonValidator,
     TypeChatLanguageModel,
 } from "typechat";
 import { createTypeScriptJsonValidator } from "typechat/ts";
@@ -209,6 +210,28 @@ export function createJsonTranslatorFromSchemaDef<T extends object>(
     instructions?: PromptSection[], // Instructions before the per request preamble
     model?: string | TypeChatLanguageModel, // optional
 ) {
+    const schema = Array.isArray(schemas)
+        ? composeTranslatorSchemas(typeName, schemas)
+        : schemas;
+
+    const validator = createTypeScriptJsonValidator<T>(schema, typeName);
+
+    return createJsonTranslatorWithValidator(
+        typeName.toLowerCase(),
+        validator,
+        constraintsValidator,
+        instructions,
+        model,
+    );
+}
+
+export function createJsonTranslatorWithValidator<T extends object>(
+    name: string,
+    validator: TypeChatJsonValidator<T>,
+    constraintsValidator?: TypeChatConstraintsValidator<T>, // Optional
+    instructions?: PromptSection[], // Instructions before the per request preamble
+    model?: string | TypeChatLanguageModel, // optional
+) {
     if (typeof model !== "object") {
         model = ai.createChatModel(
             model,
@@ -216,16 +239,12 @@ export function createJsonTranslatorFromSchemaDef<T extends object>(
                 response_format: { type: "json_object" },
             },
             undefined,
-            ["translator", typeName.toLowerCase()],
+            ["translator", name],
         );
     }
 
-    const debugPrompt = registerDebug(
-        `typeagent:translate:${typeName.toLowerCase()}:prompt`,
-    );
-    const debugResult = registerDebug(
-        `typeagent:translate:${typeName.toLowerCase()}:result`,
-    );
+    const debugPrompt = registerDebug(`typeagent:translate:${name}:prompt`);
+    const debugResult = registerDebug(`typeagent:translate:${name}:result`);
     const complete = model.complete.bind(model);
     model.complete = async (prompt: string | PromptSection[]) => {
         debugPrompt(prompt);
@@ -240,11 +259,6 @@ export function createJsonTranslatorFromSchemaDef<T extends object>(
         };
     }
 
-    const schema = Array.isArray(schemas)
-        ? composeTranslatorSchemas(typeName, schemas)
-        : schemas;
-
-    const validator = createTypeScriptJsonValidator<T>(schema, typeName);
     const translator = createJsonTranslator<T>(model, validator);
 
     translator.stripNulls = true;

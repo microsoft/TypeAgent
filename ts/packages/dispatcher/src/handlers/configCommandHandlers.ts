@@ -15,7 +15,7 @@ import { getLocalWhisperCommandHandlers } from "./serviceHost/localWhisperComman
 
 import { simpleStarRegex } from "common-utils";
 import { openai as ai, getChatModelNames } from "aiclient";
-import { SessionConfig, SessionOptions } from "../session/session.js";
+import { SessionOptions } from "../session/session.js";
 import chalk from "chalk";
 import {
     ActionContext,
