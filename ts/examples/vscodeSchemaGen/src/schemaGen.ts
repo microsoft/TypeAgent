@@ -13,7 +13,6 @@ import {
 } from "aiclient";
 import { generateActionRequests } from "./actionGen.js";
 import { dedupeList, generateEmbedding, TypeSchema } from "typeagent";
-import { processActionSchemaAndReqData } from "./genStats.js";
 
 const envPath = new URL("../../../.env", import.meta.url);
 dotenv.config({ path: envPath });
@@ -26,10 +25,9 @@ async function getModelCompletionResponse(
     const chatResponse = await chatModel.complete(prompt);
     if (chatResponse.success) {
         const responseText = chatResponse.data;
-        //console.log(responseText);
         return responseText;
     } else {
-        console.log(chatResponse.message);
+        console.log("Error:" + chatResponse.message);
         return undefined;
     }
 }
@@ -54,21 +52,58 @@ export async function createVSCODESchemaGen(
     });
 }
 
-async function genActionSchemaForNode(jsonNode: any) {
+async function genActionSchemaForNode(jsonNode: any, verbose: boolean = false) {
     const model = openai.createChatModel("GPT_4_O");
     const prompt = `
-Generate a compact TypeScript type for the following VSCode action. The type should have the following structure:
+You will be provided with a single JSON node representing a VSCode action. Your task is to generate a TypeScript type definition that meets the following rules:
 
-1. An \`actionName\` field with a literal value based on the \`id\` property of the JSON node.
-2. A \`parameters\` field that:
-    - Should be included but empty if no metadata or arguments exist in the JSON node.
-    - If \`metadata\` exists in the JSON node, include it succinctly as part of the high-level comment for the type, describing the action based on the \`description\` field and any arguments.
-    - If the \`when\` field exists, include the literal value as part of the comment describing the condition under which the action is applicable.
-    - Do not include \`key\` and \`when\` properties in the type definition.
-    - Do not include the \`metadata\` as a field in the parameters in the type definition.
-3. The result should be a valid, concise TypeScript type definition with meaningful but minimal comments.
-4. All comments should be prefixed with \`//\`.
-5. **Do not include any code block markers or markdown syntax around the TypeScript output.**
+1. **Input Details**:
+   - The input JSON node will always include an \`id\` field, and it may include optional fields like \`metadata\` or \`when\`.
+
+2. **Type Name**:
+   - The TypeScript type name must be derived from the \`id\` field by:
+     - Removing all dots (\`.\`) and converting the remaining parts to PascalCase.
+     - For example, if the \`id\` is \`editor.action.diffReview.next\`, the type name must be \`EditorActionDiffReviewNext\`.
+
+3. **Fields in the Type**:
+   - Include:
+     - An \`actionName\` field with a literal value matching the exact \`id\` field of the JSON node.
+     - A \`parameters\` field, which must remain empty (\`{}\`) if no metadata or arguments exist.
+
+4. **Comments**:
+   - Write a **single-line comment** above the type to describe its purpose:
+     - Use the \`metadata.description.value\` field (if available) to write a concise description of the action.
+     - If the \`id\` contains specific keywords like "accessible" or other meaningful context, explicitly mention this in the comment even if it's not part of the \`metadata.description.value\`.
+     - If the \`when\` field exists, rephrase it into a human-readable condition and append it to the comment.
+     - If neither \`metadata\` nor a meaningful condition exists, derive the comment from the \`id\` field, ensuring it provides a clear understanding of the action.
+
+     5. **Output Constraints**:
+   - Return only the generated TypeScript type definition for the provided JSON node.
+   - Do not include any extra types, code blocks, or markdown syntax.
+   - Avoid including \`\`\`typescript or any similar code delimiters in the output.
+
+### Example Input and Output
+#### Input JSON Node:
+{
+  "id": "editor.action.accessibleDiffViewer.prev",
+  "metadata": {
+    "description": {
+      "value": "Go to Previous Difference",
+      "original": "Go to Previous Difference"
+    }
+  },
+  "when": "isInDiffEditor"
+}
+
+#### Output Type:
+// Go to Previous Difference in accessibility mode when in a diff editor
+type EditorActionAccessibleDiffViewerPrev = {
+  actionName: "editor.action.accessibleDiffViewer.prev";
+  parameters: {};
+};
+
+#### Important:
+The example above demonstrates how the comment should incorporate critical keywords (like "accessible") from the \`id\`, even if not explicitly mentioned in the \`metadata\`. Follow this logic for all inputs.
 
 JSON Node:
 ${JSON.stringify(jsonNode, null, 2)}
@@ -76,6 +111,9 @@ ${JSON.stringify(jsonNode, null, 2)}
 TypeScript Type:
 `;
 
+    if (verbose) {
+        console.log("**Schema Gen Prompt**: ", prompt);
+    }
     return await getModelCompletionResponse(model, prompt, jsonNode);
 }
 
@@ -113,6 +151,8 @@ export async function processVscodeCommandsJsonFile(
     schemaFilePath: string,
     actionPrefix: string | undefined,
     output_dir: string,
+    maxNodestoProcess: number = -1,
+    verbose: boolean = false,
 ) {
     const jsonData = JSON.parse(fs.readFileSync(jsonFilePath, "utf8"));
     const embeddingModel = openai.createEmbeddingModel();
@@ -128,11 +168,26 @@ export async function processVscodeCommandsJsonFile(
                 continue;
             }
 
-            const schemaStr: string | undefined =
-                await genActionSchemaForNode(node);
+            const schemaStr: string | undefined = await genActionSchemaForNode(
+                node,
+                verbose,
+            );
             processedNodeCount++;
 
-            if (schemaStr) {
+            if (schemaStr !== undefined) {
+                if (verbose) {
+                    console.log(
+                        "------------------------------------------------",
+                    );
+                    console.log(
+                        `JSON for node: ${JSON.stringify(node, null, 2)}:`,
+                    );
+                    console.log(`Schema for node:\n${schemaStr}`);
+                    console.log(
+                        "------------------------------------------------",
+                    );
+                }
+
                 schemaDefinitions.push(schemaStr);
                 schemaCount++;
 
@@ -173,13 +228,18 @@ export async function processVscodeCommandsJsonFile(
                 });
             }
 
+            if (
+                maxNodestoProcess > 0 &&
+                processedNodeCount >= maxNodestoProcess
+            ) {
+                break;
+            }
+
             if (processedNodeCount % 50 === 0) {
                 console.log(
                     `Processed ${processedNodeCount} nodes so far. Schemas generated: ${schemaCount}`,
                 );
             }
-
-            //if (schemaCount == 10) break;
         } catch (error) {
             console.error(
                 `Error generating schema for node ${node.id}:`,
@@ -203,7 +263,4 @@ export async function processVscodeCommandsJsonFile(
     );
     fs.writeFileSync(jsonlFileName, jsonlData);
     console.log(`Aggregate action and request data file: ${jsonlFileName}`);
-
-    const statsfile = path.join(output_dir, "stats_[" + actionPrefix + "].csv");
-    processActionSchemaAndReqData(jsonlFileName, 0.7, statsfile, undefined);
 }
