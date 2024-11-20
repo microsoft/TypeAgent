@@ -2,42 +2,44 @@
 // Licensed under the MIT License.
 
 import {
-    ActionAliasTypeDefinition,
-    ActionInterfaceTypeDefinition,
-    ActionParamArray,
-    ActionParamField,
-    ActionParamObject,
-    ActionParamPrimitive,
-    ActionParamStringUnion,
-    ActionParamType,
-    ActionParamTypeReference,
-    ActionTypeDefinition,
+    SchemaTypeAliasDefinition,
+    SchemaTypeInterfaceDefinition,
+    SchemaTypeArray,
+    SchemaObjectField,
+    SchemaTypeObject,
+    SchemaTypeStringUnion,
+    SchemaType,
+    SchemaTypeReference,
+    SchemaTypeDefinition,
+    SchemaTypeNumber,
+    SchemaTypeBoolean,
+    SchemaTypeString,
 } from "./type.js";
 
 export function string(
-    union?: string | string[],
-): ActionParamPrimitive | ActionParamStringUnion {
-    return union
+    ...union: string[]
+): SchemaTypeString | SchemaTypeStringUnion {
+    return union.length !== 0
         ? {
               type: "string-union",
-              typeEnum: Array.isArray(union) ? union : [union],
+              typeEnum: union,
           }
         : { type: "string" };
 }
 
-export function number(): ActionParamPrimitive {
+export function number(): SchemaTypeNumber {
     return { type: "number" };
 }
 
-export function boolean(): ActionParamPrimitive {
+export function boolean(): SchemaTypeBoolean {
     return { type: "boolean" };
 }
 
-export function array(elementType: ActionParamType): ActionParamArray {
+export function array(elementType: SchemaType): SchemaTypeArray {
     return { type: "array", elementType };
 }
 
-type FieldSpec = Record<string, ActionParamField | ActionParamType>;
+export type FieldSpec = Record<string, SchemaObjectField | SchemaType>;
 type CommentSpec = string | string[];
 function toComments(comments?: CommentSpec) {
     return Array.isArray(comments)
@@ -47,38 +49,40 @@ function toComments(comments?: CommentSpec) {
           : undefined;
 }
 
+// alias definition
 export function type(
     name: string,
-    type: ActionParamType,
+    type: SchemaType,
     comments?: CommentSpec,
-): ActionAliasTypeDefinition {
+): SchemaTypeAliasDefinition {
     return { alias: true, name, type, comments: toComments(comments) };
 }
 
-export function inf(
+// interface definition
+export function intf(
     name: string,
-    type: ActionParamObject,
+    type: SchemaTypeObject,
     comments?: CommentSpec,
-): ActionInterfaceTypeDefinition {
+): SchemaTypeInterfaceDefinition {
     return { alias: false, name, type, comments: toComments(comments) };
 }
 
 export function field(
-    type: ActionParamType,
+    type: SchemaType,
     comments?: CommentSpec,
-): ActionParamField {
+): SchemaObjectField {
     return { type, comments: toComments(comments) };
 }
 
 export function optional(
-    type: ActionParamType,
+    type: SchemaType,
     comments?: CommentSpec,
-): ActionParamField {
+): SchemaObjectField {
     return { optional: true, type, comments: toComments(comments) };
 }
 
-export function obj(f: FieldSpec): ActionParamObject {
-    const fields: Record<string, ActionParamField> = {};
+export function obj(f: FieldSpec): SchemaTypeObject {
+    const fields: Record<string, SchemaObjectField> = {};
     for (const [key, value] of Object.entries(f)) {
         const fl = typeof value.type === "string" ? field(value) : value;
         fields[key] = fl;
@@ -86,9 +90,11 @@ export function obj(f: FieldSpec): ActionParamObject {
     return { type: "object", fields };
 }
 
-export function ref(
-    name: string,
-    definition: ActionTypeDefinition,
-): ActionParamTypeReference {
-    return { type: "type-reference", name, definition };
+// Doesn't support cucular reference, so only accept existing definition only.
+export function ref(definition: SchemaTypeDefinition): SchemaTypeReference {
+    return { type: "type-reference", name: definition.name, definition };
+}
+
+export function union(...types: SchemaType[]): SchemaType {
+    return { type: "type-union", types };
 }

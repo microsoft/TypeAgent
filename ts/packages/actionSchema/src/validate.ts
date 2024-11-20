@@ -2,39 +2,39 @@
 // Licensed under the MIT License.
 
 import {
-    ActionParamArray,
-    ActionParamObject,
-    ActionParamType,
+    SchemaTypeArray,
+    SchemaTypeObject,
+    SchemaType,
     ActionSchema,
 } from "./type.js";
 
-function validateField(
+export function validateSchema(
     name: string,
-    expected: ActionParamType,
+    expected: SchemaType,
     actual: unknown,
-    coerce: boolean,
+    coerce: boolean = false, // coerce string to the right primitive type
 ) {
     if (actual === null) {
-        throw new Error(`Field ${name} is null`);
+        throw new Error(`'${name}' is null`);
     }
     switch (expected.type) {
         case "type-union": {
             for (const type of expected.types) {
                 try {
-                    validateField(name, type, actual, coerce);
+                    validateSchema(name, type, actual, coerce);
                     return;
                 } catch (e) {
                     // ignore
                 }
             }
-            throw new Error(`Field ${name} does not match any union type`);
+            throw new Error(`'${name}' does not match any union type`);
         }
         case "type-reference":
-            validateField(name, expected.definition.type, actual, coerce);
+            validateSchema(name, expected.definition.type, actual, coerce);
             break;
         case "object":
             if (typeof actual !== "object" || Array.isArray(actual)) {
-                throw new Error(`Field ${name} is not an object: ${actual}`);
+                throw new Error(`'${name}' is not an object: ${actual}`);
             }
             validateObject(
                 name,
@@ -45,16 +45,16 @@ function validateField(
             break;
         case "array":
             if (!Array.isArray(actual)) {
-                throw new Error(`Field ${name} is not an array: ${actual}`);
+                throw new Error(`'${name}' is not an array: ${actual}`);
             }
             validateArray(name, expected, actual, coerce);
             break;
         case "string-union":
             if (typeof actual !== "string") {
-                throw new Error(`Field ${name} is not a string: ${actual}`);
+                throw new Error(`'${name}' is not a string: ${actual}`);
             }
             if (!expected.typeEnum.includes(actual)) {
-                throw new Error(`Field ${name} is not in the enum: ${actual}`);
+                throw new Error(`'${name}' is not in the enum: ${actual}`);
             }
             break;
         default:
@@ -78,7 +78,7 @@ function validateField(
                     }
                 }
                 throw new Error(
-                    `Property ${name} is not a ${expected.type}: ${actual}`,
+                    `'${name}' is not a ${expected.type}: ${actual}`,
                 );
             }
     }
@@ -86,13 +86,13 @@ function validateField(
 
 function validateArray(
     name: string,
-    expected: ActionParamArray,
+    expected: SchemaTypeArray,
     actual: unknown[],
     coerce: boolean = false,
 ) {
     for (let i = 0; i < actual.length; i++) {
         const element = actual[i];
-        const v = validateField(
+        const v = validateSchema(
             `${name}.${i}`,
             expected.elementType,
             element,
@@ -106,7 +106,7 @@ function validateArray(
 
 function validateObject(
     name: string,
-    expected: ActionParamObject,
+    expected: SchemaTypeObject,
     actual: Record<string, unknown>,
     coerce: boolean,
 ) {
@@ -120,7 +120,7 @@ function validateObject(
             }
             continue;
         }
-        const v = validateField(
+        const v = validateSchema(
             `${name}.${fieldName}`,
             fieldInfo.type,
             actualField,
@@ -171,7 +171,7 @@ export function validateAction(
 
     validateObject(
         "parameters",
-        parameterType as ActionParamObject, // already checked.
+        parameterType as SchemaTypeObject, // already checked.
         parameters as Record<string, unknown>,
         coerce,
     );

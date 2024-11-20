@@ -50,7 +50,7 @@ function createSelectionActionTypeDefinition(
                 sc.string(translatorName),
                 ` ${translatorConfig.description}`,
             ),
-            action: sc.field(sc.string(actionNames), actionComments),
+            action: sc.field(sc.string(...actionNames), actionComments),
         }),
     );
     return schema;
