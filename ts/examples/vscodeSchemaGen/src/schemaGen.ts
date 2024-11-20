@@ -13,7 +13,6 @@ import {
 } from "aiclient";
 import { generateActionRequests } from "./actionGen.js";
 import { dedupeList, generateEmbedding, TypeSchema } from "typeagent";
-//import { processActionSchemaAndReqData } from "./genStats.js";
 
 const envPath = new URL("../../../.env", import.meta.url);
 dotenv.config({ path: envPath });
@@ -264,7 +263,4 @@ export async function processVscodeCommandsJsonFile(
     );
     fs.writeFileSync(jsonlFileName, jsonlData);
     console.log(`Aggregate action and request data file: ${jsonlFileName}`);
-
-    //const statsfile = path.join(output_dir, "stats_[" + actionPrefix + "].csv");
-    //processActionSchemaAndReqData(jsonlFileName, 0.7, statsfile, undefined);
 }
