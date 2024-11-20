@@ -194,6 +194,12 @@ function attachAttachments(
     }
 }
 
+export type JsonTranslatorOptions<T extends object> = {
+    constraintsValidator?: TypeChatConstraintsValidator<T> | undefined; // Optional
+    instructions?: PromptSection[] | undefined; // Instructions before the per request preamble
+    model?: string | TypeChatLanguageModel | undefined; // optional
+};
+
 /**
  *
  * @param schemas pass either a single schema text OR schema definitions to compose.
@@ -206,9 +212,7 @@ function attachAttachments(
 export function createJsonTranslatorFromSchemaDef<T extends object>(
     typeName: string,
     schemas: string | TranslatorSchemaDef[],
-    constraintsValidator?: TypeChatConstraintsValidator<T>, // Optional
-    instructions?: PromptSection[], // Instructions before the per request preamble
-    model?: string | TypeChatLanguageModel, // optional
+    options?: JsonTranslatorOptions<T>,
 ) {
     const schema = Array.isArray(schemas)
         ? composeTranslatorSchemas(typeName, schemas)
@@ -219,19 +223,16 @@ export function createJsonTranslatorFromSchemaDef<T extends object>(
     return createJsonTranslatorWithValidator(
         typeName.toLowerCase(),
         validator,
-        constraintsValidator,
-        instructions,
-        model,
+        options,
     );
 }
 
 export function createJsonTranslatorWithValidator<T extends object>(
     name: string,
     validator: TypeChatJsonValidator<T>,
-    constraintsValidator?: TypeChatConstraintsValidator<T>, // Optional
-    instructions?: PromptSection[], // Instructions before the per request preamble
-    model?: string | TypeChatLanguageModel, // optional
+    options?: JsonTranslatorOptions<T>,
 ) {
+    let model = options?.model;
     if (typeof model !== "object") {
         model = ai.createChatModel(
             model,
@@ -262,11 +263,14 @@ export function createJsonTranslatorWithValidator<T extends object>(
     const translator = createJsonTranslator<T>(model, validator);
 
     translator.stripNulls = true;
+
+    const constraintsValidator = options?.constraintsValidator;
     if (constraintsValidator) {
         translator.validateInstance = constraintsValidator.validateConstraints;
     }
 
     const innerFn = translator.translate;
+    const instructions = options?.instructions;
     if (!instructions) {
         translator.translate = async (
             request: string,
@@ -332,16 +336,12 @@ export function getTranslationSchemaText(
 export function createJsonTranslatorFromFile<T extends object>(
     typeName: string,
     schemaFiles: string | string[],
-    constraintsValidator?: TypeChatConstraintsValidator<T>, // Optional
-    instructions?: PromptSection[],
-    model?: string | TypeChatLanguageModel, // optional
+    options?: JsonTranslatorOptions<T>,
 ) {
     return createJsonTranslatorFromSchemaDef<T>(
         typeName,
         getTranslationSchemaText(schemaFiles),
-        constraintsValidator,
-        instructions,
-        model,
+        options,
     );
 }
 

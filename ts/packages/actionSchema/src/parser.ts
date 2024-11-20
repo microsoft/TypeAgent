@@ -18,25 +18,25 @@ import {
 function toActionSchema(
     translatorName: string,
     definition: ActionTypeDefinition,
-    name: string,
 ): ActionSchema {
     if (definition.type.type !== "object") {
         throw new Error("Expected object type");
     }
+    const name = definition.name;
     const { actionName, parameters } = definition.type.fields;
     if (actionName === undefined) {
-        throw new Error(
-            `Missing actionName field in type ${name ?? "<unknown>"}`,
-        );
+        throw new Error(`Missing actionName field in type ${name}`);
     }
     if (actionName.optional) {
-        throw new Error("actionName field must be required");
+        throw new Error(`actionName field must be required in type ${name}`);
     }
     if (
         actionName.type.type !== "string-union" ||
         actionName.type.typeEnum.length !== 1
     ) {
-        throw new Error("actionName field must be a string literal");
+        throw new Error(
+            `actionName field must be a string literal in type ${name}`,
+        );
     }
 
     const parameterFieldType = parameters?.type;
@@ -44,11 +44,10 @@ function toActionSchema(
         parameterFieldType !== undefined &&
         parameterFieldType.type !== "object"
     ) {
-        throw new Error("parameters field must be an object");
+        throw new Error(`parameters field must be an object in type ${name}`);
     }
     return {
-        translatorName: translatorName,
-        typeName: name,
+        translatorName,
         definition: definition as ActionSchemaTypeDefinition,
         actionName: actionName.type.typeEnum[0],
     };
@@ -72,7 +71,7 @@ export function parseActionSchemaFile(
 
     switch (definition.type.type) {
         case "object":
-            return [toActionSchema(translatorName, definition, typeName)];
+            return [toActionSchema(translatorName, definition)];
         case "type-union":
             if (strict && definition.comments) {
                 throw new Error(
@@ -83,19 +82,13 @@ export function parseActionSchemaFile(
                 if (t.type !== "type-reference") {
                     throw new Error("Expected type reference");
                 }
-                return toActionSchema(translatorName, t.definition, t.name);
+                return toActionSchema(translatorName, t.definition);
             });
         case "type-reference":
             if (strict && definition.comments) {
                 throw new Error("Entry type comments are not supported");
             }
-            return [
-                toActionSchema(
-                    translatorName,
-                    definition.type.definition,
-                    definition.type.name,
-                ),
-            ];
+            return [toActionSchema(translatorName, definition.type.definition)];
         default:
             throw new Error(
                 `Expected object or type union, got ${definition.type.type}`,

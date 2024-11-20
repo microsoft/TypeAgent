@@ -64,9 +64,7 @@ export function createSubPhraseExplainer(model?: string) {
                 getPackageFilePath(
                     "./src/explanation/v5/subPhraseExplanationSchemaV5.ts",
                 ),
-                undefined,
-                undefined,
-                model,
+                { model },
             );
         },
         createInstructions,

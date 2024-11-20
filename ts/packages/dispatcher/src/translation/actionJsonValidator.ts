@@ -3,12 +3,16 @@
 
 import { error, Result, success, TypeChatJsonValidator } from "typechat";
 import { TranslatedAction } from "../handlers/requestCommandHandler.js";
-import { ActionSchema, generateSchema, validateAction } from "action-schema";
+import {
+    ActionSchema,
+    generateActionSchema,
+    validateAction,
+} from "action-schema";
 
 export function createTypeAgentJsonValidator(
     actionInfos: ActionSchema[],
 ): TypeChatJsonValidator<TranslatedAction> {
-    const schema = generateSchema(actionInfos);
+    const schema = generateActionSchema(actionInfos);
     return {
         getSchemaText: () => schema,
         getTypeName: () => "AllActions",
@@ -30,7 +34,6 @@ export function createTypeAgentJsonValidator(
             } catch (e: any) {
                 return error(e.message);
             }
-            return error("Validation failed");
         },
     };
 }

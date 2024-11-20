@@ -41,9 +41,7 @@ export function createPolitenessGeneralizer(
                 getPackageFilePath(
                     "./src/explanation/v5/politenessGeneralizationSchemaV5.ts",
                 ),
-                undefined,
-                undefined,
-                model,
+                { model },
             );
         },
         createInstructions,

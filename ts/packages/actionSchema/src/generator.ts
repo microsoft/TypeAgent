@@ -82,14 +82,12 @@ function generateTypeDefinition(
 }
 
 export function generateSchema(
-    actionSchemas: ActionSchema[],
+    definitions: ActionTypeDefinition[],
     typeName: string = "AllAction",
-    exact: boolean = false, // for testing
-): string {
+    exact: boolean = false,
+) {
     const emitted = new Map<ActionTypeDefinition, string[]>();
-    const pending: ActionTypeDefinition[] = actionSchemas.map(
-        (actionInfo) => actionInfo.definition,
-    );
+    const pending: ActionTypeDefinition[] = [...definitions];
 
     while (pending.length > 0) {
         const definition = pending.pop()!;
@@ -110,10 +108,10 @@ export function generateSchema(
 
     const finalLines: string[] = [];
 
-    if (actionSchemas.length !== 1 || actionSchemas[0].typeName !== typeName) {
+    if (definitions.length !== 1 || definitions[0].name !== typeName) {
         // If there is only on action and it is the type name, don't need to emit the main type alias
         finalLines.push(
-            `export type ${typeName} = ${actionSchemas.map((actionInfo) => actionInfo.typeName).join("|")};`,
+            `export type ${typeName} = ${definitions.map((definition) => definition.name).join("|")};`,
         );
     }
 
@@ -121,4 +119,16 @@ export function generateSchema(
         finalLines.push(...emitted.get(key)!);
     }
     return finalLines.join("\n");
+}
+
+export function generateActionSchema(
+    actionSchemas: ActionSchema[],
+    typeName: string = "AllAction",
+    exact: boolean = false, // for testing
+): string {
+    return generateSchema(
+        actionSchemas.map((actionInfo) => actionInfo.definition),
+        typeName,
+        exact,
+    );
 }
