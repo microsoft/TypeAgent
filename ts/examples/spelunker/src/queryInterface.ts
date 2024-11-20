@@ -581,7 +581,7 @@ async function processQuery(
     results.sort((a, b) => b.score - a.score);
     results.splice(options.maxHits);
     io.writer.writeLine(
-        `Found ${results.length} ${plural("hit", results.length)} for "${input}":`,
+        `Found ${results.length} hits for "${input}":`,
     );
 
     for (let i = 0; i < results.length; i++) {
@@ -626,11 +626,6 @@ function writeChunkLines(
             );
         }
     }
-}
-
-function plural(s: string, n: number): string {
-    // TOO: Use Intl.PluralRules.
-    return n === 1 ? s : s + "s";
 }
 
 // Wrap long lines. Still written by Github Copilot.
