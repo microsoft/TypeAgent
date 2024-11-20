@@ -3,9 +3,9 @@
 
 export {
     ActionSchema,
-    ActionParamType,
-    ActionParamArray,
-    ActionParamObject,
+    SchemaType as ActionParamType,
+    SchemaTypeArray as ActionParamArray,
+    SchemaTypeObject as ActionParamObject,
 } from "./type.js";
 
 export { parseActionSchemaFile } from "./parser.js";

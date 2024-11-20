@@ -2,15 +2,15 @@
 // Licensed under the MIT License.
 
 import {
-    ActionParamType,
+    SchemaType,
     ActionSchema,
-    ActionParamObjectFields,
-    ActionTypeDefinition,
+    SchemaObjectFields,
+    SchemaTypeDefinition,
 } from "./type.js";
 
 function generateSchemaType(
-    type: ActionParamType,
-    pending: ActionTypeDefinition[],
+    type: SchemaType,
+    pending: SchemaTypeDefinition[],
     indent: number,
     paren: boolean = false,
 ): string {
@@ -52,8 +52,8 @@ function generateComments(
 }
 function generateSchemaParamObject(
     lines: string[],
-    fields: ActionParamObjectFields,
-    pending: ActionTypeDefinition[],
+    fields: SchemaObjectFields,
+    pending: SchemaTypeDefinition[],
     indent: number,
 ) {
     const indentStr = "    ".repeat(indent);
@@ -68,8 +68,8 @@ function generateSchemaParamObject(
 
 function generateTypeDefinition(
     lines: string[],
-    definition: ActionTypeDefinition,
-    pending: ActionTypeDefinition[],
+    definition: SchemaTypeDefinition,
+    pending: SchemaTypeDefinition[],
     exact: boolean,
 ) {
     generateComments(lines, definition.comments, "");
@@ -82,12 +82,12 @@ function generateTypeDefinition(
 }
 
 export function generateSchema(
-    definitions: ActionTypeDefinition[],
+    definitions: SchemaTypeDefinition[],
     typeName: string = "AllAction",
     exact: boolean = false,
 ) {
-    const emitted = new Map<ActionTypeDefinition, string[]>();
-    const pending: ActionTypeDefinition[] = [...definitions];
+    const emitted = new Map<SchemaTypeDefinition, string[]>();
+    const pending: SchemaTypeDefinition[] = [...definitions];
 
     while (pending.length > 0) {
         const definition = pending.pop()!;

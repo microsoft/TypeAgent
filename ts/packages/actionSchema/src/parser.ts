@@ -2,22 +2,22 @@
 // Licensed under the MIT License.
 
 import {
-    ActionAliasTypeDefinition,
-    ActionInterfaceTypeDefinition,
-    ActionParamObject,
-    ActionParamObjectFields,
-    ActionParamStringUnion,
-    ActionParamType,
-    ActionParamTypeReference,
-    ActionParamTypeUnion,
+    SchemaTypeAliasDefinition,
+    SchemaTypeInterfaceDefinition,
+    SchemaTypeObject,
+    SchemaObjectFields,
+    SchemaTypeStringUnion,
+    SchemaType,
+    SchemaTypeReference,
+    SchemaTypeUnion,
     ActionSchema,
     ActionSchemaTypeDefinition,
-    ActionTypeDefinition,
+    SchemaTypeDefinition,
 } from "./type.js";
 
 function toActionSchema(
     translatorName: string,
-    definition: ActionTypeDefinition,
+    definition: SchemaTypeDefinition,
 ): ActionSchema {
     if (definition.type.type !== "object") {
         throw new Error("Expected object type");
@@ -102,7 +102,7 @@ class ActionParser {
     public parseSchema(
         fileName: string,
         typeName: string,
-    ): ActionTypeDefinition | undefined {
+    ): SchemaTypeDefinition | undefined {
         const options: ts.CompilerOptions = {
             target: ts.ScriptTarget.ES5,
             module: ts.ModuleKind.CommonJS,
@@ -132,8 +132,8 @@ class ActionParser {
     }
 
     private fullText = "";
-    private typeMap = new Map<string, ActionTypeDefinition>();
-    private pendingReferences = new Map<string, ActionParamTypeReference>();
+    private typeMap = new Map<string, SchemaTypeDefinition>();
+    private pendingReferences = new Map<string, SchemaTypeReference>();
     private parseAST(node: ts.Node): void {
         switch (node.kind) {
             case ts.SyntaxKind.TypeAliasDeclaration:
@@ -173,7 +173,7 @@ class ActionParser {
             }
             const exported = this.isExported(node.modifiers);
             const type = this.parseType(node.type);
-            const definition: ActionAliasTypeDefinition = {
+            const definition: SchemaTypeAliasDefinition = {
                 alias: true,
                 name,
                 type,
@@ -198,7 +198,7 @@ class ActionParser {
             }
             const exported = this.isExported(node.modifiers);
             const type = this.parseObjectType(node);
-            const definition: ActionInterfaceTypeDefinition = {
+            const definition: SchemaTypeInterfaceDefinition = {
                 alias: false,
                 name,
                 type,
@@ -214,7 +214,7 @@ class ActionParser {
         }
     }
 
-    private parseType(node: ts.TypeNode): ActionParamType {
+    private parseType(node: ts.TypeNode): SchemaType {
         switch (node.kind) {
             case ts.SyntaxKind.StringKeyword:
                 return { type: "string" };
@@ -243,7 +243,7 @@ class ActionParser {
 
     private parseTypeReference(
         node: ts.TypeReferenceNode,
-    ): ActionParamTypeReference {
+    ): SchemaTypeReference {
         if (node.typeName.kind === ts.SyntaxKind.QualifiedName) {
             throw new Error("Qualified name not supported in type references");
         }
@@ -253,7 +253,7 @@ class ActionParser {
         if (existing) {
             return existing;
         }
-        const result: ActionParamTypeReference = {
+        const result: SchemaTypeReference = {
             type: "type-reference",
             name: typeName,
             definition: undefined!, // we will make sure this get resolved later.
@@ -261,7 +261,7 @@ class ActionParser {
         this.pendingReferences.set(typeName, result);
         return result;
     }
-    private parseArrayType(node: ts.ArrayTypeNode): ActionParamType {
+    private parseArrayType(node: ts.ArrayTypeNode): SchemaType {
         const elementType = this.parseType(node.elementType);
         return {
             type: "array",
@@ -271,7 +271,7 @@ class ActionParser {
 
     private parseStringUnionType(
         node: ts.UnionTypeNode,
-    ): ActionParamStringUnion {
+    ): SchemaTypeStringUnion {
         const typeEnum = node.types.map((type) => {
             if (
                 ts.isLiteralTypeNode(type) &&
@@ -289,7 +289,7 @@ class ActionParser {
         };
     }
 
-    private parseLiteralType(node: ts.LiteralTypeNode): ActionParamStringUnion {
+    private parseLiteralType(node: ts.LiteralTypeNode): SchemaTypeStringUnion {
         if (node.literal.kind !== ts.SyntaxKind.StringLiteral) {
             throw new Error("Only string literal types are supported");
         }
@@ -299,7 +299,7 @@ class ActionParser {
         };
     }
 
-    private parseTypeUnionType(node: ts.UnionTypeNode): ActionParamTypeUnion {
+    private parseTypeUnionType(node: ts.UnionTypeNode): SchemaTypeUnion {
         const types = node.types.map((type) => this.parseType(type));
         return {
             type: "type-union",
@@ -315,8 +315,8 @@ class ActionParser {
 
     private parseObjectType(
         node: ts.TypeLiteralNode | ts.InterfaceDeclaration,
-    ): ActionParamObject {
-        const fields: ActionParamObjectFields = {};
+    ): SchemaTypeObject {
+        const fields: SchemaObjectFields = {};
         for (const member of node.members) {
             if (ts.isPropertySignature(member)) {
                 if (member.type) {
