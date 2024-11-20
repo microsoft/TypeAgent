@@ -4,14 +4,12 @@
 // User interface for querying the index.
 
 import * as fs from "fs";
-import path from "path";
 
 import * as iapp from "interactive-app";
 import * as knowLib from "knowledge-processor";
 import { ScoredItem } from "typeagent";
 
 import { IndexType, ChunkyIndex } from "./chunkyIndex.js";
-import { FileDocumentation } from "./fileDocSchema.js";
 import { QuerySpec } from "./makeQuerySchema.js";
 import { Chunk, ChunkId } from "./pythonChunker.js";
 import { importAllFiles } from "./pythonImporter.js";
@@ -128,12 +126,12 @@ export async function interactiveQueryLoop(
     ): Promise<void> {
         const namedArgs = iapp.parseNamedArguments(args, searchDef());
         const query: string = namedArgs.query;
-        const options: QueryOptions = {
+        const queryOptions: QueryOptions = {
             maxHits: namedArgs.maxHits,
             minScore: namedArgs.minScore,
             verbose: namedArgs.verbose ?? verbose,
         };
-        await processQuery(query, chunkyIndex, io, options);
+        await processQuery(query, chunkyIndex, io, queryOptions);
     }
 
     function commonOptions(): Record<string, iapp.ArgDef> {
@@ -349,129 +347,7 @@ export async function interactiveQueryLoop(
         input: string,
         io: iapp.InteractiveIo,
     ): Promise<void> {
-        const result = await chunkyIndex.queryMaker.translate(
-            input,
-            makePrompt(input),
-        );
-        if (!result.success) {
-            io.writer.writeLine(`[Error: ${result.message}]`);
-            return;
-        }
-        const specs = result.data;
-        if (verbose) io.writer.writeLine(JSON.stringify(specs, null, 2));
-        const allHits: Map<
-            IndexType | "other",
-            ScoredItem<knowLib.TextBlock<string>>[]
-        > = new Map();
-
-        for (const namedIndex of chunkyIndex.allIndexes()) {
-            const indexName = namedIndex.name;
-            const index = namedIndex.index;
-            const spec: QuerySpec | undefined = (specs as any)[indexName];
-            if (!spec) {
-                io.writer.writeLine(`[No query for ${indexName}]`);
-                continue;
-            }
-            const hits = await index.nearestNeighborsPairs(
-                spec.query,
-                spec.maxHits ?? 10,
-                spec.minScore,
-            );
-            if (!hits.length) {
-                io.writer.writeLine(`[No hits for ${indexName}]`);
-                continue;
-            }
-            allHits.set(indexName, hits);
-            if (verbose) {
-                io.writer.writeLine(
-                    `\nFound ${hits.length} ${indexName} for '${spec.query}':`,
-                );
-                for (const hit of hits) {
-                    io.writer.writeLine(
-                        `${hit.score.toFixed(3).padStart(7)}: ${hit.item.value} -- ${hit.item.sourceIds?.join(", ")}`,
-                    );
-                }
-            }
-            const nchunks = new Set(hits.flatMap((h) => h.item.sourceIds)).size;
-            const end = hits.length - 1;
-            io.writer.writeLine(
-                `[${indexName}: query '${spec.query}'; ${hits.length} hits; scores ${hits[0].score.toFixed(3)}--${hits[end].score.toFixed(3)}; ${nchunks} unique chunk ids]`,
-            );
-        }
-
-        // TODO: Move this out of allHits, make it a special case that exits early.
-        if (specs.unknownText) {
-            io.writer.writeLine(`[Unknown text: ${specs.unknownText}]`);
-            allHits.set("other", [
-                {
-                    item: {
-                        type: knowLib.TextBlockType.Sentence,
-                        value: specs.unknownText,
-                        sourceIds: [],
-                    },
-                    score: 1.0,
-                },
-            ]);
-        }
-
-        if (verbose) {
-            io.writer.writeLine(
-                JSON.stringify(Object.fromEntries(allHits), null, 4),
-            );
-        }
-
-        const allChunks: Map<ChunkId, Chunk> = new Map();
-        for (const [_, hits] of allHits) {
-            for (const hit of hits) {
-                for (const id of hit.item.sourceIds ?? []) {
-                    if (!allChunks.has(id)) {
-                        const chunk = await chunkyIndex.chunkFolder.get(id);
-                        if (chunk) allChunks.set(id, chunk);
-                    }
-                }
-            }
-        }
-        io.writer.writeLine(`\n[Overall ${allChunks.size} unique chunk ids]`);
-
-        const nextPrompt = `
-Here is a JSON representation of a set of query results on indexes for keywords, topics, goals, etc.
-For each index you see a list of scored items, where each item has a value (e.g. a topic) and a list of "source ids".
-The source ids reference code chunks, which are provided separately.
-
-Using the query results and scores, please answer this question:
-
-${input}
-`;
-
-        const request = JSON.stringify({
-            allHits: Object.fromEntries(allHits),
-            chunks: Object.fromEntries(allChunks),
-        });
-        const answerResult = await chunkyIndex.answerMaker.translate(
-            request,
-            nextPrompt,
-        );
-        if (!answerResult.success) {
-            io.writer.writeLine(`[Error: ${answerResult.message}]`);
-            return;
-        }
-
-        const answer = answerResult.data;
-        io.writer.writeLine(
-            `\nAnswer (confidence ${answer.confidence.toFixed(3).replace(/0+$/, "")}):`,
-        );
-        io.writer.writeLine(wordWrap(answer.answer));
-        if (answer.message) {
-            io.writer.writeLine(`Message: ${answer.message}`);
-        }
-        if (answer.references.length) {
-            io.writer.writeLine(
-                `\nReferences: ${answer.references.join(",").replace(/,/g, ", ")}`,
-            );
-            io.writer.writeLine(
-                `\n[Used ${answer.references.length} unique chunk ids out of ${allChunks.size}]`,
-            );
-        }
+        await processQuery(input, chunkyIndex, io, {} as QueryOptions);
     }
 
     await iapp.runConsole({
@@ -481,8 +357,130 @@ ${input}
     });
 }
 
-function makePrompt(input: string): string {
-    return `
+async function processQuery(
+    input: string,
+    chunkyIndex: ChunkyIndex,
+    io: iapp.InteractiveIo,
+    queryOptions: QueryOptions,
+): Promise<void> {
+    const result = await chunkyIndex.queryMaker.translate(
+        input,
+        makeQueryMakerPrompt(input),
+    );
+    if (!result.success) {
+        io.writer.writeLine(`[Error: ${result.message}]`);
+        return;
+    }
+    const specs = result.data;
+    if (queryOptions.verbose)
+        io.writer.writeLine(JSON.stringify(specs, null, 2));
+    const allHits: Map<
+        IndexType | "other",
+        ScoredItem<knowLib.TextBlock<string>>[]
+    > = new Map();
+
+    for (const namedIndex of chunkyIndex.allIndexes()) {
+        const indexName = namedIndex.name;
+        const index = namedIndex.index;
+        const spec: QuerySpec | undefined = (specs as any)[indexName];
+        if (!spec) {
+            io.writer.writeLine(`[No query for ${indexName}]`);
+            continue;
+        }
+        const hits = await index.nearestNeighborsPairs(
+            spec.query,
+            spec.maxHits ?? queryOptions.maxHits,
+            spec.minScore ?? queryOptions.minScore,
+        );
+        if (!hits.length) {
+            io.writer.writeLine(`[No hits for ${indexName}]`);
+            continue;
+        }
+        allHits.set(indexName, hits);
+        if (queryOptions.verbose) {
+            io.writer.writeLine(
+                `\nFound ${hits.length} ${indexName} for '${spec.query}':`,
+            );
+            for (const hit of hits) {
+                io.writer.writeLine(
+                    `${hit.score.toFixed(3).padStart(7)}: ${hit.item.value} -- ${hit.item.sourceIds?.join(", ")}`,
+                );
+            }
+        }
+        const nchunks = new Set(hits.flatMap((h) => h.item.sourceIds)).size;
+        const end = hits.length - 1;
+        io.writer.writeLine(
+            `[${indexName}: query '${spec.query}'; ${hits.length} hits; scores ${hits[0].score.toFixed(3)}--${hits[end].score.toFixed(3)}; ${nchunks} unique chunk ids]`,
+        );
+    }
+
+    // TODO: Move this out of allHits, make it a special case that exits early.
+    if (specs.unknownText) {
+        io.writer.writeLine(`[Unknown text: ${specs.unknownText}]`);
+        allHits.set("other", [
+            {
+                item: {
+                    type: knowLib.TextBlockType.Sentence,
+                    value: specs.unknownText,
+                    sourceIds: [],
+                },
+                score: 1.0,
+            },
+        ]);
+    }
+
+    if (queryOptions.verbose) {
+        io.writer.writeLine(
+            JSON.stringify(Object.fromEntries(allHits), null, 4),
+        );
+    }
+
+    const allChunks: Map<ChunkId, Chunk> = new Map();
+    for (const [_, hits] of allHits) {
+        for (const hit of hits) {
+            for (const id of hit.item.sourceIds ?? []) {
+                if (!allChunks.has(id)) {
+                    const chunk = await chunkyIndex.chunkFolder.get(id);
+                    if (chunk) allChunks.set(id, chunk);
+                }
+            }
+        }
+    }
+    io.writer.writeLine(`\n[Overall ${allChunks.size} unique chunk ids]`);
+
+    const request = JSON.stringify({
+        allHits: Object.fromEntries(allHits),
+        chunks: Object.fromEntries(allChunks),
+    });
+    const answerResult = await chunkyIndex.answerMaker.translate(
+        request,
+        makeAnswerPrompt(input),
+    );
+    if (!answerResult.success) {
+        io.writer.writeLine(`[Error: ${answerResult.message}]`);
+        return;
+    }
+
+    const answer = answerResult.data;
+    io.writer.writeLine(
+        `\nAnswer (confidence ${answer.confidence.toFixed(3).replace(/0+$/, "")}):`,
+    );
+    io.writer.writeLine(wordWrap(answer.answer));
+    if (answer.message) {
+        io.writer.writeLine(`Message: ${answer.message}`);
+    }
+    if (answer.references.length) {
+        io.writer.writeLine(
+            `\nReferences: ${answer.references.join(",").replace(/,/g, ", ")}`,
+        );
+        io.writer.writeLine(
+            `\n[Used ${answer.references.length} unique chunk ids out of ${allChunks.size}]`,
+        );
+    }
+}
+
+function makeQueryMakerPrompt(input: string): string {
+    return `\
 I have indexed a mid-sized code base written in Python. I divided each
 file up in "chunks", one per function or class or toplevel scope, and
 asked an AI to provide for each chunk:
@@ -495,7 +493,7 @@ asked an AI to provide for each chunk:
 
 For example, in JSON, a typical chunk might have this output from the AI:
 
-    "docs": {
+"docs": {
     "chunkDocs": [
         {
         "lineNumber": 33,
@@ -517,7 +515,7 @@ For example, in JSON, a typical chunk might have this output from the AI:
         "dependencies": []
         }
     ]
-    }
+}
 
 This is just an example though. The real code base looks different -- it
 just uses the same format.
@@ -535,81 +533,20 @@ ${input}
 `;
 }
 
-async function processQuery(
-    input: string,
-    chunkyIndex: ChunkyIndex,
-    io: iapp.InteractiveIo,
-    options: QueryOptions,
-): Promise<void> {
-    const hitTable = new Map<ChunkId, number>();
+function makeAnswerPrompt(input: string): string {
+    return `\
+Here is a JSON representation of a set of query results on indexes for keywords, topics, goals, etc.
+For each index you see a list of scored items, where each item has a value (e.g. a topic) and a list of "source ids".
+The source ids reference code chunks, which are provided separately.
 
-    // First gather hits from keywords, topics etc. indexes.
-    for (const nameIndexPair of chunkyIndex.allIndexes()) {
-        const indexName = nameIndexPair.name;
-        const index = nameIndexPair.index;
-        if (options.verbose)
-            io.writer.writeLine(`[Searching ${indexName} index...]`);
-        // TODO: try/catch? Embeddings can fail...
-        const hits: ScoredItem<knowLib.TextBlock<ChunkId>>[] =
-            await index.nearestNeighborsPairs(
-                input,
-                options.maxHits * 5,
-                options.minScore,
-            );
-        for (const hit of hits) {
-            if (options.verbose) {
-                io.writer.writeLine(
-                    `  ${hit.score.toFixed(3).padStart(7)}: ${hit.item.value} -- ${hit.item.sourceIds}`,
-                );
-            }
-            for (const id of hit.item.sourceIds ?? []) {
-                const oldScore = hitTable.get(id) || 0.0;
-                hitTable.set(id, oldScore + hit.score);
-            }
-        }
-    }
+Using the query results and scores, please answer this question:
 
-    // Now show the top options.maxHits hits.
-    if (!hitTable.size) {
-        io.writer.writeLine("No hits.");
-        return;
-    }
-    const results: ScoredItem<ChunkId>[] = Array.from(
-        hitTable,
-        ([item, score]) => ({ item, score }),
-    );
-    results.sort((a, b) => b.score - a.score);
-    results.splice(options.maxHits);
-    io.writer.writeLine(
-        `Found ${results.length} hits for "${input}":`,
-    );
-
-    for (let i = 0; i < results.length; i++) {
-        const hit = results[i];
-        const chunk: Chunk | undefined = await chunkyIndex.chunkFolder.get(
-            hit.item,
-        );
-        if (!chunk) {
-            io.writer.writeLine(`${hit.item} --> [No data]`);
-            continue;
-        }
-
-        io.writer.writeLine(
-            `Hit ${i + 1}: score: ${hit.score.toFixed(3)}, ` +
-                `id: ${chunk.id}, ` +
-                `file: ${path.relative(process.cwd(), chunk.filename!)}, ` +
-                `type: ${chunk.treeName}`,
-        );
-        const docs: FileDocumentation | undefined = chunk.docs;
-        for (const chunkDoc of docs?.chunkDocs ?? [])
-            io.writer.writeLine(
-                wordWrap(`${chunkDoc.summary} (${chunkDoc.lineNumber})`),
-            );
-        writeChunkLines(chunk, io, options.verbose ? 100 : 5);
-    }
+${input}
+`;
 }
 
-function writeChunkLines(
+// TODO: Make an @command for this
+export function writeChunkLines(
     chunk: Chunk,
     io: iapp.InteractiveIo,
     lineBudget = 10,
