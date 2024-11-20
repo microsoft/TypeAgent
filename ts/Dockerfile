@@ -29,11 +29,11 @@ RUN apt install -y gnome-keyring
 RUN curl -sL https://aka.ms/InstallAzureCLIDeb | bash
 
 EXPOSE 80:3000
-EXPOSE 8080:3000
-EXPOSE 443:3443
-EXPOSE 8083:3443
-#CMD [ "pnpm", "start" ]
+#EXPOSE 8080:3000
+#EXPOSE 443:3443
+#EXPOSE 8083:3443
 
+#setup start actions
 RUN echo az login --identity >> start.sh
 RUN echo pnpm start >> start.sh
 
