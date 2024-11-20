@@ -53,6 +53,7 @@ class HFModel:
             cache_dir="./hf_cache"
         )
 
+        self.tokenizer.pad_token = "!"
         self.init_peft()
 
     def load_training_data(self, dataset: Dataset):
@@ -71,7 +72,7 @@ class HFModel:
             raise ValueError("No training data loaded")
 
         data_dict = self.train_set.format(self.model_name)
-        training_data = list(map(lambda x: self.tokenize(str(x)), data_dict["infoPairs"]))
+        training_data = list(map(lambda x: self.tokenize(str(x)), data_dict["items"]))
 
         trainer = Trainer(
             model = self.model,
