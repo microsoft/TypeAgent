@@ -6,7 +6,7 @@ name: Build and deploy Node.js app to Azure Web App - typeagent
 on:
   push:
     branches:
-      - dev/robgruen/android_sans_MSAL
+      - main
   workflow_dispatch:
 
 permissions:
@@ -30,7 +30,7 @@ jobs:
           
       - uses: actions/checkout@v4
         with:
-          ref: dev/robgruen/android_sans_MSAL
+          ref: main
 
       - uses: 1arp/create-a-file-action@0.4.5
         with:
