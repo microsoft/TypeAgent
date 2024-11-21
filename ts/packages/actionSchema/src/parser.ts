@@ -10,32 +10,38 @@ import {
     SchemaType,
     SchemaTypeReference,
     SchemaTypeUnion,
-    ActionSchema,
-    ActionSchemaTypeDefinition,
     SchemaTypeDefinition,
+    ActionSchemaTypeDefinition,
+    ActionSchemaFile,
 } from "./type.js";
 
-function toActionSchema(
-    translatorName: string,
+function checkActionSchema(
     definition: SchemaTypeDefinition,
-): ActionSchema {
-    if (definition.type.type !== "object") {
-        throw new Error("Expected object type");
-    }
+): [string, ActionSchemaTypeDefinition] {
     const name = definition.name;
+    if (definition.type.type !== "object") {
+        throw new Error(
+            `Schema Error: object type expect in action schema type ${name}, got ${definition.type.type}`,
+        );
+    }
+
     const { actionName, parameters } = definition.type.fields;
     if (actionName === undefined) {
-        throw new Error(`Missing actionName field in type ${name}`);
+        throw new Error(
+            `Schema Error: Missing actionName field in action schema type ${name}`,
+        );
     }
     if (actionName.optional) {
-        throw new Error(`actionName field must be required in type ${name}`);
+        throw new Error(
+            `Schema Error: actionName field must be required in action schema type ${name}`,
+        );
     }
     if (
         actionName.type.type !== "string-union" ||
         actionName.type.typeEnum.length !== 1
     ) {
         throw new Error(
-            `actionName field must be a string literal in type ${name}`,
+            `Schema Error: actionName field must be a string literal in action schema type ${name}`,
         );
     }
 
@@ -44,12 +50,74 @@ function toActionSchema(
         parameterFieldType !== undefined &&
         parameterFieldType.type !== "object"
     ) {
-        throw new Error(`parameters field must be an object in type ${name}`);
+        throw new Error(
+            `Schema Error: parameters field must be an object in action schema type ${name}`,
+        );
+    }
+    return [
+        actionName.type.typeEnum[0],
+        definition as ActionSchemaTypeDefinition,
+    ];
+}
+
+function createActionSchemaFile(
+    translatorName: string,
+    definition: SchemaTypeDefinition | undefined,
+    strict: boolean,
+): ActionSchemaFile {
+    if (definition === undefined) {
+        throw new Error(`Type ${definition} not found`);
+    }
+
+    if (strict && !definition.exported) {
+        throw new Error(`Type ${definition} must be exported`);
+    }
+
+    const pending: SchemaTypeDefinition[] = [definition];
+    const actionSchemas: [string, ActionSchemaTypeDefinition][] = [];
+    while (pending.length > 0) {
+        const current = pending.shift()!;
+        switch (current.type.type) {
+            case "object":
+                actionSchemas.push(checkActionSchema(current));
+                break;
+            case "type-union":
+                if (strict && current.comments) {
+                    throw new Error(
+                        `Schema Error: entry type comments for '${current.name}' are not supported`,
+                    );
+                }
+                current.type.types.map((t) => {
+                    if (t.type !== "type-reference") {
+                        throw new Error(
+                            "Schema Error: expected type reference in the entry type union",
+                        );
+                    }
+                    pending.push(t.definition);
+                });
+                break;
+            case "type-reference":
+                // Definition that references another type is the same as a union type with a single type.
+                if (strict && current.comments) {
+                    throw new Error(
+                        "Schema Error: entry type comments are not supported",
+                    );
+                }
+                pending.push(current.type.definition);
+                break;
+            default:
+                throw new Error(
+                    `Schema Error: invalid type ${current.type.type} in action schema type ${current.name}`,
+                );
+        }
+    }
+    if (actionSchemas.length === 0) {
+        throw new Error("No action schema found");
     }
     return {
         translatorName,
-        definition: definition as ActionSchemaTypeDefinition,
-        actionName: actionName.type.typeEnum[0],
+        actionSchemaMap: new Map(actionSchemas),
+        definition,
     };
 }
 
@@ -58,51 +126,26 @@ export function parseActionSchemaFile(
     translatorName: string,
     typeName: string,
     strict: boolean = false,
-): ActionSchema[] {
-    const parser = new ActionParser();
-    const definition = parser.parseSchema(filename, typeName);
-    if (definition === undefined) {
-        throw new Error(`Type ${typeName} not found`);
-    }
+): ActionSchemaFile {
+    const definition = ActionParser.parseFile(filename, typeName);
+    return createActionSchemaFile(translatorName, definition, strict);
+}
 
-    if (strict && !definition.exported) {
-        throw new Error(`Type ${typeName} must be exported`);
-    }
-
-    switch (definition.type.type) {
-        case "object":
-            return [toActionSchema(translatorName, definition)];
-        case "type-union":
-            if (strict && definition.comments) {
-                throw new Error(
-                    `Entry type comments for '${typeName}' are not supported`,
-                );
-            }
-            return definition.type.types.map((t) => {
-                if (t.type !== "type-reference") {
-                    throw new Error("Expected type reference");
-                }
-                return toActionSchema(translatorName, t.definition);
-            });
-        case "type-reference":
-            if (strict && definition.comments) {
-                throw new Error("Entry type comments are not supported");
-            }
-            return [toActionSchema(translatorName, definition.type.definition)];
-        default:
-            throw new Error(
-                `Expected object or type union, got ${definition.type.type}`,
-            );
-    }
+export function parseActionSchemaSource(
+    source: string,
+    translatorName: string,
+    typeName: string,
+    strict: boolean = false,
+): ActionSchemaFile {
+    const definition = ActionParser.parseSource(source, typeName);
+    return createActionSchemaFile(translatorName, definition, strict);
 }
 
 import ts, { CommentRange } from "typescript";
 
 class ActionParser {
-    public parseSchema(
-        fileName: string,
-        typeName: string,
-    ): SchemaTypeDefinition | undefined {
+    static parseFile(fileName: string, typeName: string) {
+        // TODO: switch to read file and call parseSource?
         const options: ts.CompilerOptions = {
             target: ts.ScriptTarget.ES5,
             module: ts.ModuleKind.CommonJS,
@@ -111,24 +154,37 @@ class ActionParser {
         const program = ts.createProgram([fileName], options);
         for (const sourceFile of program.getSourceFiles()) {
             if (!sourceFile.isDeclarationFile) {
-                this.fullText = sourceFile.getFullText();
-                ts.forEachChild(sourceFile, (node: ts.Node) => {
-                    this.parseAST(node);
-                });
-
-                for (const pending of this.pendingReferences.values()) {
-                    const resolvedType = this.typeMap.get(pending.name);
-                    if (resolvedType === undefined) {
-                        throw new Error(`Type ${pending.name} not found`);
-                    }
-                    pending.definition = resolvedType;
-                }
+                const parser = new ActionParser();
+                return parser.parseSchema(sourceFile, typeName);
             }
         }
-        const result = this.typeMap.get(typeName);
-        this.typeMap.clear();
-        this.pendingReferences.clear();
-        return result;
+    }
+
+    static parseSource(source: string, typeName: string) {
+        const sourceFile = ts.createSourceFile("", source, ts.ScriptTarget.ES5);
+        const parser = new ActionParser();
+        return parser.parseSchema(sourceFile, typeName);
+    }
+
+    private constructor() {}
+    private parseSchema(
+        sourceFile: ts.SourceFile,
+        typeName: string,
+    ): SchemaTypeDefinition | undefined {
+        this.fullText = sourceFile.getFullText();
+        ts.forEachChild(sourceFile, (node: ts.Node) => {
+            this.parseAST(node);
+        });
+
+        for (const pending of this.pendingReferences.values()) {
+            const resolvedType = this.typeMap.get(pending.name);
+            if (resolvedType === undefined) {
+                throw new Error(`Type ${pending.name} not found`);
+            }
+            pending.definition = resolvedType;
+        }
+
+        return this.typeMap.get(typeName);
     }
 
     private fullText = "";

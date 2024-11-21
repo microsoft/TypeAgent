@@ -10,6 +10,8 @@ export {
     composeTranslatorSchemas,
     enableJsonTranslatorStreaming,
     TypeChatJsonTranslatorWithStreaming,
+    createJsonTranslatorWithValidator,
+    JsonTranslatorOptions,
 } from "./jsonTranslator.js";
 export { Limiter, createLimiter } from "./limiter.js";
 export * from "./print.js";

@@ -314,7 +314,7 @@ class ConfigModelSetCommandHandler implements CommandHandler {
         const reset = params.flags.reset;
         const model = params.args.model;
         if (reset || model === "") {
-            if (model !== "") {
+            if (model !== undefined && model !== "") {
                 throw new Error("Model name is not allowed with reset option");
             }
             const config: SessionOptions = {};
@@ -356,6 +356,118 @@ class ConfigModelSetCommandHandler implements CommandHandler {
     }
 }
 
+const configTranslationCommandHandlers: CommandHandlerTable = {
+    description: "Translation configuration",
+    defaultSubCommand: "on",
+    commands: {
+        ...getToggleCommandHandlers("translation", async (context, enable) => {
+            await changeContextConfig(
+                { translation: { enabled: enable } },
+                context,
+            );
+        }),
+        model: new ConfigModelSetCommandHandler("translation"),
+        multi: getToggleHandlerTable(
+            "multiple action translation",
+            async (context, enable: boolean) => {
+                await changeContextConfig(
+                    { translation: { multipleActions: enable } },
+                    context,
+                );
+            },
+        ),
+        switch: {
+            description: "auto switch translator",
+            commands: {
+                ...getToggleCommandHandlers(
+                    "switch translator",
+                    async (context, enable: boolean) => {
+                        await changeContextConfig(
+                            {
+                                translation: {
+                                    switch: {
+                                        inline: enable,
+                                        search: enable,
+                                    },
+                                },
+                            },
+                            context,
+                        );
+                    },
+                ),
+                inline: getToggleHandlerTable(
+                    "inject inline switch",
+                    async (context, enable: boolean) => {
+                        await changeContextConfig(
+                            {
+                                translation: {
+                                    switch: {
+                                        inline: enable,
+                                    },
+                                },
+                            },
+                            context,
+                        );
+                    },
+                ),
+                search: getToggleHandlerTable(
+                    "inject inline switch",
+                    async (context, enable: boolean) => {
+                        await changeContextConfig(
+                            {
+                                translation: {
+                                    switch: {
+                                        search: enable,
+                                    },
+                                },
+                            },
+                            context,
+                        );
+                    },
+                ),
+            },
+        },
+        history: getToggleHandlerTable(
+            "history",
+            async (context, enable: boolean) => {
+                await changeContextConfig(
+                    { translation: { history: enable } },
+                    context,
+                );
+            },
+        ),
+        stream: getToggleHandlerTable(
+            "streaming translation",
+            async (context, enable: boolean) => {
+                await changeContextConfig(
+                    { translation: { stream: enable } },
+                    context,
+                );
+            },
+        ),
+        schema: {
+            description: "Action schema configuration",
+            commands: {
+                regenerate: getToggleHandlerTable(
+                    "generated action schema",
+                    async (context, enable: boolean) => {
+                        await changeContextConfig(
+                            {
+                                translation: {
+                                    schema: {
+                                        regenerate: enable,
+                                    },
+                                },
+                            },
+                            context,
+                        );
+                    },
+                ),
+            },
+        },
+    },
+};
+
 export function getConfigCommandHandlers(): CommandHandlerTable {
     return {
         description: "Configuration commands",
@@ -364,100 +476,7 @@ export function getConfigCommandHandlers(): CommandHandlerTable {
             action: new AgentToggleCommandHandler(AgentToggle.Action),
             command: new AgentToggleCommandHandler(AgentToggle.Command),
             agent: new AgentToggleCommandHandler(AgentToggle.Agent),
-            translation: {
-                description: "Translation configuration",
-                defaultSubCommand: "on",
-                commands: {
-                    ...getToggleCommandHandlers(
-                        "translation",
-                        async (context, enable) => {
-                            await changeContextConfig(
-                                { translation: { enabled: enable } },
-                                context,
-                            );
-                        },
-                    ),
-                    model: new ConfigModelSetCommandHandler("translation"),
-                    multi: getToggleHandlerTable(
-                        "multiple action translation",
-                        async (context, enable: boolean) => {
-                            await changeContextConfig(
-                                { translation: { multipleActions: enable } },
-                                context,
-                            );
-                        },
-                    ),
-                    switch: {
-                        description: "auto switch translator",
-                        commands: {
-                            ...getToggleCommandHandlers(
-                                "switch translator",
-                                async (context, enable: boolean) => {
-                                    await changeContextConfig(
-                                        {
-                                            translation: {
-                                                switch: {
-                                                    inline: enable,
-                                                    search: enable,
-                                                },
-                                            },
-                                        },
-                                        context,
-                                    );
-                                },
-                            ),
-                            inline: getToggleHandlerTable(
-                                "inject inline switch",
-                                async (context, enable: boolean) => {
-                                    await changeContextConfig(
-                                        {
-                                            translation: {
-                                                switch: {
-                                                    inline: enable,
-                                                },
-                                            },
-                                        },
-                                        context,
-                                    );
-                                },
-                            ),
-                            search: getToggleHandlerTable(
-                                "inject inline switch",
-                                async (context, enable: boolean) => {
-                                    await changeContextConfig(
-                                        {
-                                            translation: {
-                                                switch: {
-                                                    search: enable,
-                                                },
-                                            },
-                                        },
-                                        context,
-                                    );
-                                },
-                            ),
-                        },
-                    },
-                    history: getToggleHandlerTable(
-                        "history",
-                        async (context, enable: boolean) => {
-                            await changeContextConfig(
-                                { translation: { history: enable } },
-                                context,
-                            );
-                        },
-                    ),
-                    stream: getToggleHandlerTable(
-                        "streaming translation",
-                        async (context, enable: boolean) => {
-                            await changeContextConfig(
-                                { translation: { stream: enable } },
-                                context,
-                            );
-                        },
-                    ),
-                },
-            },
+            translation: configTranslationCommandHandlers,
             explainer: {
                 description: "Explainer configuration",
                 defaultSubCommand: "on",
