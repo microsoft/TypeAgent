@@ -425,10 +425,6 @@ async function processQuery(
 
     // **Step 2:** Run those queries on the indexes.
 
-    const allHits: Map<
-        IndexType | "other",
-        ScoredItem<knowLib.TextBlock<string>>[]
-    > = new Map(); // Record hits for all indexes.
     const chunkIdScores: Map<ChunkId, ScoredItem<ChunkId>> = new Map(); // Record score of each chunk id.
     const totalNumChunks = await chunkyIndex.chunkFolder.size(); // Nominator in IDF calculation.
 
@@ -449,7 +445,6 @@ async function processQuery(
             io.writer.writeLine(`[No hits for ${indexName}]`);
             continue;
         }
-        allHits.set(indexName, hits);
 
         // Update chunk id scores.
         for (const hit of hits) {
@@ -496,26 +491,9 @@ async function processQuery(
         );
     }
 
-    // TODO: Move this out of allHits, make it a special case that exits early.
     if (specs.unknownText) {
         io.writer.writeLine(`[Unknown text: ${specs.unknownText}]`);
-        allHits.set("other", [
-            {
-                item: {
-                    type: knowLib.TextBlockType.Sentence,
-                    value: specs.unknownText,
-                    sourceIds: [],
-                },
-                score: 1.0,
-            },
-        ]);
-        // NOTE: This has no source ids so doesn't affect the chunkIdScores.
-    }
-
-    if (queryOptions.verbose) {
-        io.writer.writeLine(
-            JSON.stringify(Object.fromEntries(allHits), null, 4),
-        );
+        return;
     }
 
     // **Step 3:** Ask the LLM (answerMaker) to answer the question.
