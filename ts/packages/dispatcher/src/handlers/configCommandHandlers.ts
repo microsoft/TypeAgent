@@ -448,14 +448,14 @@ const configTranslationCommandHandlers: CommandHandlerTable = {
         schema: {
             description: "Action schema configuration",
             commands: {
-                regenerate: getToggleHandlerTable(
+                generation: getToggleHandlerTable(
                     "generated action schema",
                     async (context, enable: boolean) => {
                         await changeContextConfig(
                             {
                                 translation: {
                                     schema: {
-                                        regenerate: enable,
+                                        generation: enable,
                                     },
                                 },
                             },

@@ -139,7 +139,7 @@ export function getTranslator(
         config.model,
         config.switch.inline ? getActiveTranslators(context) : undefined,
         config.multipleActions,
-        config.schema.regenerate,
+        config.schema.generation,
     );
     context.translatorCache.set(translatorName, newTranslator);
     return newTranslator;
@@ -419,7 +419,7 @@ export async function changeContextConfig(
         changed.translation?.model !== undefined ||
         changed.translation?.switch?.inline !== undefined ||
         changed.translation?.multipleActions !== undefined ||
-        changed.translation?.schema?.regenerate !== undefined
+        changed.translation?.schema?.generation !== undefined
     ) {
         // The dynamic schema for change assistant is changed.
         // Clear the cache to regenerate them.
