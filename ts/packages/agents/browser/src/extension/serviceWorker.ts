@@ -731,6 +731,7 @@ let currentCrosswordUrl = "";
 async function toggleSiteTranslator(targetTab: chrome.tabs.Tab) {
     let messageType = "enableSiteTranslator";
     let messageBody = "";
+    await ensureWebsocketConnected();
     if (targetTab.url) {
         const host = new URL(targetTab.url).host;
 
@@ -843,7 +844,7 @@ async function sendActionToTabIndex(action: any) {
                 reject("Unable to contact dispatcher backend.");
             }
         } else {
-            throw new Error("No websocket connection.");
+            console.error("No websocket connection.");
         }
     });
 }
