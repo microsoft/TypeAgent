@@ -115,6 +115,9 @@ type DispatcherConfig = {
         };
         multipleActions: boolean;
         history: boolean;
+        schema: {
+            generation: boolean;
+        };
     };
     explainer: {
         enabled: boolean;
@@ -162,6 +165,9 @@ const defaultSessionConfig: SessionConfig = {
         },
         multipleActions: true,
         history: true,
+        schema: {
+            generation: true,
+        },
     },
     explainer: {
         enabled: true,

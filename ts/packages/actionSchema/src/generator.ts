@@ -1,12 +1,14 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { ActionSchemaFile } from "./type.js";
 import {
     SchemaType,
-    ActionSchema,
     SchemaObjectFields,
     SchemaTypeDefinition,
 } from "./type.js";
+import registerDebug from "debug";
+const debug = registerDebug("typeagent:schema:generate");
 
 function generateSchemaType(
     type: SchemaType,
@@ -87,7 +89,7 @@ export function generateSchema(
     exact: boolean = false,
 ) {
     const emitted = new Map<SchemaTypeDefinition, string[]>();
-    const pending: SchemaTypeDefinition[] = [...definitions];
+    const pending = [...definitions];
 
     while (pending.length > 0) {
         const definition = pending.pop()!;
@@ -118,17 +120,15 @@ export function generateSchema(
     for (const key of keys) {
         finalLines.push(...emitted.get(key)!);
     }
-    return finalLines.join("\n");
+    const result = finalLines.join("\n");
+    debug(result);
+    return result;
 }
 
 export function generateActionSchema(
-    actionSchemas: ActionSchema[],
+    actionSchemaFile: ActionSchemaFile,
     typeName: string = "AllAction",
     exact: boolean = false, // for testing
 ): string {
-    return generateSchema(
-        actionSchemas.map((actionInfo) => actionInfo.definition),
-        typeName,
-        exact,
-    );
+    return generateSchema([actionSchemaFile.definition], typeName, exact);
 }

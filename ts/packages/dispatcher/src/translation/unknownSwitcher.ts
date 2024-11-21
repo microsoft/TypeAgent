@@ -23,17 +23,17 @@ function createSelectionActionTypeDefinition(
         // No need to select for injected schemas
         return undefined;
     }
-    const actionSchemas = getTranslatorActionSchemas(
+    const actionSchemaFile = getTranslatorActionSchemas(
         translatorConfig,
         translatorName,
     );
 
     const actionNames: string[] = [];
     const actionComments: string[] = [];
-    for (const info of actionSchemas.values()) {
-        actionNames.push(info.actionName);
+    for (const [name, info] of actionSchemaFile.actionSchemaMap.entries()) {
+        actionNames.push(name);
         actionComments.push(
-            ` "${info.actionName}"${info.definition.comments ? ` - ${info.definition.comments[0].trim()}` : ""}`,
+            ` "${name}"${info.comments ? ` - ${info.comments[0].trim()}` : ""}`,
         );
     }
 

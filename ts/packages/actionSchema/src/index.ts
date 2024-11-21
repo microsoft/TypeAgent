@@ -2,13 +2,14 @@
 // Licensed under the MIT License.
 
 export {
-    ActionSchema,
     SchemaType as ActionParamType,
     SchemaTypeArray as ActionParamArray,
     SchemaTypeObject as ActionParamObject,
+    ActionSchemaTypeDefinition,
+    ActionSchemaFile,
 } from "./type.js";
 
-export { parseActionSchemaFile } from "./parser.js";
+export { parseActionSchemaFile, parseActionSchemaSource } from "./parser.js";
 export { generateActionSchema, generateSchema } from "./generator.js";
 export { validateAction } from "./validate.js";
 export { getParameterType, getParameterNames } from "./utils.js";

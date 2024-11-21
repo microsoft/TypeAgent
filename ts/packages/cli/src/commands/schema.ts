@@ -10,7 +10,7 @@ import {
     getBuiltinTranslatorConfigProvider,
     getActionSchema,
 } from "agent-dispatcher/internal";
-import { generateActionSchema } from "action-schema";
+import { generateSchema } from "action-schema";
 
 export default class Schema extends Command {
     static description = "Show schema used by translators";
@@ -54,7 +54,7 @@ export default class Schema extends Command {
                     provider,
                 );
                 if (actionSchema) {
-                    console.log(generateActionSchema([actionSchema]));
+                    console.log(generateSchema([actionSchema]));
                 } else {
                     console.error(
                         `Action ${args.actionName} not found in translator ${args.translator}`,

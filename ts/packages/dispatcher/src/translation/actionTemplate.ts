@@ -128,22 +128,23 @@ function toTemplate(
         config,
         action.translatorName,
     );
+    const actionSchemas = actionInfos.actionSchemaMap;
     const actionName: TemplateFieldStringUnion = {
         type: "string-union",
-        typeEnum: Array.from(actionInfos.keys()),
+        typeEnum: Array.from(actionSchemas.keys()),
         discriminator: "",
     };
     template.fields.actionName = {
         type: actionName,
     };
 
-    const actionInfo = actionInfos.get(action.actionName);
-    if (actionInfo === undefined) {
+    const actionSchema = actionSchemas.get(action.actionName);
+    if (actionSchema === undefined) {
         return template;
     }
     actionName.discriminator = action.actionName;
 
-    const parameterType = actionInfo.definition.type.fields.parameters?.type;
+    const parameterType = actionSchema.type.fields.parameters?.type;
     if (parameterType) {
         const type = toTemplateType(parameterType, action.parameters);
         if (type !== undefined) {
@@ -250,11 +251,11 @@ export async function getActionCompletion(
     action: DeepPartialUndefined<AppAction>,
     propertyName: string,
 ): Promise<string[]> {
-    const actionInfo = getActionSchema(action, systemContext.agents);
-    if (actionInfo === undefined) {
+    const actionSchema = getActionSchema(action, systemContext.agents);
+    if (actionSchema === undefined) {
         return [];
     }
-    const appAgentName = getAppAgentName(actionInfo.translatorName);
+    const appAgentName = getAppAgentName(action.translatorName!);
     const appAgent = systemContext.agents.getAppAgent(appAgentName);
     if (appAgent.getActionCompletion === undefined) {
         return [];

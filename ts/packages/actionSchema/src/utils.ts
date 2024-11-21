@@ -1,15 +1,17 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { SchemaType, ActionSchema } from "./type.js";
+import { SchemaType, ActionSchemaTypeDefinition } from "./type.js";
 
-export function getParameterType(actionInfo: ActionSchema, name: string) {
+export function getParameterType(
+    actionType: ActionSchemaTypeDefinition,
+    name: string,
+) {
     const propertyNames = name.split(".");
     if (propertyNames.shift() !== "parameters") {
         return undefined;
     }
-    let curr: SchemaType | undefined =
-        actionInfo.definition.type.fields.parameters?.type;
+    let curr: SchemaType | undefined = actionType.type.fields.parameters?.type;
     if (curr === undefined) {
         return undefined;
     }
@@ -41,10 +43,10 @@ export function getParameterType(actionInfo: ActionSchema, name: string) {
 }
 
 export function getParameterNames(
-    actionInfo: ActionSchema,
+    actionType: ActionSchemaTypeDefinition,
     getCurrentValue: (name: string) => any,
 ) {
-    const parameters = actionInfo.definition.type.fields.parameters?.type;
+    const parameters = actionType.type.fields.parameters?.type;
     if (parameters === undefined) {
         return [];
     }

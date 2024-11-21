@@ -100,8 +100,8 @@ export type ActionSchemaTypeDefinition =
     | SchemaTypeInterfaceDefinition
     | SchemaTypeAliasDefinition<SchemaTypeObject>;
 
-export type ActionSchema = {
+export type ActionSchemaFile = {
     translatorName: string;
-    actionName: string;
-    definition: ActionSchemaTypeDefinition;
+    actionSchemaMap: Map<string, ActionSchemaTypeDefinition>;
+    definition: SchemaTypeDefinition;
 };
