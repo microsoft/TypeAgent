@@ -3,7 +3,7 @@
 
 import WebSocket, { WebSocketServer } from "ws";
 import { Dispatcher } from "agent-dispatcher";
-import { IncomingMessage } from "node:http";
+import { IncomingMessage, Server } from "node:http";
 import { WebAPIClientIO } from "./webClientIO.js";
 
 export class TypeAgentAPIWebSocketServer {
@@ -11,17 +11,16 @@ export class TypeAgentAPIWebSocketServer {
     private settingSummary: string = "";
 
     constructor(
-        endpoint: URL,
+        webServer: Server<any, any>,
         dispatcher: Dispatcher,
         webClientIO: WebAPIClientIO,
     ) {
         this.server = new WebSocketServer({
-            port: parseInt(endpoint.port),
-            path: endpoint.pathname,
+            server: webServer,
         });
 
         this.server.on("listening", () => {
-            console.log(`WebSocket server started at ${endpoint}`);
+            console.log(`WebSocket server started!`);
             process.send?.("Success");
         });
 
@@ -151,5 +150,7 @@ export class TypeAgentAPIWebSocketServer {
         });
     }
 
-    noop() {}
+    stop() {
+        this.server.close();
+    }
 }

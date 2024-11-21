@@ -17,6 +17,7 @@
     },
     "jest.virtualFolders": [
         {"name": "aiclient", "rootPath": "packages/aiclient"},
+        {"name": "api", "rootPath": "packages/api"},
         {"name": "cache", "rootPath": "packages/cache"},
         {"name": "commonUtils", "rootPath": "packages/commonUtils"},
         {"name": "dispatcher", "rootPath": "packages/dispatcher"},

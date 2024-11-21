@@ -26,6 +26,15 @@ export type DisplayMessageKind =
 
 export type DisplayAppendMode = "inline" | "block" | "temporary";
 
+export type ClientAction =
+    | "show-camera"
+    | "show-notification"
+    | "set-alarm"
+    | "call-phonenumber"
+    | "send-sms"
+    | "search-nearby"
+    | "automate-phone-ui";
+
 export interface ActionIO {
     readonly type: DisplayType;
     setDisplay(content: DisplayContent): void;
@@ -34,5 +43,5 @@ export interface ActionIO {
     appendDisplay(content: DisplayContent, mode?: DisplayAppendMode): void;
 
     // Tell the host process take a specific action
-    takeAction(action: string): void;
+    takeAction(action: ClientAction, data?: unknown): void;
 }
