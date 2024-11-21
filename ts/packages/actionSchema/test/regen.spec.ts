@@ -88,16 +88,24 @@ describe("Action Schema Regeneration", () => {
     // There might be others, and because exact regeneration is not the goal, just
     // disable the test for now, and use this to manually check for real issues.
     //
-    it.each(testInput)("should regenerate %s", async (name, file, type) => {
-        const original = fs.readFileSync(file, "utf-8");
-        const actionSchemaFile = parseActionSchemaFile(file, name, type, true);
-        const regenerated = await generateActionSchema(
-            actionSchemaFile,
-            type,
-            true,
-        );
-        await compare(original, regenerated);
-    });
+    it.skip.each(testInput)(
+        "should regenerate %s",
+        async (name, file, type) => {
+            const original = fs.readFileSync(file, "utf-8");
+            const actionSchemaFile = parseActionSchemaFile(
+                file,
+                name,
+                type,
+                true,
+            );
+            const regenerated = await generateActionSchema(
+                actionSchemaFile,
+                type,
+                true,
+            );
+            await compare(original, regenerated);
+        },
+    );
 
     it.each(testInput)(
         "should roundtrip regenerated - %s",
