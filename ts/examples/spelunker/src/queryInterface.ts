@@ -10,9 +10,10 @@ import * as knowLib from "knowledge-processor";
 import { ScoredItem } from "typeagent";
 
 import { IndexType, ChunkyIndex } from "./chunkyIndex.js";
-import { QuerySpec } from "./makeQuerySchema.js";
+import { QuerySpec, QuerySpecs } from "./makeQuerySchema.js";
 import { Chunk, ChunkId } from "./pythonChunker.js";
 import { importAllFiles } from "./pythonImporter.js";
+import { AnswerSpecs } from "./makeAnswerSchema.js";
 
 type QueryOptions = {
     maxHits: number;
@@ -389,7 +390,6 @@ export async function interactiveQueryLoop(
         }
     }
 
-    // TODO: break up into smaller parts.
     async function _inputHandler(
         input: string,
         io: iapp.InteractiveIo,
@@ -410,26 +410,75 @@ async function processQuery(
     io: iapp.InteractiveIo,
     queryOptions: QueryOptions,
 ): Promise<void> {
+    // **Step 1:** Ask LLM (queryMaker) to propose queries for each index.
+
+    const proposedQueries = await proposeQueries(
+        input,
+        chunkyIndex,
+        io,
+        queryOptions,
+    );
+    if (!proposedQueries) return; // Error message already printed by proposeQueries.
+
+    // **Step 2:** Run those queries on the indexes.
+
+    const chunkIdScores = await runIndexQueries(
+        proposedQueries,
+        chunkyIndex,
+        io,
+        queryOptions,
+    );
+    if (!chunkIdScores) return; // Error message already printed by runIndexQueries.
+
+    // **Step 3:** Ask the LLM (answerMaker) to answer the question.
+
+    const answer = await generateAnswer(
+        input,
+        chunkIdScores,
+        chunkyIndex,
+        io,
+        queryOptions,
+    );
+    if (!answer) return; // Error message already printed by generateAnswer.
+
+    // **Step 4:** Print the answer.
+
+    reportQuery(answer, io);
+}
+
+async function proposeQueries(
+    input: string,
+    chunkyIndex: ChunkyIndex,
+    io: iapp.InteractiveIo,
+    queryOptions: QueryOptions,
+): Promise<QuerySpecs | undefined> {
     const result = await chunkyIndex.queryMaker.translate(
         input,
         makeQueryMakerPrompt(input),
     );
     if (!result.success) {
         io.writer.writeLine(`[Error: ${result.message}]`);
-        return;
+        return undefined;
     }
     const specs = result.data;
     if (queryOptions.verbose)
         io.writer.writeLine(JSON.stringify(specs, null, 2));
-    const allHits: Map<
-        IndexType | "other",
-        ScoredItem<knowLib.TextBlock<string>>[]
-    > = new Map();
+    return specs;
+}
+
+async function runIndexQueries(
+    proposedQueries: QuerySpecs,
+    chunkyIndex: ChunkyIndex,
+    io: iapp.InteractiveIo,
+    queryOptions: QueryOptions,
+): Promise<Map<ChunkId, ScoredItem<ChunkId>> | undefined> {
+    const chunkIdScores: Map<ChunkId, ScoredItem<ChunkId>> = new Map(); // Record score of each chunk id.
+    const totalNumChunks = await chunkyIndex.chunkFolder.size(); // Nominator in IDF calculation.
 
     for (const namedIndex of chunkyIndex.allIndexes()) {
         const indexName = namedIndex.name;
         const index = namedIndex.index;
-        const spec: QuerySpec | undefined = (specs as any)[indexName];
+        const spec: QuerySpec | undefined = (proposedQueries as any)[indexName];
         if (!spec) {
             io.writer.writeLine(`[No query for ${indexName}]`);
             continue;
@@ -443,7 +492,33 @@ async function processQuery(
             io.writer.writeLine(`[No hits for ${indexName}]`);
             continue;
         }
-        allHits.set(indexName, hits);
+
+        // Update chunk id scores.
+        for (const hit of hits) {
+            // IDF only depends on the term.
+            const fraction =
+                totalNumChunks / (1 + (hit.item.sourceIds?.length ?? 0));
+            const idf = 1 + Math.log(fraction);
+            for (const chunkId of hit.item.sourceIds ?? []) {
+                // Binary TF is 1 for all chunks in the list.
+                // As a tweak, we multiply by the term's relevance score.
+                const newScore = hit.score * idf;
+                const oldScoredItem = chunkIdScores.get(chunkId);
+                const oldScore = oldScoredItem?.score ?? 0;
+                // Combine scores by addition. (Alternatives: max, possibly others.)
+                const combinedScore = oldScore + newScore;
+                if (oldScoredItem) {
+                    oldScoredItem.score = combinedScore;
+                } else {
+                    chunkIdScores.set(chunkId, {
+                        score: oldScore + newScore,
+                        item: chunkId,
+                    });
+                }
+            }
+        }
+
+        // Verbose logging.
         if (queryOptions.verbose) {
             io.writer.writeLine(
                 `\nFound ${hits.length} ${indexName} for '${spec.query}':`,
@@ -454,6 +529,8 @@ async function processQuery(
                 );
             }
         }
+
+        // Regular logging.
         const nchunks = new Set(hits.flatMap((h) => h.item.sourceIds)).size;
         const end = hits.length - 1;
         io.writer.writeLine(
@@ -461,69 +538,80 @@ async function processQuery(
         );
     }
 
-    // TODO: Move this out of allHits, make it a special case that exits early.
-    if (specs.unknownText) {
-        io.writer.writeLine(`[Unknown text: ${specs.unknownText}]`);
-        allHits.set("other", [
-            {
-                item: {
-                    type: knowLib.TextBlockType.Sentence,
-                    value: specs.unknownText,
-                    sourceIds: [],
-                },
-                score: 1.0,
-            },
-        ]);
+    if (proposedQueries.unknownText) {
+        io.writer.writeLine(`[Unknown text: ${proposedQueries.unknownText}]`);
     }
+
+    return chunkIdScores;
+}
+
+async function generateAnswer(
+    input: string,
+    chunkIdScores: Map<ChunkId, ScoredItem<ChunkId>>,
+    chunkyIndex: ChunkyIndex,
+    io: iapp.InteractiveIo,
+    queryOptions: QueryOptions,
+): Promise<AnswerSpecs | undefined> {
+    // Step 3a: Compute array of ids sorted by score, truncated to some limit.
+    const scoredChunkIds: ScoredItem<ChunkId>[] = Array.from(
+        chunkIdScores.values(),
+    );
+
+    io.writer.writeLine(
+        `\n[Overall ${scoredChunkIds.length} unique chunk ids]`,
+    );
+
+    scoredChunkIds.sort((a, b) => b.score - a.score);
+    scoredChunkIds.splice(20); // Arbitrary number. (TODO: Make it an option.)
+
+    // Step 3b: Get the chunks themselves.
+    const chunks: Chunk[] = [];
+
+    for (const chunkId of scoredChunkIds) {
+        const maybeChunk = await chunkyIndex.chunkFolder.get(chunkId.item);
+        if (maybeChunk) chunks.push(maybeChunk);
+    }
+
+    io.writer.writeLine(`[Sending ${chunks.length} chunks to answerMaker]`);
+
+    // Step 3c: Make the request and check for success.
+    const request = JSON.stringify(chunks);
 
     if (queryOptions.verbose) {
-        io.writer.writeLine(
-            JSON.stringify(Object.fromEntries(allHits), null, 4),
-        );
+        io.writer.writeLine(`Request: ${JSON.stringify(chunks, null, 2)}`);
     }
 
-    const allChunks: Map<ChunkId, Chunk> = new Map();
-    for (const [_, hits] of allHits) {
-        for (const hit of hits) {
-            for (const id of hit.item.sourceIds ?? []) {
-                if (!allChunks.has(id)) {
-                    const chunk = await chunkyIndex.chunkFolder.get(id);
-                    if (chunk) allChunks.set(id, chunk);
-                }
-            }
-        }
-    }
-    io.writer.writeLine(`\n[Overall ${allChunks.size} unique chunk ids]`);
-
-    const request = JSON.stringify({
-        allHits: Object.fromEntries(allHits),
-        chunks: Object.fromEntries(allChunks),
-    });
     const answerResult = await chunkyIndex.answerMaker.translate(
         request,
         makeAnswerPrompt(input),
     );
+
     if (!answerResult.success) {
         io.writer.writeLine(`[Error: ${answerResult.message}]`);
-        return;
+        return undefined;
     }
 
-    const answer = answerResult.data;
+    if (queryOptions.verbose) {
+        io.writer.writeLine(
+            `AnswerResult: ${JSON.stringify(answerResult.data, null, 2)}`,
+        );
+    }
+
+    return answerResult.data;
+}
+
+function reportQuery(answer: AnswerSpecs, io: iapp.InteractiveIo): void {
     io.writer.writeLine(
         `\nAnswer (confidence ${answer.confidence.toFixed(3).replace(/0+$/, "")}):`,
     );
     io.writer.writeLine(wordWrap(answer.answer));
-    if (answer.message) {
-        io.writer.writeLine(`Message: ${answer.message}`);
-    }
+    if (answer.message) io.writer.writeLine(`Message: ${answer.message}`);
     if (answer.references.length) {
         io.writer.writeLine(
-            `\nReferences: ${answer.references.join(",").replace(/,/g, ", ")}`,
-        );
-        io.writer.writeLine(
-            `\n[Used ${answer.references.length} unique chunk ids out of ${allChunks.size}]`,
+            `\nReferences (${answer.references.length}): ${answer.references.join(",").replace(/,/g, ", ")}`,
         );
     }
+    // NOTE: If the user wants to see the contents of any chunk, they can use the @chunk command.
 }
 
 function makeQueryMakerPrompt(input: string): string {
