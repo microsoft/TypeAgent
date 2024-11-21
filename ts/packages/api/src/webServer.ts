@@ -27,7 +27,10 @@ export class TypeAgentAPIWebServer {
         });
 
         // secure webserver
-        if (existsSync(".cert/localhost+2-key.pem") && existsSync(".cert/localhost+2.pem")) {
+        if (
+            existsSync(".cert/localhost+2-key.pem") &&
+            existsSync(".cert/localhost+2.pem")
+        ) {
             this.secureServer = createSecureServer(
                 {
                     key: readFileSync(".cert/localhost+2-key.pem"), // path to localhost+2-key.pem
@@ -40,7 +43,9 @@ export class TypeAgentAPIWebServer {
                 },
             );
         } else {
-            console.warn("SSL Certificates NOT found, cannot listen for https:// requests!");
+            console.warn(
+                "SSL Certificates NOT found, cannot listen for https:// requests!",
+            );
         }
     }
 

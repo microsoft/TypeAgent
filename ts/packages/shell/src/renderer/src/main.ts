@@ -29,9 +29,7 @@ export function getWebSocketAPI(): ClientAPI {
     if (globalThis.webApi === undefined) {
         globalThis.webApi = webapi;
 
-        createWebSocket(true).then(
-            (ws) => (globalThis.ws = ws),
-        );
+        createWebSocket(true).then((ws) => (globalThis.ws = ws));
     }
 
     return globalThis.webApi;

@@ -16,7 +16,7 @@ export class TypeAgentAPIWebSocketServer {
         webClientIO: WebAPIClientIO,
     ) {
         this.server = new WebSocketServer({
-            server: webServer
+            server: webServer,
         });
 
         this.server.on("listening", () => {

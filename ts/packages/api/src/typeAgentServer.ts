@@ -17,9 +17,7 @@ export class TypeAgentServer {
     private webSocketServer: TypeAgentAPIWebSocketServer | undefined;
     private webServer: TypeAgentAPIWebServer | undefined;
 
-    constructor(
-        private envPath: string,
-    ) {
+    constructor(private envPath: string) {
         // typeAgent config
         dotenv.config({ path: this.envPath });
     }

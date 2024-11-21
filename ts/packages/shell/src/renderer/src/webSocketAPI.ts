@@ -229,14 +229,12 @@ function placeHolder(category: string, callback: any) {
     console.log(category + "\n" + JSON.stringify(callback));
 }
 
-export async function createWebSocket(
-    autoReconnect: boolean = true,
-) {
+export async function createWebSocket(autoReconnect: boolean = true) {
     let url = window.location;
     let protocol = url.protocol.toLowerCase() == "https:" ? "wss" : "ws";
     let port = url.hostname.toLowerCase() == "localhost" ? ":3000" : "";
 
-    const endpoint = `${protocol}://${url.hostname}${port}`
+    const endpoint = `${protocol}://${url.hostname}${port}`;
 
     return new Promise<WebSocket | undefined>((resolve) => {
         console.log(`opening web socket to ${endpoint} `);
@@ -352,9 +350,7 @@ export async function createWebSocket(
 
             // reconnect?
             if (autoReconnect) {
-                createWebSocket().then(
-                    (ws) => (globalThis.ws = ws),
-                );
+                createWebSocket().then((ws) => (globalThis.ws = ws));
             }
         };
         webSocket.onerror = (event: object) => {
