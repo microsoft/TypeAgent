@@ -31,8 +31,14 @@ type ImplicitParameter = {
     paramValue: ParamValueType;
 };
 
+export const enum WildcardMode {
+    Disabled = 0,
+    Enabled = 1,
+    Checked = 2,
+}
+
 export type ConstructionPart = {
-    readonly wildcard: boolean;
+    readonly wildcardMode: WildcardMode;
     readonly capture: boolean;
     readonly regExp: RegExp;
     readonly optional: boolean;
@@ -252,7 +258,7 @@ export class Construction {
                 return new MatchPart(
                     matchSet,
                     part.optional ?? false,
-                    part.wildcard ?? false,
+                    part.wildcardMode ?? WildcardMode.Disabled,
                     part.transformInfos,
                 );
             }),

@@ -1,8 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-// The following types define the structure of an object of type CalendarAction that represents the requested calendar action
-
 export type CalendarAction =
     | AddEventAction
     | RemoveEventAction

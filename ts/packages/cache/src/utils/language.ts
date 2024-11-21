@@ -3,7 +3,7 @@
 
 export interface LanguageTools {
     possibleReferentialPhrase(phrase: string): boolean;
-    hasClosedClass(phrase: string): boolean;
+    hasClosedClass(phase: string, exact?: boolean /* = false */): boolean;
 }
 
 const subjectPronouns = [
@@ -369,7 +369,7 @@ const referenceParts = partOfMatch([
 
 const referenceSuffixes = suffixMatch([demostrativeAdverbs]);
 
-const closedClass = partOfMatch([
+const closeClass = [
     subjectPronouns,
     objectPronouns,
     possessivePronouns,
@@ -383,7 +383,9 @@ const closedClass = partOfMatch([
     demostrativeAdverbs,
     prepositions,
     conjunctions,
-]);
+];
+const partClosedClass = partOfMatch(closeClass);
+const exactClosedClass = exactMatch(closeClass);
 
 // REVIEW: Heuristics to allow time references from now.
 const relativeToNow =
@@ -400,8 +402,8 @@ const languageToolsEn: LanguageTools = {
             !relativeToNow.test(phrase)
         );
     },
-    hasClosedClass(phrase: string) {
-        return closedClass.test(phrase);
+    hasClosedClass(phrase: string, exact: boolean = false) {
+        return (exact ? exactClosedClass : partClosedClass).test(phrase);
     },
 };
 

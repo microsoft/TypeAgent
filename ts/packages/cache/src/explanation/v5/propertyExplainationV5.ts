@@ -20,7 +20,6 @@ import {
     ensureProperties,
 } from "../validateExplanation.js";
 import { form } from "./explanationV5.js";
-import { getLanguageTools } from "../../utils/language.js";
 import { ExplainerConfig } from "../genericExplainer.js";
 
 export type PropertyExplainer = TypeChatAgent<
@@ -43,9 +42,7 @@ export function createPropertyExplainer(
                         ? "./src/explanation/v5/propertyExplanationSchemaV5WithContext.ts"
                         : "./src/explanation/v5/propertyExplanationSchemaV5.ts",
                 ),
-                undefined,
-                undefined,
-                model,
+                { model },
             );
         },
         (requestAction: RequestAction) => {

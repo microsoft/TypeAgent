@@ -2,71 +2,73 @@
 // Licensed under the MIT License.
 
 import { openai, ChatModel, TextEmbeddingModel } from "aiclient";
-import {
-    CodeDocumenter,
-    createSemanticCodeIndex,
-    SemanticCodeIndex,
-} from "code-processor";
 import * as knowLib from "knowledge-processor";
-import { createObjectFolder, ObjectFolder } from "typeagent";
+import { createObjectFolder, loadSchema, ObjectFolder } from "typeagent";
 
-import { CodeDocumentation } from "./codeDocSchema.js";
-import {
-    createFakeCodeDocumenter,
-    createFileDocumenter,
-    FileDocumenter,
-} from "./fileDocumenter.js";
+import { createFileDocumenter, FileDocumenter } from "./fileDocumenter.js";
 import { Chunk, ChunkId } from "./pythonChunker.js";
+import { QuerySpecs } from "./makeQuerySchema.js";
+import { createJsonTranslator, TypeChatJsonTranslator } from "typechat";
+import { createTypeScriptJsonValidator } from "typechat/ts";
+import { AnswerSpecs } from "./makeAnswerSchema.js";
 
-// A bundle of object stores and indices etc.
+export type IndexType =
+    | "summaries"
+    | "keywords"
+    | "topics"
+    | "goals"
+    | "dependencies";
+export type NamedIndex = {
+    name: IndexType;
+    index: knowLib.TextIndex<string, ChunkId>;
+};
+
+// A bundle of object stores and indexes etc.
 export class ChunkyIndex {
-    rootDir: string;
     chatModel: ChatModel;
     embeddingModel: TextEmbeddingModel;
     fileDocumenter: FileDocumenter;
-    fakeCodeDocumenter: CodeDocumenter;
+    queryMaker: TypeChatJsonTranslator<QuerySpecs>;
+    answerMaker: TypeChatJsonTranslator<AnswerSpecs>;
+
     // The rest are asynchronously initialized by initialize().
+    rootDir!: string;
     chunkFolder!: ObjectFolder<Chunk>;
-    codeIndex!: SemanticCodeIndex;
-    summaryFolder!: ObjectFolder<CodeDocumentation>;
+    summariesIndex!: knowLib.TextIndex<string, ChunkId>;
     keywordsIndex!: knowLib.TextIndex<string, ChunkId>;
     topicsIndex!: knowLib.TextIndex<string, ChunkId>;
     goalsIndex!: knowLib.TextIndex<string, ChunkId>;
     dependenciesIndex!: knowLib.TextIndex<string, ChunkId>;
 
-    private constructor(rootDir: string) {
-        this.rootDir = rootDir;
+    private constructor() {
         this.chatModel = openai.createChatModelDefault("spelunkerChat");
         this.embeddingModel = knowLib.createEmbeddingCache(
             openai.createEmbeddingModel(),
             1000,
         );
         this.fileDocumenter = createFileDocumenter(this.chatModel);
-        this.fakeCodeDocumenter = createFakeCodeDocumenter();
+        this.queryMaker = createQueryMaker(this.chatModel);
+        this.answerMaker = createAnswerMaker(this.chatModel);
     }
 
     static async createInstance(rootDir: string): Promise<ChunkyIndex> {
-        const instance = new ChunkyIndex(rootDir);
+        const instance = new ChunkyIndex();
+        await instance.reInitialize(rootDir);
+        return instance;
+    }
+
+    async reInitialize(rootDir: string): Promise<void> {
+        const instance = this; // So makeIndex can see it.
+        instance.rootDir = rootDir;
         instance.chunkFolder = await createObjectFolder<Chunk>(
             instance.rootDir + "/chunks",
             { serializer: (obj) => JSON.stringify(obj, null, 2) },
         );
-        instance.codeIndex = await createSemanticCodeIndex(
-            instance.rootDir + "/index",
-            instance.fakeCodeDocumenter,
-            instance.embeddingModel,
-            (obj) => JSON.stringify(obj, null, 2),
-        );
-        instance.summaryFolder = await createObjectFolder<CodeDocumentation>(
-            instance.rootDir + "/summaries",
-            { serializer: (obj) => JSON.stringify(obj, null, 2) },
-        );
+        instance.summariesIndex = await makeIndex("summaries");
         instance.keywordsIndex = await makeIndex("keywords");
         instance.topicsIndex = await makeIndex("topics");
         instance.goalsIndex = await makeIndex("goals");
         instance.dependenciesIndex = await makeIndex("dependencies");
-
-        return instance;
 
         async function makeIndex(
             name: string,
@@ -82,4 +84,49 @@ export class ChunkyIndex {
             );
         }
     }
+
+    getIndexByName(name: IndexType): knowLib.TextIndex<string, ChunkId> {
+        for (const pair of this.allIndexes()) {
+            if (pair.name === name) {
+                return pair.index;
+            }
+        }
+        throw new Error(`Unknown index: ${name}`);
+    }
+
+    allIndexes(): NamedIndex[] {
+        return [
+            { name: "summaries", index: this.summariesIndex },
+            { name: "keywords", index: this.keywordsIndex },
+            { name: "topics", index: this.topicsIndex },
+            { name: "goals", index: this.goalsIndex },
+            { name: "dependencies", index: this.dependenciesIndex },
+        ];
+    }
+}
+
+function createQueryMaker(
+    model: ChatModel,
+): TypeChatJsonTranslator<QuerySpecs> {
+    const typeName = "QuerySpecs";
+    const schema = loadSchema(["makeQuerySchema.ts"], import.meta.url);
+    const validator = createTypeScriptJsonValidator<QuerySpecs>(
+        schema,
+        typeName,
+    );
+    const translator = createJsonTranslator<QuerySpecs>(model, validator);
+    return translator;
+}
+
+function createAnswerMaker(
+    model: ChatModel,
+): TypeChatJsonTranslator<AnswerSpecs> {
+    const typeName = "AnswerSpecs";
+    const schema = loadSchema(["makeAnswerSchema.ts"], import.meta.url);
+    const validator = createTypeScriptJsonValidator<AnswerSpecs>(
+        schema,
+        typeName,
+    );
+    const translator = createJsonTranslator<AnswerSpecs>(model, validator);
+    return translator;
 }

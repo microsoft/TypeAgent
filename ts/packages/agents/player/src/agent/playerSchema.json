@@ -4,28 +4,28 @@
       "quantity": "number"
     },
     "playTrack": {
-      "trackName": "wildcard",
-      "artists.*": "wildcard"
+      "trackName": "checked_wildcard",
+      "artists.*": "checked_wildcard"
     },
     "playFromCurrentTrackList": {
       "trackNumber": "ordinal"
     },
     "playAlbum": {
-      "albumName": "wildcard",
-      "artists.*": "wildcard",
+      "albumName": "checked_wildcard",
+      "artists.*": "checked_wildcard",
       "trackNumber": "ordinal"
     },
     "playAlbumTrack": {
-      "albumName": "wildcard",
-      "trackName": "wildcard",
-      "artists.*": "wildcard"
+      "albumName": "checked_wildcard",
+      "trackName": "checked_wildcard",
+      "artists.*": "checked_wildcard"
     },
     "playArtist": {
-      "artistName": "wildcard",
+      "artistName": "checked_wildcard",
       "quantity": "number"
     },
     "playGenre": {
-      "genre": "wildcard",
+      "genre": "checked_wildcard",
       "quantity": "number"
     },
     "setVolume": {

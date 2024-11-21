@@ -3,14 +3,16 @@
 
 export {
     ActionSchema,
-    ActionParamType,
-    ActionParamArray,
-    ActionParamObject,
+    SchemaType as ActionParamType,
+    SchemaTypeArray as ActionParamArray,
+    SchemaTypeObject as ActionParamObject,
 } from "./type.js";
 
 export { parseActionSchemaFile } from "./parser.js";
-export { generateSchema } from "./generator.js";
+export { generateActionSchema, generateSchema } from "./generator.js";
 export { validateAction } from "./validate.js";
 export { getParameterType, getParameterNames } from "./utils.js";
 
 export { NodeType, SchemaParser, ISymbol, SymbolNode } from "./schemaParser.js";
+
+export * as ActionSchemaCreator from "./creator.js";

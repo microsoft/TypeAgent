@@ -20,9 +20,12 @@ export function getTranslatorActionSchemas(
     if (translatorNameToActionInfo.has(translatorName)) {
         return translatorNameToActionInfo.get(translatorName)!;
     }
-    const actionInfo = parseActionSchemaFile(
-        getPackageFilePath(translatorConfig.schemaFile),
-        translatorName,
+    const actionInfo = new Map<string, ActionSchema>(
+        parseActionSchemaFile(
+            getPackageFilePath(translatorConfig.schemaFile),
+            translatorName,
+            translatorConfig.schemaType,
+        ).map((a) => [a.actionName, a]),
     );
     translatorNameToActionInfo.set(translatorName, actionInfo);
     return actionInfo;

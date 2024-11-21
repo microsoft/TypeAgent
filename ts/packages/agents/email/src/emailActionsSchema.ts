@@ -1,8 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-// The following types define the structure of an object of type EmailAction that represents the requested email action
-
 export type EmailAction =
     | SendEmailAction
     | ReplyEmailAction

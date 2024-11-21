@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { openai as ai } from "aiclient";
+import { getOllamaModelNames } from "./ollamaModels";
 
 export function getChatModelMaxConcurrency(
     userMaxConcurrency?: number,
@@ -20,7 +21,7 @@ export function getChatModelMaxConcurrency(
         : userMaxConcurrency;
 }
 
-export function getChatModelNames() {
+export async function getChatModelNames() {
     const envKeys = Object.keys(process.env);
     const knownEnvKeys = Object.keys(ai.EnvVars);
 
@@ -41,7 +42,8 @@ export function getChatModelNames() {
     const openaiNames = getPrefixedNames(ai.EnvVars.OPENAI_API_KEY).map(
         (key) => `openai:${key}`,
     );
-    return [...azureNames, ...openaiNames];
+
+    return [...azureNames, ...openaiNames, ...(await getOllamaModelNames())];
 }
 
 export function isMultiModalContentSupported(modelName: string | undefined) {

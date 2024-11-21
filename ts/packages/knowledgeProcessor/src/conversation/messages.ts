@@ -24,7 +24,7 @@ export interface MessageIndex<TMessageId> extends SemanticIndex<TMessageId> {
     putMultiple(
         items: [string, TMessageId][],
         onlyIfNew?: boolean,
-    ): Promise<void>;
+    ): Promise<[string, TMessageId][]>;
 }
 
 export async function createMessageIndex(
@@ -54,11 +54,11 @@ export async function createMessageIndex(
         items: [string, MessageId][],
         onlyIfNew?: boolean,
         concurrency?: number,
-    ): Promise<void> {
+    ) {
         return semanticIndex.putMultiple(
             items,
             onlyIfNew,
-            settings.concurrency,
+            concurrency ?? settings.concurrency,
         );
     }
 

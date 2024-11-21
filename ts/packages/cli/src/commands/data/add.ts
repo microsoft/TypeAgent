@@ -15,10 +15,10 @@ import {
 } from "agent-dispatcher/internal";
 import chalk from "chalk";
 import { getDefaultExplainerName } from "agent-cache";
-import { getChatModelMaxConcurrency, getChatModelNames } from "common-utils";
+import { getChatModelMaxConcurrency, getChatModelNames } from "aiclient";
 
 const cacheFactory = getCacheFactory();
-
+const modelNames = await getChatModelNames();
 export default class ExplanationDataAddCommand extends Command {
     static args = {
         request: Args.string({
@@ -63,7 +63,7 @@ export default class ExplanationDataAddCommand extends Command {
         }),
         model: Flags.string({
             description: "Model to use",
-            options: getChatModelNames(),
+            options: modelNames,
         }),
     };
 

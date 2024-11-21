@@ -13,12 +13,13 @@ import { getAppAgentName } from "../translation/agentTranslators.js";
 import { getServiceHostCommandHandlers } from "./serviceHost/serviceHostCommandHandler.js";
 import { getLocalWhisperCommandHandlers } from "./serviceHost/localWhisperCommandHandler.js";
 
-import { getChatModelNames, simpleStarRegex } from "common-utils";
-import { openai as ai } from "aiclient";
-import { SessionConfig } from "../session/session.js";
+import { simpleStarRegex } from "common-utils";
+import { openai as ai, getChatModelNames } from "aiclient";
+import { SessionOptions } from "../session/session.js";
 import chalk from "chalk";
 import {
     ActionContext,
+    ParameterDefinitions,
     ParsedCommandParams,
     PartialParsedCommandParams,
     SessionContext,
@@ -282,114 +283,76 @@ class ExplainerCommandHandler implements CommandHandler {
     }
 }
 
-function getConfigModel(models: SessionConfig["models"], kind: string) {
-    if (!models.hasOwnProperty(kind)) {
-        throw new Error(
-            `Invalid model kind: ${kind}\nValid model kinds: ${Object.keys(models).join(", ")}`,
-        );
-    }
-    const model = models[kind as keyof typeof models];
+function getConfigModel(kind: string, model: string) {
     const settings = ai.getChatModelSettings(model);
     return `Current ${chalk.cyan(kind)} model: ${model ? model : "(default)"}\nURL:${settings.endpoint}`;
-}
-
-class ConfigModelShowCommandHandler implements CommandHandler {
-    public readonly description = "Show current model";
-    public readonly parameters = {
-        args: {
-            kind: {
-                description: "Model kind to show",
-                optional: true,
-            },
-        },
-    } as const;
-    public async run(
-        context: ActionContext<CommandHandlerContext>,
-        params: ParsedCommandParams<typeof this.parameters>,
-    ) {
-        const systemContext = context.sessionContext.agentContext;
-        const models = systemContext.session.getConfig().models;
-
-        if (params.args.kind !== undefined) {
-            displayResult(getConfigModel(models, params.args.kind), context);
-        } else {
-            displayResult(
-                Object.keys(models)
-                    .map((kind) => getConfigModel(models, kind))
-                    .join("\n"),
-                context,
-            );
-        }
-    }
 }
 
 class ConfigModelSetCommandHandler implements CommandHandler {
     public readonly description = "Set model";
     public readonly parameters = {
-        args: {
-            kindOrModel: {
-                description: "Model kind or name",
-                optional: true,
+        flags: {
+            reset: {
+                description: "Reset to default model",
+                char: "r",
+                type: "boolean",
+                default: false,
             },
+        },
+        args: {
             model: {
                 description: "Model name",
                 optional: true,
             },
         },
     } as const;
+    public constructor(private readonly kind: "translation" | "explainer") {}
     public async run(
         context: ActionContext<CommandHandlerContext>,
         params: ParsedCommandParams<typeof this.parameters>,
     ) {
-        const systemContext = context.sessionContext.agentContext;
-        const models = systemContext.session.getConfig().models;
-        if (params.args.kindOrModel === undefined) {
-            const newConfig = {
-                models: Object.fromEntries(
-                    Object.keys(models).map((kind) => [kind, ""]),
-                ),
-            };
-            await changeContextConfig(newConfig, context);
-            displayResult(`Reset to default model for all`, context);
+        const reset = params.flags.reset;
+        const model = params.args.model;
+        if (reset || model === "") {
+            if (model !== "") {
+                throw new Error("Model name is not allowed with reset option");
+            }
+            const config: SessionOptions = {};
+            config[this.kind] = { model: "" };
+            await changeContextConfig(config, context);
+            displayResult(`Reset to default model for ${this.kind}`, context);
             return;
         }
-
-        let kind = "translator";
-        let model = "";
-        if (params.args.model === undefined) {
-            if (models.hasOwnProperty(params.args.kindOrModel)) {
-                kind = params.args.kindOrModel;
-            } else {
-                model = params.args.kindOrModel;
-            }
-        } else {
-            kind = params.args.kindOrModel;
-            model = params.args.model;
-        }
-
-        if (!models.hasOwnProperty(kind)) {
-            throw new Error(
-                `Invalid model kind: ${kind}\nValid model kinds: ${Object.keys(models).join(", ")}`,
+        if (model === undefined) {
+            const config =
+                context.sessionContext.agentContext.session.getConfig();
+            displayResult(
+                getConfigModel(this.kind, config[this.kind].model),
+                context,
             );
+            return;
         }
-        const modelNames = getChatModelNames();
-        if (model === "") {
-            displayResult(`Reset to default model for ${kind}`, context);
-        } else if (!modelNames.includes(model)) {
+        const modelNames = await getChatModelNames();
+        if (!modelNames.includes(model)) {
             throw new Error(
                 `Invalid model name: ${model}\nValid model names: ${modelNames.join(", ")}`,
             );
         } else {
-            displayResult(`Model for ${kind} is set to ${model}`, context);
+            displayResult(`Model for ${this.kind} is set to ${model}`, context);
         }
-        await changeContextConfig(
-            {
-                models: {
-                    [kind]: model,
-                },
-            },
-            context,
-        );
+        const config: SessionOptions = {};
+        config[this.kind] = { model };
+        await changeContextConfig(config, context);
+    }
+    public async getCompletion(
+        context: SessionContext<CommandHandlerContext>,
+        params: PartialParsedCommandParams<ParameterDefinitions>,
+        names: string[],
+    ): Promise<string[]> {
+        if (params.args?.model === undefined) {
+            return getChatModelNames();
+        }
+        return [];
     }
 }
 
@@ -401,86 +364,100 @@ export function getConfigCommandHandlers(): CommandHandlerTable {
             action: new AgentToggleCommandHandler(AgentToggle.Action),
             command: new AgentToggleCommandHandler(AgentToggle.Command),
             agent: new AgentToggleCommandHandler(AgentToggle.Agent),
-            model: {
-                description: "Configure model",
-                defaultSubCommand: "show",
-                commands: {
-                    show: new ConfigModelShowCommandHandler(),
-                    set: new ConfigModelSetCommandHandler(),
-                },
-            },
-            multi: getToggleHandlerTable(
-                "multiple action translation",
-                async (context, enable: boolean) => {
-                    await changeContextConfig(
-                        { multipleActions: enable },
-                        context,
-                    );
-                },
-            ),
-            switch: {
-                description: "auto switch translator",
+            translation: {
+                description: "Translation configuration",
+                defaultSubCommand: "on",
                 commands: {
                     ...getToggleCommandHandlers(
-                        "switch translator",
-                        async (context, enable: boolean) => {
+                        "translation",
+                        async (context, enable) => {
                             await changeContextConfig(
-                                {
-                                    switch: {
-                                        inline: enable,
-                                        search: enable,
-                                    },
-                                },
+                                { translation: { enabled: enable } },
                                 context,
                             );
                         },
                     ),
-                    inline: getToggleHandlerTable(
-                        "inject inline switch",
+                    model: new ConfigModelSetCommandHandler("translation"),
+                    multi: getToggleHandlerTable(
+                        "multiple action translation",
                         async (context, enable: boolean) => {
                             await changeContextConfig(
-                                {
-                                    switch: {
-                                        inline: enable,
-                                    },
-                                },
+                                { translation: { multipleActions: enable } },
                                 context,
                             );
                         },
                     ),
-                    search: getToggleHandlerTable(
-                        "inject inline switch",
+                    switch: {
+                        description: "auto switch translator",
+                        commands: {
+                            ...getToggleCommandHandlers(
+                                "switch translator",
+                                async (context, enable: boolean) => {
+                                    await changeContextConfig(
+                                        {
+                                            translation: {
+                                                switch: {
+                                                    inline: enable,
+                                                    search: enable,
+                                                },
+                                            },
+                                        },
+                                        context,
+                                    );
+                                },
+                            ),
+                            inline: getToggleHandlerTable(
+                                "inject inline switch",
+                                async (context, enable: boolean) => {
+                                    await changeContextConfig(
+                                        {
+                                            translation: {
+                                                switch: {
+                                                    inline: enable,
+                                                },
+                                            },
+                                        },
+                                        context,
+                                    );
+                                },
+                            ),
+                            search: getToggleHandlerTable(
+                                "inject inline switch",
+                                async (context, enable: boolean) => {
+                                    await changeContextConfig(
+                                        {
+                                            translation: {
+                                                switch: {
+                                                    search: enable,
+                                                },
+                                            },
+                                        },
+                                        context,
+                                    );
+                                },
+                            ),
+                        },
+                    },
+                    history: getToggleHandlerTable(
+                        "history",
                         async (context, enable: boolean) => {
                             await changeContextConfig(
-                                {
-                                    switch: {
-                                        search: enable,
-                                    },
-                                },
+                                { translation: { history: enable } },
+                                context,
+                            );
+                        },
+                    ),
+                    stream: getToggleHandlerTable(
+                        "streaming translation",
+                        async (context, enable: boolean) => {
+                            await changeContextConfig(
+                                { translation: { stream: enable } },
                                 context,
                             );
                         },
                     ),
                 },
             },
-            history: getToggleHandlerTable(
-                "history",
-                async (context, enable: boolean) => {
-                    await changeContextConfig({ history: enable }, context);
-                },
-            ),
-            bot: getToggleHandlerTable(
-                "translation LLM usage",
-                async (context, enable: boolean) => {
-                    await changeContextConfig({ bot: enable }, context);
-                },
-            ),
-            stream: getToggleHandlerTable(
-                "streaming translation",
-                async (context, enable: boolean) => {
-                    await changeContextConfig({ stream: enable }, context);
-                },
-            ),
             explainer: {
                 description: "Explainer configuration",
                 defaultSubCommand: "on",
@@ -502,6 +479,7 @@ export function getConfigCommandHandlers(): CommandHandlerTable {
                         },
                     ),
                     name: new ExplainerCommandHandler(),
+                    model: new ConfigModelSetCommandHandler("explainer"),
                     filter: {
                         description: "Toggle explanation filter",
                         defaultSubCommand: "on",
