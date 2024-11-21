@@ -1,11 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ActionSchemaFile } from "./type.js";
 import {
     SchemaType,
     SchemaObjectFields,
     SchemaTypeDefinition,
+    ActionSchemaFile,
 } from "./type.js";
 import registerDebug from "debug";
 const debug = registerDebug("typeagent:schema:generate");
