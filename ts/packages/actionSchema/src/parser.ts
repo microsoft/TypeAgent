@@ -62,15 +62,11 @@ function checkActionSchema(
 
 function createActionSchemaFile(
     translatorName: string,
-    definition: SchemaTypeDefinition | undefined,
+    definition: SchemaTypeDefinition,
     strict: boolean,
 ): ActionSchemaFile {
-    if (definition === undefined) {
-        throw new Error(`Type ${definition} not found`);
-    }
-
     if (strict && !definition.exported) {
-        throw new Error(`Type ${definition} must be exported`);
+        throw new Error(`Type ${definition.name} must be exported`);
     }
 
     const pending: SchemaTypeDefinition[] = [definition];
@@ -128,6 +124,9 @@ export function parseActionSchemaFile(
     strict: boolean = false,
 ): ActionSchemaFile {
     const definition = ActionParser.parseFile(filename, typeName);
+    if (definition === undefined) {
+        throw new Error(`Type ${typeName} not found`);
+    }
     return createActionSchemaFile(translatorName, definition, strict);
 }
 
@@ -138,6 +137,9 @@ export function parseActionSchemaSource(
     strict: boolean = false,
 ): ActionSchemaFile {
     const definition = ActionParser.parseSource(source, typeName);
+    if (definition === undefined) {
+        throw new Error(`Type ${typeName} not found`);
+    }
     return createActionSchemaFile(translatorName, definition, strict);
 }
 
