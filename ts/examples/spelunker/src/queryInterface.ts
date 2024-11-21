@@ -10,9 +10,10 @@ import * as knowLib from "knowledge-processor";
 import { ScoredItem } from "typeagent";
 
 import { IndexType, ChunkyIndex } from "./chunkyIndex.js";
-import { QuerySpec } from "./makeQuerySchema.js";
+import { QuerySpec, QuerySpecs } from "./makeQuerySchema.js";
 import { Chunk, ChunkId } from "./pythonChunker.js";
 import { importAllFiles } from "./pythonImporter.js";
+import { AnswerSpecs } from "./makeAnswerSchema.js";
 
 type QueryOptions = {
     maxHits: number;
@@ -411,27 +412,73 @@ async function processQuery(
 ): Promise<void> {
     // **Step 1:** Ask LLM (queryMaker) to propose queries for each index.
 
+    const proposedQueries = await proposeQueries(
+        input,
+        chunkyIndex,
+        io,
+        queryOptions,
+    );
+    if (!proposedQueries) return; // Error message already printed by proposeQueries.
+
+    // **Step 2:** Run those queries on the indexes.
+
+    const chunkIdScores = await runIndexQueries(
+        proposedQueries,
+        chunkyIndex,
+        io,
+        queryOptions,
+    );
+    if (!chunkIdScores) return; // Error message already printed by runIndexQueries.
+
+    // **Step 3:** Ask the LLM (answerMaker) to answer the question.
+
+    const answer = await generateAnswer(
+        input,
+        chunkIdScores,
+        chunkyIndex,
+        io,
+        queryOptions,
+    );
+    if (!answer) return; // Error message already printed by generateAnswer.
+
+    // **Step 4:** Print the answer.
+
+    reportQuery(answer, io);
+}
+
+async function proposeQueries(
+    input: string,
+    chunkyIndex: ChunkyIndex,
+    io: iapp.InteractiveIo,
+    queryOptions: QueryOptions,
+): Promise<QuerySpecs | undefined> {
     const result = await chunkyIndex.queryMaker.translate(
         input,
         makeQueryMakerPrompt(input),
     );
     if (!result.success) {
         io.writer.writeLine(`[Error: ${result.message}]`);
-        return;
+        return undefined;
     }
     const specs = result.data;
     if (queryOptions.verbose)
         io.writer.writeLine(JSON.stringify(specs, null, 2));
+    return specs;
+}
 
-    // **Step 2:** Run those queries on the indexes.
-
+async function runIndexQueries(
+    proposedQueries: QuerySpecs,
+    chunkyIndex: ChunkyIndex,
+    io: iapp.InteractiveIo,
+    queryOptions: QueryOptions,
+): Promise<Map<ChunkId, ScoredItem<ChunkId>> | undefined> {
     const chunkIdScores: Map<ChunkId, ScoredItem<ChunkId>> = new Map(); // Record score of each chunk id.
     const totalNumChunks = await chunkyIndex.chunkFolder.size(); // Nominator in IDF calculation.
 
     for (const namedIndex of chunkyIndex.allIndexes()) {
         const indexName = namedIndex.name;
         const index = namedIndex.index;
-        const spec: QuerySpec | undefined = (specs as any)[indexName];
+        const spec: QuerySpec | undefined = (proposedQueries as any)[indexName];
         if (!spec) {
             io.writer.writeLine(`[No query for ${indexName}]`);
             continue;
@@ -491,61 +538,79 @@ async function processQuery(
         );
     }
 
-    if (specs.unknownText) {
-        io.writer.writeLine(`[Unknown text: ${specs.unknownText}]`);
-        return;
+    if (proposedQueries.unknownText) {
+        io.writer.writeLine(`[Unknown text: ${proposedQueries.unknownText}]`);
     }
 
-    // **Step 3:** Ask the LLM (answerMaker) to answer the question.
+    return chunkIdScores;
+}
 
+async function generateAnswer(
+    input: string,
+    chunkIdScores: Map<ChunkId, ScoredItem<ChunkId>>,
+    chunkyIndex: ChunkyIndex,
+    io: iapp.InteractiveIo,
+    queryOptions: QueryOptions,
+): Promise<AnswerSpecs | undefined> {
     // Step 3a: Compute array of ids sorted by score, truncated to some limit.
     const scoredChunkIds: ScoredItem<ChunkId>[] = Array.from(
         chunkIdScores.values(),
     );
+
     io.writer.writeLine(
         `\n[Overall ${scoredChunkIds.length} unique chunk ids]`,
     );
+
     scoredChunkIds.sort((a, b) => b.score - a.score);
-    scoredChunkIds.splice(50); // Arbitrary number. (TODO: Make it an option.)
+    scoredChunkIds.splice(20); // Arbitrary number. (TODO: Make it an option.)
 
     // Step 3b: Get the chunks themselves.
     const chunks: Chunk[] = [];
+
     for (const chunkId of scoredChunkIds) {
-        const chunkOrNot = await chunkyIndex.chunkFolder.get(chunkId.item);
-        if (chunkOrNot) chunks.push(chunkOrNot);
+        const maybeChunk = await chunkyIndex.chunkFolder.get(chunkId.item);
+        if (maybeChunk) chunks.push(maybeChunk);
     }
+
     io.writer.writeLine(`[Sending ${chunks.length} chunks to answerMaker]`);
 
     // Step 3c: Make the request and check for success.
     const request = JSON.stringify(chunks);
+
+    if (queryOptions.verbose) {
+        io.writer.writeLine(`Request: ${JSON.stringify(chunks, null, 2)}`);
+    }
+
     const answerResult = await chunkyIndex.answerMaker.translate(
         request,
         makeAnswerPrompt(input),
     );
+
     if (!answerResult.success) {
         io.writer.writeLine(`[Error: ${answerResult.message}]`);
-        return;
+        return undefined;
     }
 
-    // **Step 4:** Print the answer.
+    if (queryOptions.verbose) {
+        io.writer.writeLine(
+            `AnswerResult: ${JSON.stringify(answerResult.data, null, 2)}`,
+        );
+    }
 
-    const answer = answerResult.data;
+    return answerResult.data;
+}
+
+function reportQuery(answer: AnswerSpecs, io: iapp.InteractiveIo): void {
     io.writer.writeLine(
         `\nAnswer (confidence ${answer.confidence.toFixed(3).replace(/0+$/, "")}):`,
     );
     io.writer.writeLine(wordWrap(answer.answer));
-    if (answer.message) {
-        io.writer.writeLine(`Message: ${answer.message}`);
-    }
+    if (answer.message) io.writer.writeLine(`Message: ${answer.message}`);
     if (answer.references.length) {
         io.writer.writeLine(
-            `\nReferences: ${answer.references.join(",").replace(/,/g, ", ")}`,
-        );
-        io.writer.writeLine(
-            `\n[Used ${answer.references.length} chunks out of ${scoredChunkIds.length}]`,
+            `\nReferences (${answer.references.length}): ${answer.references.join(",").replace(/,/g, ", ")}`,
         );
     }
-
     // NOTE: If the user wants to see the contents of any chunk, they can use the @chunk command.
 }
 
