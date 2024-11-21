@@ -1,5 +1,7 @@
-# Docs for the Azure Web Apps Deploy action: https://github.com/Azure/webapps-deploy
-# More GitHub Actions for Azure: https://github.com/Azure/actions
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
+# This workflow builds a Docker container and deploys it to the TypeAgent container repository
 
 name: Build and deploy Node.js app to Azure Web App - typeagent
 
@@ -16,13 +18,7 @@ permissions:
 jobs:
 
   deploy:
-    runs-on: ubuntu-latest # pnpm deploy does not work currently on Windows. Fails with EPERM.
-    # needs: build_ts
-    # environment:
-    #   name: 'test'
-    #   url: ${{ steps.deploy-to-webapp.outputs.webapp-url }}
-    # permissions:
-    #   id-token: write #This is required for requesting the JWT    
+    runs-on: ubuntu-latest # pnpm deploy does not work currently on Windows. Fails with EPERM. 
     steps: 
       - name: Setup Git LF
         run: |
@@ -32,13 +28,6 @@ jobs:
         with:
           ref: main
 
-      - uses: 1arp/create-a-file-action@0.4.5
-        with:
-          path: ${{ github.workspace }}/ts/
-          isAbsolutePath: true
-          file: .env
-          content: ${{ secrets.DOCKER_DOT_ENV }}
-          
       - uses: dorny/paths-filter@v3
         id: filter
         with:

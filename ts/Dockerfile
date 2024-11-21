@@ -18,6 +18,7 @@ RUN pnpm deploy --filter=tools-scripts --prod /prod/tools
 FROM base AS api
 # api bits
 COPY --from=build /prod/api/ /prod/api/
+COPY --from=build /prod/tools/ /prod/tools/
 # rendering bits
 COPY --from=build /usr/src/app/packages/shell/out/ /prod/shell/out/
 WORKDIR /prod/api
