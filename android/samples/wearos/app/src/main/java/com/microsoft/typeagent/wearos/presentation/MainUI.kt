@@ -96,12 +96,12 @@ fun MainUI() {
             },
             onTakePicClicked = {
                 scope.launch {
-                    mainState.onSTTClicked("take a selfie")
+                    mainState.onSTTClicked("take a picture")
                 }
             },
             onEmailPicClicked = {
                 scope.launch {
-                    mainState.onSTTClicked("email the last picture i took to peter, eric, and doug")
+                    mainState.onSTTClicked("e-mail Ted that I'm going to be late")
                 }
             },
             (mainState.activity as MainActivity).speechToTextText
