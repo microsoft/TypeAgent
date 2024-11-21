@@ -33,7 +33,7 @@ export class TypeAgentAPIWebServer {
                     key: readFileSync(".cert/localhost+2-key.pem"), // path to localhost+2-key.pem
                     cert: readFileSync(".cert/localhost+2.pem"), // path to localhost+2.pem
                     requestCert: false,
-                    rejectUnauthorized: false,
+                    rejectUnauthorized: true,
                 },
                 (request: any, response: any) => {
                     this.serve(config, request, response);
