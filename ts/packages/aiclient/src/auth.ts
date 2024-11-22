@@ -11,6 +11,7 @@ export interface AuthTokenProvider {
 
 export enum AzureTokenScopes {
     CogServices = "https://cognitiveservices.azure.com/.default",
+    AzureMaps = "https://atlas.microsoft.com/.default",
 }
 
 export function createAzureTokenProvider(

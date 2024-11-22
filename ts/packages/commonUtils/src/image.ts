@@ -2,8 +2,9 @@
 // Licensed under the MIT License.
 
 import { Storage } from "@typeagent/agent-sdk";
-import { getBlob } from "aiclient";
+import { AuthTokenProvider, AzureTokenScopes, createAzureTokenProvider, getBlob } from "aiclient";
 import ExifReader from "exifreader";
+import { ApiSettings } from "../../aiclient/dist/openai.js";
 
 export class CachedImageWithDetails {
     constructor(
@@ -56,4 +57,36 @@ export async function downloadImage(
 
         resolve(false);
     });
+}
+
+export async function reverseGeocodeLookup(settings: ApiSettings) {
+    let testUri = "https://agentmaps.microsoft.com/reverseGeocode?api-version=2023-06-01&coordinates=47.64210088640227,-122.14197703742589";
+    console.log(testUri);
+
+    const tokenProvider: AuthTokenProvider = createAzureTokenProvider(AzureTokenScopes.AzureMaps);
+    const tokenResult = await tokenProvider.getAccessToken();
+    if (!tokenResult.success) {
+        return;
+    }
+    // apiHeaders = {
+    //     Authorization: `Bearer ${tokenResult.data}`,
+    // };
+
+    try {
+        const response = await fetch(
+            testUri,
+                // {
+                //       headers: tokenResult.data
+                //   }
+        );
+        return response;
+    } catch (e) {
+        const ex = e as Error;
+        if (ex.name && ex.name === "AbortError") {
+            throw new Error(`fetch timeout -1ms`);
+        } else {
+            throw e;
+        }
+    } finally {
+    }
 }
