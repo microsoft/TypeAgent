@@ -106,7 +106,7 @@ export type SchemaType =
 
 export interface ActionSchemaObject extends SchemaTypeObject {
     fields: {
-        actionName: SchemaObjectField<SchemaTypeString | SchemaTypeStringUnion>;
+        actionName: SchemaObjectField<SchemaTypeStringUnion>;
         parameters: SchemaObjectField<
             | SchemaTypeObject
             | SchemaTypeReference<
@@ -132,8 +132,12 @@ type ActionSchemaTypeReference =
 export type ActionSchemaUnion = SchemaTypeUnion<ActionSchemaTypeReference>;
 
 export type ActionSchemaFile = {
+    // The entry type definition for the action schema.
     entry: ActionSchemaEntryTypeDefinition;
+    // Map action name to action type definition
     actionSchemas: Map<string, ActionSchemaTypeDefinition>;
+    // Schema name
     schemaName?: string;
+    // Order for the type definitions
     order?: Map<string, number>; // for exact regen
 };

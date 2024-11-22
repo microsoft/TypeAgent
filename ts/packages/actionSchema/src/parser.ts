@@ -68,32 +68,40 @@ function createActionSchemaFile(
     strict: boolean,
 ): ActionSchemaFile {
     if (strict && !entry.exported) {
-        throw new Error(`Type ${entry.name} must be exported`);
+        throw new Error(
+            `Schema Error: ${schemaName}: Type ${entry.name} must be exported`,
+        );
     }
 
     const pending: SchemaTypeDefinition[] = [entry];
-    const actionSchemas: [string, ActionSchemaTypeDefinition][] = [];
+    const actionSchemas = new Map<string, ActionSchemaTypeDefinition>();
     while (pending.length > 0) {
         const current = pending.shift()!;
         switch (current.type.type) {
             case "object":
-                actionSchemas.push(checkActionSchema(current));
+                const [actionName, actionSchema] = checkActionSchema(current);
+                if (actionSchemas.get(actionName)) {
+                    throw new Error(
+                        `Schema Error: ${schemaName}: Duplicate action name '${actionName}'`,
+                    );
+                }
+                actionSchemas.set(actionName, actionSchema);
                 break;
             case "type-union":
                 if (strict && current.comments) {
                     throw new Error(
-                        `Schema Error: entry type comments for '${current.name}' are not supported`,
+                        `Schema Error: ${schemaName}: entry type comments for '${current.name}' are not supported`,
                     );
                 }
                 for (const t of current.type.types) {
                     if (t.type !== "type-reference") {
                         throw new Error(
-                            "Schema Error: expected type reference in the entry type union",
+                            `Schema Error: ${schemaName}: expected type reference in the entry type union`,
                         );
                     }
                     if (t.definition === undefined) {
                         throw new Error(
-                            `Schema Error: unresolved type reference '${t.name}' in the entry type union`,
+                            `Schema Error: ${schemaName}: unresolved type reference '${t.name}' in the entry type union`,
                         );
                     }
                     pending.push(t.definition);
@@ -103,29 +111,29 @@ function createActionSchemaFile(
                 // Definition that references another type is the same as a union type with a single type.
                 if (strict && current.comments) {
                     throw new Error(
-                        `Schema Error: entry type comments for '${current.name} are not supported`,
+                        `Schema Error: ${schemaName}:  entry type comments for '${current.name} are not supported`,
                     );
                 }
                 if (current.type.definition === undefined) {
                     throw new Error(
-                        `Schema Error: unresolved type reference '${current.type.name}' in the entry type union`,
+                        `Schema Error: ${schemaName}:  unresolved type reference '${current.type.name}' in the entry type union`,
                     );
                 }
                 pending.push(current.type.definition);
                 break;
             default:
                 throw new Error(
-                    `Schema Error: invalid type ${current.type.type} in action schema type ${current.name}`,
+                    `Schema Error: ${schemaName}:  invalid type ${current.type.type} in action schema type ${current.name}`,
                 );
         }
     }
-    if (actionSchemas.length === 0) {
+    if (actionSchemas.size === 0) {
         throw new Error("No action schema found");
     }
     return {
         entry: entry as ActionSchemaEntryTypeDefinition,
         schemaName,
-        actionSchemas: new Map(actionSchemas),
+        actionSchemas,
         order,
     };
 }

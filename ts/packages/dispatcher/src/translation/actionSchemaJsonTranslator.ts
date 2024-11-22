@@ -28,6 +28,7 @@ import {
     createChangeAssistantActionSchema,
 } from "./agentTranslators.js";
 import { createMultipleActionSchema } from "./multipleActionSchema.js";
+import { getPackageFilePath } from "../utils/getPackageFilePath.js";
 
 function createActionSchemaJsonValidator<T extends TranslatedAction>(
     actionSchemaFile: ActionSchemaFile,
@@ -58,36 +59,14 @@ function createActionSchemaJsonValidator<T extends TranslatedAction>(
     };
 }
 
-export function loadActionSchemas(
-    typeName: string,
-    schemas: TranslatorSchemaDef[],
-): ActionSchemaFile {
-    const schema = composeTranslatorSchemas(typeName, schemas);
-    const translatorName = "";
-    return parseActionSchemaSource(schema, translatorName, typeName);
-}
-
 export function createActionJsonTranslatorFromSchemaDef<
     T extends TranslatedAction,
 >(
     typeName: string,
-    schemas: string | TranslatorSchemaDef[],
+    actionSchemaFile: ActionSchemaFile,
     options?: JsonTranslatorOptions<T>,
 ) {
-    const actionSchemas = loadActionSchemas(
-        typeName,
-        Array.isArray(schemas)
-            ? schemas
-            : [
-                  {
-                      kind: "inline",
-                      typeName,
-                      schema: schemas,
-                  },
-              ],
-    );
-
-    const validator = createActionSchemaJsonValidator<T>(actionSchemas);
+    const validator = createActionSchemaJsonValidator<T>(actionSchemaFile);
 
     return createJsonTranslatorWithValidator(
         typeName.toLowerCase(),
@@ -103,7 +82,7 @@ class ActionSchemaBuilder {
     addActionConfig(...configs: ActionConfig[]) {
         for (const config of configs) {
             const actionSchemaFile = parseActionSchemaFile(
-                config.schemaFile,
+                getPackageFilePath(config.schemaFile),
                 config.schemaName,
                 config.schemaType,
             );
@@ -129,15 +108,18 @@ class ActionSchemaBuilder {
             if (file.order) {
                 const base = order.size;
                 for (const [name, num] of file.order) {
+                    if (order.has(name)) {
+                        throw new Error(
+                            `Schema Builder Error: duplicate type definition '${name}'`,
+                        );
+                    }
                     order.set(name, base + num);
                 }
             }
         }
 
-        const actionSchemas: [string, ActionSchemaTypeDefinition][] = [];
-        const pending: ActionSchemaEntryTypeDefinition[] = [
-            ...this.definitions,
-        ];
+        const actionSchemas = new Map<string, ActionSchemaTypeDefinition>();
+        const pending = [...this.definitions];
         while (pending.length > 0) {
             const current = pending.shift()!;
             const currentType = current.type;
@@ -161,10 +143,17 @@ class ActionSchemaBuilder {
                     pending.push(currentType.definition);
                     break;
                 case "object":
-                    actionSchemas.push([
-                        current.name,
+                    const actionName =
+                        currentType.fields.actionName.type.typeEnum[0];
+                    if (actionSchemas.get(actionName)) {
+                        throw new Error(
+                            `Schema Builder Error: duplicate action name '${actionName}'`,
+                        );
+                    }
+                    actionSchemas.set(
+                        actionName,
                         current as ActionSchemaTypeDefinition,
-                    ]);
+                    );
                     break;
                 default:
                     // Should not reach here.
@@ -172,11 +161,7 @@ class ActionSchemaBuilder {
             }
         }
 
-        return {
-            entry,
-            actionSchemas: new Map(actionSchemas),
-            order,
-        };
+        return { entry, actionSchemas, order };
     }
 }
 

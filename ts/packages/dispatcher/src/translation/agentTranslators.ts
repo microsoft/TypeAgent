@@ -362,20 +362,28 @@ export function loadAgentJsonTranslator<
 ): TypeAgentTranslator<T> {
     const translatorConfig = provider.getTranslatorConfig(translatorName);
 
-    const createTranslator = regenerateSchema
-        ? createActionJsonTranslatorFromSchemaDef<T>
-        : createJsonTranslatorFromSchemaDef<T>;
-    const translator = createTranslator(
-        "AllActions",
-        getTranslatorSchemaDefs(
-            translatorConfig,
-            translatorName,
-            provider,
-            activeTranslators,
-            multipleActions,
-        ),
-        { model },
-    );
+    const translator = regenerateSchema
+        ? createActionJsonTranslatorFromSchemaDef<T>(
+              "AllActions",
+              composeActionSchema(
+                  translatorName,
+                  provider,
+                  activeTranslators,
+                  multipleActions,
+              ),
+              { model },
+          )
+        : createJsonTranslatorFromSchemaDef<T>(
+              "AllActions",
+              getTranslatorSchemaDefs(
+                  translatorConfig,
+                  translatorName,
+                  provider,
+                  activeTranslators,
+                  multipleActions,
+              ),
+              { model },
+          );
 
     const streamingTranslator = enableJsonTranslatorStreaming(translator);
 
