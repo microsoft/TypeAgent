@@ -30,7 +30,9 @@ export function validateSchema(
             throw new Error(`'${name}' does not match any union type`);
         }
         case "type-reference":
-            validateSchema(name, expected.definition.type, actual, coerce);
+            if (expected.definition !== undefined) {
+                validateSchema(name, expected.definition.type, actual, coerce);
+            }
             break;
         case "object":
             if (typeof actual !== "object" || Array.isArray(actual)) {

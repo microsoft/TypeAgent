@@ -8,14 +8,17 @@ import {
 import { getTranslatorActionSchemas } from "./actionSchema.js";
 import { Result, success } from "typechat";
 import registerDebug from "debug";
-import { TranslatorConfigProvider } from "./agentTranslators.js";
-import { generateSchema, ActionSchemaCreator as sc } from "action-schema";
+import { ActionConfigProvider } from "./agentTranslators.js";
+import {
+    generateSchemaTypeDefinition,
+    ActionSchemaCreator as sc,
+} from "action-schema";
 
 const debugSwitchSearch = registerDebug("typeagent:switch:search");
 
 function createSelectionActionTypeDefinition(
     translatorName: string,
-    provider: TranslatorConfigProvider,
+    provider: ActionConfigProvider,
 ) {
     const translatorConfig = provider.getTranslatorConfig(translatorName);
     // Skip injected schemas except for chat; investigate whether we can get chat always on first pass
@@ -50,7 +53,7 @@ function createSelectionActionTypeDefinition(
                 sc.string(translatorName),
                 ` ${translatorConfig.description}`,
             ),
-            action: sc.field(sc.string(...actionNames), actionComments),
+            action: sc.field(sc.string(actionNames), actionComments),
         }),
     );
     return schema;
@@ -58,7 +61,7 @@ function createSelectionActionTypeDefinition(
 
 function createSelectionSchema(
     translatorName: string,
-    provider: TranslatorConfigProvider,
+    provider: ActionConfigProvider,
 ): InlineTranslatorSchemaDef | undefined {
     const schema = createSelectionActionTypeDefinition(
         translatorName,
@@ -71,7 +74,7 @@ function createSelectionSchema(
     return {
         kind: "inline",
         typeName,
-        schema: generateSchema([schema], typeName),
+        schema: generateSchemaTypeDefinition(schema),
     };
 }
 
@@ -81,7 +84,7 @@ const selectSchemaCache = new Map<
 >();
 function getSelectionSchema(
     translatorName: string,
-    provider: TranslatorConfigProvider,
+    provider: ActionConfigProvider,
 ): InlineTranslatorSchemaDef | undefined {
     if (selectSchemaCache.has(translatorName)) {
         return selectSchemaCache.get(translatorName);
@@ -108,7 +111,7 @@ type AssistantSelectionSchemaEntry = {
 };
 export function getAssistantSelectionSchemas(
     translatorNames: string[],
-    provider: TranslatorConfigProvider,
+    provider: ActionConfigProvider,
 ) {
     return translatorNames
         .map((name) => {
@@ -129,7 +132,7 @@ const assistantSelectionLimit = 8192 * 3;
 
 export function loadAssistantSelectionJsonTranslator(
     translatorNames: string[],
-    provider: TranslatorConfigProvider,
+    provider: ActionConfigProvider,
 ) {
     const schemas = getAssistantSelectionSchemas(translatorNames, provider);
 

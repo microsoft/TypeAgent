@@ -3,8 +3,8 @@
 
 export {
     AppAgentManifest,
-    TranslatorDefinition,
-    SchemaDefinition,
+    ActionManifest,
+    SchemaManifest as SchemaDefinition,
     AppAgent,
     AppAgentEvent,
     SessionContext,

@@ -6,10 +6,7 @@ import {
     ActionSchemaTypeDefinition,
     parseActionSchemaFile,
 } from "action-schema";
-import {
-    TranslatorConfig,
-    TranslatorConfigProvider,
-} from "./agentTranslators.js";
+import { ActionConfig, ActionConfigProvider } from "./agentTranslators.js";
 import { getPackageFilePath } from "../utils/getPackageFilePath.js";
 import { AppAction } from "@typeagent/agent-sdk";
 import { DeepPartialUndefined } from "common-utils";
@@ -18,7 +15,7 @@ import { DeepPartialUndefined } from "common-utils";
 const translatorNameToActionInfo = new Map<string, ActionSchemaFile>();
 
 export function getTranslatorActionSchemas(
-    translatorConfig: TranslatorConfig,
+    translatorConfig: ActionConfig,
     translatorName: string,
 ): ActionSchemaFile {
     if (translatorNameToActionInfo.has(translatorName)) {
@@ -35,7 +32,7 @@ export function getTranslatorActionSchemas(
 
 export function getActionSchema(
     action: DeepPartialUndefined<AppAction>,
-    provider: TranslatorConfigProvider,
+    provider: ActionConfigProvider,
 ): ActionSchemaTypeDefinition | undefined {
     const { translatorName, actionName } = action;
     if (translatorName === undefined || actionName === undefined) {

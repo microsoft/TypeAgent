@@ -3,7 +3,7 @@
 
 import {
     AppAgent,
-    TranslatorDefinition,
+    ActionManifest,
     AppAgentManifest,
 } from "@typeagent/agent-sdk";
 import {
@@ -39,13 +39,16 @@ export type AgentInfo = (InlineAppAgentInfo | ModuleAppAgentInfo) & {
     imports?: string[]; // for @const import
 };
 
-function patchPaths(config: TranslatorDefinition, dir: string) {
-    if (config.schema) {
-        config.schema.schemaFile = path.resolve(dir, config.schema.schemaFile);
+function patchPaths(manifest: ActionManifest, dir: string) {
+    if (manifest.schema) {
+        manifest.schema.schemaFile = path.resolve(
+            dir,
+            manifest.schema.schemaFile,
+        );
     }
-    if (config.subTranslators) {
-        for (const subTranslator of Object.values(config.subTranslators)) {
-            patchPaths(subTranslator, dir);
+    if (manifest.subActionManifests) {
+        for (const subManfiest of Object.values(manifest.subActionManifests)) {
+            patchPaths(subManfiest, dir);
         }
     }
 }

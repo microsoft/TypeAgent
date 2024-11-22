@@ -27,7 +27,7 @@ import {
 import {
     getDefaultBuiltinTranslatorName,
     loadAgentJsonTranslator,
-    TranslatorConfigProvider,
+    ActionConfigProvider,
     TypeAgentTranslator,
 } from "../../translation/agentTranslators.js";
 import { getCacheFactory } from "../../utils/cacheFactory.js";
@@ -147,7 +147,7 @@ export function getTranslator(
 
 async function getAgentCache(
     session: Session,
-    provider: TranslatorConfigProvider,
+    provider: ActionConfigProvider,
     logger: Logger | undefined,
 ) {
     const cacheFactory = getCacheFactory();

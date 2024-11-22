@@ -98,11 +98,9 @@ describe("Action Schema Regeneration", () => {
                 type,
                 true,
             );
-            const regenerated = await generateActionSchema(
-                actionSchemaFile,
-                type,
-                true,
-            );
+            const regenerated = await generateActionSchema(actionSchemaFile, {
+                exact: true,
+            });
             await compare(original, regenerated);
         },
     );
@@ -111,13 +109,10 @@ describe("Action Schema Regeneration", () => {
         "should roundtrip regenerated - %s",
         async (name, file, type) => {
             const actionSchemaFile = parseActionSchemaFile(file, name, type);
-            const regenerated = await generateActionSchema(
-                actionSchemaFile,
-                type,
-            );
+            const regenerated = await generateActionSchema(actionSchemaFile);
 
             const roundtrip = parseActionSchemaSource(regenerated, name, type);
-            const schema2 = await generateActionSchema(roundtrip, type);
+            const schema2 = await generateActionSchema(roundtrip);
             expect(schema2).toEqual(regenerated);
         },
     );
