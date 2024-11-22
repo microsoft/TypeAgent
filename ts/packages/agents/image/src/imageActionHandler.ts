@@ -15,7 +15,6 @@ import {
     createActionResultFromHtmlDisplayWithScript,
 } from "@typeagent/agent-sdk/helpers/action";
 import { bing, GeneratedImage, openai } from "aiclient";
-import { Image } from "../../../aiclient/dist/bing.js";
 import { randomBytes, randomUUID } from "crypto";
 import {
     CreateImageAction,
@@ -61,7 +60,7 @@ async function handlePhotoAction(
             stopWatch.start(
                 "IMAGE SEARCH: " + findImageAction.parameters.searchTerm,
             );
-            const searchResults: Image[] = await bing.searchImages(
+            const searchResults: bing.Image[] = await bing.searchImages(
                 findImageAction.parameters.searchTerm,
                 findImageAction.parameters.numImages,
             );

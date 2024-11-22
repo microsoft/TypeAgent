@@ -8,8 +8,8 @@ import {
     getCacheFactory,
     getBuiltinTranslatorNames,
     readTestData,
+    getTestDataFiles,
 } from "agent-dispatcher/internal";
-import { getTestDataFiles } from "../../../../dispatcher/dist/utils/config.js";
 import path from "node:path";
 
 function commonPathPrefix(s: string[]) {
