@@ -96,6 +96,9 @@ function toTemplateType(
             return toTemplateType(type.types[0], value);
         case "type-reference":
             // TODO: need to handle circular references (or error on circular references)
+            if (type.definition === undefined) {
+                throw new Error(`Unresolved type reference: ${type.name}`);
+            }
             return toTemplateType(type.definition.type, value);
         case "object":
             return toTemplateTypeObject(type, value);

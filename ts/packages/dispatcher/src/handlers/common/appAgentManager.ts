@@ -10,8 +10,8 @@ import { CommandHandlerContext } from "./commandHandlerContext.js";
 import {
     convertToTranslatorConfigs,
     getAppAgentName,
-    TranslatorConfig,
-    TranslatorConfigProvider,
+    ActionConfig,
+    ActionConfigProvider,
 } from "../../translation/agentTranslators.js";
 import { createSessionContext } from "../../action/actionHandlers.js";
 import { AppAgentProvider } from "../../agent/agentProvider.js";
@@ -128,9 +128,9 @@ export const alwaysEnabledAgents = {
     commands: ["system"],
 };
 
-export class AppAgentManager implements TranslatorConfigProvider {
+export class AppAgentManager implements ActionConfigProvider {
     private readonly agents = new Map<string, AppAgentRecord>();
-    private readonly translatorConfigs = new Map<string, TranslatorConfig>();
+    private readonly translatorConfigs = new Map<string, ActionConfig>();
     private readonly injectedTranslatorForActionName = new Map<
         string,
         string

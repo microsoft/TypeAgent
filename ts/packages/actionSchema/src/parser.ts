@@ -13,6 +13,7 @@ import {
     SchemaTypeDefinition,
     ActionSchemaTypeDefinition,
     ActionSchemaFile,
+    ActionSchemaEntryTypeDefinition,
 } from "./type.js";
 
 function checkActionSchema(
@@ -89,6 +90,11 @@ function createActionSchemaFile(
                             "Schema Error: expected type reference in the entry type union",
                         );
                     }
+                    if (t.definition === undefined) {
+                        throw new Error(
+                            `Schema Error: unresolved type reference in the entry type union`,
+                        );
+                    }
                     pending.push(t.definition);
                 });
                 break;
@@ -97,6 +103,11 @@ function createActionSchemaFile(
                 if (strict && current.comments) {
                     throw new Error(
                         "Schema Error: entry type comments are not supported",
+                    );
+                }
+                if (current.type.definition === undefined) {
+                    throw new Error(
+                        `Schema Error: unresolved type reference in the entry type union`,
                     );
                 }
                 pending.push(current.type.definition);
@@ -113,7 +124,7 @@ function createActionSchemaFile(
     return {
         translatorName,
         actionSchemaMap: new Map(actionSchemas),
-        definition,
+        definition: definition as ActionSchemaEntryTypeDefinition,
     };
 }
 
@@ -314,7 +325,6 @@ class ActionParser {
         const result: SchemaTypeReference = {
             type: "type-reference",
             name: typeName,
-            definition: undefined!, // we will make sure this get resolved later.
         };
         this.pendingReferences.set(typeName, result);
         return result;

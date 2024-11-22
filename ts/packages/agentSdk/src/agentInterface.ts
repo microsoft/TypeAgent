@@ -14,9 +14,9 @@ export type AppAgentManifest = {
     emojiChar: string;
     description: string;
     commandDefaultEnabled?: boolean;
-} & TranslatorDefinition;
+} & ActionManifest;
 
-export type SchemaDefinition = {
+export type SchemaManifest = {
     description: string;
     schemaType: string;
     schemaFile: string;
@@ -25,14 +25,14 @@ export type SchemaDefinition = {
     streamingActions?: string[];
 };
 
-export type TranslatorDefinition = {
+export type ActionManifest = {
     defaultEnabled?: boolean;
     translationDefaultEnabled?: boolean;
     actionDefaultEnabled?: boolean;
     transient?: boolean; // whether the translator is transient, default is false
 
-    schema?: SchemaDefinition;
-    subTranslators?: { [key: string]: TranslatorDefinition };
+    schema?: SchemaManifest;
+    subActionManifests?: { [key: string]: ActionManifest };
 };
 
 //==============================================================================

@@ -14,15 +14,17 @@ import {
     SchemaTypeNumber,
     SchemaTypeBoolean,
     SchemaTypeString,
+    SchemaTypeUnion,
 } from "./type.js";
 
 export function string(
-    ...union: string[]
+    ...union: (string | string[])[]
 ): SchemaTypeString | SchemaTypeStringUnion {
-    return union.length !== 0
+    const flat = union.flat();
+    return flat.length !== 0
         ? {
               type: "string-union",
-              typeEnum: union,
+              typeEnum: flat,
           }
         : { type: "string" };
 }
@@ -35,13 +37,15 @@ export function boolean(): SchemaTypeBoolean {
     return { type: "boolean" };
 }
 
-export function array(elementType: SchemaType): SchemaTypeArray {
+export function array<T extends SchemaType>(
+    elementType: T,
+): SchemaTypeArray<T> {
     return { type: "array", elementType };
 }
 
 export type FieldSpec = Record<string, SchemaObjectField | SchemaType>;
 type CommentSpec = string | string[];
-function toComments(comments?: CommentSpec) {
+function toComments(comments?: CommentSpec): string[] | undefined {
     return Array.isArray(comments)
         ? comments
         : comments
@@ -50,51 +54,92 @@ function toComments(comments?: CommentSpec) {
 }
 
 // alias definition
-export function type(
+export function type<T extends SchemaType = SchemaType>(
     name: string,
-    type: SchemaType,
+    type: T,
     comments?: CommentSpec,
-): SchemaTypeAliasDefinition {
-    return { alias: true, name, type, comments: toComments(comments) };
+    exported?: boolean,
+): SchemaTypeAliasDefinition<T> {
+    return {
+        alias: true,
+        name,
+        type,
+        comments: toComments(comments),
+        exported,
+    };
 }
 
 // interface definition
-export function intf(
+export function intf<T extends SchemaTypeObject = SchemaTypeObject>(
     name: string,
-    type: SchemaTypeObject,
+    type: T,
     comments?: CommentSpec,
-): SchemaTypeInterfaceDefinition {
-    return { alias: false, name, type, comments: toComments(comments) };
+    exported?: boolean,
+): SchemaTypeInterfaceDefinition<T> {
+    return {
+        alias: false,
+        name,
+        type,
+        comments: toComments(comments),
+        exported,
+    };
 }
 
-export function field(
-    type: SchemaType,
+export function field<T extends SchemaType = SchemaType>(
+    type: T,
     comments?: CommentSpec,
-): SchemaObjectField {
+): SchemaObjectField<T> {
     return { type, comments: toComments(comments) };
 }
 
-export function optional(
-    type: SchemaType,
+export function optional<T extends SchemaType = SchemaType>(
+    type: T,
     comments?: CommentSpec,
-): SchemaObjectField {
+): SchemaObjectField<T> {
     return { optional: true, type, comments: toComments(comments) };
 }
 
-export function obj(f: FieldSpec): SchemaTypeObject {
+type SchemaObjectFieldTypeFromFieldSpec<
+    T extends SchemaObjectField | SchemaType,
+> = T extends SchemaType ? SchemaObjectField<T> : T;
+
+type SchemaObjectFieldsFromSpec<T extends FieldSpec> = {
+    [K in keyof T]: SchemaObjectFieldTypeFromFieldSpec<T[K]>;
+};
+
+type SchemaTypeObjectFromSpec<T extends FieldSpec> = SchemaTypeObject<
+    SchemaObjectFieldsFromSpec<T>
+>;
+
+export function obj<T extends FieldSpec>(f: T): SchemaTypeObjectFromSpec<T> {
     const fields: Record<string, SchemaObjectField> = {};
     for (const [key, value] of Object.entries(f)) {
         const fl = typeof value.type === "string" ? field(value) : value;
         fields[key] = fl;
     }
-    return { type: "object", fields };
+    return {
+        type: "object",
+        fields: fields as SchemaObjectFieldsFromSpec<T>,
+    };
 }
 
-// Doesn't support cucular reference, so only accept existing definition only.
-export function ref(definition: SchemaTypeDefinition): SchemaTypeReference {
+export function ref<T extends SchemaTypeDefinition = SchemaTypeDefinition>(
+    definition: string | T,
+): SchemaTypeReference<T> {
+    if (typeof definition === "string") {
+        return { type: "type-reference", name: definition };
+    }
     return { type: "type-reference", name: definition.name, definition };
 }
 
-export function union(...types: SchemaType[]): SchemaType {
-    return { type: "type-union", types };
+export function union<T extends SchemaType>(
+    ...types: (T | T[])[]
+): SchemaTypeUnion<T>;
+export function union(
+    ...types: (SchemaType | SchemaType[])[]
+): SchemaTypeUnion<SchemaType>;
+export function union(
+    ...types: (SchemaType | SchemaType[])[]
+): SchemaTypeUnion<SchemaType> {
+    return { type: "type-union", types: types.flat() };
 }

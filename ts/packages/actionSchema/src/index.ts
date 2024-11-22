@@ -6,11 +6,17 @@ export {
     SchemaTypeArray as ActionParamArray,
     SchemaTypeObject as ActionParamObject,
     ActionSchemaTypeDefinition,
+    ActionSchemaEntryTypeDefinition,
     ActionSchemaFile,
+    ActionSchemaObject,
+    ActionSchemaUnion,
 } from "./type.js";
 
 export { parseActionSchemaFile, parseActionSchemaSource } from "./parser.js";
-export { generateActionSchema, generateSchema } from "./generator.js";
+export {
+    generateActionSchema,
+    generateSchemaTypeDefinition,
+} from "./generator.js";
 export { validateAction } from "./validate.js";
 export { getParameterType, getParameterNames } from "./utils.js";
 
