@@ -105,6 +105,7 @@ async function getContext(): Promise<TestContext> {
             emails: fs.existsSync(path.join(testIndexRootPath, testIndexName))
                 ? await createEmailMemory(
                       models.chat,
+                      models.answerModel,
                       testIndexName,
                       testIndexRootPath,
                       createConversationSettings(models.embeddings),

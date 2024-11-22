@@ -293,6 +293,7 @@ export interface EmailMemorySettings extends ConversationSettings {
  */
 export async function createEmailMemory(
     model: ChatModel,
+    answerModel: ChatModel,
     name: string,
     rootPath: string,
     settings: EmailMemorySettings,
@@ -314,6 +315,7 @@ export async function createEmailMemory(
     const cm = await createConversationManager(
         {
             model,
+            answerModel,
             initializer: (cm) =>
                 setupEmailConversationManager(cm, contextProvider),
         },

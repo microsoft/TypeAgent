@@ -44,6 +44,7 @@ import { pathToFileURL } from "url";
 
 export type Models = {
     chatModel: ChatModel;
+    answerModel: ChatModel;
     embeddingModel: TextEmbeddingModel;
     embeddingModelSmall?: TextEmbeddingModel | undefined;
 };
@@ -110,6 +111,7 @@ export function createModels(): Models {
         chatModel: openai.createJsonChatModel(chatModelSettings, [
             "chatMemory",
         ]),
+        answerModel: openai.createChatModel(),
         embeddingModel: knowLib.createEmbeddingCache(
             openai.createEmbeddingModel(embeddingModelSettings),
             1024,
@@ -134,6 +136,7 @@ export async function createChatMemoryContext(
 
     const models: Models = createModels();
     models.chatModel.completionCallback = completionCallback;
+    models.answerModel.completionCallback = completionCallback;
 
     const conversationName = ReservedConversationNames.transcript;
     const conversationSettings =
@@ -148,6 +151,7 @@ export async function createChatMemoryContext(
         await knowLib.conversation.createConversationManager(
             {
                 model: models.chatModel,
+                answerModel: models.answerModel,
             },
             conversationName,
             conversationPath,
@@ -216,6 +220,7 @@ export async function createSearchMemory(
     const memory = await conversation.createConversationManager(
         {
             model: context.models.chatModel,
+            answerModel: context.models.answerModel,
         },
         conversationName,
         context.storePath,
@@ -247,7 +252,10 @@ export async function loadConversation(
         context.conversationName = name;
         context.conversationManager =
             await conversation.createConversationManager(
-                { model: context.models.chatModel },
+                {
+                    model: context.models.chatModel,
+                    answerModel: context.models.answerModel,
+                },
                 name,
                 conversationPath,
                 false,

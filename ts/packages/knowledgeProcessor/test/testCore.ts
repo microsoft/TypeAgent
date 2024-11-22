@@ -18,6 +18,7 @@ import os from "node:os";
 
 export type TestModels = {
     chat: ChatModel;
+    answerModel: ChatModel;
     embeddings: TextEmbeddingModel;
 };
 
@@ -54,6 +55,7 @@ export function skipTest(name: string) {
 export function createTestModels(): TestModels {
     return {
         chat: openai.createChatModelDefault("knowledgeProcessorTest"),
+        answerModel: openai.createChatModel("knowledgeProcessorTest"),
         embeddings: openai.createEmbeddingModel(),
     };
 }

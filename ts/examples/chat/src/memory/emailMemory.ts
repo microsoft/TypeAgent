@@ -77,6 +77,7 @@ export async function createEmailMemory(
 
     const memory = await knowLib.email.createEmailMemory(
         models.chatModel,
+        models.answerModel,
         ReservedConversationNames.outlook,
         storePath,
         emailSettings,
