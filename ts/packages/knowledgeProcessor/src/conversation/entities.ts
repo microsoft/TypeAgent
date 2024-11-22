@@ -367,11 +367,7 @@ export async function createEntityIndexOnStorage<TSourceId = string>(
 
         terms = terms.filter((t) => !noiseTerms.has(t));
         if (terms && terms.length > 0) {
-            const hitCounter = createHitTable<EntityId>(
-                undefined,
-                undefined,
-                2,
-            );
+            const hitCounter = createHitTable<EntityId>();
             await Promise.all([
                 nameIndex.getNearestHitsMultiple(
                     terms,
@@ -415,40 +411,7 @@ export async function createEntityIndexOnStorage<TSourceId = string>(
         }
         return results;
     }
-    /*
-    async function projectFacets(
-        entityIds: EntityId[],
-        terms: string[],
-        options: EntitySearchOptions,
-    ): Promise<EntityId[]> {
-        // Try to filter by facets
-        const hitTable = createHitTable<EntityId>();
-        await facetIndex.getNearestHitsMultiple(
-            terms,
-            hitTable,
-            options.maxMatches,
-            options.minScore,
-        );
-        if (hitTable.size === 0) {
-            return entityIds;
-        }
-        const entityIdsWithFacets = hitTable.getTopK(options.topK ?? 3).sort();
-        // If we matched entities already, select those entities with facets of interest.
-        // Else, use facet matches as having identified entities of interest.
-        if (entityIds.length > 0) {
-            const filteredEntityIds = intersectArrays(
-                entityIds,
-                entityIdsWithFacets,
-            );
-            // If we failed to project (empty intersection), then don't toss the original good entityId matches
-            // Let the answer generator or later stages deal with it
-            return filteredEntityIds && filteredEntityIds.length > 0
-                ? filteredEntityIds
-                : entityIds;
-        }
-        return entityIdsWithFacets;
-    }
-*/
+
     function combineTerms(filter: TermFilter): string[] {
         let terms: string[] | undefined;
         if (filter.verbs && filter.verbs.length > 0) {

@@ -82,6 +82,7 @@ export async function createEmailMemory(
         emailSettings,
         storage,
     );
+    memory.searchProcessor.answers.settings.chunking.fastStop = true;
     return memory;
 }
 
@@ -92,6 +93,7 @@ export function createEmailCommands(
     commands.importEmail = importEmail;
     commands.emailConvertMsg = emailConvertMsg;
     commands.emailStats = emailStats;
+    commands.emailFastStop = emailFastStop;
 
     //--------
     // Commands
@@ -187,6 +189,29 @@ export function createEmailCommands(
             await fs.promises.writeFile(namedArgs.destFile, csv);
         } else {
             context.printer.writeLine(csv);
+        }
+    }
+
+    function emailFastStopDef(): CommandMetadata {
+        return {
+            description:
+                "Enable or disable fast stopping during answer generation",
+            options: {
+                enable: argBool("Enable"),
+            },
+        };
+    }
+    commands.emailFastStop.metadata = emailFastStopDef();
+    async function emailFastStop(args: string[]): Promise<void> {
+        const chunkingSettings =
+            context.emailMemory.searchProcessor.answers.settings.chunking;
+        if (args.length > 0) {
+            const namedArgs = parseNamedArguments(args, emailFastStopDef());
+            chunkingSettings.fastStop = namedArgs.enable;
+        } else {
+            context.printer.writeLine(
+                `Enabled ${chunkingSettings.fastStop ?? false}`,
+            );
         }
     }
 

@@ -273,7 +273,7 @@ export async function loadConversation(
 
 export async function runChatMemory(): Promise<void> {
     let context = await createChatMemoryContext(captureTokenStats);
-    let showTokenStats = true;
+    let showTokenStats = false;
     let printer = context.printer;
     const commands: Record<string, CommandHandler> = {
         importPlay,
@@ -335,6 +335,8 @@ export async function runChatMemory(): Promise<void> {
         if (showTokenStats) {
             printer.writeCompletionStats(response.usage);
             printer.writeLine();
+        } else {
+            printer.write(".");
         }
     }
     //--------------------
@@ -1353,6 +1355,7 @@ export async function runChatMemory(): Promise<void> {
             printer.writeError("No result");
             return undefined;
         }
+        printer.writeLine();
         await writeSearchTermsResult(result, namedArgs.debug);
         if (result.response && result.response.answer) {
             if (namedArgs.save && recordAnswer) {

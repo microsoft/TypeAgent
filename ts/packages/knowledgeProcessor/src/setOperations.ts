@@ -405,6 +405,8 @@ export interface HitTable<T = any> {
     set(key: any, value: ScoredItem<T>): void;
 
     clear(): void;
+
+    roundScores(decimalPlace: number): void;
 }
 
 /**
@@ -418,10 +420,8 @@ export interface HitTable<T = any> {
 export function createHitTable<T>(
     keyAccessor?: (value: T) => any,
     fixedScore?: number | undefined,
-    roundToDecimalPlace?: number | undefined,
 ): HitTable<T> {
     const map = new Map<any, ScoredItem<T>>();
-    let roundUnit = roundToDecimalPlace ? Math.pow(10, roundToDecimalPlace) : 0;
     return {
         get size() {
             return map.size;
@@ -438,8 +438,8 @@ export function createHitTable<T>(
         getTop,
         getTopK,
         getByKey,
-
         clear: () => map.clear(),
+        roundScores,
     };
 
     function get(value: T): ScoredItem<T> | undefined {
@@ -459,9 +459,6 @@ export function createHitTable<T>(
 
     function add(value: T, score?: number | undefined): number {
         score = fixedScore ? fixedScore : score ?? 1.0;
-        if (roundUnit > 0) {
-            score = Math.round(score * roundUnit) / roundUnit;
-        }
         const key = getKey(value);
         let scoredItem = map.get(key);
         if (scoredItem) {
@@ -568,5 +565,15 @@ export function createHitTable<T>(
 
     function getKey(value: T): any {
         return keyAccessor ? keyAccessor(value) : value;
+    }
+
+    function roundScores(decimalPlace: number): void {
+        let roundUnit = Math.pow(10, decimalPlace);
+        if (roundUnit > 0) {
+            for (const scoredItem of map.values()) {
+                scoredItem.score =
+                    Math.round(scoredItem.score * roundUnit) / roundUnit;
+            }
+        }
     }
 }
