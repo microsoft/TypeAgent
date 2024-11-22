@@ -30,6 +30,7 @@ import {
 import { TranslatedAction } from "../handlers/requestCommandHandler.js";
 import {
     ActionSchemaTypeDefinition,
+    generateActionSchema,
     generateSchemaTypeDefinition,
     ActionSchemaCreator as sc,
 } from "action-schema";
@@ -418,16 +419,19 @@ export function getFullSchemaText(
     activeSchemas: string[] | undefined,
     multipleActions: boolean,
     generated: boolean,
-) {
+): string {
     const active = activeSchemas
         ? Object.fromEntries(activeSchemas.map((name) => [name, true]))
         : undefined;
     if (generated) {
-        return composeActionSchema(
-            translatorName,
-            provider,
-            active,
-            multipleActions,
+        return generateActionSchema(
+            composeActionSchema(
+                translatorName,
+                provider,
+                active,
+                multipleActions,
+            ),
+            { exact: true },
         );
     }
     const translatorConfig = provider.getTranslatorConfig(translatorName);

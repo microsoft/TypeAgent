@@ -101,7 +101,7 @@ function generateTypeDefinition(
     lines.push(line);
 }
 
-type GenerateSchemaOptions = {
+export type GenerateSchemaOptions = {
     strict?: boolean; // default true
     exact?: boolean; // default false
 };
@@ -109,17 +109,25 @@ type GenerateSchemaOptions = {
 export function generateSchemaTypeDefinition(
     definition: SchemaTypeDefinition,
     options?: GenerateSchemaOptions,
+    order?: Map<string, number>,
 ) {
     const strict = options?.strict ?? true;
     const exact = options?.exact ?? false;
-    const emitted = new Map<SchemaTypeDefinition, string[]>();
+    const emitted = new Map<
+        SchemaTypeDefinition,
+        { lines: string[]; order: number | undefined; emitOrder: number }
+    >();
     const pending = [definition];
 
     while (pending.length > 0) {
         const definition = pending.shift()!;
         if (!emitted.has(definition)) {
             const lines: string[] = [];
-            emitted.set(definition, lines);
+            emitted.set(definition, {
+                lines,
+                order: order?.get(definition.name),
+                emitOrder: emitted.size,
+            });
             const dep: SchemaTypeDefinition[] = [];
             generateTypeDefinition(lines, definition, dep, strict, exact);
 
@@ -128,16 +136,18 @@ export function generateSchemaTypeDefinition(
         }
     }
 
-    const entries = Array.from(emitted.entries());
-    const emit = exact
-        ? entries.sort((a, b) => {
-              const orderA = a[0].order ?? 0;
-              const orderB = b[0].order ?? 0;
-              return orderA - orderB;
-          })
-        : entries;
+    const entries = Array.from(emitted.values());
+    const emit =
+        exact && order !== undefined
+            ? entries.sort((a, b) => {
+                  if (a.order === undefined || b.order === undefined) {
+                      return a.emitOrder - b.emitOrder;
+                  }
+                  return a.order - b.order;
+              })
+            : entries;
 
-    const result = emit.flatMap((e) => e[1]).join("\n");
+    const result = emit.flatMap((e) => e.lines).join("\n");
     debug(result);
     return result;
 }
@@ -146,5 +156,9 @@ export function generateActionSchema(
     actionSchemaFile: ActionSchemaFile,
     options?: GenerateSchemaOptions,
 ): string {
-    return generateSchemaTypeDefinition(actionSchemaFile.definition, options);
+    return generateSchemaTypeDefinition(
+        actionSchemaFile.entry,
+        options,
+        actionSchemaFile.order,
+    );
 }

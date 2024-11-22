@@ -87,7 +87,6 @@ export type SchemaTypeAliasDefinition<T extends SchemaType = SchemaType> = {
     type: T;
     comments?: string[] | undefined;
     exported?: boolean | undefined; // for exact regen
-    order?: number; // for exact regen
 };
 
 export type SchemaTypeDefinition =
@@ -133,7 +132,8 @@ type ActionSchemaTypeReference =
 export type ActionSchemaUnion = SchemaTypeUnion<ActionSchemaTypeReference>;
 
 export type ActionSchemaFile = {
-    translatorName: string;
-    actionSchemaMap: Map<string, ActionSchemaTypeDefinition>;
-    definition: ActionSchemaEntryTypeDefinition;
+    entry: ActionSchemaEntryTypeDefinition;
+    actionSchemas: Map<string, ActionSchemaTypeDefinition>;
+    schemaName?: string;
+    order?: Map<string, number>; // for exact regen
 };

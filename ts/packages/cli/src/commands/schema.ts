@@ -31,6 +31,7 @@ export default class Schema extends Command {
         }),
         generated: Flags.boolean({
             description: "Generated schema",
+            allowNo: true,
             default: true,
         }),
     };

@@ -13,6 +13,7 @@ import {
     generateSchemaTypeDefinition,
     ActionSchemaEntryTypeDefinition,
     ActionSchemaTypeDefinition,
+    ActionSchemaUnion,
 } from "action-schema";
 import {
     TranslatorSchemaDef,
@@ -34,13 +35,13 @@ function createActionSchemaJsonValidator<T extends TranslatedAction>(
     const schema = generateActionSchema(actionSchemaFile, { exact: true });
     return {
         getSchemaText: () => schema,
-        getTypeName: () => actionSchemaFile.definition.name,
+        getTypeName: () => actionSchemaFile.entry.name,
         validate(jsonObject: object): Result<T> {
             const value: any = jsonObject;
             if (value.actionName === undefined) {
                 return error("Missing actionName property");
             }
-            const actionSchema = actionSchemaFile.actionSchemaMap.get(
+            const actionSchema = actionSchemaFile.actionSchemas.get(
                 value.actionName,
             );
             if (actionSchema === undefined) {
@@ -57,7 +58,7 @@ function createActionSchemaJsonValidator<T extends TranslatedAction>(
     };
 }
 
-function loadActionSchemas(
+export function loadActionSchemas(
     typeName: string,
     schemas: TranslatorSchemaDef[],
 ): ActionSchemaFile {
@@ -107,7 +108,7 @@ class ActionSchemaBuilder {
                 config.schemaType,
             );
             this.files.push(actionSchemaFile);
-            this.definitions.push(actionSchemaFile.definition);
+            this.definitions.push(actionSchemaFile.entry);
         }
     }
 
@@ -115,16 +116,67 @@ class ActionSchemaBuilder {
         this.definitions.push(definition);
     }
 
-    getTypeUnion() {
+    getTypeUnion(): ActionSchemaUnion {
         return sc.union(
             this.definitions.map((definition) => sc.ref(definition)),
         );
     }
 
-    build(typeName: string = "AllActions") {
-        const definition = sc.type(typeName, this.getTypeUnion());
+    build(typeName: string = "AllActions"): ActionSchemaFile {
+        const entry = sc.type(typeName, this.getTypeUnion(), undefined, true);
+        const order = new Map<string, number>();
+        for (const file of this.files) {
+            if (file.order) {
+                const base = order.size;
+                for (const [name, num] of file.order) {
+                    order.set(name, base + num);
+                }
+            }
+        }
 
-        return generateSchemaTypeDefinition(definition);
+        const actionSchemas: [string, ActionSchemaTypeDefinition][] = [];
+        const pending: ActionSchemaEntryTypeDefinition[] = [
+            ...this.definitions,
+        ];
+        while (pending.length > 0) {
+            const current = pending.shift()!;
+            const currentType = current.type;
+            switch (currentType.type) {
+                case "type-union":
+                    for (const t of currentType.types) {
+                        if (t.definition === undefined) {
+                            throw new Error(
+                                `Schema Builder Error: unresolved type reference '${t.name}' in entry tryp union`,
+                            );
+                        }
+                        pending.push(t.definition);
+                    }
+                    break;
+                case "type-reference":
+                    if (currentType.definition === undefined) {
+                        throw new Error(
+                            `Schema Builder Error: unresolved type reference '${currentType.name}' in entry tryp union`,
+                        );
+                    }
+                    pending.push(currentType.definition);
+                    break;
+                case "object":
+                    actionSchemas.push([
+                        current.name,
+                        current as ActionSchemaTypeDefinition,
+                    ]);
+                    break;
+                default:
+                    // Should not reach here.
+                    throw new Error("Invalid type");
+            }
+        }
+
+        return {
+            entry,
+            actionSchemas: new Map(actionSchemas),
+            order,
+        };
     }
 }
 

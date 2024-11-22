@@ -218,7 +218,7 @@ export class AppAgentManager implements ActionConfigProvider {
                         config,
                         name,
                     );
-                    for (const actionName of actionSchemaFile.actionSchemaMap.keys()) {
+                    for (const actionName of actionSchemaFile.actionSchemas.keys()) {
                         this.injectedTranslatorForActionName.set(
                             actionName,
                             name,
