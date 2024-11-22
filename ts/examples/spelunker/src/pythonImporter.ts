@@ -142,7 +142,7 @@ async function importPythonFiles(
                 const t1 = Date.now();
                 log(
                     io,
-                    `  [Error documenting ${chunkedFile.filename} in ${((t1 - t0) * 0.001).toFixed(3)} seconds: ${error}]`,
+                    `  [Error documenting ${chunkedFile.fileName} in ${((t1 - t0) * 0.001).toFixed(3)} seconds: ${error}]`,
                 );
                 return;
             }
@@ -150,7 +150,7 @@ async function importPythonFiles(
 
             log(
                 io,
-                `  [Documented ${chunkedFile.chunks.length} chunks in ${((t1 - t0) * 0.001).toFixed(3)} seconds for ${chunkedFile.filename}]`,
+                `  [Documented ${chunkedFile.chunks.length} chunks in ${((t1 - t0) * 0.001).toFixed(3)} seconds for ${chunkedFile.fileName}]`,
             );
             documentedFiles.push(docs);
         },
@@ -192,7 +192,7 @@ export async function embedChunkedFile(
 ): Promise<void> {
     const chunks: Chunk[] = chunkedFile.chunks;
     if (chunks.length === 0) {
-        log(io, `[Skipping empty file ${chunkedFile.filename}]`);
+        log(io, `[Skipping empty file ${chunkedFile.fileName}]`);
         return;
     }
     const t0 = Date.now();
@@ -202,7 +202,7 @@ export async function embedChunkedFile(
     const t1 = Date.now();
     log(
         io,
-        `  [Embedded ${chunks.length} chunks in ${((t1 - t0) * 0.001).toFixed(3)} seconds for ${chunkedFile.filename}]`,
+        `  [Embedded ${chunks.length} chunks in ${((t1 - t0) * 0.001).toFixed(3)} seconds for ${chunkedFile.fileName}]`,
     );
 }
 
@@ -264,7 +264,7 @@ async function embedChunk(
         log(
             io,
             `  [Embedded ${chunk.id} (${lineCount} lines @ ${chunk.blobs[0].start}) ` +
-                `in ${((t1 - t0) * 0.001).toFixed(3)} seconds for ${chunk.filename}]`,
+                `in ${((t1 - t0) * 0.001).toFixed(3)} seconds for ${chunk.fileName}]`,
         );
     }
 }

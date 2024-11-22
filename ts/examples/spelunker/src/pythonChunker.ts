@@ -31,12 +31,12 @@ export interface Chunk {
     blobs: Blob[];
     parentId: ChunkId;
     children: ChunkId[];
-    filename: string; // Set on receiving end to reduce JSON size.
+    fileName: string; // Set on receiving end to reduce JSON size.
     docs?: FileDocumentation; // Computed on receiving end from file docs.
 }
 
 export interface ChunkedFile {
-    filename: string;
+    fileName: string;
     chunks: Chunk[];
 }
 
@@ -83,7 +83,7 @@ export async function chunkifyPythonFiles(
     for (const result of results) {
         if (!("error" in result)) {
             for (const chunk of result.chunks) {
-                chunk.filename = result.filename;
+                chunk.fileName = result.fileName;
             }
         }
     }
