@@ -15,14 +15,17 @@ import {
 import { Result } from "typechat";
 import { getPackageFilePath } from "../utils/getPackageFilePath.js";
 import { getMultipleActionSchemaDef } from "./multipleActionSchema.js";
-import { TranslatorSchemaDef, composeTranslatorSchemas } from "common-utils";
+import {
+    TranslatorSchemaDef,
+    composeTranslatorSchemas,
+    IncrementalJsonValueCallBack,
+} from "common-utils";
 
 import registerDebug from "debug";
 import { getBuiltinAppAgentConfigs } from "../agent/agentConfig.js";
 import { loadTranslatorSchemaConfig } from "../utils/loadSchemaConfig.js";
 import { HistoryContext } from "agent-cache";
 import { createTypeAgentRequestPrompt } from "../handlers/common/chatHistoryPrompt.js";
-import { IncrementalJsonValueCallBack } from "../../../commonUtils/dist/incrementalJsonParser.js";
 import {
     composeActionSchema,
     createActionJsonTranslatorFromSchemaDef,
@@ -32,9 +35,9 @@ import {
     ActionSchemaTypeDefinition,
     generateActionSchema,
     generateSchemaTypeDefinition,
+    ActionSchemaObject,
     ActionSchemaCreator as sc,
 } from "action-schema";
-import { ActionSchemaObject } from "../../../actionSchema/dist/type.js";
 const debugConfig = registerDebug("typeagent:translator:config");
 
 // A flatten AppAgentManifest
@@ -316,12 +319,12 @@ function getInjectedSchemaDefs(
 }
 
 function getTranslatorSchemaDefs(
-    translatorConfig: ActionConfig,
     translatorName: string,
     provider: ActionConfigProvider,
     activeTranslators: { [key: string]: boolean } | undefined,
     multipleActions: boolean = false,
 ): TranslatorSchemaDef[] {
+    const translatorConfig = provider.getTranslatorConfig(translatorName);
     return [
         getTranslatorSchemaDef(translatorConfig),
         ...getInjectedSchemaDefs(
@@ -360,8 +363,6 @@ export function loadAgentJsonTranslator<
     multipleActions: boolean = false,
     regenerateSchema: boolean = false,
 ): TypeAgentTranslator<T> {
-    const translatorConfig = provider.getTranslatorConfig(translatorName);
-
     const translator = regenerateSchema
         ? createActionJsonTranslatorFromSchemaDef<T>(
               "AllActions",
@@ -376,7 +377,6 @@ export function loadAgentJsonTranslator<
         : createJsonTranslatorFromSchemaDef<T>(
               "AllActions",
               getTranslatorSchemaDefs(
-                  translatorConfig,
                   translatorName,
                   provider,
                   activeTranslators,
@@ -442,9 +442,7 @@ export function getFullSchemaText(
             { exact: true },
         );
     }
-    const translatorConfig = provider.getTranslatorConfig(translatorName);
     const schemaDefs = getTranslatorSchemaDefs(
-        translatorConfig,
         translatorName,
         provider,
         active,

@@ -22,7 +22,11 @@ import {
     updateCorrectionContext,
 } from "./common/commandHandlerContext.js";
 
-import { CachedImageWithDetails, getColorElapsedString } from "common-utils";
+import {
+    CachedImageWithDetails,
+    getColorElapsedString,
+    IncrementalJsonValueCallBack,
+} from "common-utils";
 import { Logger } from "telemetry";
 import {
     executeActions,
@@ -40,9 +44,8 @@ import {
     MultipleAction,
     isMultipleAction,
 } from "../translation/multipleActionSchema.js";
-import { MatchResult } from "../../../cache/dist/constructions/constructions.js";
+import { MatchResult } from "agent-cache";
 import registerDebug from "debug";
-import { IncrementalJsonValueCallBack } from "../../../commonUtils/dist/incrementalJsonParser.js";
 import ExifReader from "exifreader";
 import { ProfileNames } from "../utils/profileNames.js";
 import { ActionContext, ParsedCommandParams } from "@typeagent/agent-sdk";
