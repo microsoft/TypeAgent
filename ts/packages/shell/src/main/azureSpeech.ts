@@ -70,8 +70,6 @@ export class AzureSpeech {
 
         this.token = result.token;
 
-        console.log(this.token);
-
         return result;
     };
 
