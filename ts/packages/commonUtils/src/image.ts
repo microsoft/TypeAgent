@@ -4,7 +4,7 @@
 import { Storage } from "@typeagent/agent-sdk";
 import { AuthTokenProvider, AzureTokenScopes, createAzureTokenProvider, getBlob } from "aiclient";
 import ExifReader from "exifreader";
-import { ApiSettings } from "../../aiclient/dist/openai.js";
+import { ApiSettings, apiSettingsFromEnv } from "../../aiclient/dist/openai.js";
 
 export class CachedImageWithDetails {
     constructor(
@@ -20,6 +20,10 @@ export function getImageElement(imgData: string): string {
 
 export function extractRelevantExifTags(exifTags: ExifReader.Tags) {
     let tags: string = "";
+
+    // TEST API call
+    const settings: ApiSettings = apiSettingsFromEnv();
+    reverseGeocodeLookup(settings).then((response) => { console.log(response); })    
 
     tags = `${exifTags.Make ? "Make: " + exifTags.Make.value : ""}
     ${exifTags.Model ? "Model: " + exifTags.Model.value : ""}
@@ -60,7 +64,7 @@ export async function downloadImage(
 }
 
 export async function reverseGeocodeLookup(settings: ApiSettings) {
-    let testUri = "https://agentmaps.microsoft.com/reverseGeocode?api-version=2023-06-01&coordinates=47.64210088640227,-122.14197703742589";
+    let testUri = "https://atlas.microsoft.com/reverseGeocode?api-version=2023-06-01&coordinates=-122.14197703742589,47.64210088640227";
     console.log(testUri);
 
     const tokenProvider: AuthTokenProvider = createAzureTokenProvider(AzureTokenScopes.AzureMaps);
@@ -68,18 +72,20 @@ export async function reverseGeocodeLookup(settings: ApiSettings) {
     if (!tokenResult.success) {
         return;
     }
-    // apiHeaders = {
-    //     Authorization: `Bearer ${tokenResult.data}`,
-    // };
 
+    // TODO: implement using mapsearch typescript lib - https://learn.microsoft.com/en-us/javascript/api/%40azure-rest/maps-search/?view=azure-node-preview
     try {
-        const response = await fetch(
-            testUri,
-                // {
-                //       headers: tokenResult.data
-                //   }
-        );
-        return response;
+        const options: RequestInit = {
+            method: "GET",
+            headers: new Headers({
+                "Authorization": `Bearer ${tokenResult.data}`,
+                "x-ms-client-id": "<CLIENT ID HERE>",
+            },),
+        };     
+        
+        const response = await fetch(testUri, options);
+        let responseBody = await response.json();
+        return responseBody;
     } catch (e) {
         const ex = e as Error;
         if (ex.name && ex.name === "AbortError") {
