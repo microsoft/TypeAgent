@@ -31,7 +31,7 @@ export interface Chunk {
     blobs: Blob[];
     parentId: ChunkId;
     children: ChunkId[];
-    filename?: string; // Set on receiving end to reduce JSON size.
+    filename: string; // Set on receiving end to reduce JSON size.
     docs?: FileDocumentation; // Computed on receiving end from file docs.
 }
 
@@ -65,6 +65,7 @@ export async function chunkifyPythonFiles(
         output = error?.stdout || "";
         errors = error?.stderr || error.message || "Unknown error";
     }
+
     if (!success) {
         return [{ error: errors, output: output }];
     }
@@ -74,6 +75,17 @@ export async function chunkifyPythonFiles(
     if (!output) {
         return [{ error: "No output from chunker script" }];
     }
-    // TODO: validate JSON
-    return JSON.parse(output);
+
+    const results: (ChunkedFile | ErrorItem)[] = JSON.parse(output);
+    // TODO: validate that JSON matches our schema.
+
+    // Ensure all chunks have a filename.
+    for (const result of results) {
+        if (!("error" in result)) {
+            for (const chunk of result.chunks) {
+                chunk.filename = result.filename;
+            }
+        }
+    }
+    return results;
 }

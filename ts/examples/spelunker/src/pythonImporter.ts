@@ -86,20 +86,20 @@ async function importPythonFiles(
     const t1 = Date.now();
 
     // Print stats for chunkifying.
-    let lines = 0;
-    let blobs = 0;
-    let chunks = 0;
-    let errors = 0;
+    let numLines = 0;
+    let numBlobs = 0;
+    let numChunks = 0;
+    let numErrors = 0;
     for (const result of results) {
         if ("error" in result) {
-            errors++;
+            numErrors++;
         } else {
             const chunkedFile = result;
-            chunks += chunkedFile.chunks.length;
+            numChunks += chunkedFile.chunks.length;
             for (const chunk of chunkedFile.chunks) {
-                blobs += chunk.blobs.length;
+                numBlobs += chunk.blobs.length;
                 for (const blob of chunk.blobs) {
-                    lines += blob.lines.length;
+                    numLines += blob.lines.length;
                 }
             }
         }
@@ -107,7 +107,7 @@ async function importPythonFiles(
     log(
         io,
         `[Chunked ${filenames.length} files ` +
-            `(${lines} lines, ${blobs} blobs, ${chunks} chunks, ${errors} errors) ` +
+            `(${numLines} lines, ${numBlobs} blobs, ${numChunks} chunks, ${numErrors} errors) ` +
             `in ${((t1 - t0) * 0.001).toFixed(3)} seconds]`,
     );
 

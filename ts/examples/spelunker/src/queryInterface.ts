@@ -538,10 +538,12 @@ async function runIndexQueries(
         }
 
         // Regular logging.
-        const nchunks = new Set(hits.flatMap((h) => h.item.sourceIds)).size;
+        const numChunks = new Set(hits.flatMap((h) => h.item.sourceIds)).size;
         const end = hits.length - 1;
         io.writer.writeLine(
-            `[${indexName}: query '${spec.query}'; ${hits.length} hits; scores ${hits[0].score.toFixed(3)}--${hits[end].score.toFixed(3)}; ${nchunks} unique chunk ids]`,
+            `[${indexName}: query '${spec.query}'; ${hits.length} hits; ` +
+                `scores ${hits[0].score.toFixed(3)}--${hits[end].score.toFixed(3)}; ` +
+                `${numChunks} unique chunk ids]`,
         );
     }
 
