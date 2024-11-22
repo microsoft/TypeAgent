@@ -166,8 +166,5 @@ export default class ExplainCommand extends Command {
             printProcessRequestActionResult(result);
         }
         await closeCommandHandlerContext(context);
-
-        // Some background network (like monogo) might keep the process live, exit explicitly.
-        process.exit(0);
     }
 }

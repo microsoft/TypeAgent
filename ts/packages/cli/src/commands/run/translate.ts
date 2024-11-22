@@ -50,7 +50,5 @@ export default class TranslateCommand extends Command {
             `@dispatcher translate ${args.request}`,
         );
         await dispatcher.close();
-        // Some background network (like monogo) might keep the process live, exit explicitly.
-        process.exit(0);
     }
 }
