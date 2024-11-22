@@ -426,6 +426,10 @@ export class AppAgentManager implements ActionConfigProvider {
             record.actions.clear();
             record.commands = false;
             await this.closeSessionContext(record);
+            if (record.appAgent !== undefined) {
+                record.provider.unloadAppAgent(record.name);
+            }
+            record.appAgent = undefined;
         }
     }
 

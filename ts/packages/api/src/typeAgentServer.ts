@@ -54,5 +54,6 @@ export class TypeAgentServer {
     stop() {
         this.webServer?.stop();
         this.webSocketServer?.stop();
+        this.dispatcher?.close();
     }
 }

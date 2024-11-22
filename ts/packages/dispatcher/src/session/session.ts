@@ -72,10 +72,9 @@ async function loadSessions(): Promise<Sessions> {
                 },
             });
         } catch (e) {
-            console.error(
-                `ERROR: Unable to lock profile ${userProfileDir}. Only one client per profile can be active at a time.`,
+            throw new Error(
+                `Unable to lock profile ${userProfileDir}. Only one client per profile can be active at a time.`,
             );
-            process.exit(-1);
         }
     }
 
