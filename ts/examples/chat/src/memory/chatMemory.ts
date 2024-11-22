@@ -154,7 +154,7 @@ export async function createChatMemoryContext(
             false,
             conversation,
         );
-    const entityTopK = 16;
+    const entityTopK = 32;
     const actionTopK = 16;
     const context: ChatContext = {
         storePath,

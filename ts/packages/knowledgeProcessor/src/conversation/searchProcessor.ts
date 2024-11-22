@@ -262,7 +262,6 @@ export function createSearchProcessor(
             entity: {
                 maxMatches: options.maxMatches,
                 minScore: options.minScore,
-                matchNameToType: true,
                 combinationSetOp: SetOp.IntersectUnion,
                 loadEntities: true,
             },
@@ -581,7 +580,6 @@ export function createSearchProcessor(
             entity: {
                 maxMatches: options.maxMatches,
                 minScore: options.minScore,
-                matchNameToType: true,
                 loadEntities: true,
             },
             topic: topicOptions,

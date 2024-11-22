@@ -7,6 +7,7 @@ import {
     dateTime,
     loadSchema,
     PromptSectionProvider,
+    rewriteText,
 } from "typeagent";
 import { PromptSection } from "typechat";
 import { ChatModel } from "aiclient";
@@ -263,17 +264,7 @@ export function createAnswerGenerator(
         text: string,
     ): Promise<string | undefined> {
         text = trim(text, settings.maxCharsInContext);
-        let prompt = `The following text answers the QUESTION "${question}".`;
-        prompt +=
-            " Rewrite it to remove all redundancy, duplication, contradiction, or anything that does not answer the question.";
-        prompt += "\nImprove formatting";
-        prompt += `\n"""\n${text}\n"""\n`;
-        const result = await model.complete(prompt);
-        if (result.success) {
-            return result.data;
-        }
-
-        return undefined;
+        return rewriteText(model, text, question);
     }
 
     function createAnswerPrompt(

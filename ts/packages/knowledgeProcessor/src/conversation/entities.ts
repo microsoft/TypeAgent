@@ -28,6 +28,7 @@ import {
     addToSet,
     createHitTable,
     intersect,
+    //intersectArrays,
     intersectMultiple,
     intersectUnionMultiple,
     removeUndefined,
@@ -54,8 +55,12 @@ import {
 export interface EntitySearchOptions extends SearchOptions {
     loadEntities?: boolean | undefined;
     nameSearchOptions?: SearchOptions | undefined;
-    matchNameToType: boolean;
+    facetSearchOptions?: SearchOptions | undefined;
     combinationSetOp?: SetOp | undefined;
+    /**
+     * Select items with the 'topK' scores.
+     * E.g. 3 means that the 3 highest scores are picked and any items with those scores selected
+     */
     topK?: number;
 }
 
@@ -65,7 +70,9 @@ export function createEntitySearchOptions(
     return {
         maxMatches: 2,
         minScore: 0.8,
-        matchNameToType: true,
+        facetSearchOptions: {
+            maxMatches: 10,
+        },
         combinationSetOp: SetOp.IntersectUnion,
         loadEntities,
     };
@@ -294,10 +301,7 @@ export async function createEntityIndexOnStorage<TSourceId = string>(
                 options.nameSearchOptions?.maxMatches ?? options.maxMatches,
                 options.nameSearchOptions?.minScore ?? options.minScore,
             );
-            if (
-                options.matchNameToType &&
-                (nameMatchIds === undefined || nameMatchIds.length == 0)
-            ) {
+            if (nameMatchIds === undefined || nameMatchIds.length == 0) {
                 // The AI will often mix types and names...
                 nameTypeMatchIds = await typeIndex.getNearest(
                     filter.name,
@@ -363,7 +367,11 @@ export async function createEntityIndexOnStorage<TSourceId = string>(
 
         terms = terms.filter((t) => !noiseTerms.has(t));
         if (terms && terms.length > 0) {
-            const hitCounter = createHitTable<EntityId>(undefined);
+            const hitCounter = createHitTable<EntityId>(
+                undefined,
+                undefined,
+                2,
+            );
             await Promise.all([
                 nameIndex.getNearestHitsMultiple(
                     terms,
@@ -380,11 +388,13 @@ export async function createEntityIndexOnStorage<TSourceId = string>(
                 facetIndex.getNearestHitsMultiple(
                     terms,
                     hitCounter,
-                    options.maxMatches,
-                    options.minScore,
+                    options.facetSearchOptions?.maxMatches,
+                    options.facetSearchOptions?.minScore ?? options.minScore,
                 ),
             ]);
-            const entityHits = hitCounter.getTopK(options.topK ?? 3);
+            let entityHits = hitCounter.getTopK(options.topK ?? 3).sort();
+            //entityHits = await projectFacets(entityHits, terms, options);
+
             results.entityIds = [
                 ...intersectMultiple(
                     entityHits,
@@ -405,7 +415,40 @@ export async function createEntityIndexOnStorage<TSourceId = string>(
         }
         return results;
     }
-
+    /*
+    async function projectFacets(
+        entityIds: EntityId[],
+        terms: string[],
+        options: EntitySearchOptions,
+    ): Promise<EntityId[]> {
+        // Try to filter by facets
+        const hitTable = createHitTable<EntityId>();
+        await facetIndex.getNearestHitsMultiple(
+            terms,
+            hitTable,
+            options.maxMatches,
+            options.minScore,
+        );
+        if (hitTable.size === 0) {
+            return entityIds;
+        }
+        const entityIdsWithFacets = hitTable.getTopK(options.topK ?? 3).sort();
+        // If we matched entities already, select those entities with facets of interest.
+        // Else, use facet matches as having identified entities of interest.
+        if (entityIds.length > 0) {
+            const filteredEntityIds = intersectArrays(
+                entityIds,
+                entityIdsWithFacets,
+            );
+            // If we failed to project (empty intersection), then don't toss the original good entityId matches
+            // Let the answer generator or later stages deal with it
+            return filteredEntityIds && filteredEntityIds.length > 0
+                ? filteredEntityIds
+                : entityIds;
+        }
+        return entityIdsWithFacets;
+    }
+*/
     function combineTerms(filter: TermFilter): string[] {
         let terms: string[] | undefined;
         if (filter.verbs && filter.verbs.length > 0) {
