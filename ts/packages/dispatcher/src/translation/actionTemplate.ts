@@ -127,11 +127,11 @@ function toTemplate(
         translators,
         action.translatorName,
     );
-    const actionInfos = getTranslatorActionSchemas(
+    const actionSchemaFile = getTranslatorActionSchemas(
         config,
         action.translatorName,
     );
-    const actionSchemas = actionInfos.actionSchemaMap;
+    const actionSchemas = actionSchemaFile.actionSchemas;
     const actionName: TemplateFieldStringUnion = {
         type: "string-union",
         typeEnum: Array.from(actionSchemas.keys()),

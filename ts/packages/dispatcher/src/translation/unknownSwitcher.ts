@@ -33,7 +33,7 @@ function createSelectionActionTypeDefinition(
 
     const actionNames: string[] = [];
     const actionComments: string[] = [];
-    for (const [name, info] of actionSchemaFile.actionSchemaMap.entries()) {
+    for (const [name, info] of actionSchemaFile.actionSchemas.entries()) {
         actionNames.push(name);
         actionComments.push(
             ` "${name}"${info.comments ? ` - ${info.comments[0].trim()}` : ""}`,

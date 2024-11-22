@@ -14,6 +14,7 @@ export {
 
 export { parseActionSchemaFile, parseActionSchemaSource } from "./parser.js";
 export {
+    GenerateSchemaOptions,
     generateActionSchema,
     generateSchemaTypeDefinition,
 } from "./generator.js";

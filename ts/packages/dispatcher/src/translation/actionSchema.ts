@@ -44,5 +44,5 @@ export function getActionSchema(
     }
 
     const actionSchemaFile = getTranslatorActionSchemas(config, translatorName);
-    return actionSchemaFile.actionSchemaMap.get(actionName);
+    return actionSchemaFile.actionSchemas.get(actionName);
 }

@@ -209,7 +209,7 @@ class ActionCommandHandler implements CommandHandler {
             config,
             translatorName,
         );
-        const actionSchema = actionSchemaFile.actionSchemaMap.get(actionName);
+        const actionSchema = actionSchemaFile.actionSchemas.get(actionName);
         if (actionSchema === undefined) {
             throw new Error(
                 `Invalid action name ${actionName} for translator ${translatorName}`,
@@ -259,7 +259,7 @@ class ActionCommandHandler implements CommandHandler {
                     translatorName,
                 );
 
-                completions.push(...actionSchemaFile.actionSchemaMap.keys());
+                completions.push(...actionSchemaFile.actionSchemas.keys());
                 continue;
             }
 

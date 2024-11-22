@@ -13,6 +13,7 @@ import {
     generateSchemaTypeDefinition,
     ActionSchemaEntryTypeDefinition,
     ActionSchemaTypeDefinition,
+    ActionSchemaUnion,
 } from "action-schema";
 import {
     TranslatorSchemaDef,
@@ -27,6 +28,7 @@ import {
     createChangeAssistantActionSchema,
 } from "./agentTranslators.js";
 import { createMultipleActionSchema } from "./multipleActionSchema.js";
+import { getPackageFilePath } from "../utils/getPackageFilePath.js";
 
 function createActionSchemaJsonValidator<T extends TranslatedAction>(
     actionSchemaFile: ActionSchemaFile,
@@ -34,13 +36,13 @@ function createActionSchemaJsonValidator<T extends TranslatedAction>(
     const schema = generateActionSchema(actionSchemaFile, { exact: true });
     return {
         getSchemaText: () => schema,
-        getTypeName: () => actionSchemaFile.definition.name,
+        getTypeName: () => actionSchemaFile.entry.name,
         validate(jsonObject: object): Result<T> {
             const value: any = jsonObject;
             if (value.actionName === undefined) {
                 return error("Missing actionName property");
             }
-            const actionSchema = actionSchemaFile.actionSchemaMap.get(
+            const actionSchema = actionSchemaFile.actionSchemas.get(
                 value.actionName,
             );
             if (actionSchema === undefined) {
@@ -57,36 +59,14 @@ function createActionSchemaJsonValidator<T extends TranslatedAction>(
     };
 }
 
-function loadActionSchemas(
-    typeName: string,
-    schemas: TranslatorSchemaDef[],
-): ActionSchemaFile {
-    const schema = composeTranslatorSchemas(typeName, schemas);
-    const translatorName = "";
-    return parseActionSchemaSource(schema, translatorName, typeName);
-}
-
 export function createActionJsonTranslatorFromSchemaDef<
     T extends TranslatedAction,
 >(
     typeName: string,
-    schemas: string | TranslatorSchemaDef[],
+    actionSchemaFile: ActionSchemaFile,
     options?: JsonTranslatorOptions<T>,
 ) {
-    const actionSchemas = loadActionSchemas(
-        typeName,
-        Array.isArray(schemas)
-            ? schemas
-            : [
-                  {
-                      kind: "inline",
-                      typeName,
-                      schema: schemas,
-                  },
-              ],
-    );
-
-    const validator = createActionSchemaJsonValidator<T>(actionSchemas);
+    const validator = createActionSchemaJsonValidator<T>(actionSchemaFile);
 
     return createJsonTranslatorWithValidator(
         typeName.toLowerCase(),
@@ -102,12 +82,12 @@ class ActionSchemaBuilder {
     addActionConfig(...configs: ActionConfig[]) {
         for (const config of configs) {
             const actionSchemaFile = parseActionSchemaFile(
-                config.schemaFile,
+                getPackageFilePath(config.schemaFile),
                 config.schemaName,
                 config.schemaType,
             );
             this.files.push(actionSchemaFile);
-            this.definitions.push(actionSchemaFile.definition);
+            this.definitions.push(actionSchemaFile.entry);
         }
     }
 
@@ -115,16 +95,73 @@ class ActionSchemaBuilder {
         this.definitions.push(definition);
     }
 
-    getTypeUnion() {
+    getTypeUnion(): ActionSchemaUnion {
         return sc.union(
             this.definitions.map((definition) => sc.ref(definition)),
         );
     }
 
-    build(typeName: string = "AllActions") {
-        const definition = sc.type(typeName, this.getTypeUnion());
+    build(typeName: string = "AllActions"): ActionSchemaFile {
+        const entry = sc.type(typeName, this.getTypeUnion(), undefined, true);
+        const order = new Map<string, number>();
+        for (const file of this.files) {
+            if (file.order) {
+                const base = order.size;
+                for (const [name, num] of file.order) {
+                    if (order.has(name)) {
+                        throw new Error(
+                            `Schema Builder Error: duplicate type definition '${name}'`,
+                        );
+                    }
+                    order.set(name, base + num);
+                }
+            }
+        }
 
-        return generateSchemaTypeDefinition(definition);
+        const actionSchemas = new Map<string, ActionSchemaTypeDefinition>();
+        const pending = [...this.definitions];
+        while (pending.length > 0) {
+            const current = pending.shift()!;
+            const currentType = current.type;
+            switch (currentType.type) {
+                case "type-union":
+                    for (const t of currentType.types) {
+                        if (t.definition === undefined) {
+                            throw new Error(
+                                `Schema Builder Error: unresolved type reference '${t.name}' in entry tryp union`,
+                            );
+                        }
+                        pending.push(t.definition);
+                    }
+                    break;
+                case "type-reference":
+                    if (currentType.definition === undefined) {
+                        throw new Error(
+                            `Schema Builder Error: unresolved type reference '${currentType.name}' in entry tryp union`,
+                        );
+                    }
+                    pending.push(currentType.definition);
+                    break;
+                case "object":
+                    const actionName =
+                        currentType.fields.actionName.type.typeEnum[0];
+                    if (actionSchemas.get(actionName)) {
+                        throw new Error(
+                            `Schema Builder Error: duplicate action name '${actionName}'`,
+                        );
+                    }
+                    actionSchemas.set(
+                        actionName,
+                        current as ActionSchemaTypeDefinition,
+                    );
+                    break;
+                default:
+                    // Should not reach here.
+                    throw new Error("Invalid type");
+            }
+        }
+
+        return { entry, actionSchemas, order };
     }
 }
 
