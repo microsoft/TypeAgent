@@ -205,6 +205,14 @@ async function callFetch(
 
 export type FetchThrottler = (fn: () => Promise<Response>) => Promise<Response>;
 
+async function getErrorMessage(response: Response): Promise<string> {
+    let bodyMessage = "";
+    try {
+        bodyMessage = ((await response.json()) as any).error;
+    } catch (e) {}
+    return `${response.status}: ${response.statusText}${bodyMessage ? `: ${bodyMessage}` : ""}`;
+}
+
 /**
  * fetch that automatically retries transient Http errors
  * @param url
@@ -239,9 +247,7 @@ export async function fetchWithRetry(
                 !isTransientHttpError(result.status) ||
                 retryCount >= retryMaxAttempts
             ) {
-                return error(
-                    `fetch error\n${result.status}: ${result.statusText}`,
-                );
+                return error(`fetch error\n${await getErrorMessage(result)}`);
             }
             // See if the service tells how long to wait to retry
             const pauseMs = getRetryAfterMs(result, retryPauseMs);

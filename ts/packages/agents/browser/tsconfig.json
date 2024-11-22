@@ -11,5 +11,8 @@
        "noEmitOnError": true,
        "typeRoots": [ "node_modules/@types" ]
     },
-    "exclude": ["dist/*.ts", "src/agent/*.ts"]
+    "exclude": ["dist/*.ts", "src/agent/*.ts"],
+    "ts-node": {
+      "esm": true
+    }
  }

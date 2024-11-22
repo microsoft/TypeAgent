@@ -171,6 +171,8 @@ export class CameraView {
                 .catch((err) => {
                     console.error(`${err.name}: ${err.message}`);
                 });
+        } else {
+            console.log("No media (camera) devices found");
         }
     }
 

@@ -167,10 +167,9 @@ export const webapi: ClientAPI = {
         );
     },
     getSpeechToken: () => {
-        // TODO: implement client side token acquisition
-        // Depends on implementing client side EntraID Auth first
-        return new Promise<SpeechToken | undefined>((resolve) => {
-            resolve(undefined); // currently not supported
+        return new Promise<SpeechToken | undefined>(async (resolve) => {
+            // We are not auth in this case and instead will rely on the device to provide speech reco
+            resolve(undefined);
         });
     },
     getLocalWhisperStatus: () => {
@@ -230,11 +229,15 @@ function placeHolder(category: string, callback: any) {
     console.log(category + "\n" + JSON.stringify(callback));
 }
 
-export async function createWebSocket(
-    endpoint: string = "ws://localhost:8080",
-    autoReconnect: boolean = true,
-) {
+export async function createWebSocket(autoReconnect: boolean = true) {
+    let url = window.location;
+    let protocol = url.protocol.toLowerCase() == "https:" ? "wss" : "ws";
+    let port = url.hostname.toLowerCase() == "localhost" ? ":3000" : "";
+
+    const endpoint = `${protocol}://${url.hostname}${port}`;
+
     return new Promise<WebSocket | undefined>((resolve) => {
+        console.log(`opening web socket to ${endpoint} `);
         const webSocket = new WebSocket(endpoint);
 
         webSocket.onopen = (event: object) => {
@@ -263,7 +266,11 @@ export async function createWebSocket(
                     fnMap.get("clear")(undefined, msgObj.data);
                     break;
                 case "take-action":
-                    fnMap.get("take-action")(undefined, msgObj.data);
+                    fnMap.get("take-action")(
+                        undefined,
+                        msgObj.data.action,
+                        msgObj.data.data,
+                    );
                     break;
                 case "notify":
                     notify(msgObj);
@@ -343,10 +350,7 @@ export async function createWebSocket(
 
             // reconnect?
             if (autoReconnect) {
-                let url = window.location;
-                createWebSocket(`ws://${url.hostname}:3030`, true).then(
-                    (ws) => (globalThis.ws = ws),
-                );
+                createWebSocket().then((ws) => (globalThis.ws = ws));
             }
         };
         webSocket.onerror = (event: object) => {

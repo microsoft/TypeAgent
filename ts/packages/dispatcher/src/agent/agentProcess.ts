@@ -16,6 +16,7 @@ import {
     AppAgentEvent,
     ParsedCommandParams,
     ParameterDefinitions,
+    ClientAction,
 } from "@typeagent/agent-sdk";
 
 import { createRpc } from "common-utils";
@@ -366,10 +367,11 @@ function getActionContextShim(
                 mode,
             });
         },
-        takeAction(action: string) {
+        takeAction(action: ClientAction, data?: unknown) {
             rpc.send("takeAction", {
                 actionContextId,
                 action,
+                data,
             });
         },
     };

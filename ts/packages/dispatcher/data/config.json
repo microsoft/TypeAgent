@@ -95,6 +95,11 @@
       "name": "image-agent",
       "execMode": "dispatcher"
     },
+    "androidMobile": {
+      "type": "module",
+      "name": "android-mobile-agent",
+      "execMode": "dispatcher"
+    },
     "markdown": {
       "type": "module",
       "name": "markdown-agent"

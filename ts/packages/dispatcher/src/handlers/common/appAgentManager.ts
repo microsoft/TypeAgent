@@ -214,13 +214,13 @@ export class AppAgentManager implements TranslatorConfigProvider {
                     this.transientAgents[name] = false;
                 }
                 if (config.injected) {
-                    const actionInfos = getTranslatorActionSchemas(
+                    const actionSchemaFile = getTranslatorActionSchemas(
                         config,
                         name,
                     );
-                    for (const info of actionInfos.values()) {
+                    for (const actionName of actionSchemaFile.actionSchemaMap.keys()) {
                         this.injectedTranslatorForActionName.set(
-                            info.actionName,
+                            actionName,
                             name,
                         );
                     }

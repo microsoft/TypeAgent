@@ -141,11 +141,11 @@ options for elevation (duration, justification message, etc.) are stored in `too
 
 To learn more about JIT access: [start here](https://techcommunity.microsoft.com/t5/microsoft-entra-blog/just-in-time-access-to-groups-and-conditional-access-integration/ba-p/2466926).
 
-### WSL
+### Linux/WSL
 
 For TypeAgents that operates on the Microsoft Graph (e.g. [Calendar](./packages/agents/calendar/) and [Email](./packages/agents/email/)), they leverage [@azure/identity](https://www.npmjs.com/package/@azure/identity) for authentication and use [@azure/identity-cache-persistence](https://www.npmjs.com/package/@azure/identity-cache-persistence) to cache on the local machine.
 
-Install the following packages if you are on `WSL2` environment (please `restart` the shell after running the commands below):
+Install the following packages if you are on Linux or WSL2 environment (please `restart` the shell after running the commands below):
 
 ```shell
   sudo apt-get update
@@ -289,18 +289,30 @@ Search the code base with '"typeagent:' will give all the traces available.
 
 TypeAgent does not collect telemetry by default. Developer can enable logging to a mongodb for internal debugging purpose by providing a mongodb connection string with the `MONGODB_CONNECTION_STRING` variable in the `.env` file.
 
-### Alternate LLM
+### Experiement with Local LLM via Ollama
 
-Other LLM can be substituted for GPT-4 as long as they are REST API compatible.
-To use a local model the follow environment variable can be used:
+**NOTE**: TypeAgent is current only tuned to run on GPT4 and similar model. Reliablity and quality may vary using other smaller LLM models.
 
-```
-OPENAI_API_KEY_LOCAL=None
-OPENAI_ENDPOINT_LOCAL=
-OPENAI_MODEL_LOCAL=
-OPENAI_ORGANIZATION_LOCAL=
-OPENAI_RESPONSE_FORMAT_LOCAL=
-```
+TypeAgent's shell and CLI will detect if Ollama is running locally via default port (11434) and expose those model to be used.
+To use ollama, install ollama and pull some model locally. TypeAgent will automatically detect them.
+
+In the interactive mode (cli or shell), you can also change the translation (and explainer) model using the commands
+
+- `@config translation model <name>`
+- `@config explainer model <name>`
+
+They are also offered in CLI's --model option for the follow commands:
+
+- `agent-cli interactive`
+- `agent-cli run request`
+- `agent-cli run translate`
+- `agent-cli prompt`
+- `agent-cli data add`
+- `agent-cli data regen`
+
+The model name to specify are prefix with `ollama:` for example `ollama:phi3` or `ollama:llama3.2` or specifically tagged ones: e.g. `ollama:llama3.2:3b-instruct-q5_0`
+
+If ollama is running on a different URL, `OLLAMA_ENDPOINT` environment variable can be use to specify the URL and port for the Ollama endpoints.
 
 ### User data location
 

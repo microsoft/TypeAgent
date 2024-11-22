@@ -1,7 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ActionSchema, parseActionSchemaFile } from "action-schema";
+import {
+    ActionSchemaFile,
+    ActionSchemaTypeDefinition,
+    parseActionSchemaFile,
+} from "action-schema";
 import {
     TranslatorConfig,
     TranslatorConfigProvider,
@@ -11,30 +15,28 @@ import { AppAction } from "@typeagent/agent-sdk";
 import { DeepPartialUndefined } from "common-utils";
 
 // Global Cache
-const translatorNameToActionInfo = new Map<string, Map<string, ActionSchema>>();
+const translatorNameToActionInfo = new Map<string, ActionSchemaFile>();
 
 export function getTranslatorActionSchemas(
     translatorConfig: TranslatorConfig,
     translatorName: string,
-): Map<string, ActionSchema> {
+): ActionSchemaFile {
     if (translatorNameToActionInfo.has(translatorName)) {
         return translatorNameToActionInfo.get(translatorName)!;
     }
-    const actionInfo = new Map<string, ActionSchema>(
-        parseActionSchemaFile(
-            getPackageFilePath(translatorConfig.schemaFile),
-            translatorName,
-            translatorConfig.schemaType,
-        ).map((a) => [a.actionName, a]),
+    const actionSchemaFile = parseActionSchemaFile(
+        getPackageFilePath(translatorConfig.schemaFile),
+        translatorName,
+        translatorConfig.schemaType,
     );
-    translatorNameToActionInfo.set(translatorName, actionInfo);
-    return actionInfo;
+    translatorNameToActionInfo.set(translatorName, actionSchemaFile);
+    return actionSchemaFile;
 }
 
 export function getActionSchema(
     action: DeepPartialUndefined<AppAction>,
     provider: TranslatorConfigProvider,
-) {
+): ActionSchemaTypeDefinition | undefined {
     const { translatorName, actionName } = action;
     if (translatorName === undefined || actionName === undefined) {
         return undefined;
@@ -44,6 +46,6 @@ export function getActionSchema(
         return undefined;
     }
 
-    const actionInfos = getTranslatorActionSchemas(config, translatorName);
-    return actionInfos.get(actionName);
+    const actionSchemaFile = getTranslatorActionSchemas(config, translatorName);
+    return actionSchemaFile.actionSchemaMap.get(actionName);
 }

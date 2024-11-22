@@ -13,6 +13,7 @@ import {
     CommandDescriptors,
     ParsedCommandParams,
     ParameterDefinitions,
+    ClientAction,
 } from "@typeagent/agent-sdk";
 import {
     AgentCallFunctions,
@@ -243,10 +244,14 @@ export async function createAgentProcessShim(
                 .get(param.actionContextId)
                 .actionIO.appendDisplay(param.content, param.mode);
         },
-        takeAction: (param: { actionContextId: number; action: string }) => {
+        takeAction: (param: {
+            actionContextId: number;
+            action: ClientAction;
+            data?: unknown;
+        }) => {
             actionContextMap
                 .get(param.actionContextId)
-                .actionIO.takeAction(param.action);
+                .actionIO.takeAction(param.action, param.data);
         },
     };
 

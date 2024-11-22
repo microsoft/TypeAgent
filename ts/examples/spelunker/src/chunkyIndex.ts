@@ -25,7 +25,6 @@ export type NamedIndex = {
 
 // A bundle of object stores and indexes etc.
 export class ChunkyIndex {
-    rootDir: string;
     chatModel: ChatModel;
     embeddingModel: TextEmbeddingModel;
     fileDocumenter: FileDocumenter;
@@ -33,6 +32,7 @@ export class ChunkyIndex {
     answerMaker: TypeChatJsonTranslator<AnswerSpecs>;
 
     // The rest are asynchronously initialized by initialize().
+    rootDir!: string;
     chunkFolder!: ObjectFolder<Chunk>;
     summariesIndex!: knowLib.TextIndex<string, ChunkId>;
     keywordsIndex!: knowLib.TextIndex<string, ChunkId>;
@@ -40,8 +40,7 @@ export class ChunkyIndex {
     goalsIndex!: knowLib.TextIndex<string, ChunkId>;
     dependenciesIndex!: knowLib.TextIndex<string, ChunkId>;
 
-    private constructor(rootDir: string) {
-        this.rootDir = rootDir;
+    private constructor() {
         this.chatModel = openai.createChatModelDefault("spelunkerChat");
         this.embeddingModel = knowLib.createEmbeddingCache(
             openai.createEmbeddingModel(),
@@ -53,7 +52,14 @@ export class ChunkyIndex {
     }
 
     static async createInstance(rootDir: string): Promise<ChunkyIndex> {
-        const instance = new ChunkyIndex(rootDir);
+        const instance = new ChunkyIndex();
+        await instance.reInitialize(rootDir);
+        return instance;
+    }
+
+    async reInitialize(rootDir: string): Promise<void> {
+        const instance = this; // So makeIndex can see it.
+        instance.rootDir = rootDir;
         instance.chunkFolder = await createObjectFolder<Chunk>(
             instance.rootDir + "/chunks",
             { serializer: (obj) => JSON.stringify(obj, null, 2) },
@@ -63,8 +69,6 @@ export class ChunkyIndex {
         instance.topicsIndex = await makeIndex("topics");
         instance.goalsIndex = await makeIndex("goals");
         instance.dependenciesIndex = await makeIndex("dependencies");
-
-        return instance;
 
         async function makeIndex(
             name: string,
@@ -81,7 +85,6 @@ export class ChunkyIndex {
         }
     }
 
-    // TODO: Do this type-safe?
     getIndexByName(name: IndexType): knowLib.TextIndex<string, ChunkId> {
         for (const pair of this.allIndexes()) {
             if (pair.name === name) {

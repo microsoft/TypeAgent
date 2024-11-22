@@ -37,6 +37,7 @@ export async function createWebSocket() {
     socketEndpoint += "?clientId=" + chrome.runtime.id;
     return new Promise<WebSocket | undefined>((resolve, reject) => {
         const webSocket = new WebSocket(socketEndpoint);
+        console.log("Connected to: " + socketEndpoint);
 
         webSocket.onopen = (event: object) => {
             console.log("websocket open");
@@ -181,6 +182,10 @@ async function getActiveTab(): Promise<chrome.tabs.Tab> {
 }
 
 async function getTabByTitle(title: string): Promise<chrome.tabs.Tab | null> {
+    if (!title) {
+        return null;
+    }
+
     const getTabAction = {
         actionName: "getTabIdFromIndex",
         parameters: {
@@ -726,6 +731,7 @@ let currentCrosswordUrl = "";
 async function toggleSiteTranslator(targetTab: chrome.tabs.Tab) {
     let messageType = "enableSiteTranslator";
     let messageBody = "";
+    await ensureWebsocketConnected();
     if (targetTab.url) {
         const host = new URL(targetTab.url).host;
 
@@ -838,7 +844,7 @@ async function sendActionToTabIndex(action: any) {
                 reject("Unable to contact dispatcher backend.");
             }
         } else {
-            throw new Error("No websocket connection.");
+            console.error("No websocket connection.");
         }
     });
 }
@@ -857,7 +863,7 @@ async function runBrowserAction(action: any) {
 
                 confirmationMessage = `Opened new tab to  ${action.parameters.url}`;
             } else {
-                if (action.parameters.query) {
+                if (action.parameters?.query) {
                     await chrome.search.query({
                         disposition: "NEW_TAB",
                         text: action.parameters.query,
@@ -874,7 +880,7 @@ async function runBrowserAction(action: any) {
         }
         case "closeTab": {
             let targetTab: chrome.tabs.Tab | null = null;
-            if (action.parameters.title) {
+            if (action.parameters?.title) {
                 targetTab = await getTabByTitle(action.parameters.title);
             } else {
                 targetTab = await getActiveTab();
@@ -1091,14 +1097,14 @@ async function runBrowserAction(action: any) {
         }
         case "captureScreenshot": {
             responseObject = await getTabScreenshot(
-                action.parameters.downloadAsFile,
+                action.parameters?.downloadAsFile,
             );
             break;
         }
 
         case "captureAnnotatedScreenshot": {
             responseObject = await getTabAnnotatedScreenshot(
-                action.parameters.downloadAsFile,
+                action.parameters?.downloadAsFile,
             );
             break;
         }
@@ -1113,8 +1119,8 @@ async function runBrowserAction(action: any) {
 
             responseObject = await getTabHTMLFragments(
                 targetTab,
-                action.parameters.fullHTML,
-                action.parameters.downloadAsFile,
+                action.parameters?.fullHTML,
+                action.parameters?.downloadAsFile,
                 16000,
             );
             break;
@@ -1325,6 +1331,10 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
 });
 
 chrome.tabs.onCreated.addListener(async (tab) => {
+    if (!tab.title) {
+        return;
+    }
+
     const addTabAction = {
         actionName: "addTabIdToIndex",
         parameters: {
@@ -1365,14 +1375,16 @@ chrome.windows?.onFocusChanged.addListener(async (windowId) => {
             windowId: windowId,
         });
         tabs.forEach(async (tab) => {
-            const addTabAction = {
-                actionName: "addTabIdToIndex",
-                parameters: {
-                    id: tab.id,
-                    title: tab.title,
-                },
-            };
-            await sendActionToTabIndex(addTabAction);
+            if (tab.title) {
+                const addTabAction = {
+                    actionName: "addTabIdToIndex",
+                    parameters: {
+                        id: tab.id,
+                        title: tab.title,
+                    },
+                };
+                await sendActionToTabIndex(addTabAction);
+            }
         });
 
         embeddingsInitializedWindowId = windowId;

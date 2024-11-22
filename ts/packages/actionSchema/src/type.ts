@@ -1,77 +1,107 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-export type ActionParamPrimitive = {
-    type: "string" | "number" | "boolean" | "undefined";
-};
+export interface SchemaBase {
+    type:
+        | "string"
+        | "number"
+        | "boolean"
+        | "undefined"
+        | "string-union"
+        | "object"
+        | "array"
+        | "type-reference"
+        | "type-union";
+}
 
-export type ActionParamStringUnion = {
+export interface SchemaTypeString extends SchemaBase {
+    type: "string";
+}
+
+export interface SchemaTypeNumber extends SchemaBase {
+    type: "number";
+}
+
+export interface SchemaTypeBoolean extends SchemaBase {
+    type: "boolean";
+}
+
+export interface SchemaTypeUndefined extends SchemaBase {
+    type: "undefined";
+}
+
+export interface SchemaTypeStringUnion extends SchemaBase {
     type: "string-union";
     typeEnum: string[];
-};
+}
 
-export type ActionParamScalar = ActionParamPrimitive | ActionParamStringUnion;
-
-export type ActionParamArray = {
-    type: "array";
-    elementType: ActionParamType;
-};
-
-export type ActionParamObjectFields = Record<string, ActionParamField>;
-export type ActionParamObject = {
-    type: "object";
-    fields: ActionParamObjectFields;
-};
-
-export type ActionParamField = {
+export type SchemaObjectField = {
     optional?: boolean | undefined;
-    type: ActionParamType;
+    type: SchemaType;
     comments?: string[] | undefined;
+    trailingComments?: string[] | undefined;
 };
+export type SchemaObjectFields = Record<string, SchemaObjectField>;
+export interface SchemaTypeObject extends SchemaBase {
+    type: "object";
+    fields: SchemaObjectFields;
+}
 
-export type ActionParamTypeReference = {
+export interface SchemaTypeArray extends SchemaBase {
+    type: "array";
+    elementType: SchemaType;
+}
+
+export interface SchemaTypeReference extends SchemaBase {
     type: "type-reference";
     name: string;
-    definition: ActionTypeDefinition;
-};
+    definition: SchemaTypeDefinition;
+}
 
-export type ActionParamTypeUnion = {
+export interface SchemaTypeUnion extends SchemaBase {
     type: "type-union";
-    types: ActionParamType[];
-};
+    types: SchemaType[];
+}
 
-export type ActionInterfaceTypeDefinition = {
+export type SchemaTypeInterfaceDefinition = {
     alias: false;
     name: string;
-    type: ActionParamObject;
+    type: SchemaTypeObject;
     comments?: string[] | undefined;
+    exported?: boolean; // for exact regen
+    order?: number; // for exact regen
 };
 
-export type ActionAliasTypeDefinition<T = ActionParamType> = {
+export type SchemaTypeAliasDefinition<T = SchemaType> = {
     alias: true;
     name: string;
     type: T;
     comments?: string[] | undefined;
+    exported?: boolean; // for exact regen
+    order?: number; // for exact regen
 };
 
-export type ActionTypeDefinition =
-    | ActionInterfaceTypeDefinition
-    | ActionAliasTypeDefinition;
+export type SchemaTypeDefinition =
+    | SchemaTypeInterfaceDefinition
+    | SchemaTypeAliasDefinition;
+
+export type SchemaType =
+    | SchemaTypeString
+    | SchemaTypeNumber
+    | SchemaTypeBoolean
+    | SchemaTypeUndefined
+    | SchemaTypeStringUnion
+    | SchemaTypeReference
+    | SchemaTypeUnion
+    | SchemaTypeObject
+    | SchemaTypeArray;
 
 export type ActionSchemaTypeDefinition =
-    | ActionInterfaceTypeDefinition
-    | ActionAliasTypeDefinition<ActionParamObject>;
+    | SchemaTypeInterfaceDefinition
+    | SchemaTypeAliasDefinition<SchemaTypeObject>;
 
-export type ActionParamType =
-    | ActionParamTypeReference
-    | ActionParamTypeUnion
-    | ActionParamScalar
-    | ActionParamObject
-    | ActionParamArray;
-
-export type ActionSchema = {
+export type ActionSchemaFile = {
     translatorName: string;
-    typeName: string;
-    actionName: string;
-    definition: ActionSchemaTypeDefinition;
+    actionSchemaMap: Map<string, ActionSchemaTypeDefinition>;
+    definition: SchemaTypeDefinition;
 };

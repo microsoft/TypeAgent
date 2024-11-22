@@ -170,7 +170,7 @@ export async function createViewServiceHost(filePath: string) {
         timeoutHandle = setTimeout(() => reject(undefined), 10000);
     });
 
-    const localWhisperPromise = new Promise<ChildProcess | undefined>(
+    const viewServicePromise = new Promise<ChildProcess | undefined>(
         (resolve, reject) => {
             try {
                 const expressService = fileURLToPath(
@@ -205,10 +205,8 @@ export async function createViewServiceHost(filePath: string) {
         },
     );
 
-    return Promise.race([localWhisperPromise, timeoutPromise]).then(
-        (result) => {
-            clearTimeout(timeoutHandle);
-            return result;
-        },
-    );
+    return Promise.race([viewServicePromise, timeoutPromise]).then((result) => {
+        clearTimeout(timeoutHandle);
+        return result;
+    });
 }

@@ -23,6 +23,8 @@ import { loadTranslatorSchemaConfig } from "../utils/loadSchemaConfig.js";
 import { HistoryContext } from "agent-cache";
 import { createTypeAgentRequestPrompt } from "../handlers/common/chatHistoryPrompt.js";
 import { IncrementalJsonValueCallBack } from "../../../commonUtils/dist/incrementalJsonParser.js";
+import { createActionJsonTranslatorFromSchemaDef } from "./actionSchemaJsonTranslator.js";
+import { TranslatedAction } from "../handlers/requestCommandHandler.js";
 
 const debugConfig = registerDebug("typeagent:translator:config");
 
@@ -317,17 +319,23 @@ export type TypeAgentTranslator<T = object> = {
  * @param multipleActions Add the multiple action schema if true. Default to false.
  * @returns
  */
-export function loadAgentJsonTranslator<T extends object = object>(
+export function loadAgentJsonTranslator<
+    T extends TranslatedAction = TranslatedAction,
+>(
     translatorName: string,
     provider: TranslatorConfigProvider,
     model?: string,
     activeTranslators?: { [key: string]: boolean },
     multipleActions: boolean = false,
+    regenerateSchema: boolean = false,
 ): TypeAgentTranslator<T> {
     // See if we have a registered factory method for this translator
     const translatorConfig = provider.getTranslatorConfig(translatorName);
 
-    const translator = createJsonTranslatorFromSchemaDef<T>(
+    const createTranslator = regenerateSchema
+        ? createActionJsonTranslatorFromSchemaDef<T>
+        : createJsonTranslatorFromSchemaDef<T>;
+    const translator = createTranslator(
         "AllActions",
         getTranslatorSchemaDefs(
             translatorConfig,
@@ -336,9 +344,7 @@ export function loadAgentJsonTranslator<T extends object = object>(
             activeTranslators,
             multipleActions,
         ),
-        undefined,
-        undefined,
-        model,
+        { model },
     );
 
     const streamingTranslator = enableJsonTranslatorStreaming(translator);

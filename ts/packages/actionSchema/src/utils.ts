@@ -1,15 +1,17 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ActionParamType, ActionSchema } from "./type.js";
+import { SchemaType, ActionSchemaTypeDefinition } from "./type.js";
 
-export function getParameterType(actionInfo: ActionSchema, name: string) {
+export function getParameterType(
+    actionType: ActionSchemaTypeDefinition,
+    name: string,
+) {
     const propertyNames = name.split(".");
     if (propertyNames.shift() !== "parameters") {
         return undefined;
     }
-    let curr: ActionParamType | undefined =
-        actionInfo.definition.type.fields.parameters?.type;
+    let curr: SchemaType | undefined = actionType.type.fields.parameters?.type;
     if (curr === undefined) {
         return undefined;
     }
@@ -41,16 +43,14 @@ export function getParameterType(actionInfo: ActionSchema, name: string) {
 }
 
 export function getParameterNames(
-    actionInfo: ActionSchema,
+    actionType: ActionSchemaTypeDefinition,
     getCurrentValue: (name: string) => any,
 ) {
-    const parameters = actionInfo.definition.type.fields.parameters?.type;
+    const parameters = actionType.type.fields.parameters?.type;
     if (parameters === undefined) {
         return [];
     }
-    const pending: Array<[string, ActionParamType]> = [
-        ["parameters", parameters],
-    ];
+    const pending: Array<[string, SchemaType]> = [["parameters", parameters]];
     const result: string[] = [];
     while (true) {
         const next = pending.pop();

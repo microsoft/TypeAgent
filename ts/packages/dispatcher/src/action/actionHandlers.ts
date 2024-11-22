@@ -68,8 +68,8 @@ function getActionContext(
                 mode,
             );
         },
-        takeAction(action: string): void {
-            context.requestIO.takeAction(action);
+        takeAction(action: string, data: unknown): void {
+            context.requestIO.takeAction(action, data);
         },
     };
     const actionContext: ActionContext<unknown> = {

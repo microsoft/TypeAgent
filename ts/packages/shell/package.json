@@ -29,6 +29,7 @@
     "typecheck:web": "tsc -p tsconfig.web.json"
   },
   "dependencies": {
+    "@azure/msal-browser": "^3.26.1",
     "@electron-toolkit/preload": "^2.0.0",
     "@electron-toolkit/utils": "^2.0.0",
     "@typeagent/agent-sdk": "workspace:*",

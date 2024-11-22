@@ -51,7 +51,7 @@ import { getTokenCommandHandlers } from "../handlers/tokenCommandHandler.js";
 import { Actions, FullAction } from "agent-cache";
 import {
     getActionSchema,
-    getTranslatorActionSchemas,
+    getTranslatorActionSchemas as getTranslatorActionSchemaFile,
 } from "../translation/actionSchema.js";
 import { executeActions } from "../action/actionHandlers.js";
 import { getObjectProperty } from "common-utils";
@@ -205,9 +205,12 @@ class ActionCommandHandler implements CommandHandler {
         const systemContext = context.sessionContext.agentContext;
         const { translatorName, actionName } = params.args;
         const config = systemContext.agents.getTranslatorConfig(translatorName);
-        const actionInfos = getTranslatorActionSchemas(config, translatorName);
-        const actionInfo = actionInfos.get(actionName);
-        if (actionInfo === undefined) {
+        const actionSchemaFile = getTranslatorActionSchemaFile(
+            config,
+            translatorName,
+        );
+        const actionSchema = actionSchemaFile.actionSchemaMap.get(actionName);
+        if (actionSchema === undefined) {
             throw new Error(
                 `Invalid action name ${actionName} for translator ${translatorName}`,
             );
@@ -219,7 +222,7 @@ class ActionCommandHandler implements CommandHandler {
             parameters: params.flags.parameters,
         };
 
-        validateAction(actionInfo, action, true);
+        validateAction(actionSchema, action, true);
 
         return executeActions(
             Actions.fromFullActions([action as FullAction]),
@@ -251,12 +254,12 @@ class ActionCommandHandler implements CommandHandler {
                 if (config === undefined) {
                     continue;
                 }
-                const actionInfos = getTranslatorActionSchemas(
+                const actionSchemaFile = getTranslatorActionSchemaFile(
                     config,
                     translatorName,
                 );
 
-                completions.push(...actionInfos.keys());
+                completions.push(...actionSchemaFile.actionSchemaMap.keys());
                 continue;
             }
 
