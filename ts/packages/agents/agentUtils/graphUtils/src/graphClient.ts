@@ -433,20 +433,20 @@ export class GraphClient {
         }
 
         if (this._deviceCodeCredential && this._settings?.graphUserScopes) {
-            let token = await this._deviceCodeCredential.getToken(
+            const token = await this._deviceCodeCredential.getToken(
                 this._settings?.graphUserScopes,
             );
-            console.log(token);
+            return token.token;
         }
 
         if (
             this._usernamePasswordCredential &&
             this._settings?.graphUserScopes
         ) {
-            let token = await this._usernamePasswordCredential.getToken(
+            const token = await this._usernamePasswordCredential.getToken(
                 this._settings?.graphUserScopes,
             );
-            console.log(token);
+            return token.token;
         }
 
         return "";
