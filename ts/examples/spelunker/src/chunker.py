@@ -36,7 +36,7 @@ class Blob:
 
     start: int  # 0-based!
     lines: list[str]
-    breadcrumb: bool = False # True for blobs that should be ignored in the reconstruction
+    breadcrumb: bool = False  # True to ignore on reconstruction
 
     def to_dict(self) -> dict[str, object]:
         result: dict[str, Any] = {
@@ -80,30 +80,33 @@ class Chunk:
 class ChunkedFile:
     """A file with chunks."""
 
-    filename: str
+    fileName: str
     chunks: list[Chunk]
 
     def to_dict(self) -> dict[str, object]:
         return {
-            "filename": self.filename,
+            "fileName": self.fileName,
             "chunks": self.chunks,
         }
+
 
 @dataclass
 class ErrorItem:
     """An error item."""
 
     error: str
-    filename: str
+    fileName: str
     output: str | None = None
 
     def to_dict(self) -> dict[str, str]:
-        result = {"error": self.error, "filename": self.filename}
+        result = {"error": self.error, "filename": self.fileName}
         if self.output:
             result["output"] = self.output
         return result
 
+
 # Support for JSON serialization of Chunks
+
 
 def custom_json(obj: object) -> dict[str, object]:
     if hasattr(obj, "to_dict"):
@@ -130,7 +133,7 @@ def generate_id() -> IdType:
     if next_ts <= last_ts:
         next_ts = last_ts + datetime.timedelta(microseconds=1)
     last_ts = next_ts
-    return next_ts.strftime("%Y_%m_%d-%H_%M_%S.%f")
+    return next_ts.strftime("%Y%m%d-%H%M%S.%f")
 
 
 """Design for recursive chunking.
@@ -293,7 +296,7 @@ def main():
     for filename in sys.argv[1:]:
         try:
             with open(filename) as f:
-               text = f.read()
+                text = f.read()
         except IOError as err:
             items.append(ErrorItem(str(err), filename))
         else:

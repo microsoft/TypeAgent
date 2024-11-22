@@ -77,7 +77,12 @@ export async function interactiveQueryLoop(
             io.writer.writeLine("[No files to import (use --? for help)]");
             return;
         }
-        await importAllFiles(files, chunkyIndex, namedArgs.verbose ?? verbose);
+        await importAllFiles(
+            files,
+            chunkyIndex,
+            io,
+            namedArgs.verbose ?? verbose,
+        );
     }
 
     handlers.clearMemory.metadata = "Clear all memory (and all indexes)";
@@ -293,7 +298,7 @@ export async function interactiveQueryLoop(
         const index = chunkyIndex.getIndexByName(indexName);
         if (namedArgs.debug) {
             io.writer.writeLine(`[Debug: ${indexName}]`);
-            await _debugIndex(index, indexName, verbose);
+            await _debugIndex(io, index, indexName, verbose);
             return;
         }
 
@@ -361,30 +366,32 @@ export async function interactiveQueryLoop(
     }
 
     async function _debugIndex(
+        io: iapp.InteractiveIo,
         index: knowLib.TextIndex<string, ChunkId>,
         indexName: string,
         verbose: boolean,
     ): Promise<void> {
         const allTexts = Array.from(index.text());
         for (const text of allTexts) {
-            if (verbose) console.log("Text:", text);
+            if (verbose) io.writer.writeLine(`Text: ${text}`);
             const hits = await index.nearestNeighborsPairs(
                 text,
                 allTexts.length,
             );
             if (verbose) {
                 for (const hit of hits) {
-                    console.log(
+                    io.writer.writeLine(
                         `${hit.score.toFixed(3).padStart(7)} ${hit.item.value}`,
                     );
                 }
             }
             if (hits.length < 2) {
-                console.log(`No hits for ${text}`);
+                io.writer.writeLine(`No hit for ${text}`);
             } else {
                 const end = hits.length - 1;
-                console.log(
-                    `${hits[0].item.value}: ${hits[1].item.value} (${hits[1].score.toFixed(3)}) -- ${hits[end].item.value} (${hits[end].score.toFixed(3)})`,
+                io.writer.writeLine(
+                    `hits[0].item.value}: ${hits[1].item.value} (${hits[1].score.toFixed(3)}) -- ` +
+                        `${hits[end].item.value} (${hits[end].score.toFixed(3)})`,
                 );
             }
         }
@@ -531,10 +538,12 @@ async function runIndexQueries(
         }
 
         // Regular logging.
-        const nchunks = new Set(hits.flatMap((h) => h.item.sourceIds)).size;
+        const numChunks = new Set(hits.flatMap((h) => h.item.sourceIds)).size;
         const end = hits.length - 1;
         io.writer.writeLine(
-            `[${indexName}: query '${spec.query}'; ${hits.length} hits; scores ${hits[0].score.toFixed(3)}--${hits[end].score.toFixed(3)}; ${nchunks} unique chunk ids]`,
+            `[${indexName}: query '${spec.query}'; ${hits.length} hits; ` +
+                `scores ${hits[0].score.toFixed(3)}--${hits[end].score.toFixed(3)}; ` +
+                `${numChunks} unique chunk ids]`,
         );
     }
 

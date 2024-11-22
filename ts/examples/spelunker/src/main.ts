@@ -66,7 +66,7 @@ async function main(): Promise<void> {
     const chunkyIndex = await ChunkyIndex.createInstance(databaseRootDir);
 
     if (files.length > 0) {
-        await importAllFiles(files, chunkyIndex, verbose);
+        await importAllFiles(files, chunkyIndex, undefined, verbose);
     } else {
         await interactiveQueryLoop(chunkyIndex, verbose);
     }
