@@ -84,6 +84,12 @@ async function importPythonFiles(
     const t0 = Date.now();
     const results = await chunkifyPythonFiles(filenames);
     const t1 = Date.now();
+    if (results.length !== filenames.length) {
+        log(
+            io,
+            `[Some over-long files were split into multiple partial files]`,
+        );
+    }
 
     // Print stats for chunkifying.
     let numLines = 0;
@@ -106,7 +112,7 @@ async function importPythonFiles(
     }
     log(
         io,
-        `[Chunked ${filenames.length} files ` +
+        `[Chunked ${results.length} files ` +
             `(${numLines} lines, ${numBlobs} blobs, ${numChunks} chunks, ${numErrors} errors) ` +
             `in ${((t1 - t0) * 0.001).toFixed(3)} seconds]`,
     );
