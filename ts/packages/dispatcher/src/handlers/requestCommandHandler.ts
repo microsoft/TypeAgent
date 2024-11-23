@@ -243,14 +243,14 @@ async function matchRequest(
 }
 
 async function translateRequestWithTranslator(
-    translatorName: string,
+    schemaName: string,
     request: string,
     context: ActionContext<CommandHandlerContext>,
     history?: HistoryContext,
     attachments?: CachedImageWithDetails[],
 ) {
     const systemContext = context.sessionContext.agentContext;
-    const prefix = getTranslatorPrefix(translatorName, systemContext);
+    const prefix = getTranslatorPrefix(schemaName, systemContext);
     displayStatus(`${prefix}Translating '${request}'`, context);
 
     if (history) {
@@ -271,13 +271,13 @@ async function translateRequestWithTranslator(
             ? (prop: string, value: any, delta: string | undefined) => {
                   // TODO: streaming currently doesn't not support multiple actions
                   if (prop === "actionName" && delta === undefined) {
-                      const actionTranslatorName =
+                      const actionSchemaName =
                           systemContext.agents.getInjectedTranslatorForActionName(
                               value,
-                          ) ?? translatorName;
+                          ) ?? schemaName;
 
                       const prefix = getTranslatorPrefix(
-                          actionTranslatorName,
+                          actionSchemaName,
                           systemContext,
                       );
                       displayStatus(
@@ -285,12 +285,12 @@ async function translateRequestWithTranslator(
                           context,
                       );
                       const config =
-                          systemContext.agents.getTranslatorConfig(
-                              actionTranslatorName,
+                          systemContext.agents.getActionConfig(
+                              actionSchemaName,
                           );
                       if (config.streamingActions?.includes(value)) {
                           streamFunction = startStreamPartialAction(
-                              actionTranslatorName,
+                              actionSchemaName,
                               value,
                               systemContext,
                           );
@@ -307,7 +307,7 @@ async function translateRequestWithTranslator(
                   }
               }
             : undefined;
-    const translator = getTranslator(systemContext, translatorName);
+    const translator = getTranslator(systemContext, schemaName);
     try {
         const response = await translator.translate(
             request,
@@ -791,18 +791,13 @@ function getExplainerOptions(
             return undefined;
         }
 
-        const translatorName = action.translatorName;
-        if (
-            context.agents.getTranslatorConfig(translatorName).cached === false
-        ) {
+        const schemaName = action.translatorName;
+        if (context.agents.getActionConfig(schemaName).cached === false) {
             // explanation disable at the translator level
             return undefined;
         }
 
-        usedTranslators.set(
-            translatorName,
-            getTranslator(context, translatorName),
-        );
+        usedTranslators.set(schemaName, getTranslator(context, schemaName));
     }
     const { list, value, translate } =
         context.session.getConfig().explainer.filter.reference;

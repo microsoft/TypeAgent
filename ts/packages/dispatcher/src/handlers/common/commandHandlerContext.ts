@@ -286,15 +286,15 @@ export async function initializeCommandHandlerContext(
     };
     context.requestIO.context = context;
 
-    await agents.addProvider(getBuiltinAppAgentProvider(context), context);
+    await agents.addProvider(getBuiltinAppAgentProvider(context));
     const appAgentProviders = options?.appAgentProviders;
     if (appAgentProviders !== undefined) {
         for (const provider of appAgentProviders) {
-            await agents.addProvider(provider, context);
+            await agents.addProvider(provider);
         }
     }
 
-    await agents.addProvider(getExternalAppAgentProvider(context), context);
+    await agents.addProvider(getExternalAppAgentProvider(context));
 
     await setAppAgentStates(context, options);
     return context;

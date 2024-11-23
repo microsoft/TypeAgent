@@ -6,20 +6,15 @@ import { TranslatedAction } from "../handlers/requestCommandHandler.js";
 import {
     ActionSchemaFile,
     generateActionSchema,
-    parseActionSchemaFile,
-    parseActionSchemaSource,
     validateAction,
     ActionSchemaCreator as sc,
-    generateSchemaTypeDefinition,
     ActionSchemaEntryTypeDefinition,
     ActionSchemaTypeDefinition,
     ActionSchemaUnion,
 } from "action-schema";
 import {
-    TranslatorSchemaDef,
     createJsonTranslatorWithValidator,
     JsonTranslatorOptions,
-    composeTranslatorSchemas,
 } from "common-utils";
 import {
     getInjectedTranslatorConfigs,
@@ -28,7 +23,7 @@ import {
     createChangeAssistantActionSchema,
 } from "./agentTranslators.js";
 import { createMultipleActionSchema } from "./multipleActionSchema.js";
-import { getPackageFilePath } from "../utils/getPackageFilePath.js";
+import { getActionSchemaFile } from "./actionSchema.js";
 
 function createActionSchemaJsonValidator<T extends TranslatedAction>(
     actionSchemaFile: ActionSchemaFile,
@@ -81,11 +76,7 @@ class ActionSchemaBuilder {
 
     addActionConfig(...configs: ActionConfig[]) {
         for (const config of configs) {
-            const actionSchemaFile = parseActionSchemaFile(
-                getPackageFilePath(config.schemaFile),
-                config.schemaName,
-                config.schemaType,
-            );
+            const actionSchemaFile = getActionSchemaFile(config);
             this.files.push(actionSchemaFile);
             this.definitions.push(actionSchemaFile.entry);
         }
@@ -166,25 +157,21 @@ class ActionSchemaBuilder {
 }
 
 export function composeActionSchema(
-    translatorName: string,
+    schemaName: string,
     provider: ActionConfigProvider,
     activeSchemas: { [key: string]: boolean } | undefined,
     multipleActions: boolean = false,
 ) {
     const builder = new ActionSchemaBuilder();
-    builder.addActionConfig(provider.getTranslatorConfig(translatorName));
+    builder.addActionConfig(provider.getActionConfig(schemaName));
     builder.addActionConfig(
-        ...getInjectedTranslatorConfigs(
-            translatorName,
-            provider,
-            activeSchemas,
-        ),
+        ...getInjectedTranslatorConfigs(schemaName, provider, activeSchemas),
     );
 
     if (activeSchemas) {
         const changeAssistantActionSchema = createChangeAssistantActionSchema(
             provider,
-            translatorName,
+            schemaName,
             activeSchemas,
         );
         if (changeAssistantActionSchema) {

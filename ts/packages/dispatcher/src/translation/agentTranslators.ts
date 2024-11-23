@@ -51,9 +51,9 @@ export type ActionConfig = {
 } & SchemaDefinition;
 
 export interface ActionConfigProvider {
-    tryGetTranslatorConfig(translatorName: string): ActionConfig | undefined;
-    getTranslatorConfig(translatorName: string): ActionConfig;
-    getTranslatorConfigs(): [string, ActionConfig][];
+    tryGetActionConfig(schemaName: string): ActionConfig | undefined;
+    getActionConfig(schemaName: string): ActionConfig;
+    getActionConfigs(): [string, ActionConfig][];
 }
 
 function collectActionConfigs(
@@ -141,17 +141,17 @@ export function getDefaultBuiltinTranslatorName() {
 
 export function getBuiltinTranslatorConfigProvider(): ActionConfigProvider {
     return {
-        tryGetTranslatorConfig(translatorName: string) {
-            return actionConfigs[translatorName];
+        tryGetActionConfig(schemaName: string) {
+            return actionConfigs[schemaName];
         },
-        getTranslatorConfig(translatorName: string) {
-            const config = actionConfigs[translatorName];
+        getActionConfig(schemaName: string) {
+            const config = actionConfigs[schemaName];
             if (!config) {
-                throw new Error(`Unknown translator: ${translatorName}`);
+                throw new Error(`Unknown translator: ${schemaName}`);
             }
             return config;
         },
-        getTranslatorConfigs() {
+        getActionConfigs() {
             return Object.entries(actionConfigs);
         },
     };
@@ -194,7 +194,7 @@ export function createChangeAssistantActionSchema(
     activeSchemas: { [key: string]: boolean },
 ): ActionSchemaTypeDefinition | undefined {
     // Default to no switching if active translator isn't passed in.
-    const translators = provider.getTranslatorConfigs().filter(
+    const translators = provider.getActionConfigs().filter(
         ([name, translatorConfig]) =>
             name !== currentSchemaName && // don't include itself
             !translatorConfig.injected && // don't include injected translators
@@ -264,7 +264,7 @@ export function getInjectedTranslatorConfigs(
         return [];
     }
     return provider
-        .getTranslatorConfigs()
+        .getActionConfigs()
         .filter(
             ([name, config]) =>
                 config.injected &&
@@ -319,17 +319,17 @@ function getInjectedSchemaDefs(
 }
 
 function getTranslatorSchemaDefs(
-    translatorName: string,
+    schemaName: string,
     provider: ActionConfigProvider,
     activeTranslators: { [key: string]: boolean } | undefined,
     multipleActions: boolean = false,
 ): TranslatorSchemaDef[] {
-    const translatorConfig = provider.getTranslatorConfig(translatorName);
+    const actionConfig = provider.getActionConfig(schemaName);
     return [
-        getTranslatorSchemaDef(translatorConfig),
+        getTranslatorSchemaDef(actionConfig),
         ...getInjectedSchemaDefs(
-            translatorConfig.schemaType,
-            translatorName,
+            actionConfig.schemaType,
+            schemaName,
             provider,
             activeTranslators,
             multipleActions,

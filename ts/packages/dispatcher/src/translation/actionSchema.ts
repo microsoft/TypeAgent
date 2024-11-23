@@ -14,19 +14,20 @@ import { DeepPartialUndefined } from "common-utils";
 // Global Cache
 const translatorNameToActionInfo = new Map<string, ActionSchemaFile>();
 
-export function getTranslatorActionSchemas(
-    translatorConfig: ActionConfig,
-    translatorName: string,
+export function getActionSchemaFile(
+    actionConfig: ActionConfig,
 ): ActionSchemaFile {
-    if (translatorNameToActionInfo.has(translatorName)) {
-        return translatorNameToActionInfo.get(translatorName)!;
+    const schemaFileFullPath = getPackageFilePath(actionConfig.schemaFile);
+    const key = `${actionConfig.schemaName}|${actionConfig.schemaType}|${schemaFileFullPath}`;
+    if (translatorNameToActionInfo.has(key)) {
+        return translatorNameToActionInfo.get(key)!;
     }
     const actionSchemaFile = parseActionSchemaFile(
-        getPackageFilePath(translatorConfig.schemaFile),
-        translatorName,
-        translatorConfig.schemaType,
+        schemaFileFullPath,
+        actionConfig.schemaName,
+        actionConfig.schemaType,
     );
-    translatorNameToActionInfo.set(translatorName, actionSchemaFile);
+    translatorNameToActionInfo.set(key, actionSchemaFile);
     return actionSchemaFile;
 }
 
@@ -38,11 +39,11 @@ export function getActionSchema(
     if (translatorName === undefined || actionName === undefined) {
         return undefined;
     }
-    const config = provider.tryGetTranslatorConfig(translatorName);
+    const config = provider.tryGetActionConfig(translatorName);
     if (config === undefined) {
         return undefined;
     }
 
-    const actionSchemaFile = getTranslatorActionSchemas(config, translatorName);
+    const actionSchemaFile = getActionSchemaFile(config);
     return actionSchemaFile.actionSchemas.get(actionName);
 }
