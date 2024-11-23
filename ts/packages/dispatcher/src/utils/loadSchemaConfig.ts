@@ -21,15 +21,15 @@ function loadSchemaConfig(schemaFile: string): SchemaConfig | undefined {
 const schemaConfigCache = new Map<string, SchemaConfig | undefined>();
 
 export function loadTranslatorSchemaConfig(
-    translatorName: string,
+    schemaName: string,
     provider: ActionConfigProvider,
 ) {
-    if (schemaConfigCache.has(translatorName)) {
-        return schemaConfigCache.get(translatorName);
+    if (schemaConfigCache.has(schemaName)) {
+        return schemaConfigCache.get(schemaName);
     }
     const schemaConfig = loadSchemaConfig(
-        provider.getTranslatorConfig(translatorName).schemaFile,
+        provider.getActionConfig(schemaName).schemaFile,
     );
-    schemaConfigCache.set(translatorName, schemaConfig);
+    schemaConfigCache.set(schemaName, schemaConfig);
     return schemaConfig;
 }

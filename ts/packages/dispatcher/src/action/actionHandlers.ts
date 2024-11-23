@@ -38,7 +38,7 @@ export function getTranslatorPrefix(
     translatorName: string,
     systemContext: CommandHandlerContext,
 ) {
-    const config = systemContext.agents.getTranslatorConfig(translatorName);
+    const config = systemContext.agents.getActionConfig(translatorName);
     return `[${config.emojiChar} ${translatorName}] `;
 }
 

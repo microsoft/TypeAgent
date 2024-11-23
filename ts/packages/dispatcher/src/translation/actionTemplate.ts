@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { Action, Actions } from "agent-cache";
-import { getActionSchema, getTranslatorActionSchemas } from "./actionSchema.js";
+import { getActionSchema, getActionSchemaFile } from "./actionSchema.js";
 import { CommandHandlerContext } from "../internal.js";
 import {
     TemplateFieldStringUnion,
@@ -119,7 +119,7 @@ function toTemplate(
     translators: string[],
     action: Action,
 ) {
-    const config = context.agents.tryGetTranslatorConfig(action.translatorName);
+    const config = context.agents.tryGetActionConfig(action.translatorName);
     if (config === undefined) {
         return getDefaultActionTemplate(translators);
     }
@@ -127,10 +127,7 @@ function toTemplate(
         translators,
         action.translatorName,
     );
-    const actionSchemaFile = getTranslatorActionSchemas(
-        config,
-        action.translatorName,
-    );
+    const actionSchemaFile = getActionSchemaFile(config);
     const actionSchemas = actionSchemaFile.actionSchemas;
     const actionName: TemplateFieldStringUnion = {
         type: "string-union",

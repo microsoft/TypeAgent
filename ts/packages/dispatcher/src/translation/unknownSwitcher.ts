@@ -5,7 +5,7 @@ import {
     InlineTranslatorSchemaDef,
     createJsonTranslatorFromSchemaDef,
 } from "common-utils";
-import { getTranslatorActionSchemas } from "./actionSchema.js";
+import { getActionSchemaFile } from "./actionSchema.js";
 import { Result, success } from "typechat";
 import registerDebug from "debug";
 import { ActionConfigProvider } from "./agentTranslators.js";
@@ -17,19 +17,16 @@ import {
 const debugSwitchSearch = registerDebug("typeagent:switch:search");
 
 function createSelectionActionTypeDefinition(
-    translatorName: string,
+    schemaName: string,
     provider: ActionConfigProvider,
 ) {
-    const translatorConfig = provider.getTranslatorConfig(translatorName);
+    const actionConfig = provider.getActionConfig(schemaName);
     // Skip injected schemas except for chat; investigate whether we can get chat always on first pass
-    if (translatorConfig.injected && translatorName !== "chat") {
+    if (actionConfig.injected && schemaName !== "chat") {
         // No need to select for injected schemas
         return undefined;
     }
-    const actionSchemaFile = getTranslatorActionSchemas(
-        translatorConfig,
-        translatorName,
-    );
+    const actionSchemaFile = getActionSchemaFile(actionConfig);
 
     const actionNames: string[] = [];
     const actionComments: string[] = [];
@@ -44,14 +41,14 @@ function createSelectionActionTypeDefinition(
         return undefined;
     }
 
-    const typeName = `${translatorConfig.schemaType}Assistant`;
+    const typeName = `${actionConfig.schemaType}Assistant`;
 
     const schema = sc.type(
         typeName,
         sc.obj({
             assistant: sc.field(
-                sc.string(translatorName),
-                ` ${translatorConfig.description}`,
+                sc.string(schemaName),
+                ` ${actionConfig.description}`,
             ),
             action: sc.field(sc.string(actionNames), actionComments),
         }),

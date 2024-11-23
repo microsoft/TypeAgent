@@ -16,7 +16,7 @@ import {
 import { createSessionContext } from "../../action/actionHandlers.js";
 import { AppAgentProvider } from "../../agent/agentProvider.js";
 import registerDebug from "debug";
-import { getTranslatorActionSchemas } from "../../translation/actionSchema.js";
+import { getActionSchemaFile } from "../../translation/actionSchema.js";
 import { DeepPartialUndefinedAndNull } from "common-utils";
 import { DispatcherName } from "./interactiveIO.js";
 
@@ -190,10 +190,7 @@ export class AppAgentManager implements ActionConfigProvider {
         return this.emojis;
     }
 
-    public async addProvider(
-        provider: AppAgentProvider,
-        context: CommandHandlerContext,
-    ) {
+    public async addProvider(provider: AppAgentProvider) {
         for (const name of provider.getAppAgentNames()) {
             // TODO: detect duplicate names
             const manifest = await provider.getAppAgentManifest(name);
@@ -214,10 +211,7 @@ export class AppAgentManager implements ActionConfigProvider {
                     this.transientAgents[name] = false;
                 }
                 if (config.injected) {
-                    const actionSchemaFile = getTranslatorActionSchemas(
-                        config,
-                        name,
-                    );
+                    const actionSchemaFile = getActionSchemaFile(config);
                     for (const actionName of actionSchemaFile.actionSchemas.keys()) {
                         this.injectedTranslatorForActionName.set(
                             actionName,
@@ -241,11 +235,11 @@ export class AppAgentManager implements ActionConfigProvider {
         }
     }
 
-    public tryGetTranslatorConfig(mayBeTranslatorName: string) {
+    public tryGetActionConfig(mayBeTranslatorName: string) {
         return this.translatorConfigs.get(mayBeTranslatorName);
     }
-    public getTranslatorConfig(translatorName: string) {
-        const config = this.tryGetTranslatorConfig(translatorName);
+    public getActionConfig(translatorName: string) {
+        const config = this.tryGetActionConfig(translatorName);
         if (config === undefined) {
             throw new Error(`Unknown translator: ${translatorName}`);
         }
@@ -255,7 +249,7 @@ export class AppAgentManager implements ActionConfigProvider {
     public getTranslatorNames() {
         return Array.from(this.translatorConfigs.keys());
     }
-    public getTranslatorConfigs() {
+    public getActionConfigs() {
         return Array.from(this.translatorConfigs.entries());
     }
 

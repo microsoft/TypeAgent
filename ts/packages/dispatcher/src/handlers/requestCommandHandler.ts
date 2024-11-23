@@ -285,7 +285,7 @@ async function translateRequestWithTranslator(
                           context,
                       );
                       const config =
-                          systemContext.agents.getTranslatorConfig(
+                          systemContext.agents.getActionConfig(
                               actionTranslatorName,
                           );
                       if (config.streamingActions?.includes(value)) {
@@ -792,9 +792,7 @@ function getExplainerOptions(
         }
 
         const translatorName = action.translatorName;
-        if (
-            context.agents.getTranslatorConfig(translatorName).cached === false
-        ) {
+        if (context.agents.getActionConfig(translatorName).cached === false) {
             // explanation disable at the translator level
             return undefined;
         }

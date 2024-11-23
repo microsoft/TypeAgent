@@ -16,6 +16,9 @@ import {
     ActionSchemaEntryTypeDefinition,
 } from "./type.js";
 
+import registerDebug from "debug";
+const debug = registerDebug("typeagent:schema:parse");
+
 function checkActionSchema(
     definition: SchemaTypeDefinition,
 ): [string, ActionSchemaTypeDefinition] {
@@ -189,17 +192,20 @@ class ActionParser {
         typeName: string,
         strict: boolean,
     ) {
+        debug(`Parsing ${schemaName} for ${typeName}: ${sourceFile.fileName}`);
         const parser = new ActionParser();
         const definition = parser.parseSchema(sourceFile, typeName);
         if (definition === undefined) {
             throw new Error(`Type ${typeName} not found`);
         }
-        return createActionSchemaFile(
+        const result = createActionSchemaFile(
             schemaName,
             definition,
             parser.typeOrder,
             strict,
         );
+        debug(`Parse Successful ${schemaName}`);
+        return result;
     }
     private constructor() {}
     private parseSchema(

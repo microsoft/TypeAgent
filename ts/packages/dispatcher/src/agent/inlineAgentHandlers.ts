@@ -51,7 +51,7 @@ import { getTokenCommandHandlers } from "../handlers/tokenCommandHandler.js";
 import { Actions, FullAction } from "agent-cache";
 import {
     getActionSchema,
-    getTranslatorActionSchemas as getTranslatorActionSchemaFile,
+    getActionSchemaFile,
 } from "../translation/actionSchema.js";
 import { executeActions } from "../action/actionHandlers.js";
 import { getObjectProperty } from "common-utils";
@@ -204,11 +204,8 @@ class ActionCommandHandler implements CommandHandler {
     ) {
         const systemContext = context.sessionContext.agentContext;
         const { translatorName, actionName } = params.args;
-        const config = systemContext.agents.getTranslatorConfig(translatorName);
-        const actionSchemaFile = getTranslatorActionSchemaFile(
-            config,
-            translatorName,
-        );
+        const config = systemContext.agents.getActionConfig(translatorName);
+        const actionSchemaFile = getActionSchemaFile(config);
         const actionSchema = actionSchemaFile.actionSchemas.get(actionName);
         if (actionSchema === undefined) {
             throw new Error(
@@ -249,15 +246,12 @@ class ActionCommandHandler implements CommandHandler {
                     continue;
                 }
                 const config =
-                    systemContext.agents.tryGetTranslatorConfig(translatorName);
+                    systemContext.agents.tryGetActionConfig(translatorName);
 
                 if (config === undefined) {
                     continue;
                 }
-                const actionSchemaFile = getTranslatorActionSchemaFile(
-                    config,
-                    translatorName,
-                );
+                const actionSchemaFile = getActionSchemaFile(config);
 
                 completions.push(...actionSchemaFile.actionSchemas.keys());
                 continue;

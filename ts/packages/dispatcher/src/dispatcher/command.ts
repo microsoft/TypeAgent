@@ -315,7 +315,7 @@ export function getSettingSummary(context: CommandHandlerContext) {
     const translators = Array.from(
         new Set(
             ordered.map(
-                (name) => context.agents.getTranslatorConfig(name).emojiChar,
+                (name) => context.agents.getActionConfig(name).emojiChar,
             ),
         ).values(),
     );
