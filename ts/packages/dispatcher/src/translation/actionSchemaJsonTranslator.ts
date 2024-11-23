@@ -157,25 +157,21 @@ class ActionSchemaBuilder {
 }
 
 export function composeActionSchema(
-    translatorName: string,
+    schemaName: string,
     provider: ActionConfigProvider,
     activeSchemas: { [key: string]: boolean } | undefined,
     multipleActions: boolean = false,
 ) {
     const builder = new ActionSchemaBuilder();
-    builder.addActionConfig(provider.getActionConfig(translatorName));
+    builder.addActionConfig(provider.getActionConfig(schemaName));
     builder.addActionConfig(
-        ...getInjectedTranslatorConfigs(
-            translatorName,
-            provider,
-            activeSchemas,
-        ),
+        ...getInjectedTranslatorConfigs(schemaName, provider, activeSchemas),
     );
 
     if (activeSchemas) {
         const changeAssistantActionSchema = createChangeAssistantActionSchema(
             provider,
-            translatorName,
+            schemaName,
             activeSchemas,
         );
         if (changeAssistantActionSchema) {

@@ -51,8 +51,8 @@ export type ActionConfig = {
 } & SchemaDefinition;
 
 export interface ActionConfigProvider {
-    tryGetActionConfig(translatorName: string): ActionConfig | undefined;
-    getActionConfig(translatorName: string): ActionConfig;
+    tryGetActionConfig(schemaName: string): ActionConfig | undefined;
+    getActionConfig(schemaName: string): ActionConfig;
     getActionConfigs(): [string, ActionConfig][];
 }
 
@@ -141,13 +141,13 @@ export function getDefaultBuiltinTranslatorName() {
 
 export function getBuiltinTranslatorConfigProvider(): ActionConfigProvider {
     return {
-        tryGetActionConfig(translatorName: string) {
-            return actionConfigs[translatorName];
+        tryGetActionConfig(schemaName: string) {
+            return actionConfigs[schemaName];
         },
-        getActionConfig(translatorName: string) {
-            const config = actionConfigs[translatorName];
+        getActionConfig(schemaName: string) {
+            const config = actionConfigs[schemaName];
             if (!config) {
-                throw new Error(`Unknown translator: ${translatorName}`);
+                throw new Error(`Unknown translator: ${schemaName}`);
             }
             return config;
         },
@@ -319,17 +319,17 @@ function getInjectedSchemaDefs(
 }
 
 function getTranslatorSchemaDefs(
-    translatorName: string,
+    schemaName: string,
     provider: ActionConfigProvider,
     activeTranslators: { [key: string]: boolean } | undefined,
     multipleActions: boolean = false,
 ): TranslatorSchemaDef[] {
-    const translatorConfig = provider.getActionConfig(translatorName);
+    const actionConfig = provider.getActionConfig(schemaName);
     return [
-        getTranslatorSchemaDef(translatorConfig),
+        getTranslatorSchemaDef(actionConfig),
         ...getInjectedSchemaDefs(
-            translatorConfig.schemaType,
-            translatorName,
+            actionConfig.schemaType,
+            schemaName,
             provider,
             activeTranslators,
             multipleActions,
