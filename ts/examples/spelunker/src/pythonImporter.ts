@@ -28,6 +28,7 @@ TypeScript, of course).
 
 */
 
+import chalk, { ChalkInstance } from "chalk";
 import * as fs from "fs";
 import * as knowLib from "knowledge-processor";
 import { asyncArray } from "typeagent";
@@ -43,7 +44,12 @@ import {
     ErrorItem,
 } from "./pythonChunker.js";
 
-function log(io: iapp.InteractiveIo | undefined, message: string): void {
+function log(
+    io: iapp.InteractiveIo | undefined,
+    message: string,
+    color: ChalkInstance,
+): void {
+    message = color(message);
     if (io) {
         io.writer.writeLine(message);
     } else {
@@ -57,7 +63,7 @@ export async function importAllFiles(
     io: iapp.InteractiveIo | undefined,
     verbose: boolean,
 ): Promise<void> {
-    log(io, `[Importing ${files.length} files]`);
+    log(io, `[Importing ${files.length} files]`, chalk.grey);
 
     const t0 = Date.now();
     await importPythonFiles(files, chunkyIndex, io, verbose);
@@ -66,6 +72,7 @@ export async function importAllFiles(
     log(
         io,
         `[Imported ${files.length} files in ${((t1 - t0) * 0.001).toFixed(3)} seconds]`,
+        chalk.grey,
     );
 }
 
@@ -88,6 +95,7 @@ async function importPythonFiles(
         log(
             io,
             `[Some over-long files were split into multiple partial files]`,
+            chalk.yellow,
         );
     }
 
@@ -115,19 +123,24 @@ async function importPythonFiles(
         `[Chunked ${results.length} files ` +
             `(${numLines} lines, ${numBlobs} blobs, ${numChunks} chunks, ${numErrors} errors) ` +
             `in ${((t1 - t0) * 0.001).toFixed(3)} seconds]`,
+        chalk.gray,
     );
 
     const chunkingErrors = results.filter(
         (result): result is ErrorItem => "error" in result,
     );
     for (const error of chunkingErrors) {
-        log(io, `[Error: ${error.error}; Output: ${error.output ?? ""}]`);
+        log(
+            io,
+            `[Error: ${error.error}; Output: ${error.output ?? ""}]`,
+            chalk.redBright,
+        );
     }
 
     const chunkedFiles = results.filter(
         (result): result is ChunkedFile => "chunks" in result,
     );
-    log(io, `[Documenting ${chunkedFiles.length} files]`);
+    log(io, `[Documenting ${chunkedFiles.length} files]`, chalk.grey);
 
     const tt0 = Date.now();
     const documentedFiles: FileDocumentation[] = [];
@@ -141,7 +154,9 @@ async function importPythonFiles(
             let docs: FileDocumentation;
             nChunks += chunkedFile.chunks.length;
             try {
-                docs = await chunkyIndex.fileDocumenter.document(
+                docs = await exponentialBackoff(
+                    io,
+                    chunkyIndex.fileDocumenter.document,
                     chunkedFile.chunks,
                 );
             } catch (error) {
@@ -149,6 +164,7 @@ async function importPythonFiles(
                 log(
                     io,
                     `  [Error documenting ${chunkedFile.fileName} in ${((t1 - t0) * 0.001).toFixed(3)} seconds: ${error}]`,
+                    chalk.redBright,
                 );
                 return;
             }
@@ -157,6 +173,7 @@ async function importPythonFiles(
             log(
                 io,
                 `  [Documented ${chunkedFile.chunks.length} chunks in ${((t1 - t0) * 0.001).toFixed(3)} seconds for ${chunkedFile.fileName}]`,
+                chalk.grey,
             );
             documentedFiles.push(docs);
         },
@@ -166,13 +183,14 @@ async function importPythonFiles(
     log(
         io,
         `[Documented ${documentedFiles.length} files (${nChunks} chunks) in ${((tt1 - tt0) * 0.001).toFixed(3)} seconds]`,
+        chalk.grey,
     );
 
     const nonEmptyFiles = chunkedFiles.filter(
         (cf) => cf.chunks.filter((c) => c.docs).length,
     );
 
-    log(io, `[Embedding ${nonEmptyFiles.length} files]`);
+    log(io, `[Embedding ${nonEmptyFiles.length} files]`, chalk.grey);
 
     if (nonEmptyFiles.length) {
         const ttt0 = Date.now();
@@ -186,6 +204,7 @@ async function importPythonFiles(
         log(
             io,
             `[Embedded ${documentedFiles.length} files in ${((ttt1 - ttt0) * 0.001).toFixed(3)} seconds]`,
+            chalk.grey,
         );
     }
 }
@@ -198,7 +217,7 @@ export async function embedChunkedFile(
 ): Promise<void> {
     const chunks: Chunk[] = chunkedFile.chunks;
     if (chunks.length === 0) {
-        log(io, `[Skipping empty file ${chunkedFile.fileName}]`);
+        log(io, `[Skipping empty file ${chunkedFile.fileName}]`, chalk.yellow);
         return;
     }
     const t0 = Date.now();
@@ -209,6 +228,7 @@ export async function embedChunkedFile(
     log(
         io,
         `  [Embedded ${chunks.length} chunks in ${((t1 - t0) * 0.001).toFixed(3)} seconds for ${chunkedFile.fileName}]`,
+        chalk.grey,
     );
 }
 
@@ -271,6 +291,7 @@ async function embedChunk(
             io,
             `  [Embedded ${chunk.id} (${lineCount} lines @ ${chunk.blobs[0].start}) ` +
                 `in ${((t1 - t0) * 0.001).toFixed(3)} seconds for ${chunk.fileName}]`,
+            chalk.gray,
         );
     }
 }
@@ -297,10 +318,14 @@ async function exponentialBackoff<T extends any[], R>(
             return await callable(...args);
         } catch (error) {
             if (timeout > 1000) {
-                log(io, `[Error: ${error}; giving up]`);
+                log(io, `[Error: ${error}; giving up]`, chalk.redBright);
                 throw error;
             }
-            log(io, `[Error: ${error}; retrying in ${timeout} ms]`);
+            log(
+                io,
+                `[Error: ${error}; retrying in ${timeout} ms]`,
+                chalk.redBright,
+            );
             await new Promise((resolve) => setTimeout(resolve, timeout));
             timeout *= 2;
         }
