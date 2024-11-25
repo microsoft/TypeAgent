@@ -145,8 +145,8 @@ export async function interactiveQueryLoop(
                 const chunkDocs = chunk.docs?.chunkDocs ?? [];
                 writeNote(io, `\nCHUNK ID: ${chunkId}`);
                 for (const chunkDoc of chunkDocs) {
-                    for (const pair of chunkyIndex.allIndexes()) {
-                        if (pair.name == "summaries") {
+                    for (const [name, _] of chunkyIndex.allIndexes()) {
+                        if (name == "summaries") {
                             if (chunkDoc.summary) {
                                 writeNote(io, "SUMMARY:");
                                 writeMain(
@@ -162,11 +162,11 @@ export async function interactiveQueryLoop(
                             }
                         } else {
                             const docItem: string[] | undefined =
-                                chunkDoc[pair.name];
+                                chunkDoc[name];
                             if (docItem?.length) {
                                 writeNote(
                                     io,
-                                    `${pair.name.toUpperCase()}: ${docItem.join(", ")}`,
+                                    `${name.toUpperCase()}: ${docItem.join(", ")}`,
                                 );
                             }
                         }
@@ -393,21 +393,44 @@ export async function interactiveQueryLoop(
         const namedArgs = iapp.parseNamedArguments(args, purgeFileDef());
         const file = namedArgs.fileName as string;
         const fileName = fs.existsSync(file) ? fs.realpathSync(file) : file;
-        let toDelete: ChunkId[] = [];
+        const isVerbose: boolean = namedArgs.verbose ?? verbose;
+
+        // Step 1: find chunks to remove.
+        let toDelete: Set<ChunkId> = new Set();
         for await (const chunk of chunkyIndex.chunkFolder.allObjects()) {
             if (chunk.fileName === fileName) {
-                toDelete.push(chunk.id);
+                toDelete.add(chunk.id);
                 if (verbose) writeNote(io, `[Purging chunk ${chunk.id}]`);
             }
         }
+
+        // Step 2: remove chunks.
         for (const id of toDelete) {
             if (namedArgs.verbose) writeNote(io, `[Purging chunk ${id}]`);
             await chunkyIndex.chunkFolder.remove(id);
         }
-        writeNote(
-            io,
-            `[Purged ${toDelete.length} chunks for file ${fileName}]`,
-        );
+        writeNote(io, `[Purged ${toDelete.size} chunks for file ${fileName}]`);
+
+        // Step 3: remove chunk ids from indexes.
+        const deletions: ChunkId[] = Array.from(toDelete);
+        for (const [name, index] of chunkyIndex.allIndexes()) {
+            let updates = 0;
+            for await (const textBlock of index.entries()) {
+                if (
+                    textBlock?.sourceIds?.some((id) => deletions.includes(id))
+                ) {
+                    if (isVerbose) {
+                        writeNote(
+                            io,
+                            `[Purging ${name} entry ${textBlock.value}]`,
+                        );
+                    }
+                    await index.remove(textBlock.value, deletions);
+                    updates++;
+                }
+            }
+            writeNote(io, `[Purged ${updates} ${name}]`); // name is plural, e.g. "keywords".
+        }
     }
 
     async function _reportIndex(
@@ -610,9 +633,7 @@ async function runIndexQueries(
     const chunkIdScores: Map<ChunkId, ScoredItem<ChunkId>> = new Map(); // Record score of each chunk id.
     const totalNumChunks = await chunkyIndex.chunkFolder.size(); // Nominator in IDF calculation.
 
-    for (const namedIndex of chunkyIndex.allIndexes()) {
-        const indexName = namedIndex.name;
-        const index = namedIndex.index;
+    for (const [indexName, index] of chunkyIndex.allIndexes()) {
         const spec: QuerySpec | undefined = (proposedQueries as any)[indexName];
         if (!spec) {
             writeWarning(io, `[No query for ${indexName}]`);
