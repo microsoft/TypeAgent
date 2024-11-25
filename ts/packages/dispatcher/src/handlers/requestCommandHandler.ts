@@ -535,7 +535,7 @@ export async function translateRequest(
         return;
     }
     // Start with the last translator used
-    let translatorName = systemContext.lastActionTranslatorName;
+    let translatorName = systemContext.lastActionSchemaName;
     if (!systemContext.agents.isTranslatorActive(translatorName)) {
         debugTranslate(
             `Translating request using default translator: ${translatorName} not active`,

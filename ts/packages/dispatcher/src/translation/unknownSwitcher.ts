@@ -107,10 +107,10 @@ type AssistantSelectionSchemaEntry = {
     schema: InlineTranslatorSchemaDef;
 };
 export function getAssistantSelectionSchemas(
-    translatorNames: string[],
+    schemaNames: string[],
     provider: ActionConfigProvider,
 ) {
-    return translatorNames
+    return schemaNames
         .map((name) => {
             return { name, schema: getSelectionSchema(name, provider) };
         })
@@ -128,10 +128,10 @@ export type AssistantSelection = {
 const assistantSelectionLimit = 8192 * 3;
 
 export function loadAssistantSelectionJsonTranslator(
-    translatorNames: string[],
+    schemaNames: string[],
     provider: ActionConfigProvider,
 ) {
-    const schemas = getAssistantSelectionSchemas(translatorNames, provider);
+    const schemas = getAssistantSelectionSchemas(schemaNames, provider);
 
     let currentLength = 0;
     let current: AssistantSelectionSchemaEntry[] = [];

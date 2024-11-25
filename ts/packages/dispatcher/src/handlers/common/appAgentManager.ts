@@ -161,7 +161,7 @@ export class AppAgentManager implements ActionConfigProvider {
     }
 
     public getActiveTranslators() {
-        return this.getTranslatorNames().filter((name) =>
+        return this.getSchemaNames().filter((name) =>
             this.isTranslatorActive(name),
         );
     }
@@ -243,7 +243,7 @@ export class AppAgentManager implements ActionConfigProvider {
         return config;
     }
 
-    public getTranslatorNames() {
+    public getSchemaNames() {
         return Array.from(this.actionConfigs.keys());
     }
     public getActionConfigs() {

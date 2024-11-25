@@ -25,7 +25,7 @@ import {
     setupBuiltInCache,
 } from "../../session/session.js";
 import {
-    getDefaultBuiltinTranslatorName,
+    getDefaultBuiltinSchemaName,
     loadAgentJsonTranslator,
     ActionConfigProvider,
     TypeAgentTranslator,
@@ -93,7 +93,7 @@ export type CommandHandlerContext = {
 
     // Runtime context
     commandLock: Limiter; // Make sure we process one command at a time.
-    lastActionTranslatorName: string;
+    lastActionSchemaName: string;
     translatorCache: Map<string, TypeAgentTranslator>;
     agentCache: AgentCache;
     currentScriptDir: string;
@@ -275,7 +275,7 @@ export async function initializeCommandHandlerContext(
         // Runtime context
         commandLock: createLimiter(1), // Make sure we process one command at a time.
         agentCache: await getAgentCache(session, agents, logger),
-        lastActionTranslatorName: getDefaultBuiltinTranslatorName(), // REVIEW: just default to the first one on initialize?
+        lastActionSchemaName: getDefaultBuiltinSchemaName(), // REVIEW: just default to the first one on initialize?
         translatorCache: new Map<string, TypeAgentTranslator>(),
         currentScriptDir: process.cwd(),
         chatHistory: createChatHistory(),

@@ -306,10 +306,10 @@ export function getSettingSummary(context: CommandHandlerContext) {
 
     const names = context.agents.getActiveTranslators();
     const ordered = names.filter(
-        (name) => name !== context.lastActionTranslatorName,
+        (name) => name !== context.lastActionSchemaName,
     );
     if (ordered.length !== names.length) {
-        ordered.unshift(context.lastActionTranslatorName);
+        ordered.unshift(context.lastActionSchemaName);
     }
 
     const translators = Array.from(

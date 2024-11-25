@@ -169,7 +169,7 @@ class AgentToggleCommandHandler implements CommandHandler {
         const agents = systemContext.agents;
 
         const options: Record<string, boolean | null> = {};
-        const schemaNames = agents.getTranslatorNames();
+        const schemaNames = agents.getSchemaNames();
         let existingNames: string[];
         let existingNameType: "agent" | "schema";
         if (
@@ -245,7 +245,7 @@ class AgentToggleCommandHandler implements CommandHandler {
                     this.toggle === AgentToggle.Command ||
                     this.toggle === AgentToggle.Agent
                         ? context.agentContext.agents.getAppAgentNames()
-                        : context.agentContext.agents.getTranslatorNames();
+                        : context.agentContext.agents.getSchemaNames();
                 completions.push(...existingNames);
             }
         }
