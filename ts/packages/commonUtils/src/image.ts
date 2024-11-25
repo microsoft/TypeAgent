@@ -66,7 +66,7 @@ export async function downloadImage(
 }
 
 export async function reverseGeocodeLookup(settings: ApiSettings) {
-    let endpoint = `${getEnvSetting(env, EnvVars.AZURE_MAPS_ENDPOINT)}reverseGeocode?api-version=2023-06-01&coordinates=-122.14197703742589,47.64210088640227"`;
+    let endpoint = `${getEnvSetting(env, EnvVars.AZURE_MAPS_ENDPOINT)}reverseGeocode?api-version=2023-06-01&coordinates=47.64210088640227,-122.14197703742589"`;
     console.log(endpoint);
 
     const tokenProvider: AuthTokenProvider = createAzureTokenProvider(AzureTokenScopes.AzureMaps);
@@ -81,7 +81,7 @@ export async function reverseGeocodeLookup(settings: ApiSettings) {
             method: "GET",
             headers: new Headers({
                 "Authorization": `Bearer ${tokenResult.data}`,
-                "x-ms-client-id": "<CLIENT ID HERE>",
+                "x-ms-client-id": `${getEnvSetting(env, EnvVars.AZURE_MAPS_CLIENTID)}`,
             },),
         };     
         
