@@ -43,6 +43,7 @@ import {
     chunkifyPythonFiles,
     ErrorItem,
 } from "./pythonChunker.js";
+import { purgeNormalizedFile } from "./queryInterface.js";
 
 function log(
     io: iapp.InteractiveIo | undefined,
@@ -86,6 +87,11 @@ async function importPythonFiles(
     let filenames = files.map((file) =>
         fs.existsSync(file) ? fs.realpathSync(file) : file,
     );
+
+    // Purge previous occurrences of these files.
+    for (const fileName of filenames) {
+        await purgeNormalizedFile(io, chunkyIndex, fileName, verbose);
+    }
 
     // Chunkify Python files using a helper program. (TODO: Make generic over languages)
     const t0 = Date.now();

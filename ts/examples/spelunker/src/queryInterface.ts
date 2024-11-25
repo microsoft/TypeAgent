@@ -24,31 +24,35 @@ type QueryOptions = {
 };
 
 function writeColor(
-    io: iapp.InteractiveIo,
+    io: iapp.InteractiveIo | undefined,
     color: ChalkInstance,
     message: string,
 ): void {
     message = color(message);
-    io.writer.writeLine(message);
+    if (io) {
+        io.writer.writeLine(message);
+    } else {
+        console.log(message);
+    }
 }
 
-function writeNote(io: iapp.InteractiveIo, message: string): void {
+function writeNote(io: iapp.InteractiveIo | undefined, message: string): void {
     writeColor(io, chalk.gray, message);
 }
 
-function writeMain(io: iapp.InteractiveIo, message: string): void {
+function writeMain(io: iapp.InteractiveIo | undefined, message: string): void {
     writeColor(io, chalk.white, message);
 }
 
-function writeWarning(io: iapp.InteractiveIo, message: string): void {
+function writeWarning(io: iapp.InteractiveIo | undefined, message: string): void {
     writeColor(io, chalk.yellow, message);
 }
 
-function writeError(io: iapp.InteractiveIo, message: string): void {
+function writeError(io: iapp.InteractiveIo | undefined, message: string): void {
     writeColor(io, chalk.redBright, message);
 }
 
-function writeHeading(io: iapp.InteractiveIo, message: string): void {
+function writeHeading(io: iapp.InteractiveIo | undefined, message: string): void {
     writeColor(io, chalk.green, message);
 }
 
@@ -393,44 +397,7 @@ export async function interactiveQueryLoop(
         const namedArgs = iapp.parseNamedArguments(args, purgeFileDef());
         const file = namedArgs.fileName as string;
         const fileName = fs.existsSync(file) ? fs.realpathSync(file) : file;
-        const isVerbose: boolean = namedArgs.verbose ?? verbose;
-
-        // Step 1: find chunks to remove.
-        let toDelete: Set<ChunkId> = new Set();
-        for await (const chunk of chunkyIndex.chunkFolder.allObjects()) {
-            if (chunk.fileName === fileName) {
-                toDelete.add(chunk.id);
-                if (verbose) writeNote(io, `[Purging chunk ${chunk.id}]`);
-            }
-        }
-
-        // Step 2: remove chunks.
-        for (const id of toDelete) {
-            if (namedArgs.verbose) writeNote(io, `[Purging chunk ${id}]`);
-            await chunkyIndex.chunkFolder.remove(id);
-        }
-        writeNote(io, `[Purged ${toDelete.size} chunks for file ${fileName}]`);
-
-        // Step 3: remove chunk ids from indexes.
-        const deletions: ChunkId[] = Array.from(toDelete);
-        for (const [name, index] of chunkyIndex.allIndexes()) {
-            let updates = 0;
-            for await (const textBlock of index.entries()) {
-                if (
-                    textBlock?.sourceIds?.some((id) => deletions.includes(id))
-                ) {
-                    if (isVerbose) {
-                        writeNote(
-                            io,
-                            `[Purging ${name} entry ${textBlock.value}]`,
-                        );
-                    }
-                    await index.remove(textBlock.value, deletions);
-                    updates++;
-                }
-            }
-            writeNote(io, `[Purged ${updates} ${name}]`); // name is plural, e.g. "keywords".
-        }
+        await purgeNormalizedFile(io, chunkyIndex, fileName, namedArgs.verbose ?? verbose);
     }
 
     async function _reportIndex(
@@ -556,6 +523,54 @@ export async function interactiveQueryLoop(
         handlers,
         prompt: "\n🤖> ",
     });
+}
+
+export async function purgeNormalizedFile(
+    io: iapp.InteractiveIo | undefined,
+    chunkyIndex: ChunkyIndex,
+    fileName: string,
+    verbose: boolean,
+): Promise<void> {
+    // Step 1: find chunks to remove.
+    let toDelete: Set<ChunkId> = new Set();
+    for await (const chunk of chunkyIndex.chunkFolder.allObjects()) {
+        if (chunk.fileName === fileName) {
+            toDelete.add(chunk.id);
+            if (verbose) writeNote(io, `[Purging chunk ${chunk.id}]`);
+        }
+    }
+    if (!toDelete.size) {
+        writeNote(io, `[No chunks to purge for file ${fileName}]`);
+        return;
+    }
+
+    // Step 2: remove chunks.
+    writeNote(io, `[Purging ${toDelete.size} existing chunks for file ${fileName}]`);
+    for (const id of toDelete) {
+        if (verbose) writeNote(io, `[Purging chunk ${id}]`);
+        await chunkyIndex.chunkFolder.remove(id);
+    }
+
+    // Step 3: remove chunk ids from indexes.
+    const deletions: ChunkId[] = Array.from(toDelete);
+    for (const [name, index] of chunkyIndex.allIndexes()) {
+        let updates = 0;
+        for await (const textBlock of index.entries()) {
+            if (
+                textBlock?.sourceIds?.some((id) => deletions.includes(id))
+            ) {
+                if (verbose) {
+                    writeNote(
+                        io,
+                        `[Purging ${name} entry ${textBlock.value}]`,
+                    );
+                }
+                await index.remove(textBlock.value, deletions);
+                updates++;
+            }
+        }
+        writeNote(io, `[Purged ${updates} ${name}]`); // name is plural, e.g. "keywords".
+    }
 }
 
 async function processQuery(
