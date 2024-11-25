@@ -3,7 +3,9 @@
 
 // User interface for querying the index.
 
+import chalk, { ChalkInstance } from "chalk";
 import * as fs from "fs";
+import * as util from "util";
 
 import * as iapp from "interactive-app";
 import * as knowLib from "knowledge-processor";
@@ -20,6 +22,35 @@ type QueryOptions = {
     minScore: number;
     verbose: boolean;
 };
+
+function writeColor(
+    io: iapp.InteractiveIo,
+    color: ChalkInstance,
+    message: string,
+): void {
+    message = color(message);
+    io.writer.writeLine(message);
+}
+
+function writeNote(io: iapp.InteractiveIo, message: string): void {
+    writeColor(io, chalk.gray, message);
+}
+
+function writeMain(io: iapp.InteractiveIo, message: string): void {
+    writeColor(io, chalk.white, message);
+}
+
+function writeWarning(io: iapp.InteractiveIo, message: string): void {
+    writeColor(io, chalk.yellow, message);
+}
+
+function writeError(io: iapp.InteractiveIo, message: string): void {
+    writeColor(io, chalk.redBright, message);
+}
+
+function writeHeading(io: iapp.InteractiveIo, message: string): void {
+    writeColor(io, chalk.green, message);
+}
 
 export async function interactiveQueryLoop(
     chunkyIndex: ChunkyIndex,
@@ -74,7 +105,7 @@ export async function interactiveQueryLoop(
                     .filter((line) => line.length > 0 && line[0] !== "#")
               : [];
         if (!files.length) {
-            io.writer.writeLine("[No files to import (use --? for help)]");
+            writeError(io, "[No files to import (use --? for help)]");
             return;
         }
         await importAllFiles(
@@ -95,7 +126,7 @@ export async function interactiveQueryLoop(
             force: true,
         });
         await chunkyIndex.reInitialize(chunkyIndex.rootDir);
-        io.writer.writeLine("[All memory and all indexes cleared]");
+        writeNote(io, "[All memory and all indexes cleared]");
         // Actually the embeddings cache isn't. But we shouldn't have to care.
     }
 
@@ -110,13 +141,14 @@ export async function interactiveQueryLoop(
             const chunk = await chunkyIndex.chunkFolder.get(chunkId);
             if (chunk) {
                 const chunkDocs = chunk.docs?.chunkDocs ?? [];
-                io.writer.writeLine(`\nCHUNK ID: ${chunkId}`);
+                writeNote(io, `\nCHUNK ID: ${chunkId}`);
                 for (const chunkDoc of chunkDocs) {
                     for (const pair of chunkyIndex.allIndexes()) {
                         if (pair.name == "summaries") {
                             if (chunkDoc.summary) {
-                                io.writer.writeLine("SUMMARY:");
-                                io.writer.writeLine(
+                                writeNote(io, "SUMMARY:");
+                                writeMain(
+                                    io,
                                     // Indent by two
                                     wordWrap(chunkDoc.summary).replace(
                                         /^/gm,
@@ -124,23 +156,24 @@ export async function interactiveQueryLoop(
                                     ),
                                 );
                             } else {
-                                io.writer.writeLine("SUMMARY: None");
+                                writeWarning(io, "SUMMARY: None");
                             }
                         } else {
                             const docItem: string[] | undefined =
                                 chunkDoc[pair.name];
                             if (docItem?.length) {
-                                io.writer.writeLine(
+                                writeNote(
+                                    io,
                                     `${pair.name.toUpperCase()}: ${docItem.join(", ")}`,
                                 );
                             }
                         }
                     }
                 }
-                io.writer.writeLine("CODE:");
+                writeNote(io, "CODE:");
                 writeChunkLines(chunk, io, 100);
             } else {
-                io.writer.writeLine(`[Chunk ID ${chunkId} not found]`);
+                writeWarning(io, `[Chunk ID ${chunkId} not found]`);
             }
         }
     }
@@ -297,7 +330,7 @@ export async function interactiveQueryLoop(
         const namedArgs = iapp.parseNamedArguments(args, keywordsDef());
         const index = chunkyIndex.getIndexByName(indexName);
         if (namedArgs.debug) {
-            io.writer.writeLine(`[Debug: ${indexName}]`);
+            writeNote(io, `[Debug: ${indexName}]`);
             await _debugIndex(io, index, indexName, verbose);
             return;
         }
@@ -338,10 +371,10 @@ export async function interactiveQueryLoop(
         }
 
         if (!hits.length) {
-            io.writer.writeLine(`No ${indexName}.`);
+            writeWarning(io, `No ${indexName}.`); // E.g., "No keywords."
             return;
         } else {
-            io.writer.writeLine(`Found ${hits.length} ${indexName}.`);
+            writeNote(io, `Found ${hits.length} ${indexName}.`);
 
             // TFIDF = TF(t) * IDF(t) = 1 * log(N / (1 + nt))
             // - t is a term (in other contexts, a term occurring in a given chunk)
@@ -358,8 +391,9 @@ export async function interactiveQueryLoop(
                 return a.item.value.localeCompare(b.item.value);
             });
             for (const hit of hits) {
-                io.writer.writeLine(
-                    `${hit.score.toFixed(3).padStart(7)}: ${hit.item.value} :: ${(hit.item.sourceIds ?? []).join(", ")}`,
+                writeMain(
+                    io,
+                    `${hit.score.toFixed(3).padStart(7)}: ${chalk.green(hit.item.value)} :: ${(hit.item.sourceIds ?? []).join(", ")}`,
                 );
             }
         }
@@ -373,25 +407,27 @@ export async function interactiveQueryLoop(
     ): Promise<void> {
         const allTexts = Array.from(index.text());
         for (const text of allTexts) {
-            if (verbose) io.writer.writeLine(`Text: ${text}`);
+            if (verbose) writeNote(io, `Text: ${text}`);
             const hits = await index.nearestNeighborsPairs(
                 text,
                 allTexts.length,
             );
             if (verbose) {
                 for (const hit of hits) {
-                    io.writer.writeLine(
+                    writeNote(
+                        io,
                         `${hit.score.toFixed(3).padStart(7)} ${hit.item.value}`,
                     );
                 }
             }
             if (hits.length < 2) {
-                io.writer.writeLine(`No hit for ${text}`);
+                writeWarning(io, `No hit for ${text}`);
             } else {
                 const end = hits.length - 1;
-                io.writer.writeLine(
-                    `hits[0].item.value}: ${hits[1].item.value} (${hits[1].score.toFixed(3)}) -- ` +
-                        `${hits[end].item.value} (${hits[end].score.toFixed(3)})`,
+                writeMain(
+                    io,
+                    `${chalk.green(hits[0].item.value)}: ${chalk.blue(hits[1].item.value)} (${hits[1].score.toFixed(3)}) -- ` +
+                        `${chalk.blue(hits[end].item.value)} (${hits[end].score.toFixed(3)})`,
                 );
             }
         }
@@ -464,12 +500,16 @@ async function proposeQueries(
         makeQueryMakerPrompt(input),
     );
     if (!result.success) {
-        io.writer.writeLine(`[Error: ${result.message}]`);
+        writeError(io, `[Error: ${result.message}]`);
         return undefined;
     }
     const specs = result.data;
-    if (queryOptions.verbose)
-        io.writer.writeLine(JSON.stringify(specs, null, 2));
+    if (queryOptions.verbose) {
+        // Use util.inspect() to colorize JSON; writeColor() doesn't do that.
+        io.writer.writeLine(
+            util.inspect(specs, { depth: null, colors: true, compact: false }),
+        );
+    }
     return specs;
 }
 
@@ -487,7 +527,7 @@ async function runIndexQueries(
         const index = namedIndex.index;
         const spec: QuerySpec | undefined = (proposedQueries as any)[indexName];
         if (!spec) {
-            io.writer.writeLine(`[No query for ${indexName}]`);
+            writeWarning(io, `[No query for ${indexName}]`);
             continue;
         }
         const hits = await index.nearestNeighborsPairs(
@@ -496,7 +536,7 @@ async function runIndexQueries(
             spec.minScore ?? queryOptions.minScore,
         );
         if (!hits.length) {
-            io.writer.writeLine(`[No hits for ${indexName}]`);
+            writeWarning(io, `[No hits for ${indexName}]`);
             continue;
         }
 
@@ -527,11 +567,13 @@ async function runIndexQueries(
 
         // Verbose logging.
         if (queryOptions.verbose) {
-            io.writer.writeLine(
+            writeNote(
+                io,
                 `\nFound ${hits.length} ${indexName} for '${spec.query}':`,
             );
             for (const hit of hits) {
-                io.writer.writeLine(
+                writeNote(
+                    io,
                     `${hit.score.toFixed(3).padStart(7)}: ${hit.item.value} -- ${hit.item.sourceIds?.join(", ")}`,
                 );
             }
@@ -540,7 +582,8 @@ async function runIndexQueries(
         // Regular logging.
         const numChunks = new Set(hits.flatMap((h) => h.item.sourceIds)).size;
         const end = hits.length - 1;
-        io.writer.writeLine(
+        writeNote(
+            io,
             `[${indexName}: query '${spec.query}'; ${hits.length} hits; ` +
                 `scores ${hits[0].score.toFixed(3)}--${hits[end].score.toFixed(3)}; ` +
                 `${numChunks} unique chunk ids]`,
@@ -548,7 +591,7 @@ async function runIndexQueries(
     }
 
     if (proposedQueries.unknownText) {
-        io.writer.writeLine(`[Unknown text: ${proposedQueries.unknownText}]`);
+        writeWarning(io, `[Unknown text: ${proposedQueries.unknownText}]`);
     }
 
     return chunkIdScores;
@@ -566,9 +609,7 @@ async function generateAnswer(
         chunkIdScores.values(),
     );
 
-    io.writer.writeLine(
-        `\n[Overall ${scoredChunkIds.length} unique chunk ids]`,
-    );
+    writeNote(io, `\n[Overall ${scoredChunkIds.length} unique chunk ids]`);
 
     scoredChunkIds.sort((a, b) => b.score - a.score);
     scoredChunkIds.splice(20); // Arbitrary number. (TODO: Make it an option.)
@@ -581,13 +622,13 @@ async function generateAnswer(
         if (maybeChunk) chunks.push(maybeChunk);
     }
 
-    io.writer.writeLine(`[Sending ${chunks.length} chunks to answerMaker]`);
+    writeNote(io, `[Sending ${chunks.length} chunks to answerMaker]`);
 
     // Step 3c: Make the request and check for success.
     const request = JSON.stringify(chunks);
 
     if (queryOptions.verbose) {
-        io.writer.writeLine(`Request: ${JSON.stringify(chunks, null, 2)}`);
+        writeNote(io, `Request: ${JSON.stringify(chunks, null, 2)}`);
     }
 
     const answerResult = await chunkyIndex.answerMaker.translate(
@@ -596,12 +637,13 @@ async function generateAnswer(
     );
 
     if (!answerResult.success) {
-        io.writer.writeLine(`[Error: ${answerResult.message}]`);
+        writeError(io, `[Error: ${answerResult.message}]`);
         return undefined;
     }
 
     if (queryOptions.verbose) {
-        io.writer.writeLine(
+        writeNote(
+            io,
             `AnswerResult: ${JSON.stringify(answerResult.data, null, 2)}`,
         );
     }
@@ -610,13 +652,16 @@ async function generateAnswer(
 }
 
 function reportQuery(answer: AnswerSpecs, io: iapp.InteractiveIo): void {
-    io.writer.writeLine(
+    writeHeading(
+        io,
         `\nAnswer (confidence ${answer.confidence.toFixed(3).replace(/0+$/, "")}):`,
     );
-    io.writer.writeLine(wordWrap(answer.answer));
-    if (answer.message) io.writer.writeLine(`Message: ${answer.message}`);
+    writeMain(io, wordWrap(answer.answer));
+    if (answer.message)
+        writeWarning(io, "\n" + wordWrap(`Message: ${answer.message}`));
     if (answer.references.length) {
-        io.writer.writeLine(
+        writeNote(
+            io,
             `\nReferences (${answer.references.length}): ${answer.references.join(",").replace(/,/g, ", ")}`,
         );
     }
@@ -698,10 +743,11 @@ function writeChunkLines(
     outer: for (const blob of chunk.blobs) {
         for (let i = 0; i < blob.lines.length; i++) {
             if (lineBudget-- <= 0) {
-                io.writer.writeLine("   ...");
+                writeNote(io, "   ...");
                 break outer;
             }
-            io.writer.writeLine(
+            writeMain(
+                io,
                 `${(1 + blob.start + i).toString().padStart(6)}: ${blob.lines[i].trimEnd()}`,
             );
         }
