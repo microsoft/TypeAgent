@@ -67,6 +67,7 @@ export async function interactiveQueryLoop(
         goals,
         dependencies,
         files,
+        purgeFile,
     };
     iapp.addStandardHandlers(handlers);
 
@@ -349,7 +350,7 @@ export async function interactiveQueryLoop(
             );
         }
         if (!filesPopularity.size) {
-            writeWarning(io, "[No files.]");
+            writeWarning(io, "[No files]");
         } else {
             const sortedFiles = Array.from(filesPopularity)
                 .filter(([file, _]) => !filter || file.includes(filter))
@@ -365,6 +366,48 @@ export async function interactiveQueryLoop(
                 );
             }
         }
+    }
+
+    function purgeFileDef(): iapp.CommandMetadata {
+        return {
+            description: "Purge all mentions of a file.",
+            args: {
+                fileName: {
+                    description: "File to purge",
+                    type: "string",
+                },
+            },
+            options: {
+                verbose: {
+                    description: "More verbose output",
+                    type: "boolean",
+                },
+            },
+        };
+    }
+    handlers.purgeFile.metadata = purgeFileDef();
+    async function purgeFile(
+        args: string[] | iapp.NamedArgs,
+        io: iapp.InteractiveIo,
+    ): Promise<void> {
+        const namedArgs = iapp.parseNamedArguments(args, purgeFileDef());
+        const file = namedArgs.fileName as string;
+        const fileName = fs.existsSync(file) ? fs.realpathSync(file) : file;
+        let toDelete: ChunkId[] = [];
+        for await (const chunk of chunkyIndex.chunkFolder.allObjects()) {
+            if (chunk.fileName === fileName) {
+                toDelete.push(chunk.id);
+                if (verbose) writeNote(io, `[Purging chunk ${chunk.id}]`);
+            }
+        }
+        for (const id of toDelete) {
+            if (namedArgs.verbose) writeNote(io, `[Purging chunk ${id}]`);
+            await chunkyIndex.chunkFolder.remove(id);
+        }
+        writeNote(
+            io,
+            `[Purged ${toDelete.length} chunks for file ${fileName}]`,
+        );
     }
 
     async function _reportIndex(
