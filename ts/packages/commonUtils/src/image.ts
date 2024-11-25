@@ -4,7 +4,7 @@
 import { Storage } from "@typeagent/agent-sdk";
 import { AuthTokenProvider, AzureTokenScopes, createAzureTokenProvider, getBlob } from "aiclient";
 import ExifReader from "exifreader";
-import { ApiSettings, apiSettingsFromEnv } from "../../aiclient/dist/openai.js";
+import { ApiSettings, apiSettingsFromEnv, EnvVars } from "../../aiclient/dist/openai.js";
 
 export class CachedImageWithDetails {
     constructor(
@@ -64,8 +64,8 @@ export async function downloadImage(
 }
 
 export async function reverseGeocodeLookup(settings: ApiSettings) {
-    let testUri = "https://atlas.microsoft.com/reverseGeocode?api-version=2023-06-01&coordinates=-122.14197703742589,47.64210088640227";
-    console.log(testUri);
+    let endpoint = `${EnvVars.AZURE_MAPS_ENDPOINT}reverseGeocode?api-version=2023-06-01&coordinates=-122.14197703742589,47.64210088640227"`;
+    console.log(endpoint);
 
     const tokenProvider: AuthTokenProvider = createAzureTokenProvider(AzureTokenScopes.AzureMaps);
     const tokenResult = await tokenProvider.getAccessToken();
@@ -83,7 +83,7 @@ export async function reverseGeocodeLookup(settings: ApiSettings) {
             },),
         };     
         
-        const response = await fetch(testUri, options);
+        const response = await fetch(endpoint, options);
         let responseBody = await response.json();
         return responseBody;
     } catch (e) {
