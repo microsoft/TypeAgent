@@ -66,6 +66,7 @@ export async function interactiveQueryLoop(
         topics,
         goals,
         dependencies,
+        files,
     };
     iapp.addStandardHandlers(handlers);
 
@@ -320,6 +321,50 @@ export async function interactiveQueryLoop(
         io: iapp.InteractiveIo,
     ): Promise<void> {
         await _reportIndex(args, io, "dependencies");
+    }
+
+    function filesDef(): iapp.CommandMetadata {
+        return {
+            description: "Show all recorded file names.",
+            options: {
+                verbose: {
+                    description: "More verbose output",
+                    type: "boolean",
+                },
+            },
+        };
+    }
+    handlers.files.metadata = filesDef();
+    async function files(
+        args: string[] | iapp.NamedArgs,
+        io: iapp.InteractiveIo,
+    ): Promise<void> {
+        const namedArgs = iapp.parseNamedArguments(args, filesDef());
+        const filter = namedArgs.filter;
+        const filesPopularity: Map<string, number> = new Map();
+        for await (const chunk of chunkyIndex.chunkFolder.allObjects()) {
+            filesPopularity.set(
+                chunk.fileName,
+                (filesPopularity.get(chunk.fileName) ?? 0) + 1,
+            );
+        }
+        if (!filesPopularity.size) {
+            writeWarning(io, "[No files.]");
+        } else {
+            const sortedFiles = Array.from(filesPopularity)
+                .filter(([file, _]) => !filter || file.includes(filter))
+                .sort();
+            writeNote(
+                io,
+                `Found ${sortedFiles.length} ${filter ? "matching" : "total"} files.`,
+            );
+            for (const [file, count] of sortedFiles) {
+                writeMain(
+                    io,
+                    `${chalk.blue(count.toFixed(0).padStart(7))} ${chalk.green(file)}`,
+                );
+            }
+        }
     }
 
     async function _reportIndex(
