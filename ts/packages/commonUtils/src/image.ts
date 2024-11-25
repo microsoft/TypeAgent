@@ -2,9 +2,11 @@
 // Licensed under the MIT License.
 
 import { Storage } from "@typeagent/agent-sdk";
-import { AuthTokenProvider, AzureTokenScopes, createAzureTokenProvider, getBlob } from "aiclient";
+import { AuthTokenProvider, AzureTokenScopes, createAzureTokenProvider, getBlob, getEnvSetting } from "aiclient";
 import ExifReader from "exifreader";
 import { ApiSettings, apiSettingsFromEnv, EnvVars } from "../../aiclient/dist/openai.js";
+import { SearchGetReverseGeocoding200Response } from "@azure-rest/maps-search";
+import { env } from "process";
 
 export class CachedImageWithDetails {
     constructor(
@@ -64,7 +66,7 @@ export async function downloadImage(
 }
 
 export async function reverseGeocodeLookup(settings: ApiSettings) {
-    let endpoint = `${EnvVars.AZURE_MAPS_ENDPOINT}reverseGeocode?api-version=2023-06-01&coordinates=-122.14197703742589,47.64210088640227"`;
+    let endpoint = `${getEnvSetting(env, EnvVars.AZURE_MAPS_ENDPOINT)}reverseGeocode?api-version=2023-06-01&coordinates=-122.14197703742589,47.64210088640227"`;
     console.log(endpoint);
 
     const tokenProvider: AuthTokenProvider = createAzureTokenProvider(AzureTokenScopes.AzureMaps);
@@ -73,7 +75,7 @@ export async function reverseGeocodeLookup(settings: ApiSettings) {
         return;
     }
 
-    // TODO: implement using mapsearch typescript lib - https://learn.microsoft.com/en-us/javascript/api/%40azure-rest/maps-search/?view=azure-node-preview
+    // TODO: implement using mapsearch typescript lib - https://learn.microsoft.com/en-us/javascript/api/%40azure-rest/maps-search/?view=azure-node-preview    
     try {
         const options: RequestInit = {
             method: "GET",
@@ -85,6 +87,10 @@ export async function reverseGeocodeLookup(settings: ApiSettings) {
         
         const response = await fetch(endpoint, options);
         let responseBody = await response.json();
+
+        const g : SearchGetReverseGeocoding200Response = responseBody as SearchGetReverseGeocoding200Response;
+        console.log(g);
+
         return responseBody;
     } catch (e) {
         const ex = e as Error;
