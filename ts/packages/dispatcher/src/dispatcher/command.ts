@@ -395,7 +395,7 @@ function getPendingFlag(
     const resolvedFlag = resolveFlag(flags, lastToken);
     return resolvedFlag !== undefined &&
         getFlagType(resolvedFlag[1]) !== "boolean"
-        ? lastToken
+        ? `--${resolvedFlag[0]}` // use the full flag name in case it was a short flag
         : undefined;
 }
 

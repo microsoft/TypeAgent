@@ -35,12 +35,12 @@ export default class TranslateCommand extends Command {
 
     async run(): Promise<void> {
         const { args, flags } = await this.parse(TranslateCommand);
-        const translators = flags.translator
+        const schemas = flags.translator
             ? Object.fromEntries(flags.translator.map((name) => [name, true]))
             : undefined;
 
         const dispatcher = await createDispatcher("cli run translate", {
-            translators,
+            schemas,
             actions: null,
             commands: { dispatcher: true },
             translation: { model: flags.model },

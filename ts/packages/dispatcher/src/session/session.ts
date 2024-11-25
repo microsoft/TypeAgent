@@ -147,7 +147,7 @@ export type SessionOptions = AppAgentStateOptions &
     DeepPartialUndefined<DispatcherConfig>;
 
 const defaultSessionConfig: SessionConfig = {
-    translators: undefined,
+    schemas: undefined,
     actions: undefined,
     commands: undefined,
 

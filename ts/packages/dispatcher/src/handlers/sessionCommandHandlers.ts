@@ -99,7 +99,7 @@ class SessionResetCommandHandler implements CommandHandlerNoParams {
         await changeContextConfig(getDefaultSessionConfig(), context);
         await changeContextConfig(
             {
-                translators: null,
+                schemas: null,
                 actions: null,
                 commands: null,
             },
