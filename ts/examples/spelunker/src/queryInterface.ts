@@ -44,7 +44,10 @@ function writeMain(io: iapp.InteractiveIo | undefined, message: string): void {
     writeColor(io, chalk.white, message);
 }
 
-function writeWarning(io: iapp.InteractiveIo | undefined, message: string): void {
+function writeWarning(
+    io: iapp.InteractiveIo | undefined,
+    message: string,
+): void {
     writeColor(io, chalk.yellow, message);
 }
 
@@ -52,7 +55,10 @@ function writeError(io: iapp.InteractiveIo | undefined, message: string): void {
     writeColor(io, chalk.redBright, message);
 }
 
-function writeHeading(io: iapp.InteractiveIo | undefined, message: string): void {
+function writeHeading(
+    io: iapp.InteractiveIo | undefined,
+    message: string,
+): void {
     writeColor(io, chalk.green, message);
 }
 
@@ -397,7 +403,12 @@ export async function interactiveQueryLoop(
         const namedArgs = iapp.parseNamedArguments(args, purgeFileDef());
         const file = namedArgs.fileName as string;
         const fileName = fs.existsSync(file) ? fs.realpathSync(file) : file;
-        await purgeNormalizedFile(io, chunkyIndex, fileName, namedArgs.verbose ?? verbose);
+        await purgeNormalizedFile(
+            io,
+            chunkyIndex,
+            fileName,
+            namedArgs.verbose ?? verbose,
+        );
     }
 
     async function _reportIndex(
@@ -545,7 +556,10 @@ export async function purgeNormalizedFile(
     }
 
     // Step 2: remove chunks.
-    writeNote(io, `[Purging ${toDelete.size} existing chunks for file ${fileName}]`);
+    writeNote(
+        io,
+        `[Purging ${toDelete.size} existing chunks for file ${fileName}]`,
+    );
     for (const id of toDelete) {
         if (verbose) writeNote(io, `[Purging chunk ${id}]`);
         await chunkyIndex.chunkFolder.remove(id);
@@ -556,14 +570,9 @@ export async function purgeNormalizedFile(
     for (const [name, index] of chunkyIndex.allIndexes()) {
         let updates = 0;
         for await (const textBlock of index.entries()) {
-            if (
-                textBlock?.sourceIds?.some((id) => deletions.includes(id))
-            ) {
+            if (textBlock?.sourceIds?.some((id) => deletions.includes(id))) {
                 if (verbose) {
-                    writeNote(
-                        io,
-                        `[Purging ${name} entry ${textBlock.value}]`,
-                    );
+                    writeNote(io, `[Purging ${name} entry ${textBlock.value}]`);
                 }
                 await index.remove(textBlock.value, deletions);
                 updates++;
