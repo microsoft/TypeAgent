@@ -103,7 +103,7 @@ function collectActionConfigs(
     }
 }
 
-export function convertToTranslatorConfigs(
+export function convertToActionConfig(
     name: string,
     config: AppAgentManifest,
     actionConfigs: Record<string, ActionConfig> = {},
@@ -122,12 +122,12 @@ export function convertToTranslatorConfigs(
 }
 
 const actionConfigs: { [key: string]: ActionConfig } = await (async () => {
-    const translatorConfigs = {};
-    const configs = await getBuiltinAppAgentConfigs();
-    for (const [name, config] of configs.entries()) {
-        convertToTranslatorConfigs(name, config, translatorConfigs);
+    const configs = {};
+    const appAgentConfigs = await getBuiltinAppAgentConfigs();
+    for (const [name, config] of appAgentConfigs.entries()) {
+        convertToActionConfig(name, config, configs);
     }
-    return translatorConfigs;
+    return configs;
 })();
 
 export function getBuiltinTranslatorNames() {
@@ -139,7 +139,7 @@ export function getDefaultBuiltinTranslatorName() {
     return getBuiltinTranslatorNames()[0];
 }
 
-export function getBuiltinTranslatorConfigProvider(): ActionConfigProvider {
+export function getBuiltinActionConfigProvider(): ActionConfigProvider {
     return {
         tryGetActionConfig(schemaName: string) {
             return actionConfigs[schemaName];
@@ -160,7 +160,7 @@ export function getBuiltinTranslatorConfigProvider(): ActionConfigProvider {
 export function loadBuiltinTranslatorSchemaConfig(translatorName: string) {
     return loadTranslatorSchemaConfig(
         translatorName,
-        getBuiltinTranslatorConfigProvider(),
+        getBuiltinActionConfigProvider(),
     );
 }
 
@@ -195,9 +195,9 @@ export function createChangeAssistantActionSchema(
 ): ActionSchemaTypeDefinition | undefined {
     // Default to no switching if active translator isn't passed in.
     const translators = provider.getActionConfigs().filter(
-        ([name, translatorConfig]) =>
+        ([name, actionConfigs]) =>
             name !== currentSchemaName && // don't include itself
-            !translatorConfig.injected && // don't include injected translators
+            !actionConfigs.injected && // don't include injected translators
             (activeSchemas[name] ?? false),
     );
     if (translators.length === 0) {
@@ -246,16 +246,16 @@ function getChangeAssistantSchemaDef(
 }
 
 function getTranslatorSchemaDef(
-    translatorConfig: ActionConfig,
+    actionConfig: ActionConfig,
 ): TranslatorSchemaDef {
     return {
         kind: "file",
-        typeName: translatorConfig.schemaType,
-        fileName: getPackageFilePath(translatorConfig.schemaFile),
+        typeName: actionConfig.schemaType,
+        fileName: getPackageFilePath(actionConfig.schemaFile),
     };
 }
 
-export function getInjectedTranslatorConfigs(
+export function getInjectedActionConfigs(
     translatorName: string,
     provider: ActionConfigProvider,
     activeTranslators: { [key: string]: boolean } | undefined,
@@ -282,7 +282,7 @@ function getInjectedSchemaDefs(
     multipleActions: boolean = false,
 ): TranslatorSchemaDef[] {
     // Add all injected schemas
-    const injectSchemaConfigs = getInjectedTranslatorConfigs(
+    const injectSchemaConfigs = getInjectedActionConfigs(
         translatorName,
         provider,
         activeTranslators,

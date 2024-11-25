@@ -68,13 +68,13 @@ export default class ExplainCommand extends Command {
 
     async run(): Promise<void> {
         const { args, flags } = await this.parse(ExplainCommand);
-        const translators = flags.translator
+        const schemas = flags.translator
             ? Object.fromEntries(flags.translator.map((name) => [name, true]))
             : undefined;
         const context = await initializeCommandHandlerContext(
             "cli run explain",
             {
-                translators,
+                schemas,
                 actions: null, // We don't need any actions
                 commands: null,
                 explainer: {

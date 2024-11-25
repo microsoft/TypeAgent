@@ -7,7 +7,7 @@ import {
     getAssistantSelectionSchemas,
     getFullSchemaText,
     getBuiltinTranslatorNames,
-    getBuiltinTranslatorConfigProvider,
+    getBuiltinActionConfigProvider,
     getActionSchema,
 } from "agent-dispatcher/internal";
 import { generateSchemaTypeDefinition } from "action-schema";
@@ -49,7 +49,7 @@ export default class Schema extends Command {
 
     async run(): Promise<void> {
         const { args, flags } = await this.parse(Schema);
-        const provider = getBuiltinTranslatorConfigProvider();
+        const provider = getBuiltinActionConfigProvider();
         if (!flags.assistant) {
             if (args.actionName) {
                 const actionSchema = getActionSchema(

@@ -22,7 +22,7 @@ export default class Interactive extends Command {
     static description = "Interactive mode";
     static flags = {
         translator: Flags.string({
-            description: "Translator names",
+            description: "Schema names",
             options: getBuiltinTranslatorNames(),
             multiple: true,
         }),
@@ -69,12 +69,12 @@ export default class Interactive extends Command {
 
         let context: CommandHandlerContext | undefined;
 
-        const translators = flags.translator
+        const schemas = flags.translator
             ? Object.fromEntries(flags.translator.map((name) => [name, true]))
             : undefined;
         try {
             context = await initializeCommandHandlerContext("cli interactive", {
-                translators,
+                schemas,
                 translation: { model: flags.model },
                 explainer: { name: flags.explainer },
                 stdio,

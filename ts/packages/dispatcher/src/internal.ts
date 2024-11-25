@@ -36,6 +36,6 @@ export { getActionSchema } from "./translation/actionSchema.js";
 export { getTestDataFiles } from "./utils/config.js";
 export {
     loadBuiltinTranslatorSchemaConfig,
-    getBuiltinTranslatorConfigProvider,
+    getBuiltinActionConfigProvider,
     getFullSchemaText,
 } from "./translation/agentTranslators.js";

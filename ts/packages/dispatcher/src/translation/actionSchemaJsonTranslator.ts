@@ -17,7 +17,7 @@ import {
     JsonTranslatorOptions,
 } from "common-utils";
 import {
-    getInjectedTranslatorConfigs,
+    getInjectedActionConfigs,
     ActionConfigProvider,
     ActionConfig,
     createChangeAssistantActionSchema,
@@ -165,7 +165,7 @@ export function composeActionSchema(
     const builder = new ActionSchemaBuilder();
     builder.addActionConfig(provider.getActionConfig(schemaName));
     builder.addActionConfig(
-        ...getInjectedTranslatorConfigs(schemaName, provider, activeSchemas),
+        ...getInjectedActionConfigs(schemaName, provider, activeSchemas),
     );
 
     if (activeSchemas) {
