@@ -238,14 +238,14 @@ class AgentToggleCommandHandler implements CommandHandler {
         names: string[],
     ) {
         const completions: string[] = [];
-        const existingNames =
-            this.toggle === AgentToggle.Command ||
-            this.toggle === AgentToggle.Agent
-                ? context.agentContext.agents.getAppAgentNames()
-                : context.agentContext.agents.getTranslatorNames();
 
         for (const name of names) {
             if (name === "agentNames" || name === "--off") {
+                const existingNames =
+                    this.toggle === AgentToggle.Command ||
+                    this.toggle === AgentToggle.Agent
+                        ? context.agentContext.agents.getAppAgentNames()
+                        : context.agentContext.agents.getTranslatorNames();
                 completions.push(...existingNames);
             }
         }

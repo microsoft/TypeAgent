@@ -7,7 +7,7 @@
     "schemaFile": "./codeActionsSchema.ts",
     "schemaType": "CodeActions"
   },
-  "subTranslators": {
+  "subActionManifests": {
     "code-debug": {
       "schema": {
         "description": "Code agent that helps you debug code including handling actions like showing the debug panel, adding/toggling breakpoints, stepping in/out of code etc.",
