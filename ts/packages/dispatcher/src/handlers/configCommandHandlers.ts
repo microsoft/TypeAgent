@@ -231,6 +231,27 @@ class AgentToggleCommandHandler implements CommandHandler {
             displayResult(lines, context);
         }
     }
+
+    public async getCompletion(
+        context: SessionContext<CommandHandlerContext>,
+        params: PartialParsedCommandParams<typeof this.parameters>,
+        names: string[],
+    ) {
+        const completions: string[] = [];
+        const existingNames =
+            this.toggle === AgentToggle.Command ||
+            this.toggle === AgentToggle.Agent
+                ? context.agentContext.agents.getAppAgentNames()
+                : context.agentContext.agents.getTranslatorNames();
+
+        for (const name of names) {
+            if (name === "agentNames" || name === "--off") {
+                completions.push(...existingNames);
+            }
+        }
+
+        return completions;
+    }
 }
 
 class ExplainerCommandHandler implements CommandHandler {
