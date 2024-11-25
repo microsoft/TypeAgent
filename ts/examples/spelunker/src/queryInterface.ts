@@ -327,9 +327,9 @@ export async function interactiveQueryLoop(
         return {
             description: "Show all recorded file names.",
             options: {
-                verbose: {
-                    description: "More verbose output",
-                    type: "boolean",
+                filter: {
+                    description: "Only show files containing this string",
+                    type: "string",
                 },
             },
         };
