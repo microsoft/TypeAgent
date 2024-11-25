@@ -887,40 +887,67 @@ function writeChunkLines(
     }
 }
 
-// Wrap long lines. Bugs by Github Copilot.
+// Wrap long lines.
 export function wordWrap(text: string, wrapLength: number = 80): string {
-    const wrappedLines: string[] = [];
-
-    text.split("\n").forEach((line) => {
-        let match = line.match(/^(\s*[-*]\s+|\s*)/); // Match leading indent or "- ", "* ", etc.
-        let indent = match ? match[0] : "";
-        let baseIndent = indent;
-
-        // Special handling for list items: add 2 spaces to the indent for overflow lines
-        if (match && /^(\s*[-*]\s+)/.test(indent)) {
-            // const listMarkerLength = indent.length - indent.trimStart().length;
-            indent = " ".repeat(indent.length + 2);
+    let inCodeBlock = false;
+    const lines: string[] = [];
+    const prefixRegex = /^\s*((-|\*|\d+\.)\s+)?/;
+    for (let line of text.split(/[ ]*\r?\n/)) {
+        if (line.startsWith("```")) inCodeBlock = !inCodeBlock; // TODO: Colorize code blocks.
+        if (line.length <= wrapLength || inCodeBlock) {
+            // The whole line is deemed to fit.
+            lines.push(line);
+            continue;
         }
-
-        let currentLine = "";
-        line.trimEnd()
-            .split(/\s+/)
-            .forEach((word) => {
-                if (
-                    currentLine.length + word.length + 1 > wrapLength &&
-                    currentLine.length > 0
-                ) {
-                    wrappedLines.push(baseIndent + currentLine.trimEnd());
-                    currentLine = indent + word + " ";
-                } else {
-                    currentLine += word + " ";
-                }
-            });
-
-        if (currentLine.trimEnd()) {
-            wrappedLines.push(baseIndent + currentLine.trimEnd());
+        // We must try to break.
+        const prefixLength = prefixRegex.exec(line)?.[0]?.length ?? 0;
+        const indent = " ".repeat(prefixLength);
+        while (line.length > wrapLength) {
+            const shortenedLine = line.slice(0, wrapLength + 1);
+            let index = shortenedLine.lastIndexOf(" ");
+            if (index <= prefixLength) {
+                index = line.indexOf(" ", wrapLength);
+                if (index < 0) break; // The rest of the line is one "word".
+            }
+            lines.push(line.slice(0, index).trimEnd());
+            line = indent + line.slice(index + 1).trimStart();
         }
-    });
-
-    return wrappedLines.join("\n");
+        lines.push(line);
+    }
+    return lines.join("\n");
 }
+
+export function testWordWrap(): void {
+    const sampleText = `\
+This is a long line that should be wrapped at some point. It's not clear where.
+    This is another long line but it is also indented. Let's make sure the breaks are also indented.
+    - This is a bullet point that should be wrapped at some point. It's not clear where.
+    12. This is a numbered point that should be wrapped at some point. It's not clear where.
+\`\`\`python
+def generate_id() -> IdType:
+    """Generate a new unique ID.
+
+    IDs are really timestamps formatted as YYYY_MM_DD-HH_MM_SS.UUUUUU,
+    where UUUUUU is microseconds.
+
+    To ensure IDs are unique, if the next timestamp isn't greater than the last one,
+    we add 1 usec to the last one. This has the advantage of "gracefully" handling
+    time going backwards.
+    """
+    global last_ts
+    next_ts = datetime.datetime.now()  # Local time, for now
+    if next_ts <= last_ts:
+        next_ts = last_ts + datetime.timedelta(microseconds=1)
+    last_ts = next_ts
+    return next_ts.strftime("%Y%m%d-%H%M%S.%f")
+\`\`\`
+This is a short line.
+  * A short bullet.
+  * Another short one.
+    A short indented line.
+End.
+`;
+    console.log(wordWrap(sampleText, 40));
+}
+
+// testWordWrap();
