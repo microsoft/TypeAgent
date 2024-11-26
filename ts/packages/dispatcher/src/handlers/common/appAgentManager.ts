@@ -24,6 +24,7 @@ import {
 } from "../../translation/actionSchemaSementicMap.js";
 import { ActionSchemaFileCache } from "../../translation/actionSchemaFileCache.js";
 import { ActionSchemaFile } from "action-schema";
+import path from "path";
 
 const debug = registerDebug("typeagent:agents");
 const debugError = registerDebug("typeagent:agents:error");
@@ -143,8 +144,15 @@ export class AppAgentManager implements ActionConfigProvider {
     private readonly emojis: Record<string, string> = {};
     private readonly transientAgents: Record<string, boolean | undefined> = {};
     private readonly actionSementicMap = new ActionSchemaSementicMap();
-    private readonly actionSchemaFileCache = new ActionSchemaFileCache();
+    private readonly actionSchemaFileCache;
 
+    public constructor(sessionDirPath: string | undefined) {
+        this.actionSchemaFileCache = new ActionSchemaFileCache(
+            sessionDirPath
+                ? path.join(sessionDirPath, "actionSchemaFileCache.json")
+                : undefined,
+        );
+    }
     public getAppAgentNames(): string[] {
         return Array.from(this.agents.keys());
     }

@@ -317,7 +317,7 @@ export async function initializeCommandHandlerContext(
         serviceHost = await createServiceHost();
     }
 
-    const agents = new AppAgentManager();
+    const agents = new AppAgentManager(sessionDirPath);
     const context: CommandHandlerContext = {
         agents,
         session,

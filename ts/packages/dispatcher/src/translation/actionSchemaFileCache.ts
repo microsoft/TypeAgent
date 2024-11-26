@@ -22,7 +22,22 @@ type CacheEntry = {
     actionSchemaFile: ActionSchemaFile;
 };
 export class ActionSchemaFileCache {
-    private cache = new Map<string, CacheEntry>();
+    private readonly cache = new Map<string, CacheEntry>();
+    private readonly prevSaved = new Map<string, CacheEntry>();
+    public constructor(private readonly cacheFilePath?: string) {
+        if (cacheFilePath !== undefined) {
+            try {
+                const data = fs.readFileSync(cacheFilePath, "utf-8");
+                const entries = JSON.parse(data) as [string, CacheEntry][];
+                for (const [key, entry] of entries) {
+                    this.prevSaved.set(key, entry);
+                }
+            } catch (e) {
+                // Ignore errors
+            }
+        }
+    }
+
     public getActionSchemaFile(actionConfig: ActionConfig): ActionSchemaFile {
         const schemaFileFullPath = getPackageFilePath(actionConfig.schemaFile);
         const source = fs.readFileSync(schemaFileFullPath, "utf-8");
@@ -32,6 +47,15 @@ export class ActionSchemaFileCache {
         if (cached !== undefined && cached.hash === hash) {
             return cached.actionSchemaFile;
         }
+
+        const lastCached = this.prevSaved.get(key);
+        if (lastCached !== undefined && lastCached.hash === hash) {
+            this.prevSaved.delete(key);
+            this.cache.set(key, lastCached);
+            this.saveCache();
+            return lastCached.actionSchemaFile;
+        }
+
         const actionSchemaFile = parseActionSchemaFile(
             schemaFileFullPath,
             actionConfig.schemaName,
@@ -41,7 +65,20 @@ export class ActionSchemaFileCache {
             hash,
             actionSchemaFile,
         });
+
+        this.saveCache();
         return actionSchemaFile;
+    }
+
+    private saveCache() {
+        if (this.cacheFilePath === undefined) {
+            return;
+        }
+        fs.writeFileSync(
+            this.cacheFilePath,
+            JSON.stringify(Array.from(this.cache.entries())),
+            "utf-8",
+        );
     }
 }
 
