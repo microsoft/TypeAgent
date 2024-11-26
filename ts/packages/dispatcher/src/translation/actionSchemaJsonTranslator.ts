@@ -24,7 +24,7 @@ import {
     createChangeAssistantActionSchema,
 } from "./agentTranslators.js";
 import { createMultipleActionSchema } from "./multipleActionSchema.js";
-import { getActionSchemaFile } from "./actionSchema.js";
+import { getActionSchemaFileForConfig } from "./actionSchema.js";
 
 function createActionSchemaJsonValidator<T extends TranslatedAction>(
     actionSchemaGroup: ActionSchemaGroup,
@@ -75,9 +75,13 @@ class ActionSchemaBuilder {
     private readonly files: ActionSchemaFile[] = [];
     private readonly definitions: ActionSchemaEntryTypeDefinition[] = [];
 
+    constructor(private readonly provider: ActionConfigProvider) {}
     addActionConfig(...configs: ActionConfig[]) {
         for (const config of configs) {
-            const actionSchemaFile = getActionSchemaFile(config);
+            const actionSchemaFile = getActionSchemaFileForConfig(
+                config,
+                this.provider,
+            );
             this.files.push(actionSchemaFile);
             this.definitions.push(actionSchemaFile.entry);
         }
@@ -163,7 +167,7 @@ export function composeActionSchema(
     activeSchemas: { [key: string]: boolean } | undefined,
     multipleActions: boolean = false,
 ) {
-    const builder = new ActionSchemaBuilder();
+    const builder = new ActionSchemaBuilder(provider);
     builder.addActionConfig(provider.getActionConfig(schemaName));
     builder.addActionConfig(
         ...getInjectedActionConfigs(schemaName, provider, activeSchemas),

@@ -37,6 +37,7 @@ import {
     generateSchemaTypeDefinition,
     ActionSchemaObject,
     ActionSchemaCreator as sc,
+    ActionSchemaFile,
 } from "action-schema";
 const debugConfig = registerDebug("typeagent:translator:config");
 
@@ -54,6 +55,7 @@ export interface ActionConfigProvider {
     tryGetActionConfig(schemaName: string): ActionConfig | undefined;
     getActionConfig(schemaName: string): ActionConfig;
     getActionConfigs(): [string, ActionConfig][];
+    getActionSchemaFileForConfig?(config: ActionConfig): ActionSchemaFile;
 }
 
 function collectActionConfigs(

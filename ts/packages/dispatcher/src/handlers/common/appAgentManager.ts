@@ -16,13 +16,14 @@ import {
 import { createSessionContext } from "../../action/actionHandlers.js";
 import { AppAgentProvider } from "../../agent/agentProvider.js";
 import registerDebug from "debug";
-import { getActionSchemaFile as getActionSchemaFile } from "../../translation/actionSchema.js";
 import { DeepPartialUndefinedAndNull } from "common-utils";
 import { DispatcherName } from "./interactiveIO.js";
 import {
     ActionSchemaSementicMap,
     EmbeddingCache,
 } from "../../translation/actionSchemaSementicMap.js";
+import { ActionSchemaFileCache } from "../../translation/actionSchema.js";
+import { ActionSchemaFile } from "action-schema";
 
 const debug = registerDebug("typeagent:agents");
 const debugError = registerDebug("typeagent:agents:error");
@@ -142,6 +143,8 @@ export class AppAgentManager implements ActionConfigProvider {
     private readonly emojis: Record<string, string> = {};
     private readonly transientAgents: Record<string, boolean | undefined> = {};
     private readonly actionSementicMap = new ActionSchemaSementicMap();
+    private readonly actionSchemaFileCache = new ActionSchemaFileCache();
+
     public getAppAgentNames(): string[] {
         return Array.from(this.agents.keys());
     }
@@ -224,7 +227,8 @@ export class AppAgentManager implements ActionConfigProvider {
                 this.actionConfigs.set(name, config);
                 this.emojis[name] = config.emojiChar;
 
-                const actionSchemaFile = getActionSchemaFile(config);
+                const actionSchemaFile =
+                    this.actionSchemaFileCache.getActionSchemaFile(config);
                 semanticMapP.push(
                     this.actionSementicMap.addActionSchemaFile(
                         config,
@@ -571,5 +575,16 @@ export class AppAgentManager implements ActionConfigProvider {
             throw new Error(`Unknown app agent: ${appAgentName}`);
         }
         return record;
+    }
+
+    public getActionSchemaFile(schemaName: string) {
+        const config = this.tryGetActionConfig(schemaName);
+        return config ? this.getActionSchemaFileForConfig(config) : undefined;
+    }
+
+    public getActionSchemaFileForConfig(
+        config: ActionConfig,
+    ): ActionSchemaFile {
+        return this.actionSchemaFileCache.getActionSchemaFile(config);
     }
 }
