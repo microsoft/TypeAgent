@@ -758,16 +758,20 @@ async function generateAnswer(
     writeNote(io, `\n[Overall ${scoredChunkIds.length} unique chunk ids]`);
 
     scoredChunkIds.sort((a, b) => b.score - a.score);
-    scoredChunkIds.splice(20); // Arbitrary number. (TODO: Make it an option.)
 
     // Step 3b: Get the chunks themselves.
     const chunks: Chunk[] = [];
-
+    const maxChunks = 20;
+    // Take the top N chunks that actually exist.
     for (const chunkId of scoredChunkIds) {
         const maybeChunk = await chunkyIndex.chunkFolder.get(chunkId.item);
-        if (maybeChunk) chunks.push(maybeChunk);
-        else {
-            writeWarning(io, `[Chunk ${chunkId.item} not found]`);
+        if (maybeChunk) {
+            chunks.push(maybeChunk);
+            if (chunks.length >= maxChunks) {
+                break;
+            }
+        } else {
+            writeNote(io, `[Chunk ${chunkId.item} not found]`);
         }
     }
 
