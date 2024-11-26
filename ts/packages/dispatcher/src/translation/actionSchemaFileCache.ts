@@ -3,8 +3,11 @@
 
 import {
     ActionSchemaFile,
+    ActionSchemaFileJSON,
     ActionSchemaTypeDefinition,
+    fromJSONActionSchemaFile,
     parseActionSchemaFile,
+    toJSONActionSchemaFile,
 } from "action-schema";
 import { ActionConfig, ActionConfigProvider } from "./agentTranslators.js";
 import { getPackageFilePath } from "../utils/getPackageFilePath.js";
@@ -12,17 +15,21 @@ import { AppAction } from "@typeagent/agent-sdk";
 import { DeepPartialUndefined } from "common-utils";
 import fs from "node:fs";
 import crypto from "node:crypto";
+import registerDebug from "debug";
 
+const debug = registerDebug("typeagent:schema:cache");
+const debugError = registerDebug("typeagent:schema:cache:error");
 function hashString(str: string) {
     return crypto.createHash("sha256").update(str).digest("base64");
 }
 
 type CacheEntry = {
     hash: string;
-    actionSchemaFile: ActionSchemaFile;
+    actionSchemaFile: ActionSchemaFileJSON;
 };
+
 export class ActionSchemaFileCache {
-    private readonly cache = new Map<string, CacheEntry>();
+    private readonly actionSchemaFiles = new Map<string, ActionSchemaFile>();
     private readonly prevSaved = new Map<string, CacheEntry>();
     public constructor(private readonly cacheFilePath?: string) {
         if (cacheFilePath !== undefined) {
@@ -32,53 +39,78 @@ export class ActionSchemaFileCache {
                 for (const [key, entry] of entries) {
                     this.prevSaved.set(key, entry);
                 }
+                // We will rewrite it.
+                fs.unlinkSync(cacheFilePath);
             } catch (e) {
-                // Ignore errors
+                debugError(`Failed to load parsed schema cache: ${e}`);
             }
         }
     }
 
     public getActionSchemaFile(actionConfig: ActionConfig): ActionSchemaFile {
+        const actionSchemaFile = this.actionSchemaFiles.get(
+            actionConfig.schemaName,
+        );
+        if (actionSchemaFile !== undefined) {
+            return actionSchemaFile;
+        }
+
         const schemaFileFullPath = getPackageFilePath(actionConfig.schemaFile);
         const source = fs.readFileSync(schemaFileFullPath, "utf-8");
         const hash = hashString(source);
         const key = `${actionConfig.schemaName}|${actionConfig.schemaType}|${schemaFileFullPath}`;
-        const cached = this.cache.get(key);
-        if (cached !== undefined && cached.hash === hash) {
-            return cached.actionSchemaFile;
-        }
 
         const lastCached = this.prevSaved.get(key);
-        if (lastCached !== undefined && lastCached.hash === hash) {
+        if (lastCached !== undefined) {
             this.prevSaved.delete(key);
-            this.cache.set(key, lastCached);
-            this.saveCache();
-            return lastCached.actionSchemaFile;
+            if (lastCached.hash === hash) {
+                debug(`Cached parsed schema used: ${actionConfig.schemaName}`);
+                const cached = fromJSONActionSchemaFile(
+                    lastCached.actionSchemaFile,
+                );
+                this.actionSchemaFiles.set(key, cached);
+                this.addToCache(key, hash, lastCached.actionSchemaFile);
+                return cached;
+            }
+            debugError(
+                `Cached parsed schema hash mismatch: ${actionConfig.schemaName}`,
+            );
         }
 
-        const actionSchemaFile = parseActionSchemaFile(
+        const parsed = parseActionSchemaFile(
             schemaFileFullPath,
             actionConfig.schemaName,
             actionConfig.schemaType,
         );
-        this.cache.set(key, {
-            hash,
-            actionSchemaFile,
-        });
+        this.actionSchemaFiles.set(key, parsed);
 
-        this.saveCache();
-        return actionSchemaFile;
+        if (this.cacheFilePath !== undefined) {
+            this.addToCache(key, hash, toJSONActionSchemaFile(parsed));
+        }
+        return parsed;
     }
 
-    private saveCache() {
+    private addToCache(
+        key: string,
+        hash: string,
+        actionSchemaFile: ActionSchemaFileJSON,
+    ) {
         if (this.cacheFilePath === undefined) {
             return;
         }
-        fs.writeFileSync(
-            this.cacheFilePath,
-            JSON.stringify(Array.from(this.cache.entries())),
-            "utf-8",
-        );
+
+        try {
+            const data = fs.readFileSync(this.cacheFilePath, "utf-8");
+            const entries = JSON.parse(data) as [string, CacheEntry][];
+            entries.push([key, { hash, actionSchemaFile }]);
+            fs.writeFileSync(
+                this.cacheFilePath,
+                JSON.stringify(entries),
+                "utf-8",
+            );
+        } catch {
+            // ignore error
+        }
     }
 }
 

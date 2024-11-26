@@ -25,3 +25,9 @@ export { getParameterType, getParameterNames } from "./utils.js";
 export { NodeType, SchemaParser, ISymbol, SymbolNode } from "./schemaParser.js";
 
 export * as ActionSchemaCreator from "./creator.js";
+
+export {
+    ActionSchemaFileJSON,
+    toJSONActionSchemaFile,
+    fromJSONActionSchemaFile,
+} from "./serialize.js";
