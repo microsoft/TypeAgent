@@ -1,7 +1,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-// The request has ambiguities, including multiple possible actions, multiple interpretations, unresolved references, missing parameters, etc.
+// Ask the user for clarification for the request that has ambiguities such as missing parameters, multiple possible actions, multiple interpretations, unresolved references, etc.
+// The translation must be based only on the user request and may consider available information in chat history.
+// Do not make assumptions and generate parameters that are not in the user request or chat history.
 export interface ClarifyRequestAction {
     actionName: "clarifyRequest";
     parameters: {
