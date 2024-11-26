@@ -27,6 +27,7 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
+    "@azure/maps-search": "^1.0.0-beta.2",
     "@azure-rest/maps-search": "^2.0.0-beta.2",
     "@typeagent/agent-sdk": "workspace:*",
     "aiclient": "workspace:*",
