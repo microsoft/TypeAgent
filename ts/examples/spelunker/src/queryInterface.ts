@@ -16,6 +16,7 @@ import { QuerySpec, QuerySpecs } from "./makeQuerySchema.js";
 import { Chunk, ChunkId } from "./pythonChunker.js";
 import { importAllFiles } from "./pythonImporter.js";
 import { AnswerSpecs } from "./makeAnswerSchema.js";
+import { PromptSection } from "typechat";
 
 type QueryOptions = {
     maxHits: number;
@@ -97,6 +98,7 @@ export async function interactiveQueryLoop(
                 verbose: {
                     description: "More verbose output",
                     type: "boolean",
+                    defaultValue: verbose,
                 },
             },
         };
@@ -120,12 +122,7 @@ export async function interactiveQueryLoop(
             writeError(io, "[No files to import (use --? for help)]");
             return;
         }
-        await importAllFiles(
-            files,
-            chunkyIndex,
-            io,
-            namedArgs.verbose ?? verbose,
-        );
+        await importAllFiles(files, chunkyIndex, io, namedArgs.verbose);
     }
 
     handlers.clearMemory.metadata = "Clear all memory (and all indexes)";
@@ -213,6 +210,7 @@ export async function interactiveQueryLoop(
                 verbose: {
                     description: "More verbose output",
                     type: "boolean",
+                    defaultValue: verbose,
                 },
             },
         };
@@ -227,7 +225,7 @@ export async function interactiveQueryLoop(
         const queryOptions: QueryOptions = {
             maxHits: namedArgs.maxHits,
             minScore: namedArgs.minScore,
-            verbose: namedArgs.verbose ?? verbose,
+            verbose: namedArgs.verbose,
         };
         await processQuery(query, chunkyIndex, io, queryOptions);
     }
@@ -237,6 +235,7 @@ export async function interactiveQueryLoop(
             verbose: {
                 description: "More verbose output",
                 type: "boolean",
+                defaultValue: verbose,
             },
             filter: {
                 description: "Filter by keyword",
@@ -391,6 +390,7 @@ export async function interactiveQueryLoop(
                 verbose: {
                     description: "More verbose output",
                     type: "boolean",
+                    defaultValue: verbose,
                 },
             },
         };
@@ -403,12 +403,7 @@ export async function interactiveQueryLoop(
         const namedArgs = iapp.parseNamedArguments(args, purgeFileDef());
         const file = namedArgs.fileName as string;
         const fileName = fs.existsSync(file) ? fs.realpathSync(file) : file;
-        await purgeNormalizedFile(
-            io,
-            chunkyIndex,
-            fileName,
-            namedArgs.verbose ?? verbose,
-        );
+        await purgeNormalizedFile(io, chunkyIndex, fileName, namedArgs.verbose);
     }
 
     async function _reportIndex(
@@ -526,7 +521,7 @@ export async function interactiveQueryLoop(
         input: string,
         io: iapp.InteractiveIo,
     ): Promise<void> {
-        await processQuery(input, chunkyIndex, io, {} as QueryOptions);
+        await processQuery(input, chunkyIndex, io, { verbose } as QueryOptions);
     }
 
     await iapp.runConsole({
@@ -588,7 +583,7 @@ async function processQuery(
     io: iapp.InteractiveIo,
     queryOptions: QueryOptions,
 ): Promise<void> {
-    // ** Step 0:** Find the five most recent answers (presumably in this session).
+    // ** Step 0:** Find most recent answers.
 
     const recentAnswers: NameValue<AnswerSpecs>[] = await findRecentAnswers(
         input,
@@ -608,7 +603,7 @@ async function processQuery(
 
     // **Step 2:** Run those queries on the indexes.
 
-    const chunkIdScores = await runIndexQueries(
+    const [message, chunkIdScores] = await runIndexQueries(
         proposedQueries,
         chunkyIndex,
         io,
@@ -620,6 +615,7 @@ async function processQuery(
 
     const answer = await generateAnswer(
         input,
+        message,
         chunkIdScores,
         recentAnswers,
         chunkyIndex,
@@ -641,7 +637,12 @@ async function proposeQueries(
     io: iapp.InteractiveIo,
     queryOptions: QueryOptions,
 ): Promise<QuerySpecs | undefined> {
-    const promptPreamble = makeQueryMakerPrompt(input, recentAnswers);
+    const promptPreamble = makeQueryMakerPrompt(recentAnswers);
+    if (queryOptions.verbose) {
+        for (const section of promptPreamble) {
+            writeNote(io, `[${section.role}: ${section.content}]`);
+        }
+    }
     const result = await chunkyIndex.queryMaker.translate(
         input,
         promptPreamble,
@@ -652,6 +653,7 @@ async function proposeQueries(
     }
     const specs = result.data;
     if (queryOptions.verbose) {
+        writeNote(io, `\n[Result: proposed queries]`);
         // Use util.inspect() to colorize JSON; writeColor() doesn't do that.
         io.writer.writeLine(
             util.inspect(specs, { depth: null, colors: true, compact: false }),
@@ -665,23 +667,28 @@ async function runIndexQueries(
     chunkyIndex: ChunkyIndex,
     io: iapp.InteractiveIo,
     queryOptions: QueryOptions,
-): Promise<Map<ChunkId, ScoredItem<ChunkId>> | undefined> {
+): Promise<
+    [string | undefined, Map<ChunkId, ScoredItem<ChunkId>> | undefined]
+> {
     const chunkIdScores: Map<ChunkId, ScoredItem<ChunkId>> = new Map(); // Record score of each chunk id.
     const totalNumChunks = await chunkyIndex.chunkFolder.size(); // Nominator in IDF calculation.
 
     for (const [indexName, index] of chunkyIndex.allIndexes()) {
-        const spec: QuerySpec | undefined = (proposedQueries as any)[indexName];
-        if (!spec) {
-            writeWarning(io, `[No query for ${indexName}]`);
+        const spec: QuerySpec = (proposedQueries as any)[indexName];
+        if (spec.maxHits === 0) {
+            writeWarning(io, `[${indexName}: no query]`);
             continue;
         }
         const hits = await index.nearestNeighborsPairs(
             spec.query,
             spec.maxHits ?? queryOptions.maxHits,
-            spec.minScore ?? queryOptions.minScore,
+            queryOptions.minScore,
         );
         if (!hits.length) {
-            writeWarning(io, `[No hits for ${indexName}]`);
+            writeNote(
+                io,
+                `[${indexName}: query ${spec.query} (maxHits ${spec.maxHits}) no hits]`,
+            );
             continue;
         }
 
@@ -729,21 +736,22 @@ async function runIndexQueries(
         const end = hits.length - 1;
         writeNote(
             io,
-            `[${indexName}: query '${spec.query}'; ${hits.length} hits; ` +
+            `[${indexName}: query '${spec.query}' (maxHits ${spec.maxHits}); ${hits.length} hits; ` +
                 `scores ${hits[0].score.toFixed(3)}--${hits[end].score.toFixed(3)}; ` +
                 `${numChunks} unique chunk ids]`,
         );
     }
 
-    if (proposedQueries.unknownText) {
-        writeWarning(io, `[Unknown text: ${proposedQueries.unknownText}]`);
+    if (proposedQueries.message) {
+        writeNote(io, `[Message: ${proposedQueries.message}]`);
     }
 
-    return chunkIdScores;
+    return [proposedQueries.message, chunkIdScores];
 }
 
 async function generateAnswer(
     input: string,
+    message: string | undefined,
     chunkIdScores: Map<ChunkId, ScoredItem<ChunkId>>,
     recentAnswers: NameValue<AnswerSpecs>[],
     chunkyIndex: ChunkyIndex,
@@ -778,15 +786,9 @@ async function generateAnswer(
     writeNote(io, `[Sending ${chunks.length} chunks to answerMaker]`);
 
     // Step 3c: Make the request and check for success.
-    const request = { chunks, pastAnswers: recentAnswers };
-
-    if (queryOptions.verbose) {
-        writeNote(io, `Request: ${JSON.stringify(request, null, 2)}`);
-    }
-
     const answerResult = await chunkyIndex.answerMaker.translate(
-        JSON.stringify(request),
-        makeAnswerPrompt(input),
+        input,
+        makeAnswerPrompt(message, recentAnswers, chunks),
     );
 
     if (!answerResult.success) {
@@ -808,13 +810,14 @@ async function findRecentAnswers(
     input: string,
     chunkyIndex: ChunkyIndex,
 ): Promise<NameValue<AnswerSpecs>[]> {
+    // TODO: Allow for multiple concurrent sessions.
     const recentAnswers: NameValue<AnswerSpecs>[] = [];
     for await (const answer of chunkyIndex.answerFolder.all()) {
         recentAnswers.push(answer);
     }
     // Assume the name field (the internal key) is a timestamp.
     recentAnswers.sort((a, b) => b.name.localeCompare(a.name));
-    recentAnswers.splice(5); // Arbitrary number. (TODO: Make it an option.)
+    recentAnswers.splice(5); // TODO: Cut off by total size, not count.
     recentAnswers.reverse(); // Most recent last.
     return recentAnswers;
 }
@@ -837,50 +840,57 @@ function reportQuery(answer: AnswerSpecs, io: iapp.InteractiveIo): void {
 }
 
 function makeQueryMakerPrompt(
-    input: string,
     recentAnswers: NameValue<AnswerSpecs>[],
-): string {
-    return `\
-I have indexed a code base written in Python. I divided each
-file up in "chunks", one per function or class or module, and
-asked an AI to provide for each chunk:
-
-- a summary
-- keywords
-- topics
-- goals
-- dependencies
-
-Now that I've indexed this, I can do a "nearest neighbors" search
-on any query string on each of the five categories. I will next write
-down a question and ask you to produce *queries* for each of the five
-indexes whose answers will help you answer my question. Don't try to
-answer the question (you haven't seen the code yet) -- just tell me the
-query strings for each index.
-
-If you have low confidence in your queries, explain in 'message'.
-
-Here are up to 5 recent answers to use as conversation context:
-
-${JSON.stringify(recentAnswers, null, 2)}
-
-My question is:
-
-${input}
+): PromptSection[] {
+    const prompt = `
+I have a code project split up in chunks indexed on several categories.
+Please produce suitable queries for each applicable index based on
+conversation history (especially if the query refers to a previous answer
+indirectly, e.g. via "it" or "that"), and the user question given later.
+Don't suggest "meta" queries about the conversation itself -- only the code is indexed.
 `;
+    return makeAnyPrompt(recentAnswers, prompt);
 }
 
-function makeAnswerPrompt(input: string): string {
-    return `\
-Here is a JSON representation of a set of query results on indexes for keywords, topics, goals, etc.
-For each index you see a list of text items, where each item has a value (e.g. a topic) and a list of "source ids".
-The source ids reference code chunks, which are provided separately.
-There are also up to 5 recent answers to use as conversation context.
-
-Using the query results and scores, please answer this question:
-
-${input}
+function makeAnswerPrompt(
+    message: string | undefined,
+    recentAnswers: NameValue<AnswerSpecs>[],
+    chunks: Chunk[],
+): PromptSection[] {
+    const prompt = `\
+Following are the chunks most relevant to the query.
+Use the preceding conversation items as context for the user query given later.
 `;
+    const preamble = makeAnyPrompt(recentAnswers, prompt);
+    if (message) {
+        preamble.push({ role: "assistant", content: message });
+    }
+    for (const chunk of chunks) {
+        const chunkData = {
+            fileName: chunk.fileName,
+            chunkId: chunk.id,
+            blobs: chunk.blobs,
+            summary: chunk.docs?.chunkDocs
+                ?.filter((cd) => cd.summary)
+                .map((cd) => cd.summary)
+                .join("\n"),
+        };
+        preamble.push({ role: "user", content: JSON.stringify(chunkData) });
+    }
+    return preamble;
+}
+
+function makeAnyPrompt(
+    recentAnswers: NameValue<AnswerSpecs>[],
+    prompt: string,
+): PromptSection[] {
+    const preamble: PromptSection[] = [];
+    for (const answer of recentAnswers) {
+        preamble.push({ role: "user", content: answer.value.question });
+        preamble.push({ role: "assistant", content: answer.value.answer });
+    }
+    preamble.push({ role: "user", content: prompt.trim() });
+    return preamble;
 }
 
 function writeChunkLines(
