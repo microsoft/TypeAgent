@@ -31,6 +31,7 @@ export interface SemanticMap<T> {
         retryPauseMs?: number,
         concurrency?: number,
     ): Promise<void>;
+    setValue(embeddedKey: EmbeddedValue<string>, value: T): void;
     nearestNeighbors(
         value: string | NormalizedEmbedding,
         maxMatches: number,
@@ -38,10 +39,10 @@ export interface SemanticMap<T> {
     ): Promise<ScoredItem<T>[]>;
 }
 
-export async function createSemanticMap<T = any>(
+export function createSemanticMap<T = any>(
     model?: TextEmbeddingModel,
     existingValues?: [EmbeddedValue<string>, T][],
-): Promise<SemanticMap<T>> {
+): SemanticMap<T> {
     model ??= openai.createEmbeddingModel();
     const map = new Map<string, T>();
     const semanticIndex = createSemanticList<string>(model);
@@ -60,6 +61,7 @@ export async function createSemanticMap<T = any>(
         get,
         set,
         setMultiple,
+        setValue,
         getNearest,
         nearestNeighbors,
     };
@@ -124,6 +126,13 @@ export async function createSemanticMap<T = any>(
         }
     }
 
+    function setValue(embeddedKey: EmbeddedValue<string>, value: T) {
+        if (!map.has(embeddedKey.value)) {
+            semanticIndex.pushValue(embeddedKey);
+        }
+        map.set(embeddedKey.value, value);
+    }
+
     async function getNearest(
         text: string | NormalizedEmbedding,
     ): Promise<ScoredItem<T> | undefined> {
@@ -167,8 +176,7 @@ export async function createSemanticMap<T = any>(
 
     function init(entries: [EmbeddedValue<string>, T][]): void {
         for (const [key, value] of entries) {
-            map.set(key.value, value);
-            semanticIndex.pushValue(key);
+            setValue(key, value);
         }
     }
 }

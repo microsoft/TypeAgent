@@ -19,6 +19,10 @@ import registerDebug from "debug";
 import { getActionSchemaFile as getActionSchemaFile } from "../../translation/actionSchema.js";
 import { DeepPartialUndefinedAndNull } from "common-utils";
 import { DispatcherName } from "./interactiveIO.js";
+import {
+    ActionSchemaSementicMap,
+    EmbeddingCache,
+} from "../../translation/actionSchemaSementicMap.js";
 
 const debug = registerDebug("typeagent:agents");
 const debugError = registerDebug("typeagent:agents:error");
@@ -137,7 +141,7 @@ export class AppAgentManager implements ActionConfigProvider {
     >();
     private readonly emojis: Record<string, string> = {};
     private readonly transientAgents: Record<string, boolean | undefined> = {};
-
+    private readonly actionSementicMap = new ActionSchemaSementicMap();
     public getAppAgentNames(): string[] {
         return Array.from(this.agents.keys());
     }
@@ -190,7 +194,17 @@ export class AppAgentManager implements ActionConfigProvider {
         return this.emojis;
     }
 
-    public async addProvider(provider: AppAgentProvider) {
+    public async semanticSearchActionSchema(
+        request: string,
+        maxMatches: number = 1,
+    ) {
+        return this.actionSementicMap.nearestNeighbors(request, maxMatches);
+    }
+    public async addProvider(
+        provider: AppAgentProvider,
+        actionEmbeddingCache?: EmbeddingCache,
+    ) {
+        const semanticMapP: Promise<void>[] = [];
         for (const name of provider.getAppAgentNames()) {
             // TODO: detect duplicate names
             const manifest = await provider.getAppAgentManifest(name);
@@ -201,14 +215,22 @@ export class AppAgentManager implements ActionConfigProvider {
 
             const entries = Object.entries(actionConfigs);
             for (const [name, config] of entries) {
+                debug(`Adding action config: ${name}`);
                 this.actionConfigs.set(name, config);
                 this.emojis[name] = config.emojiChar;
 
+                const actionSchemaFile = getActionSchemaFile(config);
+                semanticMapP.push(
+                    this.actionSementicMap.addActionSchemaFile(
+                        config,
+                        actionSchemaFile,
+                        actionEmbeddingCache,
+                    ),
+                );
                 if (config.transient) {
                     this.transientAgents[name] = false;
                 }
                 if (config.injected) {
-                    const actionSchemaFile = getActionSchemaFile(config);
                     for (const actionName of actionSchemaFile.actionSchemas.keys()) {
                         this.injectedTranslatorForActionName.set(
                             actionName,
@@ -230,8 +252,14 @@ export class AppAgentManager implements ActionConfigProvider {
 
             this.agents.set(name, record);
         }
+        debug("Waiting for action embeddings");
+        await Promise.all(semanticMapP);
+        debug("Finish action embeddings");
     }
 
+    public getActionEmbeddings() {
+        return this.actionSementicMap.embeddings();
+    }
     public tryGetActionConfig(mayBeTranslatorName: string) {
         return this.actionConfigs.get(mayBeTranslatorName);
     }
@@ -303,11 +331,11 @@ export class AppAgentManager implements ActionConfigProvider {
                 if (enableSchema) {
                     record.schemas.add(name);
                     changedSchemas.push([name, enableSchema]);
-                    debug(`Translator enabled ${name}`);
+                    debug(`Schema enabled ${name}`);
                 } else {
                     record.schemas.delete(name);
                     changedSchemas.push([name, enableSchema]);
-                    debug(`Translator disnabled ${name}`);
+                    debug(`Schema disnabled ${name}`);
                 }
             }
 

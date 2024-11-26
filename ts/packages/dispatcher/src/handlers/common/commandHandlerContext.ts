@@ -60,6 +60,16 @@ import { AppAgentProvider } from "../../agent/agentProvider.js";
 import { RequestMetricsManager } from "../../utils/metrics.js";
 import { getTranslatorPrefix } from "../../action/actionHandlers.js";
 import { displayError } from "@typeagent/agent-sdk/helpers/display";
+import path from "path";
+import {
+    EmbeddingCache,
+    readEmbeddingCache,
+    writeEmbeddingCache,
+} from "../../translation/actionSchemaSementicMap.js";
+
+import registerDebug from "debug";
+
+const debug = registerDebug("typeagent:dispatcher:init");
 
 export interface CommandResult {
     error?: boolean;
@@ -220,6 +230,51 @@ function getLoggerSink(isDbEnabled: () => boolean, requestIO: RequestIO) {
     );
 }
 
+async function addAppAgentProvidres(
+    context: CommandHandlerContext,
+    appAgentProviders?: AppAgentProvider[],
+    sessionDirPath?: string,
+) {
+    const embeddingCachePath = sessionDirPath
+        ? path.join(sessionDirPath, "embeddingCache.json")
+        : undefined;
+    let embeddingCache: EmbeddingCache | undefined;
+
+    if (embeddingCachePath) {
+        try {
+            embeddingCache = await readEmbeddingCache(embeddingCachePath);
+            debug("Action Schema Embedding cache loaded");
+        } catch {
+            // Ignore error
+        }
+    }
+
+    await context.agents.addProvider(
+        getBuiltinAppAgentProvider(context),
+        embeddingCache,
+    );
+    await context.agents.addProvider(
+        getExternalAppAgentProvider(context),
+        embeddingCache,
+    );
+    if (appAgentProviders) {
+        for (const provider of appAgentProviders) {
+            await context.agents.addProvider(provider, embeddingCache);
+        }
+    }
+    if (embeddingCachePath) {
+        try {
+            await writeEmbeddingCache(
+                embeddingCachePath,
+                context.agents.getActionEmbeddings(),
+            );
+            debug("Action Schema Embedding cache saved");
+        } catch {
+            // Ignore error
+        }
+    }
+}
+
 export async function initializeCommandHandlerContext(
     hostName: string,
     options?: InitializeCommandHandlerContextOptions,
@@ -286,15 +341,11 @@ export async function initializeCommandHandlerContext(
     };
     context.requestIO.context = context;
 
-    await agents.addProvider(getBuiltinAppAgentProvider(context));
-    const appAgentProviders = options?.appAgentProviders;
-    if (appAgentProviders !== undefined) {
-        for (const provider of appAgentProviders) {
-            await agents.addProvider(provider);
-        }
-    }
-
-    await agents.addProvider(getExternalAppAgentProvider(context));
+    await addAppAgentProvidres(
+        context,
+        options?.appAgentProviders,
+        sessionDirPath,
+    );
 
     await setAppAgentStates(context, options);
     return context;
@@ -410,7 +461,7 @@ export async function changeContextConfig(
     const session = systemContext.session;
     const changed = session.setConfig(options);
 
-    const translatorChanged = changed.hasOwnProperty("translators");
+    const translatorChanged = changed.hasOwnProperty("schemas");
     const actionsChanged = changed.hasOwnProperty("actions");
     const commandsChanged = changed.hasOwnProperty("commands");
 
