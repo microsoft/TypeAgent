@@ -546,10 +546,7 @@ async function pickInitialSchema(
                 )
                 .join("\n")}`,
         );
-        if (
-            result.length > 0 &&
-            result[0].item.actionSchemaFile.schemaName !== undefined
-        ) {
+        if (result.length > 0) {
             schemaName = result[0].item.actionSchemaFile.schemaName;
         }
     }

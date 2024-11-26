@@ -198,8 +198,13 @@ export class AppAgentManager implements ActionConfigProvider {
         request: string,
         maxMatches: number = 1,
     ) {
-        return this.actionSementicMap.nearestNeighbors(request, maxMatches);
+        return this.actionSementicMap.nearestNeighbors(
+            request,
+            this,
+            maxMatches,
+        );
     }
+
     public async addProvider(
         provider: AppAgentProvider,
         actionEmbeddingCache?: EmbeddingCache,

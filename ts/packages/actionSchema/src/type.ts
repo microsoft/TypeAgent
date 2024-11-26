@@ -131,13 +131,16 @@ type ActionSchemaTypeReference =
 // A union of action schema type definitions.
 export type ActionSchemaUnion = SchemaTypeUnion<ActionSchemaTypeReference>;
 
-export type ActionSchemaFile = {
+export type ActionSchemaGroup = {
     // The entry type definition for the action schema.
     entry: ActionSchemaEntryTypeDefinition;
     // Map action name to action type definition
     actionSchemas: Map<string, ActionSchemaTypeDefinition>;
-    // Schema name
-    schemaName?: string;
     // Order for the type definitions
     order?: Map<string, number>; // for exact regen
+};
+
+export type ActionSchemaFile = ActionSchemaGroup & {
+    // Schema name
+    schemaName: string;
 };

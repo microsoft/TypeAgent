@@ -5,12 +5,20 @@ import fs from "node:fs";
 import { ActionSchemaFile, ActionSchemaTypeDefinition } from "action-schema";
 import { ActionConfig } from "./agentTranslators.js";
 import {
-    createSemanticMap,
     EmbeddedValue,
+    generateEmbeddingWithRetry,
+    generateTextEmbeddingsWithRetry,
     NormalizedEmbedding,
+    ScoredItem,
+    similarity,
+    SimilarityType,
+    TopNCollection,
 } from "typeagent";
+import { TextEmbeddingModel, openai } from "aiclient";
+import { AppAgentManager } from "../handlers/common/appAgentManager.js";
 
-type SementicValue = {
+type Entry = {
+    embedding: NormalizedEmbedding;
     actionSchemaFile: ActionSchemaFile;
     definition: ActionSchemaTypeDefinition;
 };
@@ -18,44 +26,74 @@ type SementicValue = {
 export type EmbeddingCache = Map<string, NormalizedEmbedding>;
 
 export class ActionSchemaSementicMap {
-    private readonly actionSementicMap = createSemanticMap<SementicValue>();
-
+    private readonly actionSementicMap = new Map<string, Entry>();
+    private readonly model: TextEmbeddingModel;
+    public constructor(model?: TextEmbeddingModel) {
+        this.model = model ?? openai.createEmbeddingModel();
+    }
     public async addActionSchemaFile(
         config: ActionConfig,
         actionSchemaFile: ActionSchemaFile,
         cache?: EmbeddingCache,
     ) {
-        const entries: [string, SementicValue][] = [];
+        const keys: string[] = [];
+        const definitions: ActionSchemaTypeDefinition[] = [];
+
         for (const [name, definition] of actionSchemaFile.actionSchemas) {
             const key = `${config.schemaName} ${config.description} ${name} ${definition.comments?.[0] ?? ""}`;
-            const value = { actionSchemaFile, definition };
             const embedding = cache?.get(key);
             if (embedding) {
-                this.actionSementicMap.setValue(
-                    { value: key, embedding },
-                    value,
-                );
+                this.actionSementicMap.set(key, {
+                    embedding,
+                    actionSchemaFile,
+                    definition,
+                });
             } else {
-                entries.push([key, { actionSchemaFile, definition }]);
+                keys.push(key);
+                definitions.push(definition);
             }
         }
-        await this.actionSementicMap.setMultiple(entries);
+        const embeddings = await generateTextEmbeddingsWithRetry(
+            this.model,
+            keys,
+        );
+        for (let i = 0; i < keys.length; i++) {
+            this.actionSementicMap.set(keys[i], {
+                embedding: embeddings[i],
+                actionSchemaFile,
+                definition: definitions[i],
+            });
+        }
     }
 
     public async nearestNeighbors(
         request: string,
+        agents: AppAgentManager,
         maxMatches: number,
-        minScore?: number,
-    ) {
-        return this.actionSementicMap.nearestNeighbors(
-            request,
-            maxMatches,
-            minScore,
-        );
+        minScore: number = 0,
+    ): Promise<ScoredItem<Entry>[]> {
+        const embedding = await generateEmbeddingWithRetry(this.model, request);
+        const matches = new TopNCollection<Entry>(maxMatches, {} as Entry);
+        for (const entry of this.actionSementicMap.values()) {
+            if (!agents.isTranslatorActive(entry.actionSchemaFile.schemaName)) {
+                continue;
+            }
+            const score = similarity(
+                entry.embedding,
+                embedding,
+                SimilarityType.Dot,
+            );
+            if (score >= minScore) {
+                matches.push(entry, score);
+            }
+        }
+        return matches.byRank();
     }
 
-    public embeddings(): IterableIterator<EmbeddedValue<string>> {
-        return this.actionSementicMap.keys();
+    public embeddings(): [string, NormalizedEmbedding][] {
+        return Array.from(this.actionSementicMap.entries()).map(
+            ([key, entry]) => [key, entry.embedding],
+        );
     }
 }
 
@@ -76,11 +114,11 @@ function decodeEmbedding(embedding: EncodedEmbedding): NormalizedEmbedding {
 
 export async function writeEmbeddingCache(
     fileName: string,
-    embeddings: IterableIterator<EmbeddedValue<string>>,
+    embeddings: [string, NormalizedEmbedding][],
 ) {
     const entries: [string, string][] = [];
     for (const embedding of embeddings) {
-        entries.push([embedding.value, encodeEmbedding(embedding.embedding)]);
+        entries.push([embedding[0], encodeEmbedding(embedding[1])]);
     }
     return fs.promises.writeFile(fileName, JSON.stringify(entries));
 }

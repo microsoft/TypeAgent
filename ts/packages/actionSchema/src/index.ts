@@ -7,6 +7,7 @@ export {
     SchemaTypeObject as ActionParamObject,
     ActionSchemaTypeDefinition,
     ActionSchemaEntryTypeDefinition,
+    ActionSchemaGroup,
     ActionSchemaFile,
     ActionSchemaObject,
     ActionSchemaUnion,

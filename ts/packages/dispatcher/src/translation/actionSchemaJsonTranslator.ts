@@ -11,6 +11,7 @@ import {
     ActionSchemaEntryTypeDefinition,
     ActionSchemaTypeDefinition,
     ActionSchemaUnion,
+    ActionSchemaGroup,
 } from "action-schema";
 import {
     createJsonTranslatorWithValidator,
@@ -26,18 +27,18 @@ import { createMultipleActionSchema } from "./multipleActionSchema.js";
 import { getActionSchemaFile } from "./actionSchema.js";
 
 function createActionSchemaJsonValidator<T extends TranslatedAction>(
-    actionSchemaFile: ActionSchemaFile,
+    actionSchemaGroup: ActionSchemaGroup,
 ): TypeChatJsonValidator<T> {
-    const schema = generateActionSchema(actionSchemaFile, { exact: true });
+    const schema = generateActionSchema(actionSchemaGroup, { exact: true });
     return {
         getSchemaText: () => schema,
-        getTypeName: () => actionSchemaFile.entry.name,
+        getTypeName: () => actionSchemaGroup.entry.name,
         validate(jsonObject: object): Result<T> {
             const value: any = jsonObject;
             if (value.actionName === undefined) {
                 return error("Missing actionName property");
             }
-            const actionSchema = actionSchemaFile.actionSchemas.get(
+            const actionSchema = actionSchemaGroup.actionSchemas.get(
                 value.actionName,
             );
             if (actionSchema === undefined) {
@@ -58,10 +59,10 @@ export function createActionJsonTranslatorFromSchemaDef<
     T extends TranslatedAction,
 >(
     typeName: string,
-    actionSchemaFile: ActionSchemaFile,
+    actionSchemaGroup: ActionSchemaGroup,
     options?: JsonTranslatorOptions<T>,
 ) {
-    const validator = createActionSchemaJsonValidator<T>(actionSchemaFile);
+    const validator = createActionSchemaJsonValidator<T>(actionSchemaGroup);
 
     return createJsonTranslatorWithValidator(
         typeName.toLowerCase(),
@@ -92,7 +93,7 @@ class ActionSchemaBuilder {
         );
     }
 
-    build(typeName: string = "AllActions"): ActionSchemaFile {
+    build(typeName: string = "AllActions"): ActionSchemaGroup {
         const entry = sc.type(typeName, this.getTypeUnion(), undefined, true);
         const order = new Map<string, number>();
         for (const file of this.files) {
