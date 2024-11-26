@@ -21,8 +21,9 @@ import {
     IncrementalJsonParser,
     IncrementalJsonValueCallBack,
 } from "./incrementalJsonParser.js";
-import { CachedImageWithDetails, exifGPSTagToLatLong, extractRelevantExifTags, findNearbyPointsOfInterest } from "./image.js";
+import { CachedImageWithDetails, extractRelevantExifTags } from "./image.js";
 import { apiSettingsFromEnv } from "../../aiclient/dist/openai.js";
+import { exifGPSTagToLatLong, findNearbyPointsOfInterest } from "./location.js";
 
 export type InlineTranslatorSchemaDef = {
     kind: "inline";
