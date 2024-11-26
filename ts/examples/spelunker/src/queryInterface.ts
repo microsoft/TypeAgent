@@ -9,13 +9,14 @@ import * as util from "util";
 
 import * as iapp from "interactive-app";
 import * as knowLib from "knowledge-processor";
-import { ScoredItem } from "typeagent";
+import { NameValue, ScoredItem } from "typeagent";
 
 import { IndexType, ChunkyIndex } from "./chunkyIndex.js";
 import { QuerySpec, QuerySpecs } from "./makeQuerySchema.js";
 import { Chunk, ChunkId } from "./pythonChunker.js";
 import { importAllFiles } from "./pythonImporter.js";
 import { AnswerSpecs } from "./makeAnswerSchema.js";
+import { PromptSection } from "typechat";
 
 type QueryOptions = {
     maxHits: number;
@@ -97,6 +98,7 @@ export async function interactiveQueryLoop(
                 verbose: {
                     description: "More verbose output",
                     type: "boolean",
+                    defaultValue: verbose,
                 },
             },
         };
@@ -120,12 +122,7 @@ export async function interactiveQueryLoop(
             writeError(io, "[No files to import (use --? for help)]");
             return;
         }
-        await importAllFiles(
-            files,
-            chunkyIndex,
-            io,
-            namedArgs.verbose ?? verbose,
-        );
+        await importAllFiles(files, chunkyIndex, io, namedArgs.verbose);
     }
 
     handlers.clearMemory.metadata = "Clear all memory (and all indexes)";
@@ -213,6 +210,7 @@ export async function interactiveQueryLoop(
                 verbose: {
                     description: "More verbose output",
                     type: "boolean",
+                    defaultValue: verbose,
                 },
             },
         };
@@ -227,7 +225,7 @@ export async function interactiveQueryLoop(
         const queryOptions: QueryOptions = {
             maxHits: namedArgs.maxHits,
             minScore: namedArgs.minScore,
-            verbose: namedArgs.verbose ?? verbose,
+            verbose: namedArgs.verbose,
         };
         await processQuery(query, chunkyIndex, io, queryOptions);
     }
@@ -237,6 +235,7 @@ export async function interactiveQueryLoop(
             verbose: {
                 description: "More verbose output",
                 type: "boolean",
+                defaultValue: verbose,
             },
             filter: {
                 description: "Filter by keyword",
@@ -391,6 +390,7 @@ export async function interactiveQueryLoop(
                 verbose: {
                     description: "More verbose output",
                     type: "boolean",
+                    defaultValue: verbose,
                 },
             },
         };
@@ -403,12 +403,7 @@ export async function interactiveQueryLoop(
         const namedArgs = iapp.parseNamedArguments(args, purgeFileDef());
         const file = namedArgs.fileName as string;
         const fileName = fs.existsSync(file) ? fs.realpathSync(file) : file;
-        await purgeNormalizedFile(
-            io,
-            chunkyIndex,
-            fileName,
-            namedArgs.verbose ?? verbose,
-        );
+        await purgeNormalizedFile(io, chunkyIndex, fileName, namedArgs.verbose);
     }
 
     async function _reportIndex(
@@ -526,7 +521,7 @@ export async function interactiveQueryLoop(
         input: string,
         io: iapp.InteractiveIo,
     ): Promise<void> {
-        await processQuery(input, chunkyIndex, io, {} as QueryOptions);
+        await processQuery(input, chunkyIndex, io, { verbose } as QueryOptions);
     }
 
     await iapp.runConsole({
@@ -542,30 +537,25 @@ export async function purgeNormalizedFile(
     fileName: string,
     verbose: boolean,
 ): Promise<void> {
-    // Step 1: find chunks to remove.
+    // Step 1: Find chunks to remove.
     let toDelete: Set<ChunkId> = new Set();
     for await (const chunk of chunkyIndex.chunkFolder.allObjects()) {
         if (chunk.fileName === fileName) {
             toDelete.add(chunk.id);
-            if (verbose) writeNote(io, `[Purging chunk ${chunk.id}]`);
         }
     }
+
+    // Step 1a: Logging and early return if nothing to purge.
     if (!toDelete.size) {
         writeNote(io, `[No chunks to purge for file ${fileName}]`);
         return;
     }
-
-    // Step 2: remove chunks.
     writeNote(
         io,
-        `[Purging ${toDelete.size} existing chunks for file ${fileName}]`,
+        `[Need to purge ${toDelete.size} chunks for file ${fileName}]`,
     );
-    for (const id of toDelete) {
-        if (verbose) writeNote(io, `[Purging chunk ${id}]`);
-        await chunkyIndex.chunkFolder.remove(id);
-    }
 
-    // Step 3: remove chunk ids from indexes.
+    // Step 2: Remove chunk ids from indexes.
     const deletions: ChunkId[] = Array.from(toDelete);
     for (const [name, index] of chunkyIndex.allIndexes()) {
         let updates = 0;
@@ -580,6 +570,15 @@ export async function purgeNormalizedFile(
         }
         writeNote(io, `[Purged ${updates} ${name}]`); // name is plural, e.g. "keywords".
     }
+
+    // Step 3: Remove chunks (do this last so if step 2 fails we can try again).
+    for (const id of toDelete) {
+        if (verbose) {
+            writeNote(io, `[Purging chunk ${id}]`);
+        }
+        await chunkyIndex.chunkFolder.remove(id);
+    }
+    writeNote(io, `[Purged ${toDelete.size} chunks]`);
 }
 
 async function processQuery(
@@ -588,10 +587,18 @@ async function processQuery(
     io: iapp.InteractiveIo,
     queryOptions: QueryOptions,
 ): Promise<void> {
+    // ** Step 0:** Find most recent answers.
+
+    const recentAnswers: NameValue<AnswerSpecs>[] = await findRecentAnswers(
+        input,
+        chunkyIndex,
+    );
+
     // **Step 1:** Ask LLM (queryMaker) to propose queries for each index.
 
     const proposedQueries = await proposeQueries(
         input,
+        recentAnswers,
         chunkyIndex,
         io,
         queryOptions,
@@ -600,7 +607,7 @@ async function processQuery(
 
     // **Step 2:** Run those queries on the indexes.
 
-    const chunkIdScores = await runIndexQueries(
+    const [message, chunkIdScores] = await runIndexQueries(
         proposedQueries,
         chunkyIndex,
         io,
@@ -612,27 +619,37 @@ async function processQuery(
 
     const answer = await generateAnswer(
         input,
+        message,
         chunkIdScores,
+        recentAnswers,
         chunkyIndex,
         io,
         queryOptions,
     );
     if (!answer) return; // Error message already printed by generateAnswer.
 
-    // **Step 4:** Print the answer.
+    // **Step 4:** Print the answer. Also record it for posterity.
 
+    await chunkyIndex.answerFolder.put(answer);
     reportQuery(answer, io);
 }
 
 async function proposeQueries(
     input: string,
+    recentAnswers: NameValue<AnswerSpecs>[],
     chunkyIndex: ChunkyIndex,
     io: iapp.InteractiveIo,
     queryOptions: QueryOptions,
 ): Promise<QuerySpecs | undefined> {
+    const promptPreamble = makeQueryMakerPrompt(recentAnswers);
+    if (queryOptions.verbose) {
+        for (const section of promptPreamble) {
+            writeNote(io, `[${section.role}: ${section.content}]`);
+        }
+    }
     const result = await chunkyIndex.queryMaker.translate(
         input,
-        makeQueryMakerPrompt(input),
+        promptPreamble,
     );
     if (!result.success) {
         writeError(io, `[Error: ${result.message}]`);
@@ -640,6 +657,7 @@ async function proposeQueries(
     }
     const specs = result.data;
     if (queryOptions.verbose) {
+        writeNote(io, `\n[Result: proposed queries]`);
         // Use util.inspect() to colorize JSON; writeColor() doesn't do that.
         io.writer.writeLine(
             util.inspect(specs, { depth: null, colors: true, compact: false }),
@@ -653,23 +671,28 @@ async function runIndexQueries(
     chunkyIndex: ChunkyIndex,
     io: iapp.InteractiveIo,
     queryOptions: QueryOptions,
-): Promise<Map<ChunkId, ScoredItem<ChunkId>> | undefined> {
+): Promise<
+    [string | undefined, Map<ChunkId, ScoredItem<ChunkId>> | undefined]
+> {
     const chunkIdScores: Map<ChunkId, ScoredItem<ChunkId>> = new Map(); // Record score of each chunk id.
     const totalNumChunks = await chunkyIndex.chunkFolder.size(); // Nominator in IDF calculation.
 
     for (const [indexName, index] of chunkyIndex.allIndexes()) {
-        const spec: QuerySpec | undefined = (proposedQueries as any)[indexName];
-        if (!spec) {
-            writeWarning(io, `[No query for ${indexName}]`);
+        const spec: QuerySpec = (proposedQueries as any)[indexName];
+        if (spec.maxHits === 0) {
+            writeWarning(io, `[${indexName}: no query]`);
             continue;
         }
         const hits = await index.nearestNeighborsPairs(
             spec.query,
             spec.maxHits ?? queryOptions.maxHits,
-            spec.minScore ?? queryOptions.minScore,
+            queryOptions.minScore,
         );
         if (!hits.length) {
-            writeWarning(io, `[No hits for ${indexName}]`);
+            writeNote(
+                io,
+                `[${indexName}: query ${spec.query} (maxHits ${spec.maxHits}) no hits]`,
+            );
             continue;
         }
 
@@ -717,22 +740,24 @@ async function runIndexQueries(
         const end = hits.length - 1;
         writeNote(
             io,
-            `[${indexName}: query '${spec.query}'; ${hits.length} hits; ` +
+            `[${indexName}: query '${spec.query}' (maxHits ${spec.maxHits}); ${hits.length} hits; ` +
                 `scores ${hits[0].score.toFixed(3)}--${hits[end].score.toFixed(3)}; ` +
                 `${numChunks} unique chunk ids]`,
         );
     }
 
-    if (proposedQueries.unknownText) {
-        writeWarning(io, `[Unknown text: ${proposedQueries.unknownText}]`);
+    if (proposedQueries.message) {
+        writeNote(io, `[Message: ${proposedQueries.message}]`);
     }
 
-    return chunkIdScores;
+    return [proposedQueries.message, chunkIdScores];
 }
 
 async function generateAnswer(
     input: string,
+    message: string | undefined,
     chunkIdScores: Map<ChunkId, ScoredItem<ChunkId>>,
+    recentAnswers: NameValue<AnswerSpecs>[],
     chunkyIndex: ChunkyIndex,
     io: iapp.InteractiveIo,
     queryOptions: QueryOptions,
@@ -745,28 +770,29 @@ async function generateAnswer(
     writeNote(io, `\n[Overall ${scoredChunkIds.length} unique chunk ids]`);
 
     scoredChunkIds.sort((a, b) => b.score - a.score);
-    scoredChunkIds.splice(20); // Arbitrary number. (TODO: Make it an option.)
 
     // Step 3b: Get the chunks themselves.
     const chunks: Chunk[] = [];
-
+    const maxChunks = 20;
+    // Take the top N chunks that actually exist.
     for (const chunkId of scoredChunkIds) {
         const maybeChunk = await chunkyIndex.chunkFolder.get(chunkId.item);
-        if (maybeChunk) chunks.push(maybeChunk);
+        if (maybeChunk) {
+            chunks.push(maybeChunk);
+            if (chunks.length >= maxChunks) {
+                break;
+            }
+        } else {
+            writeNote(io, `[Chunk ${chunkId.item} not found]`);
+        }
     }
 
     writeNote(io, `[Sending ${chunks.length} chunks to answerMaker]`);
 
     // Step 3c: Make the request and check for success.
-    const request = JSON.stringify(chunks);
-
-    if (queryOptions.verbose) {
-        writeNote(io, `Request: ${JSON.stringify(chunks, null, 2)}`);
-    }
-
     const answerResult = await chunkyIndex.answerMaker.translate(
-        request,
-        makeAnswerPrompt(input),
+        input,
+        makeAnswerPrompt(message, recentAnswers, chunks),
     );
 
     if (!answerResult.success) {
@@ -782,6 +808,22 @@ async function generateAnswer(
     }
 
     return answerResult.data;
+}
+
+async function findRecentAnswers(
+    input: string,
+    chunkyIndex: ChunkyIndex,
+): Promise<NameValue<AnswerSpecs>[]> {
+    // TODO: Allow for multiple concurrent sessions.
+    const recentAnswers: NameValue<AnswerSpecs>[] = [];
+    for await (const answer of chunkyIndex.answerFolder.all()) {
+        recentAnswers.push(answer);
+    }
+    // Assume the name field (the internal key) is a timestamp.
+    recentAnswers.sort((a, b) => b.name.localeCompare(a.name));
+    recentAnswers.splice(5); // TODO: Cut off by total size, not count.
+    recentAnswers.reverse(); // Most recent last.
+    return recentAnswers;
 }
 
 function reportQuery(answer: AnswerSpecs, io: iapp.InteractiveIo): void {
@@ -801,70 +843,58 @@ function reportQuery(answer: AnswerSpecs, io: iapp.InteractiveIo): void {
     // NOTE: If the user wants to see the contents of any chunk, they can use the @chunk command.
 }
 
-function makeQueryMakerPrompt(input: string): string {
-    return `\
-I have indexed a mid-sized code base written in Python. I divided each
-file up in "chunks", one per function or class or toplevel scope, and
-asked an AI to provide for each chunk:
-
-- a summary
-- keywords
-- topics
-- goals
-- dependencies
-
-For example, in JSON, a typical chunk might have this output from the AI:
-
-"docs": {
-    "chunkDocs": [
-        {
-        "lineNumber": 33,
-        "name": "Blob",
-        "summary": "Represents a sequence of text lines along withmetadata, including the starting line number and a flag indicating whether the blob should be ignored during reconstruction.",
-        "keywords": [
-            "text",
-            "metadata",
-            "blob"
-        ],
-        "topics": [
-            "data structure",
-            "text processing"
-        ],
-        "goals": [
-            "Store text lines",
-            "Manage reconstruction"
-        ],
-        "dependencies": []
-        }
-    ]
+function makeQueryMakerPrompt(
+    recentAnswers: NameValue<AnswerSpecs>[],
+): PromptSection[] {
+    const prompt = `
+I have a code project split up in chunks indexed on several categories.
+Please produce suitable queries for each applicable index based on
+conversation history (especially if the query refers to a previous answer
+indirectly, e.g. via "it" or "that"), and the user question given later.
+Don't suggest "meta" queries about the conversation itself -- only the code is indexed.
+`;
+    return makeAnyPrompt(recentAnswers, prompt);
 }
 
-This is just an example though. The real code base looks different -- it
-just uses the same format.
-
-Anyway, now that I've indexed this, I can do an efficient fuzzy search
-on any query string on each of the five categories. I will next write
-down a question and ask you to produce *queries* for each of the five
-indexes whose answers will help you answer my question. Don't try to
-answer the question (you haven't seen the code yet) -- just tell me the
-query strings for each index.
-
-My question is:
-
-${input}
+function makeAnswerPrompt(
+    message: string | undefined,
+    recentAnswers: NameValue<AnswerSpecs>[],
+    chunks: Chunk[],
+): PromptSection[] {
+    const prompt = `\
+Following are the chunks most relevant to the query.
+Use the preceding conversation items as context for the user query given later.
 `;
+    const preamble = makeAnyPrompt(recentAnswers, prompt);
+    if (message) {
+        preamble.push({ role: "assistant", content: message });
+    }
+    for (const chunk of chunks) {
+        const chunkData = {
+            fileName: chunk.fileName,
+            chunkId: chunk.id,
+            blobs: chunk.blobs,
+            summary: chunk.docs?.chunkDocs
+                ?.filter((cd) => cd.summary)
+                .map((cd) => cd.summary)
+                .join("\n"),
+        };
+        preamble.push({ role: "user", content: JSON.stringify(chunkData) });
+    }
+    return preamble;
 }
 
-function makeAnswerPrompt(input: string): string {
-    return `\
-Here is a JSON representation of a set of query results on indexes for keywords, topics, goals, etc.
-For each index you see a list of scored items, where each item has a value (e.g. a topic) and a list of "source ids".
-The source ids reference code chunks, which are provided separately.
-
-Using the query results and scores, please answer this question:
-
-${input}
-`;
+function makeAnyPrompt(
+    recentAnswers: NameValue<AnswerSpecs>[],
+    prompt: string,
+): PromptSection[] {
+    const preamble: PromptSection[] = [];
+    for (const answer of recentAnswers) {
+        preamble.push({ role: "user", content: answer.value.question });
+        preamble.push({ role: "assistant", content: answer.value.answer });
+    }
+    preamble.push({ role: "user", content: prompt.trim() });
+    return preamble;
 }
 
 function writeChunkLines(
@@ -887,40 +917,67 @@ function writeChunkLines(
     }
 }
 
-// Wrap long lines. Bugs by Github Copilot.
+// Wrap long lines.
 export function wordWrap(text: string, wrapLength: number = 80): string {
-    const wrappedLines: string[] = [];
-
-    text.split("\n").forEach((line) => {
-        let match = line.match(/^(\s*[-*]\s+|\s*)/); // Match leading indent or "- ", "* ", etc.
-        let indent = match ? match[0] : "";
-        let baseIndent = indent;
-
-        // Special handling for list items: add 2 spaces to the indent for overflow lines
-        if (match && /^(\s*[-*]\s+)/.test(indent)) {
-            // const listMarkerLength = indent.length - indent.trimStart().length;
-            indent = " ".repeat(indent.length + 2);
+    let inCodeBlock = false;
+    const lines: string[] = [];
+    const prefixRegex = /^\s*((-|\*|\d+\.)\s+)?/;
+    for (let line of text.split(/[ ]*\r?\n/)) {
+        if (line.startsWith("```")) inCodeBlock = !inCodeBlock; // TODO: Colorize code blocks.
+        if (line.length <= wrapLength || inCodeBlock) {
+            // The whole line is deemed to fit.
+            lines.push(line);
+            continue;
         }
-
-        let currentLine = "";
-        line.trimEnd()
-            .split(/\s+/)
-            .forEach((word) => {
-                if (
-                    currentLine.length + word.length + 1 > wrapLength &&
-                    currentLine.length > 0
-                ) {
-                    wrappedLines.push(baseIndent + currentLine.trimEnd());
-                    currentLine = indent + word + " ";
-                } else {
-                    currentLine += word + " ";
-                }
-            });
-
-        if (currentLine.trimEnd()) {
-            wrappedLines.push(baseIndent + currentLine.trimEnd());
+        // We must try to break.
+        const prefixLength = prefixRegex.exec(line)?.[0]?.length ?? 0;
+        const indent = " ".repeat(prefixLength);
+        while (line.length > wrapLength) {
+            const shortenedLine = line.slice(0, wrapLength + 1);
+            let index = shortenedLine.lastIndexOf(" ");
+            if (index <= prefixLength) {
+                index = line.indexOf(" ", wrapLength);
+                if (index < 0) break; // The rest of the line is one "word".
+            }
+            lines.push(line.slice(0, index).trimEnd());
+            line = indent + line.slice(index + 1).trimStart();
         }
-    });
-
-    return wrappedLines.join("\n");
+        lines.push(line);
+    }
+    return lines.join("\n");
 }
+
+export function testWordWrap(): void {
+    const sampleText = `\
+This is a long line that should be wrapped at some point. It's not clear where.
+    This is another long line but it is also indented. Let's make sure the breaks are also indented.
+    - This is a bullet point that should be wrapped at some point. It's not clear where.
+    12. This is a numbered point that should be wrapped at some point. It's not clear where.
+\`\`\`python
+def generate_id() -> IdType:
+    """Generate a new unique ID.
+
+    IDs are really timestamps formatted as YYYY_MM_DD-HH_MM_SS.UUUUUU,
+    where UUUUUU is microseconds.
+
+    To ensure IDs are unique, if the next timestamp isn't greater than the last one,
+    we add 1 usec to the last one. This has the advantage of "gracefully" handling
+    time going backwards.
+    """
+    global last_ts
+    next_ts = datetime.datetime.now()  # Local time, for now
+    if next_ts <= last_ts:
+        next_ts = last_ts + datetime.timedelta(microseconds=1)
+    last_ts = next_ts
+    return next_ts.strftime("%Y%m%d-%H%M%S.%f")
+\`\`\`
+This is a short line.
+  * A short bullet.
+  * Another short one.
+    A short indented line.
+End.
+`;
+    console.log(wordWrap(sampleText, 40));
+}
+
+// testWordWrap();
