@@ -10,6 +10,7 @@ from transformers import (
 )
 from peft import LoraConfig, get_peft_model
 from chaparral.models.data import Dataset
+from chaparral.train.hf_params import HFParams
 import torch
 from dotenv import load_dotenv
 
@@ -19,9 +20,11 @@ class HFModel:
     model: AutoModelForCausalLM
     tokenizer: AutoTokenizer
     train_set: Dataset | None = None
+    params: HFParams
 
-    def __init__(self, model_name):
-        self.model_name = model_name
+    def __init__(self, params: HFParams):
+        self.params = params
+        self.model_name = params.model_name
 
     def init_peft(self):
         LORA_R = 8
@@ -43,18 +46,19 @@ class HFModel:
         self.model = AutoModelForCausalLM.from_pretrained(
             self.model_name,
             torch_dtype=torch.float32,
-            cache_dir="./hf_cache",
-            load_in_4bit=True,
+            cache_dir=self.params.cache_dir,
+            load_in_4bit=True if self.params.use_peft else False,
             device_map="auto"
         )
 
         self.tokenizer = AutoTokenizer.from_pretrained(
             self.model_name,
-            cache_dir="./hf_cache"
+            cache_dir=self.params.cache_dir
         )
 
         self.tokenizer.pad_token = "!"
-        self.init_peft()
+        if self.params.use_peft:
+            self.init_peft()
 
     def load_training_data(self, dataset: Dataset):
         self.train_set = dataset
@@ -63,6 +67,7 @@ class HFModel:
         return self.tokenizer(
             text + self.tokenizer.eos_token,
             truncation=True,
+            max_length=self.cutoff_length,
             padding="max_length"
         )
 
