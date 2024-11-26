@@ -1,2 +1,4 @@
 !bin
 .vscode-test
+.cert/
+prod/

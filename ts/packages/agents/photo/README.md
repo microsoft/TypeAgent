@@ -1,4 +1,4 @@
-# phot
+# photo
 
 Photo dispatcher agent. Used to launch the camera functionality within the shell.
 

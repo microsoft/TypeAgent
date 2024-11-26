@@ -1,7 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-//import { ShellSettings } from "../../main/shellSettings";
+/// <reference path="../../lib/lib.android.d.ts" />
+
 import { ClientAPI, NotifyCommands } from "../../preload/electronTypes";
 import { ChatView } from "./chatView";
 import { TabView } from "./tabView";
@@ -28,11 +29,7 @@ export function getWebSocketAPI(): ClientAPI {
     if (globalThis.webApi === undefined) {
         globalThis.webApi = webapi;
 
-        // TODO: update ws URI
-        let url = window.location;
-        createWebSocket(`ws://${url.hostname}:3030`, true).then(
-            (ws) => (globalThis.ws = ws),
-        );
+        createWebSocket(true).then((ws) => (globalThis.ws = ws));
     }
 
     return globalThis.webApi;
@@ -200,12 +197,38 @@ function addEvents(
             //}
         },
     );
-    api.onTakeAction((_, action: string) => {
-        switch (action) {
-            case "show-camera": {
-                cameraView.show();
-                return;
+    api.onTakeAction((_, action: string, data?: unknown) => {
+        // Android object gets injected on Android devices, otherwise unavailable
+        try {
+            console.log(`Take Action '${action}' Data: ${data}`);
+            let d: any = data;
+            switch (action) {
+                case "show-camera": {
+                    cameraView.show();
+                    break;
+                }
+                case "set-alarm": {
+                    Android?.setAlarm(d.time);
+                    break;
+                }
+                case "call-phonenumber": {
+                    Android?.callPhoneNumber(d.phoneNumber);
+                    break;
+                }
+                case "send-sms": {
+                    Android?.sendSMS(d.phoneNumber, d.message);
+                    break;
+                }
+                case "search-nearby": {
+                    Android?.searchNearby(d.searchTerm);
+                    break;
+                }
+                case "automate-phone-ui": {
+                    Android.automateUI(d.originalRequest);
+                }
             }
+        } catch (e) {
+            console.log(e);
         }
     });
 }
@@ -288,7 +311,7 @@ export class IdGenerator {
     }
 }
 
-document.addEventListener("DOMContentLoaded", function () {
+document.addEventListener("DOMContentLoaded", async function () {
     const wrapper = document.getElementById("wrapper")!;
     const idGenerator = new IdGenerator();
     const agents = new Map<string, string>();
@@ -344,5 +367,11 @@ document.addEventListener("DOMContentLoaded", function () {
 
     if ((window as any).electron) {
         (window as any).electron.ipcRenderer.send("dom ready");
+    }
+
+    if (Android) {
+        Bridge.interfaces.Android.domReady((userMessage: string) => {
+            chatView.addUserMessage(userMessage);
+        });
     }
 });

@@ -220,6 +220,9 @@ importers:
       aiclient:
         specifier: workspace:*
         version: link:../../packages/aiclient
+      chalk:
+        specifier: ^5.3.0
+        version: 5.3.0
       code-processor:
         specifier: workspace:*
         version: link:../../packages/codeProcessor
@@ -506,6 +509,22 @@ importers:
       prettier:
         specifier: ^3.2.5
         version: 3.2.5
+      typescript:
+        specifier: ^5.4.2
+        version: 5.4.3
+
+  packages/agents/androidMobile:
+    dependencies:
+      '@typeagent/agent-sdk':
+        specifier: workspace:*
+        version: link:../../agentSdk
+    devDependencies:
+      prettier:
+        specifier: ^3.2.5
+        version: 3.2.5
+      rimraf:
+        specifier: ^5.0.5
+        version: 5.0.5
       typescript:
         specifier: ^5.4.2
         version: 5.4.3
@@ -1074,6 +1093,9 @@ importers:
       dotenv:
         specifier: ^16.3.1
         version: 16.3.1
+      find-config:
+        specifier: ^1.0.0
+        version: 1.0.0
       node-http:
         specifier: 0.0.5
         version: 0.0.5
@@ -1096,6 +1118,9 @@ importers:
       '@types/debug':
         specifier: ^4.1.10
         version: 4.1.10
+      '@types/find-config':
+        specifier: 1.0.4
+        version: 1.0.4
       '@types/jest':
         specifier: ^29.5.7
         version: 29.5.7
@@ -1462,6 +1487,9 @@ importers:
       aiclient:
         specifier: workspace:*
         version: link:../aiclient
+      android-mobile-agent:
+        specifier: workspace:*
+        version: link:../agents/androidMobile
       browser-typeagent:
         specifier: workspace:*
         version: link:../agents/browser
@@ -1706,6 +1734,9 @@ importers:
 
   packages/shell:
     dependencies:
+      '@azure/msal-browser':
+        specifier: ^3.26.1
+        version: 3.26.1
       '@electron-toolkit/preload':
         specifier: ^2.0.0
         version: 2.0.0(electron@30.0.1)
@@ -1960,8 +1991,16 @@ packages:
     resolution: {integrity: sha512-fD906nmJei3yE7la6DZTdUtXKvpwzJURkfsiz9747Icv4pit77cegSm6prJTKLQ1fw4iiZzrrWwxnhMLrTf5gQ==}
     engines: {node: '>=0.8.0'}
 
+  '@azure/msal-browser@3.26.1':
+    resolution: {integrity: sha512-y78sr9g61aCAH9fcLO1um+oHFXc1/5Ap88RIsUSuzkm0BHzFnN+PXGaQeuM1h5Qf5dTnWNOd6JqkskkMPAhh7Q==}
+    engines: {node: '>=0.8.0'}
+
   '@azure/msal-common@14.12.0':
     resolution: {integrity: sha512-IDDXmzfdwmDkv4SSmMEyAniJf6fDu3FJ7ncOjlxkDuT85uSnLEhZi3fGZpoR7T4XZpOMx9teM9GXBgrfJgyeBw==}
+    engines: {node: '>=0.8.0'}
+
+  '@azure/msal-common@14.15.0':
+    resolution: {integrity: sha512-ImAQHxmpMneJ/4S8BRFhjt1MZ3bppmpRPYYNyzeQPeFN288YKbb8TmmISQEbtfkQ1BPASvYZU5doIZOPBAqENQ==}
     engines: {node: '>=0.8.0'}
 
   '@azure/msal-common@14.7.1':
@@ -7982,7 +8021,13 @@ snapshots:
     dependencies:
       '@azure/msal-common': 14.9.0
 
+  '@azure/msal-browser@3.26.1':
+    dependencies:
+      '@azure/msal-common': 14.15.0
+
   '@azure/msal-common@14.12.0': {}
+
+  '@azure/msal-common@14.15.0': {}
 
   '@azure/msal-common@14.7.1': {}
 

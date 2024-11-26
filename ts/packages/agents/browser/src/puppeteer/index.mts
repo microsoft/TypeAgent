@@ -26,7 +26,6 @@ interface ExtensionRunner {
 export class HeadlessExtensionRunner implements ExtensionRunner {
   private options: RunnerOptions;
   browser: Browser | null = null;
-  private extensionInfo: ExtensionInfo | null = null;
 
   constructor(options: RunnerOptions) {
     this.options = {
@@ -41,18 +40,15 @@ export class HeadlessExtensionRunner implements ExtensionRunner {
       args: [
         `--disable-extensions-except=${this.options.extensionPath}`,
         `--load-extension=${this.options.extensionPath}`,
-        "--whitelisted-extension-id=fhpndddbdhlckamegmejjenlekagfbid",
         "--no-sandbox",
       ],
     });
   }
 
-  private async getExtensionInfo(): Promise<ExtensionInfo> {
+  private async getServiceWorker(): Promise<ExtensionInfo> {
     if (!this.browser) {
       throw new Error("Browser not initialized");
     }
-
-    const targets = await this.browser.targets();
 
     const serviceWorkerTarget = await this.browser.waitForTarget(
       (target) =>
@@ -67,14 +63,8 @@ export class HeadlessExtensionRunner implements ExtensionRunner {
     const extensionUrl = serviceWorkerTarget.url();
     const extensionId = extensionUrl.split("/")[2];
 
-    const backgroundPageTarget = targets.find(
-      (target) =>
-        target.type() === "background_page" &&
-        target.url().includes(extensionId),
-    );
-
-    const backgroundPage = backgroundPageTarget
-      ? await backgroundPageTarget.page()
+    const backgroundPage = serviceWorkerTarget
+      ? await serviceWorkerTarget.page()
       : null;
 
     return {
@@ -88,7 +78,6 @@ export class HeadlessExtensionRunner implements ExtensionRunner {
 
     page.on("request", (request) => {
       // Log or modify requests here
-      console.log(`Request to: ${request.url()}`);
       request.continue();
     });
   }
@@ -96,11 +85,14 @@ export class HeadlessExtensionRunner implements ExtensionRunner {
   public async run(): Promise<void> {
     try {
       await this.initializeBrowser();
-      this.extensionInfo = await this.getExtensionInfo();
-      console.log(this.extensionInfo); // TODO: Remove
+      await this.getServiceWorker();
 
       const page = await this.browser!.newPage();
       await this.setupRequestInterception(page);
+      await page.setUserAgent(
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+      );
+
       process.send?.("Success");
 
       const stdio = readline.createInterface({
@@ -108,14 +100,11 @@ export class HeadlessExtensionRunner implements ExtensionRunner {
         output: process.stdout,
       });
       while (true) {
-        const input = await stdio.question("🌐");
+        const input = await stdio.question("");
         if (input.toLowerCase() === "quit" || input.toLowerCase() === "exit") {
           break;
         } else if (input.length) {
-          // await processRequest(input);
           console.log(input);
-          // for debug, allow this to simulate socket messages
-          // this.handleBrowserIpcMessage(page, JSON.parse(input));
         }
       }
       stdio.close();
@@ -133,14 +122,12 @@ export class HeadlessExtensionRunner implements ExtensionRunner {
   }
 }
 
-// Usage example
 export async function main() {
   const extensionPath = fileURLToPath(
     new URL(path.join("..", "./extension"), import.meta.url),
   );
 
   const consoleArgs = process.argv.slice(2);
-  console.log("Parameters received:", consoleArgs);
 
   const runner = new HeadlessExtensionRunner({
     extensionPath: extensionPath,

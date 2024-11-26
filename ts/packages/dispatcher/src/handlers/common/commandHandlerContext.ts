@@ -27,7 +27,7 @@ import {
 import {
     getDefaultBuiltinTranslatorName,
     loadAgentJsonTranslator,
-    TranslatorConfigProvider,
+    ActionConfigProvider,
     TypeAgentTranslator,
 } from "../../translation/agentTranslators.js";
 import { getCacheFactory } from "../../utils/cacheFactory.js";
@@ -139,6 +139,7 @@ export function getTranslator(
         config.model,
         config.switch.inline ? getActiveTranslators(context) : undefined,
         config.multipleActions,
+        config.schema.generation,
     );
     context.translatorCache.set(translatorName, newTranslator);
     return newTranslator;
@@ -146,7 +147,7 @@ export function getTranslator(
 
 async function getAgentCache(
     session: Session,
-    provider: TranslatorConfigProvider,
+    provider: ActionConfigProvider,
     logger: Logger | undefined,
 ) {
     const cacheFactory = getCacheFactory();
@@ -285,15 +286,15 @@ export async function initializeCommandHandlerContext(
     };
     context.requestIO.context = context;
 
-    await agents.addProvider(getBuiltinAppAgentProvider(context), context);
+    await agents.addProvider(getBuiltinAppAgentProvider(context));
     const appAgentProviders = options?.appAgentProviders;
     if (appAgentProviders !== undefined) {
         for (const provider of appAgentProviders) {
-            await agents.addProvider(provider, context);
+            await agents.addProvider(provider);
         }
     }
 
-    await agents.addProvider(getExternalAppAgentProvider(context), context);
+    await agents.addProvider(getExternalAppAgentProvider(context));
 
     await setAppAgentStates(context, options);
     return context;
@@ -416,8 +417,9 @@ export async function changeContextConfig(
     if (
         translatorChanged ||
         changed.translation?.model !== undefined ||
-        changed.translation?.switch?.inline ||
-        changed.translation?.multipleActions
+        changed.translation?.switch?.inline !== undefined ||
+        changed.translation?.multipleActions !== undefined ||
+        changed.translation?.schema?.generation !== undefined
     ) {
         // The dynamic schema for change assistant is changed.
         // Clear the cache to regenerate them.

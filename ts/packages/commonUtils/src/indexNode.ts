@@ -10,7 +10,10 @@ export {
     composeTranslatorSchemas,
     enableJsonTranslatorStreaming,
     TypeChatJsonTranslatorWithStreaming,
+    createJsonTranslatorWithValidator,
+    JsonTranslatorOptions,
 } from "./jsonTranslator.js";
+export { IncrementalJsonValueCallBack } from "./incrementalJsonParser.js";
 export { Limiter, createLimiter } from "./limiter.js";
 export * from "./print.js";
 

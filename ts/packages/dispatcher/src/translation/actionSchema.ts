@@ -1,49 +1,49 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ActionSchema, parseActionSchemaFile } from "action-schema";
 import {
-    TranslatorConfig,
-    TranslatorConfigProvider,
-} from "./agentTranslators.js";
+    ActionSchemaFile,
+    ActionSchemaTypeDefinition,
+    parseActionSchemaFile,
+} from "action-schema";
+import { ActionConfig, ActionConfigProvider } from "./agentTranslators.js";
 import { getPackageFilePath } from "../utils/getPackageFilePath.js";
 import { AppAction } from "@typeagent/agent-sdk";
 import { DeepPartialUndefined } from "common-utils";
 
 // Global Cache
-const translatorNameToActionInfo = new Map<string, Map<string, ActionSchema>>();
+const translatorNameToActionInfo = new Map<string, ActionSchemaFile>();
 
-export function getTranslatorActionSchemas(
-    translatorConfig: TranslatorConfig,
-    translatorName: string,
-): Map<string, ActionSchema> {
-    if (translatorNameToActionInfo.has(translatorName)) {
-        return translatorNameToActionInfo.get(translatorName)!;
+export function getActionSchemaFile(
+    actionConfig: ActionConfig,
+): ActionSchemaFile {
+    const schemaFileFullPath = getPackageFilePath(actionConfig.schemaFile);
+    const key = `${actionConfig.schemaName}|${actionConfig.schemaType}|${schemaFileFullPath}`;
+    if (translatorNameToActionInfo.has(key)) {
+        return translatorNameToActionInfo.get(key)!;
     }
-    const actionInfo = new Map<string, ActionSchema>(
-        parseActionSchemaFile(
-            getPackageFilePath(translatorConfig.schemaFile),
-            translatorName,
-            translatorConfig.schemaType,
-        ).map((a) => [a.actionName, a]),
+    const actionSchemaFile = parseActionSchemaFile(
+        schemaFileFullPath,
+        actionConfig.schemaName,
+        actionConfig.schemaType,
     );
-    translatorNameToActionInfo.set(translatorName, actionInfo);
-    return actionInfo;
+    translatorNameToActionInfo.set(key, actionSchemaFile);
+    return actionSchemaFile;
 }
 
 export function getActionSchema(
     action: DeepPartialUndefined<AppAction>,
-    provider: TranslatorConfigProvider,
-) {
+    provider: ActionConfigProvider,
+): ActionSchemaTypeDefinition | undefined {
     const { translatorName, actionName } = action;
     if (translatorName === undefined || actionName === undefined) {
         return undefined;
     }
-    const config = provider.tryGetTranslatorConfig(translatorName);
+    const config = provider.tryGetActionConfig(translatorName);
     if (config === undefined) {
         return undefined;
     }
 
-    const actionInfos = getTranslatorActionSchemas(config, translatorName);
-    return actionInfos.get(actionName);
+    const actionSchemaFile = getActionSchemaFile(config);
+    return actionSchemaFile.actionSchemas.get(actionName);
 }

@@ -5,6 +5,7 @@ import {
     ActionResult,
     AppAction,
     AppAgentEvent,
+    ClientAction,
     CommandDescriptors,
     DisplayAppendMode,
     DisplayContent,
@@ -32,7 +33,11 @@ export type AgentContextCallFunctions = {
         content: DisplayContent;
         mode: DisplayAppendMode;
     }) => void;
-    takeAction: (param: { actionContextId: number; action: string }) => void;
+    takeAction: (param: {
+        actionContextId: number;
+        action: ClientAction;
+        data?: unknown;
+    }) => void;
 };
 
 export type AgentContextInvokeFunctions = {

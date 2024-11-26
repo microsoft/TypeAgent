@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { Action, Actions } from "agent-cache";
-import { getActionSchema, getTranslatorActionSchemas } from "./actionSchema.js";
+import { getActionSchema, getActionSchemaFile } from "./actionSchema.js";
 import { CommandHandlerContext } from "../internal.js";
 import {
     TemplateFieldStringUnion,
@@ -96,6 +96,9 @@ function toTemplateType(
             return toTemplateType(type.types[0], value);
         case "type-reference":
             // TODO: need to handle circular references (or error on circular references)
+            if (type.definition === undefined) {
+                throw new Error(`Unresolved type reference: ${type.name}`);
+            }
             return toTemplateType(type.definition.type, value);
         case "object":
             return toTemplateTypeObject(type, value);
@@ -116,7 +119,7 @@ function toTemplate(
     translators: string[],
     action: Action,
 ) {
-    const config = context.agents.tryGetTranslatorConfig(action.translatorName);
+    const config = context.agents.tryGetActionConfig(action.translatorName);
     if (config === undefined) {
         return getDefaultActionTemplate(translators);
     }
@@ -124,26 +127,24 @@ function toTemplate(
         translators,
         action.translatorName,
     );
-    const actionInfos = getTranslatorActionSchemas(
-        config,
-        action.translatorName,
-    );
+    const actionSchemaFile = getActionSchemaFile(config);
+    const actionSchemas = actionSchemaFile.actionSchemas;
     const actionName: TemplateFieldStringUnion = {
         type: "string-union",
-        typeEnum: Array.from(actionInfos.keys()),
+        typeEnum: Array.from(actionSchemas.keys()),
         discriminator: "",
     };
     template.fields.actionName = {
         type: actionName,
     };
 
-    const actionInfo = actionInfos.get(action.actionName);
-    if (actionInfo === undefined) {
+    const actionSchema = actionSchemas.get(action.actionName);
+    if (actionSchema === undefined) {
         return template;
     }
     actionName.discriminator = action.actionName;
 
-    const parameterType = actionInfo.definition.type.fields.parameters?.type;
+    const parameterType = actionSchema.type.fields.parameters?.type;
     if (parameterType) {
         const type = toTemplateType(parameterType, action.parameters);
         if (type !== undefined) {
@@ -250,11 +251,11 @@ export async function getActionCompletion(
     action: DeepPartialUndefined<AppAction>,
     propertyName: string,
 ): Promise<string[]> {
-    const actionInfo = getActionSchema(action, systemContext.agents);
-    if (actionInfo === undefined) {
+    const actionSchema = getActionSchema(action, systemContext.agents);
+    if (actionSchema === undefined) {
         return [];
     }
-    const appAgentName = getAppAgentName(actionInfo.translatorName);
+    const appAgentName = getAppAgentName(action.translatorName!);
     const appAgent = systemContext.agents.getAppAgent(appAgentName);
     if (appAgent.getActionCompletion === undefined) {
         return [];

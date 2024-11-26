@@ -13,6 +13,7 @@ import {
     CommandDescriptors,
     ParsedCommandParams,
     ParameterDefinitions,
+    ClientAction,
 } from "@typeagent/agent-sdk";
 import {
     AgentCallFunctions,
@@ -67,9 +68,16 @@ function createContextMap<T>() {
         close,
     };
 }
-export async function createAgentProcessShim(
+
+export type AgentProcess = {
+    appAgent: AppAgent;
+    process: child_process.ChildProcess | undefined;
+    count: number;
+};
+
+export async function createAgentProcess(
     modulePath: string,
-): Promise<AppAgent> {
+): Promise<AgentProcess> {
     const process = child_process.fork(
         fileURLToPath(new URL(`./agentProcess.js`, import.meta.url)),
         [modulePath],
@@ -243,10 +251,14 @@ export async function createAgentProcessShim(
                 .get(param.actionContextId)
                 .actionIO.appendDisplay(param.content, param.mode);
         },
-        takeAction: (param: { actionContextId: number; action: string }) => {
+        takeAction: (param: {
+            actionContextId: number;
+            action: ClientAction;
+            data?: unknown;
+        }) => {
             actionContextMap
                 .get(param.actionContextId)
-                .actionIO.takeAction(param.action);
+                .actionIO.takeAction(param.action, param.data);
         },
     };
 
@@ -402,5 +414,9 @@ export async function createAgentProcessShim(
         contextMap.close(context);
         return result;
     };
-    return result;
+    return {
+        process,
+        appAgent: result,
+        count: 1,
+    };
 }

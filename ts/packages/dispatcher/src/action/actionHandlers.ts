@@ -28,7 +28,7 @@ import {
 import { MatchResult } from "agent-cache";
 import { getStorage } from "./storageImpl.js";
 import { getUserProfileDir } from "../utils/userData.js";
-import { IncrementalJsonValueCallBack } from "../../../commonUtils/dist/incrementalJsonParser.js";
+import { IncrementalJsonValueCallBack } from "common-utils";
 import { ProfileNames } from "../utils/profileNames.js";
 import { conversation } from "knowledge-processor";
 
@@ -38,7 +38,7 @@ export function getTranslatorPrefix(
     translatorName: string,
     systemContext: CommandHandlerContext,
 ) {
-    const config = systemContext.agents.getTranslatorConfig(translatorName);
+    const config = systemContext.agents.getActionConfig(translatorName);
     return `[${config.emojiChar} ${translatorName}] `;
 }
 
@@ -68,8 +68,8 @@ function getActionContext(
                 mode,
             );
         },
-        takeAction(action: string): void {
-            context.requestIO.takeAction(action);
+        takeAction(action: string, data: unknown): void {
+            context.requestIO.takeAction(action, data);
         },
     };
     const actionContext: ActionContext<unknown> = {

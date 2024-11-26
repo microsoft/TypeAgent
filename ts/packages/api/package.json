@@ -18,6 +18,9 @@
     "prettier": "prettier --check . --ignore-path ../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
     "start": "node ./dist/index.js",
+    "test": "node --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js --testPathPattern=\".*\\.spec\\.js\"",
+    "test:debug": "node --inspect-brk --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js --testPathPattern=\".*\\.spec\\.js\"",
+    "test:full": "node --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js",
     "tsc": "tsc -b"
   },
   "dependencies": {
@@ -29,6 +32,7 @@
     "common-utils": "workspace:*",
     "debug": "^4.3.4",
     "dotenv": "^16.3.1",
+    "find-config": "^1.0.0",
     "node-http": "0.0.5",
     "rimraf": "^5.0.5",
     "ts-node": "^10.9.1",
@@ -38,6 +42,7 @@
   },
   "devDependencies": {
     "@types/debug": "^4.1.10",
+    "@types/find-config": "1.0.4",
     "@types/jest": "^29.5.7",
     "@types/node": "^18.18.7",
     "@types/ws": "^8.5.10",

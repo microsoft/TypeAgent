@@ -72,10 +72,9 @@ async function loadSessions(): Promise<Sessions> {
                 },
             });
         } catch (e) {
-            console.error(
-                `ERROR: Unable to lock profile ${userProfileDir}. Only one client per profile can be active at a time.`,
+            throw new Error(
+                `Unable to lock profile ${userProfileDir}. Only one client per profile can be active at a time.`,
             );
-            process.exit(-1);
         }
     }
 
@@ -115,6 +114,9 @@ type DispatcherConfig = {
         };
         multipleActions: boolean;
         history: boolean;
+        schema: {
+            generation: boolean;
+        };
     };
     explainer: {
         enabled: boolean;
@@ -145,7 +147,7 @@ export type SessionOptions = AppAgentStateOptions &
     DeepPartialUndefined<DispatcherConfig>;
 
 const defaultSessionConfig: SessionConfig = {
-    translators: undefined,
+    schemas: undefined,
     actions: undefined,
     commands: undefined,
 
@@ -162,6 +164,9 @@ const defaultSessionConfig: SessionConfig = {
         },
         multipleActions: true,
         history: true,
+        schema: {
+            generation: true,
+        },
     },
     explainer: {
         enabled: true,

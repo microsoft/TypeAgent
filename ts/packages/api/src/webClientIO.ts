@@ -223,11 +223,11 @@ export class WebAPIClientIO implements ClientIO {
         );
     }
 
-    takeAction(action: string) {
+    takeAction(action: string, data: unknown) {
         this.currentws?.send(
             JSON.stringify({
                 message: "take-action",
-                data: action,
+                data: { action, data },
             }),
         );
     }
