@@ -30,6 +30,7 @@ export class ChunkyIndex {
 
     // The rest are asynchronously initialized by reInitialize(rootDir).
     rootDir!: string;
+    answerFolder!: ObjectFolder<AnswerSpecs>;
     chunkFolder!: ObjectFolder<Chunk>;
     summariesIndex!: knowLib.TextIndex<string, ChunkId>;
     keywordsIndex!: knowLib.TextIndex<string, ChunkId>;
@@ -59,6 +60,10 @@ export class ChunkyIndex {
         instance.rootDir = rootDir;
         instance.chunkFolder = await createObjectFolder<Chunk>(
             instance.rootDir + "/chunks",
+            { serializer: (obj) => JSON.stringify(obj, null, 2) },
+        );
+        instance.answerFolder = await createObjectFolder<AnswerSpecs>(
+            instance.rootDir + "/answers",
             { serializer: (obj) => JSON.stringify(obj, null, 2) },
         );
         instance.summariesIndex = await makeIndex("summaries");

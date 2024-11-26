@@ -9,7 +9,7 @@ import * as util from "util";
 
 import * as iapp from "interactive-app";
 import * as knowLib from "knowledge-processor";
-import { ScoredItem } from "typeagent";
+import { NameValue, ScoredItem } from "typeagent";
 
 import { IndexType, ChunkyIndex } from "./chunkyIndex.js";
 import { QuerySpec, QuerySpecs } from "./makeQuerySchema.js";
@@ -588,10 +588,18 @@ async function processQuery(
     io: iapp.InteractiveIo,
     queryOptions: QueryOptions,
 ): Promise<void> {
+    // ** Step 0:** Find the five most recent answers (presumably in this session).
+
+    const recentAnswers: NameValue<AnswerSpecs>[] = await findRecentAnswers(
+        input,
+        chunkyIndex,
+    );
+
     // **Step 1:** Ask LLM (queryMaker) to propose queries for each index.
 
     const proposedQueries = await proposeQueries(
         input,
+        recentAnswers,
         chunkyIndex,
         io,
         queryOptions,
@@ -613,26 +621,30 @@ async function processQuery(
     const answer = await generateAnswer(
         input,
         chunkIdScores,
+        recentAnswers,
         chunkyIndex,
         io,
         queryOptions,
     );
     if (!answer) return; // Error message already printed by generateAnswer.
 
-    // **Step 4:** Print the answer.
+    // **Step 4:** Print the answer. Also record it for posterity.
 
+    await chunkyIndex.answerFolder.put(answer);
     reportQuery(answer, io);
 }
 
 async function proposeQueries(
     input: string,
+    recentAnswers: NameValue<AnswerSpecs>[],
     chunkyIndex: ChunkyIndex,
     io: iapp.InteractiveIo,
     queryOptions: QueryOptions,
 ): Promise<QuerySpecs | undefined> {
+    const promptPreamble = makeQueryMakerPrompt(input, recentAnswers);
     const result = await chunkyIndex.queryMaker.translate(
         input,
-        makeQueryMakerPrompt(input),
+        promptPreamble,
     );
     if (!result.success) {
         writeError(io, `[Error: ${result.message}]`);
@@ -733,6 +745,7 @@ async function runIndexQueries(
 async function generateAnswer(
     input: string,
     chunkIdScores: Map<ChunkId, ScoredItem<ChunkId>>,
+    recentAnswers: NameValue<AnswerSpecs>[],
     chunkyIndex: ChunkyIndex,
     io: iapp.InteractiveIo,
     queryOptions: QueryOptions,
@@ -758,14 +771,14 @@ async function generateAnswer(
     writeNote(io, `[Sending ${chunks.length} chunks to answerMaker]`);
 
     // Step 3c: Make the request and check for success.
-    const request = JSON.stringify(chunks);
+    const request = { chunks, pastAnswers: recentAnswers };
 
     if (queryOptions.verbose) {
-        writeNote(io, `Request: ${JSON.stringify(chunks, null, 2)}`);
+        writeNote(io, `Request: ${JSON.stringify(request, null, 2)}`);
     }
 
     const answerResult = await chunkyIndex.answerMaker.translate(
-        request,
+        JSON.stringify(request),
         makeAnswerPrompt(input),
     );
 
@@ -782,6 +795,19 @@ async function generateAnswer(
     }
 
     return answerResult.data;
+}
+
+async function findRecentAnswers(
+    input: string,
+    chunkyIndex: ChunkyIndex,
+): Promise<NameValue<AnswerSpecs>[]> {
+    const recentAnswers: NameValue<AnswerSpecs>[] = [];
+    for await (const answer of chunkyIndex.answerFolder.all()) {
+        recentAnswers.push(answer);
+    }
+    recentAnswers.sort((a, b) => b.name.localeCompare(a.name));
+    recentAnswers.splice(5); // Arbitrary number. (TODO: Make it an option.)
+    return recentAnswers;
 }
 
 function reportQuery(answer: AnswerSpecs, io: iapp.InteractiveIo): void {
@@ -801,7 +827,10 @@ function reportQuery(answer: AnswerSpecs, io: iapp.InteractiveIo): void {
     // NOTE: If the user wants to see the contents of any chunk, they can use the @chunk command.
 }
 
-function makeQueryMakerPrompt(input: string): string {
+function makeQueryMakerPrompt(
+    input: string,
+    recentAnswers: NameValue<AnswerSpecs>[],
+): string {
     return `\
 I have indexed a mid-sized code base written in Python. I divided each
 file up in "chunks", one per function or class or toplevel scope, and
@@ -848,6 +877,10 @@ down a question and ask you to produce *queries* for each of the five
 indexes whose answers will help you answer my question. Don't try to
 answer the question (you haven't seen the code yet) -- just tell me the
 query strings for each index.
+
+I also have several recent questions/answers that might be relevant:
+
+${JSON.stringify(recentAnswers, null, 2)}
 
 My question is:
 
