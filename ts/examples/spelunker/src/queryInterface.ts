@@ -537,30 +537,25 @@ export async function purgeNormalizedFile(
     fileName: string,
     verbose: boolean,
 ): Promise<void> {
-    // Step 1: find chunks to remove.
+    // Step 1: Find chunks to remove.
     let toDelete: Set<ChunkId> = new Set();
     for await (const chunk of chunkyIndex.chunkFolder.allObjects()) {
         if (chunk.fileName === fileName) {
             toDelete.add(chunk.id);
-            if (verbose) writeNote(io, `[Purging chunk ${chunk.id}]`);
         }
     }
+
+    // Step 1a: Logging and early return if nothing to purge.
     if (!toDelete.size) {
         writeNote(io, `[No chunks to purge for file ${fileName}]`);
         return;
     }
-
-    // Step 2: remove chunks.
     writeNote(
         io,
-        `[Purging ${toDelete.size} existing chunks for file ${fileName}]`,
+        `[Need to purge ${toDelete.size} chunks for file ${fileName}]`,
     );
-    for (const id of toDelete) {
-        if (verbose) writeNote(io, `[Purging chunk ${id}]`);
-        await chunkyIndex.chunkFolder.remove(id);
-    }
 
-    // Step 3: remove chunk ids from indexes.
+    // Step 2: Remove chunk ids from indexes.
     const deletions: ChunkId[] = Array.from(toDelete);
     for (const [name, index] of chunkyIndex.allIndexes()) {
         let updates = 0;
@@ -575,6 +570,15 @@ export async function purgeNormalizedFile(
         }
         writeNote(io, `[Purged ${updates} ${name}]`); // name is plural, e.g. "keywords".
     }
+
+    // Step 3: Remove chunks (do this last so if step 2 fails we can try again).
+    for (const id of toDelete) {
+        if (verbose) {
+            writeNote(io, `[Purging chunk ${id}]`);
+        }
+        await chunkyIndex.chunkFolder.remove(id);
+    }
+    writeNote(io, `[Purged ${toDelete.size} chunks]`);
 }
 
 async function processQuery(
