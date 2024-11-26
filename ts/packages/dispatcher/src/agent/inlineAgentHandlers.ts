@@ -49,7 +49,7 @@ import {
 } from "../translation/actionTemplate.js";
 import { getTokenCommandHandlers } from "../handlers/tokenCommandHandler.js";
 import { Actions, FullAction } from "agent-cache";
-import { getActionSchema } from "../translation/actionSchema.js";
+import { getActionSchema } from "../translation/actionSchemaFileCache.js";
 import { executeActions } from "../action/actionHandlers.js";
 import { getObjectProperty } from "common-utils";
 import { dispatcherAgent } from "../dispatcher/dispatcherAgent.js";

@@ -22,7 +22,7 @@ import {
     ActionSchemaSementicMap,
     EmbeddingCache,
 } from "../../translation/actionSchemaSementicMap.js";
-import { ActionSchemaFileCache } from "../../translation/actionSchema.js";
+import { ActionSchemaFileCache } from "../../translation/actionSchemaFileCache.js";
 import { ActionSchemaFile } from "action-schema";
 
 const debug = registerDebug("typeagent:agents");

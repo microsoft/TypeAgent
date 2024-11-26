@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { Action, Actions } from "agent-cache";
-import { getActionSchema } from "./actionSchema.js";
+import { getActionSchema } from "./actionSchemaFileCache.js";
 import { CommandHandlerContext } from "../internal.js";
 import {
     TemplateFieldStringUnion,

@@ -5,7 +5,7 @@ import {
     InlineTranslatorSchemaDef,
     createJsonTranslatorFromSchemaDef,
 } from "common-utils";
-import { getActionSchemaFileForConfig } from "./actionSchema.js";
+import { getActionSchemaFileForConfig } from "./actionSchemaFileCache.js";
 import { Result, success } from "typechat";
 import registerDebug from "debug";
 import { ActionConfigProvider } from "./agentTranslators.js";

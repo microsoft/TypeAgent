@@ -58,7 +58,7 @@ import {
 } from "@typeagent/agent-sdk/helpers/display";
 import { DispatcherName } from "./common/interactiveIO.js";
 import { getActionTemplateEditConfig } from "../translation/actionTemplate.js";
-import { getActionSchema } from "../translation/actionSchema.js";
+import { getActionSchema } from "../translation/actionSchemaFileCache.js";
 import { isUnknownAction } from "../dispatcher/dispatcherAgent.js";
 import { UnknownAction } from "../dispatcher/schema/dispatcherActionSchema.js";
 

@@ -24,7 +24,7 @@ import {
     createChangeAssistantActionSchema,
 } from "./agentTranslators.js";
 import { createMultipleActionSchema } from "./multipleActionSchema.js";
-import { getActionSchemaFileForConfig } from "./actionSchema.js";
+import { getActionSchemaFileForConfig } from "./actionSchemaFileCache.js";
 
 function createActionSchemaJsonValidator<T extends TranslatedAction>(
     actionSchemaGroup: ActionSchemaGroup,
