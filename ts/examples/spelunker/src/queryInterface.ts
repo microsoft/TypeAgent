@@ -766,6 +766,9 @@ async function generateAnswer(
     for (const chunkId of scoredChunkIds) {
         const maybeChunk = await chunkyIndex.chunkFolder.get(chunkId.item);
         if (maybeChunk) chunks.push(maybeChunk);
+        else {
+            writeWarning(io, `[Chunk ${chunkId.item} not found]`);
+        }
     }
 
     writeNote(io, `[Sending ${chunks.length} chunks to answerMaker]`);
@@ -805,8 +808,10 @@ async function findRecentAnswers(
     for await (const answer of chunkyIndex.answerFolder.all()) {
         recentAnswers.push(answer);
     }
+    // Assume the name field (the internal key) is a timestamp.
     recentAnswers.sort((a, b) => b.name.localeCompare(a.name));
     recentAnswers.splice(5); // Arbitrary number. (TODO: Make it an option.)
+    recentAnswers.reverse(); // Most recent last.
     return recentAnswers;
 }
 
@@ -832,8 +837,8 @@ function makeQueryMakerPrompt(
     recentAnswers: NameValue<AnswerSpecs>[],
 ): string {
     return `\
-I have indexed a mid-sized code base written in Python. I divided each
-file up in "chunks", one per function or class or toplevel scope, and
+I have indexed a code base written in Python. I divided each
+file up in "chunks", one per function or class or module, and
 asked an AI to provide for each chunk:
 
 - a summary
@@ -842,43 +847,16 @@ asked an AI to provide for each chunk:
 - goals
 - dependencies
 
-For example, in JSON, a typical chunk might have this output from the AI:
-
-"docs": {
-    "chunkDocs": [
-        {
-        "lineNumber": 33,
-        "name": "Blob",
-        "summary": "Represents a sequence of text lines along withmetadata, including the starting line number and a flag indicating whether the blob should be ignored during reconstruction.",
-        "keywords": [
-            "text",
-            "metadata",
-            "blob"
-        ],
-        "topics": [
-            "data structure",
-            "text processing"
-        ],
-        "goals": [
-            "Store text lines",
-            "Manage reconstruction"
-        ],
-        "dependencies": []
-        }
-    ]
-}
-
-This is just an example though. The real code base looks different -- it
-just uses the same format.
-
-Anyway, now that I've indexed this, I can do an efficient fuzzy search
+Now that I've indexed this, I can do a "nearest neighbors" search
 on any query string on each of the five categories. I will next write
 down a question and ask you to produce *queries* for each of the five
 indexes whose answers will help you answer my question. Don't try to
 answer the question (you haven't seen the code yet) -- just tell me the
 query strings for each index.
 
-I also have several recent questions/answers that might be relevant:
+If you have low confidence in your queries, explain in 'message'.
+
+Here are up to 5 recent answers to use as conversation context:
 
 ${JSON.stringify(recentAnswers, null, 2)}
 
@@ -891,8 +869,9 @@ ${input}
 function makeAnswerPrompt(input: string): string {
     return `\
 Here is a JSON representation of a set of query results on indexes for keywords, topics, goals, etc.
-For each index you see a list of scored items, where each item has a value (e.g. a topic) and a list of "source ids".
+For each index you see a list of text items, where each item has a value (e.g. a topic) and a list of "source ids".
 The source ids reference code chunks, which are provided separately.
+There are also up to 5 recent answers to use as conversation context.
 
 Using the query results and scores, please answer this question:
 
