@@ -77,10 +77,10 @@ export async function findNearbyPointsOfInterest(position: LatLong | undefined, 
         return [];
     }
 
-    //let fuzzySearch = `${getEnvSetting(env, EnvVars.AZURE_MAPS_ENDPOINT)}search/fuzzy/json?api-version=1.0&query={lat,long}`  
-    //let poi = `${getEnvSetting(env, EnvVars.AZURE_MAPS_ENDPOINT)}search/poi/{format}?api-version=1.0&lat={LAT}&lon={LON}` 
-    let nearby = `${getEnvSetting(env, EnvVars.AZURE_MAPS_ENDPOINT)}search/nearby/json?api-version=1.0&lat=${position.latitude}&lon=${position.longitude}&radius=${radius}`;
     try {
+        //let fuzzySearch = `${getEnvSetting(env, EnvVars.AZURE_MAPS_ENDPOINT)}search/fuzzy/json?api-version=1.0&query={lat,long}`  
+        //let poi = `${getEnvSetting(env, EnvVars.AZURE_MAPS_ENDPOINT)}search/poi/{format}?api-version=1.0&lat={LAT}&lon={LON}` 
+        const nearby = `${getEnvSetting(env, EnvVars.AZURE_MAPS_ENDPOINT)}search/nearby/json?api-version=1.0&lat=${position.latitude}&lon=${position.longitude}&radius=${radius}`;
         const options: RequestInit = {
             method: "GET",
             headers: new Headers({
@@ -118,13 +118,8 @@ export async function findNearbyPointsOfInterest(position: LatLong | undefined, 
         return retVal;
 
     } catch (e) {
-        const ex = e as Error;
-        if (ex.name && ex.name === "AbortError") {
-            throw new Error(`fetch timeout -1ms`);
-        } else {
-            throw e;
-        }
-    } finally {
+        console.warn(`Error performing nearby POI lookup: ${e}`)
+        return [];
     }
 }
 
@@ -139,10 +134,9 @@ export async function reverseGeocode(position: LatLong | undefined, settings: Ap
         return [];
     }   
 
-    //let fuzzySearch = `${getEnvSetting(env, EnvVars.AZURE_MAPS_ENDPOINT)}search/fuzzy/json?api-version=1.0&query={lat,long}`  
-    //let poi = `${getEnvSetting(env, EnvVars.AZURE_MAPS_ENDPOINT)}search/poi/{format}?api-version=1.0&lat={LAT}&lon={LON}` 
-    let reverseGeocode = `${getEnvSetting(env, EnvVars.AZURE_MAPS_ENDPOINT)}reverseGeocode?api-version=2023-06-01&coordinates=${position.longitude},${position.latitude}`;
     try {
+        let reverseGeocode = `${getEnvSetting(env, EnvVars.AZURE_MAPS_ENDPOINT)}reverseGeocode?api-version=2023-06-01&coordinates=${position.longitude},${position.latitude}`;
+
         const options: RequestInit = {
             method: "GET",
             headers: new Headers({
@@ -168,13 +162,7 @@ export async function reverseGeocode(position: LatLong | undefined, settings: Ap
         return retVal;
 
     } catch (e) {
-        const ex = e as Error;
-        if (ex.name && ex.name === "AbortError") {
-            throw new Error(`fetch timeout -1ms`);
-        } else {
-            throw e;
-        }
-    } finally {
+        console.warn(`Unable to perform reverse geocode lookup: ${e}`)
+        return [];
     }
-
 }
