@@ -61,9 +61,9 @@ To list all avaiable agents and their status, just the command without any param
 |--------------------|-------|-------|--------|
 |androidMobile       |✅     |✅     |❌      |
 |browser             |✅     |✅     |✅      |
-|  browser.commerce  |✅     |✅     |        |
-|  browser.crossword |✅     |✅     |        |
-|  browser.paleoBioDb|✅     |✅     |        |
+|  browser.commerce  |💤     |💤     |        |
+|  browser.crossword |💤     |💤     |        |
+|  browser.paleoBioDb|💤     |💤     |        |
 |calendar            |✅     |✅     |✅      |
 |chat                |✅     |✅     |❌      |
 |code                |✅     |✅     |❌      |
