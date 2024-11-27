@@ -168,6 +168,7 @@ function setStatus(
     kind: keyof ChangedAgent,
     name: string,
     enable: boolean,
+    active: boolean,
     changes?: ChangedAgent,
 ) {
     const defaultStr = getDefaultStr(changes, kind, name);
@@ -182,7 +183,12 @@ function setStatus(
             status[appAgentName] = {};
         }
     }
-    status[name][kind] = enable ? `✅${defaultStr}` : `❌${defaultStr}`;
+
+    status[name][kind] = enable
+        ? active
+            ? `✅${defaultStr}`
+            : `💤${defaultStr}`
+        : `❌${defaultStr}`;
 }
 
 function showAgentStatus(
@@ -209,12 +215,14 @@ function showAgentStatus(
         for (const name of agents.getSchemaNames()) {
             if (showSchema) {
                 const state = agents.isSchemaEnabled(name);
-                setStatus(status, "schemas", name, state, changes);
+                const active = agents.isSchemaActive(name);
+                setStatus(status, "schemas", name, state, active, changes);
             }
 
             if (showAction) {
                 const state = agents.isActionEnabled(name);
-                setStatus(status, "actions", name, state, changes);
+                const active = agents.isActionActive(name);
+                setStatus(status, "actions", name, state, active, changes);
             }
         }
     }
@@ -222,7 +230,7 @@ function showAgentStatus(
     if (showCommand) {
         for (const name of agents.getAppAgentNames()) {
             const state = agents.isCommandEnabled(name);
-            setStatus(status, "commands", name, state, changes);
+            setStatus(status, "commands", name, state, true, changes);
         }
     }
 

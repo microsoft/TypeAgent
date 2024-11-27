@@ -193,7 +193,7 @@ async function matchRequest(
     if (constructionStore.isEnabled()) {
         const startTime = performance.now();
         const config = systemContext.session.getConfig();
-        const useTranslators = systemContext.agents.getActiveTranslators();
+        const useTranslators = systemContext.agents.getActiveSchemas();
         const matches = constructionStore.match(request, {
             wildcard: config.cache.matchWildcard,
             rejectReferences: config.explainer.filter.reference.list,
@@ -273,7 +273,7 @@ async function translateRequestWithTranslator(
                   // TODO: streaming currently doesn't not support multiple actions
                   if (prop === "actionName" && delta === undefined) {
                       const actionSchemaName =
-                          systemContext.agents.getInjectedTranslatorForActionName(
+                          systemContext.agents.getInjectedSchemaForActionName(
                               value,
                           ) ?? schemaName;
 
@@ -345,7 +345,7 @@ async function findAssistantForRequest(
     const systemContext = context.sessionContext.agentContext;
     const selectTranslator = loadAssistantSelectionJsonTranslator(
         systemContext.agents
-            .getActiveTranslators()
+            .getActiveSchemas()
             .filter(
                 (enabledTranslatorName) =>
                     translatorName !== enabledTranslatorName,
@@ -420,7 +420,7 @@ async function finalizeAction(
         }
 
         const { request, nextTranslatorName, searched } = nextTranslation;
-        if (!systemContext.agents.isTranslatorActive(nextTranslatorName)) {
+        if (!systemContext.agents.isSchemaActive(nextTranslatorName)) {
             // this is a bug. May be the translator cache didn't get updated when state change?
             throw new Error(
                 `Internal error: switch to disabled translator ${nextTranslatorName}`,
@@ -462,7 +462,7 @@ async function finalizeAction(
     }
 
     return new Action(
-        systemContext.agents.getInjectedTranslatorForActionName(
+        systemContext.agents.getInjectedSchemaForActionName(
             currentAction.actionName,
         ) ?? currentTranslatorName,
         currentAction.actionName,
@@ -551,12 +551,12 @@ async function pickInitialSchema(
         }
     }
 
-    if (!systemContext.agents.isTranslatorActive(schemaName)) {
+    if (!systemContext.agents.isSchemaActive(schemaName)) {
         debugTranslate(
             `Translating request using default translator: ${schemaName} not active`,
         );
         // REVIEW: Just pick the first one.
-        schemaName = systemContext.agents.getActiveTranslators()[0];
+        schemaName = systemContext.agents.getActiveSchemas()[0];
         if (schemaName === undefined) {
             throw new Error("No active translator available");
         }

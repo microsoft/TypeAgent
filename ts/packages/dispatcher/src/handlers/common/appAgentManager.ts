@@ -35,7 +35,7 @@ type AppAgentRecord = {
     schemas: Set<string>;
     actions: Set<string>;
     commands: boolean;
-    hasTranslators: boolean;
+    hasSchemas: boolean;
     manifest: AppAgentManifest;
     appAgent?: AppAgent | undefined;
     sessionContext?: SessionContext | undefined;
@@ -56,7 +56,7 @@ export type AppAgentStateOptions = DeepPartialUndefinedAndNull<AppAgentState>;
 function getEffectiveValue(
     force: AppAgentStateOptions | undefined,
     overrides: AppAgentStateOptions | undefined,
-    kind: "schemas" | "actions" | "commands",
+    kind: keyof AppAgentState,
     name: string,
     useDefault: boolean,
     defaultValue: boolean,
@@ -79,7 +79,7 @@ function getEffectiveValue(
 function computeStateChange(
     force: AppAgentStateOptions | undefined,
     overrides: AppAgentStateOptions | undefined,
-    kind: "schemas" | "actions" | "commands",
+    kind: keyof AppAgentState,
     name: string,
     useDefault: boolean,
     defaultEnabled: boolean,
@@ -109,9 +109,9 @@ function computeStateChange(
             ]);
         }
     }
-    const enableTranslator = alwaysEnabled || effectiveEnabled;
-    if (enableTranslator !== currentEnabled) {
-        return enableTranslator;
+    const enable = alwaysEnabled || effectiveEnabled;
+    if (enable !== currentEnabled) {
+        return enable;
     }
     return undefined;
 }
@@ -137,10 +137,7 @@ export const alwaysEnabledAgents = {
 export class AppAgentManager implements ActionConfigProvider {
     private readonly agents = new Map<string, AppAgentRecord>();
     private readonly actionConfigs = new Map<string, ActionConfig>();
-    private readonly injectedTranslatorForActionName = new Map<
-        string,
-        string
-    >();
+    private readonly injectedSchemaForActionName = new Map<string, string>();
     private readonly emojis: Record<string, string> = {};
     private readonly transientAgents: Record<string, boolean | undefined> = {};
     private readonly actionSementicMap = new ActionSchemaSementicMap();
@@ -168,16 +165,16 @@ export class AppAgentManager implements ActionConfigProvider {
         return record.schemas.has(schemaName);
     }
 
-    public isTranslatorActive(schemaName: string) {
+    public isSchemaActive(schemaName: string) {
         return (
             this.isSchemaEnabled(schemaName) &&
             this.transientAgents[schemaName] !== false
         );
     }
 
-    public getActiveTranslators() {
+    public getActiveSchemas() {
         return this.getSchemaNames().filter((name) =>
-            this.isTranslatorActive(name),
+            this.isSchemaActive(name),
         );
     }
 
@@ -249,10 +246,7 @@ export class AppAgentManager implements ActionConfigProvider {
                 }
                 if (config.injected) {
                     for (const actionName of actionSchemaFile.actionSchemas.keys()) {
-                        this.injectedTranslatorForActionName.set(
-                            actionName,
-                            name,
-                        );
+                        this.injectedSchemaForActionName.set(actionName, name);
                     }
                 }
             }
@@ -263,7 +257,7 @@ export class AppAgentManager implements ActionConfigProvider {
                 actions: new Set(),
                 schemas: new Set(),
                 commands: false,
-                hasTranslators: entries.length > 0,
+                hasSchemas: entries.length > 0,
                 manifest,
             };
 
@@ -277,8 +271,8 @@ export class AppAgentManager implements ActionConfigProvider {
     public getActionEmbeddings() {
         return this.actionSementicMap.embeddings();
     }
-    public tryGetActionConfig(mayBeTranslatorName: string) {
-        return this.actionConfigs.get(mayBeTranslatorName);
+    public tryGetActionConfig(mayBeSchemaName: string) {
+        return this.actionConfigs.get(mayBeSchemaName);
     }
     public getActionConfig(schemaName: string) {
         const config = this.tryGetActionConfig(schemaName);
@@ -295,8 +289,8 @@ export class AppAgentManager implements ActionConfigProvider {
         return Array.from(this.actionConfigs.entries());
     }
 
-    public getInjectedTranslatorForActionName(actionName: string) {
-        return this.injectedTranslatorForActionName.get(actionName);
+    public getInjectedSchemaForActionName(actionName: string) {
+        return this.injectedSchemaForActionName.get(actionName);
     }
 
     public getAppAgent(appAgentName: string): AppAgent {
