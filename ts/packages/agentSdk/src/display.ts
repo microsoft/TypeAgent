@@ -12,10 +12,10 @@ export type DynamicDisplay = {
 export type MessageContent = string | string[] | string[][];
 
 export type DisplayContent =
-    | MessageContent
+    | MessageContent // each string in the MessageContext is treated as text
     | {
           type: DisplayType; // Type of the content
-          content: MessageContent;
+          content: MessageContent; // each string in the MessageContext is treated as what `type` specifies
           kind?: DisplayMessageKind; // Optional message kind for client specific styling
           speak?: boolean; // Optional flag to indicate if the content should be spoken
       };
