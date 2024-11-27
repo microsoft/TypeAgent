@@ -39,3 +39,5 @@ export {
 } from "./mimeTypes.js";
 
 export { getObjectProperty, setObjectProperty } from "./objectProperty.js";
+
+export * from "./location.js";
