@@ -65,7 +65,7 @@ import {
     EmbeddingCache,
     readEmbeddingCache,
     writeEmbeddingCache,
-} from "../../translation/actionSchemaSementicMap.js";
+} from "../../translation/actionSchemaSemanticMap.js";
 
 import registerDebug from "debug";
 

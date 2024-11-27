@@ -21,7 +21,7 @@ import { DispatcherName } from "./interactiveIO.js";
 import {
     ActionSchemaSementicMap,
     EmbeddingCache,
-} from "../../translation/actionSchemaSementicMap.js";
+} from "../../translation/actionSchemaSemanticMap.js";
 import { ActionSchemaFileCache } from "../../translation/actionSchemaFileCache.js";
 import { ActionSchemaFile } from "action-schema";
 import path from "path";

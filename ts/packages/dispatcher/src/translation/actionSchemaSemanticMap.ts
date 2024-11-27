@@ -5,7 +5,6 @@ import fs from "node:fs";
 import { ActionSchemaFile, ActionSchemaTypeDefinition } from "action-schema";
 import { ActionConfig } from "./agentTranslators.js";
 import {
-    EmbeddedValue,
     generateEmbeddingWithRetry,
     generateTextEmbeddingsWithRetry,
     NormalizedEmbedding,
