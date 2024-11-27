@@ -11,7 +11,7 @@ import {
 } from "agent-cache";
 import {
     getCacheFactory,
-    getBuiltinTranslatorNames,
+    getBuiltinSchemaNames,
     initializeCommandHandlerContext,
     closeCommandHandlerContext,
 } from "agent-dispatcher/internal";
@@ -37,7 +37,7 @@ export default class ExplainCommand extends Command {
     static flags = {
         translator: Flags.string({
             description: "Translator names",
-            options: getBuiltinTranslatorNames(),
+            options: getBuiltinSchemaNames(),
             multiple: true,
         }),
         explainer: Flags.string({

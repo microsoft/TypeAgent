@@ -49,10 +49,7 @@ import {
 } from "../translation/actionTemplate.js";
 import { getTokenCommandHandlers } from "../handlers/tokenCommandHandler.js";
 import { Actions, FullAction } from "agent-cache";
-import {
-    getActionSchema,
-    getActionSchemaFile,
-} from "../translation/actionSchema.js";
+import { getActionSchema } from "../translation/actionSchemaFileCache.js";
 import { executeActions } from "../action/actionHandlers.js";
 import { getObjectProperty } from "common-utils";
 import { dispatcherAgent } from "../dispatcher/dispatcherAgent.js";
@@ -204,12 +201,15 @@ class ActionCommandHandler implements CommandHandler {
     ) {
         const systemContext = context.sessionContext.agentContext;
         const { translatorName, actionName } = params.args;
-        const config = systemContext.agents.getActionConfig(translatorName);
-        const actionSchemaFile = getActionSchemaFile(config);
+        const actionSchemaFile =
+            systemContext.agents.getActionSchemaFile(translatorName);
+        if (actionSchemaFile === undefined) {
+            throw new Error(`Invalid schema name ${translatorName}`);
+        }
         const actionSchema = actionSchemaFile.actionSchemas.get(actionName);
         if (actionSchema === undefined) {
             throw new Error(
-                `Invalid action name ${actionName} for translator ${translatorName}`,
+                `Invalid action name ${actionName} for schema ${translatorName}`,
             );
         }
 
@@ -245,14 +245,11 @@ class ActionCommandHandler implements CommandHandler {
                 if (translatorName === undefined) {
                     continue;
                 }
-                const config =
-                    systemContext.agents.tryGetActionConfig(translatorName);
-
-                if (config === undefined) {
+                const actionSchemaFile =
+                    systemContext.agents.getActionSchemaFile(translatorName);
+                if (actionSchemaFile === undefined) {
                     continue;
                 }
-                const actionSchemaFile = getActionSchemaFile(config);
-
                 completions.push(...actionSchemaFile.actionSchemas.keys());
                 continue;
             }

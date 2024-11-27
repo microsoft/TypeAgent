@@ -5,7 +5,7 @@ import {
     SchemaType,
     SchemaObjectFields,
     SchemaTypeDefinition,
-    ActionSchemaFile,
+    ActionSchemaGroup,
 } from "./type.js";
 import registerDebug from "debug";
 const debug = registerDebug("typeagent:schema:generate");
@@ -153,12 +153,12 @@ export function generateSchemaTypeDefinition(
 }
 
 export function generateActionSchema(
-    actionSchemaFile: ActionSchemaFile,
+    actionSchemaGroup: ActionSchemaGroup,
     options?: GenerateSchemaOptions,
 ): string {
     return generateSchemaTypeDefinition(
-        actionSchemaFile.entry,
+        actionSchemaGroup.entry,
         options,
-        actionSchemaFile.order,
+        actionSchemaGroup.order,
     );
 }

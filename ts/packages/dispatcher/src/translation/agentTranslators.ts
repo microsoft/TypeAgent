@@ -37,6 +37,7 @@ import {
     generateSchemaTypeDefinition,
     ActionSchemaObject,
     ActionSchemaCreator as sc,
+    ActionSchemaFile,
 } from "action-schema";
 const debugConfig = registerDebug("typeagent:translator:config");
 
@@ -54,6 +55,7 @@ export interface ActionConfigProvider {
     tryGetActionConfig(schemaName: string): ActionConfig | undefined;
     getActionConfig(schemaName: string): ActionConfig;
     getActionConfigs(): [string, ActionConfig][];
+    getActionSchemaFileForConfig?(config: ActionConfig): ActionSchemaFile;
 }
 
 function collectActionConfigs(
@@ -130,13 +132,13 @@ const actionConfigs: { [key: string]: ActionConfig } = await (async () => {
     return configs;
 })();
 
-export function getBuiltinTranslatorNames() {
+export function getBuiltinSchemaNames() {
     return Object.keys(actionConfigs);
 }
 
-export function getDefaultBuiltinTranslatorName() {
+export function getDefaultBuiltinSchemaName() {
     // Default to the first translator for now.
-    return getBuiltinTranslatorNames()[0];
+    return getBuiltinSchemaNames()[0];
 }
 
 export function getBuiltinActionConfigProvider(): ActionConfigProvider {
@@ -157,15 +159,15 @@ export function getBuiltinActionConfigProvider(): ActionConfigProvider {
     };
 }
 
-export function loadBuiltinTranslatorSchemaConfig(translatorName: string) {
+export function loadBuiltinTranslatorSchemaConfig(schemaName: string) {
     return loadTranslatorSchemaConfig(
-        translatorName,
+        schemaName,
         getBuiltinActionConfigProvider(),
     );
 }
 
-export function getAppAgentName(translatorName: string) {
-    return translatorName.split(".")[0];
+export function getAppAgentName(schemaName: string) {
+    return schemaName.split(".")[0];
 }
 
 const changeAssistantActionTypeName = "ChangeAssistantAction";

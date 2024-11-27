@@ -277,12 +277,12 @@ export async function createAgentProcess(
         updateAgentContext(
             enable,
             context: SessionContext<ShimContext>,
-            translatorName,
+            schemaName,
         ) {
             return rpc.invoke("updateAgentContext", {
                 ...getContextParam(context),
                 enable,
-                translatorName,
+                schemaName,
             });
         },
         executeAction(action: any, context: ActionContext<ShimContext>) {

@@ -64,10 +64,10 @@ function checkActionSchema(
     ];
 }
 
-function createActionSchemaFile(
+export function createActionSchemaFile(
     schemaName: string,
     entry: SchemaTypeDefinition,
-    order: Map<string, number>,
+    order: Map<string, number> | undefined,
     strict: boolean,
 ): ActionSchemaFile {
     if (strict && !entry.exported) {
@@ -133,12 +133,15 @@ function createActionSchemaFile(
     if (actionSchemas.size === 0) {
         throw new Error("No action schema found");
     }
-    return {
+    const actionSchemaFile: ActionSchemaFile = {
         entry: entry as ActionSchemaEntryTypeDefinition,
         schemaName,
         actionSchemas,
-        order,
     };
+    if (order) {
+        actionSchemaFile.order = order;
+    }
+    return actionSchemaFile;
 }
 
 export function parseActionSchemaFile(
@@ -217,7 +220,7 @@ class ActionParser {
             this.parseAST(node);
         });
 
-        for (const pending of this.pendingReferences.values()) {
+        for (const pending of this.pendingReferences) {
             const resolvedType = this.typeMap.get(pending.name);
             if (resolvedType === undefined) {
                 throw new Error(`Type ${pending.name} not found`);
@@ -231,7 +234,7 @@ class ActionParser {
     private fullText = "";
     private typeMap = new Map<string, SchemaTypeDefinition>();
     private typeOrder = new Map<string, number>();
-    private pendingReferences = new Map<string, SchemaTypeReference>();
+    private pendingReferences: SchemaTypeReference[] = [];
     private parseAST(node: ts.Node): void {
         switch (node.kind) {
             case ts.SyntaxKind.TypeAliasDeclaration:
@@ -351,15 +354,11 @@ class ActionParser {
         }
         const typeName = node.typeName.text;
 
-        const existing = this.pendingReferences.get(typeName);
-        if (existing) {
-            return existing;
-        }
         const result: SchemaTypeReference = {
             type: "type-reference",
             name: typeName,
         };
-        this.pendingReferences.set(typeName, result);
+        this.pendingReferences.push(result);
         return result;
     }
     private parseArrayType(node: ts.ArrayTypeNode): SchemaType {

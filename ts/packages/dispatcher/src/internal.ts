@@ -30,9 +30,9 @@ export {
 } from "./utils/test/testData.js";
 
 export { getBuiltinConstructionConfig } from "./utils/config.js";
-export { getBuiltinTranslatorNames } from "./translation/agentTranslators.js";
+export { getBuiltinSchemaNames } from "./translation/agentTranslators.js";
 export { getAssistantSelectionSchemas } from "./translation/unknownSwitcher.js";
-export { getActionSchema } from "./translation/actionSchema.js";
+export { getActionSchema } from "./translation/actionSchemaFileCache.js";
 export { getTestDataFiles } from "./utils/config.js";
 export {
     loadBuiltinTranslatorSchemaConfig,
