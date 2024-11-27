@@ -68,9 +68,16 @@ function createContextMap<T>() {
         close,
     };
 }
-export async function createAgentProcessShim(
+
+export type AgentProcess = {
+    appAgent: AppAgent;
+    process: child_process.ChildProcess | undefined;
+    count: number;
+};
+
+export async function createAgentProcess(
     modulePath: string,
-): Promise<AppAgent> {
+): Promise<AgentProcess> {
     const process = child_process.fork(
         fileURLToPath(new URL(`./agentProcess.js`, import.meta.url)),
         [modulePath],
@@ -270,12 +277,12 @@ export async function createAgentProcessShim(
         updateAgentContext(
             enable,
             context: SessionContext<ShimContext>,
-            translatorName,
+            schemaName,
         ) {
             return rpc.invoke("updateAgentContext", {
                 ...getContextParam(context),
                 enable,
-                translatorName,
+                schemaName,
             });
         },
         executeAction(action: any, context: ActionContext<ShimContext>) {
@@ -407,5 +414,9 @@ export async function createAgentProcessShim(
         contextMap.close(context);
         return result;
     };
-    return result;
+    return {
+        process,
+        appAgent: result,
+        count: 1,
+    };
 }

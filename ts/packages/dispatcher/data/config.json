@@ -48,7 +48,7 @@
         "injected": true,
         "cached": false
       },
-      "subTranslators": {
+      "subActionManifests": {
         "clarify": {
           "description": "Action that helps you clarify your request.",
           "schema": {
@@ -63,7 +63,7 @@
     "system": {
       "emojiChar": "🔧",
       "description": "Built-in agent to manage system configuration and sessions",
-      "subTranslators": {
+      "subActionManifests": {
         "config": {
           "schema": {
             "description": "System agent that helps you manage system settings and preferences.",

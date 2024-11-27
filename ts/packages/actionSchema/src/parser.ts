@@ -16,6 +16,9 @@ import {
     ActionSchemaEntryTypeDefinition,
 } from "./type.js";
 
+import registerDebug from "debug";
+const debug = registerDebug("typeagent:schema:parse");
+
 function checkActionSchema(
     definition: SchemaTypeDefinition,
 ): [string, ActionSchemaTypeDefinition] {
@@ -61,124 +64,152 @@ function checkActionSchema(
     ];
 }
 
-function createActionSchemaFile(
-    translatorName: string,
-    definition: SchemaTypeDefinition,
+export function createActionSchemaFile(
+    schemaName: string,
+    entry: SchemaTypeDefinition,
+    order: Map<string, number> | undefined,
     strict: boolean,
 ): ActionSchemaFile {
-    if (strict && !definition.exported) {
-        throw new Error(`Type ${definition.name} must be exported`);
+    if (strict && !entry.exported) {
+        throw new Error(
+            `Schema Error: ${schemaName}: Type ${entry.name} must be exported`,
+        );
     }
 
-    const pending: SchemaTypeDefinition[] = [definition];
-    const actionSchemas: [string, ActionSchemaTypeDefinition][] = [];
+    const pending: SchemaTypeDefinition[] = [entry];
+    const actionSchemas = new Map<string, ActionSchemaTypeDefinition>();
     while (pending.length > 0) {
         const current = pending.shift()!;
         switch (current.type.type) {
             case "object":
-                actionSchemas.push(checkActionSchema(current));
+                const [actionName, actionSchema] = checkActionSchema(current);
+                if (actionSchemas.get(actionName)) {
+                    throw new Error(
+                        `Schema Error: ${schemaName}: Duplicate action name '${actionName}'`,
+                    );
+                }
+                actionSchemas.set(actionName, actionSchema);
                 break;
             case "type-union":
                 if (strict && current.comments) {
                     throw new Error(
-                        `Schema Error: entry type comments for '${current.name}' are not supported`,
+                        `Schema Error: ${schemaName}: entry type comments for '${current.name}' are not supported`,
                     );
                 }
-                current.type.types.map((t) => {
+                for (const t of current.type.types) {
                     if (t.type !== "type-reference") {
                         throw new Error(
-                            "Schema Error: expected type reference in the entry type union",
+                            `Schema Error: ${schemaName}: expected type reference in the entry type union`,
                         );
                     }
                     if (t.definition === undefined) {
                         throw new Error(
-                            `Schema Error: unresolved type reference in the entry type union`,
+                            `Schema Error: ${schemaName}: unresolved type reference '${t.name}' in the entry type union`,
                         );
                     }
                     pending.push(t.definition);
-                });
+                }
                 break;
             case "type-reference":
                 // Definition that references another type is the same as a union type with a single type.
                 if (strict && current.comments) {
                     throw new Error(
-                        "Schema Error: entry type comments are not supported",
+                        `Schema Error: ${schemaName}:  entry type comments for '${current.name} are not supported`,
                     );
                 }
                 if (current.type.definition === undefined) {
                     throw new Error(
-                        `Schema Error: unresolved type reference in the entry type union`,
+                        `Schema Error: ${schemaName}:  unresolved type reference '${current.type.name}' in the entry type union`,
                     );
                 }
                 pending.push(current.type.definition);
                 break;
             default:
                 throw new Error(
-                    `Schema Error: invalid type ${current.type.type} in action schema type ${current.name}`,
+                    `Schema Error: ${schemaName}:  invalid type ${current.type.type} in action schema type ${current.name}`,
                 );
         }
     }
-    if (actionSchemas.length === 0) {
+    if (actionSchemas.size === 0) {
         throw new Error("No action schema found");
     }
-    return {
-        translatorName,
-        actionSchemaMap: new Map(actionSchemas),
-        definition: definition as ActionSchemaEntryTypeDefinition,
+    const actionSchemaFile: ActionSchemaFile = {
+        entry: entry as ActionSchemaEntryTypeDefinition,
+        schemaName,
+        actionSchemas,
     };
+    if (order) {
+        actionSchemaFile.order = order;
+    }
+    return actionSchemaFile;
 }
 
 export function parseActionSchemaFile(
-    filename: string,
-    translatorName: string,
+    fileName: string,
+    schemaName: string,
     typeName: string,
     strict: boolean = false,
 ): ActionSchemaFile {
-    const definition = ActionParser.parseFile(filename, typeName);
-    if (definition === undefined) {
-        throw new Error(`Type ${typeName} not found`);
+    // TODO: switch to read file and call parseSource?
+    const options: ts.CompilerOptions = {
+        target: ts.ScriptTarget.ES5,
+        module: ts.ModuleKind.CommonJS,
+    };
+
+    const program = ts.createProgram([fileName], options);
+    for (const sourceFile of program.getSourceFiles()) {
+        if (!sourceFile.isDeclarationFile) {
+            return ActionParser.parseSourceFile(
+                sourceFile,
+                schemaName,
+                typeName,
+                strict,
+            );
+        }
     }
-    return createActionSchemaFile(translatorName, definition, strict);
+
+    throw new Error(`File not found: ${fileName}`);
 }
 
 export function parseActionSchemaSource(
     source: string,
-    translatorName: string,
+    schemaName: string,
     typeName: string,
     strict: boolean = false,
 ): ActionSchemaFile {
-    const definition = ActionParser.parseSource(source, typeName);
-    if (definition === undefined) {
-        throw new Error(`Type ${typeName} not found`);
-    }
-    return createActionSchemaFile(translatorName, definition, strict);
+    const sourceFile = ts.createSourceFile("", source, ts.ScriptTarget.ES5);
+    return ActionParser.parseSourceFile(
+        sourceFile,
+        schemaName,
+        typeName,
+        strict,
+    );
 }
 
 import ts, { CommentRange } from "typescript";
 
 class ActionParser {
-    static parseFile(fileName: string, typeName: string) {
-        // TODO: switch to read file and call parseSource?
-        const options: ts.CompilerOptions = {
-            target: ts.ScriptTarget.ES5,
-            module: ts.ModuleKind.CommonJS,
-        };
-
-        const program = ts.createProgram([fileName], options);
-        for (const sourceFile of program.getSourceFiles()) {
-            if (!sourceFile.isDeclarationFile) {
-                const parser = new ActionParser();
-                return parser.parseSchema(sourceFile, typeName);
-            }
-        }
-    }
-
-    static parseSource(source: string, typeName: string) {
-        const sourceFile = ts.createSourceFile("", source, ts.ScriptTarget.ES5);
+    static parseSourceFile(
+        sourceFile: ts.SourceFile,
+        schemaName: string,
+        typeName: string,
+        strict: boolean,
+    ) {
+        debug(`Parsing ${schemaName} for ${typeName}: ${sourceFile.fileName}`);
         const parser = new ActionParser();
-        return parser.parseSchema(sourceFile, typeName);
+        const definition = parser.parseSchema(sourceFile, typeName);
+        if (definition === undefined) {
+            throw new Error(`Type ${typeName} not found`);
+        }
+        const result = createActionSchemaFile(
+            schemaName,
+            definition,
+            parser.typeOrder,
+            strict,
+        );
+        debug(`Parse Successful ${schemaName}`);
+        return result;
     }
-
     private constructor() {}
     private parseSchema(
         sourceFile: ts.SourceFile,
@@ -189,7 +220,7 @@ class ActionParser {
             this.parseAST(node);
         });
 
-        for (const pending of this.pendingReferences.values()) {
+        for (const pending of this.pendingReferences) {
             const resolvedType = this.typeMap.get(pending.name);
             if (resolvedType === undefined) {
                 throw new Error(`Type ${pending.name} not found`);
@@ -202,7 +233,8 @@ class ActionParser {
 
     private fullText = "";
     private typeMap = new Map<string, SchemaTypeDefinition>();
-    private pendingReferences = new Map<string, SchemaTypeReference>();
+    private typeOrder = new Map<string, number>();
+    private pendingReferences: SchemaTypeReference[] = [];
     private parseAST(node: ts.Node): void {
         switch (node.kind) {
             case ts.SyntaxKind.TypeAliasDeclaration:
@@ -248,9 +280,8 @@ class ActionParser {
                 type,
                 comments: this.getLeadingCommentStrings(node),
                 exported,
-                order: this.typeMap.size,
             };
-            this.typeMap.set(name, definition);
+            this.addTypeDefinition(definition);
         } catch (e: any) {
             throw new Error(`Error parsing alias type ${name}: ${e.message}`);
         }
@@ -275,12 +306,17 @@ class ActionParser {
                 exported,
                 order: this.typeMap.size,
             };
-            this.typeMap.set(name, definition);
+            this.addTypeDefinition(definition);
         } catch (e: any) {
             throw new Error(
                 `Error parsing interface type ${name}: ${e.message}`,
             );
         }
+    }
+
+    private addTypeDefinition(definition: SchemaTypeDefinition) {
+        this.typeMap.set(definition.name, definition);
+        this.typeOrder.set(definition.name, this.typeMap.size);
     }
 
     private parseType(node: ts.TypeNode): SchemaType {
@@ -318,15 +354,11 @@ class ActionParser {
         }
         const typeName = node.typeName.text;
 
-        const existing = this.pendingReferences.get(typeName);
-        if (existing) {
-            return existing;
-        }
         const result: SchemaTypeReference = {
             type: "type-reference",
             name: typeName,
         };
-        this.pendingReferences.set(typeName, result);
+        this.pendingReferences.push(result);
         return result;
     }
     private parseArrayType(node: ts.ArrayTypeNode): SchemaType {

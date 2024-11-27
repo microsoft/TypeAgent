@@ -22,7 +22,11 @@ import {
     updateCorrectionContext,
 } from "./common/commandHandlerContext.js";
 
-import { CachedImageWithDetails, getColorElapsedString } from "common-utils";
+import {
+    CachedImageWithDetails,
+    getColorElapsedString,
+    IncrementalJsonValueCallBack,
+} from "common-utils";
 import { Logger } from "telemetry";
 import {
     executeActions,
@@ -40,9 +44,8 @@ import {
     MultipleAction,
     isMultipleAction,
 } from "../translation/multipleActionSchema.js";
-import { MatchResult } from "../../../cache/dist/constructions/constructions.js";
+import { MatchResult } from "agent-cache";
 import registerDebug from "debug";
-import { IncrementalJsonValueCallBack } from "../../../commonUtils/dist/incrementalJsonParser.js";
 import ExifReader from "exifreader";
 import { ProfileNames } from "../utils/profileNames.js";
 import { ActionContext, ParsedCommandParams } from "@typeagent/agent-sdk";
@@ -55,7 +58,7 @@ import {
 } from "@typeagent/agent-sdk/helpers/display";
 import { DispatcherName } from "./common/interactiveIO.js";
 import { getActionTemplateEditConfig } from "../translation/actionTemplate.js";
-import { getActionSchema } from "../translation/actionSchema.js";
+import { getActionSchema } from "../translation/actionSchemaFileCache.js";
 import { isUnknownAction } from "../dispatcher/dispatcherAgent.js";
 import { UnknownAction } from "../dispatcher/schema/dispatcherActionSchema.js";
 
@@ -66,6 +69,7 @@ export interface TranslatedAction {
 }
 
 const debugTranslate = registerDebug("typeagent:translate");
+const debugSementicSearch = registerDebug("typeagent:translate:sementic");
 const debugExplain = registerDebug("typeagent:explain");
 const debugConstValidation = registerDebug("typeagent:const:validation");
 
@@ -240,14 +244,14 @@ async function matchRequest(
 }
 
 async function translateRequestWithTranslator(
-    translatorName: string,
+    schemaName: string,
     request: string,
     context: ActionContext<CommandHandlerContext>,
     history?: HistoryContext,
     attachments?: CachedImageWithDetails[],
 ) {
     const systemContext = context.sessionContext.agentContext;
-    const prefix = getTranslatorPrefix(translatorName, systemContext);
+    const prefix = getTranslatorPrefix(schemaName, systemContext);
     displayStatus(`${prefix}Translating '${request}'`, context);
 
     if (history) {
@@ -268,13 +272,13 @@ async function translateRequestWithTranslator(
             ? (prop: string, value: any, delta: string | undefined) => {
                   // TODO: streaming currently doesn't not support multiple actions
                   if (prop === "actionName" && delta === undefined) {
-                      const actionTranslatorName =
+                      const actionSchemaName =
                           systemContext.agents.getInjectedTranslatorForActionName(
                               value,
-                          ) ?? translatorName;
+                          ) ?? schemaName;
 
                       const prefix = getTranslatorPrefix(
-                          actionTranslatorName,
+                          actionSchemaName,
                           systemContext,
                       );
                       displayStatus(
@@ -282,12 +286,12 @@ async function translateRequestWithTranslator(
                           context,
                       );
                       const config =
-                          systemContext.agents.getTranslatorConfig(
-                              actionTranslatorName,
+                          systemContext.agents.getActionConfig(
+                              actionSchemaName,
                           );
                       if (config.streamingActions?.includes(value)) {
                           streamFunction = startStreamPartialAction(
-                              actionTranslatorName,
+                              actionSchemaName,
                               value,
                               systemContext,
                           );
@@ -304,7 +308,7 @@ async function translateRequestWithTranslator(
                   }
               }
             : undefined;
-    const translator = getTranslator(systemContext, translatorName);
+    const translator = getTranslator(systemContext, schemaName);
     try {
         const response = await translator.translate(
             request,
@@ -520,6 +524,50 @@ function hasAdditionalInstructions(history?: HistoryContext) {
     );
 }
 
+async function pickInitialSchema(
+    request: string,
+    systemContext: CommandHandlerContext,
+) {
+    // Start with the last translator used
+    let schemaName = systemContext.lastActionSchemaName;
+
+    const firstUseEmbedding =
+        systemContext.session.getConfig().translation.schema.firstUseEmbedding;
+    if (firstUseEmbedding) {
+        debugSementicSearch(`Using embedding for schema selection`);
+        // Use embedding to determine the most likely action schema and use the schema name for that.
+        const result =
+            await systemContext.agents.semanticSearchActionSchema(request);
+        debugSementicSearch(
+            `Semantic search result: ${result
+                .map(
+                    (r) =>
+                        `${r.item.actionSchemaFile.schemaName}.${r.item.definition.name} (${r.score})`,
+                )
+                .join("\n")}`,
+        );
+        if (result.length > 0) {
+            schemaName = result[0].item.actionSchemaFile.schemaName;
+        }
+    }
+
+    if (!systemContext.agents.isTranslatorActive(schemaName)) {
+        debugTranslate(
+            `Translating request using default translator: ${schemaName} not active`,
+        );
+        // REVIEW: Just pick the first one.
+        schemaName = systemContext.agents.getActiveTranslators()[0];
+        if (schemaName === undefined) {
+            throw new Error("No active translator available");
+        }
+    } else {
+        debugTranslate(
+            `Translating request using current translator: ${schemaName}`,
+        );
+    }
+    return schemaName;
+}
+
 export async function translateRequest(
     request: string,
     context: ActionContext<CommandHandlerContext>,
@@ -532,25 +580,11 @@ export async function translateRequest(
         return;
     }
     // Start with the last translator used
-    let translatorName = systemContext.lastActionTranslatorName;
-    if (!systemContext.agents.isTranslatorActive(translatorName)) {
-        debugTranslate(
-            `Translating request using default translator: ${translatorName} not active`,
-        );
-        // REVIEW: Just pick the first one.
-        translatorName = systemContext.agents.getActiveTranslators()[0];
-        if (translatorName === undefined) {
-            throw new Error("No active translator available");
-        }
-    } else {
-        debugTranslate(
-            `Translating request using current translator: ${translatorName}`,
-        );
-    }
+    const schemaName = await pickInitialSchema(request, systemContext);
     const startTime = performance.now();
 
     const action = await translateRequestWithTranslator(
-        translatorName,
+        schemaName,
         request,
         context,
         history,
@@ -561,13 +595,8 @@ export async function translateRequest(
     }
 
     const translatedAction = isMultipleAction(action)
-        ? await finalizeMultipleActions(
-              action,
-              translatorName,
-              context,
-              history,
-          )
-        : await finalizeAction(action, translatorName, context, history);
+        ? await finalizeMultipleActions(action, schemaName, context, history)
+        : await finalizeAction(action, schemaName, context, history);
 
     if (translatedAction === undefined) {
         return undefined;
@@ -586,7 +615,7 @@ export async function translateRequest(
         if (systemContext.requestIO.isInputEnabled()) {
             systemContext.logger?.logEvent("translation", {
                 elapsedMs,
-                translatorName,
+                translatorName: schemaName,
                 request,
                 actions: requestAction.actions,
                 replacedAction,
@@ -788,18 +817,13 @@ function getExplainerOptions(
             return undefined;
         }
 
-        const translatorName = action.translatorName;
-        if (
-            context.agents.getTranslatorConfig(translatorName).cached === false
-        ) {
+        const schemaName = action.translatorName;
+        if (context.agents.getActionConfig(schemaName).cached === false) {
             // explanation disable at the translator level
             return undefined;
         }
 
-        usedTranslators.set(
-            translatorName,
-            getTranslator(context, translatorName),
-        );
+        usedTranslators.set(schemaName, getTranslator(context, schemaName));
     }
     const { list, value, translate } =
         context.session.getConfig().explainer.filter.reference;
@@ -956,6 +980,8 @@ export class RequestCommandHandler implements CommandHandler {
             const match = canUseCacheMatch
                 ? await matchRequest(request, context, history)
                 : undefined;
+
+            systemContext.agents.semanticSearchActionSchema(request);
             const translationResult =
                 match === undefined // undefined means not found
                     ? await translateRequest(

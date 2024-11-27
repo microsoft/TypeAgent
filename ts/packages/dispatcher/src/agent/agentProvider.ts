@@ -7,4 +7,5 @@ export interface AppAgentProvider {
     getAppAgentNames(): string[];
     getAppAgentManifest(appAgentName: string): Promise<AppAgentManifest>;
     loadAppAgent(appAgentName: string): Promise<AppAgent>;
+    unloadAppAgent(appAgentName: string): void;
 }

@@ -4,7 +4,7 @@
 import { Args, Command, Flags } from "@oclif/core";
 import readline from "readline/promises";
 import {
-    getBuiltinTranslatorNames,
+    getBuiltinSchemaNames,
     getCacheFactory,
     processCommand,
     processRequests,
@@ -22,8 +22,8 @@ export default class Interactive extends Command {
     static description = "Interactive mode";
     static flags = {
         translator: Flags.string({
-            description: "Translator names",
-            options: getBuiltinTranslatorNames(),
+            description: "Schema names",
+            options: getBuiltinSchemaNames(),
             multiple: true,
         }),
         explainer: Flags.string({
@@ -69,12 +69,12 @@ export default class Interactive extends Command {
 
         let context: CommandHandlerContext | undefined;
 
-        const translators = flags.translator
+        const schemas = flags.translator
             ? Object.fromEntries(flags.translator.map((name) => [name, true]))
             : undefined;
         try {
             context = await initializeCommandHandlerContext("cli interactive", {
-                translators,
+                schemas,
                 translation: { model: flags.model },
                 explainer: { name: flags.explainer },
                 stdio,

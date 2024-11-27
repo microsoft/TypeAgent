@@ -17,6 +17,8 @@ import {
     SchemaTypeUnion,
 } from "./type.js";
 
+export function string(): SchemaTypeString;
+export function string(...union: (string | string[])[]): SchemaTypeStringUnion;
 export function string(
     ...union: (string | string[])[]
 ): SchemaTypeString | SchemaTypeStringUnion {

@@ -297,7 +297,7 @@ async function getImportTranslationFiles(
         const infos = config.agents;
         const enabledAgents = new Set(
             context.agents
-                .getTranslatorNames()
+                .getSchemaNames()
                 .filter((name) => context.agents.isTranslatorEnabled(name))
                 .map(getAppAgentName),
         );

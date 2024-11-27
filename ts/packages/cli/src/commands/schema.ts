@@ -6,8 +6,8 @@ import { composeTranslatorSchemas } from "common-utils";
 import {
     getAssistantSelectionSchemas,
     getFullSchemaText,
-    getBuiltinTranslatorNames,
-    getBuiltinTranslatorConfigProvider,
+    getBuiltinSchemaNames,
+    getBuiltinActionConfigProvider,
     getActionSchema,
 } from "agent-dispatcher/internal";
 import { generateSchemaTypeDefinition } from "action-schema";
@@ -31,6 +31,7 @@ export default class Schema extends Command {
         }),
         generated: Flags.boolean({
             description: "Generated schema",
+            allowNo: true,
             default: true,
         }),
     };
@@ -38,7 +39,7 @@ export default class Schema extends Command {
         translator: Args.string({
             description: "Translator name",
             required: true,
-            options: getBuiltinTranslatorNames(),
+            options: getBuiltinSchemaNames(),
         }),
         actionName: Args.string({
             description: "Action name",
@@ -48,7 +49,7 @@ export default class Schema extends Command {
 
     async run(): Promise<void> {
         const { args, flags } = await this.parse(Schema);
-        const provider = getBuiltinTranslatorConfigProvider();
+        const provider = getBuiltinActionConfigProvider();
         if (!flags.assistant) {
             if (args.actionName) {
                 const actionSchema = getActionSchema(
@@ -79,7 +80,7 @@ export default class Schema extends Command {
             );
         } else {
             const schemas = getAssistantSelectionSchemas(
-                getBuiltinTranslatorNames(),
+                getBuiltinSchemaNames(),
                 provider,
             ).map((entry) => entry.schema);
             console.log(

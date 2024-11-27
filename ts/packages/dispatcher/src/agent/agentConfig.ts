@@ -13,7 +13,7 @@ import {
 import { createRequire } from "module";
 import path from "node:path";
 
-import { createAgentProcessShim } from "./agentProcessShim.js";
+import { AgentProcess, createAgentProcess } from "./agentProcessShim.js";
 import { AppAgentProvider } from "./agentProvider.js";
 import { CommandHandlerContext } from "../handlers/common/commandHandlerContext.js";
 import { loadInlineAgent } from "./inlineAgentHandlers.js";
@@ -128,10 +128,12 @@ function enableExecutionMode() {
     return process.env.TYPEAGENT_EXECMODE !== "0";
 }
 
-async function loadModuleAgent(info: ModuleAppAgentInfo): Promise<AppAgent> {
+async function loadModuleAgent(
+    info: ModuleAppAgentInfo,
+): Promise<AgentProcess> {
     const execMode = info.execMode ?? ExecutionMode.SeparateProcess;
     if (enableExecutionMode() && execMode === ExecutionMode.SeparateProcess) {
-        return createAgentProcessShim(`${info.name}/agent/handlers`);
+        return createAgentProcess(`${info.name}/agent/handlers`);
     }
 
     const module = await import(`${info.name}/agent/handlers`);
@@ -140,12 +142,16 @@ async function loadModuleAgent(info: ModuleAppAgentInfo): Promise<AppAgent> {
             `Failed to load module agent ${info.name}: missing 'instantiate' function.`,
         );
     }
-    return module.instantiate();
+    return {
+        appAgent: module.instantiate(),
+        process: undefined,
+        count: 1,
+    };
 }
 
 async function loadExternalModuleAgent(
     info: ModuleAppAgentInfo,
-): Promise<AppAgent> {
+): Promise<AgentProcess> {
     const pkgpath = path.join(
         getUserProfileDir(),
         "externalagents/package.json",
@@ -155,7 +161,7 @@ async function loadExternalModuleAgent(
 
     const execMode = info.execMode ?? ExecutionMode.SeparateProcess;
     if (enableExecutionMode() && execMode === ExecutionMode.SeparateProcess) {
-        return createAgentProcessShim(`file://${handlerPath}`);
+        return createAgentProcess(`file://${handlerPath}`);
     }
 
     const module = await import(`${handlerPath}`);
@@ -164,24 +170,31 @@ async function loadExternalModuleAgent(
             `Failed to load module agent ${info.name}: missing 'instantiate' function.`,
         );
     }
-    return module.instantiate();
+    return {
+        appAgent: module.instantiate(),
+        process: undefined,
+        count: 1,
+    };
 }
 
 // Load on demand, doesn't unload for now
-const moduleAgents = new Map<string, AppAgent>();
+const moduleAgents = new Map<string, AgentProcess>();
 async function getModuleAgent(appAgentName: string) {
     const existing = moduleAgents.get(appAgentName);
-    if (existing) return existing;
+    if (existing) {
+        existing.count++;
+        return existing.appAgent;
+    }
     const config = getDispatcherConfig().agents[appAgentName];
     if (config === undefined || config.type !== "module") {
         throw new Error(`Unable to load app agent name: ${appAgentName}`);
     }
     const agent = await loadModuleAgent(config);
     moduleAgents.set(appAgentName, agent);
-    return agent;
+    return agent.appAgent;
 }
 
-const externalAgents = new Map<string, AppAgent>();
+const externalAgents = new Map<string, AgentProcess>();
 export function getExternalAppAgentProvider(
     context: CommandHandlerContext,
 ): AppAgentProvider {
@@ -203,19 +216,31 @@ export function getExternalAppAgentProvider(
                 ? await getExternalModuleAgent(appAgentName)
                 : loadInlineAgent(appAgentName, context);
         },
+        unloadAppAgent(appAgentName: string) {
+            const agent = externalAgents.get(appAgentName);
+            if (agent) {
+                if (--agent.count === 0) {
+                    agent.process?.kill();
+                    externalAgents.delete(appAgentName);
+                }
+            }
+        },
     };
 }
 
-async function getExternalModuleAgent(appAgentName: string) {
+async function getExternalModuleAgent(appAgentName: string): Promise<AppAgent> {
     const existing = moduleAgents.get(appAgentName);
-    if (existing) return existing;
+    if (existing) {
+        existing.count++;
+        return existing.appAgent;
+    }
     const config = getExternalAgentsConfig().agents[appAgentName];
     if (config === undefined || config.type !== "module") {
         throw new Error(`Unable to load app agent name: ${appAgentName}`);
     }
     const agent = await loadExternalModuleAgent(config);
     moduleAgents.set(appAgentName, agent);
-    return agent;
+    return agent.appAgent;
 }
 
 export function getBuiltinAppAgentProvider(
@@ -238,6 +263,15 @@ export function getBuiltinAppAgentProvider(
             return type === "module"
                 ? await getModuleAgent(appAgentName)
                 : loadInlineAgent(appAgentName, context);
+        },
+        unloadAppAgent(appAgentName: string) {
+            const agent = moduleAgents.get(appAgentName);
+            if (agent) {
+                if (--agent.count === 0) {
+                    agent.process?.kill();
+                    externalAgents.delete(appAgentName);
+                }
+            }
         },
     };
 }

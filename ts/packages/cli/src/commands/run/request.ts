@@ -5,7 +5,7 @@ import { Args, Command, Flags } from "@oclif/core";
 import { createDispatcher } from "agent-dispatcher";
 import {
     getCacheFactory,
-    getBuiltinTranslatorNames,
+    getBuiltinSchemaNames,
 } from "agent-dispatcher/internal";
 import chalk from "chalk";
 import { getChatModelNames } from "aiclient";
@@ -27,8 +27,8 @@ export default class RequestCommand extends Command {
 
     static flags = {
         translator: Flags.string({
-            description: "Translator name",
-            options: getBuiltinTranslatorNames(),
+            description: "Schema name",
+            options: getBuiltinSchemaNames(),
             multiple: true,
         }),
         explainer: Flags.string({
@@ -50,12 +50,12 @@ export default class RequestCommand extends Command {
 
     async run(): Promise<void> {
         const { args, flags } = await this.parse(RequestCommand);
-        const translators = flags.translator
+        const schemas = flags.translator
             ? Object.fromEntries(flags.translator.map((name) => [name, true]))
             : undefined;
         const dispatcher = await createDispatcher("cli run request", {
-            translators,
-            actions: translators,
+            schemas,
+            actions: schemas,
             commands: { dispatcher: true },
             translation: { model: flags.model },
             explainer: flags.explainer
