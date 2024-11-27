@@ -18,14 +18,14 @@ export function getImageElement(imgData: string): string {
 }
 
 export function extractRelevantExifTags(exifTags: ExifReader.Tags) {
-    let tags: string = ""; 
+    let tags: string = "";
 
     tags = `${exifTags.Make ? "Make: " + exifTags.Make.value : ""}
     ${exifTags.Model ? "Model: " + exifTags.Model.value : ""}
     ${exifTags.DateTime ? "Date Taken: " + exifTags.DateTime.value : ""}
     ${exifTags.OffsetTime ? "Offset Time: " + exifTags.OffsetTime.value : ""}
     ${exifTags.GPSLatitude ? "GPS Latitude: " + exifTags.GPSLatitude.description : ""}
-    ${exifTags.GPSLatitudeRef ? "GPS Latitude Reference: " + exifTags.GPSLatitudeRef.value: ""}
+    ${exifTags.GPSLatitudeRef ? "GPS Latitude Reference: " + exifTags.GPSLatitudeRef.value : ""}
     ${exifTags.GPSLongitude ? "GPS Longitude Reference: " + exifTags.GPSLongitude.description : ""}
     ${exifTags.GPSLongitudeRef ? "GPS Longitude Reference: " + exifTags.GPSLongitudeRef?.value : ""}
     ${exifTags.GPSAltitudeRef ? "GPS Altitude Reference: " + exifTags.GPSAltitudeRef.value : ""}
@@ -59,4 +59,3 @@ export async function downloadImage(
         resolve(false);
     });
 }
-
