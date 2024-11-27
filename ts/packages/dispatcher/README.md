@@ -56,29 +56,29 @@ Dispatcher agent's schema, action and command can be toggled independently as we
 To list all avaiable agents and their status, just the command without any parameters:
 
 ```bash
-🤖🚧💾  [🎧📅📩📝🌐🪟⚛️💬🤖🔧📷🖐🖼️📱🗎]@config agent
+🤖🚧💾  [🎧📅📩📝🌐💬🤖🔧📷🖐🖼️📱🗎]> @config agent
 |Agent               |Schemas|Actions|Commands|
 |--------------------|-------|-------|--------|
-|androidMobile       |✅     |✅     |❌      |
+|androidMobile       |✅     |✅     |        |
 |browser             |✅     |✅     |✅      |
 |  browser.commerce  |💤     |💤     |        |
 |  browser.crossword |💤     |💤     |        |
 |  browser.paleoBioDb|💤     |💤     |        |
 |calendar            |✅     |✅     |✅      |
-|chat                |✅     |✅     |❌      |
-|code                |✅     |✅     |❌      |
-|  code.code-debug   |✅     |✅     |        |
-|  code.code-display |✅     |✅     |        |
-|  code.code-general |✅     |✅     |        |
-|desktop             |✅     |❌     |❌      |
+|chat                |✅     |✅     |        |
+|code                |❌     |❌     |❔      |
+|  code.code-debug   |❌     |❌     |        |
+|  code.code-display |❌     |❌     |        |
+|  code.code-general |❌     |❌     |        |
+|desktop             |❌     |❌     |❔      |
 |dispatcher          |✅     |✅     |✅      |
 |  dispatcher.clarify|✅     |✅     |        |
 |email               |✅     |✅     |✅      |
 |greeting            |✅     |✅     |✅      |
-|image               |✅     |✅     |❌      |
-|list                |✅     |✅     |❌      |
-|markdown            |✅     |✅     |❌      |
-|photo               |✅     |✅     |❌      |
+|image               |✅     |✅     |        |
+|list                |✅     |✅     |        |
+|markdown            |✅     |✅     |        |
+|photo               |✅     |✅     |        |
 |player              |✅     |✅     |✅      |
 |system              |       |       |✅      |
 |  system.config     |✅     |✅     |        |
