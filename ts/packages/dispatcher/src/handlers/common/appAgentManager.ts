@@ -198,6 +198,17 @@ export class AppAgentManager implements ActionConfigProvider {
             : false;
     }
 
+    // Return undefined if we don't know because the agent isn't loaded yet.
+    // Return null if the agent doesn't support commands.
+    public getCommandEnabledState(appAgentName: string) {
+        const record = this.agents.get(appAgentName);
+        return record !== undefined && record.appAgent !== undefined
+            ? record.appAgent.executeCommand !== undefined
+                ? record.commands
+                : null
+            : undefined;
+    }
+
     public getEmojis(): Readonly<Record<string, string>> {
         return this.emojis;
     }

@@ -22,14 +22,13 @@ export function mergeConfig(
     const keys = strict ? Object.keys(config) : Object.keys(options);
     for (const key of keys) {
         if (options.hasOwnProperty(key)) {
-            let value = options[key];
-            if (value === undefined) {
+            const optionValue = options[key];
+
+            if (optionValue === undefined) {
                 continue;
             }
-            if (value === null) {
-                // null means undefined
-                value = undefined;
-            }
+            // null means undefined
+            const value = optionValue === null ? undefined : optionValue;
             let configValue = config[key];
             const strictKey = flexKeys ? !flexKeys.includes(key) : strict;
             if (strictKey && typeof configValue !== typeof value) {
@@ -55,7 +54,7 @@ export function mergeConfig(
                 } else {
                     config[key] = value;
                 }
-                changed[key] = value;
+                changed[key] = optionValue;
             }
         }
     }

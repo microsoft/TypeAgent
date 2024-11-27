@@ -167,10 +167,13 @@ function setStatus(
     status: StatusRecords,
     kind: keyof ChangedAgent,
     name: string,
-    enable: boolean,
+    enable: boolean | undefined | null,
     active: boolean,
     changes?: ChangedAgent,
 ) {
+    if (enable === null) {
+        return;
+    }
     const defaultStr = getDefaultStr(changes, kind, name);
     if (defaultStr === undefined) {
         return;
@@ -184,11 +187,9 @@ function setStatus(
         }
     }
 
-    status[name][kind] = enable
-        ? active
-            ? `✅${defaultStr}`
-            : `💤${defaultStr}`
-        : `❌${defaultStr}`;
+    const statusChar =
+        enable === undefined ? "❔" : enable ? (active ? "✅" : "💤") : "❌";
+    status[name][kind] = `${statusChar}${defaultStr}`;
 }
 
 function showAgentStatus(
@@ -229,7 +230,7 @@ function showAgentStatus(
 
     if (showCommand) {
         for (const name of agents.getAppAgentNames()) {
-            const state = agents.isCommandEnabled(name);
+            const state = agents.getCommandEnabledState(name);
             setStatus(status, "commands", name, state, true, changes);
         }
     }
