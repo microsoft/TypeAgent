@@ -87,7 +87,6 @@ export type SchemaTypeAliasDefinition<T extends SchemaType = SchemaType> = {
     type: T;
     comments?: string[] | undefined;
     exported?: boolean | undefined; // for exact regen
-    order?: number; // for exact regen
 };
 
 export type SchemaTypeDefinition =
@@ -107,7 +106,7 @@ export type SchemaType =
 
 export interface ActionSchemaObject extends SchemaTypeObject {
     fields: {
-        actionName: SchemaObjectField<SchemaTypeString | SchemaTypeStringUnion>;
+        actionName: SchemaObjectField<SchemaTypeStringUnion>;
         parameters: SchemaObjectField<
             | SchemaTypeObject
             | SchemaTypeReference<
@@ -132,8 +131,16 @@ type ActionSchemaTypeReference =
 // A union of action schema type definitions.
 export type ActionSchemaUnion = SchemaTypeUnion<ActionSchemaTypeReference>;
 
-export type ActionSchemaFile = {
-    translatorName: string;
-    actionSchemaMap: Map<string, ActionSchemaTypeDefinition>;
-    definition: ActionSchemaEntryTypeDefinition;
+export type ActionSchemaGroup = {
+    // The entry type definition for the action schema.
+    entry: ActionSchemaEntryTypeDefinition;
+    // Map action name to action type definition
+    actionSchemas: Map<string, ActionSchemaTypeDefinition>;
+    // Order for the type definitions
+    order?: Map<string, number>; // for exact regen
+};
+
+export type ActionSchemaFile = ActionSchemaGroup & {
+    // Schema name
+    schemaName: string;
 };

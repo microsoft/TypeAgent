@@ -57,7 +57,7 @@ const agentInvokeHandlers: AgentInvokeFunctions = {
     async updateAgentContext(
         param: Partial<ContextParams> & {
             enable: boolean;
-            translatorName: string;
+            schemaName: string;
         },
     ): Promise<any> {
         if (agent.updateAgentContext === undefined) {
@@ -66,7 +66,7 @@ const agentInvokeHandlers: AgentInvokeFunctions = {
         return agent.updateAgentContext(
             param.enable,
             getSessionContextShim(param),
-            param.translatorName,
+            param.schemaName,
         );
     },
     async executeAction(

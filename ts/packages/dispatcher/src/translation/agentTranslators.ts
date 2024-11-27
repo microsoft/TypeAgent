@@ -15,14 +15,17 @@ import {
 import { Result } from "typechat";
 import { getPackageFilePath } from "../utils/getPackageFilePath.js";
 import { getMultipleActionSchemaDef } from "./multipleActionSchema.js";
-import { TranslatorSchemaDef, composeTranslatorSchemas } from "common-utils";
+import {
+    TranslatorSchemaDef,
+    composeTranslatorSchemas,
+    IncrementalJsonValueCallBack,
+} from "common-utils";
 
 import registerDebug from "debug";
 import { getBuiltinAppAgentConfigs } from "../agent/agentConfig.js";
 import { loadTranslatorSchemaConfig } from "../utils/loadSchemaConfig.js";
 import { HistoryContext } from "agent-cache";
 import { createTypeAgentRequestPrompt } from "../handlers/common/chatHistoryPrompt.js";
-import { IncrementalJsonValueCallBack } from "../../../commonUtils/dist/incrementalJsonParser.js";
 import {
     composeActionSchema,
     createActionJsonTranslatorFromSchemaDef,
@@ -30,10 +33,12 @@ import {
 import { TranslatedAction } from "../handlers/requestCommandHandler.js";
 import {
     ActionSchemaTypeDefinition,
+    generateActionSchema,
     generateSchemaTypeDefinition,
+    ActionSchemaObject,
     ActionSchemaCreator as sc,
+    ActionSchemaFile,
 } from "action-schema";
-import { ActionSchemaObject } from "../../../actionSchema/dist/type.js";
 const debugConfig = registerDebug("typeagent:translator:config");
 
 // A flatten AppAgentManifest
@@ -47,9 +52,10 @@ export type ActionConfig = {
 } & SchemaDefinition;
 
 export interface ActionConfigProvider {
-    tryGetTranslatorConfig(translatorName: string): ActionConfig | undefined;
-    getTranslatorConfig(translatorName: string): ActionConfig;
-    getTranslatorConfigs(): [string, ActionConfig][];
+    tryGetActionConfig(schemaName: string): ActionConfig | undefined;
+    getActionConfig(schemaName: string): ActionConfig;
+    getActionConfigs(): [string, ActionConfig][];
+    getActionSchemaFileForConfig?(config: ActionConfig): ActionSchemaFile;
 }
 
 function collectActionConfigs(
@@ -99,7 +105,7 @@ function collectActionConfigs(
     }
 }
 
-export function convertToTranslatorConfigs(
+export function convertToActionConfig(
     name: string,
     config: AppAgentManifest,
     actionConfigs: Record<string, ActionConfig> = {},
@@ -118,50 +124,50 @@ export function convertToTranslatorConfigs(
 }
 
 const actionConfigs: { [key: string]: ActionConfig } = await (async () => {
-    const translatorConfigs = {};
-    const configs = await getBuiltinAppAgentConfigs();
-    for (const [name, config] of configs.entries()) {
-        convertToTranslatorConfigs(name, config, translatorConfigs);
+    const configs = {};
+    const appAgentConfigs = await getBuiltinAppAgentConfigs();
+    for (const [name, config] of appAgentConfigs.entries()) {
+        convertToActionConfig(name, config, configs);
     }
-    return translatorConfigs;
+    return configs;
 })();
 
-export function getBuiltinTranslatorNames() {
+export function getBuiltinSchemaNames() {
     return Object.keys(actionConfigs);
 }
 
-export function getDefaultBuiltinTranslatorName() {
+export function getDefaultBuiltinSchemaName() {
     // Default to the first translator for now.
-    return getBuiltinTranslatorNames()[0];
+    return getBuiltinSchemaNames()[0];
 }
 
-export function getBuiltinTranslatorConfigProvider(): ActionConfigProvider {
+export function getBuiltinActionConfigProvider(): ActionConfigProvider {
     return {
-        tryGetTranslatorConfig(translatorName: string) {
-            return actionConfigs[translatorName];
+        tryGetActionConfig(schemaName: string) {
+            return actionConfigs[schemaName];
         },
-        getTranslatorConfig(translatorName: string) {
-            const config = actionConfigs[translatorName];
+        getActionConfig(schemaName: string) {
+            const config = actionConfigs[schemaName];
             if (!config) {
-                throw new Error(`Unknown translator: ${translatorName}`);
+                throw new Error(`Unknown translator: ${schemaName}`);
             }
             return config;
         },
-        getTranslatorConfigs() {
+        getActionConfigs() {
             return Object.entries(actionConfigs);
         },
     };
 }
 
-export function loadBuiltinTranslatorSchemaConfig(translatorName: string) {
+export function loadBuiltinTranslatorSchemaConfig(schemaName: string) {
     return loadTranslatorSchemaConfig(
-        translatorName,
-        getBuiltinTranslatorConfigProvider(),
+        schemaName,
+        getBuiltinActionConfigProvider(),
     );
 }
 
-export function getAppAgentName(translatorName: string) {
-    return translatorName.split(".")[0];
+export function getAppAgentName(schemaName: string) {
+    return schemaName.split(".")[0];
 }
 
 const changeAssistantActionTypeName = "ChangeAssistantAction";
@@ -190,10 +196,10 @@ export function createChangeAssistantActionSchema(
     activeSchemas: { [key: string]: boolean },
 ): ActionSchemaTypeDefinition | undefined {
     // Default to no switching if active translator isn't passed in.
-    const translators = provider.getTranslatorConfigs().filter(
-        ([name, translatorConfig]) =>
+    const translators = provider.getActionConfigs().filter(
+        ([name, actionConfigs]) =>
             name !== currentSchemaName && // don't include itself
-            !translatorConfig.injected && // don't include injected translators
+            !actionConfigs.injected && // don't include injected translators
             (activeSchemas[name] ?? false),
     );
     if (translators.length === 0) {
@@ -242,16 +248,16 @@ function getChangeAssistantSchemaDef(
 }
 
 function getTranslatorSchemaDef(
-    translatorConfig: ActionConfig,
+    actionConfig: ActionConfig,
 ): TranslatorSchemaDef {
     return {
         kind: "file",
-        typeName: translatorConfig.schemaType,
-        fileName: getPackageFilePath(translatorConfig.schemaFile),
+        typeName: actionConfig.schemaType,
+        fileName: getPackageFilePath(actionConfig.schemaFile),
     };
 }
 
-export function getInjectedTranslatorConfigs(
+export function getInjectedActionConfigs(
     translatorName: string,
     provider: ActionConfigProvider,
     activeTranslators: { [key: string]: boolean } | undefined,
@@ -260,7 +266,7 @@ export function getInjectedTranslatorConfigs(
         return [];
     }
     return provider
-        .getTranslatorConfigs()
+        .getActionConfigs()
         .filter(
             ([name, config]) =>
                 config.injected &&
@@ -278,7 +284,7 @@ function getInjectedSchemaDefs(
     multipleActions: boolean = false,
 ): TranslatorSchemaDef[] {
     // Add all injected schemas
-    const injectSchemaConfigs = getInjectedTranslatorConfigs(
+    const injectSchemaConfigs = getInjectedActionConfigs(
         translatorName,
         provider,
         activeTranslators,
@@ -315,17 +321,17 @@ function getInjectedSchemaDefs(
 }
 
 function getTranslatorSchemaDefs(
-    translatorConfig: ActionConfig,
-    translatorName: string,
+    schemaName: string,
     provider: ActionConfigProvider,
     activeTranslators: { [key: string]: boolean } | undefined,
     multipleActions: boolean = false,
 ): TranslatorSchemaDef[] {
+    const actionConfig = provider.getActionConfig(schemaName);
     return [
-        getTranslatorSchemaDef(translatorConfig),
+        getTranslatorSchemaDef(actionConfig),
         ...getInjectedSchemaDefs(
-            translatorConfig.schemaType,
-            translatorName,
+            actionConfig.schemaType,
+            schemaName,
             provider,
             activeTranslators,
             multipleActions,
@@ -359,22 +365,27 @@ export function loadAgentJsonTranslator<
     multipleActions: boolean = false,
     regenerateSchema: boolean = false,
 ): TypeAgentTranslator<T> {
-    const translatorConfig = provider.getTranslatorConfig(translatorName);
-
-    const createTranslator = regenerateSchema
-        ? createActionJsonTranslatorFromSchemaDef<T>
-        : createJsonTranslatorFromSchemaDef<T>;
-    const translator = createTranslator(
-        "AllActions",
-        getTranslatorSchemaDefs(
-            translatorConfig,
-            translatorName,
-            provider,
-            activeTranslators,
-            multipleActions,
-        ),
-        { model },
-    );
+    const translator = regenerateSchema
+        ? createActionJsonTranslatorFromSchemaDef<T>(
+              "AllActions",
+              composeActionSchema(
+                  translatorName,
+                  provider,
+                  activeTranslators,
+                  multipleActions,
+              ),
+              { model },
+          )
+        : createJsonTranslatorFromSchemaDef<T>(
+              "AllActions",
+              getTranslatorSchemaDefs(
+                  translatorName,
+                  provider,
+                  activeTranslators,
+                  multipleActions,
+              ),
+              { model },
+          );
 
     const streamingTranslator = enableJsonTranslatorStreaming(translator);
 
@@ -418,21 +429,22 @@ export function getFullSchemaText(
     activeSchemas: string[] | undefined,
     multipleActions: boolean,
     generated: boolean,
-) {
+): string {
     const active = activeSchemas
         ? Object.fromEntries(activeSchemas.map((name) => [name, true]))
         : undefined;
     if (generated) {
-        return composeActionSchema(
-            translatorName,
-            provider,
-            active,
-            multipleActions,
+        return generateActionSchema(
+            composeActionSchema(
+                translatorName,
+                provider,
+                active,
+                multipleActions,
+            ),
+            { exact: true },
         );
     }
-    const translatorConfig = provider.getTranslatorConfig(translatorName);
     const schemaDefs = getTranslatorSchemaDefs(
-        translatorConfig,
         translatorName,
         provider,
         active,

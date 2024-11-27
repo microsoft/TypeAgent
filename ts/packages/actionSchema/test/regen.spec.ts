@@ -29,7 +29,7 @@ type Config = {
         schemaFile: string;
         schemaType: string;
     };
-    subTranslators?: Record<string, Config>;
+    subActionManifests?: Record<string, Config>;
 };
 
 function addTest(name: string, config: Config, dir: string) {
@@ -42,9 +42,9 @@ function addTest(name: string, config: Config, dir: string) {
         });
     }
 
-    if (config.subTranslators) {
+    if (config.subActionManifests) {
         for (const [subname, subConfig] of Object.entries(
-            config.subTranslators,
+            config.subActionManifests,
         )) {
             addTest(`${name}.${subname}`, subConfig, dir);
         }

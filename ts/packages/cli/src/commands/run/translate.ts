@@ -3,7 +3,7 @@
 
 import { Args, Command, Flags } from "@oclif/core";
 import { createDispatcher } from "agent-dispatcher";
-import { getBuiltinTranslatorNames } from "agent-dispatcher/internal";
+import { getBuiltinSchemaNames } from "agent-dispatcher/internal";
 import { getChatModelNames } from "aiclient";
 
 const modelNames = await getChatModelNames();
@@ -19,7 +19,7 @@ export default class TranslateCommand extends Command {
     static flags = {
         translator: Flags.string({
             description: "Translator name",
-            options: getBuiltinTranslatorNames(),
+            options: getBuiltinSchemaNames(),
             multiple: true,
         }),
         model: Flags.string({
@@ -35,12 +35,12 @@ export default class TranslateCommand extends Command {
 
     async run(): Promise<void> {
         const { args, flags } = await this.parse(TranslateCommand);
-        const translators = flags.translator
+        const schemas = flags.translator
             ? Object.fromEntries(flags.translator.map((name) => [name, true]))
             : undefined;
 
         const dispatcher = await createDispatcher("cli run translate", {
-            translators,
+            schemas,
             actions: null,
             commands: { dispatcher: true },
             translation: { model: flags.model },
@@ -50,7 +50,5 @@ export default class TranslateCommand extends Command {
             `@dispatcher translate ${args.request}`,
         );
         await dispatcher.close();
-        // Some background network (like monogo) might keep the process live, exit explicitly.
-        process.exit(0);
     }
 }

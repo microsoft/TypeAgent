@@ -18,10 +18,7 @@ export type IndexType =
     | "topics"
     | "goals"
     | "dependencies";
-export type NamedIndex = {
-    name: IndexType;
-    index: knowLib.TextIndex<string, ChunkId>;
-};
+export type NamedIndex = [IndexType, knowLib.TextIndex<string, ChunkId>];
 
 // A bundle of object stores and indexes etc.
 export class ChunkyIndex {
@@ -31,8 +28,9 @@ export class ChunkyIndex {
     queryMaker: TypeChatJsonTranslator<QuerySpecs>;
     answerMaker: TypeChatJsonTranslator<AnswerSpecs>;
 
-    // The rest are asynchronously initialized by initialize().
+    // The rest are asynchronously initialized by reInitialize(rootDir).
     rootDir!: string;
+    answerFolder!: ObjectFolder<AnswerSpecs>;
     chunkFolder!: ObjectFolder<Chunk>;
     summariesIndex!: knowLib.TextIndex<string, ChunkId>;
     keywordsIndex!: knowLib.TextIndex<string, ChunkId>;
@@ -64,6 +62,10 @@ export class ChunkyIndex {
             instance.rootDir + "/chunks",
             { serializer: (obj) => JSON.stringify(obj, null, 2) },
         );
+        instance.answerFolder = await createObjectFolder<AnswerSpecs>(
+            instance.rootDir + "/answers",
+            { serializer: (obj) => JSON.stringify(obj, null, 2) },
+        );
         instance.summariesIndex = await makeIndex("summaries");
         instance.keywordsIndex = await makeIndex("keywords");
         instance.topicsIndex = await makeIndex("topics");
@@ -85,22 +87,22 @@ export class ChunkyIndex {
         }
     }
 
-    getIndexByName(name: IndexType): knowLib.TextIndex<string, ChunkId> {
-        for (const pair of this.allIndexes()) {
-            if (pair.name === name) {
-                return pair.index;
+    getIndexByName(indexName: IndexType): knowLib.TextIndex<string, ChunkId> {
+        for (const [name, index] of this.allIndexes()) {
+            if (name === indexName) {
+                return index;
             }
         }
-        throw new Error(`Unknown index: ${name}`);
+        throw new Error(`Unknown index: ${indexName}`);
     }
 
     allIndexes(): NamedIndex[] {
         return [
-            { name: "summaries", index: this.summariesIndex },
-            { name: "keywords", index: this.keywordsIndex },
-            { name: "topics", index: this.topicsIndex },
-            { name: "goals", index: this.goalsIndex },
-            { name: "dependencies", index: this.dependenciesIndex },
+            ["summaries", this.summariesIndex],
+            ["keywords", this.keywordsIndex],
+            ["topics", this.topicsIndex],
+            ["goals", this.goalsIndex],
+            ["dependencies", this.dependenciesIndex],
         ];
     }
 }
