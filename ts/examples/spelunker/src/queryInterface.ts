@@ -165,7 +165,7 @@ export async function interactiveQueryLoop(
                                     ),
                                 );
                             } else {
-                                writeWarning(io, "SUMMARY: None");
+                                writeNote(io, "SUMMARY: None");
                             }
                         } else {
                             const docItem: string[] | undefined =
@@ -182,7 +182,7 @@ export async function interactiveQueryLoop(
                 writeNote(io, "CODE:");
                 writeChunkLines(chunk, io, 100);
             } else {
-                writeWarning(io, `[Chunk ID ${chunkId} not found]`);
+                writeNote(io, `[Chunk ID ${chunkId} not found]`);
             }
         }
     }
@@ -200,7 +200,7 @@ export async function interactiveQueryLoop(
                 maxHits: {
                     description: "Maximum number of hits to return",
                     type: "integer",
-                    defaultValue: 3,
+                    defaultValue: 10,
                 },
                 minScore: {
                     description: "Minimum score to return",
@@ -359,7 +359,7 @@ export async function interactiveQueryLoop(
             );
         }
         if (!filesPopularity.size) {
-            writeWarning(io, "[No files]");
+            writeMain(io, "[No files]");
         } else {
             const sortedFiles = Array.from(filesPopularity)
                 .filter(([file, _]) => !filter || file.includes(filter))
@@ -455,7 +455,7 @@ export async function interactiveQueryLoop(
         }
 
         if (!hits.length) {
-            writeWarning(io, `No ${indexName}.`); // E.g., "No keywords."
+            writeNote(io, `No ${indexName}.`); // E.g., "No keywords."
             return;
         } else {
             writeNote(io, `Found ${hits.length} ${indexName}.`);
@@ -505,7 +505,7 @@ export async function interactiveQueryLoop(
                 }
             }
             if (hits.length < 2) {
-                writeWarning(io, `No hit for ${text}`);
+                writeNote(io, `No hits for ${text} in ${indexName}`);
             } else {
                 const end = hits.length - 1;
                 writeMain(
@@ -521,7 +521,11 @@ export async function interactiveQueryLoop(
         input: string,
         io: iapp.InteractiveIo,
     ): Promise<void> {
-        await processQuery(input, chunkyIndex, io, { verbose } as QueryOptions);
+        await processQuery(input, chunkyIndex, io, {
+            maxHits: 10,
+            minScore: 0.7,
+            verbose,
+        });
     }
 
     await iapp.runConsole({
@@ -680,18 +684,27 @@ async function runIndexQueries(
     for (const [indexName, index] of chunkyIndex.allIndexes()) {
         const spec: QuerySpec = (proposedQueries as any)[indexName];
         if (spec.maxHits === 0) {
-            writeWarning(io, `[${indexName}: no query]`);
+            writeNote(io, `[${indexName}: no query]`);
             continue;
         }
+
+        const specMaxHits = spec.maxHits;
+        const defaultMaxHits = queryOptions.maxHits;
+        const maxHits = specMaxHits ?? defaultMaxHits;
+        const maxHitsDisplay =
+            maxHits === specMaxHits
+                ? maxHits.toString()
+                : `${specMaxHits} ?? ${defaultMaxHits}`;
+
         const hits = await index.nearestNeighborsPairs(
             spec.query,
-            spec.maxHits ?? queryOptions.maxHits,
+            maxHits,
             queryOptions.minScore,
         );
         if (!hits.length) {
             writeNote(
                 io,
-                `[${indexName}: query ${spec.query} (maxHits ${spec.maxHits}) no hits]`,
+                `[${indexName}: query ${spec.query} (maxHits ${maxHitsDisplay}) no hits]`,
             );
             continue;
         }
@@ -740,7 +753,7 @@ async function runIndexQueries(
         const end = hits.length - 1;
         writeNote(
             io,
-            `[${indexName}: query '${spec.query}' (maxHits ${spec.maxHits}); ${hits.length} hits; ` +
+            `[${indexName}: query '${spec.query}' (maxHits ${maxHitsDisplay}); ${hits.length} hits; ` +
                 `scores ${hits[0].score.toFixed(3)}--${hits[end].score.toFixed(3)}; ` +
                 `${numChunks} unique chunk ids]`,
         );
@@ -773,7 +786,7 @@ async function generateAnswer(
 
     // Step 3b: Get the chunks themselves.
     const chunks: Chunk[] = [];
-    const maxChunks = 20;
+    const maxChunks = 30;
     // Take the top N chunks that actually exist.
     for (const chunkId of scoredChunkIds) {
         const maybeChunk = await chunkyIndex.chunkFolder.get(chunkId.item);
@@ -789,10 +802,20 @@ async function generateAnswer(
 
     writeNote(io, `[Sending ${chunks.length} chunks to answerMaker]`);
 
+    const preamble = makeAnswerPrompt(message, recentAnswers, chunks);
+    if (queryOptions.verbose) {
+        const formatted = util.inspect(preamble, {
+            depth: null,
+            colors: true,
+            compact: false,
+        });
+        writeNote(io, `Preamble: ${formatted}`);
+    }
+
     // Step 3c: Make the request and check for success.
     const answerResult = await chunkyIndex.answerMaker.translate(
         input,
-        makeAnswerPrompt(message, recentAnswers, chunks),
+        preamble,
     );
 
     if (!answerResult.success) {
@@ -821,7 +844,7 @@ async function findRecentAnswers(
     }
     // Assume the name field (the internal key) is a timestamp.
     recentAnswers.sort((a, b) => b.name.localeCompare(a.name));
-    recentAnswers.splice(5); // TODO: Cut off by total size, not count.
+    recentAnswers.splice(20); // TODO: Cut off by total size, not count.
     recentAnswers.reverse(); // Most recent last.
     return recentAnswers;
 }
@@ -831,9 +854,12 @@ function reportQuery(answer: AnswerSpecs, io: iapp.InteractiveIo): void {
         io,
         `\nAnswer (confidence ${answer.confidence.toFixed(3).replace(/0+$/, "")}):`,
     );
+
     writeMain(io, wordWrap(answer.answer));
-    if (answer.message)
+
+    if (answer.message) {
         writeWarning(io, "\n" + wordWrap(`Message: ${answer.message}`));
+    }
     if (answer.references.length) {
         writeNote(
             io,
