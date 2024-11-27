@@ -6,6 +6,7 @@ import {
     DisplayAppendMode,
     DisplayContent,
     DisplayMessageKind,
+    MessageContent,
 } from "../display.js";
 
 function gatherMessages(callback: (log: (message?: string) => void) => void) {
@@ -19,20 +20,15 @@ function gatherMessages(callback: (log: (message?: string) => void) => void) {
 
 type LogFn = (log: (message?: string) => void) => void;
 function getMessage(
-    input: string | string[] | LogFn,
+    input: MessageContent | LogFn,
     kind?: DisplayMessageKind,
 ): DisplayContent {
-    const content =
-        typeof input === "function"
-            ? gatherMessages(input)
-            : Array.isArray(input)
-              ? input.join("\n")
-              : input;
+    const content = typeof input === "function" ? gatherMessages(input) : input;
     return kind ? { type: "text", content, kind } : content;
 }
 
 function displayMessage(
-    message: string | string[] | LogFn,
+    message: MessageContent | LogFn,
     context: ActionContext<unknown>,
     kind?: DisplayMessageKind,
     appendMode: DisplayAppendMode = "block",
@@ -41,42 +37,42 @@ function displayMessage(
 }
 
 export async function displayInfo(
-    message: string | string[] | LogFn,
+    message: MessageContent | LogFn,
     context: ActionContext<unknown>,
 ) {
     displayMessage(message, context, "info");
 }
 
 export async function displayStatus(
-    message: string | string[] | LogFn,
+    message: MessageContent | LogFn,
     context: ActionContext<unknown>,
 ) {
     displayMessage(message, context, "status", "temporary");
 }
 
 export async function displayWarn(
-    message: string | string[] | LogFn,
+    message: MessageContent | LogFn,
     context: ActionContext<unknown>,
 ) {
     displayMessage(message, context, "warning");
 }
 
 export async function displayError(
-    message: string | string[] | LogFn,
+    message: MessageContent | LogFn,
     context: ActionContext<unknown>,
 ) {
     displayMessage(message, context, "error");
 }
 
 export async function displaySuccess(
-    message: string | string[] | LogFn,
+    message: MessageContent | LogFn,
     context: ActionContext<unknown>,
 ) {
     displayMessage(message, context, "success");
 }
 
 export async function displayResult(
-    message: string | string[] | LogFn,
+    message: MessageContent | LogFn,
     context: ActionContext<unknown>,
 ) {
     displayMessage(message, context);

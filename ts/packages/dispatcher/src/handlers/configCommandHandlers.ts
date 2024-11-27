@@ -34,6 +34,8 @@ import {
 } from "@typeagent/agent-sdk/helpers/display";
 import { alwaysEnabledAgents } from "./common/appAgentManager.js";
 import { getCacheFactory } from "../internal.js";
+import { Channel } from "diagnostics_channel";
+import { string } from "../../../actionSchema/dist/creator.js";
 
 const enum AgentToggle {
     Schema,
@@ -135,6 +137,133 @@ function setAgentToggleOption(
     }
 }
 
+type StatusRecords = Record<
+    string,
+    { schemas?: string; actions?: string; commands?: string }
+>;
+
+type ChangedAgent = {
+    schemas?: Record<string, boolean | undefined | null> | undefined | null;
+    actions?: Record<string, boolean | undefined | null> | undefined | null;
+    commands?: Record<string, boolean | undefined | null> | undefined | null;
+};
+
+function getDefaultStr(
+    changes: ChangedAgent | undefined,
+    kind: keyof ChangedAgent,
+    name: string,
+) {
+    if (changes === undefined) {
+        return "";
+    }
+    const change = changes[kind]?.[name];
+    if (change === undefined) {
+        return undefined;
+    }
+    return change === null ? " (default)" : "";
+}
+
+function setStatus(
+    status: StatusRecords,
+    kind: keyof ChangedAgent,
+    name: string,
+    enable: boolean,
+    changes?: ChangedAgent,
+) {
+    const defaultStr = getDefaultStr(changes, kind, name);
+    if (defaultStr === undefined) {
+        return;
+    }
+    if (status[name] === undefined) {
+        status[name] = {};
+        const appAgentName = getAppAgentName(name);
+        if (appAgentName !== name && status[appAgentName] === undefined) {
+            // Make sure we have a row for the app agent name even if it doesn't have any status for grouping
+            status[appAgentName] = {};
+        }
+    }
+    status[name][kind] = enable ? `✅${defaultStr}` : `❌${defaultStr}`;
+}
+
+function showAgentStatus(
+    toggle: AgentToggle,
+    context: ActionContext<CommandHandlerContext>,
+    changes?: ChangedAgent,
+) {
+    const systemContext = context.sessionContext.agentContext;
+    const agents = systemContext.agents;
+
+    const status: Record<
+        string,
+        { schemas?: string; actions?: string; commands?: string }
+    > = {};
+
+    const showSchema =
+        toggle === AgentToggle.Schema || toggle === AgentToggle.Agent;
+    const showAction =
+        toggle === AgentToggle.Action || toggle === AgentToggle.Agent;
+    const showCommand =
+        toggle === AgentToggle.Command || toggle === AgentToggle.Agent;
+
+    if (showSchema || showAction) {
+        for (const name of agents.getSchemaNames()) {
+            if (showSchema) {
+                const state = agents.isSchemaEnabled(name);
+                setStatus(status, "schemas", name, state, changes);
+            }
+
+            if (showAction) {
+                const state = agents.isActionEnabled(name);
+                setStatus(status, "actions", name, state, changes);
+            }
+        }
+    }
+
+    if (showCommand) {
+        for (const name of agents.getAppAgentNames()) {
+            const state = agents.isCommandEnabled(name);
+            setStatus(status, "commands", name, state, changes);
+        }
+    }
+
+    const entries = Object.entries(status).sort(([a], [b]) =>
+        a.localeCompare(b),
+    );
+    if (entries.length === 0) {
+        displayWarn(changes ? "No changes" : "No agents", context);
+        return;
+    }
+
+    const getRow = (
+        displayName: string,
+        schemas?: string,
+        actions?: string,
+        commands?: string,
+    ) => {
+        const displayEntry = [displayName];
+        if (showSchema) {
+            displayEntry.push(schemas ?? "");
+        }
+        if (showAction) {
+            displayEntry.push(actions ?? "");
+        }
+        if (showCommand) {
+            displayEntry.push(commands ?? "");
+        }
+        return displayEntry;
+    };
+
+    const table: string[][] = [
+        getRow("Agent", "Schemas", "Actions", "Commands"),
+    ];
+
+    for (const [name, { schemas, actions, commands }] of entries) {
+        const displayName = getAppAgentName(name) !== name ? `  ${name}` : name;
+        table.push(getRow(displayName, schemas, actions, commands));
+    }
+
+    displayResult(table, context);
+}
 class AgentToggleCommandHandler implements CommandHandler {
     public readonly description = `Toggle ${AgentToggleDescription[this.toggle]}`;
     public readonly parameters = {
@@ -183,13 +312,16 @@ class AgentToggleCommandHandler implements CommandHandler {
             existingNameType = "schema";
         }
 
+        let hasParams = false;
         if (params.flags.reset) {
+            hasParams = true;
             for (const name of existingNames) {
                 options[name] = null; // default value
             }
         }
 
         if (params.flags.off) {
+            hasParams = true;
             setAgentToggleOption(
                 existingNames,
                 existingNameType,
@@ -199,6 +331,7 @@ class AgentToggleCommandHandler implements CommandHandler {
             );
         }
         if (params.args.agentNames) {
+            hasParams = true;
             setAgentToggleOption(
                 existingNames,
                 existingNameType,
@@ -206,6 +339,11 @@ class AgentToggleCommandHandler implements CommandHandler {
                 params.args.agentNames,
                 true,
             );
+        }
+
+        if (!hasParams) {
+            showAgentStatus(this.toggle, context);
+            return;
         }
 
         const changed = await changeContextConfig(
@@ -219,16 +357,7 @@ class AgentToggleCommandHandler implements CommandHandler {
         if (changedEntries.length === 0) {
             displayWarn("No change", context);
         } else {
-            const lines: string[] = [];
-            for (const [kind, options] of changedEntries) {
-                lines.push(`Changes (${kind}):`);
-                for (const [name, value] of Object.entries(options as any)) {
-                    lines.push(
-                        `  ${name}: ${value === true ? "enabled" : value === false ? "disabled" : `<default>`}`,
-                    );
-                }
-            }
-            displayResult(lines, context);
+            showAgentStatus(this.toggle, context, changed);
         }
     }
 
