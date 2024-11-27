@@ -162,7 +162,7 @@ export class AppAgentManager implements ActionConfigProvider {
         return record.manifest.description;
     }
 
-    public isTranslatorEnabled(schemaName: string) {
+    public isSchemaEnabled(schemaName: string) {
         const appAgentName = getAppAgentName(schemaName);
         const record = this.getRecord(appAgentName);
         return record.schemas.has(schemaName);
@@ -170,7 +170,7 @@ export class AppAgentManager implements ActionConfigProvider {
 
     public isTranslatorActive(schemaName: string) {
         return (
-            this.isTranslatorEnabled(schemaName) &&
+            this.isSchemaEnabled(schemaName) &&
             this.transientAgents[schemaName] !== false
         );
     }
@@ -188,7 +188,7 @@ export class AppAgentManager implements ActionConfigProvider {
         );
     }
 
-    private isActionEnabled(schemaName: string) {
+    public isActionEnabled(schemaName: string) {
         const appAgentName = getAppAgentName(schemaName);
         const record = this.getRecord(appAgentName);
         return record.actions.has(schemaName);

@@ -185,7 +185,11 @@ export class MessageContainer {
         source: string,
         appendMode?: DisplayAppendMode, // default to not appending.
     ) {
-        if (typeof content !== "string" && content.kind === "info") {
+        if (
+            typeof content !== "string" &&
+            !Array.isArray(content) &&
+            content.kind === "info"
+        ) {
             // Don't display info
             return;
         }
