@@ -25,6 +25,7 @@ import {
 import { ActionSchemaFileCache } from "../../translation/actionSchemaFileCache.js";
 import { ActionSchemaFile } from "action-schema";
 import path from "path";
+import { callEnsureError } from "../../utils/exceptions.js";
 
 const debug = registerDebug("typeagent:agents");
 const debugError = registerDebug("typeagent:agents:error");
@@ -491,10 +492,12 @@ export class AppAgentManager implements ActionConfigProvider {
                     record,
                     context,
                 );
-                await record.appAgent!.updateAgentContext?.(
-                    enable,
-                    sessionContext,
-                    schemaName,
+                await callEnsureError(() =>
+                    record.appAgent!.updateAgentContext?.(
+                        enable,
+                        sessionContext,
+                        schemaName,
+                    ),
                 );
             } catch (e) {
                 // Rollback if there is a exception
@@ -509,10 +512,12 @@ export class AppAgentManager implements ActionConfigProvider {
             record.actions.delete(schemaName);
             const sessionContext = await record.sessionContextP!;
             try {
-                await record.appAgent!.updateAgentContext?.(
-                    enable,
-                    sessionContext,
-                    schemaName,
+                await callEnsureError(() =>
+                    record.appAgent!.updateAgentContext?.(
+                        enable,
+                        sessionContext,
+                        schemaName,
+                    ),
                 );
             } finally {
                 // Assume that it is disabled even when there is an exception
@@ -540,7 +545,9 @@ export class AppAgentManager implements ActionConfigProvider {
         context: CommandHandlerContext,
     ) {
         const appAgent = await this.ensureAppAgent(record);
-        const agentContext = await appAgent.initializeAgentContext?.();
+        const agentContext = await callEnsureError(() =>
+            appAgent.initializeAgentContext?.(),
+        );
         record.sessionContext = createSessionContext(
             record.name,
             agentContext,
