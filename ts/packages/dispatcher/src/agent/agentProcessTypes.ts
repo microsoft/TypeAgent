@@ -101,7 +101,7 @@ export type AgentInvokeFunctions = {
     updateAgentContext: (
         param: Partial<ContextParams> & {
             enable: boolean;
-            translatorName: string;
+            schemaName: string;
         },
     ) => Promise<void>;
     executeAction: (

@@ -6,7 +6,7 @@ import { composeTranslatorSchemas } from "common-utils";
 import {
     getAssistantSelectionSchemas,
     getFullSchemaText,
-    getBuiltinTranslatorNames,
+    getBuiltinSchemaNames,
     getBuiltinActionConfigProvider,
     getActionSchema,
 } from "agent-dispatcher/internal";
@@ -39,7 +39,7 @@ export default class Schema extends Command {
         translator: Args.string({
             description: "Translator name",
             required: true,
-            options: getBuiltinTranslatorNames(),
+            options: getBuiltinSchemaNames(),
         }),
         actionName: Args.string({
             description: "Action name",
@@ -80,7 +80,7 @@ export default class Schema extends Command {
             );
         } else {
             const schemas = getAssistantSelectionSchemas(
-                getBuiltinTranslatorNames(),
+                getBuiltinSchemaNames(),
                 provider,
             ).map((entry) => entry.schema);
             console.log(

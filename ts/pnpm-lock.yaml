@@ -1411,6 +1411,12 @@ importers:
 
   packages/commonUtils:
     dependencies:
+      '@azure-rest/maps-search':
+        specifier: ^2.0.0-beta.2
+        version: 2.0.0-beta.2
+      '@azure/maps-search':
+        specifier: ^1.0.0-beta.2
+        version: 1.0.0-beta.2
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../agentSdk
@@ -1547,6 +1553,9 @@ importers:
       proper-lockfile:
         specifier: ^4.1.2
         version: 4.1.2
+      string-width:
+        specifier: ^7.2.0
+        version: 7.2.0
       telemetry:
         specifier: workspace:*
         version: link:../telemetry
@@ -1939,6 +1948,14 @@ packages:
     resolution: {integrity: sha512-lFMjJTrFL3j7L9yBxwYfCq2k6qqwHyzuUl/XBnif78PWTJYyL/dfowQHWE3sp6U6ZzqWiiIZnpTMO96zhkjwtg==}
     engines: {node: '>=6.0.0'}
 
+  '@azure-rest/core-client@1.4.0':
+    resolution: {integrity: sha512-ozTDPBVUDR5eOnMIwhggbnVmOrka4fXCs8n8mvUo4WLLc38kki6bAOByDoVZZPz/pZy2jMt2kwfpvy/UjALj6w==}
+    engines: {node: '>=18.0.0'}
+
+  '@azure-rest/maps-search@2.0.0-beta.2':
+    resolution: {integrity: sha512-OS3WUxmIPCgccZdSwiZpFl6UbmyvbEuVVWb9F4GC+MglJ3WdOpBEf2CJ+QeKJw9LLCwpsf+8ySGNhEnzAHj1gQ==}
+    engines: {node: '>=18.0.0'}
+
   '@azure/abort-controller@1.1.0':
     resolution: {integrity: sha512-TrRLIoSQVzfAJX9H1JeFjzAoDGcoK1IYX1UImfceTZpsyYfWr09Ss1aHW1y5TrrR3iq6RZLBwJ3E24uwPhwahw==}
     engines: {node: '>=12.0.0'}
@@ -1957,6 +1974,10 @@ packages:
 
   '@azure/core-client@1.9.1':
     resolution: {integrity: sha512-hHYFx9lz0ZpbO5W+iotU9tmIX1jPcoIjYUEUaWGuMi1628LCQ/z05TUR4P+NRtMgyoHQuyVYyGQiD3PC47kaIA==}
+    engines: {node: '>=18.0.0'}
+
+  '@azure/core-lro@2.7.2':
+    resolution: {integrity: sha512-0YIpccoX8m/k00O7mDDMdJpbr6mf1yWo2dfmxt5A8XVZVVMz2SSKaEbMCeJRvgQ0IaSlqhjT47p4hVIRRy90xw==}
     engines: {node: '>=18.0.0'}
 
   '@azure/core-paging@1.6.2':
@@ -1986,6 +2007,15 @@ packages:
   '@azure/logger@1.1.1':
     resolution: {integrity: sha512-/+4TtokaGgC+MnThdf6HyIH9Wrjp+CnCn3Nx3ggevN7FFjjNyjqg0yLlc2i9S+Z2uAzI8GYOo35Nzb1MhQ89MA==}
     engines: {node: '>=18.0.0'}
+
+  '@azure/maps-common@1.0.0-beta.2':
+    resolution: {integrity: sha512-PB9GlnfojcQ4nf9WXdQvWeAk7gm8P74o+Z5IHz5YLK/W+3vrNrmVVVuFpGOvCPrLjag50UinaZsMBtPtxoiobg==}
+    engines: {node: '>=14.0.0'}
+
+  '@azure/maps-search@1.0.0-beta.2':
+    resolution: {integrity: sha512-l2tFiQP+jsRpJG6YtoFBuaiH1aYE9gewzAUQVzUf8KqqG+H7arUkfa7E2zA96nBg1b59TdPaDvWtcxL2ytiD3Q==}
+    engines: {node: '>=14.0.0'}
+    deprecated: Please use @azure-rest/maps-search
 
   '@azure/msal-browser@3.13.0':
     resolution: {integrity: sha512-fD906nmJei3yE7la6DZTdUtXKvpwzJURkfsiz9747Icv4pit77cegSm6prJTKLQ1fw4iiZzrrWwxnhMLrTf5gQ==}
@@ -4668,6 +4698,9 @@ packages:
     resolution: {integrity: sha512-DeWwawk6r5yR9jFgnDKYt4sLS0LmHJJi3ZOnb5/JdbYwj3nW+FxQnHIjhBKz8YLC7oRNPVM9NQ47I3CVx34eqQ==}
     engines: {node: '>=12'}
 
+  emoji-regex@10.4.0:
+    resolution: {integrity: sha512-EC+0oUMY1Rqm4O6LLrgjtYDvcVYTy7chDnM4Q7030tP4Kwj3u/pR6gP9ygnp2CJMK5Gq+9Q2oqmrFJAz01DXjw==}
+
   emoji-regex@8.0.0:
     resolution: {integrity: sha512-MSjYzcWNOA0ewAHpz0MxpYFvwg6yjy1NG3xteoqz644VCo/RPgnr1/GGt+ic3iJTzQ8Eu3TdM14SawnVUmGE6A==}
 
@@ -5024,6 +5057,10 @@ packages:
   get-caller-file@2.0.5:
     resolution: {integrity: sha512-DyFP3BM/3YHTQOCUL/w0OZHR0lpKeGrxotcHWcqNEdnltqFwXVfhEBQ94eIo34AfQpo0rGki4cyIiftY06h2Fg==}
     engines: {node: 6.* || 8.* || >= 10.*}
+
+  get-east-asian-width@1.3.0:
+    resolution: {integrity: sha512-vpeMIQKxczTD/0s2CdEWHcb0eeJe6TFjxb+J5xgX7hScxqrGuyjmv4c1D4A/gelKfyox0gJJwIHF+fLjeaM8kQ==}
+    engines: {node: '>=18'}
 
   get-intrinsic@1.2.4:
     resolution: {integrity: sha512-5uYhsJH8VJBTv7oslg4BznJYhDoRI6waYCxMmCdnTrcCrHA/fCFKoTFz2JKKE0HdDFUF7/oQuhzumXJK7paBRQ==}
@@ -7222,6 +7259,10 @@ packages:
     resolution: {integrity: sha512-HnLOCR3vjcY8beoNLtcjZ5/nxn2afmME6lhrDrebokqMap+XbeW8n9TXpPDOqdGK5qcI3oT0GKTW6wC7EMiVqA==}
     engines: {node: '>=12'}
 
+  string-width@7.2.0:
+    resolution: {integrity: sha512-tsaTIkKW9b4N+AEj+SVA+WhJzV7/zMhcSu78mLKWSk7cXMOSHsBKFWUs0fWwq8QyK3MgJBQRX6Gbi4kYbdvGkQ==}
+    engines: {node: '>=18'}
+
   string_decoder@0.10.31:
     resolution: {integrity: sha512-ev2QzSzWPYmy9GuqfIVildA4OdcGLeFZQrq5ys6RtiuF+RQQiZWr8TZNyAcuVXyQRYfEO+MsoB/1BuQVhOJuoQ==}
 
@@ -7921,6 +7962,29 @@ snapshots:
       '@jridgewell/gen-mapping': 0.3.5
       '@jridgewell/trace-mapping': 0.3.25
 
+  '@azure-rest/core-client@1.4.0':
+    dependencies:
+      '@azure/abort-controller': 2.1.1
+      '@azure/core-auth': 1.7.1
+      '@azure/core-rest-pipeline': 1.15.1
+      '@azure/core-tracing': 1.1.1
+      '@azure/core-util': 1.8.1
+      tslib: 2.6.2
+    transitivePeerDependencies:
+      - supports-color
+
+  '@azure-rest/maps-search@2.0.0-beta.2':
+    dependencies:
+      '@azure-rest/core-client': 1.4.0
+      '@azure/core-auth': 1.7.1
+      '@azure/core-lro': 2.7.2
+      '@azure/core-rest-pipeline': 1.15.1
+      '@azure/logger': 1.1.1
+      '@azure/maps-common': 1.0.0-beta.2
+      tslib: 2.6.2
+    transitivePeerDependencies:
+      - supports-color
+
   '@azure/abort-controller@1.1.0':
     dependencies:
       tslib: 2.6.2
@@ -7956,6 +8020,13 @@ snapshots:
       tslib: 2.6.2
     transitivePeerDependencies:
       - supports-color
+
+  '@azure/core-lro@2.7.2':
+    dependencies:
+      '@azure/abort-controller': 2.1.1
+      '@azure/core-util': 1.8.1
+      '@azure/logger': 1.1.1
+      tslib: 2.6.2
 
   '@azure/core-paging@1.6.2':
     dependencies:
@@ -8016,6 +8087,29 @@ snapshots:
   '@azure/logger@1.1.1':
     dependencies:
       tslib: 2.6.2
+
+  '@azure/maps-common@1.0.0-beta.2':
+    dependencies:
+      '@azure/abort-controller': 1.1.0
+      '@azure/core-auth': 1.7.1
+      '@azure/core-client': 1.9.1
+      '@azure/core-lro': 2.7.2
+      '@azure/core-rest-pipeline': 1.15.1
+    transitivePeerDependencies:
+      - supports-color
+
+  '@azure/maps-search@1.0.0-beta.2':
+    dependencies:
+      '@azure/core-auth': 1.7.1
+      '@azure/core-client': 1.9.1
+      '@azure/core-lro': 2.7.2
+      '@azure/core-rest-pipeline': 1.15.1
+      '@azure/core-tracing': 1.1.1
+      '@azure/logger': 1.1.1
+      '@azure/maps-common': 1.0.0-beta.2
+      tslib: 2.6.2
+    transitivePeerDependencies:
+      - supports-color
 
   '@azure/msal-browser@3.13.0':
     dependencies:
@@ -11352,6 +11446,8 @@ snapshots:
 
   emittery@0.13.1: {}
 
+  emoji-regex@10.4.0: {}
+
   emoji-regex@8.0.0: {}
 
   emoji-regex@9.2.2: {}
@@ -11786,6 +11882,8 @@ snapshots:
   gensync@1.0.0-beta.2: {}
 
   get-caller-file@2.0.5: {}
+
+  get-east-asian-width@1.3.0: {}
 
   get-intrinsic@1.2.4:
     dependencies:
@@ -14381,6 +14479,12 @@ snapshots:
     dependencies:
       eastasianwidth: 0.2.0
       emoji-regex: 9.2.2
+      strip-ansi: 7.1.0
+
+  string-width@7.2.0:
+    dependencies:
+      emoji-regex: 10.4.0
+      get-east-asian-width: 1.3.0
       strip-ansi: 7.1.0
 
   string_decoder@0.10.31: {}

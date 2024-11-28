@@ -116,6 +116,7 @@ type DispatcherConfig = {
         history: boolean;
         schema: {
             generation: boolean;
+            firstUseEmbedding: boolean; // use embedding to determine the first schema to use.
         };
     };
     explainer: {
@@ -166,6 +167,7 @@ const defaultSessionConfig: SessionConfig = {
         history: true,
         schema: {
             generation: true,
+            firstUseEmbedding: true,
         },
     },
     explainer: {
@@ -241,7 +243,7 @@ async function readSessionData(dir: string) {
     return ensureSessionData(data);
 }
 
-const flexKeys = ["translators", "actions", "commands"];
+const flexKeys = ["schemas", "actions", "commands"];
 export class Session {
     private config: SessionConfig;
     private cacheData: SessionCacheData;

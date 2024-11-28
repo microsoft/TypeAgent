@@ -1,7 +1,7 @@
 # ====== Init =======
 @session new --memory
 @config action -*
-@config translator -* player calendar
+@config schema -* player calendar
 @config serviceHost off
 
 # Initialize context

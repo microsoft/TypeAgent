@@ -16,9 +16,16 @@ import {
 import { createSessionContext } from "../../action/actionHandlers.js";
 import { AppAgentProvider } from "../../agent/agentProvider.js";
 import registerDebug from "debug";
-import { getActionSchemaFile as getActionSchemaFile } from "../../translation/actionSchema.js";
 import { DeepPartialUndefinedAndNull } from "common-utils";
 import { DispatcherName } from "./interactiveIO.js";
+import {
+    ActionSchemaSementicMap,
+    EmbeddingCache,
+} from "../../translation/actionSchemaSemanticMap.js";
+import { ActionSchemaFileCache } from "../../translation/actionSchemaFileCache.js";
+import { ActionSchemaFile } from "action-schema";
+import path from "path";
+import { callEnsureError } from "../../utils/exceptions.js";
 
 const debug = registerDebug("typeagent:agents");
 const debugError = registerDebug("typeagent:agents:error");
@@ -29,7 +36,7 @@ type AppAgentRecord = {
     schemas: Set<string>;
     actions: Set<string>;
     commands: boolean;
-    hasTranslators: boolean;
+    hasSchemas: boolean;
     manifest: AppAgentManifest;
     appAgent?: AppAgent | undefined;
     sessionContext?: SessionContext | undefined;
@@ -50,7 +57,7 @@ export type AppAgentStateOptions = DeepPartialUndefinedAndNull<AppAgentState>;
 function getEffectiveValue(
     force: AppAgentStateOptions | undefined,
     overrides: AppAgentStateOptions | undefined,
-    kind: "schemas" | "actions" | "commands",
+    kind: keyof AppAgentState,
     name: string,
     useDefault: boolean,
     defaultValue: boolean,
@@ -73,7 +80,7 @@ function getEffectiveValue(
 function computeStateChange(
     force: AppAgentStateOptions | undefined,
     overrides: AppAgentStateOptions | undefined,
-    kind: "schemas" | "actions" | "commands",
+    kind: keyof AppAgentState,
     name: string,
     useDefault: boolean,
     defaultEnabled: boolean,
@@ -103,9 +110,9 @@ function computeStateChange(
             ]);
         }
     }
-    const enableTranslator = alwaysEnabled || effectiveEnabled;
-    if (enableTranslator !== currentEnabled) {
-        return enableTranslator;
+    const enable = alwaysEnabled || effectiveEnabled;
+    if (enable !== currentEnabled) {
+        return enable;
     }
     return undefined;
 }
@@ -131,13 +138,19 @@ export const alwaysEnabledAgents = {
 export class AppAgentManager implements ActionConfigProvider {
     private readonly agents = new Map<string, AppAgentRecord>();
     private readonly actionConfigs = new Map<string, ActionConfig>();
-    private readonly injectedTranslatorForActionName = new Map<
-        string,
-        string
-    >();
+    private readonly injectedSchemaForActionName = new Map<string, string>();
     private readonly emojis: Record<string, string> = {};
     private readonly transientAgents: Record<string, boolean | undefined> = {};
+    private readonly actionSementicMap = new ActionSchemaSementicMap();
+    private readonly actionSchemaFileCache;
 
+    public constructor(sessionDirPath: string | undefined) {
+        this.actionSchemaFileCache = new ActionSchemaFileCache(
+            sessionDirPath
+                ? path.join(sessionDirPath, "actionSchemaFileCache.json")
+                : undefined,
+        );
+    }
     public getAppAgentNames(): string[] {
         return Array.from(this.agents.keys());
     }
@@ -147,22 +160,22 @@ export class AppAgentManager implements ActionConfigProvider {
         return record.manifest.description;
     }
 
-    public isTranslatorEnabled(schemaName: string) {
+    public isSchemaEnabled(schemaName: string) {
         const appAgentName = getAppAgentName(schemaName);
         const record = this.getRecord(appAgentName);
         return record.schemas.has(schemaName);
     }
 
-    public isTranslatorActive(schemaName: string) {
+    public isSchemaActive(schemaName: string) {
         return (
-            this.isTranslatorEnabled(schemaName) &&
+            this.isSchemaEnabled(schemaName) &&
             this.transientAgents[schemaName] !== false
         );
     }
 
-    public getActiveTranslators() {
-        return this.getTranslatorNames().filter((name) =>
-            this.isTranslatorActive(name),
+    public getActiveSchemas() {
+        return this.getSchemaNames().filter((name) =>
+            this.isSchemaActive(name),
         );
     }
 
@@ -173,7 +186,7 @@ export class AppAgentManager implements ActionConfigProvider {
         );
     }
 
-    private isActionEnabled(schemaName: string) {
+    public isActionEnabled(schemaName: string) {
         const appAgentName = getAppAgentName(schemaName);
         const record = this.getRecord(appAgentName);
         return record.actions.has(schemaName);
@@ -186,11 +199,37 @@ export class AppAgentManager implements ActionConfigProvider {
             : false;
     }
 
+    // Return undefined if we don't know because the agent isn't loaded yet.
+    // Return null if the agent doesn't support commands.
+    public getCommandEnabledState(appAgentName: string) {
+        const record = this.agents.get(appAgentName);
+        return record !== undefined && record.appAgent !== undefined
+            ? record.appAgent.executeCommand !== undefined
+                ? record.commands
+                : null
+            : undefined;
+    }
+
     public getEmojis(): Readonly<Record<string, string>> {
         return this.emojis;
     }
 
-    public async addProvider(provider: AppAgentProvider) {
+    public async semanticSearchActionSchema(
+        request: string,
+        maxMatches: number = 1,
+    ) {
+        return this.actionSementicMap.nearestNeighbors(
+            request,
+            this,
+            maxMatches,
+        );
+    }
+
+    public async addProvider(
+        provider: AppAgentProvider,
+        actionEmbeddingCache?: EmbeddingCache,
+    ) {
+        const semanticMapP: Promise<void>[] = [];
         for (const name of provider.getAppAgentNames()) {
             // TODO: detect duplicate names
             const manifest = await provider.getAppAgentManifest(name);
@@ -201,19 +240,25 @@ export class AppAgentManager implements ActionConfigProvider {
 
             const entries = Object.entries(actionConfigs);
             for (const [name, config] of entries) {
+                debug(`Adding action config: ${name}`);
                 this.actionConfigs.set(name, config);
                 this.emojis[name] = config.emojiChar;
 
+                const actionSchemaFile =
+                    this.actionSchemaFileCache.getActionSchemaFile(config);
+                semanticMapP.push(
+                    this.actionSementicMap.addActionSchemaFile(
+                        config,
+                        actionSchemaFile,
+                        actionEmbeddingCache,
+                    ),
+                );
                 if (config.transient) {
                     this.transientAgents[name] = false;
                 }
                 if (config.injected) {
-                    const actionSchemaFile = getActionSchemaFile(config);
                     for (const actionName of actionSchemaFile.actionSchemas.keys()) {
-                        this.injectedTranslatorForActionName.set(
-                            actionName,
-                            name,
-                        );
+                        this.injectedSchemaForActionName.set(actionName, name);
                     }
                 }
             }
@@ -224,16 +269,22 @@ export class AppAgentManager implements ActionConfigProvider {
                 actions: new Set(),
                 schemas: new Set(),
                 commands: false,
-                hasTranslators: entries.length > 0,
+                hasSchemas: entries.length > 0,
                 manifest,
             };
 
             this.agents.set(name, record);
         }
+        debug("Waiting for action embeddings");
+        await Promise.all(semanticMapP);
+        debug("Finish action embeddings");
     }
 
-    public tryGetActionConfig(mayBeTranslatorName: string) {
-        return this.actionConfigs.get(mayBeTranslatorName);
+    public getActionEmbeddings() {
+        return this.actionSementicMap.embeddings();
+    }
+    public tryGetActionConfig(mayBeSchemaName: string) {
+        return this.actionConfigs.get(mayBeSchemaName);
     }
     public getActionConfig(schemaName: string) {
         const config = this.tryGetActionConfig(schemaName);
@@ -243,15 +294,15 @@ export class AppAgentManager implements ActionConfigProvider {
         return config;
     }
 
-    public getTranslatorNames() {
+    public getSchemaNames() {
         return Array.from(this.actionConfigs.keys());
     }
     public getActionConfigs() {
         return Array.from(this.actionConfigs.entries());
     }
 
-    public getInjectedTranslatorForActionName(actionName: string) {
-        return this.injectedTranslatorForActionName.get(actionName);
+    public getInjectedSchemaForActionName(actionName: string) {
+        return this.injectedSchemaForActionName.get(actionName);
     }
 
     public getAppAgent(appAgentName: string): AppAgent {
@@ -303,11 +354,11 @@ export class AppAgentManager implements ActionConfigProvider {
                 if (enableSchema) {
                     record.schemas.add(name);
                     changedSchemas.push([name, enableSchema]);
-                    debug(`Translator enabled ${name}`);
+                    debug(`Schema enabled ${name}`);
                 } else {
                     record.schemas.delete(name);
                     changedSchemas.push([name, enableSchema]);
-                    debug(`Translator disnabled ${name}`);
+                    debug(`Schema disnabled ${name}`);
                 }
             }
 
@@ -441,10 +492,12 @@ export class AppAgentManager implements ActionConfigProvider {
                     record,
                     context,
                 );
-                await record.appAgent!.updateAgentContext?.(
-                    enable,
-                    sessionContext,
-                    schemaName,
+                await callEnsureError(() =>
+                    record.appAgent!.updateAgentContext?.(
+                        enable,
+                        sessionContext,
+                        schemaName,
+                    ),
                 );
             } catch (e) {
                 // Rollback if there is a exception
@@ -459,10 +512,12 @@ export class AppAgentManager implements ActionConfigProvider {
             record.actions.delete(schemaName);
             const sessionContext = await record.sessionContextP!;
             try {
-                await record.appAgent!.updateAgentContext?.(
-                    enable,
-                    sessionContext,
-                    schemaName,
+                await callEnsureError(() =>
+                    record.appAgent!.updateAgentContext?.(
+                        enable,
+                        sessionContext,
+                        schemaName,
+                    ),
                 );
             } finally {
                 // Assume that it is disabled even when there is an exception
@@ -490,7 +545,9 @@ export class AppAgentManager implements ActionConfigProvider {
         context: CommandHandlerContext,
     ) {
         const appAgent = await this.ensureAppAgent(record);
-        const agentContext = await appAgent.initializeAgentContext?.();
+        const agentContext = await callEnsureError(() =>
+            appAgent.initializeAgentContext?.(),
+        );
         record.sessionContext = createSessionContext(
             record.name,
             agentContext,
@@ -538,5 +595,16 @@ export class AppAgentManager implements ActionConfigProvider {
             throw new Error(`Unknown app agent: ${appAgentName}`);
         }
         return record;
+    }
+
+    public getActionSchemaFile(schemaName: string) {
+        const config = this.tryGetActionConfig(schemaName);
+        return config ? this.getActionSchemaFileForConfig(config) : undefined;
+    }
+
+    public getActionSchemaFileForConfig(
+        config: ActionConfig,
+    ): ActionSchemaFile {
+        return this.actionSchemaFileCache.getActionSchemaFile(config);
     }
 }

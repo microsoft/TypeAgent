@@ -1,32 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-/*
-
-Now what to do with these chunks?
-
-Each chunk needs to be stored in a database, with embeddings from the blobs and
-their lines, and possibly other things that might be useful to search for.
-
-We should support indexing many files this way (given by glob patterns).
-
-Then we can define search over that database.
-
-A search should report the relevant chunks, and possibly the relevant lines
-within those chunks.
-
-Hopefully we can reuse the indexing and searching also used by codeMemory.ts.
-
-After that we should allow the model to send search queries to the database, and
-store conclusions (e.g. summaries or architectural notes) back there.
-
-It's too bad that we don't have a language server to help us with this, but we
-can add one for sure.
-
-We should also generalize the chunking to other languages, notably C (and
-TypeScript, of course).
-
-*/
+// TODO: Most of this is not Python specific; generalize to other languages.
 
 import chalk, { ChalkInstance } from "chalk";
 import * as fs from "fs";
@@ -176,11 +151,13 @@ async function importPythonFiles(
             }
             const t1 = Date.now();
 
-            log(
-                io,
-                `  [Documented ${chunkedFile.chunks.length} chunks in ${((t1 - t0) * 0.001).toFixed(3)} seconds for ${chunkedFile.fileName}]`,
-                chalk.grey,
-            );
+            if (verbose) {
+                log(
+                    io,
+                    `  [Documented ${chunkedFile.chunks.length} chunks in ${((t1 - t0) * 0.001).toFixed(3)} seconds for ${chunkedFile.fileName}]`,
+                    chalk.grey,
+                );
+            }
             documentedFiles.push(docs);
         },
     );
@@ -231,11 +208,13 @@ export async function embedChunkedFile(
         await embedChunk(chunk, chunkyIndex, io, verbose);
     }
     const t1 = Date.now();
-    log(
-        io,
-        `  [Embedded ${chunks.length} chunks in ${((t1 - t0) * 0.001).toFixed(3)} seconds for ${chunkedFile.fileName}]`,
-        chalk.grey,
-    );
+    if (verbose) {
+        log(
+            io,
+            `  [Embedded ${chunks.length} chunks in ${((t1 - t0) * 0.001).toFixed(3)} seconds for ${chunkedFile.fileName}]`,
+            chalk.grey,
+        );
+    }
 }
 
 async function embedChunk(
@@ -295,7 +274,7 @@ async function embedChunk(
     if (verbose) {
         log(
             io,
-            `  [Embedded ${chunk.id} (${lineCount} lines @ ${chunk.blobs[0].start}) ` +
+            `  [Embedded ${chunk.id} (${lineCount} lines @ ${chunk.blobs[0].start + 1}) ` +
                 `in ${((t1 - t0) * 0.001).toFixed(3)} seconds for ${chunk.fileName}]`,
             chalk.gray,
         );

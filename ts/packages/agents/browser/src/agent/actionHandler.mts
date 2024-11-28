@@ -59,9 +59,9 @@ async function initializeBrowserContext(): Promise<BrowserActionContext> {
 async function updateBrowserContext(
   enable: boolean,
   context: SessionContext<BrowserActionContext>,
-  translatorName: string,
+  schemaName: string,
 ): Promise<void> {
-  if (translatorName !== "browser") {
+  if (schemaName !== "browser") {
     // REVIEW: ignore sub-translator updates.
     return;
   }

@@ -43,11 +43,11 @@ async function initializeCodeContext(): Promise<CodeActionContext> {
 async function updateCodeContext(
     enable: boolean,
     context: SessionContext<CodeActionContext>,
-    translatorName: string,
+    schemaName: string,
 ): Promise<void> {
     const agentContext = context.agentContext;
     if (enable) {
-        agentContext.enabled.add(translatorName);
+        agentContext.enabled.add(schemaName);
         if (agentContext.webSocket?.readyState === WebSocket.OPEN) {
             return;
         }
@@ -90,7 +90,7 @@ async function updateCodeContext(
             };
         }
     } else {
-        agentContext.enabled.delete(translatorName);
+        agentContext.enabled.delete(schemaName);
         if (agentContext.enabled.size === 0) {
             const webSocket = context.agentContext.webSocket;
             if (webSocket) {

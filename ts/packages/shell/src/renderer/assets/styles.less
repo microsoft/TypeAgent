@@ -165,8 +165,10 @@ body {
   padding: 5px;
   background-color: @chat-input-bg;
   align-self: flex-end;
-  margin: 10px 10px 10px 20px;
-  width: calc(100% - 40px);
+  margin: 10px 10px 10px 10px;
+  width: calc(
+    100% - 20px
+  ); // Note: subtracted value should match horizontal margin total from line above
   border: solid 1px rgb(224, 224, 224);
   border-radius: 6px;
   position: relative;
@@ -251,6 +253,12 @@ body {
 
 .chat-message-agent-text {
   white-space: break-spaces;
+}
+
+table.table-message th,
+table.table-message td {
+  border: solid 1px black;
+  padding: 0px 10px 0px 10px;
 }
 
 .chat-message-metrics {

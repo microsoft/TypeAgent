@@ -45,7 +45,7 @@ export interface AppAgent extends Partial<AppAgentCommandInterface> {
     updateAgentContext?(
         enable: boolean,
         context: SessionContext,
-        translatorName: string, // for sub-translators
+        schemaName: string, // for sub-action schemas
     ): Promise<void>;
     closeAgentContext?(context: SessionContext): Promise<void>;
 

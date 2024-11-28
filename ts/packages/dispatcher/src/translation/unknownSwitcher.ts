@@ -5,7 +5,7 @@ import {
     InlineTranslatorSchemaDef,
     createJsonTranslatorFromSchemaDef,
 } from "common-utils";
-import { getActionSchemaFile } from "./actionSchema.js";
+import { getActionSchemaFileForConfig } from "./actionSchemaFileCache.js";
 import { Result, success } from "typechat";
 import registerDebug from "debug";
 import { ActionConfigProvider } from "./agentTranslators.js";
@@ -26,7 +26,10 @@ function createSelectionActionTypeDefinition(
         // No need to select for injected schemas
         return undefined;
     }
-    const actionSchemaFile = getActionSchemaFile(actionConfig);
+    const actionSchemaFile = getActionSchemaFileForConfig(
+        actionConfig,
+        provider,
+    );
 
     const actionNames: string[] = [];
     const actionComments: string[] = [];
@@ -107,10 +110,10 @@ type AssistantSelectionSchemaEntry = {
     schema: InlineTranslatorSchemaDef;
 };
 export function getAssistantSelectionSchemas(
-    translatorNames: string[],
+    schemaNames: string[],
     provider: ActionConfigProvider,
 ) {
-    return translatorNames
+    return schemaNames
         .map((name) => {
             return { name, schema: getSelectionSchema(name, provider) };
         })
@@ -128,10 +131,10 @@ export type AssistantSelection = {
 const assistantSelectionLimit = 8192 * 3;
 
 export function loadAssistantSelectionJsonTranslator(
-    translatorNames: string[],
+    schemaNames: string[],
     provider: ActionConfigProvider,
 ) {
-    const schemas = getAssistantSelectionSchemas(translatorNames, provider);
+    const schemas = getAssistantSelectionSchemas(schemaNames, provider);
 
     let currentLength = 0;
     let current: AssistantSelectionSchemaEntry[] = [];

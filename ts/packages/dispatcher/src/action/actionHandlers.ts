@@ -151,9 +151,9 @@ export function createSessionContext<T = unknown>(
                 context.translatorCache.clear();
                 if (enable) {
                     // REVIEW: is switch current translator the right behavior?
-                    context.lastActionTranslatorName = subAgentName;
-                } else if (context.lastActionTranslatorName === subAgentName) {
-                    context.lastActionTranslatorName = name;
+                    context.lastActionSchemaName = subAgentName;
+                } else if (context.lastActionSchemaName === subAgentName) {
+                    context.lastActionSchemaName = name;
                 }
             });
         },
@@ -178,7 +178,7 @@ async function executeAction(
     const appAgent = systemContext.agents.getAppAgent(appAgentName);
 
     // Update the last action translator.
-    systemContext.lastActionTranslatorName = translatorName;
+    systemContext.lastActionSchemaName = translatorName;
 
     if (appAgent.executeAction === undefined) {
         throw new Error(
