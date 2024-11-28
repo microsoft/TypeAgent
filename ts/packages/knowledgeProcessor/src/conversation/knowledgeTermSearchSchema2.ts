@@ -54,6 +54,9 @@ export type TermFilterV2 = {
 export type GetAnswerWithTermsActionV2 = {
     actionName: "getAnswer";
     parameters: {
+        // User question, rewritten to incorporate all context.
+        question: string;
+        // the question above is translated into filters
         filters: TermFilterV2[];
     };
 };

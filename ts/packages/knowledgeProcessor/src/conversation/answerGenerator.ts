@@ -273,10 +273,6 @@ export function createAnswerGenerator(
         answerStyle: AnswerStyle | undefined,
     ): string {
         let prompt = `The following is a user question about a conversation:\n${question}\n\n`;
-        /*
-        prompt +=
-            "Answer the question using only the relevant topics, entities, actions, messages and time ranges/timestamps found in CONVERSATION HISTORY.\n";
-        */
         prompt +=
             "The included CONVERSATION HISTORY contains information that MAY be relevant to answering the question.\n";
         prompt +=

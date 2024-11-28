@@ -199,6 +199,7 @@ export function createSearchProcessor(
             action = {
                 actionName: "getAnswer",
                 parameters: {
+                    question: query,
                     filters,
                 },
             };
@@ -342,6 +343,7 @@ export function createSearchProcessor(
         action: GetAnswerWithTermsActionV2,
         options: SearchProcessingOptions,
     ): Promise<SearchResponse> {
+        query = action.parameters.question;
         const topLevelTopicSummary = isSummaryRequestV2(action);
         const searchOptions = createSearchOptions(
             topLevelTopicSummary,
