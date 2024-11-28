@@ -11,8 +11,9 @@ function throwEnsureError(e: any): never {
         }
         const mayBeErrorLike = e as any;
         if (
+            typeof mayBeErrorLike.name === "string" &&
             typeof mayBeErrorLike.message === "string" &&
-            mayBeErrorLike.stack === "string"
+            typeof mayBeErrorLike.stack === "string"
         ) {
             throw e;
         }
