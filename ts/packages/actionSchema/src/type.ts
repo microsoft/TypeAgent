@@ -35,50 +35,58 @@ export interface SchemaTypeStringUnion extends SchemaBase {
     typeEnum: string[];
 }
 
-export type SchemaObjectField = {
+export type SchemaObjectField<T extends SchemaType = SchemaType> = {
     optional?: boolean | undefined;
-    type: SchemaType;
+    type: T;
     comments?: string[] | undefined;
     trailingComments?: string[] | undefined;
 };
 export type SchemaObjectFields = Record<string, SchemaObjectField>;
-export interface SchemaTypeObject extends SchemaBase {
+
+export interface SchemaTypeObject<
+    T extends SchemaObjectFields = SchemaObjectFields,
+> extends SchemaBase {
     type: "object";
-    fields: SchemaObjectFields;
+    fields: T;
 }
 
-export interface SchemaTypeArray extends SchemaBase {
+export interface SchemaTypeArray<T extends SchemaType = SchemaType>
+    extends SchemaBase {
     type: "array";
-    elementType: SchemaType;
+    elementType: T;
 }
 
-export interface SchemaTypeReference extends SchemaBase {
+export interface SchemaTypeReference<
+    T extends SchemaTypeDefinition = SchemaTypeDefinition,
+> extends SchemaBase {
     type: "type-reference";
     name: string;
-    definition: SchemaTypeDefinition;
+    definition?: T;
 }
 
-export interface SchemaTypeUnion extends SchemaBase {
+export interface SchemaTypeUnion<T extends SchemaType = SchemaType>
+    extends SchemaBase {
     type: "type-union";
-    types: SchemaType[];
+    types: T[];
 }
 
-export type SchemaTypeInterfaceDefinition = {
+export type SchemaTypeInterfaceDefinition<
+    T extends SchemaTypeObject = SchemaTypeObject,
+> = {
     alias: false;
     name: string;
-    type: SchemaTypeObject;
+    type: T;
     comments?: string[] | undefined;
-    exported?: boolean; // for exact regen
+    exported?: boolean | undefined; // for exact regen
     order?: number; // for exact regen
 };
 
-export type SchemaTypeAliasDefinition<T = SchemaType> = {
+export type SchemaTypeAliasDefinition<T extends SchemaType = SchemaType> = {
     alias: true;
     name: string;
     type: T;
     comments?: string[] | undefined;
-    exported?: boolean; // for exact regen
-    order?: number; // for exact regen
+    exported?: boolean | undefined; // for exact regen
 };
 
 export type SchemaTypeDefinition =
@@ -96,12 +104,43 @@ export type SchemaType =
     | SchemaTypeObject
     | SchemaTypeArray;
 
-export type ActionSchemaTypeDefinition =
-    | SchemaTypeInterfaceDefinition
-    | SchemaTypeAliasDefinition<SchemaTypeObject>;
+export interface ActionSchemaObject extends SchemaTypeObject {
+    fields: {
+        actionName: SchemaObjectField<SchemaTypeStringUnion>;
+        parameters: SchemaObjectField<
+            | SchemaTypeObject
+            | SchemaTypeReference<
+                  | SchemaTypeAliasDefinition<SchemaTypeObject>
+                  | SchemaTypeInterfaceDefinition<SchemaTypeObject>
+              >
+        >;
+    };
+}
 
-export type ActionSchemaFile = {
-    translatorName: string;
-    actionSchemaMap: Map<string, ActionSchemaTypeDefinition>;
-    definition: SchemaTypeDefinition;
+export type ActionSchemaTypeDefinition =
+    | SchemaTypeInterfaceDefinition<ActionSchemaObject>
+    | SchemaTypeAliasDefinition<ActionSchemaObject>;
+
+export type ActionSchemaEntryTypeDefinition =
+    | ActionSchemaTypeDefinition
+    | SchemaTypeAliasDefinition<ActionSchemaTypeReference | ActionSchemaUnion>;
+
+type ActionSchemaTypeReference =
+    SchemaTypeReference<ActionSchemaEntryTypeDefinition>;
+
+// A union of action schema type definitions.
+export type ActionSchemaUnion = SchemaTypeUnion<ActionSchemaTypeReference>;
+
+export type ActionSchemaGroup = {
+    // The entry type definition for the action schema.
+    entry: ActionSchemaEntryTypeDefinition;
+    // Map action name to action type definition
+    actionSchemas: Map<string, ActionSchemaTypeDefinition>;
+    // Order for the type definitions
+    order?: Map<string, number>; // for exact regen
+};
+
+export type ActionSchemaFile = ActionSchemaGroup & {
+    // Schema name
+    schemaName: string;
 };

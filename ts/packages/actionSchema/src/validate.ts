@@ -30,7 +30,9 @@ export function validateSchema(
             throw new Error(`'${name}' does not match any union type`);
         }
         case "type-reference":
-            validateSchema(name, expected.definition.type, actual, coerce);
+            if (expected.definition !== undefined) {
+                validateSchema(name, expected.definition.type, actual, coerce);
+            }
             break;
         case "object":
             if (typeof actual !== "object" || Array.isArray(actual)) {
@@ -121,6 +123,7 @@ function validateObject(
     expected: SchemaTypeObject,
     actual: Record<string, unknown>,
     coerce: boolean,
+    ignoreExtraneous?: string[],
 ) {
     for (const field of Object.entries(expected.fields)) {
         const [fieldName, fieldInfo] = field;
@@ -139,8 +142,12 @@ function validateObject(
     }
 
     for (const actualField of Object.keys(actual)) {
-        if (!expected.fields[actualField]) {
-            throw new Error(`Extraneous property ${name}.${actualField}`);
+        if (
+            !expected.fields[actualField] &&
+            ignoreExtraneous?.includes(actualField) !== true
+        ) {
+            const fullName = name ? `${name}.${actualField}` : actualField;
+            throw new Error(`Extraneous property ${fullName}`);
         }
     }
 }
@@ -150,5 +157,5 @@ export function validateAction(
     action: any,
     coerce: boolean = false,
 ) {
-    validateObject("", actionSchema.type, action, coerce);
+    validateObject("", actionSchema.type, action, coerce, ["translatorName"]);
 }

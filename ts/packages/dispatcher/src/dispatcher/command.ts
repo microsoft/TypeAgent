@@ -304,18 +304,18 @@ export function getSettingSummary(context: CommandHandlerContext) {
         }
     }
 
-    const names = context.agents.getActiveTranslators();
+    const names = context.agents.getActiveSchemas();
     const ordered = names.filter(
-        (name) => name !== context.lastActionTranslatorName,
+        (name) => name !== context.lastActionSchemaName,
     );
     if (ordered.length !== names.length) {
-        ordered.unshift(context.lastActionTranslatorName);
+        ordered.unshift(context.lastActionSchemaName);
     }
 
     const translators = Array.from(
         new Set(
             ordered.map(
-                (name) => context.agents.getTranslatorConfig(name).emojiChar,
+                (name) => context.agents.getActionConfig(name).emojiChar,
             ),
         ).values(),
     );
@@ -395,7 +395,7 @@ function getPendingFlag(
     const resolvedFlag = resolveFlag(flags, lastToken);
     return resolvedFlag !== undefined &&
         getFlagType(resolvedFlag[1]) !== "boolean"
-        ? lastToken
+        ? `--${resolvedFlag[0]}` // use the full flag name in case it was a short flag
         : undefined;
 }
 

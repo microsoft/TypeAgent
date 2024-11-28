@@ -1,6 +1,6 @@
 # ====== Init =======
 @config action -* player calendar
-@config translator -* player calendar
+@config schema -* player calendar
 @config serviceHost off
 
 # -------------------------------------
@@ -16,7 +16,7 @@ Could you play Liebesleid please?
 # -------------------------------------
 # Calendar - cross domain generalization
 # -------------------------------------
-@config translator calendar
+@config schema calendar
 
 # Request with explanation
 Can you schedule design meeting starting at 2 pm with Piali?

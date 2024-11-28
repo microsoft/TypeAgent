@@ -25,7 +25,9 @@ export function extractRelevantExifTags(exifTags: ExifReader.Tags) {
     ${exifTags.DateTime ? "Date Taken: " + exifTags.DateTime.value : ""}
     ${exifTags.OffsetTime ? "Offset Time: " + exifTags.OffsetTime.value : ""}
     ${exifTags.GPSLatitude ? "GPS Latitude: " + exifTags.GPSLatitude.description : ""}
-    ${exifTags.GPSLongitude ? "GPS Longitude: " + exifTags.GPSLongitude.description : ""}
+    ${exifTags.GPSLatitudeRef ? "GPS Latitude Reference: " + exifTags.GPSLatitudeRef.value : ""}
+    ${exifTags.GPSLongitude ? "GPS Longitude Reference: " + exifTags.GPSLongitude.description : ""}
+    ${exifTags.GPSLongitudeRef ? "GPS Longitude Reference: " + exifTags.GPSLongitudeRef?.value : ""}
     ${exifTags.GPSAltitudeRef ? "GPS Altitude Reference: " + exifTags.GPSAltitudeRef.value : ""}
     ${exifTags.GPSAltitude ? "GPS Altitude: " + exifTags.GPSAltitude.description : ""}
     `;

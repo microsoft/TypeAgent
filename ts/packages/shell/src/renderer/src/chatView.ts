@@ -348,7 +348,10 @@ export class ChatView {
         this.commandBackStackIndex = -1;
     }
 
-    async addUserMessage(request: DisplayContent, hidden: boolean = false) {
+    async addUserMessage(
+        request: string | { type: "html"; content: string },
+        hidden: boolean = false,
+    ) {
         const id = this.idGenerator.genId();
 
         let images: string[] = [];

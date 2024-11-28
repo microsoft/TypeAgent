@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { Action, Actions } from "agent-cache";
-import { getActionSchema, getTranslatorActionSchemas } from "./actionSchema.js";
+import { getActionSchema } from "./actionSchemaFileCache.js";
 import { CommandHandlerContext } from "../internal.js";
 import {
     TemplateFieldStringUnion,
@@ -96,6 +96,9 @@ function toTemplateType(
             return toTemplateType(type.types[0], value);
         case "type-reference":
             // TODO: need to handle circular references (or error on circular references)
+            if (type.definition === undefined) {
+                throw new Error(`Unresolved type reference: ${type.name}`);
+            }
             return toTemplateType(type.definition.type, value);
         case "object":
             return toTemplateTypeObject(type, value);
@@ -116,19 +119,17 @@ function toTemplate(
     translators: string[],
     action: Action,
 ) {
-    const config = context.agents.tryGetTranslatorConfig(action.translatorName);
-    if (config === undefined) {
+    const actionSchemaFile = context.agents.getActionSchemaFile(
+        action.translatorName,
+    );
+    if (actionSchemaFile === undefined) {
         return getDefaultActionTemplate(translators);
     }
     const template = getDefaultActionTemplate(
         translators,
         action.translatorName,
     );
-    const actionInfos = getTranslatorActionSchemas(
-        config,
-        action.translatorName,
-    );
-    const actionSchemas = actionInfos.actionSchemaMap;
+    const actionSchemas = actionSchemaFile.actionSchemas;
     const actionName: TemplateFieldStringUnion = {
         type: "string-union",
         typeEnum: Array.from(actionSchemas.keys()),
@@ -165,7 +166,7 @@ export function getActionTemplateEditConfig(
 ): TemplateEditConfig {
     const templateData: TemplateData[] = [];
 
-    const translators = context.agents.getActiveTranslators();
+    const translators = context.agents.getActiveSchemas();
     for (const action of actions) {
         templateData.push({
             schema: toTemplate(context, translators, action),
@@ -205,7 +206,7 @@ export async function getSystemTemplateSchema(
         data.actionName = "";
     }
 
-    const translators = systemContext.agents.getActiveTranslators();
+    const translators = systemContext.agents.getActiveSchemas();
     return toTemplate(systemContext, translators, data);
 }
 

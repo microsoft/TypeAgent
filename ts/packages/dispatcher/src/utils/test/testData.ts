@@ -5,7 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 import chalk from "chalk";
 import {
-    getBuiltinTranslatorConfigProvider,
+    getBuiltinActionConfigProvider,
     loadAgentJsonTranslator,
 } from "../../translation/agentTranslators.js";
 import {
@@ -266,7 +266,7 @@ function toExceptionMessage(e: any) {
 function getSafeTranslateFn(translatorName: string, model?: string) {
     const translator = loadAgentJsonTranslator<TranslatedAction>(
         translatorName,
-        getBuiltinTranslatorConfigProvider(),
+        getBuiltinActionConfigProvider(),
         model,
     );
     return async (request: string): Promise<Result<TranslatedAction>> => {

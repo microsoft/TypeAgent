@@ -167,7 +167,10 @@ export async function createViewServiceHost(filePath: string) {
     let timeoutHandle: NodeJS.Timeout;
 
     const timeoutPromise = new Promise<undefined>((_resolve, reject) => {
-        timeoutHandle = setTimeout(() => reject(undefined), 10000);
+        timeoutHandle = setTimeout(
+            () => reject(new Error("Markdown view service creation timed out")),
+            10000,
+        );
     });
 
     const viewServicePromise = new Promise<ChildProcess | undefined>(

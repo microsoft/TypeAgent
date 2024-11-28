@@ -5,32 +5,35 @@ import {
     InlineTranslatorSchemaDef,
     createJsonTranslatorFromSchemaDef,
 } from "common-utils";
-import { getTranslatorActionSchemas } from "./actionSchema.js";
+import { getActionSchemaFileForConfig } from "./actionSchemaFileCache.js";
 import { Result, success } from "typechat";
 import registerDebug from "debug";
-import { TranslatorConfigProvider } from "./agentTranslators.js";
-import { generateSchema, ActionSchemaCreator as sc } from "action-schema";
+import { ActionConfigProvider } from "./agentTranslators.js";
+import {
+    generateSchemaTypeDefinition,
+    ActionSchemaCreator as sc,
+} from "action-schema";
 
 const debugSwitchSearch = registerDebug("typeagent:switch:search");
 
 function createSelectionActionTypeDefinition(
-    translatorName: string,
-    provider: TranslatorConfigProvider,
+    schemaName: string,
+    provider: ActionConfigProvider,
 ) {
-    const translatorConfig = provider.getTranslatorConfig(translatorName);
+    const actionConfig = provider.getActionConfig(schemaName);
     // Skip injected schemas except for chat; investigate whether we can get chat always on first pass
-    if (translatorConfig.injected && translatorName !== "chat") {
+    if (actionConfig.injected && schemaName !== "chat") {
         // No need to select for injected schemas
         return undefined;
     }
-    const actionSchemaFile = getTranslatorActionSchemas(
-        translatorConfig,
-        translatorName,
+    const actionSchemaFile = getActionSchemaFileForConfig(
+        actionConfig,
+        provider,
     );
 
     const actionNames: string[] = [];
     const actionComments: string[] = [];
-    for (const [name, info] of actionSchemaFile.actionSchemaMap.entries()) {
+    for (const [name, info] of actionSchemaFile.actionSchemas.entries()) {
         actionNames.push(name);
         actionComments.push(
             ` "${name}"${info.comments ? ` - ${info.comments[0].trim()}` : ""}`,
@@ -41,16 +44,16 @@ function createSelectionActionTypeDefinition(
         return undefined;
     }
 
-    const typeName = `${translatorConfig.schemaType}Assistant`;
+    const typeName = `${actionConfig.schemaType}Assistant`;
 
     const schema = sc.type(
         typeName,
         sc.obj({
             assistant: sc.field(
-                sc.string(translatorName),
-                ` ${translatorConfig.description}`,
+                sc.string(schemaName),
+                ` ${actionConfig.description}`,
             ),
-            action: sc.field(sc.string(...actionNames), actionComments),
+            action: sc.field(sc.string(actionNames), actionComments),
         }),
     );
     return schema;
@@ -58,7 +61,7 @@ function createSelectionActionTypeDefinition(
 
 function createSelectionSchema(
     translatorName: string,
-    provider: TranslatorConfigProvider,
+    provider: ActionConfigProvider,
 ): InlineTranslatorSchemaDef | undefined {
     const schema = createSelectionActionTypeDefinition(
         translatorName,
@@ -71,7 +74,7 @@ function createSelectionSchema(
     return {
         kind: "inline",
         typeName,
-        schema: generateSchema([schema], typeName),
+        schema: generateSchemaTypeDefinition(schema),
     };
 }
 
@@ -81,7 +84,7 @@ const selectSchemaCache = new Map<
 >();
 function getSelectionSchema(
     translatorName: string,
-    provider: TranslatorConfigProvider,
+    provider: ActionConfigProvider,
 ): InlineTranslatorSchemaDef | undefined {
     if (selectSchemaCache.has(translatorName)) {
         return selectSchemaCache.get(translatorName);
@@ -107,10 +110,10 @@ type AssistantSelectionSchemaEntry = {
     schema: InlineTranslatorSchemaDef;
 };
 export function getAssistantSelectionSchemas(
-    translatorNames: string[],
-    provider: TranslatorConfigProvider,
+    schemaNames: string[],
+    provider: ActionConfigProvider,
 ) {
-    return translatorNames
+    return schemaNames
         .map((name) => {
             return { name, schema: getSelectionSchema(name, provider) };
         })
@@ -128,10 +131,10 @@ export type AssistantSelection = {
 const assistantSelectionLimit = 8192 * 3;
 
 export function loadAssistantSelectionJsonTranslator(
-    translatorNames: string[],
-    provider: TranslatorConfigProvider,
+    schemaNames: string[],
+    provider: ActionConfigProvider,
 ) {
-    const schemas = getAssistantSelectionSchemas(translatorNames, provider);
+    const schemas = getAssistantSelectionSchemas(schemaNames, provider);
 
     let currentLength = 0;
     let current: AssistantSelectionSchemaEntry[] = [];

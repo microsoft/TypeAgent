@@ -34,16 +34,18 @@ import {
 } from "@typeagent/agent-sdk/helpers/display";
 import { alwaysEnabledAgents } from "./common/appAgentManager.js";
 import { getCacheFactory } from "../internal.js";
+import { Channel } from "diagnostics_channel";
+import { string } from "../../../actionSchema/dist/creator.js";
 
 const enum AgentToggle {
-    Translator,
+    Schema,
     Action,
     Command,
     Agent,
 }
 
 const AgentToggleDescription = [
-    "agent translators",
+    "agent schemas",
     "agent actions",
     "agent commands",
     "agents",
@@ -52,14 +54,14 @@ const AgentToggleDescription = [
 function getAgentToggleOptions(
     toggle: AgentToggle,
     options: Record<string, boolean | null>,
-    translatorNames: string[],
-) {
+    schemaNames: string[],
+): SessionOptions {
     switch (toggle) {
-        case AgentToggle.Translator:
-            for (const name of alwaysEnabledAgents.translators) {
+        case AgentToggle.Schema:
+            for (const name of alwaysEnabledAgents.schemas) {
                 delete options[name];
             }
-            return { translators: options };
+            return { schemas: options };
         case AgentToggle.Action:
             for (const name of alwaysEnabledAgents.actions) {
                 delete options[name];
@@ -71,15 +73,15 @@ function getAgentToggleOptions(
             }
             return { commands: options };
         case AgentToggle.Agent:
-            const translatorOptions = Object.fromEntries(
-                translatorNames.map((name) => [
+            const schemaOptions = Object.fromEntries(
+                schemaNames.map((name) => [
                     name,
                     options[getAppAgentName(name)],
                 ]),
             );
-            const actionOptions = { ...translatorOptions };
-            for (const name of alwaysEnabledAgents.translators) {
-                delete translatorOptions[name];
+            const actionOptions = { ...schemaOptions };
+            for (const name of alwaysEnabledAgents.schemas) {
+                delete schemaOptions[name];
             }
             for (const name of alwaysEnabledAgents.actions) {
                 delete actionOptions[name];
@@ -88,7 +90,7 @@ function getAgentToggleOptions(
                 delete options[name];
             }
             return {
-                translators: translatorOptions,
+                schemas: schemaOptions,
                 actions: actionOptions,
                 commands: options,
             };
@@ -97,7 +99,7 @@ function getAgentToggleOptions(
 
 function setAgentToggleOption(
     existingNames: string[],
-    existingNameType: "agent" | "translator",
+    existingNameType: "agent" | "schema",
     options: any,
     nameOrPattern: string[],
     enable: boolean,
@@ -135,6 +137,142 @@ function setAgentToggleOption(
     }
 }
 
+type StatusRecords = Record<
+    string,
+    { schemas?: string; actions?: string; commands?: string }
+>;
+
+type ChangedAgent = {
+    schemas?: Record<string, boolean | undefined | null> | undefined | null;
+    actions?: Record<string, boolean | undefined | null> | undefined | null;
+    commands?: Record<string, boolean | undefined | null> | undefined | null;
+};
+
+function getDefaultStr(
+    changes: ChangedAgent | undefined,
+    kind: keyof ChangedAgent,
+    name: string,
+) {
+    if (changes === undefined) {
+        return "";
+    }
+    const change = changes[kind]?.[name];
+    if (change === undefined) {
+        return undefined;
+    }
+    return change === null ? " (default)" : "";
+}
+
+function setStatus(
+    status: StatusRecords,
+    kind: keyof ChangedAgent,
+    name: string,
+    enable: boolean | undefined | null,
+    active: boolean,
+    changes?: ChangedAgent,
+) {
+    if (enable === null) {
+        return;
+    }
+    const defaultStr = getDefaultStr(changes, kind, name);
+    if (defaultStr === undefined) {
+        return;
+    }
+    if (status[name] === undefined) {
+        status[name] = {};
+        const appAgentName = getAppAgentName(name);
+        if (appAgentName !== name && status[appAgentName] === undefined) {
+            // Make sure we have a row for the app agent name even if it doesn't have any status for grouping
+            status[appAgentName] = {};
+        }
+    }
+
+    const statusChar =
+        enable === undefined ? "❔" : enable ? (active ? "✅" : "💤") : "❌";
+    status[name][kind] = `${statusChar}${defaultStr}`;
+}
+
+function showAgentStatus(
+    toggle: AgentToggle,
+    context: ActionContext<CommandHandlerContext>,
+    changes?: ChangedAgent,
+) {
+    const systemContext = context.sessionContext.agentContext;
+    const agents = systemContext.agents;
+
+    const status: Record<
+        string,
+        { schemas?: string; actions?: string; commands?: string }
+    > = {};
+
+    const showSchema =
+        toggle === AgentToggle.Schema || toggle === AgentToggle.Agent;
+    const showAction =
+        toggle === AgentToggle.Action || toggle === AgentToggle.Agent;
+    const showCommand =
+        toggle === AgentToggle.Command || toggle === AgentToggle.Agent;
+
+    if (showSchema || showAction) {
+        for (const name of agents.getSchemaNames()) {
+            if (showSchema) {
+                const state = agents.isSchemaEnabled(name);
+                const active = agents.isSchemaActive(name);
+                setStatus(status, "schemas", name, state, active, changes);
+            }
+
+            if (showAction) {
+                const state = agents.isActionEnabled(name);
+                const active = agents.isActionActive(name);
+                setStatus(status, "actions", name, state, active, changes);
+            }
+        }
+    }
+
+    if (showCommand) {
+        for (const name of agents.getAppAgentNames()) {
+            const state = agents.getCommandEnabledState(name);
+            setStatus(status, "commands", name, state, true, changes);
+        }
+    }
+
+    const entries = Object.entries(status).sort(([a], [b]) =>
+        a.localeCompare(b),
+    );
+    if (entries.length === 0) {
+        displayWarn(changes ? "No changes" : "No agents", context);
+        return;
+    }
+
+    const getRow = (
+        displayName: string,
+        schemas?: string,
+        actions?: string,
+        commands?: string,
+    ) => {
+        const displayEntry = [displayName];
+        if (showSchema) {
+            displayEntry.push(schemas ?? "");
+        }
+        if (showAction) {
+            displayEntry.push(actions ?? "");
+        }
+        if (showCommand) {
+            displayEntry.push(commands ?? "");
+        }
+        return displayEntry;
+    };
+
+    const table: string[][] = [
+        getRow("Agent", "Schemas", "Actions", "Commands"),
+    ];
+
+    for (const [name, { schemas, actions, commands }] of entries) {
+        const displayName = getAppAgentName(name) !== name ? `  ${name}` : name;
+        table.push(getRow(displayName, schemas, actions, commands));
+    }
+
+    displayResult(table, context);
+}
 class AgentToggleCommandHandler implements CommandHandler {
     public readonly description = `Toggle ${AgentToggleDescription[this.toggle]}`;
     public readonly parameters = {
@@ -169,9 +307,9 @@ class AgentToggleCommandHandler implements CommandHandler {
         const agents = systemContext.agents;
 
         const options: Record<string, boolean | null> = {};
-        const translatorNames = agents.getTranslatorNames();
+        const schemaNames = agents.getSchemaNames();
         let existingNames: string[];
-        let existingNameType: "agent" | "translator";
+        let existingNameType: "agent" | "schema";
         if (
             this.toggle == AgentToggle.Command ||
             this.toggle === AgentToggle.Agent
@@ -179,17 +317,20 @@ class AgentToggleCommandHandler implements CommandHandler {
             existingNames = agents.getAppAgentNames();
             existingNameType = "agent";
         } else {
-            existingNames = translatorNames;
-            existingNameType = "translator";
+            existingNames = schemaNames;
+            existingNameType = "schema";
         }
 
+        let hasParams = false;
         if (params.flags.reset) {
+            hasParams = true;
             for (const name of existingNames) {
                 options[name] = null; // default value
             }
         }
 
         if (params.flags.off) {
+            hasParams = true;
             setAgentToggleOption(
                 existingNames,
                 existingNameType,
@@ -199,6 +340,7 @@ class AgentToggleCommandHandler implements CommandHandler {
             );
         }
         if (params.args.agentNames) {
+            hasParams = true;
             setAgentToggleOption(
                 existingNames,
                 existingNameType,
@@ -208,8 +350,13 @@ class AgentToggleCommandHandler implements CommandHandler {
             );
         }
 
+        if (!hasParams) {
+            showAgentStatus(this.toggle, context);
+            return;
+        }
+
         const changed = await changeContextConfig(
-            getAgentToggleOptions(this.toggle, options, translatorNames),
+            getAgentToggleOptions(this.toggle, options, schemaNames),
             context,
         );
 
@@ -219,17 +366,29 @@ class AgentToggleCommandHandler implements CommandHandler {
         if (changedEntries.length === 0) {
             displayWarn("No change", context);
         } else {
-            const lines: string[] = [];
-            for (const [kind, options] of changedEntries) {
-                lines.push(`Changes (${kind}):`);
-                for (const [name, value] of Object.entries(options as any)) {
-                    lines.push(
-                        `  ${name}: ${value === true ? "enabled" : value === false ? "disabled" : `<default>`}`,
-                    );
-                }
-            }
-            displayResult(lines, context);
+            showAgentStatus(this.toggle, context, changed);
         }
+    }
+
+    public async getCompletion(
+        context: SessionContext<CommandHandlerContext>,
+        params: PartialParsedCommandParams<typeof this.parameters>,
+        names: string[],
+    ) {
+        const completions: string[] = [];
+
+        for (const name of names) {
+            if (name === "agentNames" || name === "--off") {
+                const existingNames =
+                    this.toggle === AgentToggle.Command ||
+                    this.toggle === AgentToggle.Agent
+                        ? context.agentContext.agents.getAppAgentNames()
+                        : context.agentContext.agents.getSchemaNames();
+                completions.push(...existingNames);
+            }
+        }
+
+        return completions;
     }
 }
 
@@ -377,10 +536,10 @@ const configTranslationCommandHandlers: CommandHandlerTable = {
             },
         ),
         switch: {
-            description: "auto switch translator",
+            description: "auto switch schemas",
             commands: {
                 ...getToggleCommandHandlers(
-                    "switch translator",
+                    "switch schema",
                     async (context, enable: boolean) => {
                         await changeContextConfig(
                             {
@@ -472,7 +631,7 @@ export function getConfigCommandHandlers(): CommandHandlerTable {
     return {
         description: "Configuration commands",
         commands: {
-            translator: new AgentToggleCommandHandler(AgentToggle.Translator),
+            schema: new AgentToggleCommandHandler(AgentToggle.Schema),
             action: new AgentToggleCommandHandler(AgentToggle.Action),
             command: new AgentToggleCommandHandler(AgentToggle.Command),
             agent: new AgentToggleCommandHandler(AgentToggle.Agent),

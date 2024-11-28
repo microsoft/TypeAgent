@@ -3,8 +3,8 @@
 
 export {
     AppAgentManifest,
-    TranslatorDefinition,
-    SchemaDefinition,
+    ActionManifest,
+    SchemaManifest as SchemaDefinition,
     AppAgent,
     AppAgentEvent,
     SessionContext,
@@ -35,6 +35,7 @@ export {
     ClientAction,
     DisplayType,
     DynamicDisplay,
+    MessageContent,
     DisplayContent,
     DisplayAppendMode,
     DisplayMessageKind,
