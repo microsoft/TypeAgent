@@ -56,7 +56,7 @@ class HFModel:
             cache_dir=self.params.cache_dir
         )
 
-        self.tokenizer.pad_token = "!"
+        self.tokenizer.pad_token = self.params.pad_token
         if self.params.use_peft:
             self.init_peft()
 
@@ -83,14 +83,14 @@ class HFModel:
             model = self.model,
             train_dataset = training_data,
             args = TrainingArguments(
-                per_device_train_batch_size=2,
-                gradient_accumulation_steps=4,
-                num_train_epochs=6,
-                learning_rate=1e-4,
-                logging_steps=2,
-                optim="adamw_torch",
-                save_strategy="epoch",
-                output_dir="hf_output"
+                per_device_train_batch_size=self.params.hf_trainer_params.per_device_train_batch_size,
+                gradient_accumulation_steps=self.params.hf_trainer_params.gradient_accumulation_steps,
+                num_train_epochs=self.params.hf_trainer_params.num_train_epochs,
+                learning_rate=self.params.hf_trainer_params.learning_rate,
+                logging_steps=self.params.hf_trainer_params.logging_steps,
+                optim=self.params.hf_trainer_params.optim,
+                save_strategy=self.params.hf_trainer_params.save_strategy,
+                output_dir=self.params.hf_trainer_params.output_dir
             ),
             data_collator = DataCollatorForLanguageModeling(self.tokenizer, mlm=False)
         )

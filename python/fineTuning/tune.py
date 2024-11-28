@@ -34,6 +34,7 @@ if __name__ == "__main__":
     model = HFModel(params)
 
     print("Model loaded")
+    exit()
 
     model.load_training_data(train_set)
 
