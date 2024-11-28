@@ -304,7 +304,7 @@ export function getSettingSummary(context: CommandHandlerContext) {
         }
     }
 
-    const names = context.agents.getActiveTranslators();
+    const names = context.agents.getActiveSchemas();
     const ordered = names.filter(
         (name) => name !== context.lastActionSchemaName,
     );

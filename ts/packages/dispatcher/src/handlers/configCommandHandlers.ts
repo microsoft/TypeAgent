@@ -167,9 +167,13 @@ function setStatus(
     status: StatusRecords,
     kind: keyof ChangedAgent,
     name: string,
-    enable: boolean,
+    enable: boolean | undefined | null,
+    active: boolean,
     changes?: ChangedAgent,
 ) {
+    if (enable === null) {
+        return;
+    }
     const defaultStr = getDefaultStr(changes, kind, name);
     if (defaultStr === undefined) {
         return;
@@ -182,7 +186,10 @@ function setStatus(
             status[appAgentName] = {};
         }
     }
-    status[name][kind] = enable ? `✅${defaultStr}` : `❌${defaultStr}`;
+
+    const statusChar =
+        enable === undefined ? "❔" : enable ? (active ? "✅" : "💤") : "❌";
+    status[name][kind] = `${statusChar}${defaultStr}`;
 }
 
 function showAgentStatus(
@@ -209,20 +216,22 @@ function showAgentStatus(
         for (const name of agents.getSchemaNames()) {
             if (showSchema) {
                 const state = agents.isSchemaEnabled(name);
-                setStatus(status, "schemas", name, state, changes);
+                const active = agents.isSchemaActive(name);
+                setStatus(status, "schemas", name, state, active, changes);
             }
 
             if (showAction) {
                 const state = agents.isActionEnabled(name);
-                setStatus(status, "actions", name, state, changes);
+                const active = agents.isActionActive(name);
+                setStatus(status, "actions", name, state, active, changes);
             }
         }
     }
 
     if (showCommand) {
         for (const name of agents.getAppAgentNames()) {
-            const state = agents.isCommandEnabled(name);
-            setStatus(status, "commands", name, state, changes);
+            const state = agents.getCommandEnabledState(name);
+            setStatus(status, "commands", name, state, true, changes);
         }
     }
 

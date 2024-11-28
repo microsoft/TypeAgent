@@ -166,7 +166,7 @@ export function getActionTemplateEditConfig(
 ): TemplateEditConfig {
     const templateData: TemplateData[] = [];
 
-    const translators = context.agents.getActiveTranslators();
+    const translators = context.agents.getActiveSchemas();
     for (const action of actions) {
         templateData.push({
             schema: toTemplate(context, translators, action),
@@ -206,7 +206,7 @@ export async function getSystemTemplateSchema(
         data.actionName = "";
     }
 
-    const translators = systemContext.agents.getActiveTranslators();
+    const translators = systemContext.agents.getActiveSchemas();
     return toTemplate(systemContext, translators, data);
 }
 
