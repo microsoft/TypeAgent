@@ -27,10 +27,6 @@ if __name__ == "__main__":
     # format data into train and eval sets
     train_set, eval_set = dataset.create_train_eval_sets()
 
-    # load model
-    # model_name = "mistralai/Mixtral-8x7b-v0.1"
-    # model_name = "microsoft/Phi-3-mini-128k-instruct"
-    # model_name = "google/gemma-2-2b"
     model = HFModel(params)
 
     print("Model loaded")
