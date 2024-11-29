@@ -9,6 +9,7 @@ export {
     getISODayStartTime,
     getISODayEndTime,
     getUniqueLocalId,
+    parseFuzzyDateString,
 } from "./datetimeHelper.js";
 
 export { createCalendarGraphClient, CalendarClient } from "./calendarClient.js";

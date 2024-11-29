@@ -483,7 +483,12 @@ export async function handleCalendarAction(
                             });
                     }
                 }
-            } else if (actionEvent && actionEvent.day) {
+            } else if (
+                actionEvent &&
+                (actionEvent.day ||
+                    actionEvent.timeRange ||
+                    actionEvent.dayRange)
+            ) {
                 let findQuery = getTimeRangeBasedQuery(actionEvent);
                 if (findQuery !== undefined) {
                     let results: any =
