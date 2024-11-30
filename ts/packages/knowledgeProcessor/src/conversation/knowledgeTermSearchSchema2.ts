@@ -43,7 +43,7 @@ export type ActionTerm = {
 // Search indexes for following search terms: typically single word keywords.
 export type TermFilterV2 = {
     action?: ActionTerm;
-    // Includes any search terms not already in action
+    // Includes any search terms not already in action.
     // skip generic terms like "topic" and "subject"
     // Phrases like 'email address' or 'first name' are a single term
     searchTerms?: SearchTerm[];
@@ -56,7 +56,7 @@ export type GetAnswerWithTermsActionV2 = {
     parameters: {
         // User question, rewritten to incorporate all context.
         question: string;
-        // the question above is translated into filters
+        // the question above is translated into filters. All words must be exactly as in the question
         filters: TermFilterV2[];
     };
 };
