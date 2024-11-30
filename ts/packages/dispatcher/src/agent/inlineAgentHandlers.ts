@@ -58,6 +58,7 @@ import {
     getParameterNames,
     validateAction,
 } from "action-schema";
+import { EnvCommandHandler } from "../handlers/envCommandHnadler.js";
 
 function executeSystemAction(
     action: AppAction,
@@ -352,6 +353,7 @@ const systemHandlers: CommandHandlerTable = {
         random: getRandomCommandHandlers(),
         notify: getNotifyCommandHandlers(),
         token: getTokenCommandHandlers(),
+        env: new EnvCommandHandler(),
     },
 };
 
