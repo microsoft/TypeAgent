@@ -9,6 +9,7 @@ on:
   push:
     branches:
       - main
+      - dev/robgruen/storage_mounting
   workflow_dispatch:
 
 permissions:
