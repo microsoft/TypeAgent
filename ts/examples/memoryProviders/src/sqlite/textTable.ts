@@ -223,6 +223,14 @@ export async function createTextIndex<
          FROM ${textTable.tableName} 
          INNER JOIN ${postingsTable.tableName} 
          ON keyId = stringId          
+         WHERE value = ? 
+         ORDER BY valueId ASC`,
+    );
+    const sql_getFreq = db.prepare(
+        `SELECT count(valueId) as count 
+         FROM ${textTable.tableName} 
+         INNER JOIN ${postingsTable.tableName} 
+         ON keyId = stringId          
          WHERE value = ?`,
     );
 
@@ -236,6 +244,7 @@ export async function createTextIndex<
         ids,
         entries,
         get,
+        getFrequency,
         getById,
         getByIds,
         getId,
@@ -288,6 +297,12 @@ export async function createTextIndex<
 
     function get(text: string): Promise<TSourceId[] | undefined> {
         return Promise.resolve(getSync(text));
+    }
+
+    function getFrequency(text: string): Promise<number> {
+        const row = sql_getFreq.get(text);
+        const count = row ? (row as any).count : 0;
+        return Promise.resolve(count);
     }
 
     function getSync(text: string): TSourceId[] | undefined {
