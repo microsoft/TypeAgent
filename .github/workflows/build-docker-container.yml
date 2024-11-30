@@ -27,7 +27,7 @@ jobs:
           
       - uses: actions/checkout@v4
         with:
-          ref: main
+          ref: dev/robgruen/storage_mounting
 
       - uses: dorny/paths-filter@v3
         id: filter
