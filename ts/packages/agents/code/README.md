@@ -7,15 +7,13 @@ The code dispatcher agent is not enabled by default. It is integrated to work wi
 You can enable all the sub-agents as part of the code agent by running the following commands on the typeagent cli or shell:
 
 ```
-@config action code*
-@config translator code*
+@config agent code*
 ```
 
 Please look at the agent [manifest](./src/codeManifest.json) file to look at other sub-agents that are part of the code agent. The code agent shows how to extend an agent to handle a hierarchical set of actions. For instance if you want to run different commands related to debugging an application on vscode, you will want to run these commands:
 
 ```
-@config translator code.code-debug
-@config action code.code-debug
+@config agent code.code-debug
 ```
 
 ## Trademarks

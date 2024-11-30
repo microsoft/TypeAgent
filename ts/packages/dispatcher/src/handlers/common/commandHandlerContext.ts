@@ -541,6 +541,6 @@ export async function changeContextConfig(
 
 function getActiveTranslators(context: CommandHandlerContext) {
     return Object.fromEntries(
-        context.agents.getActiveTranslators().map((name) => [name, true]),
+        context.agents.getActiveSchemas().map((name) => [name, true]),
     );
 }
