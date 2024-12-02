@@ -541,9 +541,9 @@ export async function getAlbum(
         },
     };
 
-    const artistsUrl = `https://api.spotify.com/v1/album/${encodeURIComponent(id)}`;
+    const albumUrl = `https://api.spotify.com/v1/albums/${encodeURIComponent(id)}`;
     try {
-        const spotifyResult = await axios.get(artistsUrl, config);
+        const spotifyResult = await axios.get(albumUrl, config);
         return spotifyResult.data as SpotifyApi.SingleAlbumResponse;
     } catch (e) {
         translateAxiosError(e);
