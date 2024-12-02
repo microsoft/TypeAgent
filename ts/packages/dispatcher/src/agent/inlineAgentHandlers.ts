@@ -334,7 +334,7 @@ const systemHandlers: CommandHandlerTable = {
         clear: {
             description: "Clear the console",
             async run(context: ActionContext<CommandHandlerContext>) {
-                context.sessionContext.agentContext.requestIO.clear();
+                context.sessionContext.agentContext.clientIO.clear();
             },
         },
         run: new RunCommandScriptHandler(),
@@ -342,9 +342,7 @@ const systemHandlers: CommandHandlerTable = {
             description: "Exit the program",
             async run(context: ActionContext<CommandHandlerContext>) {
                 const systemContext = context.sessionContext.agentContext;
-                systemContext.clientIO
-                    ? systemContext.clientIO.exit()
-                    : process.exit(0);
+                systemContext.clientIO.exit();
             },
         },
         random: getRandomCommandHandlers(),

@@ -5,9 +5,12 @@ import readline from "readline/promises";
 import chalk from "chalk";
 
 export const enum unicodeChar {
+    wood = "🪵",
     robotFace = "🤖",
     constructionSign = "🚧",
     floppyDisk = "💾",
+    stopSign = "🛑",
+    convert = "🔄",
 }
 
 const promptColor = chalk.cyanBright;

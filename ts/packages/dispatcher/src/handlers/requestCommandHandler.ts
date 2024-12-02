@@ -112,18 +112,15 @@ async function confirmTranslation(
 }> {
     const actions = requestAction.actions;
     const systemContext = context.sessionContext.agentContext;
-    if (!systemContext.developerMode) {
+    if (!systemContext.developerMode || systemContext.batchMode) {
         const messages = [];
 
-        if (context.actionIO.type === "text") {
-            // Provide a one line information for text output
-            messages.push(
-                `${source}: ${chalk.blueBright(
-                    ` ${requestAction.toString()}`,
-                )} ${getColorElapsedString(elapsedMs)}`,
-            );
-            messages.push();
-        }
+        messages.push(
+            `${source}: ${chalk.blueBright(
+                ` ${requestAction.toString()}`,
+            )} ${getColorElapsedString(elapsedMs)}`,
+        );
+        messages.push();
 
         const prettyStr = JSON.stringify(actions, undefined, 2);
         messages.push(`${chalk.italic(chalk.cyanBright(prettyStr))}`);
@@ -141,8 +138,9 @@ async function confirmTranslation(
         editPreface,
     );
 
-    const newActions = await systemContext.requestIO.proposeAction(
+    const newActions = await systemContext.clientIO.proposeAction(
         templateSequence,
+        systemContext.requestId,
         DispatcherName,
     );
 
@@ -855,12 +853,17 @@ async function requestExplain(
         const error = explanationResult?.success
             ? undefined
             : explanationResult?.message;
-        context.requestIO.notify("explained", requestId, {
-            time: new Date().toLocaleTimeString(),
-            fromCache,
-            fromUser,
-            error,
-        });
+        context.clientIO.notify(
+            "explained",
+            requestId,
+            {
+                time: new Date().toLocaleTimeString(),
+                fromCache,
+                fromUser,
+                error,
+            },
+            DispatcherName,
+        );
     };
 
     if (fromCache && !fromUser) {
@@ -882,12 +885,17 @@ async function requestExplain(
 
     if (context.explanationAsynchronousMode) {
         processRequestActionP.then(notifyExplained).catch((e) =>
-            context.requestIO.notify("explained", requestId, {
-                error: e.message,
-                fromCache,
-                fromUser,
-                time: new Date().toLocaleTimeString(),
-            }),
+            context.clientIO.notify(
+                "explained",
+                requestId,
+                {
+                    error: e.message,
+                    fromCache,
+                    fromUser,
+                    time: new Date().toLocaleTimeString(),
+                },
+                DispatcherName,
+            ),
         );
     } else {
         console.log(
