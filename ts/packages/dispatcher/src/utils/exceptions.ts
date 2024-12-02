@@ -6,17 +6,7 @@ function throwEnsureError(e: any): never {
         throw new Error(e);
     }
     if (typeof e === "object") {
-        if (e instanceof Error) {
-            throw e;
-        }
-        const mayBeErrorLike = e as any;
-        if (
-            typeof mayBeErrorLike.name === "string" &&
-            typeof mayBeErrorLike.message === "string" &&
-            typeof mayBeErrorLike.stack === "string"
-        ) {
-            throw e;
-        }
+        throw e;
     }
     throw new Error(`Unknown error: ${JSON.stringify(e)}`);
 }

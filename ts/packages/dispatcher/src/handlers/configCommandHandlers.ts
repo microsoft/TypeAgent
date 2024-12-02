@@ -244,12 +244,13 @@ function showAgentStatus(
     }
 
     const getRow = (
+        emoji: string,
         displayName: string,
         schemas?: string,
         actions?: string,
         commands?: string,
     ) => {
-        const displayEntry = [displayName];
+        const displayEntry = [emoji, displayName];
         if (showSchema) {
             displayEntry.push(schemas ?? "");
         }
@@ -263,16 +264,19 @@ function showAgentStatus(
     };
 
     const table: string[][] = [
-        getRow("Agent", "Schemas", "Actions", "Commands"),
+        getRow("", "Agent", "Schemas", "Actions", "Commands"),
     ];
 
     for (const [name, { schemas, actions, commands }] of entries) {
-        const displayName = getAppAgentName(name) !== name ? `  ${name}` : name;
-        table.push(getRow(displayName, schemas, actions, commands));
+        const isAppAgentName = getAppAgentName(name) === name;
+        const displayName = isAppAgentName ? name : `  ${name}`;
+        const emoji = isAppAgentName ? agents.getEmojis()[name] : "";
+        table.push(getRow(emoji, displayName, schemas, actions, commands));
     }
 
     displayResult(table, context);
 }
+
 class AgentToggleCommandHandler implements CommandHandler {
     public readonly description = `Toggle ${AgentToggleDescription[this.toggle]}`;
     public readonly parameters = {
