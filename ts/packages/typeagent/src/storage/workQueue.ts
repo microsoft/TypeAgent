@@ -132,8 +132,8 @@ export async function createWorkQueueFolder(
                 } else {
                     await processor(filePath, startAt + index, total);
                     await moveFileTo(fileName, completedPath);
+                    ++successCount;
                 }
-                ++successCount;
                 return;
             } catch (err) {
                 if (thisQueue.onError) {

@@ -19,12 +19,22 @@ import {
 import { BrowserConnector } from "./browserConnector.mjs";
 import { handleCommerceAction } from "./commerce/actionHandler.mjs";
 import { TabTitleIndex, createTabTitleIndex } from "./tabTitleIndex.mjs";
+import { ChildProcess, fork } from "child_process";
+import { fileURLToPath } from "node:url";
+import path from "node:path";
+
+import {
+  CommandHandlerNoParams,
+  CommandHandlerTable,
+  getCommandInterface,
+} from "@typeagent/agent-sdk/helpers/command";
 
 export function instantiate(): AppAgent {
   return {
     initializeAgentContext: initializeBrowserContext,
     updateAgentContext: updateBrowserContext,
     executeAction: executeBrowserAction,
+    ...getCommandInterface(handlers),
   };
 }
 
@@ -32,6 +42,7 @@ export type BrowserActionContext = {
   webSocket: WebSocket | undefined;
   crossWordState: Crossword | undefined;
   browserConnector: BrowserConnector | undefined;
+  browserProcess: ChildProcess | undefined;
   tabTitleIndex: TabTitleIndex | undefined;
 };
 
@@ -40,6 +51,7 @@ async function initializeBrowserContext(): Promise<BrowserActionContext> {
     webSocket: undefined,
     crossWordState: undefined,
     browserConnector: undefined,
+    browserProcess: undefined,
     tabTitleIndex: undefined,
   };
 }
@@ -47,9 +59,9 @@ async function initializeBrowserContext(): Promise<BrowserActionContext> {
 async function updateBrowserContext(
   enable: boolean,
   context: SessionContext<BrowserActionContext>,
-  translatorName: string,
+  schemaName: string,
 ): Promise<void> {
-  if (translatorName !== "browser") {
+  if (schemaName !== "browser") {
     // REVIEW: ignore sub-translator updates.
     return;
   }
@@ -130,6 +142,11 @@ async function updateBrowserContext(
     }
 
     context.agentContext.webSocket = undefined;
+
+    // shut down service
+    if (context.agentContext.browserProcess) {
+      context.agentContext.browserProcess.kill();
+    }
   }
 }
 
@@ -265,3 +282,91 @@ async function handleTabIndexActions(
   }
   return undefined;
 }
+
+export async function createAutomationBrowser(isVisible?: boolean) {
+  let timeoutHandle: NodeJS.Timeout;
+
+  const timeoutPromise = new Promise<undefined>((_resolve, reject) => {
+    timeoutHandle = setTimeout(() => reject(undefined), 10000);
+  });
+
+  const hiddenWindowPromise = new Promise<ChildProcess | undefined>(
+    (resolve, reject) => {
+      try {
+        const expressService = fileURLToPath(
+          new URL(path.join("..", "./puppeteer/index.mjs"), import.meta.url),
+        );
+
+        const childProcess = fork(expressService, [
+          isVisible ? "true" : "false",
+        ]);
+
+        childProcess.on("message", function (message) {
+          if (message === "Success") {
+            resolve(childProcess);
+          } else if (message === "Failure") {
+            resolve(undefined);
+          }
+        });
+
+        childProcess.on("exit", (code) => {
+          console.log("Browser instance exited with code:", code);
+        });
+      } catch (e: any) {
+        console.error(e);
+        resolve(undefined);
+      }
+    },
+  );
+
+  return Promise.race([hiddenWindowPromise, timeoutPromise]).then((result) => {
+    clearTimeout(timeoutHandle);
+    return result;
+  });
+}
+
+class OpenStandaloneBrowserHandler implements CommandHandlerNoParams {
+  public readonly description = "Open a standalone browser instance";
+  public async run(context: ActionContext<BrowserActionContext>) {
+    if (context.sessionContext.agentContext.browserProcess) {
+      context.sessionContext.agentContext.browserProcess.kill();
+    }
+    context.sessionContext.agentContext.browserProcess =
+      await createAutomationBrowser(true);
+  }
+}
+
+class OpenHiddenBrowserHandler implements CommandHandlerNoParams {
+  public readonly description = "Open a hidden/headless browser instance";
+  public async run(context: ActionContext<BrowserActionContext>) {
+    if (context.sessionContext.agentContext.browserProcess) {
+      context.sessionContext.agentContext.browserProcess.kill();
+    }
+    context.sessionContext.agentContext.browserProcess =
+      await createAutomationBrowser(false);
+  }
+}
+
+class CloseBrowserHandler implements CommandHandlerNoParams {
+  public readonly description = "Close the new Web Content view";
+  public async run(context: ActionContext<BrowserActionContext>) {
+    if (context.sessionContext.agentContext.browserProcess) {
+      context.sessionContext.agentContext.browserProcess.kill();
+    }
+  }
+}
+
+export const handlers: CommandHandlerTable = {
+  description: "Browwser App Agent Commands",
+  commands: {
+    launch: {
+      description: "Launch a browser session",
+      defaultSubCommand: "standalone",
+      commands: {
+        hidden: new OpenHiddenBrowserHandler(),
+        standalone: new OpenStandaloneBrowserHandler(),
+      },
+    },
+    close: new CloseBrowserHandler(),
+  },
+};

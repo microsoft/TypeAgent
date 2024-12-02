@@ -11,7 +11,7 @@ import {
 } from "agent-cache";
 import {
     getCacheFactory,
-    getBuiltinTranslatorNames,
+    getBuiltinSchemaNames,
     initializeCommandHandlerContext,
     closeCommandHandlerContext,
 } from "agent-dispatcher/internal";
@@ -37,7 +37,7 @@ export default class ExplainCommand extends Command {
     static flags = {
         translator: Flags.string({
             description: "Translator names",
-            options: getBuiltinTranslatorNames(),
+            options: getBuiltinSchemaNames(),
             multiple: true,
         }),
         explainer: Flags.string({
@@ -53,6 +53,12 @@ export default class ExplainCommand extends Command {
             description: "Number of concurrent requests",
             default: 5,
         }),
+        filter: Flags.string({
+            description: "Filter for the explanation",
+            options: ["refvalue", "reflist"],
+            multiple: true,
+            required: false,
+        }),
     };
 
     static description = "Explain a request and action";
@@ -62,15 +68,18 @@ export default class ExplainCommand extends Command {
 
     async run(): Promise<void> {
         const { args, flags } = await this.parse(ExplainCommand);
-        const translators = flags.translator
+        const schemas = flags.translator
             ? Object.fromEntries(flags.translator.map((name) => [name, true]))
             : undefined;
         const context = await initializeCommandHandlerContext(
             "cli run explain",
             {
-                translators,
-                actions: {}, // We don't need any actions
-                explainer: { name: flags.explainer },
+                schemas,
+                actions: null, // We don't need any actions
+                commands: null,
+                explainer: {
+                    name: flags.explainer,
+                },
                 cache: { enabled: false },
                 clientIO: flags.repeat > 1 ? null : undefined,
             },
@@ -84,6 +93,10 @@ export default class ExplainCommand extends Command {
             ? RequestAction.fromString(args.request)
             : testRequest;
 
+        const options = {
+            valueInRequest: flags.filter?.includes("refvalue") ?? false,
+            noReferences: flags.filter?.includes("reflist") ?? false,
+        };
         console.log(chalk.grey(`Generate explanation for '${requestAction}'`));
         if (flags.repeat > 1) {
             console.log(
@@ -104,7 +117,7 @@ export default class ExplainCommand extends Command {
                             await context.agentCache.processRequestAction(
                                 requestAction,
                                 false,
-                                { concurrent: true },
+                                { concurrent: true, ...options },
                             );
                         console.log(
                             result.explanationResult.explanation.success
@@ -147,13 +160,11 @@ export default class ExplainCommand extends Command {
             const result = await context.agentCache.processRequestAction(
                 requestAction,
                 false,
+                options,
             );
 
             printProcessRequestActionResult(result);
         }
         await closeCommandHandlerContext(context);
-
-        // Some background network (like monogo) might keep the process live, exit explicitly.
-        process.exit(0);
     }
 }

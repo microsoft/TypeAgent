@@ -14,9 +14,9 @@ export type AppAgentManifest = {
     emojiChar: string;
     description: string;
     commandDefaultEnabled?: boolean;
-} & TranslatorDefinition;
+} & ActionManifest;
 
-export type SchemaDefinition = {
+export type SchemaManifest = {
     description: string;
     schemaType: string;
     schemaFile: string;
@@ -25,14 +25,14 @@ export type SchemaDefinition = {
     streamingActions?: string[];
 };
 
-export type TranslatorDefinition = {
+export type ActionManifest = {
     defaultEnabled?: boolean;
     translationDefaultEnabled?: boolean;
     actionDefaultEnabled?: boolean;
     transient?: boolean; // whether the translator is transient, default is false
 
-    schema?: SchemaDefinition;
-    subTranslators?: { [key: string]: TranslatorDefinition };
+    schema?: SchemaManifest;
+    subActionManifests?: { [key: string]: ActionManifest };
 };
 
 //==============================================================================
@@ -45,7 +45,7 @@ export interface AppAgent extends Partial<AppAgentCommandInterface> {
     updateAgentContext?(
         enable: boolean,
         context: SessionContext,
-        translatorName: string, // for sub-translators
+        schemaName: string, // for sub-action schemas
     ): Promise<void>;
     closeAgentContext?(context: SessionContext): Promise<void>;
 
@@ -120,6 +120,7 @@ export type StorageEncoding = "utf8" | "base64";
 
 export type StorageListOptions = {
     dirs?: boolean;
+    fullPath?: boolean;
 };
 
 export interface TokenCachePersistence {

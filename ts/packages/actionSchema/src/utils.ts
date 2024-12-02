@@ -1,18 +1,36 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ActionParamType, ActionSchema } from "./type.js";
+import { SchemaType, ActionSchemaTypeDefinition } from "./type.js";
 
-export function getParameterType(actionInfo: ActionSchema, name: string) {
+function resolveReference(type?: SchemaType): SchemaType | undefined {
+    if (type === undefined) {
+        return undefined;
+    }
+    let curr = type;
+    while (curr.type === "type-reference") {
+        if (curr.definition === undefined) {
+            return undefined;
+        }
+        curr = curr.definition.type;
+    }
+    return curr;
+}
+
+// Unresolved type references are ignored.
+// Type Union is not supported.
+export function getParameterType(
+    actionType: ActionSchemaTypeDefinition,
+    name: string,
+) {
     const propertyNames = name.split(".");
     if (propertyNames.shift() !== "parameters") {
         return undefined;
     }
-    let curr: ActionParamType | undefined = actionInfo.parameters;
+    let curr = resolveReference(actionType.type.fields.parameters?.type);
     if (curr === undefined) {
         return undefined;
     }
-
     for (const propertyName of propertyNames) {
         const maybeIndex = parseInt(propertyName);
         if (maybeIndex.toString() == propertyName) {
@@ -25,24 +43,28 @@ export function getParameterType(actionInfo: ActionSchema, name: string) {
                 return undefined;
             }
             curr = curr.fields[propertyName]?.type;
-            if (curr === undefined) {
-                return undefined;
-            }
+        }
+
+        // TODO: doesn't work on union types yet.
+        curr = resolveReference(curr);
+        if (curr === undefined) {
+            return undefined;
         }
     }
     return curr;
 }
 
+// Unresolved type references are ignored.
+// Type Union is not supported.
 export function getParameterNames(
-    actionInfo: ActionSchema,
+    actionType: ActionSchemaTypeDefinition,
     getCurrentValue: (name: string) => any,
 ) {
-    if (actionInfo.parameters === undefined) {
+    const parameters = actionType.type.fields.parameters?.type;
+    if (parameters === undefined) {
         return [];
     }
-    const pending: Array<[string, ActionParamType]> = [
-        ["parameters", actionInfo.parameters],
-    ];
+    const pending: Array<[string, SchemaType]> = [["parameters", parameters]];
     const result: string[] = [];
     while (true) {
         const next = pending.pop();
@@ -52,6 +74,14 @@ export function getParameterNames(
 
         const [name, field] = next;
         switch (field.type) {
+            case "type-union":
+                // TODO: Implement this case
+                break;
+            case "type-reference":
+                if (field.definition) {
+                    pending.push([name, field.definition.type]);
+                }
+                break;
             case "object":
                 for (const [key, value] of Object.entries(field.fields)) {
                     pending.push([`${name}.${key}`, value.type]);

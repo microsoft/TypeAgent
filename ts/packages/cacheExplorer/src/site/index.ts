@@ -192,7 +192,7 @@ function createConstructionView(cache: ConstructionCache, namespace: string) {
                   const partElem = document.createElement("td");
                   constructionElem.appendChild(partElem);
                   partElem.innerText = `${p.toString()}${
-                      p.wildcard ? "(w)" : ""
+                      p.wildcardMode ? "(w)" : ""
                   }`;
                   return { part: p, elem: partElem };
               });

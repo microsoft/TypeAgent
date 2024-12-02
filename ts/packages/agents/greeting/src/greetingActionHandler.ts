@@ -113,10 +113,8 @@ export class GreetingCommandHandler implements CommandHandlerNoParams {
         let completionSettings: CompletionSettings = {
             temperature: 1.0,
             max_tokens: 1000, // Max response tokens
+            response_format: { type: "json_object" }, // createChatModel will remove it if the model doesn't support it
         };
-        if (apiSettings?.supportsResponseFormat) {
-            completionSettings.response_format = { type: "json_object" };
-        }
         const chatModel = openai.createChatModel(
             apiSettings,
             completionSettings,

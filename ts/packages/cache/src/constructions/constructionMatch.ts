@@ -14,7 +14,7 @@ import {
     MatchedValueTranslator,
     matchedValues,
 } from "./constructionValue.js";
-import { ConstructionPart } from "./constructions.js";
+import { ConstructionPart, WildcardMode } from "./constructions.js";
 
 const wildcardRegex = new RegExp(
     `^${spaceAndPunctuationRegexStr}*([^\\s].*?)${spaceAndPunctuationRegexStr}*$`,
@@ -153,11 +153,13 @@ function finishMatchParts(
         // Matched
         if (state.pendingWildcard !== -1) {
             const wildcardText = m.wildcard!;
+            const wildpart = parts[state.matchedStart.length - 1];
             if (
                 !captureWildcardMatch(
                     state,
                     wildcardText,
-                    config.rejectReferences,
+                    config.rejectReferences &&
+                        wildpart.wildcardMode !== WildcardMode.Checked,
                 )
             ) {
                 return false;
@@ -250,7 +252,7 @@ function backtrack(
     if (config.enableWildcard) {
         // if the part we failed to match could be wildcard, queue up the wildcard match for later
         const failedPart = parts[state.matchedStart.length];
-        if (failedPart && failedPart.wildcard) {
+        if (failedPart && failedPart.wildcardMode) {
             // Do not queue up consecutive wildcard.
             if (state.pendingWildcard === -1) {
                 wildcardQueue.push(cloneMatchState(state));
@@ -335,7 +337,7 @@ function backtrack(
         }
 
         // Give up on the current backtrackPart, queue up wildcard match for later if enabled.
-        if (config.enableWildcard && backtrackPart.wildcard) {
+        if (config.enableWildcard && backtrackPart.wildcardMode) {
             // queue up wildcard match
             wildcardQueue.push(cloneMatchState(state));
         }

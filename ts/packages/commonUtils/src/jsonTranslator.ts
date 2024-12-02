@@ -9,6 +9,7 @@ import {
     Result,
     success,
     TypeChatJsonTranslator,
+    TypeChatJsonValidator,
     TypeChatLanguageModel,
 } from "typechat";
 import { createTypeScriptJsonValidator } from "typechat/ts";
@@ -21,6 +22,12 @@ import {
     IncrementalJsonValueCallBack,
 } from "./incrementalJsonParser.js";
 import { CachedImageWithDetails, extractRelevantExifTags } from "./image.js";
+import { apiSettingsFromEnv } from "../../aiclient/dist/openai.js";
+import {
+    exifGPSTagToLatLong,
+    findNearbyPointsOfInterest,
+    reverseGeocode,
+} from "./location.js";
 
 export type InlineTranslatorSchemaDef = {
     kind: "inline";
@@ -151,7 +158,7 @@ export function enableJsonTranslatorStreaming<T extends object>(
         cb?: IncrementalJsonValueCallBack,
         attachments?: CachedImageWithDetails[],
     ) => {
-        attachAttachments(attachments, promptPreamble);
+        await attachAttachments(attachments, promptPreamble);
         return originalTranslate(
             request,
             initializeStreamingParser(promptPreamble, cb),
@@ -161,7 +168,7 @@ export function enableJsonTranslatorStreaming<T extends object>(
     return translatorWithStreaming;
 }
 
-function attachAttachments(
+async function attachAttachments(
     attachments: CachedImageWithDetails[] | undefined,
     promptPreamble?: string | PromptSection[],
 ) {
@@ -187,11 +194,45 @@ function attachAttachments(
                         type: "text",
                         text: `Image EXIF tags: \n${extractRelevantExifTags(attachments![i].exifTags)}`,
                     },
+                    {
+                        type: "text",
+                        text: `Nearby Points of Interest: \n${JSON.stringify(
+                            await findNearbyPointsOfInterest(
+                                exifGPSTagToLatLong(
+                                    attachments![i].exifTags.GPSLatitude,
+                                    attachments![i].exifTags.GPSLatitudeRef,
+                                    attachments![i].exifTags.GPSLongitude,
+                                    attachments![i].exifTags.GPSLongitudeRef,
+                                ),
+                                apiSettingsFromEnv(),
+                            ),
+                        )}`,
+                    },
+                    {
+                        type: "text",
+                        text: `Reverse Geocode Results: \n${JSON.stringify(
+                            await reverseGeocode(
+                                exifGPSTagToLatLong(
+                                    attachments![i].exifTags.GPSLatitude,
+                                    attachments![i].exifTags.GPSLatitudeRef,
+                                    attachments![i].exifTags.GPSLongitude,
+                                    attachments![i].exifTags.GPSLongitudeRef,
+                                ),
+                                apiSettingsFromEnv(),
+                            ),
+                        )}`,
+                    },
                 ],
             });
         }
     }
 }
+
+export type JsonTranslatorOptions<T extends object> = {
+    constraintsValidator?: TypeChatConstraintsValidator<T> | undefined; // Optional
+    instructions?: PromptSection[] | undefined; // Instructions before the per request preamble
+    model?: string | TypeChatLanguageModel | undefined; // optional
+};
 
 /**
  *
@@ -205,10 +246,27 @@ function attachAttachments(
 export function createJsonTranslatorFromSchemaDef<T extends object>(
     typeName: string,
     schemas: string | TranslatorSchemaDef[],
-    constraintsValidator?: TypeChatConstraintsValidator<T>, // Optional
-    instructions?: PromptSection[], // Instructions before the per request preamble
-    model?: string | TypeChatLanguageModel, // optional
+    options?: JsonTranslatorOptions<T>,
 ) {
+    const schema = Array.isArray(schemas)
+        ? composeTranslatorSchemas(typeName, schemas)
+        : schemas;
+
+    const validator = createTypeScriptJsonValidator<T>(schema, typeName);
+
+    return createJsonTranslatorWithValidator(
+        typeName.toLowerCase(),
+        validator,
+        options,
+    );
+}
+
+export function createJsonTranslatorWithValidator<T extends object>(
+    name: string,
+    validator: TypeChatJsonValidator<T>,
+    options?: JsonTranslatorOptions<T>,
+) {
+    let model = options?.model;
     if (typeof model !== "object") {
         model = ai.createChatModel(
             model,
@@ -216,16 +274,12 @@ export function createJsonTranslatorFromSchemaDef<T extends object>(
                 response_format: { type: "json_object" },
             },
             undefined,
-            ["translator", typeName.toLowerCase()],
+            ["translator", name],
         );
     }
 
-    const debugPrompt = registerDebug(
-        `typeagent:translate:${typeName.toLowerCase()}:prompt`,
-    );
-    const debugResult = registerDebug(
-        `typeagent:translate:${typeName.toLowerCase()}:result`,
-    );
+    const debugPrompt = registerDebug(`typeagent:translate:${name}:prompt`);
+    const debugResult = registerDebug(`typeagent:translate:${name}:result`);
     const complete = model.complete.bind(model);
     model.complete = async (prompt: string | PromptSection[]) => {
         debugPrompt(prompt);
@@ -240,19 +294,17 @@ export function createJsonTranslatorFromSchemaDef<T extends object>(
         };
     }
 
-    const schema = Array.isArray(schemas)
-        ? composeTranslatorSchemas(typeName, schemas)
-        : schemas;
-
-    const validator = createTypeScriptJsonValidator<T>(schema, typeName);
     const translator = createJsonTranslator<T>(model, validator);
 
     translator.stripNulls = true;
+
+    const constraintsValidator = options?.constraintsValidator;
     if (constraintsValidator) {
         translator.validateInstance = constraintsValidator.validateConstraints;
     }
 
     const innerFn = translator.translate;
+    const instructions = options?.instructions;
     if (!instructions) {
         translator.translate = async (
             request: string,
@@ -318,16 +370,12 @@ export function getTranslationSchemaText(
 export function createJsonTranslatorFromFile<T extends object>(
     typeName: string,
     schemaFiles: string | string[],
-    constraintsValidator?: TypeChatConstraintsValidator<T>, // Optional
-    instructions?: PromptSection[],
-    model?: string | TypeChatLanguageModel, // optional
+    options?: JsonTranslatorOptions<T>,
 ) {
     return createJsonTranslatorFromSchemaDef<T>(
         typeName,
         getTranslationSchemaText(schemaFiles),
-        constraintsValidator,
-        instructions,
-        model,
+        options,
     );
 }
 

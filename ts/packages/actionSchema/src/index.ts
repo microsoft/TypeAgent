@@ -2,15 +2,32 @@
 // Licensed under the MIT License.
 
 export {
-    ActionSchema,
-    ActionParamType,
-    ActionParamArray,
-    ActionParamObject,
+    SchemaType as ActionParamType,
+    SchemaTypeArray as ActionParamArray,
+    SchemaTypeObject as ActionParamObject,
+    ActionSchemaTypeDefinition,
+    ActionSchemaEntryTypeDefinition,
+    ActionSchemaGroup,
+    ActionSchemaFile,
+    ActionSchemaObject,
+    ActionSchemaUnion,
 } from "./type.js";
 
-export { parseActionSchemaFile } from "./parser.js";
-export { generateSchema } from "./generator.js";
+export { parseActionSchemaFile, parseActionSchemaSource } from "./parser.js";
+export {
+    GenerateSchemaOptions,
+    generateActionSchema,
+    generateSchemaTypeDefinition,
+} from "./generator.js";
 export { validateAction } from "./validate.js";
 export { getParameterType, getParameterNames } from "./utils.js";
 
 export { NodeType, SchemaParser, ISymbol, SymbolNode } from "./schemaParser.js";
+
+export * as ActionSchemaCreator from "./creator.js";
+
+export {
+    ActionSchemaFileJSON,
+    toJSONActionSchemaFile,
+    fromJSONActionSchemaFile,
+} from "./serialize.js";

@@ -46,13 +46,19 @@ public class App
     public Command Command_ExportAll()
     {
         Command command = new Command("exportAll");
-        var dirPath = new Option<string>("--dirPath", "Output path");
+        var dirPath = new Option<string>("--destDir", "Output path");
+        var maxMessages = new Option<int>("--maxMessages", () => -1, "Max messages to export");
+        var bucket = new Option<bool>("--bucket", () => true, "Bucket messages by latest body size");
+        var includeJson = new Option<bool>("--includeJson", () => true, "Also export to Json");
         command.AddOption(dirPath);
-        command.SetHandler<string>((string dirPath) =>
+        command.AddOption(maxMessages);
+        command.AddOption(bucket);
+        command.AddOption(includeJson);
+        command.SetHandler<string, int, bool, bool>((string dirPath, int maxMessages, bool bucket, bool includeJson) =>
         {
-            _exporter.ExportAllMsgBySize(dirPath);
+            _exporter.ExportAll(dirPath, maxMessages, bucket, includeJson);
 
-        }, dirPath);
+        }, dirPath, maxMessages, bucket, includeJson);
 
         return command;
     }
@@ -117,7 +123,10 @@ public class App
             {
                 args[0] = args[0][1..];
                 var result = app._commands.Invoke(args);
-                Console.WriteLine(result);
+                if (result != 0)
+                {
+                    Console.WriteLine($"Command returned {result}");
+                }
             }
             args = ConsoleEx.GetInput("📬>");
         }

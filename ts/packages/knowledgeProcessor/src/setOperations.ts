@@ -386,17 +386,37 @@ export interface HitTable<T = any> {
     ): void;
     keys(): IterableIterator<any>;
     values(): IterableIterator<ScoredItem<T>>;
-
+    /**
+     * Return all hits sorted by score
+     */
     byHighestScore(): ScoredItem<T>[];
+    /**
+     * Return top scoring hits
+     */
     getTop(): T[];
+    /**
+     * Return hits with the 'k' hightest scores
+     * getTopK(3) will return all items whose scores put them in the top 3
+     * @param k k highest scores
+     */
     getTopK(k: number): T[];
 
     getByKey(key: any): ScoredItem<T> | undefined;
     set(key: any, value: ScoredItem<T>): void;
 
     clear(): void;
+
+    roundScores(decimalPlace: number): void;
 }
 
+/**
+ * Tracks the # of hits on an object of arbitrary type T
+ * Internally uses the Map object
+ * @param keyAccessor (optional) By default, when T is a non-primitive type, the map object uses object identity as the 'key'.
+ * This is not always what we want, as we may want to treat different object with different identities as the same..
+ * @param fixedScore (optional) Overrides an supplied scores. E.g. set this to 1.0 to get a hit *counter*
+ * @returns
+ */
 export function createHitTable<T>(
     keyAccessor?: (value: T) => any,
     fixedScore?: number | undefined,
@@ -418,8 +438,8 @@ export function createHitTable<T>(
         getTop,
         getTopK,
         getByKey,
-
         clear: () => map.clear(),
+        roundScores,
     };
 
     function get(value: T): ScoredItem<T> | undefined {
@@ -483,10 +503,15 @@ export function createHitTable<T>(
             return [];
         }
         // Descending order
-        return [...map.values()].sort((x, y) => y.score - x.score);
+        let valuesByScore = [...map.values()].sort((x, y) => y.score - x.score);
+        return valuesByScore;
     }
 
     // TODO: Optimize.
+    /**
+     * Get the top scoring items
+     * @returns
+     */
     function getTop(): T[] {
         if (map.size === 0) {
             return [];
@@ -502,6 +527,11 @@ export function createHitTable<T>(
     }
 
     // TODO: Optimize.
+    /**
+     * Return the items with the 'k' highest scores
+     * @param k
+     * @returns
+     */
     function getTopK(k: number): T[] {
         const topItems = byHighestScore();
         if (k === map.size) {
@@ -535,5 +565,15 @@ export function createHitTable<T>(
 
     function getKey(value: T): any {
         return keyAccessor ? keyAccessor(value) : value;
+    }
+
+    function roundScores(decimalPlace: number): void {
+        let roundUnit = Math.pow(10, decimalPlace);
+        if (roundUnit > 0) {
+            for (const scoredItem of map.values()) {
+                scoredItem.score =
+                    Math.round(scoredItem.score * roundUnit) / roundUnit;
+            }
+        }
     }
 }

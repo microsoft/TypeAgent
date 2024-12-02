@@ -56,7 +56,8 @@ public class MailStats
         Console.WriteLine();
         if (stats.Values.Count > 0)
         {
-            ConsoleEx.WriteLineColor(ConsoleColor.Cyan, $"Median: {stats.Median() / 1024} K, Average: {stats.Values.Average() / 1024} K");
+            double median = ((double) stats.Median()) / 1024;
+            ConsoleEx.WriteLineColor(ConsoleColor.Cyan, $"Median: {Math.Round(median, 2)} K, Average: {stats.Values.Average() / 1024} K");
         }
         return (stats.Values.Count, histogram);
     }

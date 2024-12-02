@@ -170,16 +170,6 @@ export interface Conversation<
     ): Promise<void>;
 }
 
-export type ExtractedKnowledgeIds<
-    TopicId = any,
-    TEntityId = any,
-    TActionId = any,
-> = {
-    topicIds?: TopicId[];
-    entityIds?: TEntityId[] | undefined;
-    actionIds?: TActionId[] | undefined;
-};
-
 /**
  * Create or load a persistent conversation, using the given rootPath as the storage root.
  * - The conversation is stored in folders below the given root path
@@ -629,12 +619,27 @@ export async function createConversation(
         ]);
         const results = createSearchResults();
         for (let filter of filters) {
-            const tasks = [
+            let topLevelTopicMatches =
+                options.topic &&
+                options.topic.useHighLevel &&
+                options.topicLevel === 1
+                    ? await matchTopLevelTopics(
+                          options.topicLevel,
+                          filter,
+                          options.topic,
+                      )
+                    : undefined;
+
+            const searchTasks = [
                 options.action
                     ? await actionIndex.searchTermsV2(filter, options.action)
                     : Promise.resolve(undefined),
                 options.topic
-                    ? topicIndex.searchTermsV2(filter, options.topic)
+                    ? topicIndex.searchTermsV2(
+                          filter,
+                          options.topic,
+                          topLevelTopicMatches,
+                      )
                     : Promise.resolve(undefined),
                 options.entity
                     ? entityIndex.searchTermsV2(
@@ -647,7 +652,7 @@ export async function createConversation(
                     : Promise.resolve(undefined),
             ];
             const [actionResult, topicResult, entityResult] =
-                await Promise.all(tasks);
+                await Promise.all(searchTasks);
             if (topicResult) {
                 results.topics.push(topicResult);
             }
@@ -667,6 +672,19 @@ export async function createConversation(
             );
         }
         return results;
+    }
+
+    async function matchTopLevelTopics(
+        level: number,
+        filter: TermFilterV2,
+        options: TopicSearchOptions,
+    ): Promise<TopicId[] | undefined> {
+        const topicIndex = await getTopicsIndex(level + 1);
+        const result = await topicIndex.searchTermsV2(filter, options);
+        if (result.topicIds && result.topicIds.length > 0) {
+            return await topicIndex.getSourceIds(result.topicIds);
+        }
+        return undefined;
     }
 
     async function searchMessages(
@@ -785,6 +803,16 @@ export async function createConversation(
         return createSearchResponse<MessageId, TopicId, EntityId>();
     }
 }
+
+export type ExtractedKnowledgeIds<
+    TopicId = any,
+    TEntityId = any,
+    TActionId = any,
+> = {
+    topicIds?: TopicId[];
+    entityIds?: TEntityId[] | undefined;
+    actionIds?: TActionId[] | undefined;
+};
 
 export interface ConversationTopicMerger<TTopicId = any>
     extends TopicMerger<TTopicId> {

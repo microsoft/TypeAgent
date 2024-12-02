@@ -15,7 +15,9 @@ import {
     parseNamedArguments,
     runConsole,
     getInteractiveIO,
+    StopWatch,
     NamedArgs,
+    millisecondsToString,
 } from "interactive-app";
 import {
     asyncArray,
@@ -30,6 +32,7 @@ import { timestampBlocks } from "./importer.js";
 import path from "path";
 import fs from "fs";
 import {
+    argPause,
     argConcurrency,
     argDestFile,
     argMinScore,
@@ -41,6 +44,7 @@ import { pathToFileURL } from "url";
 
 export type Models = {
     chatModel: ChatModel;
+    answerModel: ChatModel;
     embeddingModel: TextEmbeddingModel;
     embeddingModelSmall?: TextEmbeddingModel | undefined;
 };
@@ -51,7 +55,7 @@ export type ChatContext = {
     printer: ChatMemoryPrinter;
     models: Models;
     maxCharsPerChunk: number;
-    stats: knowLib.IndexingStats;
+    stats?: knowLib.IndexingStats | undefined;
     topicWindowSize: number;
     searchConcurrency: number;
     minScore: number;
@@ -96,15 +100,20 @@ function getReservedConversation(
 }
 
 export function createModels(): Models {
-    const embeddingSettings = openai.apiSettingsFromEnv(
+    const chatModelSettings = openai.apiSettingsFromEnv(openai.ModelType.Chat);
+    chatModelSettings.retryPauseMs = 10000;
+    const embeddingModelSettings = openai.apiSettingsFromEnv(
         openai.ModelType.Embedding,
     );
-    embeddingSettings.retryPauseMs = 25 * 1000;
+    embeddingModelSettings.retryPauseMs = 25 * 1000;
 
     const models: Models = {
-        chatModel: openai.createChatModelDefault("chatMemory"),
+        chatModel: openai.createJsonChatModel(chatModelSettings, [
+            "chatMemory",
+        ]),
+        answerModel: openai.createChatModel(),
         embeddingModel: knowLib.createEmbeddingCache(
-            openai.createEmbeddingModel(embeddingSettings),
+            openai.createEmbeddingModel(embeddingModelSettings),
             1024,
         ),
         /*
@@ -127,6 +136,7 @@ export async function createChatMemoryContext(
 
     const models: Models = createModels();
     models.chatModel.completionCallback = completionCallback;
+    models.answerModel.completionCallback = completionCallback;
 
     const conversationName = ReservedConversationNames.transcript;
     const conversationSettings =
@@ -141,20 +151,20 @@ export async function createChatMemoryContext(
         await knowLib.conversation.createConversationManager(
             {
                 model: models.chatModel,
+                answerModel: models.answerModel,
             },
             conversationName,
             conversationPath,
             false,
             conversation,
         );
-    const entityTopK = 16;
+    const entityTopK = 32;
     const actionTopK = 16;
     const context: ChatContext = {
         storePath,
         statsPath,
         printer: new ChatMemoryPrinter(getInteractiveIO()),
         models,
-        stats: knowLib.createIndexingStats(),
         maxCharsPerChunk: 4096,
         topicWindowSize: 8,
         searchConcurrency: 2,
@@ -210,6 +220,7 @@ export async function createSearchMemory(
     const memory = await conversation.createConversationManager(
         {
             model: context.models.chatModel,
+            answerModel: context.models.answerModel,
         },
         conversationName,
         context.storePath,
@@ -241,7 +252,10 @@ export async function loadConversation(
         context.conversationName = name;
         context.conversationManager =
             await conversation.createConversationManager(
-                { model: context.models.chatModel },
+                {
+                    model: context.models.chatModel,
+                    answerModel: context.models.answerModel,
+                },
                 name,
                 conversationPath,
                 false,
@@ -267,7 +281,7 @@ export async function loadConversation(
 
 export async function runChatMemory(): Promise<void> {
     let context = await createChatMemoryContext(captureTokenStats);
-    let showTokenStats = true;
+    let showTokenStats = false;
     let printer = context.printer;
     const commands: Record<string, CommandHandler> = {
         importPlay,
@@ -277,6 +291,8 @@ export async function runChatMemory(): Promise<void> {
         history,
         replay,
         knowledge,
+        extract,
+        compare,
         buildIndex,
         topics,
         entities,
@@ -321,10 +337,14 @@ export async function runChatMemory(): Promise<void> {
     }
 
     function captureTokenStats(req: any, response: any): void {
-        context.stats.updateCurrentTokenStats(response.usage);
+        if (context.stats) {
+            context.stats.updateCurrentTokenStats(response.usage);
+        }
         if (showTokenStats) {
             printer.writeCompletionStats(response.usage);
             printer.writeLine();
+        } else {
+            printer.write(".");
         }
     }
     //--------------------
@@ -511,6 +531,260 @@ export async function runChatMemory(): Promise<void> {
             }
         }
         printer.writeLine(context.conversationName);
+    }
+    interface IMessageData {
+        content: string;
+        id?: string;
+        section_title?: string;
+        speaker?: string;
+    }
+
+    interface IExtractedData {
+        knowledge: knowLib.conversation.KnowledgeResponse;
+        message: string;
+        id?: string | undefined;
+        description?: string | undefined;
+        loss?: number | undefined;
+        simpleLoss?: number | undefined;
+        modelName?: string | undefined;
+        refModelName?: string | undefined;
+    }
+
+    function extractDef(): CommandMetadata {
+        return {
+            description:
+                "Extract knowledge from the messages in the current conversation",
+            options: {
+                maxTurns: argNum("Number of turns to run"),
+                pause: argPause(),
+                logFile: argDestFile("Log file for extraction data"),
+                inFile: argSourceFile("Input file with messages"),
+                testLoss: argBool("Compute loss for each message"),
+            },
+        };
+    }
+    commands.extract.metadata = extractDef();
+    async function extract(args: string[], _io: InteractiveIo) {
+        const namedArgs = parseNamedArguments(args, knowledgeDef());
+        const logFile = namedArgs.logFile as string;
+        const inFile = namedArgs.inFile as string;
+        if (!logFile || !inFile) {
+            printer.writeError("Missing logFile or inFile");
+            return;
+        }
+        const fullInPath = path.join(context.storePath, inFile);
+        const inData = JSON.parse(
+            fs.readFileSync(fullInPath, "utf8"),
+        ) as IMessageData[];
+        // open log file for writing
+        const logPath = path.join(context.storePath, logFile);
+        const logStream = fs.createWriteStream(logPath);
+        const chatModelSettings = openai.apiSettingsFromEnv(
+            openai.ModelType.Chat,
+            undefined,
+            "GPT_4_O",
+        );
+        chatModelSettings.retryPauseMs = 10000;
+        const chatModel = openai.createJsonChatModel(chatModelSettings, [
+            "chatExtractor",
+        ]);
+        const extractor = conversation.createKnowledgeExtractor(chatModel, {
+            maxContextLength: context.maxCharsPerChunk,
+            mergeActionKnowledge: false,
+        });
+        const extractedData = [] as IExtractedData[];
+        // extract from each record in inData and write to the log file
+        let count = 0;
+        const maxTurns = namedArgs.maxTurns;
+        const testLoss = namedArgs.testLoss;
+        const clock = new StopWatch();
+        let totalElapsed = 0;
+        clock.start();
+        for (const record of inData) {
+            let msg = record.content;
+            if (record.speaker) {
+                msg = `${record.speaker}: ${msg}`;
+            }
+            let knowledge: knowLib.conversation.KnowledgeResponse | undefined;
+            knowledge = await extractor.extract(msg).catch((err) => {
+                printer.writeError(`Error extracting knowledge: ${err}`);
+                return undefined;
+            });
+
+            if (knowledge) {
+                const data = {
+                    knowledge,
+                    message: msg,
+                    id: record.id,
+                    description: record.section_title,
+                };
+                if (testLoss) {
+                    const loss = await conversation
+                        .knowledgeResponseLoss(
+                            knowledge,
+                            knowledge,
+                            context.models.embeddingModel,
+                        )
+                        .catch((err) => {
+                            printer.writeError(`Error computing loss: ${err}`);
+                            return 0;
+                        });
+                    const simpleLoss =
+                        await conversation.simpleKnowledgeResponseLoss(
+                            knowledge,
+                            knowledge,
+                            context.models.embeddingModel,
+                        );
+                    printer.writeError(
+                        `Loss for ${msg} is ${loss.toFixed(2)}, simple loss: ${simpleLoss.toFixed(2)}`,
+                    );
+                }
+                extractedData.push(data);
+                count++;
+            }
+            if (maxTurns && count >= maxTurns) {
+                break;
+            }
+            // write elapsed time every 10 records
+            if (count % 10 === 0) {
+                clock.stop();
+                totalElapsed += clock.elapsedMs;
+                printer.writeTiming(chalk.cyan, clock, "last 10 records");
+                // write out elapsed time in seconds
+                printer.writeLine(
+                    `Processed ${count} records with total elapsed time: ${millisecondsToString(
+                        totalElapsed,
+                        "s",
+                    )}`,
+                );
+                clock.start();
+            }
+        }
+        clock.stop();
+        const json = JSON.stringify(extractedData, null, 2);
+        logStream.write(json);
+        logStream.close();
+    }
+
+    function compareDef(): CommandMetadata {
+        return {
+            description:
+                "Extract knowledge from the messages in the current conversation",
+            options: {
+                maxTurns: argNum("Number of turns to run"),
+                pause: argPause(),
+                logFile: argDestFile("Log file for extraction data"),
+                inFile: argSourceFile("Input file with messages and KR data"),
+            },
+        };
+    }
+    commands.compare.metadata = compareDef();
+    async function compare(args: string[], _io: InteractiveIo) {
+        const namedArgs = parseNamedArguments(args, knowledgeDef());
+        const logFile = namedArgs.logFile as string;
+        const inFile = namedArgs.inFile as string;
+        if (!logFile || !inFile) {
+            printer.writeError("Missing logFile or inFile");
+            return;
+        }
+        const fullInPath = path.join(context.storePath, inFile);
+        const inData = JSON.parse(
+            fs.readFileSync(fullInPath, "utf8"),
+        ) as IExtractedData[];
+        // open log file for writing
+        const logPath = path.join(context.storePath, logFile);
+        const logStream = fs.createWriteStream(logPath);
+        /*    const chatModelSettings = openai.apiSettingsFromEnv(
+            openai.ModelType.Chat,
+            undefined,
+            "GPT_4_O_MINI",
+        );
+        */
+        const chatModelSettings = openai.localOpenAIApiSettingsFromEnv(
+            openai.ModelType.Chat,
+            process.env,
+            "LOCAL",
+        );
+        if (!chatModelSettings) {
+            return;
+        }
+        chatModelSettings.retryPauseMs = 10000;
+        const chatModel = openai.createJsonChatModel(chatModelSettings, [
+            "chatExtractor",
+        ]);
+        const extractor = conversation.createKnowledgeExtractor(chatModel, {
+            maxContextLength: context.maxCharsPerChunk,
+            mergeActionKnowledge: false,
+        });
+        const extractedData = [] as IExtractedData[];
+        // extract from each record in inData and write to the log file
+        let count = 0;
+        const maxTurns = namedArgs.maxTurns;
+        const clock = new StopWatch();
+        let totalElapsed = 0;
+        let aveLoss = 0.0;
+        let aveSimpleLoss = 0.0;
+        clock.start();
+        for (const record of inData) {
+            let msg = record.message;
+            const refKnowledge = record.knowledge;
+            let knowledge: knowLib.conversation.KnowledgeResponse | undefined;
+            knowledge = await extractor.extract(msg).catch((err) => {
+                printer.writeError(`Error extracting knowledge: ${err}`);
+                return undefined;
+            });
+
+            if (knowledge) {
+                const loss = await knowLib.conversation.knowledgeResponseLoss(
+                    knowledge,
+                    refKnowledge,
+                    context.models.embeddingModel,
+                );
+                count++;
+                aveLoss += loss;
+                const simpleLoss =
+                    await knowLib.conversation.simpleKnowledgeResponseLoss(
+                        knowledge,
+                        refKnowledge,
+                        context.models.embeddingModel,
+                    );
+                aveSimpleLoss += simpleLoss;
+                printer.writeError(
+                    `Loss for ${msg} is ${loss.toFixed(2)}, ave: ${(aveLoss / count).toFixed(2)}, simple loss: ${simpleLoss.toFixed(2)}, ave: ${(aveSimpleLoss / count).toFixed(2)}`,
+                );
+                const data = {
+                    knowledge,
+                    message: msg,
+                    id: record.id,
+                    loss,
+                    refModelName: record.modelName || "gpt_4o",
+                    modelName: "gemma2:9b-instruct-fp16",
+                    description: record.description,
+                };
+                extractedData.push(data);
+            }
+            if (maxTurns && count >= maxTurns) {
+                break;
+            }
+            // write elapsed time every 10 records
+            if (count % 10 === 0) {
+                clock.stop();
+                totalElapsed += clock.elapsedMs;
+                printer.writeTiming(chalk.cyan, clock, "last 10 records");
+                // write out elapsed time in seconds
+                printer.writeLine(
+                    `Processed ${count} records with total elapsed time: ${millisecondsToString(
+                        totalElapsed,
+                        "s",
+                    )}`,
+                );
+                clock.start();
+            }
+        }
+        clock.stop();
+        const json = JSON.stringify(extractedData, null, 2);
+        logStream.write(json);
+        logStream.close();
     }
 
     function knowledgeDef(): CommandMetadata {
@@ -1045,8 +1319,10 @@ export async function runChatMemory(): Promise<void> {
         }
         if (!namedArgs.eval) {
             // just translate user query into structured query without eval
-            const translationContext =
-                await context.searcher.buildContext(searchOptions);
+            const translationContext = await context.searcher.buildContext(
+                query,
+                searchOptions,
+            );
             const searchResult: any = namedArgs.v2
                 ? await searcher.actions.translateSearchTermsV2(
                       query,
@@ -1087,6 +1363,7 @@ export async function runChatMemory(): Promise<void> {
             printer.writeError("No result");
             return undefined;
         }
+        printer.writeLine();
         await writeSearchTermsResult(result, namedArgs.debug);
         if (result.response && result.response.answer) {
             if (namedArgs.save && recordAnswer) {

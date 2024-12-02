@@ -34,7 +34,11 @@ import {
     normalizeParamString,
     RequestAction,
 } from "../requestAction.js";
-import { Construction } from "../../constructions/constructions.js";
+import {
+    Construction,
+    ConstructionPart,
+    WildcardMode,
+} from "../../constructions/constructions.js";
 import { TypeChatAgentResult, ValidationError } from "../typeChatAgent.js";
 import {
     getParamSpec,
@@ -67,13 +71,20 @@ import { createParsePart } from "../../constructions/parsePart.js";
 import {
     TransformInfo,
     createMatchPart,
+    isMatchPart,
 } from "../../constructions/matchPart.js";
 import { Transforms } from "../../constructions/transforms.js";
 import { getLanguageTools } from "../../utils/language.js";
+import {
+    createPolitenessGeneralizer,
+    PolitenessGenerializer,
+} from "./politenessGeneralizationV5.js";
+import { PolitenessGeneralization } from "./politenessGeneralizationSchemaV5.js";
 
 type Explanation = PropertyExplanation &
     SubPhraseExplanation &
-    AlternativesExplanation;
+    AlternativesExplanation &
+    Partial<PolitenessGeneralization>;
 
 export type ExplanationResult = GenericExplanationResult<Explanation>;
 
@@ -86,6 +97,7 @@ class ExplanationV5TypeChatAgent {
     private readonly propertyExplainerWithContext: PropertyExplainer;
     private readonly subPhrasesExplainer: SubPhraseExplainer;
     private readonly alternativesExplainer: AlternativesExplainer;
+    private readonly politenessGeneralizer: PolitenessGenerializer;
     constructor(model?: string) {
         this.propertyExplainerWithoutContext = createPropertyExplainer(
             false,
@@ -97,8 +109,11 @@ class ExplanationV5TypeChatAgent {
         );
         this.subPhrasesExplainer = createSubPhraseExplainer(model);
         this.alternativesExplainer = createAlternativesExplainer(model);
+        this.politenessGeneralizer = createPolitenessGeneralizer(model);
     }
     public async run(input: RequestAction, config?: ExplainerConfig) {
+        const politenessGeneralizationP = this.politenessGeneralizer.run(input);
+
         const propertyExplainer = input.history
             ? this.propertyExplainerWithContext
             : this.propertyExplainerWithoutContext;
@@ -114,8 +129,8 @@ class ExplanationV5TypeChatAgent {
             // includes the data from agent1 in corrections
             result2.corrections.forEach((correction) => {
                 correction.data = {
-                    properties: result1.data.properties,
-                    subPhrases: correction.data.subPhrases,
+                    ...result1.data,
+                    ...correction.data,
                 };
             });
         }
@@ -130,14 +145,18 @@ class ExplanationV5TypeChatAgent {
             // includes the data from agent1 in corrections
             result3.corrections.forEach((correction) => {
                 correction.data = {
-                    properties: result1.data.properties,
-                    subPhrases: result2.data.subPhrases,
-                    propertyAlternatives: correction.data.propertyAlternatives,
+                    ...result1.data,
+                    ...result2.data,
+                    ...correction.data,
                 };
             });
         }
         if (!result3.success) {
             return result3;
+        }
+        const politenessGeneralization = await politenessGeneralizationP;
+        if (!politenessGeneralization.success) {
+            return politenessGeneralization;
         }
         const corrections: CorrectionRecord<Partial<Explanation>>[] = [];
         if (result1.corrections) {
@@ -149,12 +168,16 @@ class ExplanationV5TypeChatAgent {
         if (result3.corrections) {
             corrections.push(...result3.corrections);
         }
+        if (politenessGeneralization.corrections) {
+            corrections.push(...politenessGeneralization.corrections);
+        }
         const result: TypeChatAgentResult<Explanation> = {
             success: true,
             data: {
-                properties: result1.data.properties,
-                subPhrases: result2.data.subPhrases,
-                propertyAlternatives: result3.data.propertyAlternatives,
+                ...result1.data,
+                ...result2.data,
+                ...result3.data,
+                ...politenessGeneralization.data,
             },
         };
         if (corrections.length !== 0) {
@@ -437,11 +460,55 @@ function getParserForPropertyValue(
 
 const langTool = getLanguageTools("en");
 function canBeMergedNonPropertySubPhrase(phrase: NonPropertySubPhrase) {
-    return langTool?.hasClosedClass(phrase.text) !== true;
+    return langTool?.hasClosedClass(phrase.text, phrase.isOptional) !== true;
 }
 
-function useSynonymsForNonPropertySubPhrase(phrase: SubPhrase) {
-    return langTool?.hasClosedClass(phrase.text) !== true;
+function useSynonymsForNonPropertySubPhrase(phrase: NonPropertySubPhrase) {
+    return langTool?.hasClosedClass(phrase.text, phrase.isOptional) !== true;
+}
+
+function addPolitePrefixParts(
+    parts: ConstructionPart[],
+    explanation: Explanation,
+) {
+    if (
+        explanation.politePrefixes === undefined ||
+        explanation.politeSuffixes === undefined
+    ) {
+        return;
+    }
+
+    let hasPolitePrefix = false;
+    let hasPoliteSuffix = false;
+    let seenNonOptional = false;
+    for (const part of parts) {
+        if (!part.optional) {
+            hasPoliteSuffix = false;
+            seenNonOptional = true;
+        } else if (isMatchPart(part) && part.matchSet.name === "politeness") {
+            if (!seenNonOptional) {
+                hasPolitePrefix = true;
+            } else {
+                hasPoliteSuffix = true;
+            }
+        }
+    }
+
+    if (!hasPolitePrefix && explanation.politePrefixes.length !== 0) {
+        parts.unshift(
+            createMatchPart(explanation.politePrefixes, "politeness", {
+                optional: true,
+            }),
+        );
+    }
+
+    if (!hasPoliteSuffix && explanation.politeSuffixes.length !== 0) {
+        parts.push(
+            createMatchPart(explanation.politeSuffixes, "politeness", {
+                optional: true,
+            }),
+        );
+    }
 }
 
 export function createConstructionV5(
@@ -576,17 +643,35 @@ export function createConstructionV5(
         const ltext = normalizeParamString(phrase.text);
         const lval = normalizeParamString(paramInfo.propertyValue.toString());
         return (
-            getPropertySpec(
-                paramInfo.propertyName,
-                actions,
-                getSchemaConfig,
-            ) === "wildcard" &&
             // Only handle direct copy of the text to value
-            (ltext === lval ||
-                // REVIEW: a hack to ignore quote mismatch
-                ltext === `'${lval}'` ||
-                ltext === `"${lval}"`)
+            ltext === lval ||
+            // REVIEW: a hack to ignore quote mismatch
+            ltext === `'${lval}'` ||
+            ltext === `"${lval}"`
         );
+    };
+
+    const updateWildcardMode = (
+        wildcardMode: WildcardMode,
+        phrase: SubPhrase,
+        paramInfo: PropertyValue,
+    ) => {
+        if (
+            wildcardMode === WildcardMode.Disabled ||
+            !shouldValueBeCopied(phrase, paramInfo)
+        ) {
+            return WildcardMode.Disabled;
+        }
+        const spec = getPropertySpec(
+            paramInfo.propertyName,
+            actions,
+            getSchemaConfig,
+        );
+        return spec === "wildcard"
+            ? WildcardMode.Enabled
+            : spec === "checked_wildcard"
+              ? wildcardMode
+              : WildcardMode.Disabled;
     };
 
     const parts = explanation.subPhrases.map((phrase) => {
@@ -611,7 +696,7 @@ export function createConstructionV5(
                     return createParsePart(propertyName, parser);
                 }
             }
-            let enableWildcard = true;
+            let wildcardMode = WildcardMode.Checked;
 
             // REVIEW: can the match set be merged if it is for multiple param names?
             let canBeMerged = hasSinglePropertyName;
@@ -625,7 +710,7 @@ export function createConstructionV5(
                 );
                 transformInfos.push(transformInfo);
                 if (entityParamMap.has(propertyName)) {
-                    enableWildcard = false; // not a wildcard mapping
+                    wildcardMode = WildcardMode.Disabled; // not a wildcard mapping
                     canBeMerged = false; // REVIEW: can you merge matchset for entity references?
 
                     // REVIEW: Don't use other synonyms or alternatives info for entities for now
@@ -638,8 +723,11 @@ export function createConstructionV5(
                     throw new Error(`Parameter ${propertyName} not found`);
                 }
 
-                const shouldBeCopied = shouldValueBeCopied(phrase, paramInfo);
-                enableWildcard = enableWildcard && shouldBeCopied;
+                wildcardMode = updateWildcardMode(
+                    wildcardMode,
+                    phrase,
+                    paramInfo,
+                );
 
                 if (!disableAlternateParamValues.has(propertyName)) {
                     collectAltParamMatches(matches, phrase, paramInfo);
@@ -650,7 +738,7 @@ export function createConstructionV5(
             return createMatchPart(matches, baseName, {
                 transformInfos,
                 canBeMerged,
-                canBeWildcard: enableWildcard,
+                wildcardMode,
             });
         } catch (e: any) {
             throw new Error(
@@ -662,6 +750,8 @@ export function createConstructionV5(
     const implicitProperties = explanation.properties.filter(
         (param) => !explicitPropertyNames.has(param.name),
     );
+
+    addPolitePrefixParts(parts, explanation);
 
     return Construction.create(
         parts,
@@ -689,7 +779,7 @@ function toPrettyString(explanation: Explanation) {
         Math.max(
             phrase.text.length,
             phrase.category.length + 2,
-            ...(hasPropertyNames(phrase)
+            ...(isPropertySubPhrase(phrase)
                 ? []
                 : phrase.synonyms.map((s) => s.length)),
             ...categories.map((c) => c.length),
@@ -724,7 +814,7 @@ function toPrettyString(explanation: Explanation) {
     // Synonyms
     const maxSynonyms = Math.max(
         ...explanation.subPhrases.map((phrase) =>
-            hasPropertyNames(phrase) ? 0 : phrase.synonyms.length,
+            isPropertySubPhrase(phrase) ? 0 : phrase.synonyms.length,
         ),
     );
 
@@ -733,7 +823,7 @@ function toPrettyString(explanation: Explanation) {
             createLine(
                 i === 0 ? "Synonyms" : "",
                 explanation.subPhrases.map((phrase) =>
-                    hasPropertyNames(phrase) ? "" : phrase.synonyms[i] ?? "",
+                    isPropertySubPhrase(phrase) ? "" : phrase.synonyms[i] ?? "",
                 ),
             ),
         );

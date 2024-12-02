@@ -1,6 +1,6 @@
 {
   "name": "spelunker-example",
-  "version": "0.0.1",
+  "version": "0.1",
   "private": true,
   "description": "Spelunker Example",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
@@ -28,6 +28,7 @@
   },
   "dependencies": {
     "aiclient": "workspace:*",
+    "chalk": "^5.3.0",
     "code-processor": "workspace:*",
     "dotenv": "^16.3.1",
     "interactive-app": "workspace:*",

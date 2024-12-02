@@ -88,9 +88,7 @@ export function createAlternativesExplainer(
                 getPackageFilePath(
                     "./src/explanation/v5/alternativesExplanationSchemaV5.ts",
                 ),
-                undefined,
-                undefined,
-                model,
+                { model },
             );
         },
         createInstructions,

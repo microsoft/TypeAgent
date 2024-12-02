@@ -26,7 +26,9 @@ export type ProductDetailsHeroTile = {
   cssSelector: string;
 
   addToCartButton?: AddToCartButton;
-  locationInStore?: string;
+  storeName?: string;
+  // The physical location of the goods, such as the Aisle, Bay or Shelf
+  physicalLocationInStore?: string;
   numberInStock?: string;
 };
 
@@ -36,4 +38,18 @@ export type SearchInput = {
 
   // css selector for submit button
   submitButtonCssSelector: string;
+};
+
+// Information the Physical store location
+export type StoreLocation = {
+  locationName: string;
+  zipCode: string;
+};
+
+// Information the Physical store location
+export type LocationInStore = {
+  storeName: string;
+  // The physical location of the goods, such as the Aisle, Bay or Shelf
+  physicalLocationInStore: string;
+  numberInStock?: string;
 };

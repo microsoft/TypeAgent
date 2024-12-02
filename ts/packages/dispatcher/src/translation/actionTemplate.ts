@@ -2,16 +2,25 @@
 // Licensed under the MIT License.
 
 import { Action, Actions } from "agent-cache";
-import { getActionSchema, getTranslatorActionSchemas } from "./actionSchema.js";
+import { getActionSchema } from "./actionSchemaFileCache.js";
 import { CommandHandlerContext } from "../internal.js";
 import {
     TemplateFieldStringUnion,
     TemplateSchema,
     SessionContext,
     AppAction,
+    TemplateType,
+    TemplateFieldObject,
+    TemplateFieldArray,
+    TemplateFieldPrimitive,
 } from "@typeagent/agent-sdk";
 import { getAppAgentName } from "./agentTranslators.js";
 import { DeepPartialUndefined } from "common-utils";
+import {
+    ActionParamArray,
+    ActionParamObject,
+    ActionParamType,
+} from "action-schema";
 
 export type TemplateData = {
     schema: TemplateSchema;
@@ -47,43 +56,104 @@ function getDefaultActionTemplate(
     return template;
 }
 
+function toTemplateTypeObject(type: ActionParamObject, value: any) {
+    const templateType: TemplateFieldObject = {
+        type: "object",
+        fields: {},
+    };
+
+    for (const [key, field] of Object.entries(type.fields)) {
+        const type = toTemplateType(field.type, value[key]);
+        if (type === undefined) {
+            // Skip undefined fileds.
+            continue;
+        }
+        templateType.fields[key] = { optional: field.optional, type };
+    }
+    return templateType;
+}
+
+function toTemplateTypeArray(type: ActionParamArray, value: any) {
+    const elementType = toTemplateType(type.elementType, value[0]);
+    if (elementType === undefined) {
+        // Skip undefined fileds.
+        return undefined;
+    }
+    const templateType: TemplateFieldArray = {
+        type: "array",
+        elementType,
+    };
+    return templateType;
+}
+
+function toTemplateType(
+    type: ActionParamType,
+    value: any,
+): TemplateType | undefined {
+    switch (type.type) {
+        case "type-union":
+            // TODO: smarter about type unions.
+            return toTemplateType(type.types[0], value);
+        case "type-reference":
+            // TODO: need to handle circular references (or error on circular references)
+            if (type.definition === undefined) {
+                throw new Error(`Unresolved type reference: ${type.name}`);
+            }
+            return toTemplateType(type.definition.type, value);
+        case "object":
+            return toTemplateTypeObject(type, value);
+        case "array":
+            return toTemplateTypeArray(type, value[0]);
+        case "undefined":
+            return undefined;
+        case "string":
+        case "number":
+        case "boolean":
+            return type as TemplateFieldPrimitive;
+        default:
+            throw new Error(`Unknown type ${type.type}`);
+    }
+}
 function toTemplate(
     context: CommandHandlerContext,
     translators: string[],
     action: Action,
 ) {
-    const config = context.agents.tryGetTranslatorConfig(action.translatorName);
-    if (config === undefined) {
+    const actionSchemaFile = context.agents.getActionSchemaFile(
+        action.translatorName,
+    );
+    if (actionSchemaFile === undefined) {
         return getDefaultActionTemplate(translators);
     }
     const template = getDefaultActionTemplate(
         translators,
         action.translatorName,
     );
-    const actionInfos = getTranslatorActionSchemas(
-        config,
-        action.translatorName,
-    );
+    const actionSchemas = actionSchemaFile.actionSchemas;
     const actionName: TemplateFieldStringUnion = {
         type: "string-union",
-        typeEnum: Array.from(actionInfos.keys()),
+        typeEnum: Array.from(actionSchemas.keys()),
         discriminator: "",
     };
     template.fields.actionName = {
         type: actionName,
     };
 
-    const actionInfo = actionInfos.get(action.actionName);
-    if (actionInfo === undefined) {
+    const actionSchema = actionSchemas.get(action.actionName);
+    if (actionSchema === undefined) {
         return template;
     }
     actionName.discriminator = action.actionName;
 
-    if (actionInfo.parameters) {
-        template.fields.parameters = {
-            // ActionParam types are compatible with TemplateFields
-            type: actionInfo.parameters,
-        };
+    const parameterType = actionSchema.type.fields.parameters?.type;
+    if (parameterType) {
+        const type = toTemplateType(parameterType, action.parameters);
+        if (type !== undefined) {
+            template.fields.parameters = {
+                // ActionParam types are compatible with TemplateFields
+                type,
+            };
+        }
     }
     return template;
 }
@@ -96,7 +166,7 @@ export function getActionTemplateEditConfig(
 ): TemplateEditConfig {
     const templateData: TemplateData[] = [];
 
-    const translators = context.agents.getActiveTranslators();
+    const translators = context.agents.getActiveSchemas();
     for (const action of actions) {
         templateData.push({
             schema: toTemplate(context, translators, action),
@@ -136,7 +206,7 @@ export async function getSystemTemplateSchema(
         data.actionName = "";
     }
 
-    const translators = systemContext.agents.getActiveTranslators();
+    const translators = systemContext.agents.getActiveSchemas();
     return toTemplate(systemContext, translators, data);
 }
 
@@ -182,11 +252,11 @@ export async function getActionCompletion(
     action: DeepPartialUndefined<AppAction>,
     propertyName: string,
 ): Promise<string[]> {
-    const actionInfo = getActionSchema(action, systemContext.agents);
-    if (actionInfo === undefined) {
+    const actionSchema = getActionSchema(action, systemContext.agents);
+    if (actionSchema === undefined) {
         return [];
     }
-    const appAgentName = getAppAgentName(actionInfo.translatorName);
+    const appAgentName = getAppAgentName(action.translatorName!);
     const appAgent = systemContext.agents.getAppAgent(appAgentName);
     if (appAgent.getActionCompletion === undefined) {
         return [];

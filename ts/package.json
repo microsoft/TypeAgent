@@ -13,7 +13,7 @@
   "license": "MIT",
   "author": "Microsoft",
   "scripts": {
-    "api": "pnpm -C packages/api exec npm run dev",
+    "api": "pnpm -C packages/api exec npm run start",
     "build": "fluid-build . -t build",
     "check:link": "git ls-tree -r --name-only HEAD .. | grep \\.md | xargs  markdown-link-check",
     "check:policy": "node tools/scripts/repo-policy-check.mjs",

@@ -6,19 +6,20 @@ import { composeTranslatorSchemas } from "common-utils";
 import {
     getAssistantSelectionSchemas,
     getFullSchemaText,
-    getBuiltinTranslatorNames,
-    getBuiltinTranslatorConfigProvider,
+    getBuiltinSchemaNames,
+    getBuiltinActionConfigProvider,
     getActionSchema,
 } from "agent-dispatcher/internal";
-import { generateSchema } from "action-schema";
+import { generateSchemaTypeDefinition } from "action-schema";
 
 export default class Schema extends Command {
     static description = "Show schema used by translators";
 
     static flags = {
-        change: Flags.boolean({
-            description: "Include change assistant schema",
-            default: false,
+        active: Flags.string({
+            description:
+                "Active scheam to include in the inlined change assistant schema",
+            multiple: true,
         }),
         multiple: Flags.boolean({
             description: "Include multiple action schema",
@@ -28,12 +29,17 @@ export default class Schema extends Command {
             description: "Show all assistant selection schema",
             default: false,
         }),
+        generated: Flags.boolean({
+            description: "Generated schema",
+            allowNo: true,
+            default: true,
+        }),
     };
     static args = {
         translator: Args.string({
             description: "Translator name",
             required: true,
-            options: getBuiltinTranslatorNames(),
+            options: getBuiltinSchemaNames(),
         }),
         actionName: Args.string({
             description: "Action name",
@@ -43,7 +49,7 @@ export default class Schema extends Command {
 
     async run(): Promise<void> {
         const { args, flags } = await this.parse(Schema);
-        const provider = getBuiltinTranslatorConfigProvider();
+        const provider = getBuiltinActionConfigProvider();
         if (!flags.assistant) {
             if (args.actionName) {
                 const actionSchema = getActionSchema(
@@ -54,7 +60,7 @@ export default class Schema extends Command {
                     provider,
                 );
                 if (actionSchema) {
-                    console.log(generateSchema([actionSchema]));
+                    console.log(generateSchemaTypeDefinition(actionSchema));
                 } else {
                     console.error(
                         `Action ${args.actionName} not found in translator ${args.translator}`,
@@ -67,13 +73,14 @@ export default class Schema extends Command {
                 getFullSchemaText(
                     args.translator,
                     provider,
-                    flags.change,
+                    flags.active,
                     flags.multiple,
+                    flags.generated,
                 ),
             );
         } else {
             const schemas = getAssistantSelectionSchemas(
-                getBuiltinTranslatorNames(),
+                getBuiltinSchemaNames(),
                 provider,
             ).map((entry) => entry.schema);
             console.log(

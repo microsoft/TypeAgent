@@ -10,7 +10,9 @@ import {
     AppAgentEvent,
     DisplayContent,
     DisplayAppendMode,
+    MessageContent,
 } from "@typeagent/agent-sdk";
+import stringWidth from "string-width";
 import { RequestMetrics } from "../../utils/metrics.js";
 
 export const DispatcherName = "dispatcher";
@@ -86,7 +88,7 @@ export interface ClientIO {
     ): void;
 
     // Host specific (TODO: Formalize the API)
-    takeAction(action: string): void;
+    takeAction(action: string, data: unknown): void;
 }
 
 // Dispatcher request specific IO
@@ -142,7 +144,52 @@ export interface RequestIO {
         requestId: RequestId,
         filter: NotifyCommands,
     ): void;
-    takeAction(action: string): void;
+    takeAction(action: string, data: unknown): void;
+}
+
+function displayPadEnd(content: string, length: number): string {
+    // Account for full width characters
+    return `${content}${" ".repeat(length - stringWidth(content))}`;
+}
+
+export function messageContentToText(message: MessageContent): string {
+    if (typeof message === "string") {
+        return message;
+    }
+
+    if (message.length === 0) {
+        return "";
+    }
+    if (typeof message[0] === "string") {
+        return message.join("\n");
+    }
+    const table = message as string[][];
+    let numColumns = 0;
+    const maxColumnWidths: number[] = [];
+    for (const row of table) {
+        numColumns = Math.max(numColumns, row.length);
+        for (let i = 0; i < row.length; i++) {
+            maxColumnWidths[i] = Math.max(
+                maxColumnWidths[i] ?? 0,
+                stringWidth(row[i]),
+            );
+        }
+    }
+
+    const displayRows = table.map((row) => {
+        const items: string[] = [];
+        for (let i = 0; i < numColumns; i++) {
+            const content = i < row.length ? row[i] : "";
+            items.push(displayPadEnd(content, maxColumnWidths[i]));
+        }
+        return `|${items.join("|")}|`;
+    });
+    displayRows.splice(
+        1,
+        0,
+        `|${maxColumnWidths.map((w) => "-".repeat(w)).join("|")}|`,
+    );
+    return displayRows.join("\n");
 }
 
 let lastAppendMode: DisplayAppendMode | undefined;
@@ -150,8 +197,8 @@ function displayContent(
     content: DisplayContent,
     appendMode?: DisplayAppendMode,
 ) {
-    let message: string;
-    if (typeof content === "string") {
+    let message: MessageContent;
+    if (typeof content === "string" || Array.isArray(content)) {
         message = content;
     } else {
         // TODO: should reject html content
@@ -178,14 +225,15 @@ function displayContent(
         }
     }
 
+    const displayText = messageContentToText(message);
     if (appendMode !== "inline") {
         if (lastAppendMode === "inline") {
             process.stdout.write("\n");
         }
-        process.stdout.write(message);
+        process.stdout.write(displayText);
         process.stdout.write("\n");
     } else {
-        process.stdout.write(message);
+        process.stdout.write(displayText);
     }
 
     lastAppendMode = appendMode;
@@ -236,7 +284,7 @@ export function getConsoleRequestIO(
                 // ignored.
             }
         },
-        takeAction: (action: string) => {
+        takeAction: (action: string, data: unknown) => {
             return stdio?.write("This command is not supported in the CLI.\n");
         },
     };
@@ -318,8 +366,8 @@ export function getRequestIO(
         ) {
             clientIO.notify(event, requestId, data, source);
         },
-        takeAction(action: string) {
-            clientIO.takeAction(action);
+        takeAction(action: string, data: unknown) {
+            clientIO.takeAction(action, data);
         },
     };
 }

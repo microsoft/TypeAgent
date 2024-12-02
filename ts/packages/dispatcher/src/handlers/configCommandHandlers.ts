@@ -13,12 +13,13 @@ import { getAppAgentName } from "../translation/agentTranslators.js";
 import { getServiceHostCommandHandlers } from "./serviceHost/serviceHostCommandHandler.js";
 import { getLocalWhisperCommandHandlers } from "./serviceHost/localWhisperCommandHandler.js";
 
-import { getChatModelNames, simpleStarRegex } from "common-utils";
-import { openai as ai } from "aiclient";
-import { SessionConfig } from "../session/session.js";
+import { simpleStarRegex } from "common-utils";
+import { openai as ai, getChatModelNames } from "aiclient";
+import { SessionOptions } from "../session/session.js";
 import chalk from "chalk";
 import {
     ActionContext,
+    ParameterDefinitions,
     ParsedCommandParams,
     PartialParsedCommandParams,
     SessionContext,
@@ -33,16 +34,18 @@ import {
 } from "@typeagent/agent-sdk/helpers/display";
 import { alwaysEnabledAgents } from "./common/appAgentManager.js";
 import { getCacheFactory } from "../internal.js";
+import { Channel } from "diagnostics_channel";
+import { string } from "../../../actionSchema/dist/creator.js";
 
 const enum AgentToggle {
-    Translator,
+    Schema,
     Action,
     Command,
     Agent,
 }
 
 const AgentToggleDescription = [
-    "agent translators",
+    "agent schemas",
     "agent actions",
     "agent commands",
     "agents",
@@ -51,14 +54,14 @@ const AgentToggleDescription = [
 function getAgentToggleOptions(
     toggle: AgentToggle,
     options: Record<string, boolean | null>,
-    translatorNames: string[],
-) {
+    schemaNames: string[],
+): SessionOptions {
     switch (toggle) {
-        case AgentToggle.Translator:
-            for (const name of alwaysEnabledAgents.translators) {
+        case AgentToggle.Schema:
+            for (const name of alwaysEnabledAgents.schemas) {
                 delete options[name];
             }
-            return { translators: options };
+            return { schemas: options };
         case AgentToggle.Action:
             for (const name of alwaysEnabledAgents.actions) {
                 delete options[name];
@@ -70,15 +73,15 @@ function getAgentToggleOptions(
             }
             return { commands: options };
         case AgentToggle.Agent:
-            const translatorOptions = Object.fromEntries(
-                translatorNames.map((name) => [
+            const schemaOptions = Object.fromEntries(
+                schemaNames.map((name) => [
                     name,
                     options[getAppAgentName(name)],
                 ]),
             );
-            const actionOptions = { ...translatorOptions };
-            for (const name of alwaysEnabledAgents.translators) {
-                delete translatorOptions[name];
+            const actionOptions = { ...schemaOptions };
+            for (const name of alwaysEnabledAgents.schemas) {
+                delete schemaOptions[name];
             }
             for (const name of alwaysEnabledAgents.actions) {
                 delete actionOptions[name];
@@ -87,7 +90,7 @@ function getAgentToggleOptions(
                 delete options[name];
             }
             return {
-                translators: translatorOptions,
+                schemas: schemaOptions,
                 actions: actionOptions,
                 commands: options,
             };
@@ -96,7 +99,7 @@ function getAgentToggleOptions(
 
 function setAgentToggleOption(
     existingNames: string[],
-    existingNameType: "agent" | "translator",
+    existingNameType: "agent" | "schema",
     options: any,
     nameOrPattern: string[],
     enable: boolean,
@@ -134,6 +137,146 @@ function setAgentToggleOption(
     }
 }
 
+type StatusRecords = Record<
+    string,
+    { schemas?: string; actions?: string; commands?: string }
+>;
+
+type ChangedAgent = {
+    schemas?: Record<string, boolean | undefined | null> | undefined | null;
+    actions?: Record<string, boolean | undefined | null> | undefined | null;
+    commands?: Record<string, boolean | undefined | null> | undefined | null;
+};
+
+function getDefaultStr(
+    changes: ChangedAgent | undefined,
+    kind: keyof ChangedAgent,
+    name: string,
+) {
+    if (changes === undefined) {
+        return "";
+    }
+    const change = changes[kind]?.[name];
+    if (change === undefined) {
+        return undefined;
+    }
+    return change === null ? " (default)" : "";
+}
+
+function setStatus(
+    status: StatusRecords,
+    kind: keyof ChangedAgent,
+    name: string,
+    enable: boolean | undefined | null,
+    active: boolean,
+    changes?: ChangedAgent,
+) {
+    if (enable === null) {
+        return;
+    }
+    const defaultStr = getDefaultStr(changes, kind, name);
+    if (defaultStr === undefined) {
+        return;
+    }
+    if (status[name] === undefined) {
+        status[name] = {};
+        const appAgentName = getAppAgentName(name);
+        if (appAgentName !== name && status[appAgentName] === undefined) {
+            // Make sure we have a row for the app agent name even if it doesn't have any status for grouping
+            status[appAgentName] = {};
+        }
+    }
+
+    const statusChar =
+        enable === undefined ? "❔" : enable ? (active ? "✅" : "💤") : "❌";
+    status[name][kind] = `${statusChar}${defaultStr}`;
+}
+
+function showAgentStatus(
+    toggle: AgentToggle,
+    context: ActionContext<CommandHandlerContext>,
+    changes?: ChangedAgent,
+) {
+    const systemContext = context.sessionContext.agentContext;
+    const agents = systemContext.agents;
+
+    const status: Record<
+        string,
+        { schemas?: string; actions?: string; commands?: string }
+    > = {};
+
+    const showSchema =
+        toggle === AgentToggle.Schema || toggle === AgentToggle.Agent;
+    const showAction =
+        toggle === AgentToggle.Action || toggle === AgentToggle.Agent;
+    const showCommand =
+        toggle === AgentToggle.Command || toggle === AgentToggle.Agent;
+
+    if (showSchema || showAction) {
+        for (const name of agents.getSchemaNames()) {
+            if (showSchema) {
+                const state = agents.isSchemaEnabled(name);
+                const active = agents.isSchemaActive(name);
+                setStatus(status, "schemas", name, state, active, changes);
+            }
+
+            if (showAction) {
+                const state = agents.isActionEnabled(name);
+                const active = agents.isActionActive(name);
+                setStatus(status, "actions", name, state, active, changes);
+            }
+        }
+    }
+
+    if (showCommand) {
+        for (const name of agents.getAppAgentNames()) {
+            const state = agents.getCommandEnabledState(name);
+            setStatus(status, "commands", name, state, true, changes);
+        }
+    }
+
+    const entries = Object.entries(status).sort(([a], [b]) =>
+        a.localeCompare(b),
+    );
+    if (entries.length === 0) {
+        displayWarn(changes ? "No changes" : "No agents", context);
+        return;
+    }
+
+    const getRow = (
+        emoji: string,
+        displayName: string,
+        schemas?: string,
+        actions?: string,
+        commands?: string,
+    ) => {
+        const displayEntry = [emoji, displayName];
+        if (showSchema) {
+            displayEntry.push(schemas ?? "");
+        }
+        if (showAction) {
+            displayEntry.push(actions ?? "");
+        }
+        if (showCommand) {
+            displayEntry.push(commands ?? "");
+        }
+        return displayEntry;
+    };
+
+    const table: string[][] = [
+        getRow("", "Agent", "Schemas", "Actions", "Commands"),
+    ];
+
+    for (const [name, { schemas, actions, commands }] of entries) {
+        const isAppAgentName = getAppAgentName(name) === name;
+        const displayName = isAppAgentName ? name : `  ${name}`;
+        const emoji = isAppAgentName ? agents.getEmojis()[name] : "";
+        table.push(getRow(emoji, displayName, schemas, actions, commands));
+    }
+
+    displayResult(table, context);
+}
+
 class AgentToggleCommandHandler implements CommandHandler {
     public readonly description = `Toggle ${AgentToggleDescription[this.toggle]}`;
     public readonly parameters = {
@@ -168,9 +311,9 @@ class AgentToggleCommandHandler implements CommandHandler {
         const agents = systemContext.agents;
 
         const options: Record<string, boolean | null> = {};
-        const translatorNames = agents.getTranslatorNames();
+        const schemaNames = agents.getSchemaNames();
         let existingNames: string[];
-        let existingNameType: "agent" | "translator";
+        let existingNameType: "agent" | "schema";
         if (
             this.toggle == AgentToggle.Command ||
             this.toggle === AgentToggle.Agent
@@ -178,17 +321,20 @@ class AgentToggleCommandHandler implements CommandHandler {
             existingNames = agents.getAppAgentNames();
             existingNameType = "agent";
         } else {
-            existingNames = translatorNames;
-            existingNameType = "translator";
+            existingNames = schemaNames;
+            existingNameType = "schema";
         }
 
+        let hasParams = false;
         if (params.flags.reset) {
+            hasParams = true;
             for (const name of existingNames) {
                 options[name] = null; // default value
             }
         }
 
         if (params.flags.off) {
+            hasParams = true;
             setAgentToggleOption(
                 existingNames,
                 existingNameType,
@@ -198,6 +344,7 @@ class AgentToggleCommandHandler implements CommandHandler {
             );
         }
         if (params.args.agentNames) {
+            hasParams = true;
             setAgentToggleOption(
                 existingNames,
                 existingNameType,
@@ -207,8 +354,13 @@ class AgentToggleCommandHandler implements CommandHandler {
             );
         }
 
+        if (!hasParams) {
+            showAgentStatus(this.toggle, context);
+            return;
+        }
+
         const changed = await changeContextConfig(
-            getAgentToggleOptions(this.toggle, options, translatorNames),
+            getAgentToggleOptions(this.toggle, options, schemaNames),
             context,
         );
 
@@ -218,17 +370,29 @@ class AgentToggleCommandHandler implements CommandHandler {
         if (changedEntries.length === 0) {
             displayWarn("No change", context);
         } else {
-            const lines: string[] = [];
-            for (const [kind, options] of changedEntries) {
-                lines.push(`Changes (${kind}):`);
-                for (const [name, value] of Object.entries(options as any)) {
-                    lines.push(
-                        `  ${name}: ${value === true ? "enabled" : value === false ? "disabled" : `<default>`}`,
-                    );
-                }
-            }
-            displayResult(lines, context);
+            showAgentStatus(this.toggle, context, changed);
         }
+    }
+
+    public async getCompletion(
+        context: SessionContext<CommandHandlerContext>,
+        params: PartialParsedCommandParams<typeof this.parameters>,
+        names: string[],
+    ) {
+        const completions: string[] = [];
+
+        for (const name of names) {
+            if (name === "agentNames" || name === "--off") {
+                const existingNames =
+                    this.toggle === AgentToggle.Command ||
+                    this.toggle === AgentToggle.Agent
+                        ? context.agentContext.agents.getAppAgentNames()
+                        : context.agentContext.agents.getSchemaNames();
+                completions.push(...existingNames);
+            }
+        }
+
+        return completions;
     }
 }
 
@@ -282,205 +446,200 @@ class ExplainerCommandHandler implements CommandHandler {
     }
 }
 
-function getConfigModel(models: SessionConfig["models"], kind: string) {
-    if (!models.hasOwnProperty(kind)) {
-        throw new Error(
-            `Invalid model kind: ${kind}\nValid model kinds: ${Object.keys(models).join(", ")}`,
-        );
-    }
-    const model = models[kind as keyof typeof models];
+function getConfigModel(kind: string, model: string) {
     const settings = ai.getChatModelSettings(model);
     return `Current ${chalk.cyan(kind)} model: ${model ? model : "(default)"}\nURL:${settings.endpoint}`;
-}
-
-class ConfigModelShowCommandHandler implements CommandHandler {
-    public readonly description = "Show current model";
-    public readonly parameters = {
-        args: {
-            kind: {
-                description: "Model kind to show",
-                optional: true,
-            },
-        },
-    } as const;
-    public async run(
-        context: ActionContext<CommandHandlerContext>,
-        params: ParsedCommandParams<typeof this.parameters>,
-    ) {
-        const systemContext = context.sessionContext.agentContext;
-        const models = systemContext.session.getConfig().models;
-
-        if (params.args.kind !== undefined) {
-            displayResult(getConfigModel(models, params.args.kind), context);
-        } else {
-            displayResult(
-                Object.keys(models)
-                    .map((kind) => getConfigModel(models, kind))
-                    .join("\n"),
-                context,
-            );
-        }
-    }
 }
 
 class ConfigModelSetCommandHandler implements CommandHandler {
     public readonly description = "Set model";
     public readonly parameters = {
-        args: {
-            kindOrModel: {
-                description: "Model kind or name",
-                optional: true,
+        flags: {
+            reset: {
+                description: "Reset to default model",
+                char: "r",
+                type: "boolean",
+                default: false,
             },
+        },
+        args: {
             model: {
                 description: "Model name",
                 optional: true,
             },
         },
     } as const;
+    public constructor(private readonly kind: "translation" | "explainer") {}
     public async run(
         context: ActionContext<CommandHandlerContext>,
         params: ParsedCommandParams<typeof this.parameters>,
     ) {
-        const systemContext = context.sessionContext.agentContext;
-        const models = systemContext.session.getConfig().models;
-        if (params.args.kindOrModel === undefined) {
-            const newConfig = {
-                models: Object.fromEntries(
-                    Object.keys(models).map((kind) => [kind, ""]),
-                ),
-            };
-            await changeContextConfig(newConfig, context);
-            displayResult(`Reset to default model for all`, context);
+        const reset = params.flags.reset;
+        const model = params.args.model;
+        if (reset || model === "") {
+            if (model !== undefined && model !== "") {
+                throw new Error("Model name is not allowed with reset option");
+            }
+            const config: SessionOptions = {};
+            config[this.kind] = { model: "" };
+            await changeContextConfig(config, context);
+            displayResult(`Reset to default model for ${this.kind}`, context);
             return;
         }
-
-        let kind = "translator";
-        let model = "";
-        if (params.args.model === undefined) {
-            if (models.hasOwnProperty(params.args.kindOrModel)) {
-                kind = params.args.kindOrModel;
-            } else {
-                model = params.args.kindOrModel;
-            }
-        } else {
-            kind = params.args.kindOrModel;
-            model = params.args.model;
-        }
-
-        if (!models.hasOwnProperty(kind)) {
-            throw new Error(
-                `Invalid model kind: ${kind}\nValid model kinds: ${Object.keys(models).join(", ")}`,
+        if (model === undefined) {
+            const config =
+                context.sessionContext.agentContext.session.getConfig();
+            displayResult(
+                getConfigModel(this.kind, config[this.kind].model),
+                context,
             );
+            return;
         }
-        const modelNames = getChatModelNames();
-        if (model === "") {
-            displayResult(`Reset to default model for ${kind}`, context);
-        } else if (!modelNames.includes(model)) {
+        const modelNames = await getChatModelNames();
+        if (!modelNames.includes(model)) {
             throw new Error(
                 `Invalid model name: ${model}\nValid model names: ${modelNames.join(", ")}`,
             );
         } else {
-            displayResult(`Model for ${kind} is set to ${model}`, context);
+            displayResult(`Model for ${this.kind} is set to ${model}`, context);
         }
-        await changeContextConfig(
-            {
-                models: {
-                    [kind]: model,
-                },
-            },
-            context,
-        );
+        const config: SessionOptions = {};
+        config[this.kind] = { model };
+        await changeContextConfig(config, context);
+    }
+    public async getCompletion(
+        context: SessionContext<CommandHandlerContext>,
+        params: PartialParsedCommandParams<ParameterDefinitions>,
+        names: string[],
+    ): Promise<string[]> {
+        if (params.args?.model === undefined) {
+            return getChatModelNames();
+        }
+        return [];
     }
 }
+
+const configTranslationCommandHandlers: CommandHandlerTable = {
+    description: "Translation configuration",
+    defaultSubCommand: "on",
+    commands: {
+        ...getToggleCommandHandlers("translation", async (context, enable) => {
+            await changeContextConfig(
+                { translation: { enabled: enable } },
+                context,
+            );
+        }),
+        model: new ConfigModelSetCommandHandler("translation"),
+        multi: getToggleHandlerTable(
+            "multiple action translation",
+            async (context, enable: boolean) => {
+                await changeContextConfig(
+                    { translation: { multipleActions: enable } },
+                    context,
+                );
+            },
+        ),
+        switch: {
+            description: "auto switch schemas",
+            commands: {
+                ...getToggleCommandHandlers(
+                    "switch schema",
+                    async (context, enable: boolean) => {
+                        await changeContextConfig(
+                            {
+                                translation: {
+                                    switch: {
+                                        inline: enable,
+                                        search: enable,
+                                    },
+                                },
+                            },
+                            context,
+                        );
+                    },
+                ),
+                inline: getToggleHandlerTable(
+                    "inject inline switch",
+                    async (context, enable: boolean) => {
+                        await changeContextConfig(
+                            {
+                                translation: {
+                                    switch: {
+                                        inline: enable,
+                                    },
+                                },
+                            },
+                            context,
+                        );
+                    },
+                ),
+                search: getToggleHandlerTable(
+                    "inject inline switch",
+                    async (context, enable: boolean) => {
+                        await changeContextConfig(
+                            {
+                                translation: {
+                                    switch: {
+                                        search: enable,
+                                    },
+                                },
+                            },
+                            context,
+                        );
+                    },
+                ),
+            },
+        },
+        history: getToggleHandlerTable(
+            "history",
+            async (context, enable: boolean) => {
+                await changeContextConfig(
+                    { translation: { history: enable } },
+                    context,
+                );
+            },
+        ),
+        stream: getToggleHandlerTable(
+            "streaming translation",
+            async (context, enable: boolean) => {
+                await changeContextConfig(
+                    { translation: { stream: enable } },
+                    context,
+                );
+            },
+        ),
+        schema: {
+            description: "Action schema configuration",
+            commands: {
+                generation: getToggleHandlerTable(
+                    "generated action schema",
+                    async (context, enable: boolean) => {
+                        await changeContextConfig(
+                            {
+                                translation: {
+                                    schema: {
+                                        generation: enable,
+                                    },
+                                },
+                            },
+                            context,
+                        );
+                    },
+                ),
+            },
+        },
+    },
+};
 
 export function getConfigCommandHandlers(): CommandHandlerTable {
     return {
         description: "Configuration commands",
         commands: {
-            translator: new AgentToggleCommandHandler(AgentToggle.Translator),
+            schema: new AgentToggleCommandHandler(AgentToggle.Schema),
             action: new AgentToggleCommandHandler(AgentToggle.Action),
             command: new AgentToggleCommandHandler(AgentToggle.Command),
             agent: new AgentToggleCommandHandler(AgentToggle.Agent),
-            model: {
-                description: "Configure model",
-                defaultSubCommand: "show",
-                commands: {
-                    show: new ConfigModelShowCommandHandler(),
-                    set: new ConfigModelSetCommandHandler(),
-                },
-            },
-            multi: getToggleHandlerTable(
-                "multiple action translation",
-                async (context, enable: boolean) => {
-                    await changeContextConfig(
-                        { multipleActions: enable },
-                        context,
-                    );
-                },
-            ),
-            switch: {
-                description: "auto switch translator",
-                commands: {
-                    ...getToggleCommandHandlers(
-                        "switch translator",
-                        async (context, enable: boolean) => {
-                            await changeContextConfig(
-                                {
-                                    switch: {
-                                        inline: enable,
-                                        search: enable,
-                                    },
-                                },
-                                context,
-                            );
-                        },
-                    ),
-                    inline: getToggleHandlerTable(
-                        "inject inline switch",
-                        async (context, enable: boolean) => {
-                            await changeContextConfig(
-                                {
-                                    switch: {
-                                        inline: enable,
-                                    },
-                                },
-                                context,
-                            );
-                        },
-                    ),
-                    search: getToggleHandlerTable(
-                        "inject inline switch",
-                        async (context, enable: boolean) => {
-                            await changeContextConfig(
-                                {
-                                    switch: {
-                                        search: enable,
-                                    },
-                                },
-                                context,
-                            );
-                        },
-                    ),
-                },
-            },
-            history: getToggleHandlerTable(
-                "history",
-                async (context, enable: boolean) => {
-                    await changeContextConfig({ history: enable }, context);
-                },
-            ),
-            bot: getToggleHandlerTable(
-                "translation LLM usage",
-                async (context, enable: boolean) => {
-                    await changeContextConfig({ bot: enable }, context);
-                },
-            ),
-            stream: getToggleHandlerTable(
-                "streaming translation",
-                async (context, enable: boolean) => {
-                    await changeContextConfig({ stream: enable }, context);
-                },
-            ),
+            translation: configTranslationCommandHandlers,
             explainer: {
                 description: "Explainer configuration",
                 defaultSubCommand: "on",
@@ -502,6 +661,7 @@ export function getConfigCommandHandlers(): CommandHandlerTable {
                         },
                     ),
                     name: new ExplainerCommandHandler(),
+                    model: new ConfigModelSetCommandHandler("explainer"),
                     filter: {
                         description: "Toggle explanation filter",
                         defaultSubCommand: "on",

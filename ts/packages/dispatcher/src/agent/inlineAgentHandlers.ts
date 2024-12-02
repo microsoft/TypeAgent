@@ -49,10 +49,7 @@ import {
 } from "../translation/actionTemplate.js";
 import { getTokenCommandHandlers } from "../handlers/tokenCommandHandler.js";
 import { Actions, FullAction } from "agent-cache";
-import {
-    getActionSchema,
-    getTranslatorActionSchemas,
-} from "../translation/actionSchema.js";
+import { getActionSchema } from "../translation/actionSchemaFileCache.js";
 import { executeActions } from "../action/actionHandlers.js";
 import { getObjectProperty } from "common-utils";
 import { dispatcherAgent } from "../dispatcher/dispatcherAgent.js";
@@ -204,12 +201,15 @@ class ActionCommandHandler implements CommandHandler {
     ) {
         const systemContext = context.sessionContext.agentContext;
         const { translatorName, actionName } = params.args;
-        const config = systemContext.agents.getTranslatorConfig(translatorName);
-        const actionInfos = getTranslatorActionSchemas(config, translatorName);
-        const actionInfo = actionInfos.get(actionName);
-        if (actionInfo === undefined) {
+        const actionSchemaFile =
+            systemContext.agents.getActionSchemaFile(translatorName);
+        if (actionSchemaFile === undefined) {
+            throw new Error(`Invalid schema name ${translatorName}`);
+        }
+        const actionSchema = actionSchemaFile.actionSchemas.get(actionName);
+        if (actionSchema === undefined) {
             throw new Error(
-                `Invalid action name ${actionName} for translator ${translatorName}`,
+                `Invalid action name ${actionName} for schema ${translatorName}`,
             );
         }
 
@@ -219,7 +219,7 @@ class ActionCommandHandler implements CommandHandler {
             parameters: params.flags.parameters,
         };
 
-        validateAction(actionInfo, action, true);
+        validateAction(actionSchema, action, true);
 
         return executeActions(
             Actions.fromFullActions([action as FullAction]),
@@ -235,7 +235,7 @@ class ActionCommandHandler implements CommandHandler {
         const completions: string[] = [];
         for (const name of names) {
             if (name === "translatorName") {
-                const translators = systemContext.agents.getActiveTranslators();
+                const translators = systemContext.agents.getActiveSchemas();
                 completions.push(...translators);
                 continue;
             }
@@ -245,18 +245,12 @@ class ActionCommandHandler implements CommandHandler {
                 if (translatorName === undefined) {
                     continue;
                 }
-                const config =
-                    systemContext.agents.tryGetTranslatorConfig(translatorName);
-
-                if (config === undefined) {
+                const actionSchemaFile =
+                    systemContext.agents.getActionSchemaFile(translatorName);
+                if (actionSchemaFile === undefined) {
                     continue;
                 }
-                const actionInfos = getTranslatorActionSchemas(
-                    config,
-                    translatorName,
-                );
-
-                completions.push(...actionInfos.keys());
+                completions.push(...actionSchemaFile.actionSchemas.keys());
                 continue;
             }
 

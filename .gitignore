@@ -437,3 +437,4 @@ FodyWeavers.xsd
 
 # Python virtual env
 .venv
+android/samples/mobile/.idea/deploymentTargetSelector.xml

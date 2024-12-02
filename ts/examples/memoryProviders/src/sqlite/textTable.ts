@@ -223,6 +223,14 @@ export async function createTextIndex<
          FROM ${textTable.tableName} 
          INNER JOIN ${postingsTable.tableName} 
          ON keyId = stringId          
+         WHERE value = ? 
+         ORDER BY valueId ASC`,
+    );
+    const sql_getFreq = db.prepare(
+        `SELECT count(valueId) as count 
+         FROM ${textTable.tableName} 
+         INNER JOIN ${postingsTable.tableName} 
+         ON keyId = stringId          
          WHERE value = ?`,
     );
 
@@ -236,6 +244,7 @@ export async function createTextIndex<
         ids,
         entries,
         get,
+        getFrequency,
         getById,
         getByIds,
         getId,
@@ -245,6 +254,7 @@ export async function createTextIndex<
         getNearest,
         getNearestMultiple,
         getNearestText,
+        getNearestTextMultiple,
         getNearestHits,
         getNearestHitsMultiple,
         put,
@@ -252,6 +262,7 @@ export async function createTextIndex<
         addSources,
         nearestNeighbors,
         nearestNeighborsText,
+        nearestNeighborsPairs,
         remove,
     };
 
@@ -286,6 +297,12 @@ export async function createTextIndex<
 
     function get(text: string): Promise<TSourceId[] | undefined> {
         return Promise.resolve(getSync(text));
+    }
+
+    function getFrequency(text: string): Promise<number> {
+        const row = sql_getFreq.get(text);
+        const count = row ? (row as any).count : 0;
+        return Promise.resolve(count);
     }
 
     function getSync(text: string): TSourceId[] | undefined {
@@ -470,6 +487,21 @@ export async function createTextIndex<
         return [];
     }
 
+    async function getNearestTextMultiple(
+        values: string[],
+        maxMatches?: number,
+        minScore?: number,
+    ): Promise<TTextId[]> {
+        // TODO: optimize by lowering into DB if possible
+        const matches = await asyncArray.mapAsync(
+            values,
+            settings.concurrency,
+            (t) => getNearestText(t, maxMatches, minScore),
+        );
+
+        return knowLib.sets.intersectUnionMultiple(...matches) ?? [];
+    }
+
     async function nearestNeighbors(
         value: string,
         maxMatches: number,
@@ -537,6 +569,29 @@ export async function createTextIndex<
             matches.splice(0, 0, { score: 1.0, item: textId });
         }
         return matches;
+    }
+
+    async function nearestNeighborsPairs(
+        value: string,
+        maxMatches: number,
+        minScore?: number,
+    ): Promise<ScoredItem<TextBlock<TSourceId>>[]> {
+        const matches = await nearestNeighborsTextIds(
+            value,
+            maxMatches,
+            minScore,
+        );
+        const results = matches.map((m) => {
+            return {
+                score: m.score,
+                item: {
+                    type: TextBlockType.Sentence,
+                    value: isIdInt ? m.item : serializer.serialize(m.item),
+                    sourceIds: postingsTable.getSync(m.item) ?? [],
+                },
+            };
+        });
+        return results;
     }
 
     // TODO: Optimize

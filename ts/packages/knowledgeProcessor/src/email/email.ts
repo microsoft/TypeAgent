@@ -286,6 +286,7 @@ export interface EmailMemorySettings extends ConversationSettings {
  */
 export async function createEmailMemory(
     model: ChatModel,
+    answerModel: ChatModel,
     name: string,
     rootPath: string,
     settings: EmailMemorySettings,
@@ -303,6 +304,7 @@ export async function createEmailMemory(
     const cm = await createConversationManager(
         {
             model,
+            answerModel,
             initializer: setupEmailConversationManager,
         },
         name,
@@ -310,6 +312,14 @@ export async function createEmailMemory(
         false,
         emailConversation,
     );
+    const userProfile = await readJsonFile<any>(
+        path.join(rootPath, "emailUserProfile.json"),
+    );
+    cm.searchProcessor.actions.requestInstructions =
+        "The following is a user request about the messages in their email inbox. The email inbox belongs to:\n" +
+        JSON.stringify(userProfile, undefined, 2) +
+        "\n" +
+        "User specific first person pronouns are rewritten to use user's name, but general ones are not.";
     return cm;
 }
 
@@ -323,7 +333,10 @@ async function setupEmailConversationManager(
     entityIndex.noiseTerms.put("email");
     entityIndex.noiseTerms.put("message");
 
-    cm.searchProcessor.answers.settings.hints = `messages are *emails*. Use email headers (to, subject. etc) to determine if message is highly relevant to the question`;
+    cm.searchProcessor.answers.settings.hints =
+        "messages are *emails* with email headers such as To, From, Cc, Subject. etc. " +
+        "To answer questions correctly, use the headers to determine who the email is from and who it was sent to. " +
+        "If you are not sure, return NoAnswer.";
 }
 
 async function setupEmailConversation(

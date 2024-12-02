@@ -5,52 +5,77 @@ import {
     InlineTranslatorSchemaDef,
     createJsonTranslatorFromSchemaDef,
 } from "common-utils";
-import { getTranslatorActionSchemas } from "./actionSchema.js";
+import { getActionSchemaFileForConfig } from "./actionSchemaFileCache.js";
 import { Result, success } from "typechat";
 import registerDebug from "debug";
-import { TranslatorConfigProvider } from "./agentTranslators.js";
+import { ActionConfigProvider } from "./agentTranslators.js";
+import {
+    generateSchemaTypeDefinition,
+    ActionSchemaCreator as sc,
+} from "action-schema";
 
 const debugSwitchSearch = registerDebug("typeagent:switch:search");
 
-function createSelectionSchema(
-    translatorName: string,
-    provider: TranslatorConfigProvider,
-): InlineTranslatorSchemaDef | undefined {
-    const translatorConfig = provider.getTranslatorConfig(translatorName);
+function createSelectionActionTypeDefinition(
+    schemaName: string,
+    provider: ActionConfigProvider,
+) {
+    const actionConfig = provider.getActionConfig(schemaName);
     // Skip injected schemas except for chat; investigate whether we can get chat always on first pass
-    if (translatorConfig.injected && translatorName !== "chat") {
+    if (actionConfig.injected && schemaName !== "chat") {
         // No need to select for injected schemas
-        selectSchemaCache.set(translatorName, undefined);
         return undefined;
     }
-    const actionSchemas = getTranslatorActionSchemas(
-        translatorConfig,
-        translatorName,
+    const actionSchemaFile = getActionSchemaFileForConfig(
+        actionConfig,
+        provider,
     );
 
     const actionNames: string[] = [];
     const actionComments: string[] = [];
-    for (const info of actionSchemas.values()) {
-        actionNames.push(`"${info.actionName}"`);
+    for (const [name, info] of actionSchemaFile.actionSchemas.entries()) {
+        actionNames.push(name);
         actionComments.push(
-            `"${info.actionName}"${info.comments ? ` - ${info.comments[0]}` : ""}`,
+            ` "${name}"${info.comments ? ` - ${info.comments[0].trim()}` : ""}`,
         );
     }
 
     if (actionNames.length === 0) {
-        selectSchemaCache.set(translatorName, undefined);
         return undefined;
     }
-    const typeName = `${translatorConfig.schemaType}Assistant`;
-    const schema = `
-export type ${typeName} = {
-    // ${translatorConfig.description}
-    assistant: "${translatorName}";
-    // ${actionComments.join("\n    // ")}
-    action: ${actionNames.join(" | ")};
-};`;
 
-    return { kind: "inline", typeName, schema };
+    const typeName = `${actionConfig.schemaType}Assistant`;
+
+    const schema = sc.type(
+        typeName,
+        sc.obj({
+            assistant: sc.field(
+                sc.string(schemaName),
+                ` ${actionConfig.description}`,
+            ),
+            action: sc.field(sc.string(actionNames), actionComments),
+        }),
+    );
+    return schema;
+}
+
+function createSelectionSchema(
+    translatorName: string,
+    provider: ActionConfigProvider,
+): InlineTranslatorSchemaDef | undefined {
+    const schema = createSelectionActionTypeDefinition(
+        translatorName,
+        provider,
+    );
+    if (schema === undefined) {
+        return undefined;
+    }
+    const typeName = schema.name;
+    return {
+        kind: "inline",
+        typeName,
+        schema: generateSchemaTypeDefinition(schema),
+    };
 }
 
 const selectSchemaCache = new Map<
@@ -59,7 +84,7 @@ const selectSchemaCache = new Map<
 >();
 function getSelectionSchema(
     translatorName: string,
-    provider: TranslatorConfigProvider,
+    provider: ActionConfigProvider,
 ): InlineTranslatorSchemaDef | undefined {
     if (selectSchemaCache.has(translatorName)) {
         return selectSchemaCache.get(translatorName);
@@ -85,10 +110,10 @@ type AssistantSelectionSchemaEntry = {
     schema: InlineTranslatorSchemaDef;
 };
 export function getAssistantSelectionSchemas(
-    translatorNames: string[],
-    provider: TranslatorConfigProvider,
+    schemaNames: string[],
+    provider: ActionConfigProvider,
 ) {
-    return translatorNames
+    return schemaNames
         .map((name) => {
             return { name, schema: getSelectionSchema(name, provider) };
         })
@@ -106,10 +131,10 @@ export type AssistantSelection = {
 const assistantSelectionLimit = 8192 * 3;
 
 export function loadAssistantSelectionJsonTranslator(
-    translatorNames: string[],
-    provider: TranslatorConfigProvider,
+    schemaNames: string[],
+    provider: ActionConfigProvider,
 ) {
-    const schemas = getAssistantSelectionSchemas(translatorNames, provider);
+    const schemas = getAssistantSelectionSchemas(schemaNames, provider);
 
     let currentLength = 0;
     let current: AssistantSelectionSchemaEntry[] = [];
@@ -138,13 +163,15 @@ export function loadAssistantSelectionJsonTranslator(
                 entries
                     .map((entry) => entry.schema)
                     .concat(unknownAssistantSelectionSchemaDef),
-                undefined,
-                [
-                    {
-                        role: "system",
-                        content: "Select the assistant to handle the request",
-                    },
-                ],
+                {
+                    instructions: [
+                        {
+                            role: "system",
+                            content:
+                                "Select the assistant to handle the request",
+                        },
+                    ],
+                },
             ),
         };
     });
