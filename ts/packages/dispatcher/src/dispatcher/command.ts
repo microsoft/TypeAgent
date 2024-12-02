@@ -3,11 +3,7 @@
 
 import chalk from "chalk";
 import registerDebug from "debug";
-import {
-    RequestId,
-    getRequestIO,
-    DispatcherName,
-} from "../handlers/common/interactiveIO.js";
+import { RequestId, DispatcherName } from "../handlers/common/interactiveIO.js";
 import { getDefaultExplainerName } from "agent-cache";
 import { CommandHandlerContext } from "../handlers/common/commandHandlerContext.js";
 
@@ -263,12 +259,7 @@ export async function processCommand(
             context.commandProfiler =
                 context.metricsManager?.beginCommand(requestId);
         }
-        const oldRequestIO = context.requestIO;
         try {
-            if (context.clientIO) {
-                context.requestIO = getRequestIO(context, context.clientIO);
-            }
-
             await processCommandNoLock(originalInput, context, attachments);
         } finally {
             context.commandProfiler?.stop();
@@ -279,8 +270,6 @@ export async function processCommand(
                 : undefined;
 
             context.requestId = undefined;
-            context.requestIO = oldRequestIO;
-
             return metrics;
         }
     });

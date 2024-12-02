@@ -15,6 +15,7 @@ import {
 } from "agent-dispatcher/internal";
 import inspector from "node:inspector";
 import { getChatModelNames } from "aiclient";
+import { createConsoleClientIO } from "agent-dispatcher/helpers/console";
 
 const modelNames = await getChatModelNames();
 
@@ -77,9 +78,9 @@ export default class Interactive extends Command {
                 schemas,
                 translation: { model: flags.model },
                 explainer: { name: flags.explainer },
-                stdio,
                 persistSession: !flags.memory,
                 enableServiceHost: true,
+                clientIO: createConsoleClientIO(stdio),
             });
 
             if (args.input) {

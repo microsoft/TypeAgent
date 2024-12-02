@@ -35,8 +35,7 @@ import { createServiceHost } from "../serviceHost/serviceHostCommandHandler.js";
 import {
     ClientIO,
     RequestIO,
-    getConsoleRequestIO,
-    getRequestIO,
+    createRequestIO,
     RequestId,
     getNullRequestIO,
     DispatcherName,
@@ -98,7 +97,7 @@ export type CommandHandlerContext = {
     developerMode?: boolean;
     explanationAsynchronousMode: boolean;
     dblogging: boolean;
-    clientIO: ClientIO | undefined | null;
+    clientIO: ClientIO | undefined;
     requestIO: RequestIO;
 
     // Runtime context
@@ -112,6 +111,8 @@ export type CommandHandlerContext = {
     localWhisper: ChildProcess | undefined;
     requestId?: RequestId;
     chatHistory: ChatHistory;
+
+    batchMode: boolean;
 
     // For @correct
     lastRequestAction?: RequestAction;
@@ -183,8 +184,7 @@ export type InitializeCommandHandlerContextOptions = SessionOptions & {
     appAgentProviders?: AppAgentProvider[];
     explanationAsynchronousMode?: boolean; // default to false
     persistSession?: boolean; // default to false,
-    stdio?: readline.Interface;
-    clientIO?: ClientIO | undefined | null; // default to console IO, null to disable
+    clientIO?: ClientIO | undefined; // undefined to disable any IO.
     enableServiceHost?: boolean; // default to false,
     metrics?: boolean; // default to false
 };
@@ -205,7 +205,10 @@ async function getSession(persistSession: boolean = false) {
     return session;
 }
 
-function getLoggerSink(isDbEnabled: () => boolean, requestIO: RequestIO) {
+function getLoggerSink(
+    isDbEnabled: () => boolean,
+    clientIO: ClientIO | undefined,
+) {
     const debugLoggerSink = createDebugLoggerSink();
     let dbLoggerSink: LoggerSink | undefined;
 
@@ -216,11 +219,14 @@ function getLoggerSink(isDbEnabled: () => boolean, requestIO: RequestIO) {
             isDbEnabled,
         );
     } catch (e) {
-        requestIO.notify(
-            AppAgentEvent.Warning,
-            undefined,
-            `DB logging disabled. ${e}`,
-        );
+        if (clientIO) {
+            clientIO.notify(
+                AppAgentEvent.Warning,
+                undefined,
+                `DB logging disabled. ${e}`,
+                DispatcherName,
+            );
+        }
     }
 
     return new MultiSinkLogger(
@@ -282,7 +288,6 @@ export async function initializeCommandHandlerContext(
     const metrics = options?.metrics ?? false;
     const explanationAsynchronousMode =
         options?.explanationAsynchronousMode ?? false;
-    const stdio = options?.stdio;
 
     const session = await getSession(options?.persistSession);
     if (options) {
@@ -299,12 +304,7 @@ export async function initializeCommandHandlerContext(
         : undefined;
 
     const clientIO = options?.clientIO;
-    const requestIO = clientIO
-        ? getRequestIO(undefined, clientIO)
-        : clientIO === undefined
-          ? getConsoleRequestIO(stdio)
-          : getNullRequestIO();
-    const loggerSink = getLoggerSink(() => context.dblogging, requestIO);
+    const loggerSink = getLoggerSink(() => context.dblogging, clientIO);
     const logger = new ChildLogger(loggerSink, DispatcherName, {
         hostName,
         userId: getUserId(),
@@ -325,7 +325,7 @@ export async function initializeCommandHandlerContext(
         explanationAsynchronousMode,
         dblogging: true,
         clientIO,
-        requestIO,
+        requestIO: getNullRequestIO(),
 
         // Runtime context
         commandLock: createLimiter(1), // Make sure we process one command at a time.
@@ -338,8 +338,11 @@ export async function initializeCommandHandlerContext(
         serviceHost: serviceHost,
         localWhisper: undefined,
         metricsManager: metrics ? new RequestMetricsManager() : undefined,
+        batchMode: false,
     };
-    context.requestIO.context = context;
+    if (clientIO) {
+        context.requestIO = createRequestIO(context, clientIO);
+    }
 
     await addAppAgentProvidres(
         context,

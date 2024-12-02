@@ -95,7 +95,6 @@ export interface ClientIO {
 
 export interface RequestIO {
     type: "html" | "text";
-    context: CommandHandlerContext | undefined;
     clear(): void;
 
     // Action status
@@ -112,7 +111,6 @@ export interface RequestIO {
     ): void;
 
     // Input
-    isInputEnabled(): boolean;
     askYesNo(message: string, defaultValue?: boolean): Promise<boolean>;
     proposeAction(
         actionTemplates: TemplateEditConfig,
@@ -147,149 +145,6 @@ export interface RequestIO {
     takeAction(action: string, data: unknown): void;
 }
 
-function displayPadEnd(content: string, length: number): string {
-    // Account for full width characters
-    return `${content}${" ".repeat(length - stringWidth(content))}`;
-}
-
-export function messageContentToText(message: MessageContent): string {
-    if (typeof message === "string") {
-        return message;
-    }
-
-    if (message.length === 0) {
-        return "";
-    }
-    if (typeof message[0] === "string") {
-        return message.join("\n");
-    }
-    const table = message as string[][];
-    let numColumns = 0;
-    const maxColumnWidths: number[] = [];
-    for (const row of table) {
-        numColumns = Math.max(numColumns, row.length);
-        for (let i = 0; i < row.length; i++) {
-            maxColumnWidths[i] = Math.max(
-                maxColumnWidths[i] ?? 0,
-                stringWidth(row[i]),
-            );
-        }
-    }
-
-    const displayRows = table.map((row) => {
-        const items: string[] = [];
-        for (let i = 0; i < numColumns; i++) {
-            const content = i < row.length ? row[i] : "";
-            items.push(displayPadEnd(content, maxColumnWidths[i]));
-        }
-        return `|${items.join("|")}|`;
-    });
-    displayRows.splice(
-        1,
-        0,
-        `|${maxColumnWidths.map((w) => "-".repeat(w)).join("|")}|`,
-    );
-    return displayRows.join("\n");
-}
-
-let lastAppendMode: DisplayAppendMode | undefined;
-function displayContent(
-    content: DisplayContent,
-    appendMode?: DisplayAppendMode,
-) {
-    let message: MessageContent;
-    if (typeof content === "string" || Array.isArray(content)) {
-        message = content;
-    } else {
-        // TODO: should reject html content
-        message = content.content;
-        switch (content.kind) {
-            case "status":
-                message = chalk.grey(content.content);
-                break;
-            case "error":
-                message = chalk.red(content.content);
-                break;
-            case "warning":
-                message = chalk.yellow(content.content);
-                break;
-            case "info":
-                message = chalk.grey(content.content);
-                break;
-            case "success":
-                message = chalk.greenBright(content.content);
-                break;
-            default:
-                message = chalk.green(content.content);
-                break;
-        }
-    }
-
-    const displayText = messageContentToText(message);
-    if (appendMode !== "inline") {
-        if (lastAppendMode === "inline") {
-            process.stdout.write("\n");
-        }
-        process.stdout.write(displayText);
-        process.stdout.write("\n");
-    } else {
-        process.stdout.write(displayText);
-    }
-
-    lastAppendMode = appendMode;
-}
-
-export function getConsoleRequestIO(
-    stdio: readline.Interface | undefined,
-): RequestIO {
-    return {
-        type: "text",
-        context: undefined,
-        clear: () => console.clear(),
-        setDisplay: (content: DisplayContent) => displayContent(content),
-
-        appendDisplay: (
-            content: DisplayContent,
-            _actionIndex: number | undefined,
-            _source: string,
-            mode: DisplayAppendMode,
-        ) => displayContent(content, mode),
-
-        isInputEnabled: () => stdio !== undefined,
-        askYesNo: async (message: string, defaultValue?: boolean) => {
-            return await askYesNo(message, stdio, defaultValue);
-        },
-        proposeAction: async (
-            actionTemplates: TemplateEditConfig,
-            source: string,
-        ) => {
-            // TODO: Not implemented
-            return undefined;
-        },
-        question: async (message: string) => {
-            return await stdio?.question(`${message}: `);
-        },
-        notify: (event: string, requestId: RequestId, data: any) => {
-            switch (event) {
-                case AppAgentEvent.Error:
-                    console.error(chalk.red(data));
-                    break;
-                case AppAgentEvent.Warning:
-                    console.warn(chalk.yellow(data));
-                    break;
-                case AppAgentEvent.Info:
-                    console.info(data);
-                    break;
-                default:
-                // ignored.
-            }
-        },
-        takeAction: (action: string, data: unknown) => {
-            return stdio?.write("This command is not supported in the CLI.\n");
-        },
-    };
-}
-
 function makeClientIOMessage(
     context: CommandHandlerContext | undefined,
     message: DisplayContent,
@@ -309,14 +164,12 @@ function makeClientIOMessage(
     };
 }
 
-export function getRequestIO(
-    context: CommandHandlerContext | undefined,
+export function createRequestIO(
+    context: CommandHandlerContext,
     clientIO: ClientIO,
 ): RequestIO {
-    const requestId = context?.requestId;
     return {
         type: "html",
-        context: context,
         clear: () => clientIO.clear(),
         setDisplay: (
             content: DisplayContent,
@@ -327,7 +180,7 @@ export function getRequestIO(
                 makeClientIOMessage(
                     context,
                     content,
-                    requestId,
+                    context.requestId,
                     source,
                     actionIndex,
                 ),
@@ -342,22 +195,32 @@ export function getRequestIO(
                 makeClientIOMessage(
                     context,
                     content,
-                    requestId,
+                    context.requestId,
                     source,
                     actionIndex,
                 ),
                 mode,
             ),
 
-        isInputEnabled: () => true,
-        askYesNo: async (message: string, defaultValue?: boolean) =>
-            clientIO.askYesNo(message, requestId, defaultValue),
+        askYesNo: async (message: string, defaultValue: boolean = false) =>
+            context?.batchMode
+                ? defaultValue
+                : clientIO.askYesNo(message, context.requestId, defaultValue),
+
         proposeAction: async (
             actionTemplates: TemplateEditConfig,
             source: string,
-        ) => clientIO.proposeAction(actionTemplates, requestId, source),
+        ) => {
+            return clientIO.proposeAction(
+                actionTemplates,
+                context.requestId,
+                source,
+            );
+        },
         question: async (message: string) =>
-            clientIO.question(message, requestId),
+            context?.batchMode
+                ? undefined
+                : clientIO.question(message, context.requestId),
         notify(
             event: string,
             requestId: RequestId,
@@ -375,11 +238,9 @@ export function getRequestIO(
 export function getNullRequestIO(): RequestIO {
     return {
         type: "text",
-        context: undefined,
         clear: () => {},
         setDisplay: () => {},
         appendDisplay: () => {},
-        isInputEnabled: () => false,
         askYesNo: async () => false,
         proposeAction: async () => undefined,
         question: async () => undefined,

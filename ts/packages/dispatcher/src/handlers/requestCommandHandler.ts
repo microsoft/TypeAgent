@@ -213,7 +213,7 @@ async function matchRequest(
             );
 
             if (requestAction) {
-                if (systemContext.requestIO.isInputEnabled()) {
+                if (!systemContext.batchMode) {
                     systemContext.logger?.logEvent("match", {
                         elapsedMs,
                         request,
@@ -612,7 +612,7 @@ export async function translateRequest(
     );
 
     if (requestAction) {
-        if (systemContext.requestIO.isInputEnabled()) {
+        if (!systemContext.batchMode) {
             systemContext.logger?.logEvent("translation", {
                 elapsedMs,
                 translatorName: schemaName,
