@@ -44,6 +44,7 @@ import { pathToFileURL } from "url";
 
 export type Models = {
     chatModel: ChatModel;
+    answerModel: ChatModel;
     embeddingModel: TextEmbeddingModel;
     embeddingModelSmall?: TextEmbeddingModel | undefined;
 };
@@ -54,7 +55,7 @@ export type ChatContext = {
     printer: ChatMemoryPrinter;
     models: Models;
     maxCharsPerChunk: number;
-    stats: knowLib.IndexingStats;
+    stats?: knowLib.IndexingStats | undefined;
     topicWindowSize: number;
     searchConcurrency: number;
     minScore: number;
@@ -110,6 +111,7 @@ export function createModels(): Models {
         chatModel: openai.createJsonChatModel(chatModelSettings, [
             "chatMemory",
         ]),
+        answerModel: openai.createChatModel(),
         embeddingModel: knowLib.createEmbeddingCache(
             openai.createEmbeddingModel(embeddingModelSettings),
             1024,
@@ -134,6 +136,7 @@ export async function createChatMemoryContext(
 
     const models: Models = createModels();
     models.chatModel.completionCallback = completionCallback;
+    models.answerModel.completionCallback = completionCallback;
 
     const conversationName = ReservedConversationNames.transcript;
     const conversationSettings =
@@ -148,20 +151,20 @@ export async function createChatMemoryContext(
         await knowLib.conversation.createConversationManager(
             {
                 model: models.chatModel,
+                answerModel: models.answerModel,
             },
             conversationName,
             conversationPath,
             false,
             conversation,
         );
-    const entityTopK = 16;
+    const entityTopK = 32;
     const actionTopK = 16;
     const context: ChatContext = {
         storePath,
         statsPath,
         printer: new ChatMemoryPrinter(getInteractiveIO()),
         models,
-        stats: knowLib.createIndexingStats(),
         maxCharsPerChunk: 4096,
         topicWindowSize: 8,
         searchConcurrency: 2,
@@ -217,6 +220,7 @@ export async function createSearchMemory(
     const memory = await conversation.createConversationManager(
         {
             model: context.models.chatModel,
+            answerModel: context.models.answerModel,
         },
         conversationName,
         context.storePath,
@@ -248,7 +252,10 @@ export async function loadConversation(
         context.conversationName = name;
         context.conversationManager =
             await conversation.createConversationManager(
-                { model: context.models.chatModel },
+                {
+                    model: context.models.chatModel,
+                    answerModel: context.models.answerModel,
+                },
                 name,
                 conversationPath,
                 false,
@@ -274,7 +281,7 @@ export async function loadConversation(
 
 export async function runChatMemory(): Promise<void> {
     let context = await createChatMemoryContext(captureTokenStats);
-    let showTokenStats = true;
+    let showTokenStats = false;
     let printer = context.printer;
     const commands: Record<string, CommandHandler> = {
         importPlay,
@@ -330,10 +337,14 @@ export async function runChatMemory(): Promise<void> {
     }
 
     function captureTokenStats(req: any, response: any): void {
-        context.stats.updateCurrentTokenStats(response.usage);
+        if (context.stats) {
+            context.stats.updateCurrentTokenStats(response.usage);
+        }
         if (showTokenStats) {
             printer.writeCompletionStats(response.usage);
             printer.writeLine();
+        } else {
+            printer.write(".");
         }
     }
     //--------------------
@@ -1352,6 +1363,7 @@ export async function runChatMemory(): Promise<void> {
             printer.writeError("No result");
             return undefined;
         }
+        printer.writeLine();
         await writeSearchTermsResult(result, namedArgs.debug);
         if (result.response && result.response.answer) {
             if (namedArgs.save && recordAnswer) {

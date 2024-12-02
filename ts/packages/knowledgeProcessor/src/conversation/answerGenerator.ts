@@ -6,6 +6,8 @@ import {
     createChatTranslator,
     dateTime,
     loadSchema,
+    PromptSectionProvider,
+    rewriteText,
 } from "typeagent";
 import { PromptSection } from "typechat";
 import { ChatModel } from "aiclient";
@@ -39,6 +41,7 @@ export type AnswerGeneratorSettings = {
     chunking: AnswerChunkingSettings;
     maxCharsInContext?: number | undefined;
     concurrency?: number;
+    contextProvider?: PromptSectionProvider | undefined;
     hints?: string | undefined;
 };
 
@@ -52,7 +55,7 @@ export function createAnswerGeneratorSettings(): AnswerGeneratorSettings {
         chunking: {
             enable: false,
             splitMessages: false,
-            fastStop: true,
+            fastStop: false,
         },
         maxCharsInContext: 1024 * 8,
     };
@@ -152,7 +155,11 @@ export function createAnswerGenerator(
                 structuredChunk,
                 false,
             );
-            if (structuredAnswer && structuredAnswer.type === "Answered") {
+            if (
+                structuredAnswer &&
+                structuredAnswer.type === "Answered" &&
+                settings.chunking.fastStop
+            ) {
                 return structuredAnswer;
             }
             chunks = chunks.slice(1);
@@ -199,17 +206,23 @@ export function createAnswerGenerator(
         if (trim && contextContent.length > getMaxContextLength()) {
             contextContent = trimContext(contextContent, getMaxContextLength());
         }
-        const contextSection: PromptSection = {
+        let preamble: PromptSection[] = [];
+        if (settings.contextProvider) {
+            preamble.push(
+                ...(await settings.contextProvider.getSections(question)),
+            );
+        }
+        preamble.push({
             role: "user",
             content: `[CONVERSATION HISTORY]\n${contextContent}`,
-        };
+        });
 
         const prompt = createAnswerPrompt(
             question,
             higherPrecision,
             answerStyle,
         );
-        const result = await translator.translate(prompt, [contextSection]);
+        const result = await translator.translate(prompt, preamble);
         return result.success ? result.data : undefined;
     }
 
@@ -251,17 +264,7 @@ export function createAnswerGenerator(
         text: string,
     ): Promise<string | undefined> {
         text = trim(text, settings.maxCharsInContext);
-        let prompt = `The following text answers the QUESTION "${question}".`;
-        prompt +=
-            " Rewrite it to remove all redundancy, duplication, contradiction, or anything that does not answer the question.";
-        prompt += "\nImprove formatting";
-        prompt += `\n"""\n${text}\n"""\n`;
-        const result = await model.complete(prompt);
-        if (result.success) {
-            return result.data;
-        }
-
-        return undefined;
+        return rewriteText(model, text, question);
     }
 
     function createAnswerPrompt(
@@ -271,8 +274,12 @@ export function createAnswerGenerator(
     ): string {
         let prompt = `The following is a user question about a conversation:\n${question}\n\n`;
         prompt +=
-            "Answer the question using only the relevant topics, entities, actions, messages and time ranges/timestamps found in CONVERSATION HISTORY.\n";
-        prompt += "Entities and topics are case-insensitive\n";
+            "The included CONVERSATION HISTORY contains information that MAY be relevant to answering the question.\n";
+        prompt +=
+            "Answer the question using only relevant topics, entities, actions, messages and time ranges/timestamps found in CONVERSATION HISTORY.\n";
+        prompt +=
+            "Use the name and type of the provided entities to select those highly relevant to answering the question.\n";
+        prompt += "Entities and topics are case-insensitive\n.";
         if (settings.hints) {
             prompt += "\n" + settings.hints;
         }

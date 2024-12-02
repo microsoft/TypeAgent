@@ -29,23 +29,58 @@ import { TextBlock, TextBlockType } from "./text.js";
 import { TextEmbeddingModel } from "aiclient";
 import { createIndexFolder } from "./keyValueIndex.js";
 
+/**
+ * A text index helps you index textual information.
+ * A text index is a map. text --> where that text was seen.
+ * A text index stores and retrieves "postings" (defined below) for a given piece of text.
+ * Postings:
+ * - Text values (term, phrase, etc) is found in a "source". Each source has a unique Id
+ * - Postings are the set of source ids a value is found in
+ *
+ * What a source is up to you. A source can be a text block, or a document, or an entity or..
+ */
 export interface TextIndex<TTextId = any, TSourceId = any> {
     text(): IterableIterator<string>;
     ids(): AsyncIterableIterator<TTextId>;
     entries(): AsyncIterableIterator<TextBlock<TSourceId>>;
     /**
-     * Get the sourceIds (if any) for the text exactly matching the given value
+     * Get the postings (source ids) for the the given text. Uses exact matching.
      * For fuzzy matching, use getNearest
-     * @param value
+     * @param text
+     * @returns If value matches, returns
      */
-    get(value: string): Promise<TSourceId[] | undefined>;
+    get(text: string): Promise<TSourceId[] | undefined>;
+    /**
+     * How many unique sources is this value seen?
+     * @param text
+     */
+    getFrequency(text: string): Promise<number>;
     getById(id: TTextId): Promise<TSourceId[] | undefined>;
     getByIds(ids: TTextId[]): Promise<(TSourceId[] | undefined)[]>;
-    getId(value: string): Promise<TTextId | undefined>;
-    getIds(values: string[]): Promise<(TTextId | undefined)[]>;
+    /**
+     * Return the text Id for the given text.
+     * @param text
+     * @returns text id if the value is indexed. Else returns undefined
+     */
+    getId(text: string): Promise<TTextId | undefined>;
+    /**
+     * Return the Ids for the given array of texts
+     * @param texts
+     */
+    getIds(texts: string[]): Promise<(TTextId | undefined)[]>;
+    /**
+     * Return the text for the given text id
+     * @param id
+     */
     getText(id: TTextId): Promise<string | undefined>;
     // TODO: rename put to "add"
-    put(value: string, postings?: TSourceId[]): Promise<TTextId>;
+    /**
+     * Add postings for the given text.
+     * Merges the new postings with the existing postings
+     * @param text
+     * @param postings
+     */
+    put(text: string, postings?: TSourceId[]): Promise<TTextId>;
     putMultiple(values: TextBlock<TSourceId>[]): Promise<TTextId[]>;
     /**
      * Add source Ids for the given text Id
@@ -54,14 +89,14 @@ export interface TextIndex<TTextId = any, TSourceId = any> {
      */
     addSources(id: TTextId, postings: TSourceId[]): Promise<void>;
     /**
-     * Get the sourceIds for the texts nearest to the given value
+     * Get the sourceIds for the texts in this index that are nearest to the given value
      * Ids are returned in sorted order, with duplicates removed
-     * @param value
+     * @param text
      * @param maxMatches
      * @param minScore
      */
     getNearest(
-        value: string,
+        text: string,
         maxMatches?: number,
         minScore?: number,
     ): Promise<TSourceId[]>;
@@ -185,6 +220,7 @@ export async function createTextIndex<TSourceId = any>(
         ids,
         entries,
         get,
+        getFrequency,
         getById,
         getByIds,
         getId,
@@ -227,6 +263,11 @@ export async function createTextIndex<TSourceId = any>(
             return postingFolder.get(textId);
         }
         return undefined;
+    }
+
+    async function getFrequency(text: string): Promise<number> {
+        const postings = await get(text);
+        return postings ? postings.length : 0;
     }
 
     async function getById(id: TextId): Promise<TSourceId[] | undefined> {
