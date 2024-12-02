@@ -30,7 +30,7 @@ A user query is handled using the following steps:
 
 1. Feed the user query (and some recent conversation history from **answers**) as context to an LLM tasked with producing sensible queries for each index.
 2. Search each local index (**summaries**, **keywords** etc.), keeping the top hits from each (scored by proximity to the query phrase produced by step 1).
-3. Using some information retrieval magic (a variant of TF*IDF), select the top "best" chunks among those hits.
+3. Using some information retrieval magic (a variant of TF\*IDF), select the top "best" chunks among those hits.
 4. Send the selected chunks (including parial metadata and summary), plus the same recent history from step 1, as context to an LLM tasked with producing the final answer from all the context it is given.
 5. present the answer to the user and add it to the conversation history (**answers**).
 
@@ -72,6 +72,6 @@ A user query is handled using the following steps:
 
 ## Details of the current processes
 
-E.g. my TF*IDF variant, etc.
+E.g. my TF\*IDF variant, etc.
 
 This is TODO. For now just see the code.
