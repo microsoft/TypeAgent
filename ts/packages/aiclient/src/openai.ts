@@ -623,11 +623,11 @@ export function createChatModel(
         }
 
         try {
-            // track request content
+            // Log request
             PromptLogger.getInstance().logModelRequest(
                 {
                     prompt: (messages as PromptSection[]), 
-                    response: data.choices,
+                    response: data.choices[0].message?.content ?? "",
                     tokenUsage: data.usage
                 } );
     
@@ -690,8 +690,7 @@ export function createChatModel(
             return result;
         }
         
-        PromptLogger.getInstance().logModelRequest(messages as PromptSection[]);
-
+        let fullResponseText = "";
         return {
             success: true,
             data: (async function* () {
@@ -704,20 +703,21 @@ export function createChatModel(
                         if (data.choices && data.choices.length > 0) {
                             const delta = data.choices[0].delta?.content ?? "";
                             if (delta) {
+                                fullResponseText += delta;
                                 yield delta;
                             }
                         }
                         if (data.usage) {
                             try {
-
-                                // track request content
+                                // Log request
                                 PromptLogger.getInstance().logModelRequest(
                                     {
                                         prompt: (messages as PromptSection[]), 
-                                        response: data.choices,
-                                        tokenUsage: data.usage,
+                                        response: fullResponseText,
+                                        tokenUsage: data.usage
                                     } );
-
+                        
+                                // track token usage                                
                                 TokenCounter.getInstance().add(
                                     data.usage,
                                     tags,
