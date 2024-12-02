@@ -5,7 +5,7 @@ import {
     LoggerSink,
     MultiSinkLogger,
     createMongoDBLoggerSink,
-    createDebugLoggerSink        
+    createDebugLoggerSink,
 } from "telemetry";
 
 import registerDebug from "debug";
@@ -21,31 +21,28 @@ export class PromptLogger {
 
     public static getInstance = (): PromptLogger => {
         if (!PromptLogger.instance) {
-
             PromptLogger.instance = new PromptLogger();
-            PromptLogger.instance.sinkLogger = PromptLogger.instance.createSinkLogger();
+            PromptLogger.instance.sinkLogger =
+                PromptLogger.instance.createSinkLogger();
         }
 
         return PromptLogger.instance;
     };
 
-    logModelRequest(requestContent : any) {
-        this.sinkLogger?.logEvent("modelRequest", { requestContent });       
+    logModelRequest(requestContent: any) {
+        this.sinkLogger?.logEvent("modelRequest", { requestContent });
     }
 
-    createSinkLogger() : MultiSinkLogger {
+    createSinkLogger(): MultiSinkLogger {
         const debugLoggerSink = createDebugLoggerSink();
         let dbLoggerSink: LoggerSink | undefined;
-    
+
         try {
-            dbLoggerSink = createMongoDBLoggerSink(
-                "telemetrydb",
-                "promptLogs"
-            );
+            dbLoggerSink = createMongoDBLoggerSink("telemetrydb", "promptLogs");
         } catch (e) {
             debugPromptLogger(`DB logging disabled. ${e}`);
         }
-    
+
         return new MultiSinkLogger(
             dbLoggerSink === undefined
                 ? [debugLoggerSink]

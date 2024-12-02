@@ -455,13 +455,12 @@ function createAzureOpenAIChatModel(
 
         try {
             // Log request
-            PromptLogger.getInstance().logModelRequest(
-                {
-                    prompt: (messages as PromptSection[]), 
-                    response: data.choices[0].message?.content ?? "",
-                    tokenUsage: data.usage
-                } );
-    
+            PromptLogger.getInstance().logModelRequest({
+                prompt: messages as PromptSection[],
+                response: data.choices[0].message?.content ?? "",
+                tokenUsage: data.usage,
+            });
+
             // track token usage
             TokenCounter.getInstance().add(data.usage, tags);
         } catch {}
@@ -515,7 +514,7 @@ function createAzureOpenAIChatModel(
         if (!result.success) {
             return result;
         }
-        
+
         let fullResponseText = "";
         return {
             success: true,
@@ -536,14 +535,13 @@ function createAzureOpenAIChatModel(
                         if (data.usage) {
                             try {
                                 // Log request
-                                PromptLogger.getInstance().logModelRequest(
-                                    {
-                                        prompt: (messages as PromptSection[]), 
-                                        response: fullResponseText,
-                                        tokenUsage: data.usage
-                                    } );
-                        
-                                // track token usage                                
+                                PromptLogger.getInstance().logModelRequest({
+                                    prompt: messages as PromptSection[],
+                                    response: fullResponseText,
+                                    tokenUsage: data.usage,
+                                });
+
+                                // track token usage
                                 TokenCounter.getInstance().add(
                                     data.usage,
                                     tags,
