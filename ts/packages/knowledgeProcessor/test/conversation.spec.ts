@@ -13,10 +13,9 @@ type TestContext = {
     cm: conversation.ConversationManager;
 };
 
-let g_context: TestContext | undefined;
-const testTimeout = 120000;
-
 describe("ConversationManager", () => {
+    const testTimeout = 120000;
+    let g_context: TestContext | undefined;
     beforeAll(async () => {
         await getContext();
     });
@@ -75,14 +74,13 @@ describe("ConversationManager", () => {
               },
               testTimeout * 2,
           );
-});
-
-async function getContext(): Promise<TestContext> {
-    if (!g_context) {
-        g_context = await createTestContext();
+    async function getContext(): Promise<TestContext> {
+        if (!g_context) {
+            g_context = await createTestContext();
+        }
+        return g_context;
     }
-    return g_context;
-}
+});
 
 async function createTestContext(): Promise<TestContext> {
     const cm = await conversation.createConversationManager(

@@ -70,6 +70,9 @@ export function createEntitySearchOptions(
     return {
         maxMatches: 2,
         minScore: 0.8,
+        nameSearchOptions: {
+            maxMatches: 10,
+        },
         facetSearchOptions: {
             maxMatches: 10,
         },
