@@ -6,9 +6,11 @@ import { BrowserActionContext } from "../actionHandler.mjs";
 import { BrowserConnector } from "../browserConnector.mjs";
 import { createCommercePageTranslator } from "./translator.mjs";
 import {
+  LocationInStore,
   ProductDetailsHeroTile,
   ProductTile,
   SearchInput,
+  StoreLocation,
 } from "./schema/pageComponents.mjs";
 
 export async function handleCommerceAction(
@@ -27,16 +29,22 @@ export async function handleCommerceAction(
 
   switch (action.actionName) {
     case "searchForProductAction":
-      await handleProductSearch(action);
+      await searchForProduct(action.parameters.productName);
       break;
     case "selectSearchResult":
-      await handleSelectSearchResult(action);
+      await selectSearchResult(action.parameters.productName);
       break;
     case "addToCartAction":
       await handleAddToCart(action);
       break;
     case "answerPageQuestion":
       await handlePageChat(action);
+      break;
+    case "findInStoreAction":
+      await handleFindInStore(action);
+      break;
+    case "findNearbyStoreAction":
+      await handleFindNearbyStore(action);
       break;
   }
 
@@ -65,19 +73,19 @@ export async function handleCommerceAction(
     return response.data;
   }
 
-  async function handleProductSearch(action: any) {
+  async function searchForProduct(productName: string) {
     const selector = (await getComponentFromPage("SearchInput")) as SearchInput;
     const searchSelector = selector.cssSelector;
 
     await browser.clickOn(searchSelector);
-    await browser.enterTextIn(action.parameters.productName, searchSelector);
+    await browser.enterTextIn(productName, searchSelector);
     await browser.clickOn(selector.submitButtonCssSelector);
     await new Promise((r) => setTimeout(r, 200));
     await browser.awaitPageLoad();
   }
 
-  async function handleSelectSearchResult(action: any) {
-    const request = `Search result: ${action.selectionCriteria}`;
+  async function selectSearchResult(productName: string) {
+    const request = `Search result: ${productName}`;
     const selector = (await getComponentFromPage(
       "ProductTile",
       request,
@@ -108,6 +116,42 @@ export async function handleCommerceAction(
     );
 
     console.log(response);
+  }
+
+  async function handleFindInStore(action: any) {
+    const targetProduct = (await getComponentFromPage(
+      "ProductDetailsHeroTile",
+    )) as ProductDetailsHeroTile;
+
+    if (targetProduct && targetProduct.physicalLocationInStore) {
+      message = `Found ${targetProduct.numberInStock} at ${targetProduct.physicalLocationInStore} in the ${targetProduct.storeName} store`;
+      return;
+    }
+
+    await searchForProduct(action.parameters.productName);
+    await selectSearchResult(action.parameters.productName);
+
+    const locationInfo = (await getComponentFromPage(
+      "LocationInStore",
+    )) as LocationInStore;
+
+    console.log(locationInfo);
+
+    if (locationInfo.physicalLocationInStore) {
+      message = `Found ${locationInfo.numberInStock} at ${locationInfo.physicalLocationInStore} in the ${locationInfo.storeName} store`;
+    }
+  }
+
+  async function handleFindNearbyStore(action: any) {
+    //StoreLocation
+
+    const storeInfo = (await getComponentFromPage(
+      "StoreLocation",
+    )) as StoreLocation;
+
+    if (storeInfo.locationName) {
+      message = `Nearest store is ${storeInfo.locationName} (${storeInfo.zipCode})`;
+    }
   }
 
   return message;

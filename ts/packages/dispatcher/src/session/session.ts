@@ -72,10 +72,9 @@ async function loadSessions(): Promise<Sessions> {
                 },
             });
         } catch (e) {
-            console.error(
-                `ERROR: Unable to lock profile ${userProfileDir}. Only one client per profile can be active at a time.`,
+            throw new Error(
+                `Unable to lock profile ${userProfileDir}. Only one client per profile can be active at a time.`,
             );
-            process.exit(-1);
         }
     }
 
@@ -102,14 +101,27 @@ async function newSessionDir() {
 }
 
 type DispatcherConfig = {
-    models: {
-        translator: string;
-        explainer: string;
+    translation: {
+        enabled: boolean;
+        model: string;
+        stream: boolean;
+        promptConfig: {
+            additionalInstructions: boolean;
+        };
+        switch: {
+            inline: boolean;
+            search: boolean;
+        };
+        multipleActions: boolean;
+        history: boolean;
+        schema: {
+            generation: boolean;
+            firstUseEmbedding: boolean; // use embedding to determine the first schema to use.
+        };
     };
-    bot: boolean;
-    stream: boolean;
     explainer: {
         enabled: boolean;
+        model: string;
         name: string;
         filter: {
             multiple: boolean;
@@ -120,15 +132,6 @@ type DispatcherConfig = {
             };
         };
     };
-    promptConfig: {
-        additionalInstructions: boolean;
-    };
-    switch: {
-        inline: boolean;
-        search: boolean;
-    };
-    multipleActions: boolean;
-    history: boolean;
 
     // Cache behaviors
     cache: CacheConfig & {
@@ -145,26 +148,31 @@ export type SessionOptions = AppAgentStateOptions &
     DeepPartialUndefined<DispatcherConfig>;
 
 const defaultSessionConfig: SessionConfig = {
-    translators: undefined,
+    schemas: undefined,
     actions: undefined,
     commands: undefined,
-    models: {
-        translator: "",
-        explainer: "",
+
+    translation: {
+        enabled: true,
+        model: "",
+        stream: true,
+        promptConfig: {
+            additionalInstructions: true,
+        },
+        switch: {
+            inline: true,
+            search: true,
+        },
+        multipleActions: true,
+        history: true,
+        schema: {
+            generation: true,
+            firstUseEmbedding: true,
+        },
     },
-    bot: true,
-    stream: true,
-    promptConfig: {
-        additionalInstructions: true,
-    },
-    switch: {
-        inline: true,
-        search: true,
-    },
-    multipleActions: true,
-    history: true,
     explainer: {
         enabled: true,
+        model: "",
         name: getDefaultExplainerName(),
         filter: {
             multiple: true,
@@ -235,7 +243,7 @@ async function readSessionData(dir: string) {
     return ensureSessionData(data);
 }
 
-const flexKeys = ["translators", "actions", "commands"];
+const flexKeys = ["schemas", "actions", "commands"];
 export class Session {
     private config: SessionConfig;
     private cacheData: SessionCacheData;
@@ -294,7 +302,7 @@ export class Session {
     }
 
     public get bot() {
-        return this.config.bot;
+        return this.config.translation.enabled;
     }
 
     public get explanation() {
@@ -448,7 +456,7 @@ export async function setupAgentCache(
     agentCache: AgentCache,
 ) {
     const config = session.getConfig();
-    agentCache.model = config.models.explainer;
+    agentCache.model = config.explainer.model;
     agentCache.constructionStore.clear();
     if (config.cache.enabled) {
         const cacheData = session.getCacheDataFilePath();

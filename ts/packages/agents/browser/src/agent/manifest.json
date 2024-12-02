@@ -1,5 +1,5 @@
 {
-  "emojiChar": "👀",
+  "emojiChar": "🌐",
   "defaultEnabled": false,
   "description": "Agent that allows you control an existing browser window",
   "schema": {
@@ -7,7 +7,7 @@
     "schemaFile": "./actionsSchema.mts",
     "schemaType": "BrowserActions"
   },
-  "subTranslators": {
+  "subActionManifests": {
     "paleoBioDb": {
       "defaultEnabled": false,
       "transient": true,

@@ -14,7 +14,7 @@ These are declared in the `package.json` as export paths:
 
 ### Manifest
 
-When loading dispatcher agent in a NPM package, the dispatcher first loads the manifest from the agent. It contains definition of the emoji representing the agent and the translator configuration for the agent. See the type `AppAgentManifest` and `TranslatorDefinition` for the detail.
+When loading dispatcher agent in a NPM package, the dispatcher first loads the manifest from the agent. It contains definition of the emoji representing the agent and the translator configuration for the agent. See the type `AppAgentManifest` and `ActionManifest` for the detail.
 
 ### Instantiation Entry point
 

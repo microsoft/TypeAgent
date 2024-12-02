@@ -4,7 +4,7 @@
 import { Args, Command, Flags } from "@oclif/core";
 import readline from "readline/promises";
 import {
-    getBuiltinTranslatorNames,
+    getBuiltinSchemaNames,
     getCacheFactory,
     processCommand,
     processRequests,
@@ -14,19 +14,26 @@ import {
     closeCommandHandlerContext,
 } from "agent-dispatcher/internal";
 import inspector from "node:inspector";
+import { getChatModelNames } from "aiclient";
+
+const modelNames = await getChatModelNames();
 
 export default class Interactive extends Command {
     static description = "Interactive mode";
     static flags = {
         translator: Flags.string({
-            description: "Translator names",
-            options: getBuiltinTranslatorNames(),
+            description: "Schema names",
+            options: getBuiltinSchemaNames(),
             multiple: true,
         }),
         explainer: Flags.string({
             description:
                 "Explainer name (defaults to the explainer associated with the translator)",
             options: getCacheFactory().getExplainerNames(),
+        }),
+        model: Flags.string({
+            description: "Translation model to use",
+            options: modelNames,
         }),
         debug: Flags.boolean({
             description: "Enable debug mode",
@@ -62,12 +69,13 @@ export default class Interactive extends Command {
 
         let context: CommandHandlerContext | undefined;
 
-        const translators = flags.translator
+        const schemas = flags.translator
             ? Object.fromEntries(flags.translator.map((name) => [name, true]))
             : undefined;
         try {
             context = await initializeCommandHandlerContext("cli interactive", {
-                translators,
+                schemas,
+                translation: { model: flags.model },
                 explainer: { name: flags.explainer },
                 stdio,
                 persistSession: !flags.memory,

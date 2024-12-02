@@ -5,7 +5,9 @@
   },
   "include": [],
   "references": [
-    { "path": "./src" }
+    { "path": "./src/agent" },
+    { "path": "./src/view/site" },
+    { "path": "./src/view/route" }
   ],
   "ts-node": {
     "esm": true

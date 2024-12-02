@@ -3,8 +3,8 @@
 
 export {
     AppAgentManifest,
-    TranslatorDefinition,
-    SchemaDefinition,
+    ActionManifest,
+    SchemaManifest as SchemaDefinition,
     AppAgent,
     AppAgentEvent,
     SessionContext,
@@ -32,8 +32,10 @@ export {
 } from "./parameters.js";
 export {
     ActionIO,
+    ClientAction,
     DisplayType,
     DynamicDisplay,
+    MessageContent,
     DisplayContent,
     DisplayAppendMode,
     DisplayMessageKind,

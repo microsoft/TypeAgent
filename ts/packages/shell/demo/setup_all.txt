@@ -2,4 +2,4 @@
 @config bot on
 @config serviceHost on
 @config action * player list desktop browser code calendar email 
-@config translator * player list desktop browser code calendar email
+@config schema * player list desktop browser code calendar email

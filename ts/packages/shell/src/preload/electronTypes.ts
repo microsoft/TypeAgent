@@ -39,6 +39,12 @@ export interface ClientSettingsProvider {
 
 export type DisplayType = "html" | "iframe" | "text";
 
+export type ClientActions =
+    | "show-camera"
+    | "open-app"
+    | "show-notification"
+    | "start-intent";
+
 // end duplicate type section
 
 export interface ClientAPI {
@@ -185,7 +191,11 @@ export interface ClientAPI {
         ) => void,
     ): void;
     onTakeAction(
-        callback: (e: Electron.IpcRendererEvent, action: string) => void,
+        callback: (
+            e: Electron.IpcRendererEvent,
+            action: string,
+            data: unknown,
+        ) => void,
     );
 }
 

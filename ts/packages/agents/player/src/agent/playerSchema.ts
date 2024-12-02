@@ -177,14 +177,10 @@ export interface GetPlaylistAction {
     };
 }
 
-// get album by name; if name is "", use the currently playing track
+// get currently playing album
 // set the current track list the tracks in the album
 export interface GetAlbumAction {
     actionName: "getAlbum";
-    parameters: {
-        // name of album to get
-        name: string;
-    };
 }
 
 // Set the current track list to the user's favorite tracks

@@ -2,69 +2,163 @@
 // Licensed under the MIT License.
 
 import {
-    ActionParamType,
-    ActionSchema,
-    ActionParamObjectFields,
+    SchemaType,
+    SchemaObjectFields,
+    SchemaTypeDefinition,
+    ActionSchemaGroup,
 } from "./type.js";
+import registerDebug from "debug";
+const debug = registerDebug("typeagent:schema:generate");
 
 function generateSchemaType(
-    type: ActionParamType,
-    indent: string,
+    type: SchemaType,
+    pending: SchemaTypeDefinition[],
+    indent: number,
+    strict: boolean,
     paren: boolean = false,
 ): string {
     switch (type.type) {
         case "object":
             const lines: string[] = [];
-            generateSchemaParamObject(lines, type.fields, `${indent}    `);
-            return `{\n${lines.join("\n")}\n${indent}}`;
+            generateSchemaObjectFields(
+                lines,
+                type.fields,
+                pending,
+                indent + 1,
+                strict,
+            );
+            return `{\n${lines.join("\n")}\n${"    ".repeat(indent)}}`;
         case "array":
-            return `${generateSchemaType(type.elementType, indent, true)}[]`;
+            return `${generateSchemaType(type.elementType, pending, indent, strict, true)}[]`;
         case "string-union":
-            const union = type.typeEnum.map((v) => `"${v}"`).join(" | ");
-            return paren ? `(${union})` : union;
+            const stringUnion = type.typeEnum.map((v) => `"${v}"`).join(" | ");
+            return paren ? `(${stringUnion})` : stringUnion;
+        case "type-union":
+            const typeUnion = type.types
+                .map((t) => generateSchemaType(t, pending, indent, strict))
+                .join(" | ");
+            return paren ? `(${typeUnion})` : typeUnion;
+        case "type-reference":
+            if (type.definition) {
+                pending.push(type.definition);
+            } else if (strict) {
+                throw new Error(`Unresolved type reference: ${type.name}`);
+            }
+            return type.name;
+
         default:
             return type.type;
     }
 }
 
-function generateSchemaParamObject(
+function generateComments(
     lines: string[],
-    fields: ActionParamObjectFields,
-    indent: string,
+    comments: string[] | undefined,
+    indentStr: string,
 ) {
+    if (!comments) {
+        return;
+    }
+    for (const comment of comments) {
+        lines.push(`${indentStr}//${comment}`);
+    }
+}
+function generateSchemaObjectFields(
+    lines: string[],
+    fields: SchemaObjectFields,
+    pending: SchemaTypeDefinition[],
+    indent: number,
+    strict: boolean,
+) {
+    const indentStr = "    ".repeat(indent);
     for (const [key, field] of Object.entries(fields)) {
+        generateComments(lines, field.comments, indentStr);
         const optional = field.optional ? "?" : "";
         lines.push(
-            `${indent}${key}${optional}: ${generateSchemaType(field.type, indent)}`,
+            `${indentStr}${key}${optional}: ${generateSchemaType(field.type, pending, indent, strict)};${field.trailingComments ? ` //${field.trailingComments.join(" ")}` : ""}`,
         );
     }
 }
 
-export function generateSchema(actionSchemas: ActionSchema[]) {
-    const lines: string[] = [];
-
-    lines.push(
-        `export type AllAction = ${actionSchemas.map((actionInfo) => actionInfo.typeName).join("|")};`,
+function generateTypeDefinition(
+    lines: string[],
+    definition: SchemaTypeDefinition,
+    pending: SchemaTypeDefinition[],
+    strict: boolean,
+    exact: boolean,
+) {
+    generateComments(lines, definition.comments, "");
+    const prefix = exact && definition.exported ? "export " : "";
+    const generatedDefinition = generateSchemaType(
+        definition.type,
+        pending,
+        0,
+        strict,
     );
+    const line = definition.alias
+        ? `${prefix}type ${definition.name} = ${generatedDefinition};`
+        : `${prefix}interface ${definition.name} ${generatedDefinition}`;
+    lines.push(line);
+}
 
-    for (const actionInfo of actionSchemas) {
-        if (actionInfo.comments) {
-            lines.push(
-                actionInfo.comments
-                    .map((comment) => `// ${comment}`)
-                    .join("\n"),
-            );
-        }
+export type GenerateSchemaOptions = {
+    strict?: boolean; // default true
+    exact?: boolean; // default false
+};
 
-        lines.push(`export interface ${actionInfo.typeName} {`);
-        lines.push(`    actionName: "${actionInfo.actionName}";`);
-        if (actionInfo.parameters) {
-            lines.push(
-                `    parameters: ${generateSchemaType(actionInfo.parameters, "    ")};`,
-            );
+export function generateSchemaTypeDefinition(
+    definition: SchemaTypeDefinition,
+    options?: GenerateSchemaOptions,
+    order?: Map<string, number>,
+) {
+    const strict = options?.strict ?? true;
+    const exact = options?.exact ?? false;
+    const emitted = new Map<
+        SchemaTypeDefinition,
+        { lines: string[]; order: number | undefined; emitOrder: number }
+    >();
+    const pending = [definition];
+
+    while (pending.length > 0) {
+        const definition = pending.shift()!;
+        if (!emitted.has(definition)) {
+            const lines: string[] = [];
+            emitted.set(definition, {
+                lines,
+                order: order?.get(definition.name),
+                emitOrder: emitted.size,
+            });
+            const dep: SchemaTypeDefinition[] = [];
+            generateTypeDefinition(lines, definition, dep, strict, exact);
+
+            // Generate the dependencies first to be close to the usage
+            pending.unshift(...dep);
         }
-        lines.push("}");
     }
 
-    return lines.join("\n");
+    const entries = Array.from(emitted.values());
+    const emit =
+        exact && order !== undefined
+            ? entries.sort((a, b) => {
+                  if (a.order === undefined || b.order === undefined) {
+                      return a.emitOrder - b.emitOrder;
+                  }
+                  return a.order - b.order;
+              })
+            : entries;
+
+    const result = emit.flatMap((e) => e.lines).join("\n");
+    debug(result);
+    return result;
+}
+
+export function generateActionSchema(
+    actionSchemaGroup: ActionSchemaGroup,
+    options?: GenerateSchemaOptions,
+): string {
+    return generateSchemaTypeDefinition(
+        actionSchemaGroup.entry,
+        options,
+        actionSchemaGroup.order,
+    );
 }

@@ -99,7 +99,7 @@ class SessionResetCommandHandler implements CommandHandlerNoParams {
         await changeContextConfig(getDefaultSessionConfig(), context);
         await changeContextConfig(
             {
-                translators: null,
+                schemas: null,
                 actions: null,
                 commands: null,
             },
@@ -275,18 +275,6 @@ export function getSessionCommandHandlers(): CommandHandlerTable {
             list: new SessionListCommandHandler(),
             delete: new SessionDeleteCommandHandler(),
             info: new SessionInfoCommandHandler(),
-            history: getToggleHandlerTable(
-                "history",
-                async (
-                    context: ActionContext<CommandHandlerContext>,
-                    enable: boolean,
-                ) => {
-                    const systemContext = context.sessionContext.agentContext;
-                    systemContext.session.setConfig({
-                        history: enable,
-                    });
-                },
-            ),
         },
     };
 }

@@ -217,7 +217,6 @@ export function parseFilter(filter: string): IFilterResult {
             }
         } else if (token.type === FilterTokenType.Value) {
             if (!pendingConstraint) {
-                console.log(token.rawValue);
                 return {
                     diagnostics: [
                         "Unexpected: value without constraint prefix",

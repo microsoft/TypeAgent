@@ -8,16 +8,16 @@ export type AddToCartAction = {
   };
 };
 
-export type PickUpAtStoreAction = {
-  actionName: "pickUpAtStoreAction";
+export type FindNearbyStoreAction = {
+  actionName: "findNearbyStoreAction";
   parameters: {
     productName: string;
     storeLocation?: string;
   };
 };
 
-export type LookupAtStoreAction = {
-  actionName: "lookupAtStoreAction";
+export type FindInStoreAction = {
+  actionName: "findInStoreAction";
   parameters: {
     productName: string;
   };
@@ -49,8 +49,8 @@ export type AnswerQuestionBasedOnPage = {
 
 export type ShoppingActions =
   | AddToCartAction
-  | PickUpAtStoreAction
-  | LookupAtStoreAction
+  | FindNearbyStoreAction
+  | FindInStoreAction
   | SearchForProductAction
   | SelectSearchResult
   | AnswerQuestionBasedOnPage;

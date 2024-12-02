@@ -35,34 +35,66 @@ Beyond natural language, users can specify system command with inputs starting w
 
 ### Toggling Dispatcher Agents
 
-Dispatcher agent's translation can be enabled and disabled.
+Dispatcher agent can be enabled and disabled.
 
-- `@config translator <translator>` | Enables the supplied translator
-- `@config translator -<translator>` | Disables the supplied translator
-- `@config translator *` | Enable all translators
-- `@config translator code*` | Enable a pattern of translators (useful for sub-translators)
-- `@config translator @` | Reset enable or disable of the translator to default
+Toggle a specific `<agent>`:
 
-Similarly, dispatcher agent's action can be enabled and disable independent of translation with similar pattern using `@config action`
+- `@config agent <agent>` _(Enable `<agent>`)_
+- `@config agent --off <agent>` or `@config agent -x <agent>` _(Disable `<agent>`)_
 
-To list all the translator (and explainer) configured:
+Toggle using `*` pattern:
+
+- `@config agent *` (Enable all agents)
+- `@config agent *l*` | (Enable agents that has "l" in the name)
+
+Reset to default:
+
+- `@config agent --reset` or `@config agent -r`
+
+Dispatcher agent's schema, action and command can be toggled independently as well, using `@config schema`, `@config action`, `@config command`.
+
+To list all avaiable agents and their status, just the command without any parameters:
 
 ```bash
-[📅💊📩📝👀🪟⚛️💬🔧]>@config translator
-Usage: @config translator [-]<translator>]
-   <translator>: player, calendar, email, list, browser, browser.paleoBioDb, desktop, code, code.code-debug, code.code-display, code.code-general, phrases, books, chat, correction, photo, system.config, system.session
+🤖🚧💾  [🎧📅📩📝🌐💬🤖🔧📷🖐🖼️📱🗎]> @config agent
+|Agent               |Schemas|Actions|Commands|
+|--------------------|-------|-------|--------|
+|androidMobile       |✅     |✅     |        |
+|browser             |✅     |✅     |✅      |
+|  browser.commerce  |💤     |💤     |        |
+|  browser.crossword |💤     |💤     |        |
+|  browser.paleoBioDb|💤     |💤     |        |
+|calendar            |✅     |✅     |✅      |
+|chat                |✅     |✅     |        |
+|code                |❌     |❌     |❔      |
+|  code.code-debug   |❌     |❌     |        |
+|  code.code-display |❌     |❌     |        |
+|  code.code-general |❌     |❌     |        |
+|desktop             |❌     |❌     |❔      |
+|dispatcher          |✅     |✅     |✅      |
+|  dispatcher.clarify|✅     |✅     |        |
+|email               |✅     |✅     |✅      |
+|greeting            |✅     |✅     |✅      |
+|image               |✅     |✅     |        |
+|list                |✅     |✅     |        |
+|markdown            |✅     |✅     |        |
+|photo               |✅     |✅     |        |
+|player              |✅     |✅     |✅      |
+|system              |       |       |✅      |
+|  system.config     |✅     |✅     |        |
+|  system.session    |✅     |✅     |        |
 ```
 
 ### Explainer
 
 Explainer is the step where the dispatcher leverages the cache to ask the GPT to explain the generated translations once the user accepted it. The result is used to create constructions if it is enabled (see below). (Explanation is not generated for translations using constructions if it is enabled).
 
-As part of the exploration, the cache has multiple explainer implementations, which can be changed in the CLI's interactive mode using the command `@config explainer <explainer>`.
+As part of the exploration, the cache has multiple explainer implementations, which can be changed in the CLI's interactive mode using the command `@config explainer name <explainer>`.
 
 For example, in the [CLI](../cli):
 
 ```bash
-[📅💊📩📝👀🪟⚛️💬🔧]> @config explainer v4
+[📅💊📩📝👀🪟⚛️💬🔧]> @config explainer name v4
 
 [📅💊📩📝👀🪟⚛️💬🔧 (explainer: v4)]>
 ```
@@ -71,7 +103,7 @@ To list all configured explainers:
 
 ```bash
 🤖🚧💾  [📅💊📩📝👀🪟⚛️💬🔧]>@config explainer
-Usage: @config explainer <explainer>
+Usage: @config explainer name <explainer>
    <explainer>: v4, v5
 ```
 
@@ -81,7 +113,6 @@ There are other short cut commands to exercise specify part of the TypeAgent Dis
 
 - `@translate <request>` - Only do the translation (no follow up explanation )
 - `@explain <request> => <action>` - only do the explanation of the request/action combo
-- `@correct <correction prompt>` - based on the response of the last explanation, send a follow up prompt for correction
 
 ### Sessions
 
@@ -98,7 +129,6 @@ For dispatcher configured to persist sessions (i.e. [CLI](../cli) and [shell](..
 | `@session clear`                | Clear all data but keep the settings.                                                                                                                                                         |
 | `@session list`                 | List all sessions                                                                                                                                                                             |
 | `@session delete [<name>] [-a]` | Delete a session. If no session is specified, delete the current sessions.`-a` to delete all sessions. If the current session is deleted, a new session will be created.                      |
-| `@session history <on/off>`     | Turn history on/off for the current session                                                                                                                                                   |
 
 ### Constructions
 

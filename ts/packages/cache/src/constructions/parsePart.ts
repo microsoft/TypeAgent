@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { ParamSpec } from "../explanation/schemaConfig.js";
-import { ConstructionPart } from "./constructions.js";
+import { ConstructionPart, WildcardMode } from "./constructions.js";
 import { isMatchPart } from "./matchPart.js";
 import { PropertyParser, getPropertyParser } from "./propertyParser.js";
 
@@ -11,8 +11,8 @@ export class ParsePart implements ConstructionPart {
         public readonly propertyName: string,
         private readonly parser: PropertyParser,
     ) {}
-    public get wildcard() {
-        return false;
+    public get wildcardMode() {
+        return WildcardMode.Disabled;
     }
     public get capture() {
         return true;

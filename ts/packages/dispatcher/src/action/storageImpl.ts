@@ -30,7 +30,9 @@ export function getStorage(name: string, baseDir: string): Storage {
                 .filter((item) =>
                     options?.dirs ? item.isDirectory() : item.isFile(),
                 )
-                .map((item) => item.name);
+                .map((item) =>
+                    options?.fullPath ? getFullPath(item.name) : item.name,
+                );
         },
         exists: async (storagePath: string) => {
             const fullPath = getFullPath(storagePath);

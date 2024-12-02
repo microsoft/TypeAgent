@@ -304,39 +304,36 @@ export function getSettingSummary(context: CommandHandlerContext) {
         }
     }
 
-    const names = context.agents.getActiveTranslators();
+    const names = context.agents.getActiveSchemas();
     const ordered = names.filter(
-        (name) => name !== context.lastActionTranslatorName,
+        (name) => name !== context.lastActionSchemaName,
     );
     if (ordered.length !== names.length) {
-        ordered.unshift(context.lastActionTranslatorName);
+        ordered.unshift(context.lastActionSchemaName);
     }
 
     const translators = Array.from(
         new Set(
             ordered.map(
-                (name) => context.agents.getTranslatorConfig(name).emojiChar,
+                (name) => context.agents.getActionConfig(name).emojiChar,
             ),
         ).values(),
     );
     prompt.push("  [", translators.join(""));
-    if (context.session.getConfig().models.translator !== "") {
-        prompt.push(
-            ` (model: ${context.session.getConfig().models.translator})`,
-        );
+    const translationModel = context.session.getConfig().translation.model;
+    if (translationModel !== "") {
+        prompt.push(` (model: ${translationModel})`);
     }
+    const explainerModel = context.session.getConfig().explainer.model;
     if (context.agentCache.explainerName !== getDefaultExplainerName()) {
         prompt.push(` (explainer: ${context.agentCache.explainerName}`);
-        if (context.session.getConfig().models.explainer !== "") {
-            prompt.push(
-                ` model: ${context.session.getConfig().models.translator}`,
-            );
+
+        if (explainerModel !== "") {
+            prompt.push(` model: ${explainerModel}`);
         }
         prompt.push(")");
-    } else if (context.session.getConfig().models.explainer !== "") {
-        prompt.push(
-            ` (explainer model: ${context.session.getConfig().models.explainer})`,
-        );
+    } else if (explainerModel !== "") {
+        prompt.push(` (explainer model: ${explainerModel})`);
     }
 
     prompt.push("]");
@@ -398,7 +395,7 @@ function getPendingFlag(
     const resolvedFlag = resolveFlag(flags, lastToken);
     return resolvedFlag !== undefined &&
         getFlagType(resolvedFlag[1]) !== "boolean"
-        ? lastToken
+        ? `--${resolvedFlag[0]}` // use the full flag name in case it was a short flag
         : undefined;
 }
 

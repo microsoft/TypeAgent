@@ -1,170 +1,226 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-/*
+// TODO: Most of this is not Python specific; generalize to other languages.
 
-Now what to do with these chunks?
-
-Each chunk needs to be stored in a database, with embeddings from the blobs and
-their lines, and possibly other things that might be useful to search for.
-
-We should support indexing many files this way (given by glob patterns).
-
-Then we can define search over that database.
-
-A search should report the relevant chunks, and possibly the relevant lines
-within those chunks.
-
-Hopefully we can reuse the indexing and searching also used by codeMemory.ts.
-
-After that we should allow the model to send search queries to the database, and
-store conclusions (e.g. summaries or architectural notes) back there.
-
-It's too bad that we don't have a language server to help us with this, but we
-can add one for sure.
-
-We should also generalize the chunking to other languages, notably C (and
-TypeScript, of course).
-
-*/
-
+import chalk, { ChalkInstance } from "chalk";
 import * as fs from "fs";
 import * as knowLib from "knowledge-processor";
 import { asyncArray } from "typeagent";
 
+import * as iapp from "interactive-app";
 import { ChunkyIndex } from "./chunkyIndex.js";
-import { CodeDocumentation } from "./codeDocSchema.js";
-import { CodeBlockWithDocs } from "./fileDocumenter.js";
+import { ChunkDoc, FileDocumentation } from "./fileDocSchema.js";
 import {
     Chunk,
     ChunkedFile,
     ChunkId,
     chunkifyPythonFiles,
+    ErrorItem,
 } from "./pythonChunker.js";
+import { purgeNormalizedFile } from "./queryInterface.js";
 
-// TODO: Turn (chunkFolder, codeIndex, summaryFolder) into a single object.
+function log(
+    io: iapp.InteractiveIo | undefined,
+    message: string,
+    color: ChalkInstance,
+): void {
+    message = color(message);
+    if (io) {
+        io.writer.writeLine(message);
+    } else {
+        console.log(message);
+    }
+}
 
-export async function importPythonFiles(
+export async function importAllFiles(
     files: string[],
     chunkyIndex: ChunkyIndex,
-    firstFile = true,
+    io: iapp.InteractiveIo | undefined,
+    verbose: boolean,
+): Promise<void> {
+    log(io, `[Importing ${files.length} files]`, chalk.grey);
+
+    const t0 = Date.now();
+    await importPythonFiles(files, chunkyIndex, io, verbose);
+    const t1 = Date.now();
+
+    log(
+        io,
+        `[Imported ${files.length} files in ${((t1 - t0) * 0.001).toFixed(3)} seconds]`,
+        chalk.grey,
+    );
+}
+
+async function importPythonFiles(
+    files: string[],
+    chunkyIndex: ChunkyIndex,
+    io: iapp.InteractiveIo | undefined,
     verbose = false,
-): Promise<boolean> {
+): Promise<void> {
     // Canonicalize filenames.
     let filenames = files.map((file) =>
         fs.existsSync(file) ? fs.realpathSync(file) : file,
     );
 
-    // Chunkify Python files. (TODO: Make generic over languages)
+    // Purge previous occurrences of these files.
+    for (const fileName of filenames) {
+        await purgeNormalizedFile(io, chunkyIndex, fileName, verbose);
+    }
+
+    // Chunkify Python files using a helper program. (TODO: Make generic over languages)
     const t0 = Date.now();
     const results = await chunkifyPythonFiles(filenames);
     const t1 = Date.now();
+    if (results.length !== filenames.length) {
+        log(
+            io,
+            `[Some over-long files were split into multiple partial files]`,
+            chalk.yellow,
+        );
+    }
 
-    // Compute some stats for log message.
-    let lines = 0;
-    let blobs = 0;
-    let chunks = 0;
-    let errors = 0;
+    // Print stats for chunkifying.
+    let numLines = 0;
+    let numBlobs = 0;
+    let numChunks = 0;
+    let numErrors = 0;
     for (const result of results) {
         if ("error" in result) {
-            errors++;
+            numErrors++;
         } else {
             const chunkedFile = result;
-            chunks += chunkedFile.chunks.length;
+            numChunks += chunkedFile.chunks.length;
             for (const chunk of chunkedFile.chunks) {
-                blobs += chunk.blobs.length;
+                numBlobs += chunk.blobs.length;
                 for (const blob of chunk.blobs) {
-                    lines += blob.lines.length;
+                    numLines += blob.lines.length;
                 }
             }
         }
     }
-    console.log(
-        `[Chunked ${filenames.length} files ` +
-            `(${lines} lines, ${blobs} blobs, ${chunks} chunks, ${errors} errors) ` +
+    log(
+        io,
+        `[Chunked ${results.length} files ` +
+            `(${numLines} lines, ${numBlobs} blobs, ${numChunks} chunks, ${numErrors} errors) ` +
             `in ${((t1 - t0) * 0.001).toFixed(3)} seconds]`,
+        chalk.gray,
     );
 
-    // TODO: concurrency.
-    for (const result of results) {
-        if ("error" in result) {
-            console.log(`[Error: ${result.error}]`);
-            if (result.output) {
-                console.log(`[output: ${result.output}]`);
-            }
-            continue;
-        }
-        const chunkedFile = result;
-        const chunks = chunkedFile.chunks;
-        for (const chunk of chunks) {
-            chunk.filename = chunkedFile.filename;
-        }
-        console.log(
-            `[Documenting ${chunks.length} chunks from ${chunkedFile.filename}]`,
-        );
-        const t0 = Date.now();
-        try {
-            const docs = await chunkyIndex.fileDocumenter.document(chunks);
-            if (verbose) console.log(JSON.stringify(docs, null, 4));
-        } catch (error) {
-            console.log(
-                `[Error documenting ${chunkedFile.filename}: ${error}]`,
-            );
-            continue;
-        }
-        const t1 = Date.now();
-        console.log(
-            `[Documented ${chunks.length} chunks in ${((t1 - t0) * 0.001).toFixed(3)} seconds]`,
-        );
-        firstFile = await embedChunkedFile(
-            chunkedFile,
-            chunkyIndex,
-            firstFile,
-            verbose,
+    const chunkingErrors = results.filter(
+        (result): result is ErrorItem => "error" in result,
+    );
+    for (const error of chunkingErrors) {
+        log(
+            io,
+            `[Error: ${error.error}; Output: ${error.output ?? ""}]`,
+            chalk.redBright,
         );
     }
-    return firstFile;
+
+    const chunkedFiles = results.filter(
+        (result): result is ChunkedFile => "chunks" in result,
+    );
+    log(io, `[Documenting ${chunkedFiles.length} files]`, chalk.grey);
+
+    const tt0 = Date.now();
+    const documentedFiles: FileDocumentation[] = [];
+    const concurrency = 8; // TODO: Make this a function argument
+    let nChunks = 0;
+    await asyncArray.forEachAsync(
+        chunkedFiles,
+        concurrency,
+        async (chunkedFile) => {
+            const t0 = Date.now();
+            let docs: FileDocumentation;
+            nChunks += chunkedFile.chunks.length;
+            try {
+                docs = await exponentialBackoff(
+                    io,
+                    chunkyIndex.fileDocumenter.document,
+                    chunkedFile.chunks,
+                );
+            } catch (error) {
+                const t1 = Date.now();
+                log(
+                    io,
+                    `  [Error documenting ${chunkedFile.fileName} in ${((t1 - t0) * 0.001).toFixed(3)} seconds: ${error}]`,
+                    chalk.redBright,
+                );
+                return;
+            }
+            const t1 = Date.now();
+
+            if (verbose) {
+                log(
+                    io,
+                    `  [Documented ${chunkedFile.chunks.length} chunks in ${((t1 - t0) * 0.001).toFixed(3)} seconds for ${chunkedFile.fileName}]`,
+                    chalk.grey,
+                );
+            }
+            documentedFiles.push(docs);
+        },
+    );
+    const tt1 = Date.now();
+
+    log(
+        io,
+        `[Documented ${documentedFiles.length} files (${nChunks} chunks) in ${((tt1 - tt0) * 0.001).toFixed(3)} seconds]`,
+        chalk.grey,
+    );
+
+    const nonEmptyFiles = chunkedFiles.filter(
+        (cf) => cf.chunks.filter((c) => c.docs).length,
+    );
+
+    log(io, `[Embedding ${nonEmptyFiles.length} files]`, chalk.grey);
+
+    if (nonEmptyFiles.length) {
+        const ttt0 = Date.now();
+        // Cannot parallelize this because of concurrent writing to TextIndex.
+        // TODO: Try pre-computing embeddings in parallel to fill the embeddings cache (is that cache safe?)
+        for (const chunkedFile of nonEmptyFiles) {
+            await embedChunkedFile(chunkedFile, chunkyIndex, io, verbose);
+        }
+        const ttt1 = Date.now();
+
+        log(
+            io,
+            `[Embedded ${documentedFiles.length} files in ${((ttt1 - ttt0) * 0.001).toFixed(3)} seconds]`,
+            chalk.grey,
+        );
+    }
 }
 
-async function embedChunkedFile(
+export async function embedChunkedFile(
     chunkedFile: ChunkedFile,
     chunkyIndex: ChunkyIndex,
-    firstFile = false,
+    io: iapp.InteractiveIo | undefined,
     verbose = false,
-): Promise<boolean> {
+): Promise<void> {
     const chunks: Chunk[] = chunkedFile.chunks;
     if (chunks.length === 0) {
-        console.log(`[Empty file ${chunkedFile.filename} skipped]`);
-        return firstFile;
+        log(io, `[Skipping empty file ${chunkedFile.fileName}]`, chalk.yellow);
+        return;
     }
-    console.log(
-        `[Embedding ${chunks.length} chunks from ${chunkedFile.filename}]`,
-    );
     const t0 = Date.now();
-
-    // Handle the first chunk of the first file separately, it waits for API key setup.
-    if (firstFile) {
-        const chunk = chunks.shift()!;
-        await embedChunk(chunk, chunkyIndex, verbose);
+    for (const chunk of chunkedFile.chunks) {
+        await embedChunk(chunk, chunkyIndex, io, verbose);
     }
-
-    // Limit concurrency to avoid 429 errors.
-    await asyncArray.forEachAsync(
-        chunks,
-        verbose ? 1 : 4,
-        async (chunk) => await embedChunk(chunk, chunkyIndex, verbose),
-    );
-
     const t1 = Date.now();
-    console.log(
-        `[Embedded ${+firstFile + chunks.length} chunks in ${((t1 - t0) * 0.001).toFixed(3)} seconds]`,
-    );
-    return false;
+    if (verbose) {
+        log(
+            io,
+            `  [Embedded ${chunks.length} chunks in ${((t1 - t0) * 0.001).toFixed(3)} seconds for ${chunkedFile.fileName}]`,
+            chalk.grey,
+        );
+    }
 }
 
 async function embedChunk(
     chunk: Chunk,
     chunkyIndex: ChunkyIndex,
+    io: iapp.InteractiveIo | undefined,
     verbose = false,
 ): Promise<void> {
     const t0 = Date.now();
@@ -172,93 +228,96 @@ async function embedChunk(
         (acc, blob) => acc + blob.lines.length,
         0,
     );
-    if (verbose) console.log(`  [Embedding ${chunk.id} (${lineCount} lines)]`);
-    await chunkyIndex.chunkFolder!.put(chunk, chunk.id);
-    const blobLines = extractBlobLines(chunk);
-    const codeBlock: CodeBlockWithDocs = {
-        code: blobLines,
-        language: "python",
-        docs: chunk.docs!,
-    };
-    const docs = (await chunkyIndex.codeIndex!.put(
-        codeBlock,
-        chunk.id,
-        chunk.filename,
-    )) as CodeDocumentation;
-    await chunkyIndex.summaryFolder.put(docs, chunk.id);
-    for (const comment of docs.comments || []) {
-        await writeToIndex(chunk.id, comment.topics, chunkyIndex.topicsIndex);
+    await exponentialBackoff(io, chunkyIndex.chunkFolder.put, chunk, chunk.id);
+
+    const summaries: string[] = [];
+    const chunkDocs: ChunkDoc[] = chunk.docs?.chunkDocs ?? [];
+    for (const chunkDoc of chunkDocs) {
+        summaries.push(chunkDoc.summary);
+    }
+    const combinedSummaries = summaries.join("\n").trimEnd();
+    if (combinedSummaries) {
+        await exponentialBackoff(
+            io,
+            chunkyIndex.summariesIndex.put,
+            combinedSummaries,
+            [chunk.id],
+        );
+    }
+    for (const chunkDoc of chunkDocs) {
         await writeToIndex(
+            io,
             chunk.id,
-            comment.keywords,
+            chunkDoc.topics,
+            chunkyIndex.topicsIndex,
+        );
+        await writeToIndex(
+            io,
+            chunk.id,
+            chunkDoc.keywords,
             chunkyIndex.keywordsIndex,
         );
-        await writeToIndex(chunk.id, comment.goals, chunkyIndex.goalsIndex);
         await writeToIndex(
+            io,
             chunk.id,
-            comment.dependencies,
+            chunkDoc.goals,
+            chunkyIndex.goalsIndex,
+        );
+        await writeToIndex(
+            io,
+            chunk.id,
+            chunkDoc.dependencies,
             chunkyIndex.dependenciesIndex,
         );
     }
-    if (verbose) {
-        for (const comment of docs.comments || []) {
-            console.log(wordWrap(`${comment.comment} (${comment.lineNumber})`));
-            if (comment.topics?.length)
-                console.log(`TOPICS: ${comment.topics.join(", ")}`);
-            if (comment.keywords?.length)
-                console.log(`KEYWORDS: ${comment.keywords.join(", ")}`);
-            if (comment.goals?.length)
-                console.log(`GOALS: ${comment.goals.join(", ")}`);
-            if (comment.dependencies?.length)
-                console.log(`DEPENDENCIES: ${comment.dependencies.join(", ")}`);
-        }
-    }
     const t1 = Date.now();
     if (verbose) {
-        console.log(
-            `  [Embedded ${chunk.id} (${lineCount} lines @ ${chunk.blobs[0].start}) ` +
-                `in ${((t1 - t0) * 0.001).toFixed(3)} seconds]`,
+        log(
+            io,
+            `  [Embedded ${chunk.id} (${lineCount} lines @ ${chunk.blobs[0].start + 1}) ` +
+                `in ${((t1 - t0) * 0.001).toFixed(3)} seconds for ${chunk.fileName}]`,
+            chalk.gray,
         );
     }
 }
 
-function extractBlobLines(chunk: Chunk): string[] {
-    const lines: string[] = [];
-    for (const blob of chunk.blobs) {
-        lines.push(...blob.lines);
-    }
-    return lines;
-}
-
-// Wrap words in anger. Written by Github Copilot.
-export function wordWrap(text: string, width: number = 80): string {
-    const words = text.split(/\s+/);
-    let line = "";
-    let lines = [];
-    for (const word of words) {
-        if (line.length + word.length + 1 > width) {
-            lines.push(line);
-            line = word;
-        } else {
-            line += (line.length ? " " : "") + word;
-        }
-    }
-    lines.push(line);
-    return lines.join("\n");
-}
-
 async function writeToIndex(
+    io: iapp.InteractiveIo | undefined,
     chunkId: ChunkId,
     phrases: string[] | undefined, // List of keywords, topics, etc. in chunk
     index: knowLib.TextIndex<string, ChunkId>,
 ) {
-    if (!phrases) return;
-    for (const phrase of phrases) {
-        await index.put(phrase, [chunkId]);
+    for (const phrase of phrases ?? []) {
+        await exponentialBackoff(io, index.put, phrase, [chunkId]);
     }
 }
 
-// Apply URL escaping to key. NOTE: Currently unused.
+async function exponentialBackoff<T extends any[], R>(
+    io: iapp.InteractiveIo | undefined,
+    callable: (...args: T) => Promise<R>,
+    ...args: T
+): Promise<R> {
+    let timeout = 1;
+    for (;;) {
+        try {
+            return await callable(...args);
+        } catch (error) {
+            if (timeout > 1000) {
+                log(io, `[Error: ${error}; giving up]`, chalk.redBright);
+                throw error;
+            }
+            log(
+                io,
+                `[Error: ${error}; retrying in ${timeout} ms]`,
+                chalk.redBright,
+            );
+            await new Promise((resolve) => setTimeout(resolve, timeout));
+            timeout *= 2;
+        }
+    }
+}
+
+// Apply URL escaping to key. NOTE: Currently unused. TODO: Therefore remove.
 export function sanitizeKey(key: string): string {
     return encodeURIComponent(key).replace(/%20/g, "+"); // Encode spaces as plus, others as %xx.
 }

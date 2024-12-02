@@ -48,7 +48,7 @@ describe("storage.objectFolder", () => {
     const folderPath = testDirectoryPath("./data/test/testStore");
     beforeAll(async () => {
         folder = await ensureStore(folderPath, true);
-    });
+    }, timeoutMs);
     test(
         "idGen",
         () => {
@@ -114,26 +114,31 @@ describe("storage.objectFolder", () => {
 });
 
 describe("storage.objectFolder.safeWrites", () => {
+    const timeoutMs = 1000 * 60 * 5;
     let folder: ObjectFolder<TestObject> | undefined;
     const folderPath = testDirectoryPath("./data/test/testStoreSafe");
     beforeAll(async () => {
         folder = await ensureStore(folderPath, true, true);
-    });
-    test("putAndGet", async () => {
-        const obj: TestObject = {
-            key: "Foo",
-            value: "Bar",
-        };
-        const id = await folder!.put(obj);
-        let loaded = await folder!.get(id);
-        expect(loaded).toEqual(obj);
+    }, timeoutMs);
+    test(
+        "putAndGet",
+        async () => {
+            const obj: TestObject = {
+                key: "Foo",
+                value: "Bar",
+            };
+            const id = await folder!.put(obj);
+            let loaded = await folder!.get(id);
+            expect(loaded).toEqual(obj);
 
-        obj.value = "Goo";
-        await folder!.put(obj, id);
-        loaded = await folder!.get(id);
-        expect(loaded).toEqual(obj);
+            obj.value = "Goo";
+            await folder!.put(obj, id);
+            loaded = await folder!.get(id);
+            expect(loaded).toEqual(obj);
 
-        const allIds = await folder!.allNames();
-        expect(allIds).toHaveLength(1);
-    });
+            const allIds = await folder!.allNames();
+            expect(allIds).toHaveLength(1);
+        },
+        timeoutMs,
+    );
 });

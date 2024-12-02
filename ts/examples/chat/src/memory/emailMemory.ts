@@ -34,11 +34,15 @@ import {
     argChunkSize,
     argClean,
     argConcurrency,
+    argDestFile,
     argPause,
     argSourceFileOrFolder,
+    indexingStatsToCsv,
+    pause,
 } from "./common.js";
 import chalk from "chalk";
 import { convertMsgFiles } from "./importer.js";
+import fs from "fs";
 
 export async function createEmailMemory(
     models: Models,
@@ -71,13 +75,16 @@ export async function createEmailMemory(
         ? await sqlite.createStorageDb(emailStorePath, "outlook.db", createNew)
         : undefined;
 
-    return await knowLib.email.createEmailMemory(
+    const memory = await knowLib.email.createEmailMemory(
         models.chatModel,
+        models.answerModel,
         ReservedConversationNames.outlook,
         storePath,
         emailSettings,
         storage,
     );
+    memory.searchProcessor.answers.settings.chunking.fastStop = true;
+    return memory;
 }
 
 export function createEmailCommands(
@@ -85,8 +92,9 @@ export function createEmailCommands(
     commands: Record<string, CommandHandler>,
 ): void {
     commands.importEmail = importEmail;
-    commands.convertMsg = convertMsgs;
+    commands.emailConvertMsg = emailConvertMsg;
     commands.emailStats = emailStats;
+    commands.emailFastStop = emailFastStop;
 
     //--------
     // Commands
@@ -103,7 +111,7 @@ export function createEmailCommands(
                 chunkSize: argChunkSize(context.maxCharsPerChunk),
                 maxMessages: argNum("Max messages", 25),
                 index: argBool("Index imported files", true),
-                pause: argPause(),
+                pauseMs: argPause(),
             },
         };
     }
@@ -130,7 +138,7 @@ export function createEmailCommands(
         }
     }
 
-    function convertMsgsDef(): CommandMetadata {
+    function emailConvertMsgDef(): CommandMetadata {
         return {
             description: "Convert msg files in a folder",
             args: {
@@ -138,12 +146,14 @@ export function createEmailCommands(
             },
         };
     }
-    async function convertMsgs(
+    commands.emailConvertMsg.metadata = emailConvertMsgDef();
+    async function emailConvertMsg(
         args: string[],
         io: InteractiveIo,
     ): Promise<void> {
-        const namedArgs = parseNamedArguments(args, convertMsgsDef());
+        const namedArgs = parseNamedArguments(args, emailConvertMsgDef());
         let sourcePath: string = namedArgs.sourcePath;
+        /*
         let isDir = isDirectoryPath(sourcePath);
         if (isDir) {
             context.printer.writeInColor(
@@ -152,15 +162,58 @@ export function createEmailCommands(
             );
             await convertMsgFiles(sourcePath, io);
         }
+            */
+        context.printer.writeInColor(chalk.cyan, "Converting message files");
+        await convertMsgFiles(sourcePath, io);
     }
 
-    commands.emailStats.metadata = "Email statistics";
+    function emailStatsDef(): CommandMetadata {
+        return {
+            description: "Email indexing statistics",
+            options: {
+                destFile: argDestFile(),
+            },
+        };
+    }
+
+    commands.emailStats.metadata = emailStatsDef();
     async function emailStats(args: string[]): Promise<void> {
+        const namedArgs = parseNamedArguments(args, emailStatsDef());
         const stats = await loadStats(false);
         context.printer.writeBullet(`Email count: ${stats.itemStats.length}`);
         context.printer.writeBullet(
             `Total chars: ${stats.totalStats.charCount}`,
         );
+        context.printer.writeCompletionStats(stats.totalStats.tokenStats);
+        const csv = indexingStatsToCsv(stats.itemStats);
+        if (namedArgs.destFile) {
+            await fs.promises.writeFile(namedArgs.destFile, csv);
+        } else {
+            context.printer.writeLine(csv);
+        }
+    }
+
+    function emailFastStopDef(): CommandMetadata {
+        return {
+            description:
+                "Enable or disable fast stopping during answer generation",
+            options: {
+                enable: argBool("Enable"),
+            },
+        };
+    }
+    commands.emailFastStop.metadata = emailFastStopDef();
+    async function emailFastStop(args: string[]): Promise<void> {
+        const chunkingSettings =
+            context.emailMemory.searchProcessor.answers.settings.chunking;
+        if (args.length > 0) {
+            const namedArgs = parseNamedArguments(args, emailFastStopDef());
+            chunkingSettings.fastStop = namedArgs.enable;
+        } else {
+            context.printer.writeLine(
+                `Enabled ${chunkingSettings.fastStop ?? false}`,
+            );
+        }
     }
 
     //-------------
@@ -200,7 +253,7 @@ export function createEmailCommands(
                         `${email!.sourcePath}\n${emailLength} chars`,
                     );
 
-                    context.stats.startItem();
+                    context.stats!.startItem();
                     clock.start();
                     await knowLib.email.addEmailToConversation(
                         context.emailMemory,
@@ -208,14 +261,18 @@ export function createEmailCommands(
                         namedArgs.chunkSize,
                     );
                     clock.stop();
-                    context.stats.updateCurrent(clock.elapsedMs, emailLength);
+                    context.stats!.updateCurrent(clock.elapsedMs, emailLength);
                     await saveStats();
 
                     grandTotal++;
-                    const status = `[${clock.elapsedString()}, ${millisecondsToString(context.stats.totalStats.timeMs, "m")} for ${grandTotal} msgs.]`;
+                    const status = `[${clock.elapsedString()}, ${millisecondsToString(context.stats!.totalStats.timeMs, "m")} for ${grandTotal} msgs.]`;
 
                     context.printer.writeInColor(chalk.green, status);
                     context.printer.writeLine();
+
+                    if (namedArgs.pauseMs > 0) {
+                        await pause(namedArgs.pauseMs);
+                    }
                 },
                 maxMessages,
             );
@@ -233,6 +290,7 @@ export function createEmailCommands(
         }
         context.printer.writeHeading("Indexing Stats");
         context.printer.writeIndexingStats(context.stats);
+        context.stats = undefined;
     }
 
     async function loadStats(clean: boolean): Promise<knowLib.IndexingStats> {

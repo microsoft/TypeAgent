@@ -7,6 +7,7 @@ import {
     DisplayContent,
     DisplayType,
     DisplayMessageKind,
+    MessageContent,
 } from "@typeagent/agent-sdk";
 import DOMPurify from "dompurify";
 import { SettingsView } from "./settingsView";
@@ -32,6 +33,17 @@ function encodeTextToHtml(text: string): string {
 }
 
 const enableText2Html = true;
+function processContent(content: string, type: string): string {
+    return type === "html"
+        ? DOMPurify.sanitize(content, {
+              ADD_ATTR: ["target", "onclick", "onerror"],
+              ADD_DATA_URI_TAGS: ["img"],
+              ADD_URI_SAFE_ATTR: ["src"],
+          })
+        : enableText2Html
+          ? textToHtml(content)
+          : stripAnsi(encodeTextToHtml(content));
+}
 
 function matchKindStyle(elm: HTMLElement, kindStyle?: string) {
     if (kindStyle !== undefined) {
@@ -43,6 +55,28 @@ function matchKindStyle(elm: HTMLElement, kindStyle?: string) {
         }
     }
     return true;
+}
+
+function messageContentToHTML(
+    message: MessageContent,
+    type: DisplayType,
+): string {
+    if (typeof message === "string") {
+        return processContent(message, type);
+    }
+
+    if (message.length === 0) {
+        return "";
+    }
+
+    if (typeof message[0] === "string") {
+        return (message as string[])
+            .map((s) => processContent(s, type))
+            .join("<br>");
+    }
+
+    const table = message as string[][];
+    return `<table class="table-message">${table.map((row, i) => `<tr>${row.map((cell) => `${i === 0 ? "<th>" : "<td>"}${processContent(cell, type)}${i === 0 ? "</th>" : "</td>"}`).join("")}</tr>`).join("")}</table>`;
 }
 
 export function setContent(
@@ -60,15 +94,15 @@ export function setContent(
 
     let type: DisplayType;
     let kind: DisplayMessageKind | undefined;
-    let text: string;
+    let message: MessageContent;
     let speak: boolean;
-    if (typeof content === "string") {
+    if (typeof content === "string" || Array.isArray(content)) {
         type = "text";
-        text = content;
+        message = content;
         speak = false;
     } else {
         type = content.type;
-        text = content.content;
+        message = content.content;
         kind = content.kind;
         speak = content.speak ?? false;
     }
@@ -115,16 +149,7 @@ export function setContent(
     }
 
     // Process content according to type
-    const contentHtml =
-        type === "html"
-            ? DOMPurify.sanitize(text, {
-                  ADD_ATTR: ["target", "onclick", "onerror"],
-                  ADD_DATA_URI_TAGS: ["img"],
-                  ADD_URI_SAFE_ATTR: ["src"],
-              })
-            : enableText2Html
-              ? textToHtml(text)
-              : stripAnsi(encodeTextToHtml(text));
+    const contentHtml = messageContentToHTML(message, type);
 
     // if the agent wants to show script we need to do that in isolation so create an iframe
     // and put both the script and supplied HTML into it
@@ -146,7 +171,7 @@ export function setContent(
         <head>
         ${css}
         </head>
-        <body style="height: auto; overflow: hidden;">${text}</body></html>`;
+        <body style="height: auto; overflow: hidden;">${message}</body></html>`;
 
         // give the iframe the same stylesheet as the host page
 
@@ -160,7 +185,16 @@ export function setContent(
         return undefined;
     }
     if (type === "text") {
-        return stripAnsi(text);
+        if (typeof message === "string") {
+            return stripAnsi(message);
+        }
+        if (message.length === 0) {
+            return undefined;
+        }
+        if (typeof message[0] === "string") {
+            return message.join("\n");
+        }
+        return message.map((row) => row.join("\t")).join("\n");
     }
 
     if (newDiv) {

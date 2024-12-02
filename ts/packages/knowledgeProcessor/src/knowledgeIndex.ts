@@ -18,6 +18,7 @@ import {
 import {
     HitTable,
     intersectMultiple,
+    intersectUnionMultiple,
     removeUndefined,
     union,
     unionArrays,
@@ -26,83 +27,86 @@ import {
 } from "./setOperations.js";
 import { TextBlock, TextBlockType } from "./text.js";
 import { TextEmbeddingModel } from "aiclient";
-import { KeyValueIndex } from "./keyValueIndex.js";
+import { createIndexFolder } from "./keyValueIndex.js";
 
-export async function createIndexFolder<TValueId>(
-    folderPath: string,
-    folderSettings?: ObjectFolderSettings,
-    fSys?: FileSystem,
-): Promise<KeyValueIndex<string, TValueId>> {
-    type TKeyId = string;
-    const indexFolder = await createObjectFolder<TValueId[]>(
-        folderPath,
-        folderSettings,
-        fSys,
-    );
-    return {
-        get,
-        getMultiple,
-        put,
-        replace,
-        remove,
-    };
-
-    async function get(id: TKeyId): Promise<TValueId[] | undefined> {
-        return indexFolder.get(id);
-    }
-
-    async function getMultiple(
-        ids: TKeyId[],
-        concurrency?: number,
-    ): Promise<TValueId[][]> {
-        const values = await asyncArray.mapAsync(ids, concurrency ?? 1, (id) =>
-            indexFolder.get(id),
-        );
-        return removeUndefined(values);
-    }
-
-    async function put(postings?: TValueId[], id?: TKeyId): Promise<TKeyId> {
-        postings = preparePostings(postings);
-        const existingPostings = id ? await indexFolder.get(id) : undefined;
-        const updatedPostings =
-            existingPostings && existingPostings.length > 0
-                ? [...union(existingPostings, postings)]
-                : postings;
-        return await indexFolder.put(updatedPostings, id);
-    }
-
-    function replace(postings: TValueId[], id: TKeyId): Promise<TKeyId> {
-        return indexFolder.put(postings, id);
-    }
-
-    function remove(id: TKeyId): Promise<void> {
-        return indexFolder.remove(id);
-    }
-
-    function preparePostings(postings?: TValueId[]): TValueId[] {
-        return postings ? postings.sort() : [];
-    }
-}
-
+/**
+ * A text index helps you index textual information.
+ * A text index is a map. text --> where that text was seen.
+ * A text index stores and retrieves "postings" (defined below) for a given piece of text.
+ * Postings:
+ * - Text values (term, phrase, etc) is found in a "source". Each source has a unique Id
+ * - Postings are the set of source ids a value is found in
+ *
+ * What a source is up to you. A source can be a text block, or a document, or an entity or..
+ */
 export interface TextIndex<TTextId = any, TSourceId = any> {
     text(): IterableIterator<string>;
     ids(): AsyncIterableIterator<TTextId>;
     entries(): AsyncIterableIterator<TextBlock<TSourceId>>;
-    get(value: string): Promise<TSourceId[] | undefined>;
+    /**
+     * Get the postings (source ids) for the the given text. Uses exact matching.
+     * For fuzzy matching, use getNearest
+     * @param text
+     * @returns If value matches, returns
+     */
+    get(text: string): Promise<TSourceId[] | undefined>;
+    /**
+     * How many unique sources is this value seen?
+     * @param text
+     */
+    getFrequency(text: string): Promise<number>;
     getById(id: TTextId): Promise<TSourceId[] | undefined>;
     getByIds(ids: TTextId[]): Promise<(TSourceId[] | undefined)[]>;
-    getId(value: string): Promise<TTextId | undefined>;
-    getIds(values: string[]): Promise<(TTextId | undefined)[]>;
+    /**
+     * Return the text Id for the given text.
+     * @param text
+     * @returns text id if the value is indexed. Else returns undefined
+     */
+    getId(text: string): Promise<TTextId | undefined>;
+    /**
+     * Return the Ids for the given array of texts
+     * @param texts
+     */
+    getIds(texts: string[]): Promise<(TTextId | undefined)[]>;
+    /**
+     * Return the text for the given text id
+     * @param id
+     */
     getText(id: TTextId): Promise<string | undefined>;
     // TODO: rename put to "add"
-    put(value: string, postings?: TSourceId[]): Promise<TTextId>;
+    /**
+     * Add postings for the given text.
+     * Merges the new postings with the existing postings
+     * @param text
+     * @param postings
+     */
+    put(text: string, postings?: TSourceId[]): Promise<TTextId>;
     putMultiple(values: TextBlock<TSourceId>[]): Promise<TTextId[]>;
+    /**
+     * Add source Ids for the given text Id
+     * @param id
+     * @param postings
+     */
     addSources(id: TTextId, postings: TSourceId[]): Promise<void>;
+    /**
+     * Get the sourceIds for the texts in this index that are nearest to the given value
+     * Ids are returned in sorted order, with duplicates removed
+     * @param text
+     * @param maxMatches
+     * @param minScore
+     */
     getNearest(
-        value: string,
+        text: string,
         maxMatches?: number,
         minScore?: number,
     ): Promise<TSourceId[]>;
+    /**
+     * Get the sourceIds for the texts nearest to the given values
+     * Ids are returned in sorted order, with duplicates removed
+     * @param values
+     * @param maxMatches
+     * @param minScore
+     */
     getNearestMultiple(
         values: string[],
         maxMatches?: number,
@@ -127,16 +131,44 @@ export interface TextIndex<TTextId = any, TSourceId = any> {
         maxMatches: number,
         minScore?: number,
     ): Promise<ScoredItem<TSourceId[]>[]>;
+    /**
+     * Return the TextIds of the text nearest to the given value.
+     * @param value
+     * @param maxMatches
+     * @param minScore
+     */
     getNearestText(
-        text: string,
+        value: string,
         maxMatches: number,
         minScore?: number,
     ): Promise<TTextId[]>;
+    /**
+     * Return the TextIds of the texts nearest to the given values.
+     * @param value
+     * @param maxMatches
+     * @param minScore
+     */
+    getNearestTextMultiple(
+        values: string[],
+        maxMatches: number,
+        minScore?: number,
+    ): Promise<TTextId[]>;
+    /**
+     * Return the TextIds of the nearest matching text + their scores
+     * @param value
+     * @param maxMatches
+     * @param minScore
+     */
     nearestNeighborsText(
         value: string,
         maxMatches: number,
         minScore?: number,
     ): Promise<ScoredItem<TTextId>[]>;
+    nearestNeighborsPairs(
+        value: string,
+        maxMatches: number,
+        minScore?: number,
+    ): Promise<ScoredItem<TextBlock<TSourceId>>[]>;
     remove(textId: TTextId, postings: TSourceId | TSourceId[]): Promise<void>;
 }
 
@@ -147,6 +179,10 @@ export type TextIndexSettings = {
     embeddingModel?: TextEmbeddingModel | undefined;
 };
 
+// There are *three* important types here:
+// - entries are always strings; typically words or sentences
+// - postings are arrays of TSourceIds; typically unique IDs for other objects
+// - TextId is a string that uniquely identifies an (entry, postings) pair internally
 export async function createTextIndex<TSourceId = any>(
     settings: TextIndexSettings,
     folderPath: string,
@@ -162,7 +198,7 @@ export async function createTextIndex<TSourceId = any>(
             folderSettings,
             fSys,
         ));
-    const textIdMap = await loadTextIdMap();
+    const textIdMap: Map<string, TextId> = await loadTextIdMap();
     const postingFolder = await createIndexFolder<TSourceId>(
         path.join(folderPath, "postings"),
         folderSettings,
@@ -184,6 +220,7 @@ export async function createTextIndex<TSourceId = any>(
         ids,
         entries,
         get,
+        getFrequency,
         getById,
         getByIds,
         getId,
@@ -197,8 +234,10 @@ export async function createTextIndex<TSourceId = any>(
         getNearestHitsMultiple,
         getNearestMultiple,
         getNearestText,
+        getNearestTextMultiple,
         nearestNeighbors,
         nearestNeighborsText,
+        nearestNeighborsPairs,
         remove,
     };
 
@@ -224,6 +263,11 @@ export async function createTextIndex<TSourceId = any>(
             return postingFolder.get(textId);
         }
         return undefined;
+    }
+
+    async function getFrequency(text: string): Promise<number> {
+        const postings = await get(text);
+        return postings ? postings.length : 0;
     }
 
     async function getById(id: TextId): Promise<TSourceId[] | undefined> {
@@ -283,7 +327,7 @@ export async function createTextIndex<TSourceId = any>(
     async function addPostings(
         text: string,
         postings?: TSourceId[],
-    ): Promise<string> {
+    ): Promise<TextId> {
         let textId = await entriesFolder.put(text);
         const tasks = [];
         if (postings && postings.length > 0) {
@@ -452,6 +496,20 @@ export async function createTextIndex<TSourceId = any>(
         return matchedIds;
     }
 
+    async function getNearestTextMultiple(
+        values: string[],
+        maxMatches?: number,
+        minScore?: number,
+    ): Promise<TextId[]> {
+        const matches = await asyncArray.mapAsync(
+            values,
+            settings.concurrency,
+            (t) => getNearestText(t, maxMatches, minScore),
+        );
+
+        return intersectUnionMultiple(...matches) ?? [];
+    }
+
     async function nearestNeighbors(
         value: string,
         maxMatches: number,
@@ -480,7 +538,7 @@ export async function createTextIndex<TSourceId = any>(
             minScore,
         );
         // Also do an exact match
-        let textId = textToId(value);
+        let textId: TextId | undefined = textToId(value);
         if (textId) {
             // Remove prior match
             const pos = matches.findIndex((m) => m.item === textId);
@@ -492,17 +550,44 @@ export async function createTextIndex<TSourceId = any>(
         return matches;
     }
 
+    async function nearestNeighborsPairs(
+        query: string,
+        maxMatches: number,
+        minScore?: number,
+    ): Promise<ScoredItem<TextBlock<TSourceId>>[]> {
+        return removeUndefined(
+            await asyncArray.mapAsync(
+                await nearestNeighborsText(query, maxMatches, minScore),
+                settings.concurrency,
+                async (m) => {
+                    const value = await entriesFolder.get(m.item);
+                    if (!value) return;
+                    const sourceIds = await postingFolder.get(m.item);
+                    if (!sourceIds) return;
+                    return {
+                        score: m.score,
+                        item: {
+                            type: TextBlockType.Sentence,
+                            value,
+                            sourceIds,
+                        },
+                    };
+                },
+            ),
+        );
+    }
+
     async function loadTextIdMap(): Promise<Map<string, TextId>> {
         const map = new Map<string, TextId>();
-        const allIds = await entriesFolder.allNames();
+        const allIds: TextId[] = await entriesFolder.allNames();
         if (allIds.length > 0) {
             // Load all text entries
-            const allText = await asyncArray.mapAsync(
+            const allText: (string | undefined)[] = await asyncArray.mapAsync(
                 allIds,
                 settings.concurrency,
                 (id) => entriesFolder.get(id),
             );
-            if (!allText || allIds.length != allText.length) {
+            if (!allText || allIds.length !== allText.length) {
                 throw Error(`TextIndex is corrupt: ${folderPath}`);
             }
             // And now map the text to its ids

@@ -170,6 +170,10 @@ class ShellOpenWebContentView implements CommandHandler {
                 targetUrl = new URL("https://www.target.com/");
 
                 break;
+            case "markdown":
+                targetUrl = new URL("http://localhost:9001/");
+
+                break;
             default:
                 targetUrl = new URL(params.args.site);
         }
@@ -238,5 +242,10 @@ export const shellAgentProvider: AppAgentProvider = {
             throw new Error(`Unknown app agent: ${appAgentName}`);
         }
         return agent;
+    },
+    unloadAppAgent: (appAgentName: string) => {
+        if (appAgentName !== "shell") {
+            throw new Error(`Unknown app agent: ${appAgentName}`);
+        }
     },
 };

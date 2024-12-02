@@ -6,10 +6,10 @@ import chalk from "chalk";
 import { CorrectionRecord } from "agent-cache";
 import {
     getCacheFactory,
-    getBuiltinTranslatorNames,
+    getBuiltinSchemaNames,
     readTestData,
+    getTestDataFiles,
 } from "agent-dispatcher/internal";
-import { getTestDataFiles } from "../../../../dispatcher/dist/utils/config.js";
 import path from "node:path";
 
 function commonPathPrefix(s: string[]) {
@@ -148,7 +148,7 @@ export default class ExplanationDataStatCommmand extends Command {
     static flags = {
         translator: Flags.string({
             description: "Filter by translator",
-            options: getBuiltinTranslatorNames(),
+            options: getBuiltinSchemaNames(),
             multiple: true,
         }),
         explainer: Flags.string({

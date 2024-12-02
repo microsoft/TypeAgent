@@ -68,7 +68,7 @@ export function matchedValues(
                 } else {
                     entry = { transformInfo: info, text: [match] };
                     matchedTransformText.set(key, entry);
-                    if (config.enableWildcard && part.wildcard) {
+                    if (config.enableWildcard && part.wildcardMode) {
                         wildcardNames.add(key);
                     }
                 }

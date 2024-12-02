@@ -6,11 +6,54 @@ import { fileURLToPath } from "url";
 import { ChatModel, openai } from "aiclient";
 import { normalizeCommandsandKBJson } from "./normalizeVscodeJson.js";
 import { processVscodeCommandsJsonFile } from "./schemaGen.js";
-import { processActionSchemaAndReqData } from "./genStats.js";
+import {
+    processActionSchemaAndReqData,
+    processActionReqDataWithComments,
+} from "./genStats.js";
 
 export interface VSCodeSchemaGenApp {
     readonly model: ChatModel;
     run(): Promise<void>;
+}
+
+type ArgType = "string" | "number";
+function parseArg<T extends ArgType>(
+    argName: string,
+    type: T,
+    args: string[],
+): T extends "number" ? number : string | undefined {
+    const prefix = `-${argName}=`;
+    const matchedArg = args.find((arg) => arg.startsWith(prefix));
+
+    if (!matchedArg) {
+        console.log(`Argument -${argName} not provided`);
+        switch (type) {
+            case "number":
+                return -1 as T extends "number" ? number : string;
+            case "string":
+            default:
+                return "" as T extends "number" ? number : string;
+        }
+    } else {
+        const value = matchedArg.slice(prefix.length);
+        if (!matchedArg) {
+            return (type === "number" ? -1 : undefined) as T extends "number"
+                ? number
+                : string | undefined;
+        }
+
+        switch (type) {
+            case "number":
+                const numValue = Number(value);
+                if (isNaN(numValue)) {
+                    return -1 as T extends "number" ? number : string;
+                }
+                return numValue as T extends "number" ? number : string;
+            case "string":
+            default:
+                return value as T extends "number" ? number : string;
+        }
+    }
 }
 
 export async function createVSCodeSchemaGenApp(): Promise<VSCodeSchemaGenApp> {
@@ -42,6 +85,8 @@ export async function createVSCodeSchemaGenApp(): Promise<VSCodeSchemaGenApp> {
             "vscodeCommandsSchema.ts",
         );
 
+        const verbose: boolean = args.includes("-verbose");
+
         if (args.includes("-dataprep")) {
             console.log(
                 "Create a master JSON for VSCODE keybindings and commands...",
@@ -49,12 +94,27 @@ export async function createVSCodeSchemaGenApp(): Promise<VSCodeSchemaGenApp> {
             await normalizeCommandsandKBJson();
         } else if (args.includes("-schemagen")) {
             console.log("VSCODE Action Schema generation ...");
+
+            /*let maxNodestoProcess = -1;
+            const maxNodestoProcessArg = args.find((arg) =>
+                arg.startsWith("-maxnodes"));
+            if (maxNodestoProcessArg) {
+                const value = maxNodestoProcessArg.split("=")[1];
+                maxNodestoProcess = isNaN(Number(value)) ? 0 : parseInt(value, 10);
+            }*/
+            let maxNodestoProcess = parseArg(
+                "maxNodesToProcess",
+                "number",
+                args,
+            );
             await processVscodeCommandsJsonFile(
                 vscodeSchemaGenApp.model,
                 master_commandsnkb_filepath,
                 vscodeCommandsSchema_filepath,
                 undefined,
                 output_dir,
+                maxNodestoProcess,
+                verbose,
             );
         } else if (
             args.some((arg) => arg.startsWith("-schemagen-actionprefix"))
@@ -64,7 +124,6 @@ export async function createVSCodeSchemaGenApp(): Promise<VSCodeSchemaGenApp> {
             );
             if (actionPrefixArg) {
                 const actionPrefix = actionPrefixArg.split("=")[1];
-
                 console.log("VSCODE Action Schema generation ...");
                 const schemaFile = path.join(
                     __dirname,
@@ -72,12 +131,20 @@ export async function createVSCodeSchemaGenApp(): Promise<VSCodeSchemaGenApp> {
                     "output",
                     "vscodeCommandsSchema_[" + actionPrefix + "].ts",
                 );
+
+                const maxNodestoProcess = parseArg(
+                    "maxNodesToProcess",
+                    "number",
+                    args,
+                );
                 await processVscodeCommandsJsonFile(
                     vscodeSchemaGenApp.model,
                     master_commandsnkb_filepath,
                     schemaFile,
                     actionPrefix,
                     output_dir,
+                    maxNodestoProcess,
+                    verbose,
                 );
             }
         } else if (args.includes("-statgen")) {
@@ -97,12 +164,26 @@ export async function createVSCodeSchemaGenApp(): Promise<VSCodeSchemaGenApp> {
                     path.dirname(statGenFilePath),
                     "zero_rank_stats.csv",
                 );
-                processActionSchemaAndReqData(
-                    actionreqEmbeddingsFile,
-                    0.7,
-                    statGenFilePath,
-                    zerorankStatsFile,
-                );
+
+                const actionSchemaIndex = args.indexOf("-schemaFile");
+                if (actionSchemaIndex !== -1) {
+                    const actionSchemaFile = args[actionSchemaIndex + 1];
+                    console.log("actionSchemaFile: ", actionSchemaFile);
+                    processActionReqDataWithComments(
+                        actionSchemaFile,
+                        actionreqEmbeddingsFile,
+                        0.7,
+                        statGenFilePath,
+                        zerorankStatsFile,
+                    );
+                } else {
+                    processActionSchemaAndReqData(
+                        actionreqEmbeddingsFile,
+                        0.7,
+                        statGenFilePath,
+                        zerorankStatsFile,
+                    );
+                }
             } else {
                 console.error("Missing required file paths for -statgen mode.");
                 console.error(

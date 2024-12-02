@@ -1,7 +1,7 @@
 # ====== Init =======
 @session new --memory
 @config action -*
-@config translator -* player calendar
+@config schema -* player calendar
 @config serviceHost off
 
 # =============================================
@@ -37,7 +37,7 @@ Could you play Liebesleid please?
 # -------------------------------------
 # Calendar - cross domain generalization
 # -------------------------------------
-@config translator calendar
+@config schema calendar
 
 # Request with explanation
 Can you schedule design meeting starting at 2 pm with Piali?
@@ -50,7 +50,7 @@ kindly plan meeting to discuss office assignment from 4 pm with John?
 # ==========================
 # Prebuilt caches
 # ==========================
-@config translator player
+@config schema player
 @const import
 
 begin playing Deutsche Motette by Richard Strauss
@@ -58,7 +58,7 @@ Please play Symphony No. 8 by Shostakovich.
 if you don't mind, begin playing a selection of Phillip Glass for us?
 I want to listen to a selection of Johann Sebastian Bach
 
-@config translator calendar
+@config schema calendar
 @const import
 
 Add meeting 3-4pm next Thursday
