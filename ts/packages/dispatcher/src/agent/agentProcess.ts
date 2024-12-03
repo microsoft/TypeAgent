@@ -351,9 +351,6 @@ function getActionContextShim(
     }
     const sessionContext = getSessionContextShim(param);
     const actionIO: ActionIO = {
-        get type(): DisplayType {
-            return "text";
-        },
         setDisplay(content: DisplayContent): void {
             rpc.send("setDisplay", {
                 actionContextId,

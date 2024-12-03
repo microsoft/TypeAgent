@@ -6,7 +6,7 @@ import {
     CommandHandlerTable,
 } from "@typeagent/agent-sdk/helpers/command";
 import { CommandHandlerContext } from "./common/commandHandlerContext.js";
-import { NotifyCommands } from "./common/interactiveIO.js";
+import { DispatcherName, NotifyCommands } from "./common/interactiveIO.js";
 import { ActionContext } from "@typeagent/agent-sdk";
 
 class NotifyInfoCommandHandler implements CommandHandlerNoParams {
@@ -16,10 +16,11 @@ class NotifyInfoCommandHandler implements CommandHandlerNoParams {
         context: ActionContext<CommandHandlerContext>,
     ): Promise<void> {
         const systemContext = context.sessionContext.agentContext;
-        systemContext.requestIO.notify(
+        systemContext.clientIO.notify(
             "showNotifications",
             systemContext.requestId,
             NotifyCommands.ShowSummary,
+            DispatcherName,
         );
     }
 }
@@ -31,10 +32,11 @@ class NotifyClearCommandHandler implements CommandHandlerNoParams {
         context: ActionContext<CommandHandlerContext>,
     ): Promise<void> {
         const systemContext = context.sessionContext.agentContext;
-        systemContext.requestIO.notify(
+        systemContext.clientIO.notify(
             "showNotifications",
             systemContext.requestId,
             NotifyCommands.Clear,
+            DispatcherName,
         );
     }
 }
@@ -46,10 +48,11 @@ class NotifyShowUnreadCommandHandler implements CommandHandlerNoParams {
         context: ActionContext<CommandHandlerContext>,
     ): Promise<void> {
         const systemContext = context.sessionContext.agentContext;
-        systemContext.requestIO.notify(
+        systemContext.clientIO.notify(
             "showNotifications",
             systemContext.requestId,
             NotifyCommands.ShowUnread,
+            DispatcherName,
         );
     }
 }
@@ -62,10 +65,11 @@ class NotifyShowAllCommandHandler implements CommandHandlerNoParams {
         context: ActionContext<CommandHandlerContext>,
     ): Promise<void> {
         const systemContext = context.sessionContext.agentContext;
-        systemContext.requestIO.notify(
+        systemContext.clientIO.notify(
             "showNotifications",
             systemContext.requestId,
             NotifyCommands.ShowAll,
+            DispatcherName,
         );
     }
 }
