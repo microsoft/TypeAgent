@@ -5,7 +5,10 @@ import { createSemanticList } from "typeagent";
 import { cleanDir, getRootDataPath, hasTestKeys, testIf } from "./testCore.js";
 import { openai, TextEmbeddingModel } from "aiclient";
 import { createEntitySearchOptions } from "../src/conversation/entities.js";
-import { createNameIndex } from "../src/conversation/nameIndex.js";
+import {
+    createAliasMatcher,
+    createNameIndex,
+} from "../src/conversation/nameIndex.js";
 import { createFileSystemStorageProvider } from "../src/storageProvider.js";
 import path from "path";
 import { TextBlock, TextBlockType } from "../src/text.js";
@@ -103,6 +106,35 @@ describe("Entities", () => {
         },
         testTimeoutMs,
     );
+    test(
+        "aliasMatcher",
+        async () => {
+            const rootPath = path.join(getRootDataPath(), "aliasMatcher");
+            await cleanDir(rootPath);
+            const provider = createFileSystemStorageProvider(rootPath);
+            const index = await createAliasMatcher<string>(
+                provider,
+                rootPath,
+                "aliasMatcher",
+                "TEXT",
+            );
+            const nameIds = nameMap();
+            await testAlias("Jane Austen", "Austen");
+            await testAlias("Jane Porter", "Porter");
+
+            async function testAlias(name: string, alias: string) {
+                const nameId = nameIds.get(name);
+                await index.add(alias, nameId!);
+                let aliasPostings = await index.match(alias);
+                expect(aliasPostings).toBeDefined();
+                if (aliasPostings) {
+                    expect(aliasPostings).toHaveLength(1);
+                    expect(aliasPostings[0].item).toEqual(nameId);
+                }
+            }
+        },
+        testTimeoutMs,
+    );
 
     function nameBlocks(): TextBlock[] {
         return names.map<TextBlock>((value, i) => {
@@ -112,5 +144,12 @@ describe("Entities", () => {
                 sourceIds: [i.toString()],
             };
         });
+    }
+    function nameMap(): Map<string, string> {
+        const map = new Map<string, string>();
+        for (let i = 0; i < names.length; ++i) {
+            map.set(names[i], i.toString());
+        }
+        return map;
     }
 });
