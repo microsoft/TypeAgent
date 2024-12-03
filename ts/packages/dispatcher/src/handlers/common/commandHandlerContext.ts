@@ -262,11 +262,11 @@ async function addAppAgentProvidres(
     }
     if (embeddingCachePath) {
         try {
-            await writeEmbeddingCache(
-                embeddingCachePath,
-                context.agents.getActionEmbeddings(),
-            );
-            debug("Action Schema Embedding cache saved");
+            const embeddings = context.agents.getActionEmbeddings();
+            if (embeddings) {
+                await writeEmbeddingCache(embeddingCachePath, embeddings);
+                debug("Action Schema Embedding cache saved");
+            }
         } catch {
             // Ignore error
         }
@@ -286,6 +286,7 @@ export async function initializeCommandHandlerContext(
         session.setConfig(options);
     }
     const sessionDirPath = session.getSessionDirPath();
+    debug(`Session directory: ${sessionDirPath}`);
     const conversationManager = sessionDirPath
         ? await Conversation.createConversationManager(
               {},
@@ -339,6 +340,7 @@ export async function initializeCommandHandlerContext(
     );
 
     await setAppAgentStates(context, options);
+    debug("Context initialized");
     return context;
 }
 
