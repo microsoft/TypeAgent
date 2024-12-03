@@ -181,6 +181,7 @@ export function createConsoleClientIO(): ClientIO {
     };
 }
 
+import readline from "readline";
 function initializeConsole() {
     // set the input back to raw mode and resume the input to drain key press during action and not echo them
     process.stdin.setRawMode(true);
@@ -190,11 +191,12 @@ function initializeConsole() {
         }
     });
     process.stdin.resume();
+    readline.emitKeypressEvents(process.stdin);
 }
 
-import readline from "readline/promises";
+import { createInterface } from "readline/promises";
 async function question(message: string, history?: string[]): Promise<string> {
-    const rl = readline.createInterface({
+    const rl = createInterface({
         input: process.stdin,
         output: process.stdout,
         history,

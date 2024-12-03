@@ -156,7 +156,6 @@ class RunCommandScriptHandler implements CommandHandler {
         try {
             // handle nested @run in files
             systemContext.currentScriptDir = path.parse(inputFile).dir;
-
             systemContext.batchMode = true;
 
             // Process the commands in the file.
