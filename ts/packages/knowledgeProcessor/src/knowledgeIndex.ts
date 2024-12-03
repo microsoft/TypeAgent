@@ -413,9 +413,10 @@ export async function createTextIndex<TSourceId = any>(
         maxMatches ??= 1;
         // Check exact match first
         let postingsExact = await get(value);
-        if ((!postingsExact || postingsExact.length === 0) && aliases) {
+        let postingsAlias: TSourceId[] | undefined;
+        if (aliases) {
             // If no exact match, see if matched any (optional) aliases.
-            postingsExact = await getByAlias(value, aliases);
+            postingsAlias = await getByAlias(value, aliases);
         }
         let postingsNearest:
             | ScoredItem<TSourceId>[]
@@ -446,6 +447,7 @@ export async function createTextIndex<TSourceId = any>(
         hitTable.addMultipleScored(
             unionMultipleScored(
                 postingsExact ? scorePostings(postingsExact, 1.0) : undefined,
+                postingsAlias ? scorePostings(postingsAlias, 1.0) : undefined,
                 postingsNearest,
             ),
         );
@@ -469,7 +471,7 @@ export async function createTextIndex<TSourceId = any>(
         maxMatches?: number,
         minScore?: number,
         scoreBoost?: number,
-        customMatcher?: TextMatcher<TextId>,
+        aliases?: TextMatcher<TextId>,
     ): Promise<void> {
         return asyncArray.forEachAsync(values, settings.concurrency, (v) =>
             getNearestHits(
@@ -478,7 +480,7 @@ export async function createTextIndex<TSourceId = any>(
                 maxMatches,
                 minScore,
                 scoreBoost,
-                customMatcher,
+                aliases,
             ),
         );
     }
@@ -704,13 +706,13 @@ export async function createTextIndex<TSourceId = any>(
     }
 }
 
-export async function searchIndex<TTextId = any, TPostingId = any>(
-    index: TextIndex<TTextId, TPostingId>,
+export async function searchIndex<TTextId = any, TSourceId = any>(
+    index: TextIndex<TTextId, TSourceId>,
     value: string,
     exact: boolean,
     count?: number,
     minScore?: number,
-): Promise<ScoredItem<TPostingId[]>[]> {
+): Promise<ScoredItem<TSourceId[]>[]> {
     if (exact) {
         const ids = await index.get(value);
         if (ids) {
@@ -723,8 +725,8 @@ export async function searchIndex<TTextId = any, TPostingId = any>(
     return matches;
 }
 
-export async function searchIndexText<TTextId = any, TPostingId = any>(
-    index: TextIndex<TTextId, TPostingId>,
+export async function searchIndexText<TTextId = any, TSourceId = any>(
+    index: TextIndex<TTextId, TSourceId>,
     value: string,
     exact: boolean,
     count?: number,

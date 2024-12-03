@@ -389,6 +389,7 @@ export async function createEntityIndexOnStorage<TSourceId = string>(
                     options.nameSearchOptions?.maxMatches ?? options.maxMatches,
                     options.nameSearchOptions?.minScore ?? options.minScore,
                     scoreBoost,
+                    nameAliases,
                 ),
                 typeIndex.getNearestHitsMultiple(
                     terms,
