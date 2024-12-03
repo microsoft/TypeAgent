@@ -652,6 +652,8 @@ async function proposeQueries(
     io: iapp.InteractiveIo,
     queryOptions: QueryOptions,
 ): Promise<QuerySpecs | undefined> {
+    const t0 = Date.now();
+
     const promptPreamble = makeQueryMakerPrompt(recentAnswers);
     if (queryOptions.verbose) {
         for (const section of promptPreamble) {
@@ -663,7 +665,8 @@ async function proposeQueries(
         promptPreamble,
     );
     if (!result.success) {
-        writeError(io, `[Error: ${result.message}]`);
+        const t1 = Date.now();
+        writeError(io, `[Error: ${result.message} in ${((t1 - t0) * 0.001).toFixed(3)} seconds]`);
         return undefined;
     }
     const specs = result.data;
@@ -674,6 +677,9 @@ async function proposeQueries(
             util.inspect(specs, { depth: null, colors: true, compact: false }),
         );
     }
+    const t1 = Date.now();
+    writeNote(io, `[proposeQueries took ${((t1 - t0) * 0.001).toFixed(3)} seconds]`);
+
     return specs;
 }
 
@@ -683,6 +689,8 @@ async function runIndexQueries(
     io: iapp.InteractiveIo,
     queryOptions: QueryOptions,
 ): Promise<Map<ChunkId, ScoredItem<ChunkId>> | undefined> {
+    const t0 = Date.now();
+
     const chunkIdScores: Map<ChunkId, ScoredItem<ChunkId>> = new Map(); // Record score of each chunk id.
     const totalNumChunks = await chunkyIndex.chunkFolder.size(); // Nominator in IDF calculation.
 
@@ -765,6 +773,9 @@ async function runIndexQueries(
         );
     }
 
+    const t1 = Date.now();
+    writeNote(io, `[runIndexQueries took ${((t1 - t0) * 0.001).toFixed(3)} seconds]`);
+
     return chunkIdScores;
 }
 
@@ -776,6 +787,8 @@ async function generateAnswer(
     io: iapp.InteractiveIo,
     queryOptions: QueryOptions,
 ): Promise<AnswerSpecs | undefined> {
+    const t0 = Date.now();
+
     // Step 3a: Compute array of ids sorted by score, truncated to some limit.
     const scoredChunkIds: ScoredItem<ChunkId>[] = Array.from(
         chunkIdScores.values(),
@@ -830,6 +843,9 @@ async function generateAnswer(
             `AnswerResult: ${JSON.stringify(answerResult.data, null, 2)}`,
         );
     }
+
+    const t1 = Date.now();
+    writeNote(io, `[generateAnswer took ${((t1 - t0) * 0.001).toFixed(3)} seconds]`);
 
     return answerResult.data;
 }
