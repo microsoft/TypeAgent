@@ -687,9 +687,9 @@ async function runIndexQueries(
     const totalNumChunks = await chunkyIndex.chunkFolder.size(); // Nominator in IDF calculation.
 
     for (const [indexName, index] of chunkyIndex.allIndexes()) {
-        const spec: QuerySpec = (proposedQueries as any)[indexName];
-        if (spec.maxHits === 0) {
-            writeNote(io, `[${indexName}: no query]`);
+        const spec: QuerySpec | undefined = (proposedQueries as any)[indexName];
+        if (spec === undefined) {
+            writeNote(io, `[No query specified for ${indexName}]`);
             continue;
         }
 
