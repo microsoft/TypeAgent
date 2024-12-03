@@ -520,36 +520,6 @@ async function proposeAction(
     });
 }
 
-let maxQuestionId = 0;
-async function question(message: string, requestId: RequestId) {
-    // Ignore message without requestId
-    if (requestId === undefined) {
-        console.warn("question: requestId is undefined");
-        return undefined;
-    }
-    const currentQuestionId = maxQuestionId++;
-    return new Promise<string | undefined>((resolve) => {
-        const callback = (
-            _event: Electron.IpcMainEvent,
-            questionId: number,
-            response?: string,
-        ) => {
-            if (currentQuestionId !== questionId) {
-                return;
-            }
-            ipcMain.removeListener("questionResponse", callback);
-            resolve(response);
-        };
-        ipcMain.on("questionResponse", callback);
-        chatView?.webContents.send(
-            "question",
-            currentQuestionId,
-            message,
-            requestId,
-        );
-    });
-}
-
 const clientIO: ClientIO = {
     clear: () => {
         chatView?.webContents.send("clear");
@@ -559,7 +529,6 @@ const clientIO: ClientIO = {
     setDynamicDisplay,
     askYesNo,
     proposeAction,
-    question,
     notify(event: string, requestId: RequestId, data: any, source: string) {
         switch (event) {
             case "explained":
