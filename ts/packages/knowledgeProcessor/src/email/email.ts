@@ -342,7 +342,7 @@ async function setupEmailConversationManager(
         "If you are not sure, return NoAnswer.";
     cm.searchProcessor.settings.defaultEntitySearchOptions =
         createEntitySearchOptions(true);
-    cm.searchProcessor.settings.defaultEntitySearchOptions.nameSearchOptions!.maxMatches = 25;
+    // cm.searchProcessor.settings.defaultEntitySearchOptions.nameSearchOptions!.maxMatches = 25;
 }
 
 async function setupEmailConversation(
