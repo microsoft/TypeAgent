@@ -83,10 +83,23 @@ describe("Entities", () => {
             );
             const blocks = nameBlocks();
             await index.putMultiple(blocks);
-            await index.addAlias("Jane Austen", "Austen");
-            await index.addAlias("Jane Porter", "Porter");
-            const ids = await index.get("Porter");
-            expect(ids).toBeDefined();
+
+            await testAlias("Jane Austen", "Austen");
+            await testAlias("Jane Porter", "Porter");
+
+            let alias = "Austen";
+            await index.removeAlias("Jane Austen", alias);
+            let ids = await index.get(alias);
+            expect(ids).toBeUndefined();
+
+            async function testAlias(name: string, alias: string) {
+                await index.addAlias(name, alias);
+                let exactPostings = await index.get(name);
+                expect(exactPostings).toBeDefined();
+                let aliasPostings = await index.get(alias);
+                expect(aliasPostings).toBeDefined();
+                expect(aliasPostings).toEqual(exactPostings);
+            }
         },
         testTimeoutMs,
     );
