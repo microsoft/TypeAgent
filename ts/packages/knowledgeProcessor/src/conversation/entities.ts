@@ -394,7 +394,7 @@ export async function createEntityIndexOnStorage<TSourceId = string>(
                     options.facetSearchOptions?.minScore ?? options.minScore,
                 ),
             ]);
-            let entityHits = hitCounter.getTopK(options.topK ?? 3).sort();
+            let entityHits = hitCounter.getTopK(determineTopK(options)).sort();
             //entityHits = await projectFacets(entityHits, terms, options);
 
             results.entityIds = [
@@ -459,6 +459,17 @@ export async function createEntityIndexOnStorage<TSourceId = string>(
             },
         );
         return unique.size === 0 ? undefined : unique;
+    }
+
+    function determineTopK(options: EntitySearchOptions): number {
+        const topK =
+            options.topK ??
+            Math.max(
+                options.maxMatches,
+                options.nameSearchOptions?.maxMatches ?? 0,
+                options.facetSearchOptions?.maxMatches ?? 0,
+            );
+        return topK ?? 3;
     }
 }
 

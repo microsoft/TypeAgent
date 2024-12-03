@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { createSemanticList } from "typeagent";
+import { createSemanticList, collections } from "typeagent";
 import { hasTestKeys, testIf } from "./testCore.js";
 import { openai, TextEmbeddingModel } from "aiclient";
 import { createEntitySearchOptions } from "../src/conversation/entities.js";
@@ -19,7 +19,7 @@ describe("Entities", () => {
         "entityNames",
         () => hasTestKeys(),
         async () => {
-            const names = [
+            let names = [
                 "Kevin",
                 "Kevin Andersen",
                 "Kevin Bacon",
@@ -33,6 +33,7 @@ describe("Entities", () => {
                 "Patrick",
                 "Patrick Stewart",
             ];
+            collections.lowerAndSort(names);
             const semanticList = createSemanticList<string>(embeddingModel!);
             await semanticList.pushMultiple(names);
 
