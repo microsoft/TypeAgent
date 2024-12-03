@@ -5,15 +5,12 @@ import { createSemanticList } from "typeagent";
 import { cleanDir, getRootDataPath, hasTestKeys, testIf } from "./testCore.js";
 import { openai, TextEmbeddingModel } from "aiclient";
 import { createEntitySearchOptions } from "../src/conversation/entities.js";
-import {
-    createAliasMatcher,
-    createNameIndex,
-} from "../src/conversation/nameIndex.js";
+import { createAliasMatcher } from "../src/textMatcher.js";
 import { createFileSystemStorageProvider } from "../src/storageProvider.js";
 import path from "path";
-import { TextBlock, TextBlockType } from "../src/text.js";
+//import { TextBlock, TextBlockType } from "./text.js";
 
-describe("Entities", () => {
+describe("TextMatchers", () => {
     const testTimeoutMs = 1000 * 60 * 5;
     let embeddingModel: TextEmbeddingModel | undefined;
     let names = [
@@ -67,45 +64,6 @@ describe("Entities", () => {
         },
         testTimeoutMs,
     );
-    testIf(
-        "aliases",
-        () => hasTestKeys(),
-        async () => {
-            const rootPath = path.join(getRootDataPath(), "aliases");
-            await cleanDir(rootPath);
-            const provider = createFileSystemStorageProvider(rootPath);
-            const index = await createNameIndex(
-                provider,
-                {
-                    caseSensitive: false,
-                    concurrency: 1,
-                },
-                rootPath,
-                "alias",
-                "TEXT",
-            );
-            const blocks = nameBlocks();
-            await index.putMultiple(blocks);
-
-            await testAlias("Jane Austen", "Austen");
-            await testAlias("Jane Porter", "Porter");
-
-            let alias = "Austen";
-            await index.removeAlias("Jane Austen", alias);
-            let ids = await index.get(alias);
-            expect(ids).toBeUndefined();
-
-            async function testAlias(name: string, alias: string) {
-                await index.addAlias(name, alias);
-                let exactPostings = await index.get(name);
-                expect(exactPostings).toBeDefined();
-                let aliasPostings = await index.get(alias);
-                expect(aliasPostings).toBeDefined();
-                expect(aliasPostings).toEqual(exactPostings);
-            }
-        },
-        testTimeoutMs,
-    );
     test(
         "aliasMatcher",
         async () => {
@@ -119,23 +77,47 @@ describe("Entities", () => {
                 "TEXT",
             );
             const nameIds = nameMap();
-            await testAlias("Jane Austen", "Austen");
-            await testAlias("Jane Porter", "Porter");
+            await testAdd("Jane Austen", "Austen", 1);
+            await testAdd("Jane Austen", "Jane", 1);
+            await testAdd("Jane Porter", "Porter", 1);
+            await testAdd("Jane Porter", "Jane", 2);
+            await testRemove("Jane Austen", "Austen", 0);
+            await testRemove("Jane Austen", "Jane", 1);
 
-            async function testAlias(name: string, alias: string) {
+            async function testAdd(
+                name: string,
+                alias: string,
+                expectedMatchCount: number,
+            ) {
                 const nameId = nameIds.get(name);
-                await index.add(alias, nameId!);
+                await index.addAlias(alias, nameId!);
+                let matches = await index.match(alias);
+                expect(matches).toBeDefined();
+                if (matches) {
+                    expect(matches).toHaveLength(expectedMatchCount);
+                    expect(matches.some((m) => m.item === nameId)).toBeTruthy();
+                }
+            }
+
+            async function testRemove(
+                name: string,
+                alias: string,
+                expectedPostingsLength: number,
+            ) {
+                const nameId = nameIds.get(name);
+                await index.removeAlias(alias, nameId!);
                 let aliasPostings = await index.match(alias);
-                expect(aliasPostings).toBeDefined();
-                if (aliasPostings) {
-                    expect(aliasPostings).toHaveLength(1);
-                    expect(aliasPostings[0].item).toEqual(nameId);
+                if (expectedPostingsLength > 0) {
+                    expect(aliasPostings).toBeDefined();
+                    expect(aliasPostings!).toHaveLength(expectedPostingsLength);
+                } else {
+                    expect(aliasPostings).toBeUndefined();
                 }
             }
         },
         testTimeoutMs,
     );
-
+    /*
     function nameBlocks(): TextBlock[] {
         return names.map<TextBlock>((value, i) => {
             return {
@@ -145,6 +127,7 @@ describe("Entities", () => {
             };
         });
     }
+        */
     function nameMap(): Map<string, string> {
         const map = new Map<string, string>();
         for (let i = 0; i < names.length; ++i) {

@@ -18,7 +18,6 @@ export * from "./topics.js";
 export * from "./topicSchema.js";
 export * from "./transcript.js";
 export * from "./actions.js";
-export * from "./nameIndex.js";
 
 export * from "./searchResponse.js";
 export * from "./searchProcessor.js";

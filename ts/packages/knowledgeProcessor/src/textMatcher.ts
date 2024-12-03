@@ -2,21 +2,25 @@
 // Licensed under the MIT License.
 
 import { ScoredItem, SearchOptions } from "typeagent";
-import { TextIndex, TextIndexSettings } from "../knowledgeIndex.js";
-import { unionMultiple } from "../setOperations.js";
+import { TextIndex, TextIndexSettings } from "./knowledgeIndex.js";
+import { unionMultiple } from "./setOperations.js";
 import {
     StorageProvider,
     ValueDataType,
     ValueType,
-} from "../storageProvider.js";
+} from "./storageProvider.js";
 
 export interface TextMatcher<TTextId = any> {
-    add(value: string, textId: TTextId): Promise<void>;
-    remove(value: string, textId: TTextId): Promise<void>;
     match(
         value: string,
         options?: SearchOptions,
     ): Promise<ScoredItem<TTextId>[] | undefined>;
+}
+
+export interface AliasMatcher<TTextId = any, TAliasId = any>
+    extends TextMatcher<TTextId> {
+    addAlias(alias: string, textId: TTextId): Promise<TAliasId>;
+    removeAlias(alias: string, textId: TTextId): Promise<void>;
 }
 
 export async function createAliasMatcher<TTextId extends ValueType>(
@@ -24,25 +28,31 @@ export async function createAliasMatcher<TTextId extends ValueType>(
     basePath: string,
     name: string,
     textIdType: ValueDataType<TTextId>,
-): Promise<TextMatcher<TTextId>> {
+): Promise<AliasMatcher<TTextId, string>> {
+    type AliasId = string;
     const aliases = await storageProvider.createTextIndex<TTextId>(
         { caseSensitive: false, concurrency: 1 },
         basePath,
-        "aliases",
+        name,
         textIdType,
     );
     return {
-        add,
-        remove,
+        addAlias,
+        removeAlias,
         match,
     };
 
-    async function add(value: string, textId: TTextId): Promise<void> {
-        await aliases.put(value, [textId]);
+    async function addAlias(alias: string, textId: TTextId): Promise<AliasId> {
+        return aliases.put(alias, [textId]);
     }
-    async function remove(value: string, textId: TTextId): Promise<void> {
-        await aliases.remove(value, textId);
+
+    async function removeAlias(alias: string, textId: TTextId): Promise<void> {
+        const aliasId = await aliases.getId(alias);
+        if (aliasId) {
+            await aliases.remove(aliasId, textId);
+        }
     }
+
     async function match(
         value: string,
         options?: SearchOptions,
