@@ -609,9 +609,17 @@ async function processQuery(
     );
     if (!proposedQueries) return; // Error message already printed by proposeQueries.
 
+    // Step 1a: If step 1 gave the answer, print it and exit.
+    if ("answer" in proposedQueries) {
+        await chunkyIndex.answerFolder.put(proposedQueries.answer);
+        reportQuery(proposedQueries.answer, io);
+        writeNote(io, "[Answer produced by stage 1]");
+        return;
+    }
+
     // **Step 2:** Run those queries on the indexes.
 
-    const [message, chunkIdScores] = await runIndexQueries(
+    const chunkIdScores = await runIndexQueries(
         proposedQueries,
         chunkyIndex,
         io,
@@ -623,7 +631,6 @@ async function processQuery(
 
     const answer = await generateAnswer(
         input,
-        message,
         chunkIdScores,
         recentAnswers,
         chunkyIndex,
@@ -675,9 +682,7 @@ async function runIndexQueries(
     chunkyIndex: ChunkyIndex,
     io: iapp.InteractiveIo,
     queryOptions: QueryOptions,
-): Promise<
-    [string | undefined, Map<ChunkId, ScoredItem<ChunkId>> | undefined]
-> {
+): Promise<Map<ChunkId, ScoredItem<ChunkId>> | undefined> {
     const chunkIdScores: Map<ChunkId, ScoredItem<ChunkId>> = new Map(); // Record score of each chunk id.
     const totalNumChunks = await chunkyIndex.chunkFolder.size(); // Nominator in IDF calculation.
 
@@ -718,7 +723,8 @@ async function runIndexQueries(
             for (const chunkId of hit.item.sourceIds ?? []) {
                 // Binary TF is 1 for all chunks in the list.
                 // As a tweak, we multiply by the term's relevance score.
-                const newScore = hit.score * idf;
+                const tf = hit.score;
+                const newScore = tf * idf;
                 const oldScoredItem = chunkIdScores.get(chunkId);
                 const oldScore = oldScoredItem?.score ?? 0;
                 // Combine scores by addition. (Alternatives: max, possibly others.)
@@ -759,16 +765,11 @@ async function runIndexQueries(
         );
     }
 
-    if (proposedQueries.message) {
-        writeNote(io, `[Message: ${proposedQueries.message}]`);
-    }
-
-    return [proposedQueries.message, chunkIdScores];
+    return chunkIdScores;
 }
 
 async function generateAnswer(
     input: string,
-    message: string | undefined,
     chunkIdScores: Map<ChunkId, ScoredItem<ChunkId>>,
     recentAnswers: NameValue<AnswerSpecs>[],
     chunkyIndex: ChunkyIndex,
@@ -802,7 +803,7 @@ async function generateAnswer(
 
     writeNote(io, `[Sending ${chunks.length} chunks to answerMaker]`);
 
-    const preamble = makeAnswerPrompt(message, recentAnswers, chunks);
+    const preamble = makeAnswerPrompt(recentAnswers, chunks);
     if (queryOptions.verbose) {
         const formatted = util.inspect(preamble, {
             depth: null,
@@ -883,7 +884,6 @@ Don't suggest "meta" queries about the conversation itself -- only the code is i
 }
 
 function makeAnswerPrompt(
-    message: string | undefined,
     recentAnswers: NameValue<AnswerSpecs>[],
     chunks: Chunk[],
 ): PromptSection[] {
@@ -891,10 +891,8 @@ function makeAnswerPrompt(
 Following are the chunks most relevant to the query.
 Use the preceding conversation items as context for the user query given later.
 `;
+
     const preamble = makeAnyPrompt(recentAnswers, prompt);
-    if (message) {
-        preamble.push({ role: "assistant", content: message });
-    }
     for (const chunk of chunks) {
         const chunkData = {
             fileName: chunk.fileName,
