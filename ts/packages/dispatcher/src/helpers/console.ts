@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 import {
     AppAgentEvent,
     DisplayAppendMode,
@@ -59,6 +62,7 @@ function messageContentToText(message: MessageContent): string {
 }
 
 export function createConsoleClientIO(): ClientIO {
+    initializeConsole();
     let lastAppendMode: DisplayAppendMode | undefined;
     function displayContent(
         content: DisplayContent,
@@ -177,10 +181,19 @@ export function createConsoleClientIO(): ClientIO {
     };
 }
 
+function initializeConsole() {
+    // set the input back to raw mode and resume the input to drain key press during action and not echo them
+    process.stdin.setRawMode(true);
+    process.stdin.on("keypress", (str, key) => {
+        if (key?.ctrl && key.name === "c") {
+            process.emit("SIGINT");
+        }
+    });
+    process.stdin.resume();
+}
+
 import readline from "readline/promises";
 async function question(message: string, history?: string[]): Promise<string> {
-    process.stdin.resume();
-
     const rl = readline.createInterface({
         input: process.stdin,
         output: process.stdout,
@@ -207,8 +220,10 @@ async function question(message: string, history?: string[]): Promise<string> {
     } finally {
         process.stdin.off("data", adjust);
 
-        // Close the readline interface, set the input back to raw mode and resume the input so that it doesn't echo and accumulate input, while action is going on.
+        // Close the readline interface
         rl.close();
+
+        // set the input back to raw mode and resume the input to drain key press during action and not echo them
         process.stdin.setRawMode(true);
         process.stdin.resume();
     }
