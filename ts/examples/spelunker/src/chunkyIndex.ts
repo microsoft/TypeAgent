@@ -111,7 +111,10 @@ function createQueryMaker(
     model: ChatModel,
 ): TypeChatJsonTranslator<QuerySpecs> {
     const typeName = "QuerySpecs";
-    const schema = loadSchema(["makeQuerySchema.ts"], import.meta.url);
+    const schema = loadSchema(
+        ["makeQuerySchema.ts", "makeAnswerSchema.ts"],
+        import.meta.url,
+    );
     const validator = createTypeScriptJsonValidator<QuerySpecs>(
         schema,
         typeName,
