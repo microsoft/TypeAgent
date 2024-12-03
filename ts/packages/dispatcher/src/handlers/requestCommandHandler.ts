@@ -536,16 +536,18 @@ async function pickInitialSchema(
         // Use embedding to determine the most likely action schema and use the schema name for that.
         const result =
             await systemContext.agents.semanticSearchActionSchema(request);
-        debugSementicSearch(
-            `Semantic search result: ${result
-                .map(
-                    (r) =>
-                        `${r.item.actionSchemaFile.schemaName}.${r.item.definition.name} (${r.score})`,
-                )
-                .join("\n")}`,
-        );
-        if (result.length > 0) {
-            schemaName = result[0].item.actionSchemaFile.schemaName;
+        if (result) {
+            debugSementicSearch(
+                `Semantic search result: ${result
+                    .map(
+                        (r) =>
+                            `${r.item.actionSchemaFile.schemaName}.${r.item.definition.name} (${r.score})`,
+                    )
+                    .join("\n")}`,
+            );
+            if (result.length > 0) {
+                schemaName = result[0].item.actionSchemaFile.schemaName;
+            }
         }
     }
 
@@ -989,7 +991,6 @@ export class RequestCommandHandler implements CommandHandler {
                 ? await matchRequest(request, context, history)
                 : undefined;
 
-            systemContext.agents.semanticSearchActionSchema(request);
             const translationResult =
                 match === undefined // undefined means not found
                     ? await translateRequest(
