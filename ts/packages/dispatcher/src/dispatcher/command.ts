@@ -11,7 +11,6 @@ import {
 import { getDefaultExplainerName } from "agent-cache";
 import { CommandHandlerContext } from "../handlers/common/commandHandlerContext.js";
 
-import { unicodeChar } from "../utils/interactive.js";
 import {
     CommandDescriptor,
     CommandDescriptors,
@@ -282,6 +281,14 @@ export async function processCommand(
     });
 }
 
+export const enum unicodeChar {
+    wood = "🪵",
+    robotFace = "🤖",
+    constructionSign = "🚧",
+    floppyDisk = "💾",
+    stopSign = "🛑",
+    convert = "🔄",
+}
 export function getSettingSummary(context: CommandHandlerContext) {
     const prompt: string[] = [unicodeChar.robotFace];
 

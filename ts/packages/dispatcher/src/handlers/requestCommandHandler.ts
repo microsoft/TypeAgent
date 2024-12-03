@@ -34,7 +34,7 @@ import {
     startStreamPartialAction,
     validateWildcardMatch,
 } from "../action/actionHandlers.js";
-import { unicodeChar } from "../utils/interactive.js";
+import { unicodeChar } from "../dispatcher/command.js";
 import {
     isChangeAssistantAction,
     TypeAgentTranslator,

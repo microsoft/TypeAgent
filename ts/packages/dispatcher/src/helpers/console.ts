@@ -7,14 +7,11 @@ import {
 import {
     ClientIO,
     IAgentMessage,
-    NotifyExplainedData,
     RequestId,
 } from "../handlers/common/interactiveIO.js";
 import { TemplateEditConfig } from "../translation/actionTemplate.js";
 import chalk from "chalk";
-import readline from "readline/promises";
 import stringWidth from "string-width";
-import { askYesNo } from "../utils/interactive.js";
 
 function displayPadEnd(content: string, length: number): string {
     // Account for full width characters
@@ -61,9 +58,7 @@ function messageContentToText(message: MessageContent): string {
     return displayRows.join("\n");
 }
 
-export function createConsoleClientIO(
-    stdio?: readline.Interface | undefined,
-): ClientIO {
+export function createConsoleClientIO(): ClientIO {
     let lastAppendMode: DisplayAppendMode | undefined;
     function displayContent(
         content: DisplayContent,
@@ -142,7 +137,8 @@ export function createConsoleClientIO(
             requestId: RequestId,
             defaultValue?: boolean,
         ): Promise<boolean> {
-            return askYesNo(message, stdio, defaultValue);
+            const input = await question(`${message} (y/n)`);
+            return input.toLowerCase() === "y";
         },
         async proposeAction(
             actionTemplates: TemplateEditConfig,
@@ -179,4 +175,107 @@ export function createConsoleClientIO(
             throw new Error(`Action ${action} not supported`);
         },
     };
+}
+
+import readline from "readline/promises";
+async function question(message: string, history?: string[]): Promise<string> {
+    process.stdin.resume();
+
+    const rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout,
+        history,
+    });
+
+    // readline doesn't account for the right full width for some emojis.
+    // Do manual adjustment.
+    const adjust = (data: Buffer) => {
+        if (data[0] === 13) {
+            return;
+        }
+
+        process.stdout.cursorTo(
+            stringWidth(message + rl.line.slice(0, rl.cursor)),
+        );
+    };
+    process.stdin.on("data", adjust);
+
+    try {
+        const p = rl.question(message);
+        process.stdout.cursorTo(stringWidth(message));
+        return await p;
+    } finally {
+        process.stdin.off("data", adjust);
+
+        // Close the readline interface, set the input back to raw mode and resume the input so that it doesn't echo and accumulate input, while action is going on.
+        rl.close();
+        process.stdin.setRawMode(true);
+        process.stdin.resume();
+    }
+}
+
+const promptColor = chalk.cyanBright;
+
+function getNextInput(prompt: string, inputs: string[]): string {
+    while (true) {
+        let input = inputs.shift();
+        if (input === undefined) {
+            return "exit";
+        }
+        input = input.trim();
+        if (input.length === 0) {
+            continue;
+        }
+        if (!input.startsWith("#")) {
+            console.log(`${promptColor(prompt)}${input}`);
+            return input;
+        }
+        // Handle comments in files
+        console.log(chalk.green(input));
+    }
+}
+
+/**
+ * A request processor for interactive input or input from a text file. If an input file name is specified,
+ * the callback function is invoked for each line in file. Otherwise, the callback function is invoked for
+ * each line of interactive input until the user types "quit" or "exit".
+ * @param interactivePrompt Prompt to present to user.
+ * @param inputFileName Input text file name, if any.
+ * @param processRequest Async callback function that is invoked for each interactive input or each line in text file.
+ */
+export async function processRequests<T>(
+    interactivePrompt: string | ((context: T) => string),
+    processRequest: (request: string, context: T) => Promise<any>,
+    context: T,
+    inputs?: string[],
+) {
+    const history: string[] = [];
+    while (true) {
+        const prompt =
+            typeof interactivePrompt === "function"
+                ? interactivePrompt(context)
+                : interactivePrompt;
+        const request = inputs
+            ? getNextInput(prompt, inputs)
+            : await question(promptColor(prompt), history);
+        if (request.length) {
+            if (
+                request.toLowerCase() === "quit" ||
+                request.toLowerCase() === "exit"
+            ) {
+                (context as any)?.session.save(); // save session state
+                break;
+            } else {
+                try {
+                    await processRequest(request, context);
+                    history.push(request);
+                    (context as any)?.session.save(); // save session state
+                } catch (error) {
+                    console.log("### ERROR:");
+                    console.log(error);
+                }
+            }
+        }
+        console.log("");
+    }
 }

@@ -14,7 +14,6 @@ export {
     getPrompt,
     getTranslatorNameToEmojiMap,
 } from "./dispatcher/command.js";
-export { processRequests } from "./utils/interactive.js";
 export { getCacheFactory } from "./utils/cacheFactory.js";
 export {
     GenerateTestDataResult,

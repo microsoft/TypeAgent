@@ -1,8 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { unicodeChar } from "../../../../dispatcher/src/utils/interactive";
-
 export class MetricsView {
     private mainContainer: HTMLDivElement;
 
@@ -10,7 +8,7 @@ export class MetricsView {
         this.mainContainer = document.createElement("div");
         this.mainContainer.className = "metrics";
 
-        this.mainContainer.innerHTML = `<div style="text-align: center; font-size: 64px;">${unicodeChar.constructionSign}</div>`;
+        this.mainContainer.innerHTML = `<div style="text-align: center; font-size: 64px;">🚧</div>`;
 
         this.updateMetrics();
     }

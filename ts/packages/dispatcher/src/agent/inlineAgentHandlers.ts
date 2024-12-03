@@ -31,7 +31,7 @@ import { getHistoryCommandHandlers } from "../handlers/historyCommandHandler.js"
 import { TraceCommandHandler } from "../handlers/traceCommandHandler.js";
 import { getRandomCommandHandlers } from "../handlers/randomCommandHandler.js";
 import { getNotifyCommandHandlers } from "../handlers/notifyCommandHandler.js";
-import { processRequests } from "../utils/interactive.js";
+import { processRequests } from "agent-dispatcher/helpers/console";
 import {
     getDefaultSubCommandDescriptor,
     getParsedCommand,
@@ -162,9 +162,9 @@ class RunCommandScriptHandler implements CommandHandler {
             // Process the commands in the file.
             await processRequests(
                 getPrompt,
-                inputs,
                 processCommandNoLock,
                 systemContext,
+                inputs,
             );
         } finally {
             // Restore state
