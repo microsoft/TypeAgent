@@ -51,6 +51,7 @@ import {
     createFileSystemStorageProvider,
     StorageProvider,
 } from "../storageProvider.js";
+import { AliasMatcher, createAliasMatcher } from "../textMatcher.js";
 
 export interface EntitySearchOptions extends SearchOptions {
     loadEntities?: boolean | undefined;
@@ -86,7 +87,7 @@ export interface EntityIndex<TEntityId = any, TSourceId = any, TTextId = any>
     readonly nameIndex: TextIndex<TTextId, TEntityId>;
     readonly typeIndex: TextIndex<TTextId, TEntityId>;
     readonly facetIndex: TextIndex<TTextId, TEntityId>;
-
+    readonly nameAliases: AliasMatcher<TTextId>;
     readonly noiseTerms: TermSet;
 
     entities(): AsyncIterableIterator<ExtractedEntity<TSourceId>>;
@@ -162,12 +163,21 @@ export async function createEntityIndexOnStorage<TSourceId = string>(
             "TEXT",
         ),
     ]);
+    const nameAliases = await createAliasMatcher(
+        nameIndex,
+        storageProvider,
+        rootPath,
+        "nameAliases",
+        "TEXT",
+    );
+
     const noiseTerms = createTermSet();
     return {
         ...entityStore,
         nameIndex,
         typeIndex,
         facetIndex,
+        nameAliases,
         noiseTerms,
         entities: () => entityStore.entries(),
         get: (id) => entityStore.get(id),
@@ -395,7 +405,6 @@ export async function createEntityIndexOnStorage<TSourceId = string>(
                 ),
             ]);
             let entityHits = hitCounter.getTopK(determineTopK(options)).sort();
-            //entityHits = await projectFacets(entityHits, terms, options);
 
             results.entityIds = [
                 ...intersectMultiple(

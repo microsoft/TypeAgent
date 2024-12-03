@@ -5,7 +5,7 @@ import { createSemanticList } from "typeagent";
 import { cleanDir, getRootDataPath, hasTestKeys, testIf } from "./testCore.js";
 import { openai, TextEmbeddingModel } from "aiclient";
 import { createEntitySearchOptions } from "../src/conversation/entities.js";
-import { createAliasMatcher } from "../src/textMatcher.js";
+import { createAliasMatcher, TextTable } from "../src/textMatcher.js";
 import { createFileSystemStorageProvider } from "../src/storageProvider.js";
 import path from "path";
 //import { TextBlock, TextBlockType } from "./text.js";
@@ -70,13 +70,14 @@ describe("TextMatchers", () => {
             const rootPath = path.join(getRootDataPath(), "aliasMatcher");
             await cleanDir(rootPath);
             const provider = createFileSystemStorageProvider(rootPath);
+            const nameMap = new NameMap();
             const index = await createAliasMatcher<string>(
+                nameMap,
                 provider,
                 rootPath,
                 "aliasMatcher",
                 "TEXT",
             );
-            const nameIds = nameMap();
             await testAdd("Jane Austen", "Austen", 1);
             await testAdd("Jane Austen", "Jane", 1);
             await testAdd("Jane Porter", "Porter", 1);
@@ -89,13 +90,13 @@ describe("TextMatchers", () => {
                 alias: string,
                 expectedMatchCount: number,
             ) {
-                const nameId = nameIds.get(name);
-                await index.addAlias(alias, nameId!);
+                await index.addAlias(alias, name);
                 let matches = await index.match(alias);
                 expect(matches).toBeDefined();
                 if (matches) {
+                    const nameId = await nameMap.getId(name);
                     expect(matches).toHaveLength(expectedMatchCount);
-                    expect(matches.some((m) => m.item === nameId)).toBeTruthy();
+                    expect(matches).toContain(nameId);
                 }
             }
 
@@ -104,8 +105,7 @@ describe("TextMatchers", () => {
                 alias: string,
                 expectedPostingsLength: number,
             ) {
-                const nameId = nameIds.get(name);
-                await index.removeAlias(alias, nameId!);
+                await index.removeAlias(alias, name);
                 let aliasPostings = await index.match(alias);
                 if (expectedPostingsLength > 0) {
                     expect(aliasPostings).toBeDefined();
@@ -134,5 +134,25 @@ describe("TextMatchers", () => {
             map.set(names[i], i.toString());
         }
         return map;
+    }
+
+    class NameMap implements TextTable<string> {
+        public map: Map<string, string>;
+
+        constructor() {
+            this.map = nameMap();
+        }
+
+        public getId(text: string): Promise<string | undefined> {
+            return Promise.resolve(this.map.get(text));
+        }
+        public getText(id: string): Promise<string | undefined> {
+            for (const entry of this.map.entries()) {
+                if (entry[1] === id) {
+                    return Promise.resolve(entry[0]);
+                }
+            }
+            return Promise.resolve(undefined);
+        }
     }
 });

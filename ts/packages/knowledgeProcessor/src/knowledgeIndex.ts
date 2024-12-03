@@ -28,6 +28,7 @@ import {
 import { TextBlock, TextBlockType } from "./text.js";
 import { TextEmbeddingModel } from "aiclient";
 import { createIndexFolder } from "./keyValueIndex.js";
+import { TextMatcher } from "./textMatcher.js";
 
 /**
  * A text index helps you index textual information.
@@ -118,6 +119,7 @@ export interface TextIndex<TTextId = any, TSourceId = any> {
         maxMatches?: number,
         minScore?: number,
         scoreBoost?: number,
+        aliases?: TextMatcher<TTextId>,
     ): Promise<void>;
     getNearestHitsMultiple(
         values: string[],
@@ -125,6 +127,7 @@ export interface TextIndex<TTextId = any, TSourceId = any> {
         maxMatches?: number,
         minScore?: number,
         scoreBoost?: number,
+        aliases?: TextMatcher<TTextId>,
     ): Promise<void>;
     nearestNeighbors(
         value: string,
@@ -405,10 +408,15 @@ export async function createTextIndex<TSourceId = any>(
         maxMatches?: number,
         minScore?: number,
         scoreBoost?: number,
+        aliases?: TextMatcher<TextId>,
     ): Promise<void> {
         maxMatches ??= 1;
         // Check exact match first
         let postingsExact = await get(value);
+        if ((!postingsExact || postingsExact.length === 0) && aliases) {
+            // If no exact match, see if matched any (optional) aliases.
+            postingsExact = await getByAlias(value, aliases);
+        }
         let postingsNearest:
             | ScoredItem<TSourceId>[]
             | IterableIterator<ScoredItem<TSourceId>>
@@ -443,15 +451,35 @@ export async function createTextIndex<TSourceId = any>(
         );
     }
 
+    async function getByAlias(
+        value: string,
+        aliases: TextMatcher<TextId>,
+    ): Promise<TSourceId[] | undefined> {
+        const matchedTextIds = await aliases.match(value);
+        if (matchedTextIds && matchedTextIds.length > 0) {
+            const postings = await getByIds(matchedTextIds);
+            return [...unionMultiple(...postings)];
+        }
+        return undefined;
+    }
+
     async function getNearestHitsMultiple(
         values: string[],
         hitTable: HitTable<TSourceId>,
         maxMatches?: number,
         minScore?: number,
         scoreBoost?: number,
+        customMatcher?: TextMatcher<TextId>,
     ): Promise<void> {
         return asyncArray.forEachAsync(values, settings.concurrency, (v) =>
-            getNearestHits(v, hitTable, maxMatches, minScore, scoreBoost),
+            getNearestHits(
+                v,
+                hitTable,
+                maxMatches,
+                minScore,
+                scoreBoost,
+                customMatcher,
+            ),
         );
     }
 

@@ -1,29 +1,42 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ScoredItem, SearchOptions } from "typeagent";
-import { TextIndex, TextIndexSettings } from "./knowledgeIndex.js";
-import { unionMultiple } from "./setOperations.js";
+import { asyncArray, NameValue, ScoredItem } from "typeagent";
 import {
     StorageProvider,
     ValueDataType,
     ValueType,
 } from "./storageProvider.js";
+import { removeUndefined } from "./setOperations.js";
+
+export interface TextTable<TTextId = any> {
+    getId(text: string): Promise<TTextId | undefined>;
+    getText(id: TTextId): Promise<string | undefined>;
+}
 
 export interface TextMatcher<TTextId = any> {
+    match(text: string): Promise<TTextId[] | undefined>;
+}
+
+export interface ApproxTextMatcher<TTextId = any> {
     match(
         value: string,
-        options?: SearchOptions,
+        maxMatches?: number,
+        minScore?: number,
     ): Promise<ScoredItem<TTextId>[] | undefined>;
 }
 
 export interface AliasMatcher<TTextId = any, TAliasId = any>
     extends TextMatcher<TTextId> {
-    addAlias(alias: string, textId: TTextId): Promise<TAliasId>;
-    removeAlias(alias: string, textId: TTextId): Promise<void>;
+    entries(): AsyncIterableIterator<NameValue<string[]>>;
+
+    getByAlias(text: string): Promise<string[] | undefined>;
+    addAlias(alias: string, text: string): Promise<TAliasId | undefined>;
+    removeAlias(alias: string, text: string): Promise<void>;
 }
 
-export async function createAliasMatcher<TTextId extends ValueType>(
+export async function createAliasMatcher<TTextId extends ValueType = string>(
+    textTable: TextTable<TTextId>,
     storageProvider: StorageProvider,
     basePath: string,
     name: string,
@@ -36,109 +49,57 @@ export async function createAliasMatcher<TTextId extends ValueType>(
         name,
         textIdType,
     );
-    return {
+    const thisMatcher: AliasMatcher<TTextId, AliasId> = {
+        entries,
         addAlias,
         removeAlias,
         match,
+        getByAlias,
     };
+    return thisMatcher;
 
-    async function addAlias(alias: string, textId: TTextId): Promise<AliasId> {
-        return aliases.put(alias, [textId]);
-    }
-
-    async function removeAlias(alias: string, textId: TTextId): Promise<void> {
-        const aliasId = await aliases.getId(alias);
-        if (aliasId) {
-            await aliases.remove(aliasId, textId);
+    async function* entries(): AsyncIterableIterator<NameValue<string[]>> {
+        for await (const alias of aliases.text()) {
+            const texts = await getByAlias(alias);
+            if (texts && texts.length > 0) {
+                yield { name: alias, value: texts };
+            }
         }
-    }
-
-    async function match(
-        value: string,
-        options?: SearchOptions,
-    ): Promise<ScoredItem<TTextId>[] | undefined> {
-        const matches = await aliases.get(value);
-        return matches && matches.length > 0
-            ? matches.map((item) => {
-                  return {
-                      item,
-                      score: 1.0,
-                  };
-              })
-            : undefined;
-    }
-}
-
-export interface NameIndex<TTextId = any, TSourceId = any>
-    extends TextIndex<TTextId, TSourceId> {
-    readonly aliases: TextIndex<TTextId>;
-
-    addAlias(name: string, alias: string): Promise<TTextId | undefined>;
-    removeAlias(name: string, alias: string): Promise<void>;
-}
-
-export async function createNameIndex<TSourceId extends ValueType>(
-    storageProvider: StorageProvider,
-    settings: TextIndexSettings,
-    basePath: string,
-    name: string,
-    sourceIdType: ValueDataType<TSourceId>,
-): Promise<NameIndex<string, TSourceId>> {
-    type TextId = string;
-    const textIndex = await storageProvider.createTextIndex<TSourceId>(
-        settings,
-        basePath,
-        name,
-        sourceIdType,
-    );
-    const aliases = await storageProvider.createTextIndex<TextId>(
-        settings,
-        basePath,
-        "aliases",
-        "TEXT",
-    );
-    const nameIndex = {
-        ...textIndex,
-        get aliases() {
-            return aliases;
-        },
-        get,
-        addAlias,
-        removeAlias,
-    };
-    return nameIndex;
-
-    async function get(text: string): Promise<TSourceId[] | undefined> {
-        const postings = await textIndex.get(text);
-        if (postings) {
-            return postings;
-        }
-        const textIds = await aliases.get(text);
-        if (textIds) {
-            const postingsList = await textIndex.getByIds(textIds);
-            return [...unionMultiple(...postingsList)];
-        }
-        return undefined;
     }
 
     async function addAlias(
-        name: string,
         alias: string,
-    ): Promise<TextId | undefined> {
-        const textId = await textIndex.getId(name);
+        text: string,
+    ): Promise<AliasId | undefined> {
+        const textId = await textTable.getId(text);
         if (textId) {
-            return await aliases.put(alias, [textId]);
+            return aliases.put(alias, [textId]);
         }
         return undefined;
     }
 
-    async function removeAlias(name: string, alias: string): Promise<void> {
+    async function removeAlias(alias: string, text: string): Promise<void> {
         const aliasId = await aliases.getId(alias);
         if (aliasId) {
-            const textId = await textIndex.getId(name);
+            const textId = await textTable.getId(text);
             if (textId) {
                 await aliases.remove(aliasId, textId);
             }
         }
+    }
+
+    async function match(text: string): Promise<TTextId[] | undefined> {
+        return aliases.get(text);
+    }
+
+    async function getByAlias(text: string): Promise<string[] | undefined> {
+        const textIds = await match(text);
+        if (textIds && textIds.length > 0) {
+            const texts = await asyncArray.mapAsync(textIds, 1, (id) =>
+                textTable.getText(id),
+            );
+            return removeUndefined(texts);
+        }
+        return undefined;
     }
 }
