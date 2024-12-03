@@ -23,6 +23,7 @@ export type NamedIndex = [IndexType, knowLib.TextIndex<string, ChunkId>];
 // A bundle of object stores and indexes etc.
 export class ChunkyIndex {
     chatModel: ChatModel;
+    miniModel: ChatModel; // E.g. gpt-3.5-turbo or gpt-4-mini or o1-mini.
     embeddingModel: TextEmbeddingModel;
     fileDocumenter: FileDocumenter;
     queryMaker: TypeChatJsonTranslator<QuerySpecs>;
@@ -40,12 +41,13 @@ export class ChunkyIndex {
 
     private constructor() {
         this.chatModel = openai.createChatModelDefault("spelunkerChat");
+        this.miniModel = openai.createChatModel("GPT_35_TURBO", undefined, undefined, ["spelunkerMini"]);
         this.embeddingModel = knowLib.createEmbeddingCache(
             openai.createEmbeddingModel(),
             1000,
         );
         this.fileDocumenter = createFileDocumenter(this.chatModel);
-        this.queryMaker = createQueryMaker(this.chatModel);
+        this.queryMaker = createQueryMaker(this.miniModel);
         this.answerMaker = createAnswerMaker(this.chatModel);
     }
 
