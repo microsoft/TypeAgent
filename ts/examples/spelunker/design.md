@@ -62,6 +62,7 @@ A user query is handled using the following steps:
 
 ### Query process open questions
 
+- Can we use a faster, cheaper (and dumber) model for step 1?
 - How much conversation history to include in the context for steps 1 and 4, and if not all, how to choose (anither proximity search perhaps?).
 - Prompt engineering to get the first LLM to come up with better queries. (Sometimes it puts stuff in the queries that feel poorly chosen.)
 - How many hits to request from each index (**maxHits**). And possibly how to determine **minScore**.
