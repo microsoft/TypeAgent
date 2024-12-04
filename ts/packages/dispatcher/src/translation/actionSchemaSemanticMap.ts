@@ -74,7 +74,7 @@ export class ActionSchemaSementicMap {
         const embedding = await generateEmbeddingWithRetry(this.model, request);
         const matches = new TopNCollection<Entry>(maxMatches, {} as Entry);
         for (const entry of this.actionSementicMap.values()) {
-            if (!agents.isTranslatorActive(entry.actionSchemaFile.schemaName)) {
+            if (!agents.isSchemaActive(entry.actionSchemaFile.schemaName)) {
                 continue;
             }
             const score = similarity(

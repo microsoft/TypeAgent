@@ -35,6 +35,7 @@ export {
     ClientAction,
     DisplayType,
     DynamicDisplay,
+    MessageContent,
     DisplayContent,
     DisplayAppendMode,
     DisplayMessageKind,

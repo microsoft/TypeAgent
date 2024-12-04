@@ -90,6 +90,8 @@ import {
 } from "./search.js";
 import { toTrackObjectFull } from "./spotifyUtils.js";
 
+const debugSpotify = registerDebug("typeagent:spotify");
+
 const debugSpotifyError = registerDebug("typeagent:spotify:error");
 
 function createWarningActionResult(message: string) {
@@ -341,6 +343,7 @@ export async function getClientContext(
         await createTokenProvider(profileStorage),
     );
     await service.init();
+    debugSpotify("Service initialized");
     const userdata = await getUserProfile(service);
     service.storeUser({
         id: userdata?.id,
@@ -355,7 +358,6 @@ export async function getClientContext(
             devices.devices[0];
         deviceId = activeDevice.id ?? undefined;
     }
-
     return {
         deviceId,
         service,
@@ -858,23 +860,14 @@ export async function handleCall(
             return createNotFoundActionResult(`playlist ${playlistName}`);
         }
         case "getAlbum": {
-            const getAlbumAction = action as unknown as GetPlaylistAction;
-            const name = getAlbumAction.parameters.name;
             let album: SpotifyApi.AlbumObjectSimplified | undefined = undefined;
             let status: SpotifyApi.CurrentPlaybackResponse | undefined =
                 undefined;
-            if (name.length > 0) {
-                actionIO.setDisplay(
-                    chalk.magentaBright(`searching for album: ${name}`),
-                );
-                album = await searchAlbum(name, clientContext);
-            } else {
-                // get album of current playing track and load it as track collection
-                status = await getPlaybackState(clientContext.service);
-                if (status && status.item && status.item.type === "track") {
-                    const track = status.item as SpotifyApi.TrackObjectFull;
-                    album = track.album;
-                }
+            // get album of current playing track and load it as track collection
+            status = await getPlaybackState(clientContext.service);
+            if (status && status.item && status.item.type === "track") {
+                const track = status.item as SpotifyApi.TrackObjectFull;
+                album = track.album;
             }
             if (album !== undefined) {
                 const fullAlbumRsponse = await getAlbum(
@@ -900,16 +893,13 @@ export async function handleCall(
                     const collection = new AlbumTrackCollection(
                         fullAlbumRsponse,
                     );
-
-                    actionIO.setDisplay(
-                        chalk.magentaBright(
-                            `${getAlbumAction.parameters.name}:`,
-                        ),
-                    );
+                    actionIO.setDisplay(chalk.magentaBright(`${album.name}:`));
                     await updateTrackListAndPrint(collection, clientContext);
                     return htmlTrackNames(collection);
                 }
-                return createNotFoundActionResult(`tracks from album ${name}`);
+                return createNotFoundActionResult(
+                    `tracks from album ${album.name}`,
+                );
             }
             return createNotFoundActionResult("album");
         }

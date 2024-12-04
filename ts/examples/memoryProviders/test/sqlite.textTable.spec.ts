@@ -104,6 +104,10 @@ describe("sqlite.textTable", () => {
             // Retrieve postings by text...
             const ids = await table.get(composerBlocks[0].value);
             expect(ids).toEqual(composerBlocks[0].sourceIds);
+            // Should match frequencies
+            const freq = await table.getFrequency(composerBlocks[0].value);
+            expect(freq).toEqual(composerBlocks[0].sourceIds?.length);
+
             // Nearest... will do exact matches
             for (let i = 0; i < composerBlocks.length; ++i) {
                 const matches = await table.getNearest(composerBlocks[i].value);

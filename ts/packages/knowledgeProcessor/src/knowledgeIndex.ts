@@ -28,24 +28,60 @@ import {
 import { TextBlock, TextBlockType } from "./text.js";
 import { TextEmbeddingModel } from "aiclient";
 import { createIndexFolder } from "./keyValueIndex.js";
+import { TextMatcher } from "./textMatcher.js";
 
+/**
+ * A text index helps you index textual information.
+ * A text index is a map. text --> where that text was seen.
+ * A text index stores and retrieves "postings" (defined below) for a given piece of text.
+ * Postings:
+ * - Text values (term, phrase, etc) is found in a "source". Each source has a unique Id
+ * - Postings are the set of source ids a value is found in
+ *
+ * What a source is up to you. A source can be a text block, or a document, or an entity or..
+ */
 export interface TextIndex<TTextId = any, TSourceId = any> {
     text(): IterableIterator<string>;
     ids(): AsyncIterableIterator<TTextId>;
     entries(): AsyncIterableIterator<TextBlock<TSourceId>>;
     /**
-     * Get the sourceIds (if any) for the text exactly matching the given value
+     * Get the postings (source ids) for the the given text. Uses exact matching.
      * For fuzzy matching, use getNearest
-     * @param value
+     * @param text
+     * @returns If value matches, returns
      */
-    get(value: string): Promise<TSourceId[] | undefined>;
+    get(text: string): Promise<TSourceId[] | undefined>;
+    /**
+     * How many unique sources is this value seen?
+     * @param text
+     */
+    getFrequency(text: string): Promise<number>;
     getById(id: TTextId): Promise<TSourceId[] | undefined>;
     getByIds(ids: TTextId[]): Promise<(TSourceId[] | undefined)[]>;
-    getId(value: string): Promise<TTextId | undefined>;
-    getIds(values: string[]): Promise<(TTextId | undefined)[]>;
+    /**
+     * Return the text Id for the given text.
+     * @param text
+     * @returns text id if the value is indexed. Else returns undefined
+     */
+    getId(text: string): Promise<TTextId | undefined>;
+    /**
+     * Return the Ids for the given array of texts
+     * @param texts
+     */
+    getIds(texts: string[]): Promise<(TTextId | undefined)[]>;
+    /**
+     * Return the text for the given text id
+     * @param id
+     */
     getText(id: TTextId): Promise<string | undefined>;
     // TODO: rename put to "add"
-    put(value: string, postings?: TSourceId[]): Promise<TTextId>;
+    /**
+     * Add postings for the given text.
+     * Merges the new postings with the existing postings
+     * @param text
+     * @param postings
+     */
+    put(text: string, postings?: TSourceId[]): Promise<TTextId>;
     putMultiple(values: TextBlock<TSourceId>[]): Promise<TTextId[]>;
     /**
      * Add source Ids for the given text Id
@@ -54,14 +90,14 @@ export interface TextIndex<TTextId = any, TSourceId = any> {
      */
     addSources(id: TTextId, postings: TSourceId[]): Promise<void>;
     /**
-     * Get the sourceIds for the texts nearest to the given value
+     * Get the sourceIds for the texts in this index that are nearest to the given value
      * Ids are returned in sorted order, with duplicates removed
-     * @param value
+     * @param text
      * @param maxMatches
      * @param minScore
      */
     getNearest(
-        value: string,
+        text: string,
         maxMatches?: number,
         minScore?: number,
     ): Promise<TSourceId[]>;
@@ -83,6 +119,7 @@ export interface TextIndex<TTextId = any, TSourceId = any> {
         maxMatches?: number,
         minScore?: number,
         scoreBoost?: number,
+        aliases?: TextMatcher<TTextId>,
     ): Promise<void>;
     getNearestHitsMultiple(
         values: string[],
@@ -90,6 +127,7 @@ export interface TextIndex<TTextId = any, TSourceId = any> {
         maxMatches?: number,
         minScore?: number,
         scoreBoost?: number,
+        aliases?: TextMatcher<TTextId>,
     ): Promise<void>;
     nearestNeighbors(
         value: string,
@@ -185,6 +223,7 @@ export async function createTextIndex<TSourceId = any>(
         ids,
         entries,
         get,
+        getFrequency,
         getById,
         getByIds,
         getId,
@@ -227,6 +266,11 @@ export async function createTextIndex<TSourceId = any>(
             return postingFolder.get(textId);
         }
         return undefined;
+    }
+
+    async function getFrequency(text: string): Promise<number> {
+        const postings = await get(text);
+        return postings ? postings.length : 0;
     }
 
     async function getById(id: TextId): Promise<TSourceId[] | undefined> {
@@ -364,10 +408,16 @@ export async function createTextIndex<TSourceId = any>(
         maxMatches?: number,
         minScore?: number,
         scoreBoost?: number,
+        aliases?: TextMatcher<TextId>,
     ): Promise<void> {
         maxMatches ??= 1;
         // Check exact match first
         let postingsExact = await get(value);
+        let postingsAlias: TSourceId[] | undefined;
+        if (aliases) {
+            // If no exact match, see if matched any (optional) aliases.
+            postingsAlias = await getByAlias(value, aliases);
+        }
         let postingsNearest:
             | ScoredItem<TSourceId>[]
             | IterableIterator<ScoredItem<TSourceId>>
@@ -397,9 +447,22 @@ export async function createTextIndex<TSourceId = any>(
         hitTable.addMultipleScored(
             unionMultipleScored(
                 postingsExact ? scorePostings(postingsExact, 1.0) : undefined,
+                postingsAlias ? scorePostings(postingsAlias, 1.0) : undefined,
                 postingsNearest,
             ),
         );
+    }
+
+    async function getByAlias(
+        value: string,
+        aliases: TextMatcher<TextId>,
+    ): Promise<TSourceId[] | undefined> {
+        const matchedTextIds = await aliases.match(value);
+        if (matchedTextIds && matchedTextIds.length > 0) {
+            const postings = await getByIds(matchedTextIds);
+            return [...unionMultiple(...postings)];
+        }
+        return undefined;
     }
 
     async function getNearestHitsMultiple(
@@ -408,9 +471,17 @@ export async function createTextIndex<TSourceId = any>(
         maxMatches?: number,
         minScore?: number,
         scoreBoost?: number,
+        aliases?: TextMatcher<TextId>,
     ): Promise<void> {
         return asyncArray.forEachAsync(values, settings.concurrency, (v) =>
-            getNearestHits(v, hitTable, maxMatches, minScore, scoreBoost),
+            getNearestHits(
+                v,
+                hitTable,
+                maxMatches,
+                minScore,
+                scoreBoost,
+                aliases,
+            ),
         );
     }
 
@@ -635,13 +706,13 @@ export async function createTextIndex<TSourceId = any>(
     }
 }
 
-export async function searchIndex<TTextId = any, TPostingId = any>(
-    index: TextIndex<TTextId, TPostingId>,
+export async function searchIndex<TTextId = any, TSourceId = any>(
+    index: TextIndex<TTextId, TSourceId>,
     value: string,
     exact: boolean,
     count?: number,
     minScore?: number,
-): Promise<ScoredItem<TPostingId[]>[]> {
+): Promise<ScoredItem<TSourceId[]>[]> {
     if (exact) {
         const ids = await index.get(value);
         if (ids) {
@@ -654,8 +725,8 @@ export async function searchIndex<TTextId = any, TPostingId = any>(
     return matches;
 }
 
-export async function searchIndexText<TTextId = any, TPostingId = any>(
-    index: TextIndex<TTextId, TPostingId>,
+export async function searchIndexText<TTextId = any, TSourceId = any>(
+    index: TextIndex<TTextId, TSourceId>,
     value: string,
     exact: boolean,
     count?: number,

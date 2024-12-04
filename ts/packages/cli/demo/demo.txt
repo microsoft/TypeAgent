@@ -1,7 +1,8 @@
 # ====== Init =======
-@session new --memory
-@config action -*
-@config translator -* player calendar
+@session new --persist false
+@config action -x *
+@config schema -x * 
+@config schema player calendar
 @config serviceHost off
 
 # =============================================
@@ -16,7 +17,7 @@ Please play Nocturne No. 2 by Chopin.
 @const list -a
 
 # Cache hit
-@config bot off
+@config translation off
 Could you play Anti-Hero by Taylor Swift?
 Kindly play Rhapsody on a Theme of Paganini composed by Rachmaninoff?
 
@@ -24,33 +25,33 @@ Kindly play Rhapsody on a Theme of Paganini composed by Rachmaninoff?
 # Deep dive into explanation
 # -------------------------------------
 # Request with explanation
-@config bot on
+@config translation on
 I would like to listen to 1812 Overture please.
 @const list -a
 
 # Cache hit
-@config bot off
+@config translation off
 I would like to stream Figure Humaine by Poulenc
 Could you play Liebesleid please?
-@config bot on
+@config translation on
 
 # -------------------------------------
 # Calendar - cross domain generalization
 # -------------------------------------
-@config translator calendar
+@config schema calendar
 
 # Request with explanation
 Can you schedule design meeting starting at 2 pm with Piali?
 @const list -a
 
 # Cache hit
-@config bot off
+@config translation off
 kindly plan meeting to discuss office assignment from 4 pm with John?
 
 # ==========================
 # Prebuilt caches
 # ==========================
-@config translator player
+@config schema player
 @const import
 
 begin playing Deutsche Motette by Richard Strauss
@@ -58,7 +59,7 @@ Please play Symphony No. 8 by Shostakovich.
 if you don't mind, begin playing a selection of Phillip Glass for us?
 I want to listen to a selection of Johann Sebastian Bach
 
-@config translator calendar
+@config schema calendar
 @const import
 
 Add meeting 3-4pm next Thursday

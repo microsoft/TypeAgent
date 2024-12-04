@@ -152,20 +152,6 @@ export const webapi: ClientAPI = {
             }),
         );
     },
-    onQuestion(callback) {
-        fnMap.set("question", callback);
-    },
-    sendAnswer: (questionId: number, answer?: string) => {
-        globalThis.ws?.send(
-            JSON.stringify({
-                message: "questionResponse",
-                data: {
-                    questionId,
-                    answer,
-                },
-            }),
-        );
-    },
     getSpeechToken: () => {
         return new Promise<SpeechToken | undefined>(async (resolve) => {
             // We are not auth in this case and instead will rely on the device to provide speech reco
@@ -312,13 +298,6 @@ export async function createWebSocket(autoReconnect: boolean = true) {
                         msgObj.data.actionTemplates,
                         msgObj.data.requestId,
                         msgObj.data.source,
-                    );
-                    break;
-                case "question":
-                    fnMap.get("question")(
-                        msgObj.data.currentQuestionId,
-                        msgObj.data.message,
-                        msgObj.data.requestId,
                     );
                     break;
                 case "process-shell-request-done":

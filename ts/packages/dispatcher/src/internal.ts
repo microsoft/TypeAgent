@@ -14,7 +14,6 @@ export {
     getPrompt,
     getTranslatorNameToEmojiMap,
 } from "./dispatcher/command.js";
-export { processRequests } from "./utils/interactive.js";
 export { getCacheFactory } from "./utils/cacheFactory.js";
 export {
     GenerateTestDataResult,
@@ -30,12 +29,12 @@ export {
 } from "./utils/test/testData.js";
 
 export { getBuiltinConstructionConfig } from "./utils/config.js";
-export { getBuiltinSchemaNames } from "./translation/agentTranslators.js";
+export {
+    getSchemaNamesFromDefaultAppAgentProviders,
+    getActionConfigProviderFromDefaultAppAgentProviders,
+    loadSchemaConfigFromDefaultAppAgentProviders,
+} from "./utils/defaultAppProviders.js";
 export { getAssistantSelectionSchemas } from "./translation/unknownSwitcher.js";
 export { getActionSchema } from "./translation/actionSchemaFileCache.js";
 export { getTestDataFiles } from "./utils/config.js";
-export {
-    loadBuiltinTranslatorSchemaConfig,
-    getBuiltinActionConfigProvider,
-    getFullSchemaText,
-} from "./translation/agentTranslators.js";
+export { getFullSchemaText } from "./translation/agentTranslators.js";

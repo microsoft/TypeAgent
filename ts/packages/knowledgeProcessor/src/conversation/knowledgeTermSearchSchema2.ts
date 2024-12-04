@@ -26,6 +26,7 @@ export type VerbsTerm = {
 
 export type SubjectTerm = {
     subject: string;
+    // true only if subject is a pronoun, such as "I", "Me", "Us", "They"
     isPronoun: boolean;
 };
 
@@ -42,7 +43,7 @@ export type ActionTerm = {
 // Search indexes for following search terms: typically single word keywords.
 export type TermFilterV2 = {
     action?: ActionTerm;
-    // Includes any search terms not already in action
+    // Includes any search terms not already in action.
     // skip generic terms like "topic" and "subject"
     // Phrases like 'email address' or 'first name' are a single term
     searchTerms?: SearchTerm[];
@@ -53,6 +54,9 @@ export type TermFilterV2 = {
 export type GetAnswerWithTermsActionV2 = {
     actionName: "getAnswer";
     parameters: {
+        // User question, rewritten to incorporate all context.
+        question: string;
+        // the question above is translated into filters. All words must be exactly as in the question
         filters: TermFilterV2[];
     };
 };

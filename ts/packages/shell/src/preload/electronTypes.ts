@@ -141,16 +141,6 @@ export interface ClientAPI {
         ) => void,
     ): void;
     sendProposedAction(proposeActionId: number, replacement?: unknown): void;
-    onQuestion(
-        callback: (
-            e: Electron.IpcRendererEvent,
-            questionId: number,
-            message: string,
-            requestId: string,
-            source: string,
-        ) => void,
-    ): void;
-    sendAnswer: (questionId: number, answer?: string) => void;
     getSpeechToken: () => Promise<SpeechToken | undefined>;
     getLocalWhisperStatus: () => Promise<boolean | undefined>;
     onSendInputText(

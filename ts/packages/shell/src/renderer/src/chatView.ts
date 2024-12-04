@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { IdGenerator, getClientAPI } from "./main";
-import { ChatInput, ExpandableTextarea, questionInput } from "./chatInput";
+import { ChatInput, ExpandableTextarea } from "./chatInput";
 import { iconCheckMarkCircle, iconX } from "./icon";
 import {
     DisplayAppendMode,
@@ -348,7 +348,10 @@ export class ChatView {
         this.commandBackStackIndex = -1;
     }
 
-    async addUserMessage(request: DisplayContent, hidden: boolean = false) {
+    async addUserMessage(
+        request: string | { type: "html"; content: string },
+        hidden: boolean = false,
+    ) {
         const id = this.idGenerator.genId();
 
         let images: string[] = [];
@@ -512,41 +515,6 @@ export class ChatView {
         }
         agentMessage.proposeAction(proposeActionId, actionTemplates);
     }
-    question(
-        questionId: number,
-        message: string,
-        requestId: string,
-        source: string,
-    ) {
-        const agentMessage = this.ensureAgentMessage({
-            message: "",
-            requestId,
-            source,
-        });
-        if (agentMessage === undefined) {
-            return;
-        }
-        agentMessage.div.innerHTML = "";
-        this.showStatusMessage({ message, requestId, source }, true);
-
-        const replacementElm = questionInput(
-            this,
-            questionId,
-            message,
-            requestId,
-            this.settingsView!,
-        );
-        agentMessage.div.appendChild(replacementElm);
-    }
-
-    answer(questionId: number, answer: string, requestId: string) {
-        let message = "Answer sent!";
-        let source = "shell";
-        this.showStatusMessage({ message, requestId, source }, true);
-        console.log(answer);
-        getClientAPI().sendAnswer(questionId, answer);
-    }
-
     getMessageElm() {
         return this.topDiv;
     }

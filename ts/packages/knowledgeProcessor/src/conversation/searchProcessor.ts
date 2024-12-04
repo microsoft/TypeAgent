@@ -42,15 +42,18 @@ import {
     TermFilterV2,
 } from "./knowledgeTermSearchSchema2.js";
 import { createTopicSearchOptions } from "./topics.js";
+import { EntitySearchOptions } from "./entities.js";
 
 export type SearchProcessorSettings = {
-    sectionProvider?: PromptSectionProvider | undefined;
+    contextProvider?: PromptSectionProvider | undefined;
+    defaultEntitySearchOptions?: EntitySearchOptions | undefined;
 };
 
 export type SearchProcessingOptions = {
     maxMatches: number;
     minScore: number;
     maxMessages: number;
+    entitySearch?: EntitySearchOptions | undefined;
     fallbackSearch?: SearchOptions | undefined;
     skipAnswerGeneration?: boolean;
     skipEntitySearch?: boolean;
@@ -199,6 +202,7 @@ export function createSearchProcessor(
             action = {
                 actionName: "getAnswer",
                 parameters: {
+                    question: query,
                     filters,
                 },
             };
@@ -241,15 +245,11 @@ export function createSearchProcessor(
                 content: `ONLY IF user request explicitly asks for time ranges, THEN use the CONVERSATION TIME RANGE: "${timeRange.startDate} to ${timeRange.stopDate}"`,
             });
         }
-        if (settings.sectionProvider) {
-            const sections = await settings.sectionProvider.getSections(query);
-            if (sections && sections.length > 0) {
-                if (context) {
-                    context.push(...sections);
-                } else {
-                    context = sections;
-                }
-            }
+        if (settings.contextProvider) {
+            context ??= [];
+            context.push(
+                ...(await settings.contextProvider.getSections(query)),
+            );
         }
         return context;
     }
@@ -266,7 +266,6 @@ export function createSearchProcessor(
             entity: {
                 maxMatches: options.maxMatches,
                 minScore: options.minScore,
-                matchNameToType: true,
                 combinationSetOp: SetOp.IntersectUnion,
                 loadEntities: true,
             },
@@ -347,11 +346,12 @@ export function createSearchProcessor(
         action: GetAnswerWithTermsActionV2,
         options: SearchProcessingOptions,
     ): Promise<SearchResponse> {
+        query = action.parameters.question;
         const topLevelTopicSummary = isSummaryRequestV2(action);
         const searchOptions = createSearchOptions(
             topLevelTopicSummary,
             options,
-            true,
+            false,
         );
         const response = await conversation.searchTermsV2(
             action.parameters.filters,
@@ -582,12 +582,12 @@ export function createSearchProcessor(
         const topicOptions = createTopicSearchOptions(topLevelTopicSummary);
         topicOptions.minScore = options.minScore;
         const searchOptions: ConversationSearchOptions = {
-            entity: {
-                maxMatches: options.maxMatches,
-                minScore: options.minScore,
-                matchNameToType: true,
-                loadEntities: true,
-            },
+            entity: options.entitySearch ??
+                settings.defaultEntitySearchOptions ?? {
+                    maxMatches: options.maxMatches,
+                    minScore: options.minScore,
+                    loadEntities: true,
+                },
             topic: topicOptions,
             topicLevel,
             loadMessages: !topLevelTopicSummary,

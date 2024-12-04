@@ -20,6 +20,7 @@ import {
     writeJsonFile,
 } from "typeagent";
 import {
+    arg,
     argBool,
     argNum,
     CommandHandler,
@@ -77,11 +78,13 @@ export async function createEmailMemory(
 
     const memory = await knowLib.email.createEmailMemory(
         models.chatModel,
+        models.answerModel,
         ReservedConversationNames.outlook,
         storePath,
         emailSettings,
         storage,
     );
+    memory.searchProcessor.answers.settings.chunking.fastStop = true;
     return memory;
 }
 
@@ -92,6 +95,8 @@ export function createEmailCommands(
     commands.importEmail = importEmail;
     commands.emailConvertMsg = emailConvertMsg;
     commands.emailStats = emailStats;
+    commands.emailFastStop = emailFastStop;
+    commands.emailNameAlias = emailNameAlias;
 
     //--------
     // Commands
@@ -190,6 +195,59 @@ export function createEmailCommands(
         }
     }
 
+    function emailFastStopDef(): CommandMetadata {
+        return {
+            description:
+                "Enable or disable fast stopping during answer generation",
+            options: {
+                enable: argBool("Enable"),
+            },
+        };
+    }
+    commands.emailFastStop.metadata = emailFastStopDef();
+    async function emailFastStop(args: string[]): Promise<void> {
+        const chunkingSettings =
+            context.emailMemory.searchProcessor.answers.settings.chunking;
+        if (args.length > 0) {
+            const namedArgs = parseNamedArguments(args, emailFastStopDef());
+            chunkingSettings.fastStop = namedArgs.enable;
+        } else {
+            context.printer.writeLine(
+                `Enabled ${chunkingSettings.fastStop ?? false}`,
+            );
+        }
+    }
+
+    function emailNameAliasDef(): CommandMetadata {
+        return {
+            description: "Add an alias for a person's name",
+            options: {
+                name: arg("Person's name"),
+                alias: arg("Alias"),
+            },
+        };
+    }
+    commands.emailNameAlias.metadata = emailNameAliasDef();
+    async function emailNameAlias(args: string[]): Promise<void> {
+        const namedArgs = parseNamedArguments(args, emailNameAliasDef());
+        const aliases = (
+            await context.emailMemory.conversation.getEntityIndex()
+        ).nameAliases;
+        if (namedArgs.name && namedArgs.alias) {
+            await aliases.addAlias(namedArgs.alias, namedArgs.name);
+        } else if (namedArgs.alias) {
+            const names = await aliases.getByAlias(namedArgs.alias);
+            if (names) {
+                context.printer.writeLines(names);
+            }
+        } else {
+            for await (const entry of aliases.entries()) {
+                context.printer.writeLine(entry.name);
+                context.printer.writeList(entry.value, { type: "ul" });
+            }
+        }
+    }
+
     //-------------
     // End commands
     //-------------
@@ -227,7 +285,7 @@ export function createEmailCommands(
                         `${email!.sourcePath}\n${emailLength} chars`,
                     );
 
-                    context.stats.startItem();
+                    context.stats!.startItem();
                     clock.start();
                     await knowLib.email.addEmailToConversation(
                         context.emailMemory,
@@ -235,12 +293,12 @@ export function createEmailCommands(
                         namedArgs.chunkSize,
                     );
                     clock.stop();
-                    context.stats.updateCurrent(clock.elapsedMs, emailLength);
+                    context.stats!.updateCurrent(clock.elapsedMs, emailLength);
                     await saveStats();
 
                     grandTotal++;
-                    const status = `[${clock.elapsedString()}, ${millisecondsToString(context.stats.totalStats.timeMs, "m")} for ${grandTotal} msgs.]`;
-
+                    const status = `[${clock.elapsedString()}, ${millisecondsToString(context.stats!.totalStats.timeMs, "m")} for ${grandTotal} msgs.]`;
+                    context.printer.writeLine();
                     context.printer.writeInColor(chalk.green, status);
                     context.printer.writeLine();
 
@@ -264,6 +322,7 @@ export function createEmailCommands(
         }
         context.printer.writeHeading("Indexing Stats");
         context.printer.writeIndexingStats(context.stats);
+        context.stats = undefined;
     }
 
     async function loadStats(clean: boolean): Promise<knowLib.IndexingStats> {

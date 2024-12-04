@@ -6,12 +6,9 @@ dotenv.config({ path: new URL("../../../../.env", import.meta.url) });
 
 import { getPackageFilePath } from "../src/utils/getPackageFilePath.js";
 import { readTestData } from "../src/utils/test/testData.js";
-import {
-    getBuiltinActionConfigProvider,
-    loadAgentJsonTranslator,
-} from "../src/translation/agentTranslators.js";
+import { loadAgentJsonTranslator } from "../src/translation/agentTranslators.js";
 import { JSONAction } from "agent-cache";
-
+import { getActionConfigProviderFromDefaultAppAgentProviders } from "../src/utils/defaultAppProviders.js";
 const dataFiles = [
     "test/data/player/v5/simple.json",
     "test/data/player/v5/full.json",
@@ -36,7 +33,7 @@ describe("translation", () => {
         async (translatorName, request, action) => {
             const translator = loadAgentJsonTranslator(
                 translatorName,
-                getBuiltinActionConfigProvider(),
+                getActionConfigProviderFromDefaultAppAgentProviders(),
             );
             const result = await translator.translate(request);
             expect(result.success).toBe(true);

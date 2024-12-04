@@ -1,107 +1,53 @@
 {
   "agents": {
     "player": {
-      "type": "module",
       "name": "music",
       "imports": [
         "./test/data/player/**/*.json"
       ]
     },
     "calendar": {
-      "type": "module",
       "name": "calendar",
       "imports": [
         "./test/data/calendar/**/*.json"
       ]
     },
     "email": {
-      "type": "module",
       "name": "email"
     },
     "list": {
-      "type": "module",
       "name": "list-agent"
     },
     "browser": {
-      "type": "module",
       "name": "browser-typeagent"
     },
     "desktop": {
-      "type": "module",
       "name": "desktop-automation"
     },
     "code": {
-      "type": "module",
       "name": "code-agent"
     },
     "chat": {
-      "type": "module",
       "name": "chat-agent",
       "execMode": "dispatcher"
     },
-    "dispatcher": {
-      "emojiChar": "🤖",
-      "description": "Built-in agent to dispatch request",
-      "schema": {
-        "schemaType": "DispatcherActions",
-        "schemaFile": "./src/dispatcher/schema/dispatcherActionSchema.ts",
-        "injected": true,
-        "cached": false
-      },
-      "subActionManifests": {
-        "clarify": {
-          "description": "Action that helps you clarify your request.",
-          "schema": {
-            "schemaFile": "./src/dispatcher/schema/clarifyActionSchema.ts",
-            "schemaType": "ClarifyRequestAction",
-            "injected": true,
-            "cached": false
-          }
-        }
-      }
-    },
-    "system": {
-      "emojiChar": "🔧",
-      "description": "Built-in agent to manage system configuration and sessions",
-      "subActionManifests": {
-        "config": {
-          "schema": {
-            "description": "System agent that helps you manage system settings and preferences.",
-            "schemaFile": "./src/translation/system/configActionSchema.ts",
-            "schemaType": "ConfigAction"
-          }
-        },
-        "session": {
-          "schema": {
-            "description": "System agent that helps you manage your session.",
-            "schemaFile": "./src/translation/system/sessionActionSchema.ts",
-            "schemaType": "SessionAction"
-          }
-        }
-      }
-    },
     "photo": {
-      "type": "module",
       "name": "photo-agent",
       "execMode": "separate"
     },
     "greeting": {
-      "type": "module",
       "name": "greeting-agent",
       "execMode": "dispatcher"
     },
     "image": {
-      "type": "module",
       "name": "image-agent",
       "execMode": "dispatcher"
     },
     "androidMobile": {
-      "type": "module",
       "name": "android-mobile-agent",
       "execMode": "dispatcher"
     },
     "markdown": {
-      "type": "module",
       "name": "markdown-agent"
     }
   },

@@ -76,6 +76,7 @@ export type ConversationManagerTask = AddMessageTask;
 
 export type ConversationManagerSettings = {
     model?: ChatModel | undefined;
+    answerModel?: ChatModel | undefined;
     initializer?: ((cm: ConversationManager) => Promise<void>) | undefined;
 };
 
@@ -188,7 +189,7 @@ export async function createConversationManager(
     const chatModel =
         settings.model ?? openai.createChatModelDefault("conversationManager");
     const knowledgeModel = chatModel;
-    const answerModel = chatModel;
+    const answerModel = settings.answerModel ?? chatModel;
 
     const folderSettings = defaultFolderSettings();
 

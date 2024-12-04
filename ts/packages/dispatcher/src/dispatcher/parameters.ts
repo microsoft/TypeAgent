@@ -178,11 +178,19 @@ export function parseParams<T extends ParameterDefinitions>(
                 const [name, flag] = flagInfo;
                 const valueType = getFlagType(flag);
                 let value: FlagValueTypes;
+                const rollback = curr;
+                const valueToken = nextToken();
                 if (valueType === "boolean") {
                     value = true;
+                    if (valueToken === "false") {
+                        value = false;
+                    } else if (valueToken !== "true") {
+                        value = true;
+                        // default to true if not specified. Rollback
+                        curr = rollback;
+                        parsedTokens.pop();
+                    }
                 } else {
-                    const rollback = curr;
-                    const valueToken = nextToken();
                     try {
                         value = parseValueToken(
                             next,

@@ -28,6 +28,7 @@ import {
     displayWarn,
 } from "@typeagent/agent-sdk/helpers/display";
 import { getToggleHandlerTable } from "./common/commandHandler.js";
+import { askYesNoWithContext } from "./common/interactiveIO.js";
 
 class SessionNewCommandHandler implements CommandHandler {
     public readonly description = "Create a new empty session";
@@ -119,7 +120,8 @@ class SessionClearCommandHandler implements CommandHandlerNoParams {
         }
 
         if (
-            !(await systemContext.requestIO.askYesNo(
+            !(await askYesNoWithContext(
+                systemContext,
                 `Are you sure you want to clear data for current session '${systemContext.session.dir}'?`,
                 false,
             ))
@@ -163,7 +165,8 @@ class SessionDeleteCommandHandler implements CommandHandler {
         const persist = systemContext.session.dir !== undefined;
         if (params.flags.all === true) {
             if (
-                !(await systemContext.requestIO.askYesNo(
+                !(await askYesNoWithContext(
+                    systemContext,
                     "Are you sure you want to delete all sessions?",
                     false,
                 ))
@@ -185,7 +188,8 @@ class SessionDeleteCommandHandler implements CommandHandler {
                 throw new Error(`'${del}' is not a session name`);
             }
             if (
-                !(await systemContext.requestIO.askYesNo(
+                !(await askYesNoWithContext(
+                    systemContext,
                     `Are you sure you want to delete session '${del}'?`,
                     false,
                 ))

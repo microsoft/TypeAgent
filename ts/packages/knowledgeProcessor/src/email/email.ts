@@ -1,13 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import {
-    asyncArray,
-    dateTime,
-    MessageSourceRole,
-    PromptSectionProvider,
-    readJsonFile,
-} from "typeagent";
+import { asyncArray, dateTime, readJsonFile } from "typeagent";
 import {
     Action,
     ConcreteEntity,
@@ -32,7 +26,7 @@ import { isValidChunkSize, splitLargeTextIntoChunks } from "../textChunker.js";
 import { ChatModel } from "aiclient";
 import { KnownEntityTypes } from "../conversation/knowledge.js";
 import { StorageProvider } from "../storageProvider.js";
-import { PromptSection } from "typechat";
+import { createEntitySearchOptions } from "../conversation/entities.js";
 
 export function emailAddressToString(address: EmailAddress): string {
     if (address.displayName) {
@@ -293,6 +287,7 @@ export interface EmailMemorySettings extends ConversationSettings {
  */
 export async function createEmailMemory(
     model: ChatModel,
+    answerModel: ChatModel,
     name: string,
     rootPath: string,
     settings: EmailMemorySettings,
@@ -307,15 +302,14 @@ export async function createEmailMemory(
         undefined,
         storageProvider,
     );
-
-    const contextProvider = await createEmailContextProvider(
+    const userProfile = await readJsonFile<any>(
         path.join(rootPath, "emailUserProfile.json"),
     );
     const cm = await createConversationManager(
         {
             model,
-            initializer: (cm) =>
-                setupEmailConversationManager(cm, contextProvider),
+            answerModel,
+            initializer: (c) => setupEmailConversationManager(c, userProfile),
         },
         name,
         rootPath,
@@ -327,7 +321,7 @@ export async function createEmailMemory(
 
 async function setupEmailConversationManager(
     cm: ConversationManager,
-    contextProvider: PromptSectionProvider,
+    userProfile: any,
 ): Promise<void> {
     cm.topicMerger.settings.mergeWindowSize = 1;
     cm.topicMerger.settings.trackRecent = false;
@@ -336,31 +330,19 @@ async function setupEmailConversationManager(
     entityIndex.noiseTerms.put("email");
     entityIndex.noiseTerms.put("message");
 
-    cm.searchProcessor.settings.sectionProvider = contextProvider;
-    cm.searchProcessor.answers.settings.hints = `messages are *emails*. Use email headers (to, subject. etc) to determine if message is highly relevant to the question`;
-}
+    cm.searchProcessor.actions.requestInstructions =
+        "The following is a user request about the messages in their email inbox. The email inbox belongs to:\n" +
+        JSON.stringify(userProfile, undefined, 2) +
+        "\n" +
+        "User specific first person pronouns are rewritten to use user's name, but general ones are not.";
 
-async function createEmailContextProvider(
-    profilePath: string,
-): Promise<PromptSectionProvider> {
-    let sections: PromptSection[] | undefined;
-    const userProfile = await readJsonFile<any>(profilePath);
-    if (userProfile) {
-        sections = [];
-        sections.push({
-            role: MessageSourceRole.system,
-            content:
-                `This is the Email Inbox of:\n'''${JSON.stringify(userProfile, undefined, 2)}\n'''` +
-                "\nTranslate references to 'Me', 'I' etc. explicitly to the above user",
-        });
-    }
-    return { getSections };
-
-    async function getSections(
-        request: string,
-    ): Promise<PromptSection[] | undefined> {
-        return sections;
-    }
+    cm.searchProcessor.answers.settings.hints =
+        "messages are *emails* with email headers such as To, From, Cc, Subject. etc. " +
+        "To answer questions correctly, use the headers to determine who the email is from and who it was sent to. " +
+        "If you are not sure, return NoAnswer.";
+    cm.searchProcessor.settings.defaultEntitySearchOptions =
+        createEntitySearchOptions(true);
+    // cm.searchProcessor.settings.defaultEntitySearchOptions.nameSearchOptions!.maxMatches = 25;
 }
 
 async function setupEmailConversation(
