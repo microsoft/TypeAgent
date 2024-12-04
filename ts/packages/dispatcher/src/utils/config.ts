@@ -31,8 +31,6 @@ export function getDispatcherConfig(): Config {
     return config;
 }
 
-
-
 export function getBuiltinConstructionConfig(explainerName: string) {
     const config =
         getDispatcherConfig()?.explainers?.[explainerName]?.constructions;
