@@ -28,7 +28,7 @@ import {
     getColorElapsedString,
     IncrementalJsonValueCallBack,
 } from "common-utils";
-import { Logger, Profiler } from "telemetry";
+import { Logger } from "telemetry";
 import {
     executeActions,
     getTranslatorPrefix,
@@ -254,12 +254,57 @@ async function translateRequestWithSchema(
     const prefix = getTranslatorPrefix(schemaName, systemContext);
     displayStatus(`${prefix}Translating '${request}'`, context);
 
-    if (history) {
-        debugTranslate(
-            `Using history for translation. Entities: ${JSON.stringify(history.entities)}`,
+    const optimize = config.translation.schema.optimize;
+    if (optimize.enabled && optimize.numInitialActions > 0) {
+        const selectedActionTranslator = await getTranslatorForSelectedActions(
+            systemContext,
+            schemaName,
+            request,
+            optimize.numInitialActions,
         );
-    }
+        if (selectedActionTranslator) {
+            const translatedAction = await translateWithTranslator(
+                selectedActionTranslator,
+                schemaName,
+                request,
+                history,
+                attachments,
+                context,
+            );
+            if (translatedAction === undefined) {
+                return undefined;
+            }
 
+            if (
+                !isUnknownAction(translatedAction) &&
+                (!isChangeAssistantAction(translatedAction) ||
+                    translatedAction.parameters.assistant !== schemaName)
+            ) {
+                return translatedAction;
+            }
+        }
+    }
+    const translator = getTranslatorForSchema(systemContext, schemaName);
+    return translateWithTranslator(
+        translator,
+        schemaName,
+        request,
+        history,
+        attachments,
+        context,
+    );
+}
+
+async function translateWithTranslator(
+    translator: TypeAgentTranslator,
+    schemaName: string,
+    request: string,
+    history: HistoryContext | undefined,
+    attachments: CachedImageWithDetails[] | undefined,
+    context: ActionContext<CommandHandlerContext>,
+) {
+    const systemContext = context.sessionContext.agentContext;
+    const config = systemContext.session.getConfig();
     const profiler = systemContext.commandProfiler?.measure(
         ProfileNames.translate,
     );
@@ -306,59 +351,6 @@ async function translateRequestWithSchema(
               }
           }
         : undefined;
-
-    const optimize = config.translation.schema.optimize;
-    if (optimize.enabled && optimize.numInitialActions > 0) {
-        const selectedActionTranslator = await getTranslatorForSelectedActions(
-            systemContext,
-            schemaName,
-            request,
-            optimize.numInitialActions,
-        );
-        if (selectedActionTranslator) {
-            const translatedAction = await translateWithTranslator(
-                selectedActionTranslator,
-                request,
-                history,
-                attachments,
-                onProperty,
-                context,
-                profiler,
-            );
-            if (translatedAction === undefined) {
-                return undefined;
-            }
-
-            if (
-                !isUnknownAction(translatedAction) &&
-                (!isChangeAssistantAction(translatedAction) ||
-                    translatedAction.parameters.assistant !== schemaName)
-            ) {
-                return translatedAction;
-            }
-        }
-    }
-    const translator = getTranslatorForSchema(systemContext, schemaName);
-    return translateWithTranslator(
-        translator,
-        request,
-        history,
-        attachments,
-        onProperty,
-        context,
-        profiler,
-    );
-}
-
-async function translateWithTranslator(
-    translator: TypeAgentTranslator,
-    request: string,
-    history: HistoryContext | undefined,
-    attachments: CachedImageWithDetails[] | undefined,
-    onProperty: IncrementalJsonValueCallBack | undefined,
-    context: ActionContext<CommandHandlerContext>,
-    profiler?: Profiler,
-) {
     try {
         const response = await translator.translate(
             request,
@@ -633,10 +625,15 @@ export async function translateRequest(
         return;
     }
 
-    // Start with the last translator used
-    const schemaName = await pickInitialSchema(request, systemContext);
-    const startTime = performance.now();
+    if (history) {
+        debugTranslate(
+            `Using history for translation. Entities: ${JSON.stringify(history.entities)}`,
+        );
+    }
 
+    // Start with the last translator used
+    const startTime = performance.now();
+    const schemaName = await pickInitialSchema(request, systemContext);
     const action = await translateRequestWithSchema(
         schemaName,
         request,
@@ -675,6 +672,11 @@ export async function translateRequest(
                 replacedAction,
                 developerMode: systemContext.developerMode,
                 history,
+                config: systemContext.session.getConfig().translation,
+                metrics: systemContext.metricsManager?.getMeasures(
+                    systemContext.requestId!,
+                    ProfileNames.translate,
+                ),
             });
         }
         return {
