@@ -527,9 +527,9 @@ function createAzureOpenAIChatModel(
                             PromptLogger.getInstance().logModelRequest({
                                 prompt: messages as PromptSection[],
                                 response: fullResponseText,
-                                tokenUsageData: tokenUsage
+                                tokenUsageData: tokenUsage,
                             });
-                        } catch {}                        
+                        } catch {}
                         break;
                     }
                     const data = JSON.parse(evt.data) as ChatCompletionChunk;
