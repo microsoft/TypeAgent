@@ -50,6 +50,13 @@ function collectTypes(
     }
 }
 
+/**
+ * Convert a ActionSchemaFile to a JSON-able object
+ * Data in the original ActionSchemaFile will not be modified.
+ *
+ * @param actionSchemaFile ActionSchemaFile to convert
+ * @returns
+ */
 export function toJSONActionSchemaFile(
     actionSchemaFile: ActionSchemaFile,
 ): ActionSchemaFileJSON {
@@ -102,6 +109,14 @@ function resolveTypes(
     }
 }
 
+/**
+ * Convert a ActionSchemaFileJSON back to a ActionSchemaFile
+ * Data in the JSON will be modified.
+ * Clone the data before passing into this function if you want to keep the original.
+ *
+ * @param json JSON data to convert
+ * @returns
+ */
 export function fromJSONActionSchemaFile(
     json: ActionSchemaFileJSON,
 ): ActionSchemaFile {
