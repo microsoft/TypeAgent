@@ -311,7 +311,8 @@ export function getSettingSummary(context: CommandHandlerContext) {
 
     const disabled = [];
 
-    if (!context.session.bot) {
+    const config = context.session.getConfig();
+    if (!config.translation.enabled) {
         disabled.push(unicodeChar.convert);
     }
     const constructionStore = context.agentCache.constructionStore;
@@ -329,11 +330,11 @@ export function getSettingSummary(context: CommandHandlerContext) {
     if (disabled.length !== 0) {
         prompt.push(" ", unicodeChar.stopSign, ":[", ...disabled, "]");
     }
-    const translationModel = context.session.getConfig().translation.model;
+    const translationModel = config.translation.model;
     if (translationModel !== "") {
         prompt.push(` (model: ${translationModel})`);
     }
-    const explainerModel = context.session.getConfig().explainer.model;
+    const explainerModel = config.explainer.model;
     if (context.agentCache.explainerName !== getDefaultExplainerName()) {
         prompt.push(` (explainer: ${context.agentCache.explainerName}`);
 
