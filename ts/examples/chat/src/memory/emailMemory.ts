@@ -298,7 +298,7 @@ export function createEmailCommands(
 
                     grandTotal++;
                     const status = `[${clock.elapsedString()}, ${millisecondsToString(context.stats!.totalStats.timeMs, "m")} for ${grandTotal} msgs.]`;
-
+                    context.printer.writeLine();
                     context.printer.writeInColor(chalk.green, status);
                     context.printer.writeLine();
 
