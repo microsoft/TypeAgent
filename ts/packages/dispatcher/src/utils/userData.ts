@@ -190,3 +190,9 @@ export function ensureUserProfileDir() {
     createDirectory(dir);
     return dir;
 }
+
+export function ensureCacheDir() {
+    const dir = path.join(getUserProfileDir(), "cache");
+    createDirectory(dir);
+    return dir;
+}
