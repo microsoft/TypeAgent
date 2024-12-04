@@ -60,11 +60,11 @@ async function loadModuleAgent(
     requirePath: string,
 ): Promise<AgentProcess> {
     const require = getRequire(info, requirePath);
-    const handlerPath = require.resolve(`${info.name}/agent/handlers`);
+    // file:// is require so that on windows the drive name doesn't get confused with the protocol name for `import()`
+    const handlerPath = `file://${require.resolve(`${info.name}/agent/handlers`)}`;
     const execMode = info.execMode ?? ExecutionMode.SeparateProcess;
     if (enableExecutionMode() && execMode === ExecutionMode.SeparateProcess) {
-        // file:// is require so that the drive name doesn't get confused with the protocol name.
-        return createAgentProcess(`file://${handlerPath}`);
+        return createAgentProcess(handlerPath);
     }
 
     const module = await import(handlerPath);
