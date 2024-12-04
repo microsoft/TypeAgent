@@ -27,6 +27,8 @@ import { ChatModel } from "aiclient";
 import { KnownEntityTypes } from "../conversation/knowledge.js";
 import { StorageProvider } from "../storageProvider.js";
 import { createEntitySearchOptions } from "../conversation/entities.js";
+import { ActionFilter } from "../conversation/knowledgeSearchSchema.js";
+import { createActionSearchOptions } from "../conversation/actions.js";
 
 export function emailAddressToString(address: EmailAddress): string {
     if (address.displayName) {
@@ -170,6 +172,13 @@ export function emailToEntities(
 enum EmailVerbs {
     send = "send",
     receive = "receive",
+}
+
+export function isEmailVerb(verbs: string[]): boolean {
+    if (verbs.length === 1) {
+        return verbs[0] === EmailVerbs.receive || verbs[0] === EmailVerbs.send;
+    }
+    return false;
 }
 
 function createEmailActions(
@@ -426,4 +435,32 @@ function makeHeader(name: string, text: string | undefined): string {
         return `${name}: ${text}\n`;
     }
     return "";
+}
+
+export async function emailActionItemsFromConversation(
+    cm: ConversationManager,
+    subject: string,
+    verb?: string,
+    verbTense?: any,
+): Promise<Action[] | undefined> {
+    const actionIndex = await cm.conversation.getActionIndex();
+    const filter: ActionFilter = {
+        filterType: "Action",
+        subjectEntityName: subject,
+    };
+    if (verb) {
+        filter.verbFilter = { verbs: [verb], verbTense };
+    }
+    const results = await actionIndex.search(
+        filter,
+        createActionSearchOptions(true),
+    );
+    if (results.actions && results.actions.length > 0) {
+        return results.actions.filter(
+            (a) =>
+                !isEmailVerb(a.verbs) &&
+                (!verbTense || a.verbTense === verbTense),
+        );
+    }
+    return undefined;
 }

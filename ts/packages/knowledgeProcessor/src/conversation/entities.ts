@@ -72,7 +72,7 @@ export function createEntitySearchOptions(
         maxMatches: 2,
         minScore: 0.8,
         nameSearchOptions: {
-            maxMatches: 10,
+            maxMatches: 5,
         },
         facetSearchOptions: {
             maxMatches: 10,
@@ -477,7 +477,7 @@ export async function createEntityIndexOnStorage<TSourceId = string>(
             Math.max(
                 options.maxMatches,
                 options.nameSearchOptions?.maxMatches ?? 0,
-                options.facetSearchOptions?.maxMatches ?? 0,
+                //options.facetSearchOptions?.maxMatches ?? 0,
             );
         return topK ?? 3;
     }

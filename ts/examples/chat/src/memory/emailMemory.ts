@@ -97,6 +97,7 @@ export function createEmailCommands(
     commands.emailStats = emailStats;
     commands.emailFastStop = emailFastStop;
     commands.emailNameAlias = emailNameAlias;
+    commands.emailActionItems = emailActionItems;
 
     //--------
     // Commands
@@ -244,6 +245,42 @@ export function createEmailCommands(
             for await (const entry of aliases.entries()) {
                 context.printer.writeLine(entry.name);
                 context.printer.writeList(entry.value, { type: "ul" });
+            }
+        }
+    }
+
+    function emailActionItemsDef(): CommandMetadata {
+        return {
+            description: "Display action items for person",
+            args: {
+                name: arg("Name of person"),
+            },
+            options: {
+                verb: arg("Verb to look for"),
+                period: arg("past | present | future"),
+            },
+        };
+    }
+    commands.emailActionItems.metadata = emailActionItemsDef();
+    async function emailActionItems(args: string[]): Promise<void> {
+        const namedArgs = parseNamedArguments(args, emailActionItemsDef());
+        let tenses: string[] = [];
+        if (namedArgs.period) {
+            tenses.push(namedArgs.period);
+        } else {
+            tenses.push("past", "present", "future");
+        }
+        for (let tense of tenses) {
+            context.printer.writeTitle(tense.toUpperCase() + " Actions");
+            const actions =
+                await knowLib.email.emailActionItemsFromConversation(
+                    context.emailMemory,
+                    namedArgs.name,
+                    namedArgs.verb,
+                    tense,
+                );
+            if (actions && actions.length > 0) {
+                context.printer.writeActions(actions);
             }
         }
     }
