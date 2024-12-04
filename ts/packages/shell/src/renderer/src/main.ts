@@ -115,9 +115,6 @@ function addEvents(
             );
         },
     );
-    api.onQuestion(async (_, questionId, message, id, source) => {
-        chatView.question(questionId, message, id, source);
-    });
     api.onSettingSummaryChanged((_, summary, registeredAgents) => {
         document.title = summary;
         document.title += ` Zoom: ${settingsView.shellSettings.zoomLevel * 100}%`;

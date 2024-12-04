@@ -39,7 +39,6 @@ export type ClientAction =
     | "automate-phone-ui";
 
 export interface ActionIO {
-    readonly type: DisplayType;
     setDisplay(content: DisplayContent): void;
 
     // Append content to the display, default mode is "inline"

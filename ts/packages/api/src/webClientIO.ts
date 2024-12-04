@@ -147,30 +147,6 @@ export class WebAPIClientIO implements ClientIO {
         });
     }
 
-    private maxQuestionId = 0;
-    question(message: string, requestId: RequestId): Promise<string> {
-        const currentQuestionId = this.maxQuestionId++;
-        return new Promise<string>((resolve) => {
-            this.questionCallbacks.set(
-                currentQuestionId,
-                (response: string) => {
-                    resolve(response);
-                },
-            );
-
-            this.currentws?.send(
-                JSON.stringify({
-                    message: "question",
-                    data: {
-                        currentQuestionId,
-                        message,
-                        requestId,
-                    },
-                }),
-            );
-        });
-    }
-
     private maxProposedActionId = 0;
     proposeAction(
         actionTemplates: TemplateEditConfig,

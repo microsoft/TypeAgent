@@ -31,8 +31,7 @@ import { getHistoryCommandHandlers } from "../handlers/historyCommandHandler.js"
 import { TraceCommandHandler } from "../handlers/traceCommandHandler.js";
 import { getRandomCommandHandlers } from "../handlers/randomCommandHandler.js";
 import { getNotifyCommandHandlers } from "../handlers/notifyCommandHandler.js";
-import { processRequests } from "../utils/interactive.js";
-import { getConsoleRequestIO } from "../handlers/common/interactiveIO.js";
+import { processRequests } from "agent-dispatcher/helpers/console";
 import {
     getDefaultSubCommandDescriptor,
     getParsedCommand,
@@ -153,24 +152,22 @@ class RunCommandScriptHandler implements CommandHandler {
         const inputFile = path.resolve(prevScriptDir, params.args.input);
         const content = await fs.promises.readFile(inputFile, "utf8");
         const inputs = content.split(/\r?\n/);
-        const prevRequestIO = systemContext.requestIO;
+        const prevBatchMode = systemContext.batchMode;
         try {
             // handle nested @run in files
             systemContext.currentScriptDir = path.parse(inputFile).dir;
-
-            // Disable confirmation in file mode
-            systemContext.requestIO = getConsoleRequestIO(undefined);
+            systemContext.batchMode = true;
 
             // Process the commands in the file.
             await processRequests(
                 getPrompt,
-                inputs,
                 processCommandNoLock,
                 systemContext,
+                inputs,
             );
         } finally {
             // Restore state
-            systemContext.requestIO = prevRequestIO;
+            systemContext.batchMode = prevBatchMode;
             systemContext.currentScriptDir = prevScriptDir;
         }
     }
@@ -336,7 +333,7 @@ const systemHandlers: CommandHandlerTable = {
         clear: {
             description: "Clear the console",
             async run(context: ActionContext<CommandHandlerContext>) {
-                context.sessionContext.agentContext.requestIO.clear();
+                context.sessionContext.agentContext.clientIO.clear();
             },
         },
         run: new RunCommandScriptHandler(),
@@ -344,9 +341,7 @@ const systemHandlers: CommandHandlerTable = {
             description: "Exit the program",
             async run(context: ActionContext<CommandHandlerContext>) {
                 const systemContext = context.sessionContext.agentContext;
-                systemContext.clientIO
-                    ? systemContext.clientIO.exit()
-                    : process.exit(0);
+                systemContext.clientIO.exit();
             },
         },
         random: getRandomCommandHandlers(),

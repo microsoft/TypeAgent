@@ -90,6 +90,8 @@ import {
 } from "./search.js";
 import { toTrackObjectFull } from "./spotifyUtils.js";
 
+const debugSpotify = registerDebug("typeagent:spotify");
+
 const debugSpotifyError = registerDebug("typeagent:spotify:error");
 
 function createWarningActionResult(message: string) {
@@ -341,6 +343,7 @@ export async function getClientContext(
         await createTokenProvider(profileStorage),
     );
     await service.init();
+    debugSpotify("Service initialized");
     const userdata = await getUserProfile(service);
     service.storeUser({
         id: userdata?.id,
@@ -355,7 +358,6 @@ export async function getClientContext(
             devices.devices[0];
         deviceId = activeDevice.id ?? undefined;
     }
-
     return {
         deviceId,
         service,

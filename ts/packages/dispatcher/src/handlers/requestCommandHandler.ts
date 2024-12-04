@@ -34,7 +34,7 @@ import {
     startStreamPartialAction,
     validateWildcardMatch,
 } from "../action/actionHandlers.js";
-import { unicodeChar } from "../utils/interactive.js";
+import { unicodeChar } from "../dispatcher/command.js";
 import {
     isChangeAssistantAction,
     TypeAgentTranslator,
@@ -112,18 +112,15 @@ async function confirmTranslation(
 }> {
     const actions = requestAction.actions;
     const systemContext = context.sessionContext.agentContext;
-    if (!systemContext.developerMode) {
+    if (!systemContext.developerMode || systemContext.batchMode) {
         const messages = [];
 
-        if (context.actionIO.type === "text") {
-            // Provide a one line information for text output
-            messages.push(
-                `${source}: ${chalk.blueBright(
-                    ` ${requestAction.toString()}`,
-                )} ${getColorElapsedString(elapsedMs)}`,
-            );
-            messages.push();
-        }
+        messages.push(
+            `${source}: ${chalk.blueBright(
+                ` ${requestAction.toString()}`,
+            )} ${getColorElapsedString(elapsedMs)}`,
+        );
+        messages.push();
 
         const prettyStr = JSON.stringify(actions, undefined, 2);
         messages.push(`${chalk.italic(chalk.cyanBright(prettyStr))}`);
@@ -141,8 +138,9 @@ async function confirmTranslation(
         editPreface,
     );
 
-    const newActions = await systemContext.requestIO.proposeAction(
+    const newActions = await systemContext.clientIO.proposeAction(
         templateSequence,
+        systemContext.requestId,
         DispatcherName,
     );
 
@@ -213,7 +211,7 @@ async function matchRequest(
             );
 
             if (requestAction) {
-                if (systemContext.requestIO.isInputEnabled()) {
+                if (!systemContext.batchMode) {
                     systemContext.logger?.logEvent("match", {
                         elapsedMs,
                         request,
@@ -538,16 +536,18 @@ async function pickInitialSchema(
         // Use embedding to determine the most likely action schema and use the schema name for that.
         const result =
             await systemContext.agents.semanticSearchActionSchema(request);
-        debugSementicSearch(
-            `Semantic search result: ${result
-                .map(
-                    (r) =>
-                        `${r.item.actionSchemaFile.schemaName}.${r.item.definition.name} (${r.score})`,
-                )
-                .join("\n")}`,
-        );
-        if (result.length > 0) {
-            schemaName = result[0].item.actionSchemaFile.schemaName;
+        if (result) {
+            debugSementicSearch(
+                `Semantic search result: ${result
+                    .map(
+                        (r) =>
+                            `${r.item.actionSchemaFile.schemaName}.${r.item.definition.name} (${r.score})`,
+                    )
+                    .join("\n")}`,
+            );
+            if (result.length > 0) {
+                schemaName = result[0].item.actionSchemaFile.schemaName;
+            }
         }
     }
 
@@ -612,7 +612,7 @@ export async function translateRequest(
     );
 
     if (requestAction) {
-        if (systemContext.requestIO.isInputEnabled()) {
+        if (!systemContext.batchMode) {
             systemContext.logger?.logEvent("translation", {
                 elapsedMs,
                 translatorName: schemaName,
@@ -855,12 +855,17 @@ async function requestExplain(
         const error = explanationResult?.success
             ? undefined
             : explanationResult?.message;
-        context.requestIO.notify("explained", requestId, {
-            time: new Date().toLocaleTimeString(),
-            fromCache,
-            fromUser,
-            error,
-        });
+        context.clientIO.notify(
+            "explained",
+            requestId,
+            {
+                time: new Date().toLocaleTimeString(),
+                fromCache,
+                fromUser,
+                error,
+            },
+            DispatcherName,
+        );
     };
 
     if (fromCache && !fromUser) {
@@ -882,12 +887,17 @@ async function requestExplain(
 
     if (context.explanationAsynchronousMode) {
         processRequestActionP.then(notifyExplained).catch((e) =>
-            context.requestIO.notify("explained", requestId, {
-                error: e.message,
-                fromCache,
-                fromUser,
-                time: new Date().toLocaleTimeString(),
-            }),
+            context.clientIO.notify(
+                "explained",
+                requestId,
+                {
+                    error: e.message,
+                    fromCache,
+                    fromUser,
+                    time: new Date().toLocaleTimeString(),
+                },
+                DispatcherName,
+            ),
         );
     } else {
         console.log(
@@ -981,7 +991,6 @@ export class RequestCommandHandler implements CommandHandler {
                 ? await matchRequest(request, context, history)
                 : undefined;
 
-            systemContext.agents.semanticSearchActionSchema(request);
             const translationResult =
                 match === undefined // undefined means not found
                     ? await translateRequest(

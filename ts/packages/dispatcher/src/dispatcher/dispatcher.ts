@@ -120,7 +120,7 @@ async function getTemplateCompletion(
 export type DispatcherOptions = InitializeCommandHandlerContextOptions;
 export async function createDispatcher(
     hostName: string,
-    options: DispatcherOptions,
+    options?: DispatcherOptions,
 ): Promise<Dispatcher> {
     const context = await initializeCommandHandlerContext(hostName, options);
     return {

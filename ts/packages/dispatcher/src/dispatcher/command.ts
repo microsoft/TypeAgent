@@ -5,13 +5,12 @@ import chalk from "chalk";
 import registerDebug from "debug";
 import {
     RequestId,
-    getRequestIO,
     DispatcherName,
+    makeClientIOMessage,
 } from "../handlers/common/interactiveIO.js";
 import { getDefaultExplainerName } from "agent-cache";
 import { CommandHandlerContext } from "../handlers/common/commandHandlerContext.js";
 
-import { unicodeChar } from "../utils/interactive.js";
 import {
     CommandDescriptor,
     CommandDescriptors,
@@ -236,14 +235,17 @@ export async function processCommandNoLock(
             attachments,
         );
     } catch (e: any) {
-        context.requestIO.appendDisplay(
-            {
-                type: "text",
-                content: `ERROR: ${e.message}`,
-                kind: "error",
-            },
-            undefined,
-            DispatcherName,
+        context.clientIO.appendDisplay(
+            makeClientIOMessage(
+                context,
+                {
+                    type: "text",
+                    content: `ERROR: ${e.message}`,
+                    kind: "error",
+                },
+                context.requestId,
+                DispatcherName,
+            ),
             "block",
         );
         debugCommandError(e.stack);
@@ -263,12 +265,7 @@ export async function processCommand(
             context.commandProfiler =
                 context.metricsManager?.beginCommand(requestId);
         }
-        const oldRequestIO = context.requestIO;
         try {
-            if (context.clientIO) {
-                context.requestIO = getRequestIO(context, context.clientIO);
-            }
-
             await processCommandNoLock(originalInput, context, attachments);
         } finally {
             context.commandProfiler?.stop();
@@ -279,30 +276,21 @@ export async function processCommand(
                 : undefined;
 
             context.requestId = undefined;
-            context.requestIO = oldRequestIO;
-
             return metrics;
         }
     });
 }
 
+export const enum unicodeChar {
+    wood = "🪵",
+    robotFace = "🤖",
+    constructionSign = "🚧",
+    floppyDisk = "💾",
+    stopSign = "🛑",
+    convert = "🔄",
+}
 export function getSettingSummary(context: CommandHandlerContext) {
-    const prompt = [];
-    if (!context.dblogging) {
-        const str = "WARNING: DB LOGGING OFF!!! ";
-        prompt.push(context.requestIO.type === "text" ? chalk.red(str) : str);
-    }
-
-    if (context.session.bot) {
-        prompt.push(unicodeChar.robotFace);
-    }
-    const constructionStore = context.agentCache.constructionStore;
-    if (constructionStore.isEnabled()) {
-        prompt.push(unicodeChar.constructionSign);
-        if (constructionStore.isAutoSave()) {
-            prompt.push(unicodeChar.floppyDisk);
-        }
-    }
+    const prompt: string[] = [unicodeChar.robotFace];
 
     const names = context.agents.getActiveSchemas();
     const ordered = names.filter(
@@ -319,7 +307,28 @@ export function getSettingSummary(context: CommandHandlerContext) {
             ),
         ).values(),
     );
-    prompt.push("  [", translators.join(""));
+    prompt.push(":[", translators.join(""), "]");
+
+    const disabled = [];
+
+    if (!context.session.bot) {
+        disabled.push(unicodeChar.convert);
+    }
+    const constructionStore = context.agentCache.constructionStore;
+    if (!constructionStore.isEnabled()) {
+        disabled.push(unicodeChar.constructionSign);
+        if (!constructionStore.isAutoSave()) {
+            disabled.push(unicodeChar.floppyDisk);
+        }
+    }
+
+    if (!context.dblogging) {
+        disabled.push(unicodeChar.wood);
+    }
+
+    if (disabled.length !== 0) {
+        prompt.push(" ", unicodeChar.stopSign, ":[", ...disabled, "]");
+    }
     const translationModel = context.session.getConfig().translation.model;
     if (translationModel !== "") {
         prompt.push(` (model: ${translationModel})`);
@@ -335,8 +344,6 @@ export function getSettingSummary(context: CommandHandlerContext) {
     } else if (explainerModel !== "") {
         prompt.push(` (explainer model: ${explainerModel})`);
     }
-
-    prompt.push("]");
 
     return prompt.join("");
 }
