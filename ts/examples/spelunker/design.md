@@ -49,6 +49,7 @@ A user query is handled using the following steps:
 
 - How to measure the quality of the answers? This probably has to be a manual process.
   We might be able to have a standard set of queries about a particular code base and for each potential improvement decide which variant gives the better answer.
+- Anecdotally, GitHub Copilot in VS Code does a better job (possibly because it can see the project docs)
 
 ### Import process open questions
 
