@@ -10,6 +10,7 @@ import {
     ParsedCommandParams,
     SessionContext,
     PartialParsedCommandParams,
+    AppAgentManifest,
 } from "@typeagent/agent-sdk";
 import {
     CommandHandler,
@@ -57,6 +58,7 @@ import {
     getParameterNames,
     validateAction,
 } from "action-schema";
+import { AppAgentProvider } from "./agentProvider.js";
 
 function executeSystemAction(
     action: AppAction,
@@ -360,13 +362,86 @@ const inlineHandlers: { [key: string]: AppAgent } = {
     },
 };
 
-export function loadInlineAgent(
-    name: string,
-    context: CommandHandlerContext,
-): AppAgent {
-    const handlers = inlineHandlers[name];
-    if (handlers === undefined) {
-        throw new Error(`Invalid inline agent name: ${name}`);
-    }
-    return { ...handlers, initializeAgentContext: async () => context };
+export const inlineAgentManifests: Record<string, AppAgentManifest> = {
+    dispatcher: {
+        emojiChar: "🤖",
+        description: "Built-in agent to dispatch request",
+        schema: {
+            description: "",
+            schemaType: "DispatcherActions",
+            schemaFile: "./src/dispatcher/schema/dispatcherActionSchema.ts",
+            injected: true,
+            cached: false,
+        },
+        subActionManifests: {
+            clarify: {
+                schema: {
+                    description: "Action that helps you clarify your request.",
+                    schemaFile:
+                        "./src/dispatcher/schema/clarifyActionSchema.ts",
+                    schemaType: "ClarifyRequestAction",
+                    injected: true,
+                    cached: false,
+                },
+            },
+        },
+    },
+    system: {
+        emojiChar: "🔧",
+        description:
+            "Built-in agent to manage system configuration and sessions",
+        subActionManifests: {
+            config: {
+                schema: {
+                    description:
+                        "System agent that helps you manage system settings and preferences.",
+                    schemaFile:
+                        "./src/translation/system/configActionSchema.ts",
+                    schemaType: "ConfigAction",
+                },
+            },
+            session: {
+                schema: {
+                    description:
+                        "System agent that helps you manage your session.",
+                    schemaFile:
+                        "./src/translation/system/sessionActionSchema.ts",
+                    schemaType: "SessionAction",
+                },
+            },
+        },
+    },
+};
+
+export function createInlineAppAgentProvider(
+    context?: CommandHandlerContext,
+): AppAgentProvider {
+    return {
+        getAppAgentNames() {
+            return Object.keys(inlineAgentManifests);
+        },
+        async getAppAgentManifest(appAgentName: string) {
+            const manifest = inlineAgentManifests[appAgentName];
+            if (manifest === undefined) {
+                throw new Error(`Invalid app agent: ${appAgentName}`);
+            }
+            return manifest;
+        },
+        async loadAppAgent(appAgentName: string) {
+            if (context === undefined) {
+                throw new Error("Context is required to load inline agent");
+            }
+            const handlers = inlineHandlers[appAgentName];
+            if (handlers === undefined) {
+                throw new Error(`Invalid app agent: ${appAgentName}`);
+            }
+            return { ...handlers, initializeAgentContext: async () => context };
+        },
+        unloadAppAgent(appAgentName: string) {
+            // Inline agents are always loaded
+            if (inlineAgentManifests[appAgentName] === undefined) {
+                throw new Error(`Invalid app agent: ${appAgentName}`);
+            }
+        },
+    };
 }

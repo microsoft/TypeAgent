@@ -1,0 +1,9 @@
+{
+  "emojiChar": "➕",
+  "description": "Agent to do addition",
+  "schema": {
+    "description": "Math agent with action to do addition",
+    "schemaFile": "./schema.ts",
+    "schemaType": "AddAction"
+  }
+}

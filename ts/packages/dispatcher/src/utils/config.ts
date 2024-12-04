@@ -5,9 +5,8 @@ import path from "node:path";
 import { getPackageFilePath } from "../utils/getPackageFilePath.js";
 import fs from "node:fs";
 import { glob } from "glob";
-import type { AgentInfo } from "../agent/agentConfig.js";
+import type { AgentInfo } from "../agent/npmAgentProvider.js";
 import { getUserProfileDir } from "../utils/userData.js";
-import { Console } from "node:console";
 
 export type ExplainerConfig = {
     constructions?: {
@@ -32,26 +31,7 @@ export function getDispatcherConfig(): Config {
     return config;
 }
 
-let externalAppAgentsConfig: Config | undefined;
-export function getExternalAgentsConfig(): Config {
-    if (externalAppAgentsConfig === undefined) {
-        if (
-            fs.existsSync(
-                path.join(getUserProfileDir(), "externalAgentsConfig.json"),
-            )
-        ) {
-            externalAppAgentsConfig = JSON.parse(
-                fs.readFileSync(
-                    path.join(getUserProfileDir(), "externalAgentsConfig.json"),
-                    "utf8",
-                ),
-            ) as Config;
-        } else {
-            externalAppAgentsConfig = { agents: {}, explainers: {}, tests: [] };
-        }
-    }
-    return externalAppAgentsConfig;
-}
+
 
 export function getBuiltinConstructionConfig(explainerName: string) {
     const config =

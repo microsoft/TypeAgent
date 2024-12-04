@@ -53,15 +53,11 @@ function addTest(name: string, config: Config, dir: string) {
 
 const dispatcherRequire = createRequire(`${dispatcherPath}/src`);
 for (const [name, entry] of Object.entries(config.agents) as [string, any][]) {
-    if (entry.type === "module") {
-        const manifestModulePath = `${entry.name}/agent/manifest`;
-        const manifestPath = dispatcherRequire.resolve(manifestModulePath);
-        const manifest = dispatcherRequire(manifestPath);
-        const manifestDir = path.dirname(manifestPath);
-        addTest(name, manifest, manifestDir);
-    } else {
-        addTest(name, entry, dispatcherPath);
-    }
+    const manifestModulePath = `${entry.name}/agent/manifest`;
+    const manifestPath = dispatcherRequire.resolve(manifestModulePath);
+    const manifest = dispatcherRequire(manifestPath);
+    const manifestDir = path.dirname(manifestPath);
+    addTest(name, manifest, manifestDir);
 }
 
 import prettier from "prettier";

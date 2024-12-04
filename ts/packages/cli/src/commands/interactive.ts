@@ -3,7 +3,7 @@
 
 import { Args, Command, Flags } from "@oclif/core";
 import {
-    getBuiltinSchemaNames,
+    getSchemaNamesFromDefaultAppAgentProviders,
     getCacheFactory,
     processCommand,
     getPrompt,
@@ -25,7 +25,7 @@ export default class Interactive extends Command {
     static flags = {
         translator: Flags.string({
             description: "Schema names",
-            options: getBuiltinSchemaNames(),
+            options: getSchemaNamesFromDefaultAppAgentProviders(),
             multiple: true,
         }),
         explainer: Flags.string({

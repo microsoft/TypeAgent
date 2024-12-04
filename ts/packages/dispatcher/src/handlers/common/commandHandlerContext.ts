@@ -25,7 +25,6 @@ import {
     setupBuiltInCache,
 } from "../../session/session.js";
 import {
-    getDefaultBuiltinSchemaName,
     loadAgentJsonTranslator,
     ActionConfigProvider,
     TypeAgentTranslator,
@@ -48,10 +47,6 @@ import {
     AppAgentStateOptions,
     SetStateResult,
 } from "./appAgentManager.js";
-import {
-    getBuiltinAppAgentProvider,
-    getExternalAppAgentProvider,
-} from "../../agent/agentConfig.js";
 import { loadTranslatorSchemaConfig } from "../../utils/loadSchemaConfig.js";
 import { AppAgentProvider } from "../../agent/agentProvider.js";
 import { RequestMetricsManager } from "../../utils/metrics.js";
@@ -65,6 +60,7 @@ import {
 } from "../../translation/actionSchemaSemanticMap.js";
 
 import registerDebug from "debug";
+import { getDefaultAppProviders } from "../../utils/defaultAppProviders.js";
 
 const debug = registerDebug("typeagent:dispatcher:init");
 
@@ -247,14 +243,11 @@ async function addAppAgentProvidres(
         }
     }
 
-    await context.agents.addProvider(
-        getBuiltinAppAgentProvider(context),
-        embeddingCache,
-    );
-    await context.agents.addProvider(
-        getExternalAppAgentProvider(context),
-        embeddingCache,
-    );
+    const appProviders = getDefaultAppProviders(context);
+
+    for (const provider of appProviders) {
+        await context.agents.addProvider(provider, embeddingCache);
+    }
     if (appAgentProviders) {
         for (const provider of appAgentProviders) {
             await context.agents.addProvider(provider, embeddingCache);
@@ -322,7 +315,7 @@ export async function initializeCommandHandlerContext(
         // Runtime context
         commandLock: createLimiter(1), // Make sure we process one command at a time.
         agentCache: await getAgentCache(session, agents, logger),
-        lastActionSchemaName: getDefaultBuiltinSchemaName(), // REVIEW: just default to the first one on initialize?
+        lastActionSchemaName: "",
         translatorCache: new Map<string, TypeAgentTranslator>(),
         currentScriptDir: process.cwd(),
         chatHistory: createChatHistory(),
