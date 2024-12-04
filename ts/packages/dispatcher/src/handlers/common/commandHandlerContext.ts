@@ -38,7 +38,7 @@ import {
     nullClientIO,
 } from "./interactiveIO.js";
 import { ChatHistory, createChatHistory } from "./chatHistory.js";
-import { getUserId } from "../../utils/userData.js";
+import { getUserId, getUserProfileDir } from "../../utils/userData.js";
 import { ActionContext, AppAgentEvent } from "@typeagent/agent-sdk";
 import { Profiler } from "telemetry";
 import { conversation as Conversation } from "knowledge-processor";
@@ -303,7 +303,7 @@ export async function initializeCommandHandlerContext(
         serviceHost = await createServiceHost();
     }
 
-    const agents = new AppAgentManager(sessionDirPath);
+    const agents = new AppAgentManager(getUserProfileDir());
     const context: CommandHandlerContext = {
         agents,
         session,

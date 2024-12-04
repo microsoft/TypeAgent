@@ -6,7 +6,7 @@ import {
     ActionSchemaFileJSON,
     ActionSchemaTypeDefinition,
     fromJSONActionSchemaFile,
-    parseActionSchemaFile,
+    parseActionSchemaSource,
     toJSONActionSchemaFile,
 } from "action-schema";
 import { ActionConfig, ActionConfigProvider } from "./agentTranslators.js";
@@ -79,10 +79,11 @@ export class ActionSchemaFileCache {
             );
         }
 
-        const parsed = parseActionSchemaFile(
-            schemaFileFullPath,
+        const parsed = parseActionSchemaSource(
+            source,
             actionConfig.schemaName,
             actionConfig.schemaType,
+            schemaFileFullPath,
         );
         this.actionSchemaFiles.set(key, parsed);
 
