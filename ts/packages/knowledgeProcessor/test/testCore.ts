@@ -10,7 +10,7 @@ import {
     TextEmbeddingModel,
 } from "aiclient";
 import { TextBlock, TextBlockType } from "../src/text.js";
-import { readAllText, readJsonFile } from "typeagent";
+import { ensureDir, readAllText, readJsonFile, removeDir } from "typeagent";
 import { splitIntoBlocks } from "../src/textChunker.js";
 import { SearchTermsActionV2 } from "../src/conversation/knowledgeTermSearchSchema2.js";
 import path from "path";
@@ -62,6 +62,11 @@ export function createTestModels(): TestModels {
 
 export function getRootDataPath() {
     return path.join(os.tmpdir(), "/data/tests");
+}
+
+export async function cleanDir(rootPath: string) {
+    await removeDir(rootPath);
+    await ensureDir(rootPath);
 }
 
 export async function loadData(

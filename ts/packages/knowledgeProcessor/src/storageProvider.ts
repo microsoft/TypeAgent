@@ -100,6 +100,9 @@ export function createFileSystemStorageProvider(
         name: string,
         sourceIdType: ValueDataType<TSourceId>,
     ): Promise<TextIndex<string, TSourceId>> {
+        if (sourceIdType !== "TEXT") {
+            throw new Error(`SourceId of type ${sourceIdType} not supported.`);
+        }
         verifyPath(basePath);
         return createTextIndex<TSourceId>(
             settings,

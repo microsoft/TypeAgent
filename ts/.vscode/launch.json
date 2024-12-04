@@ -285,6 +285,26 @@
             ]
 		},
         {
+			"name": "VSCODE SchemaGen -genembeddings",
+			"type": "node",
+			"request": "launch",
+            "skipFiles": [
+                "<node_internals>/**"
+            ],
+            "cwd": "${workspaceFolder}/examples/vscodeSchemaGen",
+            "program": "./dist/main.js",
+           "args": [ "-genembeddings",
+                "-schemaFile",
+                "",
+                "-actionPrefix",
+                "workbench.action"
+            ],
+            "console": "externalTerminal",
+            "outFiles": [
+                "${workspaceFolder}/**/*.js"
+            ]
+		},
+        {
 			"name": "VSCODE SchemaGen -statgen",
 			"type": "node",
 			"request": "launch",

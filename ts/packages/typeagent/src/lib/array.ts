@@ -2,6 +2,15 @@
 // Licensed under the MIT License.
 
 /**
+ * Returns true if the given array is undefined or has length 0
+ * @param array 
+ * @returns 
+ */
+export function isUndefinedOrEmpty(array: any[] | undefined): boolean {
+    return array === undefined || array.length === 0;
+}
+
+/**
  * Binary search an array
  * @param array
  * @param value
