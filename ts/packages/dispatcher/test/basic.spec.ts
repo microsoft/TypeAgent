@@ -4,7 +4,6 @@
 import { createNpmAppAgentProvider } from "../src/agent/npmAgentProvider.js";
 import { createDispatcher } from "../src/dispatcher/dispatcher.js";
 import { fileURLToPath } from "node:url";
-import { createConsoleClientIO } from "../src/helpers/console.js";
 
 describe("basic", () => {
     it("startup and shutdown", async () => {
@@ -29,7 +28,6 @@ describe("basic", () => {
                     import.meta.url,
                 ),
             ],
-            clientIO: createConsoleClientIO(),
         });
         dispatcher.processCommand(
             '@action test add --parameters \'{"a": 1, "b": 2}\'',
