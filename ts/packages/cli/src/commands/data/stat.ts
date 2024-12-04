@@ -6,7 +6,7 @@ import chalk from "chalk";
 import { CorrectionRecord } from "agent-cache";
 import {
     getCacheFactory,
-    getBuiltinSchemaNames,
+    getSchemaNamesFromDefaultAppAgentProviders,
     readTestData,
     getTestDataFiles,
 } from "agent-dispatcher/internal";
@@ -148,7 +148,7 @@ export default class ExplanationDataStatCommmand extends Command {
     static flags = {
         translator: Flags.string({
             description: "Filter by translator",
-            options: getBuiltinSchemaNames(),
+            options: getSchemaNamesFromDefaultAppAgentProviders(),
             multiple: true,
         }),
         explainer: Flags.string({

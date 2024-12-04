@@ -10,7 +10,7 @@ import {
     generateTestDataFiles,
     printTestDataStats,
     getEmptyTestData,
-    getBuiltinSchemaNames,
+    getSchemaNamesFromDefaultAppAgentProviders,
     getCacheFactory,
 } from "agent-dispatcher/internal";
 import chalk from "chalk";
@@ -45,7 +45,7 @@ export default class ExplanationDataAddCommand extends Command {
         }),
         translator: Flags.string({
             description: "Translator name",
-            options: getBuiltinSchemaNames(),
+            options: getSchemaNamesFromDefaultAppAgentProviders(),
         }),
         explainer: Flags.string({
             description:

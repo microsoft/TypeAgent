@@ -4,10 +4,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import chalk from "chalk";
-import {
-    getBuiltinActionConfigProvider,
-    loadAgentJsonTranslator,
-} from "../../translation/agentTranslators.js";
+import { loadAgentJsonTranslator } from "../../translation/agentTranslators.js";
 import {
     JSONAction,
     RequestAction,
@@ -23,6 +20,7 @@ import { getCacheFactory } from "../cacheFactory.js";
 import { Result } from "typechat";
 import { isMultipleAction } from "../../translation/multipleActionSchema.js";
 import { TranslatedAction } from "../../handlers/requestCommandHandler.js";
+import { getActionConfigProviderFromDefaultAppAgentProviders } from "../defaultAppProviders.js";
 
 const testDataJSONVersion = 2;
 export type TestDataEntry<T extends object = object> =
@@ -266,7 +264,7 @@ function toExceptionMessage(e: any) {
 function getSafeTranslateFn(translatorName: string, model?: string) {
     const translator = loadAgentJsonTranslator<TranslatedAction>(
         translatorName,
-        getBuiltinActionConfigProvider(),
+        getActionConfigProviderFromDefaultAppAgentProviders(),
         model,
     );
     return async (request: string): Promise<Result<TranslatedAction>> => {

@@ -1027,6 +1027,22 @@ importers:
         specifier: ^5.4.2
         version: 5.4.3
 
+  packages/agents/test:
+    dependencies:
+      '@typeagent/agent-sdk':
+        specifier: workspace:*
+        version: link:../../agentSdk
+    devDependencies:
+      prettier:
+        specifier: ^3.2.5
+        version: 3.2.5
+      rimraf:
+        specifier: ^5.0.5
+        version: 5.0.5
+      typescript:
+        specifier: ^5.4.2
+        version: 5.4.3
+
   packages/aiclient:
     dependencies:
       '@azure/identity':
