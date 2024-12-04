@@ -516,11 +516,20 @@ function createAzureOpenAIChatModel(
         }
 
         let fullResponseText = "";
+        let tokenUsage;
         return {
             success: true,
             data: (async function* () {
                 for await (const evt of readServerEventStream(result.data)) {
                     if (evt.data === "[DONE]") {
+                        try {
+                            // Log request.
+                            PromptLogger.getInstance().logModelRequest({
+                                prompt: messages as PromptSection[],
+                                response: fullResponseText,
+                                tokenUsageData: tokenUsage
+                            });
+                        } catch {}                        
                         break;
                     }
                     const data = JSON.parse(evt.data) as ChatCompletionChunk;
@@ -533,14 +542,8 @@ function createAzureOpenAIChatModel(
                             }
                         }
                         if (data.usage) {
+                            tokenUsage = data.usage;
                             try {
-                                // Log request
-                                PromptLogger.getInstance().logModelRequest({
-                                    prompt: messages as PromptSection[],
-                                    response: fullResponseText,
-                                    tokenUsage: data.usage,
-                                });
-
                                 // track token usage
                                 TokenCounter.getInstance().add(
                                     data.usage,
