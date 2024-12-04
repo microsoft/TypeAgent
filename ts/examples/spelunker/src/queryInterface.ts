@@ -942,7 +942,11 @@ function writeVerboseReferences(
 ): void {
     for (const ref of references) {
         const score = chunkIdScores.get(ref)?.score ?? 0;
-        writeColor(io, chalk.blue, `  ${ref} (${chalk.white(score.toFixed(3))})`);
+        writeColor(
+            io,
+            chalk.blue,
+            `  ${ref} (${chalk.white(score.toFixed(3))})`,
+        );
         for (const indexName of hitsByIndex.keys()) {
             const hits = hitsByIndex.get(indexName) ?? [];
             for (const hit of hits) {
