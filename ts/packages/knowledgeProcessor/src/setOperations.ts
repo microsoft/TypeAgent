@@ -395,7 +395,7 @@ export interface HitTable<T = any> {
      */
     getTop(): T[];
     /**
-     * Return hits with the 'k' hightest scores
+     * Return hits with the 'k' highest scores
      * getTopK(3) will return all items whose scores put them in the top 3
      * @param k k highest scores
      */
@@ -529,12 +529,12 @@ export function createHitTable<T>(
     // TODO: Optimize.
     /**
      * Return the items with the 'k' highest scores
-     * @param k
-     * @returns
+     * @param k if <= 0, returns all
+     * @returns array of items
      */
     function getTopK(k: number): T[] {
         const topItems = byHighestScore();
-        if (k === map.size) {
+        if (k === map.size || k <= 0) {
             return topItems.map((i) => i.item);
         }
 

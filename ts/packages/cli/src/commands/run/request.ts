@@ -5,7 +5,7 @@ import { Args, Command, Flags } from "@oclif/core";
 import { createDispatcher } from "agent-dispatcher";
 import {
     getCacheFactory,
-    getBuiltinSchemaNames,
+    getSchemaNamesFromDefaultAppAgentProviders,
 } from "agent-dispatcher/internal";
 import chalk from "chalk";
 import { getChatModelNames } from "aiclient";
@@ -28,7 +28,7 @@ export default class RequestCommand extends Command {
     static flags = {
         translator: Flags.string({
             description: "Schema name",
-            options: getBuiltinSchemaNames(),
+            options: getSchemaNamesFromDefaultAppAgentProviders(),
             multiple: true,
         }),
         explainer: Flags.string({

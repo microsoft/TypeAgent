@@ -32,7 +32,7 @@ import {
 import { Action, JSONAction } from "agent-cache";
 import registerDebug from "debug";
 
-const debug = registerDebug("typeagent:agentProcess");
+const debug = registerDebug("typeagent:dispatcher:agentProcess");
 
 const modulePath = process.argv[2];
 const module = await import(modulePath);

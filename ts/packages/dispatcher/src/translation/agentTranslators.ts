@@ -22,8 +22,6 @@ import {
 } from "common-utils";
 
 import registerDebug from "debug";
-import { getBuiltinAppAgentConfigs } from "../agent/agentConfig.js";
-import { loadTranslatorSchemaConfig } from "../utils/loadSchemaConfig.js";
 import { HistoryContext } from "agent-cache";
 import { createTypeAgentRequestPrompt } from "../handlers/common/chatHistoryPrompt.js";
 import {
@@ -39,7 +37,7 @@ import {
     ActionSchemaCreator as sc,
     ActionSchemaFile,
 } from "action-schema";
-const debugConfig = registerDebug("typeagent:translator:config");
+const debugConfig = registerDebug("typeagent:dispatcher:schema:config");
 
 // A flatten AppAgentManifest
 export type ActionConfig = {
@@ -78,7 +76,7 @@ function collectActionConfigs(
         actionDefaultEnabled; // inherit from parent if not specified
 
     if (manifest.schema) {
-        debugConfig(`Adding translator '${schemaName}'`);
+        debugConfig(`Adding schema '${schemaName}'`);
         actionSchemaConfigs[schemaName] = {
             schemaName,
             emojiChar,
@@ -121,49 +119,6 @@ export function convertToActionConfig(
         true, // actionDefaultEnabled default to true if not specified
     );
     return actionConfigs;
-}
-
-const actionConfigs: { [key: string]: ActionConfig } = await (async () => {
-    const configs = {};
-    const appAgentConfigs = await getBuiltinAppAgentConfigs();
-    for (const [name, config] of appAgentConfigs.entries()) {
-        convertToActionConfig(name, config, configs);
-    }
-    return configs;
-})();
-
-export function getBuiltinSchemaNames() {
-    return Object.keys(actionConfigs);
-}
-
-export function getDefaultBuiltinSchemaName() {
-    // Default to the first translator for now.
-    return getBuiltinSchemaNames()[0];
-}
-
-export function getBuiltinActionConfigProvider(): ActionConfigProvider {
-    return {
-        tryGetActionConfig(schemaName: string) {
-            return actionConfigs[schemaName];
-        },
-        getActionConfig(schemaName: string) {
-            const config = actionConfigs[schemaName];
-            if (!config) {
-                throw new Error(`Unknown translator: ${schemaName}`);
-            }
-            return config;
-        },
-        getActionConfigs() {
-            return Object.entries(actionConfigs);
-        },
-    };
-}
-
-export function loadBuiltinTranslatorSchemaConfig(schemaName: string) {
-    return loadTranslatorSchemaConfig(
-        schemaName,
-        getBuiltinActionConfigProvider(),
-    );
 }
 
 export function getAppAgentName(schemaName: string) {

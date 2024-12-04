@@ -26,6 +26,7 @@ import { isValidChunkSize, splitLargeTextIntoChunks } from "../textChunker.js";
 import { ChatModel } from "aiclient";
 import { KnownEntityTypes } from "../conversation/knowledge.js";
 import { StorageProvider } from "../storageProvider.js";
+import { createEntitySearchOptions } from "../conversation/entities.js";
 
 export function emailAddressToString(address: EmailAddress): string {
     if (address.displayName) {
@@ -301,30 +302,26 @@ export async function createEmailMemory(
         undefined,
         storageProvider,
     );
+    const userProfile = await readJsonFile<any>(
+        path.join(rootPath, "emailUserProfile.json"),
+    );
     const cm = await createConversationManager(
         {
             model,
             answerModel,
-            initializer: setupEmailConversationManager,
+            initializer: (c) => setupEmailConversationManager(c, userProfile),
         },
         name,
         rootPath,
         false,
         emailConversation,
     );
-    const userProfile = await readJsonFile<any>(
-        path.join(rootPath, "emailUserProfile.json"),
-    );
-    cm.searchProcessor.actions.requestInstructions =
-        "The following is a user request about the messages in their email inbox. The email inbox belongs to:\n" +
-        JSON.stringify(userProfile, undefined, 2) +
-        "\n" +
-        "User specific first person pronouns are rewritten to use user's name, but general ones are not.";
     return cm;
 }
 
 async function setupEmailConversationManager(
     cm: ConversationManager,
+    userProfile: any,
 ): Promise<void> {
     cm.topicMerger.settings.mergeWindowSize = 1;
     cm.topicMerger.settings.trackRecent = false;
@@ -333,10 +330,19 @@ async function setupEmailConversationManager(
     entityIndex.noiseTerms.put("email");
     entityIndex.noiseTerms.put("message");
 
+    cm.searchProcessor.actions.requestInstructions =
+        "The following is a user request about the messages in their email inbox. The email inbox belongs to:\n" +
+        JSON.stringify(userProfile, undefined, 2) +
+        "\n" +
+        "User specific first person pronouns are rewritten to use user's name, but general ones are not.";
+
     cm.searchProcessor.answers.settings.hints =
         "messages are *emails* with email headers such as To, From, Cc, Subject. etc. " +
         "To answer questions correctly, use the headers to determine who the email is from and who it was sent to. " +
         "If you are not sure, return NoAnswer.";
+    cm.searchProcessor.settings.defaultEntitySearchOptions =
+        createEntitySearchOptions(true);
+    // cm.searchProcessor.settings.defaultEntitySearchOptions.nameSearchOptions!.maxMatches = 25;
 }
 
 async function setupEmailConversation(

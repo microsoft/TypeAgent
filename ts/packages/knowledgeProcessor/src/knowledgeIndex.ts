@@ -28,6 +28,7 @@ import {
 import { TextBlock, TextBlockType } from "./text.js";
 import { TextEmbeddingModel } from "aiclient";
 import { createIndexFolder } from "./keyValueIndex.js";
+import { TextMatcher } from "./textMatcher.js";
 
 /**
  * A text index helps you index textual information.
@@ -118,6 +119,7 @@ export interface TextIndex<TTextId = any, TSourceId = any> {
         maxMatches?: number,
         minScore?: number,
         scoreBoost?: number,
+        aliases?: TextMatcher<TTextId>,
     ): Promise<void>;
     getNearestHitsMultiple(
         values: string[],
@@ -125,6 +127,7 @@ export interface TextIndex<TTextId = any, TSourceId = any> {
         maxMatches?: number,
         minScore?: number,
         scoreBoost?: number,
+        aliases?: TextMatcher<TTextId>,
     ): Promise<void>;
     nearestNeighbors(
         value: string,
@@ -405,10 +408,16 @@ export async function createTextIndex<TSourceId = any>(
         maxMatches?: number,
         minScore?: number,
         scoreBoost?: number,
+        aliases?: TextMatcher<TextId>,
     ): Promise<void> {
         maxMatches ??= 1;
         // Check exact match first
         let postingsExact = await get(value);
+        let postingsAlias: TSourceId[] | undefined;
+        if (aliases) {
+            // If no exact match, see if matched any (optional) aliases.
+            postingsAlias = await getByAlias(value, aliases);
+        }
         let postingsNearest:
             | ScoredItem<TSourceId>[]
             | IterableIterator<ScoredItem<TSourceId>>
@@ -438,9 +447,22 @@ export async function createTextIndex<TSourceId = any>(
         hitTable.addMultipleScored(
             unionMultipleScored(
                 postingsExact ? scorePostings(postingsExact, 1.0) : undefined,
+                postingsAlias ? scorePostings(postingsAlias, 1.0) : undefined,
                 postingsNearest,
             ),
         );
+    }
+
+    async function getByAlias(
+        value: string,
+        aliases: TextMatcher<TextId>,
+    ): Promise<TSourceId[] | undefined> {
+        const matchedTextIds = await aliases.match(value);
+        if (matchedTextIds && matchedTextIds.length > 0) {
+            const postings = await getByIds(matchedTextIds);
+            return [...unionMultiple(...postings)];
+        }
+        return undefined;
     }
 
     async function getNearestHitsMultiple(
@@ -449,9 +471,17 @@ export async function createTextIndex<TSourceId = any>(
         maxMatches?: number,
         minScore?: number,
         scoreBoost?: number,
+        aliases?: TextMatcher<TextId>,
     ): Promise<void> {
         return asyncArray.forEachAsync(values, settings.concurrency, (v) =>
-            getNearestHits(v, hitTable, maxMatches, minScore, scoreBoost),
+            getNearestHits(
+                v,
+                hitTable,
+                maxMatches,
+                minScore,
+                scoreBoost,
+                aliases,
+            ),
         );
     }
 
@@ -676,13 +706,13 @@ export async function createTextIndex<TSourceId = any>(
     }
 }
 
-export async function searchIndex<TTextId = any, TPostingId = any>(
-    index: TextIndex<TTextId, TPostingId>,
+export async function searchIndex<TTextId = any, TSourceId = any>(
+    index: TextIndex<TTextId, TSourceId>,
     value: string,
     exact: boolean,
     count?: number,
     minScore?: number,
-): Promise<ScoredItem<TPostingId[]>[]> {
+): Promise<ScoredItem<TSourceId[]>[]> {
     if (exact) {
         const ids = await index.get(value);
         if (ids) {
@@ -695,8 +725,8 @@ export async function searchIndex<TTextId = any, TPostingId = any>(
     return matches;
 }
 
-export async function searchIndexText<TTextId = any, TPostingId = any>(
-    index: TextIndex<TTextId, TPostingId>,
+export async function searchIndexText<TTextId = any, TSourceId = any>(
+    index: TextIndex<TTextId, TSourceId>,
     value: string,
     exact: boolean,
     count?: number,

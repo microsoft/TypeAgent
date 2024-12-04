@@ -13,7 +13,7 @@ import { SpotifyService } from "./service.js";
 import registerDebug from "debug";
 import { Storage } from "@typeagent/agent-sdk";
 
-const debugSpotify = registerDebug("typeagent:spotify");
+const debugData = registerDebug("typeagent:spotify:data");
 
 export interface MusicItemInfo {
     id: string;
@@ -214,7 +214,7 @@ async function updateUserData(
     userData: SpotifyUserData,
 ) {
     try {
-        debugSpotify("Updating user data");
+        debugData("Updating user data");
         const [
             favoriteTracks,
             favoriteAlbums,
@@ -287,7 +287,7 @@ async function updateUserData(
             ];
         }
 
-        if (debugSpotify.enabled) {
+        if (debugData.enabled) {
             const messages: string[] = [
                 [
                     "".padEnd(22),
@@ -312,13 +312,13 @@ async function updateUserData(
                     .padStart(length),
             );
             messages.unshift("");
-            debugSpotify(messages.join("\n"));
+            debugData(messages.join("\n"));
         }
 
         userData.lastUpdated = Date.now();
         await saveUserData(storage, userData);
     } catch (e) {
-        debugSpotify("Failed to update user data", e);
+        debugData("Failed to update user data", e);
     }
 }
 
@@ -332,12 +332,10 @@ export async function initializeUserData(
     profileStorage: Storage,
     service: SpotifyService,
 ) {
+    debugData("Loading saved user data");
     const data = await loadUserData(profileStorage);
-    const result: UserData = {
-        data,
-    };
-    // print sizes of each map to console
-    console.log(
+    const result: UserData = { data };
+    debugData(
         `Tracks: ${data.tracks.size}, Artists: ${data.artists.size}, Albums: ${data.albums.size}`,
     );
     // Update once a day

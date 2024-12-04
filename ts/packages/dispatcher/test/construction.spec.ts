@@ -7,7 +7,7 @@ dotenv.config({ path: new URL("../../../../.env", import.meta.url) });
 import { getCacheFactory } from "../src/utils/cacheFactory.js";
 import { readTestData } from "../src/utils/test/testData.js";
 import { Actions, RequestAction } from "agent-cache";
-import { loadBuiltinTranslatorSchemaConfig } from "../src/translation/agentTranslators.js";
+import { loadSchemaConfigFromDefaultAppAgentProviders } from "../src/utils/defaultAppProviders.js";
 import { glob } from "glob";
 
 const dataFiles = ["test/data/**/v5/*.json"];
@@ -51,7 +51,8 @@ describe("construction", () => {
                     requestAction,
                     explanation,
                     {
-                        getSchemaConfig: loadBuiltinTranslatorSchemaConfig,
+                        getSchemaConfig:
+                            loadSchemaConfigFromDefaultAppAgentProviders,
                     },
                 );
 
