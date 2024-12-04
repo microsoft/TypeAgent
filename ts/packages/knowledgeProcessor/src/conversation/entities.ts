@@ -51,6 +51,7 @@ import {
     createFileSystemStorageProvider,
     StorageProvider,
 } from "../storageProvider.js";
+import { AliasMatcher, createAliasMatcher } from "../textMatcher.js";
 
 export interface EntitySearchOptions extends SearchOptions {
     loadEntities?: boolean | undefined;
@@ -70,6 +71,9 @@ export function createEntitySearchOptions(
     return {
         maxMatches: 2,
         minScore: 0.8,
+        nameSearchOptions: {
+            maxMatches: 10,
+        },
         facetSearchOptions: {
             maxMatches: 10,
         },
@@ -83,7 +87,7 @@ export interface EntityIndex<TEntityId = any, TSourceId = any, TTextId = any>
     readonly nameIndex: TextIndex<TTextId, TEntityId>;
     readonly typeIndex: TextIndex<TTextId, TEntityId>;
     readonly facetIndex: TextIndex<TTextId, TEntityId>;
-
+    readonly nameAliases: AliasMatcher<TTextId>;
     readonly noiseTerms: TermSet;
 
     entities(): AsyncIterableIterator<ExtractedEntity<TSourceId>>;
@@ -159,12 +163,21 @@ export async function createEntityIndexOnStorage<TSourceId = string>(
             "TEXT",
         ),
     ]);
+    const nameAliases = await createAliasMatcher(
+        nameIndex,
+        storageProvider,
+        rootPath,
+        "nameAliases",
+        "TEXT",
+    );
+
     const noiseTerms = createTermSet();
     return {
         ...entityStore,
         nameIndex,
         typeIndex,
         facetIndex,
+        nameAliases,
         noiseTerms,
         entities: () => entityStore.entries(),
         get: (id) => entityStore.get(id),
@@ -376,6 +389,7 @@ export async function createEntityIndexOnStorage<TSourceId = string>(
                     options.nameSearchOptions?.maxMatches ?? options.maxMatches,
                     options.nameSearchOptions?.minScore ?? options.minScore,
                     scoreBoost,
+                    nameAliases,
                 ),
                 typeIndex.getNearestHitsMultiple(
                     terms,
@@ -391,8 +405,7 @@ export async function createEntityIndexOnStorage<TSourceId = string>(
                     options.facetSearchOptions?.minScore ?? options.minScore,
                 ),
             ]);
-            let entityHits = hitCounter.getTopK(options.topK ?? 3).sort();
-            //entityHits = await projectFacets(entityHits, terms, options);
+            let entityHits = hitCounter.getTopK(determineTopK(options)).sort();
 
             results.entityIds = [
                 ...intersectMultiple(
@@ -456,6 +469,17 @@ export async function createEntityIndexOnStorage<TSourceId = string>(
             },
         );
         return unique.size === 0 ? undefined : unique;
+    }
+
+    function determineTopK(options: EntitySearchOptions): number {
+        const topK =
+            options.topK ??
+            Math.max(
+                options.maxMatches,
+                options.nameSearchOptions?.maxMatches ?? 0,
+                options.facetSearchOptions?.maxMatches ?? 0,
+            );
+        return topK ?? 3;
     }
 }
 

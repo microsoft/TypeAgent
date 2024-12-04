@@ -42,15 +42,18 @@ import {
     TermFilterV2,
 } from "./knowledgeTermSearchSchema2.js";
 import { createTopicSearchOptions } from "./topics.js";
+import { EntitySearchOptions } from "./entities.js";
 
 export type SearchProcessorSettings = {
     contextProvider?: PromptSectionProvider | undefined;
+    defaultEntitySearchOptions?: EntitySearchOptions | undefined;
 };
 
 export type SearchProcessingOptions = {
     maxMatches: number;
     minScore: number;
     maxMessages: number;
+    entitySearch?: EntitySearchOptions | undefined;
     fallbackSearch?: SearchOptions | undefined;
     skipAnswerGeneration?: boolean;
     skipEntitySearch?: boolean;
@@ -579,11 +582,12 @@ export function createSearchProcessor(
         const topicOptions = createTopicSearchOptions(topLevelTopicSummary);
         topicOptions.minScore = options.minScore;
         const searchOptions: ConversationSearchOptions = {
-            entity: {
-                maxMatches: options.maxMatches,
-                minScore: options.minScore,
-                loadEntities: true,
-            },
+            entity: options.entitySearch ??
+                settings.defaultEntitySearchOptions ?? {
+                    maxMatches: options.maxMatches,
+                    minScore: options.minScore,
+                    loadEntities: true,
+                },
             topic: topicOptions,
             topicLevel,
             loadMessages: !topLevelTopicSummary,

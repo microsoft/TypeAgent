@@ -20,6 +20,7 @@ import {
     writeJsonFile,
 } from "typeagent";
 import {
+    arg,
     argBool,
     argNum,
     CommandHandler,
@@ -95,6 +96,7 @@ export function createEmailCommands(
     commands.emailConvertMsg = emailConvertMsg;
     commands.emailStats = emailStats;
     commands.emailFastStop = emailFastStop;
+    commands.emailNameAlias = emailNameAlias;
 
     //--------
     // Commands
@@ -216,6 +218,36 @@ export function createEmailCommands(
         }
     }
 
+    function emailNameAliasDef(): CommandMetadata {
+        return {
+            description: "Add an alias for a person's name",
+            options: {
+                name: arg("Person's name"),
+                alias: arg("Alias"),
+            },
+        };
+    }
+    commands.emailNameAlias.metadata = emailNameAliasDef();
+    async function emailNameAlias(args: string[]): Promise<void> {
+        const namedArgs = parseNamedArguments(args, emailNameAliasDef());
+        const aliases = (
+            await context.emailMemory.conversation.getEntityIndex()
+        ).nameAliases;
+        if (namedArgs.name && namedArgs.alias) {
+            await aliases.addAlias(namedArgs.alias, namedArgs.name);
+        } else if (namedArgs.alias) {
+            const names = await aliases.getByAlias(namedArgs.alias);
+            if (names) {
+                context.printer.writeLines(names);
+            }
+        } else {
+            for await (const entry of aliases.entries()) {
+                context.printer.writeLine(entry.name);
+                context.printer.writeList(entry.value, { type: "ul" });
+            }
+        }
+    }
+
     //-------------
     // End commands
     //-------------
@@ -266,7 +298,7 @@ export function createEmailCommands(
 
                     grandTotal++;
                     const status = `[${clock.elapsedString()}, ${millisecondsToString(context.stats!.totalStats.timeMs, "m")} for ${grandTotal} msgs.]`;
-
+                    context.printer.writeLine();
                     context.printer.writeInColor(chalk.green, status);
                     context.printer.writeLine();
 
