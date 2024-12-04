@@ -57,6 +57,7 @@ class MainActivity : ComponentActivity() {
          */
         private const val SPEECH_TO_TEXT_COMPLETE : Int = 1
 
+        @SuppressLint("StaticFieldLeak")
         public var currentActivity : MainActivity? = null
     }
 
@@ -98,7 +99,7 @@ class MainActivity : ComponentActivity() {
             TypeAgentAndroidSampleTheme {
                 Scaffold(
                     modifier = Modifier.fillMaxSize(),
-                    topBar = { TopAppBar(title = { Text("WebView - Test", color = Color.White) }) },
+                    topBar = { TopAppBar(title = { Text("TypeAgent Sample") }) },
                 ) { innerPadding ->
                     Browser()
                     Greeting(
@@ -213,7 +214,7 @@ class MainActivity : ComponentActivity() {
     @Composable
     fun Greeting(name: String, modifier: Modifier = Modifier) {
         Text(
-            text = "Hello $name!",
+            text = "Connected to $name!",
             modifier = modifier
         )
     }
