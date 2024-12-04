@@ -745,11 +745,11 @@ async function runIndexQueries(
             const fraction =
                 totalNumChunks / (1 + (hit.item.sourceIds?.length ?? 0));
             const idf = 1 + Math.log(fraction);
+            // Binary TF is 1 for all chunks in the list;
+            // but as a tweak, we multiply by the term's relevance score.
+            const tf = hit.score;
+            const newScore = tf * idf;
             for (const chunkId of hit.item.sourceIds ?? []) {
-                // Binary TF is 1 for all chunks in the list.
-                // As a tweak, we multiply by the term's relevance score.
-                const tf = hit.score;
-                const newScore = tf * idf;
                 const oldScoredItem = chunkIdScores.get(chunkId);
                 const oldScore = oldScoredItem?.score ?? 0;
                 // Combine scores by addition. (Alternatives: max, possibly others.)
