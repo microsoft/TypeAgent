@@ -144,6 +144,7 @@ export interface TextIndex<TTextId = any, TSourceId = any> {
         value: string,
         maxMatches: number,
         minScore?: number,
+        aliases?: TextMatcher<TTextId>,
     ): Promise<TTextId[]>;
     /**
      * Return the TextIds of the texts nearest to the given values.
@@ -504,6 +505,7 @@ export async function createTextIndex<TSourceId = any>(
         value: string,
         maxMatches?: number,
         minScore?: number,
+        aliases?: TextMatcher<TextId>,
     ): Promise<TextId[]> {
         maxMatches ??= 1;
         // Check exact match first
@@ -511,6 +513,12 @@ export async function createTextIndex<TSourceId = any>(
         let exactMatchId = textToId(value);
         if (exactMatchId) {
             matchedIds.push(exactMatchId);
+        }
+        if (aliases) {
+            const aliasMatchIds = await aliases.match(value);
+            if (aliasMatchIds && aliasMatchIds.length > 0) {
+                matchedIds = unionArrays(matchedIds, aliasMatchIds) as TextId[];
+            }
         }
         if (semanticIndex && maxMatches > 1) {
             const nearestMatches = await semanticIndex.nearestNeighbors(

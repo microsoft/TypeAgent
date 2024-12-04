@@ -28,6 +28,7 @@ import {
 } from "../knowledgeIndex.js";
 import {
     EntityIndex,
+    EntityNameIndex,
     EntitySearchOptions,
     createEntityIndexOnStorage,
     createEntitySearchOptions,
@@ -191,6 +192,7 @@ export async function createConversation(
     type TopicId = string;
     type EntityId = string;
     type ActionId = string;
+    type TextId = string;
 
     settings.indexActions ??= true;
     folderSettings ??= {
@@ -267,8 +269,12 @@ export async function createConversation(
         return entityIndex;
     }
 
-    async function getEntityNameIndex() {
-        return (await getEntityIndex()).nameIndex;
+    async function getEntityNameIndex(): Promise<EntityNameIndex<TextId>> {
+        const entityIndex = await getEntityIndex();
+        return {
+            nameIndex: entityIndex.nameIndex,
+            nameAliases: entityIndex.nameAliases,
+        };
     }
 
     async function getActionIndex(): Promise<ActionIndex> {

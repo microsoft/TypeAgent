@@ -664,3 +664,8 @@ export function facetsFromRecord(
 
     return facets;
 }
+
+export type EntityNameIndex<TTextId = any> = {
+    nameIndex: TextIndex<TTextId>;
+    nameAliases?: AliasMatcher<TTextId> | undefined;
+};
