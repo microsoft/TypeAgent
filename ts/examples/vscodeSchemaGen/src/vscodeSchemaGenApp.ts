@@ -5,7 +5,10 @@ import * as path from "path";
 import { fileURLToPath } from "url";
 import { ChatModel, openai } from "aiclient";
 import { normalizeCommandsandKBJson } from "./normalizeVscodeJson.js";
-import { processVscodeCommandsJsonFile } from "./schemaGen.js";
+import {
+    processVscodeCommandsJsonFile,
+    genEmbeddingDataFromActionSchema,
+} from "./schemaGen.js";
 import {
     processActionSchemaAndReqData,
     processActionReqDataWithComments,
@@ -95,13 +98,6 @@ export async function createVSCodeSchemaGenApp(): Promise<VSCodeSchemaGenApp> {
         } else if (args.includes("-schemagen")) {
             console.log("VSCODE Action Schema generation ...");
 
-            /*let maxNodestoProcess = -1;
-            const maxNodestoProcessArg = args.find((arg) =>
-                arg.startsWith("-maxnodes"));
-            if (maxNodestoProcessArg) {
-                const value = maxNodestoProcessArg.split("=")[1];
-                maxNodestoProcess = isNaN(Number(value)) ? 0 : parseInt(value, 10);
-            }*/
             let maxNodestoProcess = parseArg(
                 "maxNodesToProcess",
                 "number",
@@ -147,6 +143,34 @@ export async function createVSCodeSchemaGenApp(): Promise<VSCodeSchemaGenApp> {
                     verbose,
                 );
             }
+        } else if (args.includes("-genembeddings")) {
+            console.log("Generate embeddings for VSCODE Action Schema ...");
+            const schemaIndex = args.indexOf("-schemaFile");
+            const actionPrefixIndex = args.indexOf("-actionPrefix");
+
+            if (schemaIndex !== -1) {
+                const schemaFile = args[schemaIndex + 1];
+                console.log("Actions schema file: ", schemaFile);
+
+                let actionPrefix: string | undefined = undefined;
+                if (actionPrefixIndex !== -1) {
+                    actionPrefix = args[actionPrefixIndex + 1];
+                    console.log("Action Prefix: ", actionPrefix);
+                }
+
+                await genEmbeddingDataFromActionSchema(
+                    vscodeSchemaGenApp.model,
+                    master_commandsnkb_filepath,
+                    schemaFile,
+                    actionPrefix,
+                    output_dir,
+                    -1,
+                );
+            } else {
+                console.error(
+                    "Missing required actions schema file path for -genembeddings mode.",
+                );
+            }
         } else if (args.includes("-statgen")) {
             const actionReqIndex = args.indexOf("-actionreqEmbeddingsFile");
             const statGenIndex = args.indexOf("-statGenFile");
@@ -169,7 +193,7 @@ export async function createVSCodeSchemaGenApp(): Promise<VSCodeSchemaGenApp> {
                 if (actionSchemaIndex !== -1) {
                     const actionSchemaFile = args[actionSchemaIndex + 1];
                     console.log("actionSchemaFile: ", actionSchemaFile);
-                    processActionReqDataWithComments(
+                    await processActionReqDataWithComments(
                         actionSchemaFile,
                         actionreqEmbeddingsFile,
                         0.7,
@@ -177,7 +201,7 @@ export async function createVSCodeSchemaGenApp(): Promise<VSCodeSchemaGenApp> {
                         zerorankStatsFile,
                     );
                 } else {
-                    processActionSchemaAndReqData(
+                    await processActionSchemaAndReqData(
                         actionreqEmbeddingsFile,
                         0.7,
                         statGenFilePath,
