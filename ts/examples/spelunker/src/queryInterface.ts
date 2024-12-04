@@ -666,7 +666,10 @@ async function proposeQueries(
     );
     if (!result.success) {
         const t1 = Date.now();
-        writeError(io, `[Error: ${result.message} in ${((t1 - t0) * 0.001).toFixed(3)} seconds]`);
+        writeError(
+            io,
+            `[Error: ${result.message} in ${((t1 - t0) * 0.001).toFixed(3)} seconds]`,
+        );
         return undefined;
     }
     const specs = result.data;
@@ -678,7 +681,10 @@ async function proposeQueries(
         );
     }
     const t1 = Date.now();
-    writeNote(io, `[proposeQueries took ${((t1 - t0) * 0.001).toFixed(3)} seconds]`);
+    writeNote(
+        io,
+        `[proposeQueries took ${((t1 - t0) * 0.001).toFixed(3)} seconds]`,
+    );
 
     return specs;
 }
@@ -774,7 +780,10 @@ async function runIndexQueries(
     }
 
     const t1 = Date.now();
-    writeNote(io, `[runIndexQueries took ${((t1 - t0) * 0.001).toFixed(3)} seconds]`);
+    writeNote(
+        io,
+        `[runIndexQueries took ${((t1 - t0) * 0.001).toFixed(3)} seconds]`,
+    );
 
     return chunkIdScores;
 }
@@ -845,7 +854,10 @@ async function generateAnswer(
     }
 
     const t1 = Date.now();
-    writeNote(io, `[generateAnswer took ${((t1 - t0) * 0.001).toFixed(3)} seconds]`);
+    writeNote(
+        io,
+        `[generateAnswer took ${((t1 - t0) * 0.001).toFixed(3)} seconds]`,
+    );
 
     return answerResult.data;
 }

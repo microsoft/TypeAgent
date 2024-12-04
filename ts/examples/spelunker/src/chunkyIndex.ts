@@ -41,7 +41,12 @@ export class ChunkyIndex {
 
     private constructor() {
         this.chatModel = openai.createChatModelDefault("spelunkerChat");
-        this.miniModel = openai.createChatModel("GPT_35_TURBO", undefined, undefined, ["spelunkerMini"]);
+        this.miniModel = openai.createChatModel(
+            "GPT_35_TURBO",
+            undefined,
+            undefined,
+            ["spelunkerMini"],
+        );
         this.embeddingModel = knowLib.createEmbeddingCache(
             openai.createEmbeddingModel(),
             1000,
