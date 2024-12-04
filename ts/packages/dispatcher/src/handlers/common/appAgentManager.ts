@@ -144,10 +144,10 @@ export class AppAgentManager implements ActionConfigProvider {
     private readonly actionSementicMap?: ActionSchemaSementicMap;
     private readonly actionSchemaFileCache;
 
-    public constructor(sessionDirPath: string | undefined) {
+    public constructor(cacheDirPath: string | undefined) {
         this.actionSchemaFileCache = new ActionSchemaFileCache(
-            sessionDirPath
-                ? path.join(sessionDirPath, "actionSchemaFileCache.json")
+            cacheDirPath
+                ? path.join(cacheDirPath, "actionSchemaFileCache.json")
                 : undefined,
         );
 

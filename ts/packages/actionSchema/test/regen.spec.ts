@@ -4,11 +4,11 @@
 import { createRequire } from "node:module";
 import fs from "node:fs";
 import path from "node:path";
+import { parseActionSchemaSource } from "../src/parser.js";
 import {
-    parseActionSchemaFile,
-    parseActionSchemaSource,
-} from "../src/parser.js";
-
+    toJSONActionSchemaFile,
+    fromJSONActionSchemaFile,
+} from "../src/serialize.js";
 import { fileURLToPath } from "node:url";
 import { generateActionSchema } from "../src/generator.js";
 
@@ -19,9 +19,10 @@ const configPath = path.resolve(dispatcherPath, "./data/config.json");
 const config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
 
 const tests: {
-    name: string;
-    file: string;
-    type: string;
+    source: string;
+    schemaName: string;
+    fileName: string;
+    typeName: string;
 }[] = [];
 
 type Config = {
@@ -32,13 +33,15 @@ type Config = {
     subActionManifests?: Record<string, Config>;
 };
 
-function addTest(name: string, config: Config, dir: string) {
+function addTest(schemaName: string, config: Config, dir: string) {
     const schema = config.schema;
     if (schema) {
+        const fileName = path.resolve(dir, schema.schemaFile);
         tests.push({
-            name,
-            file: path.resolve(dir, schema.schemaFile),
-            type: schema.schemaType,
+            source: fs.readFileSync(fileName, "utf-8"),
+            schemaName,
+            fileName,
+            typeName: schema.schemaType,
         });
     }
 
@@ -46,7 +49,7 @@ function addTest(name: string, config: Config, dir: string) {
         for (const [subname, subConfig] of Object.entries(
             config.subActionManifests,
         )) {
-            addTest(`${name}.${subname}`, subConfig, dir);
+            addTest(`${schemaName}.${subname}`, subConfig, dir);
         }
     }
 }
@@ -75,41 +78,77 @@ async function compare(original: string, regenerated: string) {
     expect(regen).toEqual(orig);
 }
 
-const testInput = tests.map((t) => [t.name, t.file, t.type]);
 describe("Action Schema Regeneration", () => {
     //
-    // There are a couple of tests that fail because of minor difference in generating
+    // There are a couple of tests that fail because of minor difference in regenerating
     // - single line object property becomes multiline
     // - location of the entry type if it is not the first one.
     // There might be others, and because exact regeneration is not the goal, just
     // disable the test for now, and use this to manually check for real issues.
     //
-    it.skip.each(testInput)(
-        "should regenerate %s",
-        async (name, file, type) => {
-            const original = fs.readFileSync(file, "utf-8");
-            const actionSchemaFile = parseActionSchemaFile(
-                file,
-                name,
-                type,
+    it.skip.each(tests)(
+        "should regenerate $schemaName",
+        async ({ source, schemaName, fileName, typeName }) => {
+            const actionSchemaFile = parseActionSchemaSource(
+                source,
+                schemaName,
+                typeName,
+                fileName,
                 true,
             );
             const regenerated = await generateActionSchema(actionSchemaFile, {
                 exact: true,
             });
-            await compare(original, regenerated);
+            await compare(source, regenerated);
         },
     );
 
-    it.each(testInput)(
-        "should roundtrip regenerated - %s",
-        async (name, file, type) => {
-            const actionSchemaFile = parseActionSchemaFile(file, name, type);
+    it.each(tests)(
+        "should roundtrip regenerated - $schemaName",
+        async ({ source, schemaName, fileName, typeName }) => {
+            const actionSchemaFile = parseActionSchemaSource(
+                source,
+                schemaName,
+                typeName,
+                fileName,
+            );
             const regenerated = await generateActionSchema(actionSchemaFile);
 
-            const roundtrip = parseActionSchemaSource(regenerated, name, type);
+            const roundtrip = parseActionSchemaSource(
+                regenerated,
+                schemaName,
+                typeName,
+            );
             const schema2 = await generateActionSchema(roundtrip);
             expect(schema2).toEqual(regenerated);
+        },
+    );
+});
+
+describe("Action Schema Serialization", () => {
+    it.each(tests)(
+        "roundtrip $schemaName",
+        async ({ source, schemaName, fileName, typeName }) => {
+            const actionSchemaFile = parseActionSchemaSource(
+                source,
+                schemaName,
+                typeName,
+                fileName,
+            );
+            const serialized = toJSONActionSchemaFile(actionSchemaFile);
+            const deserialized = fromJSONActionSchemaFile(
+                structuredClone(serialized),
+            );
+
+            expect(deserialized).toEqual(actionSchemaFile);
+
+            const serialized2 = toJSONActionSchemaFile(actionSchemaFile);
+            expect(serialized2).toEqual(serialized);
+
+            const deserialized2 = fromJSONActionSchemaFile(
+                structuredClone(serialized),
+            );
+            expect(deserialized2).toEqual(deserialized);
         },
     );
 });

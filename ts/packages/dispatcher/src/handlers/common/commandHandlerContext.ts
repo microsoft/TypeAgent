@@ -17,7 +17,6 @@ import {
     RequestAction,
 } from "agent-cache";
 import { randomUUID } from "crypto";
-import readline from "readline/promises";
 import {
     Session,
     SessionOptions,
@@ -38,7 +37,7 @@ import {
     nullClientIO,
 } from "./interactiveIO.js";
 import { ChatHistory, createChatHistory } from "./chatHistory.js";
-import { getUserId } from "../../utils/userData.js";
+import { ensureCacheDir, getUserId } from "../../utils/userData.js";
 import { ActionContext, AppAgentEvent } from "@typeagent/agent-sdk";
 import { Profiler } from "telemetry";
 import { conversation as Conversation } from "knowledge-processor";
@@ -52,7 +51,7 @@ import { AppAgentProvider } from "../../agent/agentProvider.js";
 import { RequestMetricsManager } from "../../utils/metrics.js";
 import { getTranslatorPrefix } from "../../action/actionHandlers.js";
 import { displayError } from "@typeagent/agent-sdk/helpers/display";
-import path from "path";
+
 import {
     EmbeddingCache,
     readEmbeddingCache,
@@ -61,6 +60,7 @@ import {
 
 import registerDebug from "debug";
 import { getDefaultAppProviders } from "../../utils/defaultAppProviders.js";
+import path from "node:path";
 
 const debug = registerDebug("typeagent:dispatcher:init");
 
@@ -227,17 +227,19 @@ function getLoggerSink(isDbEnabled: () => boolean, clientIO: ClientIO) {
 async function addAppAgentProvidres(
     context: CommandHandlerContext,
     appAgentProviders?: AppAgentProvider[],
-    sessionDirPath?: string,
+    cacheDirPath?: string,
 ) {
-    const embeddingCachePath = sessionDirPath
-        ? path.join(sessionDirPath, "embeddingCache.json")
+    const embeddingCachePath = cacheDirPath
+        ? path.join(cacheDirPath, "embeddingCache.json")
         : undefined;
     let embeddingCache: EmbeddingCache | undefined;
 
     if (embeddingCachePath) {
         try {
             embeddingCache = await readEmbeddingCache(embeddingCachePath);
-            debug("Action Schema Embedding cache loaded");
+            debug(
+                `Action Schema Embedding cache loaded: ${embeddingCachePath}`,
+            );
         } catch {
             // Ignore error
         }
@@ -258,7 +260,9 @@ async function addAppAgentProvidres(
             const embeddings = context.agents.getActionEmbeddings();
             if (embeddings) {
                 await writeEmbeddingCache(embeddingCachePath, embeddings);
-                debug("Action Schema Embedding cache saved");
+                debug(
+                    `Action Schema Embedding cache saved: ${embeddingCachePath}`,
+                );
             }
         } catch {
             // Ignore error
@@ -303,7 +307,8 @@ export async function initializeCommandHandlerContext(
         serviceHost = await createServiceHost();
     }
 
-    const agents = new AppAgentManager(sessionDirPath);
+    const cacheDirPath = ensureCacheDir();
+    const agents = new AppAgentManager(cacheDirPath);
     const context: CommandHandlerContext = {
         agents,
         session,
@@ -329,7 +334,7 @@ export async function initializeCommandHandlerContext(
     await addAppAgentProvidres(
         context,
         options?.appAgentProviders,
-        sessionDirPath,
+        cacheDirPath,
     );
 
     await setAppAgentStates(context, options);
