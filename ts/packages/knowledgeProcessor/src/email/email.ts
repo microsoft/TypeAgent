@@ -27,8 +27,6 @@ import { ChatModel } from "aiclient";
 import { KnownEntityTypes } from "../conversation/knowledge.js";
 import { StorageProvider } from "../storageProvider.js";
 import { createEntitySearchOptions } from "../conversation/entities.js";
-import { ActionFilter } from "../conversation/knowledgeSearchSchema.js";
-import { createActionSearchOptions } from "../conversation/actions.js";
 
 export function emailAddressToString(address: EmailAddress): string {
     if (address.displayName) {
@@ -435,49 +433,4 @@ function makeHeader(name: string, text: string | undefined): string {
         return `${name}: ${text}\n`;
     }
     return "";
-}
-
-export type EmailActionItem = {
-    action: Action;
-    sourceBlocks: TextBlock[];
-};
-
-export async function emailActionItemsFromConversation(
-    cm: ConversationManager,
-    subject: string,
-    verb?: string,
-    verbTense?: any,
-): Promise<EmailActionItem[] | undefined> {
-    const actionIndex = await cm.conversation.getActionIndex();
-    const filter: ActionFilter = {
-        filterType: "Action",
-        subjectEntityName: subject,
-    };
-    if (verb) {
-        filter.verbFilter = { verbs: [verb], verbTense };
-    }
-    const results = await actionIndex.search(
-        filter,
-        createActionSearchOptions(false),
-    );
-    const actionIds = results.actionIds;
-    if (!actionIds || actionIds.length === 0) {
-        return undefined;
-    }
-    const actions = await actionIndex.getMultiple(actionIds);
-    const messages = cm.conversation.messages;
-    const actionItems: EmailActionItem[] = [];
-    for (let i = 0; i < actions.length; ++i) {
-        const action = actions[i];
-        if (
-            isEmailVerb(action.value.verbs) ||
-            (verbTense && action.value.verbTense !== verbTense)
-        ) {
-            continue;
-        }
-        const sourceBlocks = await messages.getMultipleText(action.sourceIds);
-        actionItems.push({ action: action.value, sourceBlocks });
-    }
-
-    return actionItems;
 }

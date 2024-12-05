@@ -273,13 +273,12 @@ export function createEmailCommands(
             tenses.push("past", "present", "future");
         }
         for (let tense of tenses) {
-            const actionItems =
-                await knowLib.email.emailActionItemsFromConversation(
-                    context.emailMemory,
-                    namedArgs.name,
-                    namedArgs.verb,
-                    tense,
-                );
+            const actionItems = await emailActionItemsFromConversation(
+                context.emailMemory,
+                namedArgs.name,
+                namedArgs.verb,
+                tense as conversation.VerbTense,
+            );
             if (actionItems) {
                 context.printer.writeTitle(tense.toUpperCase() + " Actions");
                 for (const actionItem of actionItems) {
@@ -425,4 +424,49 @@ export function createEmailCommands(
             }
         }
     }
+}
+
+export type EmailActionItem = {
+    action: conversation.Action;
+    sourceBlocks: knowLib.TextBlock[];
+};
+
+export async function emailActionItemsFromConversation(
+    cm: conversation.ConversationManager,
+    subject: string,
+    action?: string,
+    timePeriod?: conversation.VerbTense,
+): Promise<EmailActionItem[] | undefined> {
+    const actionIndex = await cm.conversation.getActionIndex();
+    const filter: conversation.ActionFilter = {
+        filterType: "Action",
+        subjectEntityName: subject,
+    };
+    if (action) {
+        filter.verbFilter = { verbs: [action], verbTense: timePeriod };
+    }
+    const results = await actionIndex.search(
+        filter,
+        conversation.createActionSearchOptions(false),
+    );
+    const actionIds = results.actionIds;
+    if (!actionIds || actionIds.length === 0) {
+        return undefined;
+    }
+    const actions = await actionIndex.getMultiple(actionIds);
+    const messages = cm.conversation.messages;
+    const actionItems: EmailActionItem[] = [];
+    for (let i = 0; i < actions.length; ++i) {
+        const action = actions[i];
+        if (
+            knowLib.email.isEmailVerb(action.value.verbs) ||
+            (timePeriod && action.value.verbTense !== timePeriod)
+        ) {
+            continue;
+        }
+        const sourceBlocks = await messages.getMultipleText(action.sourceIds);
+        actionItems.push({ action: action.value, sourceBlocks });
+    }
+
+    return actionItems;
 }
