@@ -588,7 +588,9 @@ export function actionToString(action: Action): string {
 
     function appendEntityName(text: string, name: string): string {
         if (isValidEntityName(name)) {
-            text += " ";
+            if (text.length > 0) {
+                text += " ";
+            }
             text += name;
         }
         return text;
@@ -605,7 +607,7 @@ export function actionVerbsToString(
     return text;
 }
 
-function actionParamToString(param: string | ActionParam): string {
+export function actionParamToString(param: string | ActionParam): string {
     return typeof param === "string"
         ? param
         : `${param.name}="${knowledgeValueToString(param.value)}"`;

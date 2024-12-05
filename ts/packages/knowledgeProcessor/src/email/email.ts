@@ -437,12 +437,17 @@ function makeHeader(name: string, text: string | undefined): string {
     return "";
 }
 
+export type EmailActionItem = {
+    action: Action;
+    sourceBlocks: TextBlock[];
+};
+
 export async function emailActionItemsFromConversation(
     cm: ConversationManager,
     subject: string,
     verb?: string,
     verbTense?: any,
-): Promise<Action[] | undefined> {
+): Promise<EmailActionItem[] | undefined> {
     const actionIndex = await cm.conversation.getActionIndex();
     const filter: ActionFilter = {
         filterType: "Action",
@@ -453,14 +458,26 @@ export async function emailActionItemsFromConversation(
     }
     const results = await actionIndex.search(
         filter,
-        createActionSearchOptions(true),
+        createActionSearchOptions(false),
     );
-    if (results.actions && results.actions.length > 0) {
-        return results.actions.filter(
-            (a) =>
-                !isEmailVerb(a.verbs) &&
-                (!verbTense || a.verbTense === verbTense),
-        );
+    const actionIds = results.actionIds;
+    if (!actionIds || actionIds.length === 0) {
+        return undefined;
     }
-    return undefined;
+    const actions = await actionIndex.getMultiple(actionIds);
+    const messages = cm.conversation.messages;
+    const actionItems: EmailActionItem[] = [];
+    for (let i = 0; i < actions.length; ++i) {
+        const action = actions[i];
+        if (
+            isEmailVerb(action.value.verbs) ||
+            (verbTense && action.value.verbTense !== verbTense)
+        ) {
+            continue;
+        }
+        const sourceBlocks = await messages.getMultipleText(action.sourceIds);
+        actionItems.push({ action: action.value, sourceBlocks });
+    }
+
+    return actionItems;
 }

@@ -258,6 +258,8 @@ export function createEmailCommands(
             options: {
                 verb: arg("Verb to look for"),
                 period: arg("past | present | future"),
+                showSnippet: argBool("Show message snippet", true),
+                showMessages: argBool("Show source messages", true),
             },
         };
     }
@@ -271,16 +273,28 @@ export function createEmailCommands(
             tenses.push("past", "present", "future");
         }
         for (let tense of tenses) {
-            context.printer.writeTitle(tense.toUpperCase() + " Actions");
-            const actions =
+            const actionItems =
                 await knowLib.email.emailActionItemsFromConversation(
                     context.emailMemory,
                     namedArgs.name,
                     namedArgs.verb,
                     tense,
                 );
-            if (actions && actions.length > 0) {
-                context.printer.writeActions(actions);
+            if (actionItems) {
+                context.printer.writeTitle(tense.toUpperCase() + " Actions");
+                for (const actionItem of actionItems) {
+                    context.printer.writeAction(actionItem.action);
+                    if (namedArgs.showSnippet) {
+                        context.printer.writeBlocks(
+                            chalk.gray,
+                            actionItem.sourceBlocks,
+                        );
+                    }
+                    for (const source of actionItem.sourceBlocks) {
+                        writeMessageLinks(source.sourceIds);
+                    }
+                    context.printer.writeLine();
+                }
             }
         }
     }
@@ -402,5 +416,13 @@ export function createEmailCommands(
             (x, y) => y.timestamp.getTime() - x.timestamp.getTime(),
         );
         return timestampedNames.map((t) => t.value);
+    }
+
+    function writeMessageLinks(sourceIds: string[] | undefined) {
+        if (sourceIds) {
+            for (const id of sourceIds) {
+                context.printer.writeLink(id);
+            }
+        }
     }
 }
