@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { processCommandNoLock } from "../../dispatcher/command.js";
+import { processCommandNoLock } from "../../command/command.js";
 import { CommandHandlerContext } from "../../handlers/common/commandHandlerContext.js";
 import { SessionAction } from "../../translation/system/sessionActionSchema.js";
 import { AppAction, ActionContext } from "@typeagent/agent-sdk";

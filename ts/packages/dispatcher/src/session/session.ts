@@ -18,7 +18,7 @@ import ExifReader from "exifreader";
 import {
     AppAgentState,
     AppAgentStateOptions,
-} from "../handlers/common/appAgentManager.js";
+} from "../agent/appAgentManager.js";
 import { cloneConfig, mergeConfig } from "./options.js";
 import { TokenCounter, TokenCounterData } from "aiclient";
 

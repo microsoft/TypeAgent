@@ -5,7 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import chalk from "chalk";
-import { getToggleHandlerTable } from "./common/commandHandler.js";
+import { getToggleHandlerTable } from "../command/handlerUtils.js";
 import {
     CommandHandlerContext,
     changeContextConfig,

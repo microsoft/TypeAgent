@@ -4,7 +4,7 @@
 import {
     getToggleCommandHandlers,
     getToggleHandlerTable,
-} from "./common/commandHandler.js";
+} from "../command/handlerUtils.js";
 import {
     CommandHandlerContext,
     changeContextConfig,
@@ -32,7 +32,7 @@ import {
     displayResult,
     displayWarn,
 } from "@typeagent/agent-sdk/helpers/display";
-import { alwaysEnabledAgents } from "./common/appAgentManager.js";
+import { alwaysEnabledAgents } from "../agent/appAgentManager.js";
 import { getCacheFactory } from "../internal.js";
 import { Channel } from "diagnostics_channel";
 import { string } from "../../../actionSchema/dist/creator.js";

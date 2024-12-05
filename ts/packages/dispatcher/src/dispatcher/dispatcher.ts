@@ -3,12 +3,15 @@
 
 import { DisplayType, DynamicDisplay } from "@typeagent/agent-sdk";
 import {
-    getCommandCompletion,
     getPrompt,
     getSettingSummary,
     getTranslatorNameToEmojiMap,
     processCommand,
-} from "./command.js";
+} from "../command/command.js";
+import {
+    CommandCompletionResult,
+    getCommandCompletion,
+} from "../command/completion.js";
 import {
     closeCommandHandlerContext,
     CommandHandlerContext,
@@ -18,13 +21,6 @@ import {
 import { RequestId } from "../handlers/common/interactiveIO.js";
 import { RequestMetrics } from "../utils/metrics.js";
 import { TemplateSchema } from "../../../agentSdk/dist/templateInput.js";
-
-export type CommandCompletionResult = {
-    partial: string; // The head part of the completion
-    space: boolean; // require space between partial and prefix
-    prefix: string; // the prefix for completion match
-    completions: string[]; // All the partial completions available after partial (and space if true)
-};
 
 export interface Dispatcher {
     processCommand(
