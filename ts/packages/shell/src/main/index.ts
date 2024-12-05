@@ -98,7 +98,7 @@ function setContentSize() {
 
 const time = performance.now();
 debugShell("Starting...");
-function createWindow(dispatcher: Dispatcher): void {
+function createWindow(): void {
     debugShell("Creating window", performance.now() - time);
 
     // Create the browser window.
@@ -168,8 +168,6 @@ function createWindow(dispatcher: Dispatcher): void {
             ShellSettings.getinstance().closeInlineBrowser();
             ShellSettings.getinstance().size = mainWindow.getSize();
         }
-
-        dispatcher.getContext().session.save();
     });
 
     mainWindow.on("closed", () => {
@@ -766,16 +764,17 @@ app.whenReady().then(async () => {
         ShellSettings.getinstance().save();
     });
 
-    globalShortcut.register("Alt+Right", () => {
-        chatView?.webContents.send("send-demo-event", "Alt+Right");
-    });
-
     ipcMain.on(
         "send-to-browser-ipc",
         async (_event, data: WebSocketMessage) => {
             await BrowserAgentIpc.getinstance().send(data);
         },
     );
+    globalShortcut.register("Alt+Right", () => {
+        chatView?.webContents.send("send-demo-event", "Alt+Right");
+    });
+
+    setupQuit(dispatcher);
 
     // Default open or close DevTools by F12 in development
     // and ignore CommandOrControl + R in production.
@@ -791,20 +790,45 @@ app.whenReady().then(async () => {
         });
     });
 
-    createWindow(dispatcher);
+    createWindow();
 
     app.on("activate", function () {
         // On macOS it's common to re-create a window in the app when the
         // dock icon is clicked and there are no other windows open.
-        if (BrowserWindow.getAllWindows().length === 0)
-            createWindow(dispatcher);
+        if (BrowserWindow.getAllWindows().length === 0) createWindow();
     });
 });
 
-app.on("will-quit", () => {
-    // Unregister all shortcuts.
-    globalShortcut.unregisterAll();
-});
+function setupQuit(dispatcher: Dispatcher) {
+    let quitting = false;
+    let canQuit = false;
+    async function quit() {
+        // Unregister all shortcuts.
+        globalShortcut.unregisterAll();
+
+        quitting = true;
+        debugShell("Closing dispatcher");
+        await dispatcher.close();
+        debugShell("Quitting");
+        canQuit = true;
+        app.quit();
+    }
+
+    app.on("before-quit", (e) => {
+        if (canQuit) {
+            return;
+        }
+        // Stop the quiting to finish async tasks.
+        e.preventDefault();
+
+        // if we are already quitting, do nothing
+        if (quitting) {
+            return;
+        }
+
+        quit();
+    });
+}
 
 // Quit when all windows are closed, except on macOS. There, it's common
 // for applications and their menu bar to stay active until the user quits

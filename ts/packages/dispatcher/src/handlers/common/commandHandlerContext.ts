@@ -459,6 +459,8 @@ export async function closeCommandHandlerContext(
     context: CommandHandlerContext,
 ) {
     context.serviceHost?.kill();
+    // Save the session because the token count is in it.
+    context.session.save();
     await context.agents.close();
 }
 
