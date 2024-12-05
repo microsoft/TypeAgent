@@ -741,13 +741,13 @@ async function runIndexQueries(
 
         // Update chunk id scores.
         for (const hit of hits) {
-            // IDF only depends on the term.
+            // Literature suggests setting TF = 1 in this case,
+            // but the term's relevance score intuitively makes sense.
+            const tf = hit.score;
+            // IDF calculation ("inverse document frequency smooth").
             const fraction =
                 totalNumChunks / (1 + (hit.item.sourceIds?.length ?? 0));
             const idf = 1 + Math.log(fraction);
-            // Binary TF is 1 for all chunks in the list;
-            // but as a tweak, we multiply by the term's relevance score.
-            const tf = hit.score;
             const newScore = tf * idf;
             for (const chunkId of hit.item.sourceIds ?? []) {
                 const oldScoredItem = chunkIdScores.get(chunkId);
