@@ -28,6 +28,7 @@ import {
 } from "../knowledgeIndex.js";
 import {
     EntityIndex,
+    EntityNameIndex,
     EntitySearchOptions,
     createEntityIndexOnStorage,
     createEntitySearchOptions,
@@ -101,6 +102,24 @@ export function createConversationSearchOptions(
     return searchOptions;
 }
 
+/**
+ * A conversation is *anything* that can be modelled as a set of turns or conversation messages.
+ * Messages are:
+ *  - text blocks, with optional links back to their sources.
+ *  - timestamped
+ * Each new message can also have *associated* knowledge:
+ *  - Entities
+ *  - Actions
+ *  - Hierarchical topics
+ * This knowledge is stored and indexed. It is available for search and enumeration.
+ * Knowledge is used to implement 'Structured RAG'. The knowledge informs and improves search *specificity*.
+ * Instead of just relying on embeddings (like classic RAG), structured RAG uses the indexes structured knowledge and
+ * structured queries to find knowledge (entities etc) AND messages that are relevant to user intent.
+ *
+ * Knowledge extraction can be automatic or manual. For automatic knowledge extraction, see:
+ * - KnowledgeExtractor {@link ./knowledge.ts}
+ * - ConversationManager, which provides a built in pipeline for knowledge extraction  {@link ./conversationManager.ts}
+ */
 export interface Conversation<
     MessageId = any,
     TTopicId = any,
@@ -111,16 +130,33 @@ export interface Conversation<
     readonly messages: TextStore<MessageId>;
     readonly knowledge: ObjectFolder<ExtractedKnowledge>;
 
+    /**
+     * Returns the index for all messages in this conversation. The index is dynamically maintained.
+     */
     getMessageIndex(): Promise<MessageIndex<MessageId>>;
+    /**
+     * Returns the index of all entities found in this conversation. The index is dynamically maintained.
+     */
     getEntityIndex(): Promise<EntityIndex<TEntityId, MessageId>>;
+    /**
+     * Returns the index of all topics found in this conversation. The index is dynamically maintained.
+     * @param level
+     */
     getTopicsIndex(level?: number): Promise<TopicIndex<TTopicId, MessageId>>;
+    /**
+     * Returns the index of
+     */
     getActionIndex(): Promise<ActionIndex<TActionId, MessageId>>;
     /**
      *
      * @param removeMessages If you want the original messages also removed. Set to false if you just want to rebuild the indexes
      */
     clear(removeMessages: boolean): Promise<void>;
-
+    /**
+     * Add a message to the conversation
+     * @param message
+     * @param timestamp
+     */
     addMessage(
         message: string | TextBlock,
         timestamp?: Date,
@@ -133,18 +169,45 @@ export interface Conversation<
         knowledge: ExtractedKnowledge<MessageId>,
         knowledgeIds: ExtractedKnowledgeIds<TTopicId, TEntityId, TActionId>,
     ): Promise<void>;
+    /**
+     * Search for artifacts (messages, entities, actions, topics,etc..) that match the given filters
+     * @param filters
+     * @param options
+     */
     search(
         filters: Filter[],
         options: ConversationSearchOptions,
     ): Promise<SearchResponse>;
+    /**
+     * Search for artifacts (messages, entities, actions, topics,etc..) that match the given term filters
+     * Deprecated. Use searchTermsV2 when possible
+     * @param filters
+     * @param options
+     */
     searchTerms(
         filters: TermFilter[],
         options: ConversationSearchOptions,
     ): Promise<SearchResponse>;
+    /**
+     * Search for artifacts (messages, entities, actions, topics,etc..) that match the given term filters
+     * This is 'structured RAG' search
+     * This is an new version of searchTerms and will eventually replace it
+     * @param filters
+     * @param options
+     */
     searchTermsV2(
         filters: TermFilterV2[],
         options?: ConversationSearchOptions | undefined,
     ): Promise<SearchResponse>;
+    /**
+     * Find messages that are nearest to the given query.
+     * Does not use structured indices like entities or actions; just does pure ANN.
+     * You can pass in message ids to restrict the set of messages you want to search. This is useful if you
+     * used structured indices to pre-filter the messages you were interested in.
+     * @param query
+     * @param options
+     * @param idsToSearch
+     */
     searchMessages(
         query: string,
         options: SearchOptions,
@@ -156,18 +219,14 @@ export interface Conversation<
           }
         | undefined
     >;
+    /**
+     * Find the message whose text exactly matches messageText
+     * For example, you can use this to find out if a message is already in the conversation (de-dupe)
+     * @param messageText
+     */
     findMessage(
         messageText: string,
     ): Promise<dateTime.Timestamped<TextBlock<MessageId>> | undefined>;
-    addNextEntities(
-        knowledge: ExtractedKnowledge<MessageId>,
-        knowledgeIds: ExtractedKnowledgeIds<TTopicId, TEntityId, TActionId>,
-        timestamp?: Date | undefined,
-    ): Promise<void>;
-    indexEntities(
-        knowledge: ExtractedKnowledge<MessageId>,
-        knowledgeIds: ExtractedKnowledgeIds<TTopicId, TEntityId, TActionId>,
-    ): Promise<void>;
 }
 
 /**
@@ -191,6 +250,7 @@ export async function createConversation(
     type TopicId = string;
     type EntityId = string;
     type ActionId = string;
+    type TextId = string;
 
     settings.indexActions ??= true;
     folderSettings ??= {
@@ -237,9 +297,6 @@ export async function createConversation(
         searchTermsV2,
         searchMessages,
         findMessage,
-
-        addNextEntities,
-        indexEntities,
     };
     await load();
     return thisConversation;
@@ -267,8 +324,12 @@ export async function createConversation(
         return entityIndex;
     }
 
-    async function getEntityNameIndex() {
-        return (await getEntityIndex()).nameIndex;
+    async function getEntityNameIndex(): Promise<EntityNameIndex<TextId>> {
+        const entityIndex = await getEntityIndex();
+        return {
+            nameIndex: entityIndex.nameIndex,
+            nameAliases: entityIndex.nameAliases,
+        };
     }
 
     async function getActionIndex(): Promise<ActionIndex> {

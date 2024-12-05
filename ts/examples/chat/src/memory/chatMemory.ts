@@ -1046,7 +1046,7 @@ export async function runChatMemory(): Promise<void> {
                 verb: arg(
                     "Verb to search for. Compound verbs are comma separated",
                 ),
-                tense: arg("Verb tense: past | present | future", "past"),
+                tense: arg("Verb tense: past | present | future"),
                 count: argNum("Num action matches", 1),
                 verbCount: argNum("Num verb matches", 1),
                 nameCount: argNum("Num name matches", 3),
@@ -1128,7 +1128,7 @@ export async function runChatMemory(): Promise<void> {
                 eval: argBool("Evaluate search query", true),
                 debug: argBool("Show debug info", false),
                 save: argBool("Save the search", false),
-                v2: argBool("Run V2 match", false),
+                v2: argBool("Run V2 match", true),
                 chunk: argBool("Use chunking", true),
             },
         };

@@ -172,6 +172,13 @@ enum EmailVerbs {
     receive = "receive",
 }
 
+export function isEmailVerb(verbs: string[]): boolean {
+    if (verbs.length === 1) {
+        return verbs[0] === EmailVerbs.receive || verbs[0] === EmailVerbs.send;
+    }
+    return false;
+}
+
 function createEmailActions(
     sender: EmailAddress,
     recipient: EmailAddress,

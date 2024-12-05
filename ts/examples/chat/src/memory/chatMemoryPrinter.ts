@@ -7,10 +7,15 @@ import { InteractiveIo } from "interactive-app";
 import { collections, dateTime } from "typeagent";
 import { ChatPrinter } from "../chatPrinter.js";
 import chalk, { ChalkInstance } from "chalk";
+import { pathToFileURL } from "url";
 
 export class ChatMemoryPrinter extends ChatPrinter {
     constructor(io: InteractiveIo) {
         super(io);
+    }
+
+    public writeLink(filePath: string): void {
+        this.writeInColor(chalk.cyan, pathToFileURL(filePath).toString());
     }
 
     public writeBlocks(
@@ -194,6 +199,20 @@ export class ChatMemoryPrinter extends ChatPrinter {
                     }
                 } else {
                     this.writeLine();
+                }
+            }
+        }
+    }
+
+    public writeAction(
+        action: conversation.Action | undefined,
+        writeParams: boolean = true,
+    ): void {
+        if (action) {
+            this.writeLine(conversation.actionToString(action));
+            if (writeParams && action.params) {
+                for (const param of action.params) {
+                    this.writeBullet(conversation.actionParamToString(param));
                 }
             }
         }

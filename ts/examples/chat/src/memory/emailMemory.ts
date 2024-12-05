@@ -97,6 +97,7 @@ export function createEmailCommands(
     commands.emailStats = emailStats;
     commands.emailFastStop = emailFastStop;
     commands.emailNameAlias = emailNameAlias;
+    commands.emailActionItems = emailActionItems;
 
     //--------
     // Commands
@@ -248,6 +249,55 @@ export function createEmailCommands(
         }
     }
 
+    function emailActionItemsDef(): CommandMetadata {
+        return {
+            description: "Display action items for person",
+            args: {
+                name: arg("Name of person"),
+            },
+            options: {
+                verb: arg("Verb to look for"),
+                period: arg("past | present | future"),
+                showSnippet: argBool("Show message snippet", false),
+                showMessages: argBool("Show source messages", true),
+            },
+        };
+    }
+    commands.emailActionItems.metadata = emailActionItemsDef();
+    async function emailActionItems(args: string[]): Promise<void> {
+        const namedArgs = parseNamedArguments(args, emailActionItemsDef());
+        let tenses: string[] = [];
+        if (namedArgs.period) {
+            tenses.push(namedArgs.period);
+        } else {
+            tenses.push("past", "present", "future");
+        }
+        for (let tense of tenses) {
+            const actionItems = await emailActionItemsFromConversation(
+                context.emailMemory,
+                namedArgs.name,
+                namedArgs.verb,
+                tense as conversation.VerbTense,
+            );
+            if (actionItems) {
+                context.printer.writeTitle(tense.toUpperCase() + " Actions");
+                for (const actionItem of actionItems) {
+                    context.printer.writeAction(actionItem.action);
+                    if (namedArgs.showSnippet) {
+                        context.printer.writeBlocks(
+                            chalk.gray,
+                            actionItem.sourceBlocks,
+                        );
+                    }
+                    for (const source of actionItem.sourceBlocks) {
+                        writeMessageLinks(source.sourceIds);
+                    }
+                    context.printer.writeLine();
+                }
+            }
+        }
+    }
+
     //-------------
     // End commands
     //-------------
@@ -366,4 +416,57 @@ export function createEmailCommands(
         );
         return timestampedNames.map((t) => t.value);
     }
+
+    function writeMessageLinks(sourceIds: string[] | undefined) {
+        if (sourceIds) {
+            for (const id of sourceIds) {
+                context.printer.writeLink(id);
+            }
+        }
+    }
+}
+
+export type EmailActionItem = {
+    action: conversation.Action;
+    sourceBlocks: knowLib.TextBlock[];
+};
+
+export async function emailActionItemsFromConversation(
+    cm: conversation.ConversationManager,
+    subject: string,
+    action?: string,
+    timePeriod?: conversation.VerbTense,
+): Promise<EmailActionItem[] | undefined> {
+    const actionIndex = await cm.conversation.getActionIndex();
+    const filter: conversation.ActionFilter = {
+        filterType: "Action",
+        subjectEntityName: subject,
+    };
+    if (action) {
+        filter.verbFilter = { verbs: [action], verbTense: timePeriod };
+    }
+    const results = await actionIndex.search(
+        filter,
+        conversation.createActionSearchOptions(false),
+    );
+    const actionIds = results.actionIds;
+    if (!actionIds || actionIds.length === 0) {
+        return undefined;
+    }
+    const actions = await actionIndex.getMultiple(actionIds);
+    const messages = cm.conversation.messages;
+    const actionItems: EmailActionItem[] = [];
+    for (let i = 0; i < actions.length; ++i) {
+        const action = actions[i];
+        if (
+            knowLib.email.isEmailVerb(action.value.verbs) ||
+            (timePeriod && action.value.verbTense !== timePeriod)
+        ) {
+            continue;
+        }
+        const sourceBlocks = await messages.getMultipleText(action.sourceIds);
+        actionItems.push({ action: action.value, sourceBlocks });
+    }
+
+    return actionItems;
 }

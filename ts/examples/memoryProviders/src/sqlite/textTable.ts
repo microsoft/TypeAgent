@@ -484,9 +484,15 @@ export async function createTextIndex<
         value: string,
         maxMatches?: number,
         minScore?: number,
+        aliases?: knowLib.TextMatcher<TTextId>,
     ): Promise<TTextId[]> {
         maxMatches ??= 1;
-        const matches = await getNearestTextIds(value, maxMatches, minScore);
+        const matches = await getExactAndNearestTextIds(
+            value,
+            maxMatches,
+            minScore,
+            aliases,
+        );
         if (matches) {
             return isIdInt
                 ? matches
@@ -635,6 +641,7 @@ export async function createTextIndex<
         value: string,
         maxMatches?: number,
         minScore?: number,
+        aliases?: knowLib.TextMatcher<TTextId>,
     ): Promise<TextId[] | undefined> {
         maxMatches ??= 1;
         // Check exact match first
@@ -644,6 +651,11 @@ export async function createTextIndex<
         if (exactId) {
             matchedIds = [exactId];
         }
+        let matchedAliasIds: TextId[] | undefined;
+        if (aliases) {
+            matchedAliasIds = await getTextIdsByAlias(value, aliases);
+        }
+
         let nearestIds: TextId[] | undefined;
         if (maxMatches > 1) {
             nearestIds = await getNearestTextIds(value, maxMatches, minScore);
@@ -653,7 +665,13 @@ export async function createTextIndex<
                 nearestIds = [nearestId];
             }
         }
-        matchedIds = knowLib.sets.unionArrays(matchedIds, nearestIds);
+        matchedIds = [
+            ...knowLib.sets.unionMultiple(
+                matchedIds,
+                matchedAliasIds,
+                nearestIds,
+            ),
+        ];
         return matchedIds;
     }
 
@@ -700,6 +718,17 @@ export async function createTextIndex<
             ),
         ];
         return matchedIds.length > 0 ? matchedIds : undefined;
+    }
+
+    async function getTextIdsByAlias(
+        value: string,
+        aliases: knowLib.TextMatcher<TTextId>,
+    ): Promise<TextId[] | undefined> {
+        const matchedTextIds = await aliases.match(value);
+        if (matchedTextIds && matchedTextIds.length > 0) {
+            return matchedTextIds.map((id) => serializer.deserialize(id));
+        }
+        return undefined;
     }
 
     async function getTextIdsByAliasScored(
