@@ -122,6 +122,10 @@ export function createKnowledgeExtractorSettings(
     };
 }
 
+export interface ExtractedValue<TSourceId = any> {
+    sourceIds?: TSourceId[] | undefined;
+}
+
 export type ExtractedEntity<TSourceId = any> = {
     value: ConcreteEntity;
     sourceIds: TSourceId[];

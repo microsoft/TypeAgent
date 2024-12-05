@@ -258,7 +258,7 @@ export function createEmailCommands(
             options: {
                 verb: arg("Verb to look for"),
                 period: arg("past | present | future"),
-                showSnippet: argBool("Show message snippet", true),
+                showSnippet: argBool("Show message snippet", false),
                 showMessages: argBool("Show source messages", true),
             },
         };
