@@ -60,6 +60,7 @@ export type CommonApiSettings = {
     retryPauseMs?: number;
     maxConcurrency?: number | undefined;
     throttler?: FetchThrottler;
+    enableModelRequestLogging?: boolean | undefined;
 };
 /**
  * Settings used by OpenAI clients
@@ -99,6 +100,8 @@ export enum EnvVars {
 
     AZURE_MAPS_ENDPOINT = "AZURE_MAPS_ENDPOINT",
     AZURE_MAPS_CLIENTID = "AZURE_MAPS_CLIENTID",
+
+    ENABLE_MODEL_REQUEST_LOGGING = "ENABLE_MODEL_REQUEST_LOGGING",
 }
 
 export const MAX_PROMPT_LENGTH_DEFAULT = 1000 * 60;
@@ -454,13 +457,15 @@ function createAzureOpenAIChatModel(
         }
 
         try {
-            // Log request
-            PromptLogger.getInstance().logModelRequest({
-                prompt: messages as PromptSection[],
-                response: data.choices[0].message?.content ?? "",
-                tokenUsage: data.usage,
-            });
-
+            if (settings.enableModelRequestLogging) {
+                // Log request
+                PromptLogger.getInstance().logModelRequest({
+                    prompt: messages as PromptSection[],
+                    response: data.choices[0].message?.content ?? "",
+                    tokenUsage: data.usage,
+                    tags: tags,
+                });
+            }
             // track token usage
             TokenCounter.getInstance().add(data.usage, tags);
         } catch {}
@@ -523,12 +528,15 @@ function createAzureOpenAIChatModel(
                 for await (const evt of readServerEventStream(result.data)) {
                     if (evt.data === "[DONE]") {
                         try {
-                            // Log request.
-                            PromptLogger.getInstance().logModelRequest({
-                                prompt: messages as PromptSection[],
-                                response: fullResponseText,
-                                tokenUsageData: tokenUsage,
-                            });
+                            if (settings.enableModelRequestLogging) {
+                                // Log request.
+                                PromptLogger.getInstance().logModelRequest({
+                                    prompt: messages as PromptSection[],
+                                    response: fullResponseText,
+                                    tokenUsageData: tokenUsage,
+                                    tags: tags,
+                                });
+                            }
                         } catch {}
                         break;
                     }

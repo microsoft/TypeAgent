@@ -67,5 +67,12 @@ export function openAIApiSettingsFromEnv(
             EnvVars.OPENAI_MAX_CONCURRENCY,
             endpointName,
         ),
+        enableModelRequestLogging:
+            getEnvSetting(
+                env,
+                EnvVars.ENABLE_MODEL_REQUEST_LOGGING,
+                endpointName,
+                "false",
+            ) === "true",
     };
 }
