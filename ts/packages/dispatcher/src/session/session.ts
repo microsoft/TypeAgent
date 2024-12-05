@@ -117,6 +117,10 @@ type DispatcherConfig = {
         schema: {
             generation: boolean;
             firstUseEmbedding: boolean; // use embedding to determine the first schema to use.
+            optimize: {
+                enabled: boolean;
+                numInitialActions: number; // 0 means no limit
+            };
         };
     };
     explainer: {
@@ -168,6 +172,10 @@ const defaultSessionConfig: SessionConfig = {
         schema: {
             generation: true,
             firstUseEmbedding: true,
+            optimize: {
+                enabled: true,
+                numInitialActions: 5,
+            },
         },
     },
     explainer: {
@@ -299,10 +307,6 @@ export class Session {
 
     public get explainerName() {
         return this.config.explainer.name;
-    }
-
-    public get bot() {
-        return this.config.translation.enabled;
     }
 
     public get explanation() {

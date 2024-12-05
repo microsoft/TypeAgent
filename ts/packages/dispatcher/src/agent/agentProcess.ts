@@ -10,12 +10,9 @@ import {
     StorageListOptions,
     TokenCachePersistence,
     ActionIO,
-    DisplayType,
     DisplayContent,
     DisplayAppendMode,
     AppAgentEvent,
-    ParsedCommandParams,
-    ParameterDefinitions,
     ClientAction,
 } from "@typeagent/agent-sdk";
 

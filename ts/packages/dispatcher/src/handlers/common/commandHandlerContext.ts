@@ -27,6 +27,7 @@ import {
     loadAgentJsonTranslator,
     ActionConfigProvider,
     TypeAgentTranslator,
+    createTypeAgentTranslatorForSelectedActions,
 } from "../../translation/agentTranslators.js";
 import { getCacheFactory } from "../../utils/cacheFactory.js";
 import { createServiceHost } from "../serviceHost/serviceHostCommandHandler.js";
@@ -128,7 +129,7 @@ export function updateCorrectionContext(
     }
 }
 
-export function getTranslator(
+export function getTranslatorForSchema(
     context: CommandHandlerContext,
     translatorName: string,
 ) {
@@ -144,9 +145,43 @@ export function getTranslator(
         config.switch.inline ? getActiveTranslators(context) : undefined,
         config.multipleActions,
         config.schema.generation,
+        !config.schema.optimize.enabled,
     );
     context.translatorCache.set(translatorName, newTranslator);
     return newTranslator;
+}
+
+export async function getTranslatorForSelectedActions(
+    context: CommandHandlerContext,
+    schemaName: string,
+    request: string,
+    numActions: number,
+): Promise<TypeAgentTranslator | undefined> {
+    const actionSchemaFile = context.agents.getActionSchemaFile(schemaName);
+    if (
+        actionSchemaFile === undefined ||
+        actionSchemaFile.actionSchemas.size <= numActions
+    ) {
+        return undefined;
+    }
+    const nearestNeighbors = await context.agents.semanticSearchActionSchema(
+        request,
+        numActions,
+        (name) => name === schemaName,
+    );
+
+    if (nearestNeighbors === undefined) {
+        return undefined;
+    }
+    const config = context.session.getConfig().translation;
+    return createTypeAgentTranslatorForSelectedActions(
+        nearestNeighbors.map((e) => e.item.definition),
+        schemaName,
+        context.agents,
+        config.model,
+        config.switch.inline ? getActiveTranslators(context) : undefined,
+        config.multipleActions,
+    );
 }
 
 async function getAgentCache(
@@ -466,10 +501,10 @@ export async function changeContextConfig(
         changed.translation?.model !== undefined ||
         changed.translation?.switch?.inline !== undefined ||
         changed.translation?.multipleActions !== undefined ||
-        changed.translation?.schema?.generation !== undefined
+        changed.translation?.schema?.generation !== undefined ||
+        changed.translation?.schema?.optimize?.enabled !== undefined
     ) {
-        // The dynamic schema for change assistant is changed.
-        // Clear the cache to regenerate them.
+        // Schema changed, clear the cache to regenerate them.
         systemContext.translatorCache.clear();
     }
 

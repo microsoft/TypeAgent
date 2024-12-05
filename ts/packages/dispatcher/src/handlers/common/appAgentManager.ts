@@ -225,11 +225,13 @@ export class AppAgentManager implements ActionConfigProvider {
     public async semanticSearchActionSchema(
         request: string,
         maxMatches: number = 1,
+        filter: (schemaName: string) => boolean = (schemaName) =>
+            this.isSchemaActive(schemaName),
     ) {
         return this.actionSementicMap?.nearestNeighbors(
             request,
-            this,
             maxMatches,
+            filter,
         );
     }
 

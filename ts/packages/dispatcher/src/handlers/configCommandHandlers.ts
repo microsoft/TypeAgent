@@ -519,6 +519,46 @@ class ConfigModelSetCommandHandler implements CommandHandler {
     }
 }
 
+class ConfigTranslationNumberOfInitialActionsCommandHandler
+    implements CommandHandler
+{
+    public readonly description =
+        "Set number of actions to use for initial translation";
+    public readonly parameters = {
+        args: {
+            count: {
+                description: "Number of actions",
+                type: "number",
+            },
+        },
+    } as const;
+    public async run(
+        context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const count = params.args.count;
+        if (count < 0) {
+            throw new Error("Count must be positive interger");
+        }
+        await changeContextConfig(
+            {
+                translation: {
+                    schema: {
+                        optimize: {
+                            numInitialActions: count,
+                        },
+                    },
+                },
+            },
+            context,
+        );
+        displayResult(
+            `Number of actions to use for initial translation is set to ${count}`,
+            context,
+        );
+    }
+}
+
 const configTranslationCommandHandlers: CommandHandlerTable = {
     description: "Translation configuration",
     defaultSubCommand: "on",
@@ -626,6 +666,30 @@ const configTranslationCommandHandlers: CommandHandlerTable = {
                         );
                     },
                 ),
+                optimize: {
+                    description: "Optimize schema",
+                    commands: {
+                        ...getToggleCommandHandlers(
+                            "schema optimization",
+                            async (context, enable) => {
+                                await changeContextConfig(
+                                    {
+                                        translation: {
+                                            schema: {
+                                                optimize: {
+                                                    enabled: enable,
+                                                },
+                                            },
+                                        },
+                                    },
+                                    context,
+                                );
+                            },
+                        ),
+                        actions:
+                            new ConfigTranslationNumberOfInitialActionsCommandHandler(),
+                    },
+                },
             },
         },
     },
