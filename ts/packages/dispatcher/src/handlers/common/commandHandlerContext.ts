@@ -46,7 +46,7 @@ import {
     AppAgentManager,
     AppAgentStateOptions,
     SetStateResult,
-} from "./appAgentManager.js";
+} from "../../agent/appAgentManager.js";
 import { loadTranslatorSchemaConfig } from "../../utils/loadSchemaConfig.js";
 import { AppAgentProvider } from "../../agent/agentProvider.js";
 import { RequestMetricsManager } from "../../utils/metrics.js";
