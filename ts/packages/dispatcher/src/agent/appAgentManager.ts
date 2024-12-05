@@ -6,26 +6,26 @@ import {
     SessionContext,
     AppAgentManifest,
 } from "@typeagent/agent-sdk";
-import { CommandHandlerContext } from "./commandHandlerContext.js";
+import { CommandHandlerContext } from "../handlers/common/commandHandlerContext.js";
 import {
     convertToActionConfig,
     getAppAgentName,
     ActionConfig,
     ActionConfigProvider,
-} from "../../translation/agentTranslators.js";
-import { createSessionContext } from "../../action/actionHandlers.js";
-import { AppAgentProvider } from "../../agent/agentProvider.js";
+} from "../translation/agentTranslators.js";
+import { createSessionContext } from "../action/actionHandlers.js";
+import { AppAgentProvider } from "./agentProvider.js";
 import registerDebug from "debug";
 import { DeepPartialUndefinedAndNull } from "common-utils";
-import { DispatcherName } from "./interactiveIO.js";
+import { DispatcherName } from "../handlers/common/interactiveIO.js";
 import {
     ActionSchemaSementicMap,
     EmbeddingCache,
-} from "../../translation/actionSchemaSemanticMap.js";
-import { ActionSchemaFileCache } from "../../translation/actionSchemaFileCache.js";
+} from "../translation/actionSchemaSemanticMap.js";
+import { ActionSchemaFileCache } from "../translation/actionSchemaFileCache.js";
 import { ActionSchemaFile } from "action-schema";
 import path from "path";
-import { callEnsureError } from "../../utils/exceptions.js";
+import { callEnsureError } from "../utils/exceptions.js";
 
 const debug = registerDebug("typeagent:dispatcher:agents");
 const debugError = registerDebug("typeagent:dispatcher:agents:error");
@@ -144,10 +144,10 @@ export class AppAgentManager implements ActionConfigProvider {
     private readonly actionSementicMap?: ActionSchemaSementicMap;
     private readonly actionSchemaFileCache;
 
-    public constructor(sessionDirPath: string | undefined) {
+    public constructor(cacheDirPath: string | undefined) {
         this.actionSchemaFileCache = new ActionSchemaFileCache(
-            sessionDirPath
-                ? path.join(sessionDirPath, "actionSchemaFileCache.json")
+            cacheDirPath
+                ? path.join(cacheDirPath, "actionSchemaFileCache.json")
                 : undefined,
         );
 
@@ -225,11 +225,13 @@ export class AppAgentManager implements ActionConfigProvider {
     public async semanticSearchActionSchema(
         request: string,
         maxMatches: number = 1,
+        filter: (schemaName: string) => boolean = (schemaName) =>
+            this.isSchemaActive(schemaName),
     ) {
         return this.actionSementicMap?.nearestNeighbors(
             request,
-            this,
             maxMatches,
+            filter,
         );
     }
 

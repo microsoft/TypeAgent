@@ -13,7 +13,7 @@ export {
     ActionSchemaUnion,
 } from "./type.js";
 
-export { parseActionSchemaFile, parseActionSchemaSource } from "./parser.js";
+export { parseActionSchemaSource } from "./parser.js";
 export {
     GenerateSchemaOptions,
     generateActionSchema,

@@ -12,7 +12,7 @@ import {
     SchemaDefinition,
     AppAgentManifest,
 } from "@typeagent/agent-sdk";
-import { Result } from "typechat";
+import { Result, TypeChatJsonTranslator } from "typechat";
 import { getPackageFilePath } from "../utils/getPackageFilePath.js";
 import { getMultipleActionSchemaDef } from "./multipleActionSchema.js";
 import {
@@ -22,12 +22,11 @@ import {
 } from "common-utils";
 
 import registerDebug from "debug";
-import { getBuiltinAppAgentConfigs } from "../agent/agentConfig.js";
-import { loadTranslatorSchemaConfig } from "../utils/loadSchemaConfig.js";
 import { HistoryContext } from "agent-cache";
 import { createTypeAgentRequestPrompt } from "../handlers/common/chatHistoryPrompt.js";
 import {
     composeActionSchema,
+    composeSelectedActionSchema,
     createActionJsonTranslatorFromSchemaDef,
 } from "./actionSchemaJsonTranslator.js";
 import { TranslatedAction } from "../handlers/requestCommandHandler.js";
@@ -39,7 +38,7 @@ import {
     ActionSchemaCreator as sc,
     ActionSchemaFile,
 } from "action-schema";
-const debugConfig = registerDebug("typeagent:translator:config");
+const debugConfig = registerDebug("typeagent:dispatcher:schema:config");
 
 // A flatten AppAgentManifest
 export type ActionConfig = {
@@ -78,7 +77,7 @@ function collectActionConfigs(
         actionDefaultEnabled; // inherit from parent if not specified
 
     if (manifest.schema) {
-        debugConfig(`Adding translator '${schemaName}'`);
+        debugConfig(`Adding schema '${schemaName}'`);
         actionSchemaConfigs[schemaName] = {
             schemaName,
             emojiChar,
@@ -123,49 +122,6 @@ export function convertToActionConfig(
     return actionConfigs;
 }
 
-const actionConfigs: { [key: string]: ActionConfig } = await (async () => {
-    const configs = {};
-    const appAgentConfigs = await getBuiltinAppAgentConfigs();
-    for (const [name, config] of appAgentConfigs.entries()) {
-        convertToActionConfig(name, config, configs);
-    }
-    return configs;
-})();
-
-export function getBuiltinSchemaNames() {
-    return Object.keys(actionConfigs);
-}
-
-export function getDefaultBuiltinSchemaName() {
-    // Default to the first translator for now.
-    return getBuiltinSchemaNames()[0];
-}
-
-export function getBuiltinActionConfigProvider(): ActionConfigProvider {
-    return {
-        tryGetActionConfig(schemaName: string) {
-            return actionConfigs[schemaName];
-        },
-        getActionConfig(schemaName: string) {
-            const config = actionConfigs[schemaName];
-            if (!config) {
-                throw new Error(`Unknown translator: ${schemaName}`);
-            }
-            return config;
-        },
-        getActionConfigs() {
-            return Object.entries(actionConfigs);
-        },
-    };
-}
-
-export function loadBuiltinTranslatorSchemaConfig(schemaName: string) {
-    return loadTranslatorSchemaConfig(
-        schemaName,
-        getBuiltinActionConfigProvider(),
-    );
-}
-
 export function getAppAgentName(schemaName: string) {
     return schemaName.split(".")[0];
 }
@@ -194,13 +150,15 @@ export function createChangeAssistantActionSchema(
     provider: ActionConfigProvider,
     currentSchemaName: string, // schema name to not include
     activeSchemas: { [key: string]: boolean },
+    partial: boolean = false,
 ): ActionSchemaTypeDefinition | undefined {
     // Default to no switching if active translator isn't passed in.
     const translators = provider.getActionConfigs().filter(
         ([name, actionConfigs]) =>
-            name !== currentSchemaName && // don't include itself
-            !actionConfigs.injected && // don't include injected translators
-            (activeSchemas[name] ?? false),
+            (partial && name === currentSchemaName) || // include itself if partial
+            (name !== currentSchemaName && // don't include itself
+                !actionConfigs.injected && // don't include injected translators
+                (activeSchemas[name] ?? false)),
     );
     if (translators.length === 0) {
         return undefined;
@@ -364,6 +322,7 @@ export function loadAgentJsonTranslator<
     activeTranslators?: { [key: string]: boolean },
     multipleActions: boolean = false,
     regenerateSchema: boolean = false,
+    exact: boolean = true,
 ): TypeAgentTranslator<T> {
     const translator = regenerateSchema
         ? createActionJsonTranslatorFromSchemaDef<T>(
@@ -375,6 +334,7 @@ export function loadAgentJsonTranslator<
                   multipleActions,
               ),
               { model },
+              { exact },
           )
         : createJsonTranslatorFromSchemaDef<T>(
               "AllActions",
@@ -387,6 +347,12 @@ export function loadAgentJsonTranslator<
               { model },
           );
 
+    return createTypeAgentTranslator(translator);
+}
+
+function createTypeAgentTranslator<
+    T extends TranslatedAction = TranslatedAction,
+>(translator: TypeChatJsonTranslator<T>): TypeAgentTranslator<T> {
     const streamingTranslator = enableJsonTranslatorStreaming(translator);
 
     // the request prompt is already expanded by the override replacement below
@@ -420,6 +386,30 @@ export function loadAgentJsonTranslator<
     };
 
     return typeAgentTranslator;
+}
+
+export function createTypeAgentTranslatorForSelectedActions<
+    T extends TranslatedAction = TranslatedAction,
+>(
+    definitions: ActionSchemaTypeDefinition[],
+    schemaName: string,
+    provider: ActionConfigProvider,
+    model?: string,
+    activeTranslators?: { [key: string]: boolean },
+    multipleActions: boolean = false,
+) {
+    const translator = createActionJsonTranslatorFromSchemaDef<T>(
+        "AllActions",
+        composeSelectedActionSchema(
+            definitions,
+            schemaName,
+            provider,
+            activeTranslators,
+            multipleActions,
+        ),
+        { model },
+    );
+    return createTypeAgentTranslator<T>(translator);
 }
 
 // For CLI, replicate the behavior of loadAgentJsonTranslator to get the schema

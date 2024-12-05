@@ -19,27 +19,53 @@ export interface StatsResult {
     stdDevScore: number;
 }
 
-function loadActionData(filePath: string): any[] {
-    const rawData = fs.readFileSync(filePath, "utf8").split("\n");
-    let data: any[] = [];
-    rawData.forEach((line, index) => {
-        if (line.trim() !== "") {
-            try {
-                data.push(JSON.parse(line));
-            } catch (error: any) {
-                console.error(`Error parsing JSON on line ${index + 1}:`, line);
-                console.error(`Error details: ${error.message}`);
+export async function loadActionData(filePath: string): Promise<any[]> {
+    const readStream = fs.createReadStream(filePath, { encoding: "utf8" });
+    const results: any[] = [];
+    let leftover = "";
+
+    for await (const chunk of readStream) {
+        const lines = (leftover + chunk).split("\n");
+        leftover = lines.pop()!;
+
+        for (const line of lines) {
+            if (line.trim()) {
+                try {
+                    const item = JSON.parse(line);
+                    results.push({
+                        ...item,
+                        embedding: new Float32Array(item.embedding),
+                        requests: item.requests.map((request: any) => ({
+                            ...request,
+                            embedding: new Float32Array(request.embedding),
+                        })),
+                    });
+                } catch (error: any) {
+                    console.error(`Error parsing line: ${line}`);
+                    console.error(`Error details: ${error.message}`);
+                }
             }
         }
-    });
-    return data.map((item: any) => ({
-        ...item,
-        embedding: new Float32Array(item.embedding),
-        requests: item.requests.map((request: any) => ({
-            ...request,
-            embedding: new Float32Array(request.embedding),
-        })),
-    }));
+    }
+
+    if (leftover.trim()) {
+        try {
+            const item = JSON.parse(leftover);
+            results.push({
+                ...item,
+                embedding: new Float32Array(item.embedding),
+                requests: item.requests.map((request: any) => ({
+                    ...request,
+                    embedding: new Float32Array(request.embedding),
+                })),
+            });
+        } catch (error: any) {
+            console.error(`Error parsing leftover: ${leftover}`);
+            console.error(`Error details: ${error.message}`);
+        }
+    }
+
+    return results;
 }
 
 function calcMean(values: number[]): number {
@@ -253,13 +279,13 @@ export function loadCommentsActionSchema(
     return actionSchemaComments;
 }
 
-export function processActionSchemaAndReqData(
+export async function processActionSchemaAndReqData(
     actionreqEmbeddingsFile: string,
     threshold: number = 0.7,
     statsfile: string,
     zerorankStatsFile: string | undefined,
 ) {
-    const data: any[] = loadActionData(actionreqEmbeddingsFile);
+    const data: any[] = await loadActionData(actionreqEmbeddingsFile);
     const results: any[] = generateStats(data, threshold);
     printDetailedMarkdownTable(
         results,
@@ -268,14 +294,14 @@ export function processActionSchemaAndReqData(
     );
 }
 
-export function processActionReqDataWithComments(
+export async function processActionReqDataWithComments(
     schemaFilePath: string,
     actionreqEmbeddingsFile: string,
     threshold: number = 0.7,
     statsfile: string,
     zerorankStatsFile: string | undefined,
 ) {
-    const data: any[] = loadActionData(actionreqEmbeddingsFile);
+    const data: any[] = await loadActionData(actionreqEmbeddingsFile);
     const results: any[] = generateStats(data, threshold);
     const actionSchemaComments = loadCommentsActionSchema(schemaFilePath);
     printDetailedMarkdownTable(

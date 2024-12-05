@@ -6,7 +6,7 @@ import {
     ActionSchemaFileJSON,
     ActionSchemaTypeDefinition,
     fromJSONActionSchemaFile,
-    parseActionSchemaFile,
+    parseActionSchemaSource,
     toJSONActionSchemaFile,
 } from "action-schema";
 import { ActionConfig, ActionConfigProvider } from "./agentTranslators.js";
@@ -17,8 +17,8 @@ import fs from "node:fs";
 import crypto from "node:crypto";
 import registerDebug from "debug";
 
-const debug = registerDebug("typeagent:schema:cache");
-const debugError = registerDebug("typeagent:schema:cache:error");
+const debug = registerDebug("typeagent:dispatcher:schema:cache");
+const debugError = registerDebug("typeagent:dispatcher:schema:cache:error");
 function hashString(str: string) {
     return crypto.createHash("sha256").update(str).digest("base64");
 }
@@ -42,6 +42,7 @@ export class ActionSchemaFileCache {
                     // We will rewrite it.
                     fs.unlinkSync(cacheFilePath);
                 }
+                debug(`Loaded parsed schema cache: ${cacheFilePath}`);
             } catch (e) {
                 debugError(`Failed to load parsed schema cache: ${e}`);
             }
@@ -79,10 +80,11 @@ export class ActionSchemaFileCache {
             );
         }
 
-        const parsed = parseActionSchemaFile(
-            schemaFileFullPath,
+        const parsed = parseActionSchemaSource(
+            source,
             actionConfig.schemaName,
             actionConfig.schemaType,
+            schemaFileFullPath,
         );
         this.actionSchemaFiles.set(key, parsed);
 

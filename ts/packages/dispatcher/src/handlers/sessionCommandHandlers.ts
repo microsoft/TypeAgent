@@ -27,7 +27,7 @@ import {
     displaySuccess,
     displayWarn,
 } from "@typeagent/agent-sdk/helpers/display";
-import { getToggleHandlerTable } from "./common/commandHandler.js";
+import { getToggleHandlerTable } from "../command/handlerUtils.js";
 import { askYesNoWithContext } from "./common/interactiveIO.js";
 
 class SessionNewCommandHandler implements CommandHandler {

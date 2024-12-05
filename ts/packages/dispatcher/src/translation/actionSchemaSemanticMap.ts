@@ -14,7 +14,6 @@ import {
     TopNCollection,
 } from "typeagent";
 import { TextEmbeddingModel, openai } from "aiclient";
-import { AppAgentManager } from "../handlers/common/appAgentManager.js";
 
 type Entry = {
     embedding: NormalizedEmbedding;
@@ -67,14 +66,14 @@ export class ActionSchemaSementicMap {
 
     public async nearestNeighbors(
         request: string,
-        agents: AppAgentManager,
         maxMatches: number,
+        filter: (schemaName: string) => boolean,
         minScore: number = 0,
     ): Promise<ScoredItem<Entry>[]> {
         const embedding = await generateEmbeddingWithRetry(this.model, request);
         const matches = new TopNCollection<Entry>(maxMatches, {} as Entry);
         for (const entry of this.actionSementicMap.values()) {
-            if (!agents.isSchemaActive(entry.actionSchemaFile.schemaName)) {
+            if (!filter(entry.actionSchemaFile.schemaName)) {
                 continue;
             }
             const score = similarity(

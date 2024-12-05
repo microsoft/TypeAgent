@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { ObjectValue } from "@typeagent/agent-sdk";
-import { parseParams } from "../src/dispatcher/parameters.js";
+import { parseParams } from "../src/command/parameters.js";
 
 describe("Argument parsing", () => {
     const parameters = {
