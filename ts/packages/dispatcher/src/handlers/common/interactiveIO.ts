@@ -3,11 +3,7 @@
 
 import { TemplateEditConfig } from "../../translation/actionTemplate.js";
 import { CommandHandlerContext } from "./commandHandlerContext.js";
-import {
-    AppAgentEvent,
-    DisplayContent,
-    DisplayAppendMode,
-} from "@typeagent/agent-sdk";
+import { DisplayContent, DisplayAppendMode } from "@typeagent/agent-sdk";
 import { RequestMetrics } from "../../utils/metrics.js";
 
 export const DispatcherName = "dispatcher";
