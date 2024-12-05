@@ -39,9 +39,9 @@ import {
     getPrompt,
     processCommandNoLock,
     resolveCommand,
-} from "../dispatcher/command.js";
+} from "../command/command.js";
+import { getHandlerTableUsage, getUsage } from "../command/commandHelp.js";
 import { DisplayCommandHandler } from "../handlers/displayCommandHandler.js";
-import { getHandlerTableUsage, getUsage } from "../dispatcher/commandHelp.js";
 import {
     getActionCompletion,
     getSystemTemplateCompletion,
