@@ -35,6 +35,10 @@ import { BrowserAgentIpc } from "./browserIpc.js";
 import { WebSocketMessage } from "common-utils";
 import { AzureSpeech } from "./azureSpeech.js";
 import { auth } from "aiclient";
+import {
+    closeLocalWhipser,
+    isLocalWhisperEnabled,
+} from "./localWhisperCommandHandler.js";
 
 console.log(auth.AzureTokenScopes.CogServices);
 
@@ -414,10 +418,9 @@ async function getSpeechToken() {
     return speechToken;
 }
 
-async function triggerRecognitionOnce(dispatcher: Dispatcher) {
+async function triggerRecognitionOnce() {
     const speechToken = await getSpeechToken();
-    const useLocalWhisper =
-        typeof dispatcher.getContext().localWhisper !== "undefined";
+    const useLocalWhisper = isLocalWhisperEnabled();
     chatView?.webContents.send(
         "listen-event",
         "Alt+M",
@@ -583,7 +586,7 @@ async function setDynamicDisplay(
     );
 }
 
-async function initializeSpeech(dispatcher: Dispatcher) {
+async function initializeSpeech() {
     const key = process.env["SPEECH_SDK_KEY"];
     const region = process.env["SPEECH_SDK_REGION"];
     const endpoint = process.env["SPEECH_SDK_ENDPOINT"] as string;
@@ -607,7 +610,7 @@ async function initializeSpeech(dispatcher: Dispatcher) {
     }
 
     const ret = globalShortcut.register("Alt+M", () => {
-        triggerRecognitionOnce(dispatcher);
+        triggerRecognitionOnce();
     });
 
     if (ret) {
@@ -623,7 +626,7 @@ async function initializeSpeech(dispatcher: Dispatcher) {
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
-app.whenReady().then(async () => {
+async function initialize() {
     debugShell("Ready", performance.now() - time);
     // Set app user model id for windows
     electronApp.setAppUserModelId("com.electron");
@@ -747,9 +750,9 @@ app.whenReady().then(async () => {
         });
     });
 
-    await initializeSpeech(dispatcher);
+    await initializeSpeech();
     ipcMain.handle("get-localWhisper-status", async () => {
-        return typeof dispatcher.getContext().localWhisper !== "undefined";
+        return isLocalWhisperEnabled();
     });
 
     ipcMain.on("save-settings", (_event, settings: ShellSettings) => {
@@ -797,18 +800,33 @@ app.whenReady().then(async () => {
         // dock icon is clicked and there are no other windows open.
         if (BrowserWindow.getAllWindows().length === 0) createWindow();
     });
-});
+}
+
+app.whenReady()
+    .then(initialize)
+    .catch((error) => {
+        debugShellError(error);
+        console.error(`Error starting shell: ${error.message}`);
+        app.quit();
+    });
 
 function setupQuit(dispatcher: Dispatcher) {
     let quitting = false;
     let canQuit = false;
     async function quit() {
+        quitting = true;
+
         // Unregister all shortcuts.
         globalShortcut.unregisterAll();
 
-        quitting = true;
+        closeLocalWhipser();
+
         debugShell("Closing dispatcher");
-        await dispatcher.close();
+        try {
+            await dispatcher.close();
+        } catch (e) {
+            debugShellError("Error closing dispatcher", e);
+        }
         debugShell("Quitting");
         canQuit = true;
         app.quit();
