@@ -12,6 +12,7 @@ import {
     ActionSchemaTypeDefinition,
     ActionSchemaUnion,
     ActionSchemaGroup,
+    GenerateSchemaOptions,
 } from "action-schema";
 import {
     createJsonTranslatorWithValidator,
@@ -28,8 +29,9 @@ import { getActionSchemaFileForConfig } from "./actionSchemaFileCache.js";
 
 function createActionSchemaJsonValidator<T extends TranslatedAction>(
     actionSchemaGroup: ActionSchemaGroup,
+    generateOptions?: GenerateSchemaOptions,
 ): TypeChatJsonValidator<T> {
-    const schema = generateActionSchema(actionSchemaGroup, { exact: true });
+    const schema = generateActionSchema(actionSchemaGroup, generateOptions);
     return {
         getSchemaText: () => schema,
         getTypeName: () => actionSchemaGroup.entry.name,
@@ -61,8 +63,12 @@ export function createActionJsonTranslatorFromSchemaDef<
     typeName: string,
     actionSchemaGroup: ActionSchemaGroup,
     options?: JsonTranslatorOptions<T>,
+    generateOptions?: GenerateSchemaOptions,
 ) {
-    const validator = createActionSchemaJsonValidator<T>(actionSchemaGroup);
+    const validator = createActionSchemaJsonValidator<T>(
+        actionSchemaGroup,
+        generateOptions,
+    );
 
     return createJsonTranslatorWithValidator(
         typeName.toLowerCase(),
@@ -169,6 +175,45 @@ export function composeActionSchema(
 ) {
     const builder = new ActionSchemaBuilder(provider);
     builder.addActionConfig(provider.getActionConfig(schemaName));
+    return finalizeActionSchemaBuilder(
+        builder,
+        schemaName,
+        provider,
+        activeSchemas,
+        multipleActions,
+        false,
+    );
+}
+
+export function composeSelectedActionSchema(
+    definitions: ActionSchemaTypeDefinition[],
+    schemaName: string,
+    provider: ActionConfigProvider,
+    activeSchemas: { [key: string]: boolean } | undefined,
+    multipleActions: boolean = false,
+) {
+    const builder = new ActionSchemaBuilder(provider);
+    for (const definition of definitions) {
+        builder.addTypeDefinition(definition);
+    }
+    return finalizeActionSchemaBuilder(
+        builder,
+        schemaName,
+        provider,
+        activeSchemas,
+        multipleActions,
+        true,
+    );
+}
+
+function finalizeActionSchemaBuilder(
+    builder: ActionSchemaBuilder,
+    schemaName: string,
+    provider: ActionConfigProvider,
+    activeSchemas: { [key: string]: boolean } | undefined,
+    multipleActions: boolean,
+    partial: boolean,
+) {
     builder.addActionConfig(
         ...getInjectedActionConfigs(schemaName, provider, activeSchemas),
     );
@@ -178,6 +223,7 @@ export function composeActionSchema(
             provider,
             schemaName,
             activeSchemas,
+            partial,
         );
         if (changeAssistantActionSchema) {
             builder.addTypeDefinition(changeAssistantActionSchema);

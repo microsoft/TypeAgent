@@ -4,7 +4,10 @@
 import { ActionManifest, AppAgentManifest } from "@typeagent/agent-sdk";
 import { createRequire } from "module";
 import path from "node:path";
-import { AgentProcess, createAgentProcess } from "./agentProcessShim.js";
+import {
+    AgentProcess,
+    createAgentProcess,
+} from "./process/agentProcessShim.js";
 import { AppAgentProvider } from "./agentProvider.js";
 
 const enum ExecutionMode {

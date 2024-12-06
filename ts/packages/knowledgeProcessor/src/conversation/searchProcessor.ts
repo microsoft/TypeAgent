@@ -515,7 +515,10 @@ export function createSearchProcessor(
         ) {
             const result = await conversation.searchMessages(
                 query,
-                processingOptions,
+                {
+                    // No min score. We already know that the messages are relevant. We are using embeddings to pick the most relevant
+                    maxMatches: processingOptions.maxMessages,
+                },
                 response.messageIds,
             );
             if (result) {

@@ -27,6 +27,7 @@ import {
     loadAgentJsonTranslator,
     ActionConfigProvider,
     TypeAgentTranslator,
+    createTypeAgentTranslatorForSelectedActions,
 } from "../../translation/agentTranslators.js";
 import { getCacheFactory } from "../../utils/cacheFactory.js";
 import { createServiceHost } from "../serviceHost/serviceHostCommandHandler.js";
@@ -45,7 +46,7 @@ import {
     AppAgentManager,
     AppAgentStateOptions,
     SetStateResult,
-} from "./appAgentManager.js";
+} from "../../agent/appAgentManager.js";
 import { loadTranslatorSchemaConfig } from "../../utils/loadSchemaConfig.js";
 import { AppAgentProvider } from "../../agent/agentProvider.js";
 import { RequestMetricsManager } from "../../utils/metrics.js";
@@ -63,6 +64,7 @@ import { getDefaultAppProviders } from "../../utils/defaultAppProviders.js";
 import path from "node:path";
 
 const debug = registerDebug("typeagent:dispatcher:init");
+const debugError = registerDebug("typeagent:dispatcher:init:error");
 
 export interface CommandResult {
     error?: boolean;
@@ -101,7 +103,6 @@ export type CommandHandlerContext = {
     currentScriptDir: string;
     logger?: Logger | undefined;
     serviceHost: ChildProcess | undefined;
-    localWhisper: ChildProcess | undefined;
     requestId?: RequestId;
     chatHistory: ChatHistory;
 
@@ -128,7 +129,7 @@ export function updateCorrectionContext(
     }
 }
 
-export function getTranslator(
+export function getTranslatorForSchema(
     context: CommandHandlerContext,
     translatorName: string,
 ) {
@@ -144,9 +145,43 @@ export function getTranslator(
         config.switch.inline ? getActiveTranslators(context) : undefined,
         config.multipleActions,
         config.schema.generation,
+        !config.schema.optimize.enabled,
     );
     context.translatorCache.set(translatorName, newTranslator);
     return newTranslator;
+}
+
+export async function getTranslatorForSelectedActions(
+    context: CommandHandlerContext,
+    schemaName: string,
+    request: string,
+    numActions: number,
+): Promise<TypeAgentTranslator | undefined> {
+    const actionSchemaFile = context.agents.getActionSchemaFile(schemaName);
+    if (
+        actionSchemaFile === undefined ||
+        actionSchemaFile.actionSchemas.size <= numActions
+    ) {
+        return undefined;
+    }
+    const nearestNeighbors = await context.agents.semanticSearchActionSchema(
+        request,
+        numActions,
+        (name) => name === schemaName,
+    );
+
+    if (nearestNeighbors === undefined) {
+        return undefined;
+    }
+    const config = context.session.getConfig().translation;
+    return createTypeAgentTranslatorForSelectedActions(
+        nearestNeighbors.map((e) => e.item.definition),
+        schemaName,
+        context.agents,
+        config.model,
+        config.switch.inline ? getActiveTranslators(context) : undefined,
+        config.multipleActions,
+    );
 }
 
 async function getAgentCache(
@@ -188,7 +223,7 @@ async function getSession(persistSession: boolean = false) {
         try {
             session = await Session.restoreLastSession();
         } catch (e: any) {
-            console.warn(`WARNING: ${e.message}. Creating new session.`);
+            debugError(`WARNING: ${e.message}. Creating new session.`);
         }
     }
     if (session === undefined) {
@@ -325,8 +360,7 @@ export async function initializeCommandHandlerContext(
         currentScriptDir: process.cwd(),
         chatHistory: createChatHistory(),
         logger,
-        serviceHost: serviceHost,
-        localWhisper: undefined,
+        serviceHost,
         metricsManager: metrics ? new RequestMetricsManager() : undefined,
         batchMode: false,
     };
@@ -424,6 +458,8 @@ export async function closeCommandHandlerContext(
     context: CommandHandlerContext,
 ) {
     context.serviceHost?.kill();
+    // Save the session because the token count is in it.
+    context.session.save();
     await context.agents.close();
 }
 
@@ -466,10 +502,10 @@ export async function changeContextConfig(
         changed.translation?.model !== undefined ||
         changed.translation?.switch?.inline !== undefined ||
         changed.translation?.multipleActions !== undefined ||
-        changed.translation?.schema?.generation !== undefined
+        changed.translation?.schema?.generation !== undefined ||
+        changed.translation?.schema?.optimize?.enabled !== undefined
     ) {
-        // The dynamic schema for change assistant is changed.
-        // Clear the cache to regenerate them.
+        // Schema changed, clear the cache to regenerate them.
         systemContext.translatorCache.clear();
     }
 

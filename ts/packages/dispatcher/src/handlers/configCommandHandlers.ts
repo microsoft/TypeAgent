@@ -4,14 +4,13 @@
 import {
     getToggleCommandHandlers,
     getToggleHandlerTable,
-} from "./common/commandHandler.js";
+} from "../command/handlerUtils.js";
 import {
     CommandHandlerContext,
     changeContextConfig,
 } from "./common/commandHandlerContext.js";
 import { getAppAgentName } from "../translation/agentTranslators.js";
 import { getServiceHostCommandHandlers } from "./serviceHost/serviceHostCommandHandler.js";
-import { getLocalWhisperCommandHandlers } from "./serviceHost/localWhisperCommandHandler.js";
 
 import { simpleStarRegex } from "common-utils";
 import { openai as ai, getChatModelNames } from "aiclient";
@@ -32,10 +31,8 @@ import {
     displayResult,
     displayWarn,
 } from "@typeagent/agent-sdk/helpers/display";
-import { alwaysEnabledAgents } from "./common/appAgentManager.js";
+import { alwaysEnabledAgents } from "../agent/appAgentManager.js";
 import { getCacheFactory } from "../internal.js";
-import { Channel } from "diagnostics_channel";
-import { string } from "../../../actionSchema/dist/creator.js";
 
 const enum AgentToggle {
     Schema,
@@ -519,6 +516,46 @@ class ConfigModelSetCommandHandler implements CommandHandler {
     }
 }
 
+class ConfigTranslationNumberOfInitialActionsCommandHandler
+    implements CommandHandler
+{
+    public readonly description =
+        "Set number of actions to use for initial translation";
+    public readonly parameters = {
+        args: {
+            count: {
+                description: "Number of actions",
+                type: "number",
+            },
+        },
+    } as const;
+    public async run(
+        context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const count = params.args.count;
+        if (count < 0) {
+            throw new Error("Count must be positive interger");
+        }
+        await changeContextConfig(
+            {
+                translation: {
+                    schema: {
+                        optimize: {
+                            numInitialActions: count,
+                        },
+                    },
+                },
+            },
+            context,
+        );
+        displayResult(
+            `Number of actions to use for initial translation is set to ${count}`,
+            context,
+        );
+    }
+}
+
 const configTranslationCommandHandlers: CommandHandlerTable = {
     description: "Translation configuration",
     defaultSubCommand: "on",
@@ -626,6 +663,30 @@ const configTranslationCommandHandlers: CommandHandlerTable = {
                         );
                     },
                 ),
+                optimize: {
+                    description: "Optimize schema",
+                    commands: {
+                        ...getToggleCommandHandlers(
+                            "schema optimization",
+                            async (context, enable) => {
+                                await changeContextConfig(
+                                    {
+                                        translation: {
+                                            schema: {
+                                                optimize: {
+                                                    enabled: enable,
+                                                },
+                                            },
+                                        },
+                                    },
+                                    context,
+                                );
+                            },
+                        ),
+                        actions:
+                            new ConfigTranslationNumberOfInitialActionsCommandHandler(),
+                    },
+                },
             },
         },
     },
@@ -784,7 +845,6 @@ export function getConfigCommandHandlers(): CommandHandlerTable {
                 },
             },
             serviceHost: getServiceHostCommandHandlers(),
-            localWhisper: getLocalWhisperCommandHandlers(),
             dev: getToggleHandlerTable(
                 "development mode",
                 async (context, enable) => {

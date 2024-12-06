@@ -12,7 +12,6 @@ import {
 } from "typeagent";
 import {
     TermMap,
-    TextIndex,
     TextIndexSettings,
     createTermMap,
 } from "../knowledgeIndex.js";
@@ -49,7 +48,7 @@ import { TermFilter } from "./knowledgeTermSearchSchema.js";
 import { toStopDate, toStartDate } from "./knowledgeActions.js";
 import { DateTimeRange } from "./dateTimeSchema.js";
 import { TermFilterV2, ActionTerm } from "./knowledgeTermSearchSchema2.js";
-import { facetToString } from "./entities.js";
+import { EntityNameIndex, facetToString } from "./entities.js";
 import {
     createFileSystemStorageProvider,
     StorageProvider,
@@ -124,7 +123,7 @@ export interface ActionIndex<TActionId = any, TSourceId = any>
 
 export function createActionIndex<TSourceId = any>(
     settings: TextIndexSettings,
-    getNameIndex: () => Promise<TextIndex<string>>,
+    getNameIndex: () => Promise<EntityNameIndex<string>>,
     rootPath: string,
     folderSettings?: ObjectFolderSettings,
     fSys?: FileSystem,
@@ -138,7 +137,7 @@ export function createActionIndex<TSourceId = any>(
 }
 export async function createActionIndexOnStorage<TSourceId = any>(
     settings: TextIndexSettings,
-    getNameIndex: () => Promise<TextIndex<string>>,
+    getEntityNameIndex: () => Promise<EntityNameIndex<string>>,
     rootPath: string,
     storageProvider: StorageProvider,
 ): Promise<ActionIndex<string, TSourceId>> {
@@ -193,7 +192,7 @@ export async function createActionIndexOnStorage<TSourceId = any>(
         id = await actionStore.add(action, id);
         const postings = [id];
 
-        const names = await getNameIndex();
+        const names = await getEntityNameIndex();
         await Promise.all([
             addVerb(action.value, postings),
             addName(
@@ -265,13 +264,13 @@ export async function createActionIndexOnStorage<TSourceId = any>(
     }
 
     async function addName(
-        names: TextIndex<string>,
+        names: EntityNameIndex<string>,
         nameIndex: KeyValueIndex<string, ActionId>,
         name: string,
         actionIds: ActionId[],
     ): Promise<void> {
         if (isValidEntityName(name)) {
-            const nameId = await names.getId(name);
+            const nameId = await names.nameIndex.getId(name);
             if (nameId) {
                 await nameIndex.put(actionIds, nameId);
             }
@@ -291,7 +290,7 @@ export async function createActionIndexOnStorage<TSourceId = any>(
             results.temporalSequence = await matchTimeRange(timeRange);
         }
 
-        const names = await getNameIndex();
+        const entityNames = await getEntityNameIndex();
         const [
             subjectToActionIds,
             objectToActionIds,
@@ -299,15 +298,25 @@ export async function createActionIndexOnStorage<TSourceId = any>(
             termsToActionIds,
             verbToActionIds,
         ] = await Promise.all([
-            matchName(names, subjectIndex, filter.subjectEntityName, options),
-            matchName(names, objectIndex, filter.objectEntityName, options),
             matchName(
-                names,
+                entityNames,
+                subjectIndex,
+                filter.subjectEntityName,
+                options,
+            ),
+            matchName(
+                entityNames,
+                objectIndex,
+                filter.objectEntityName,
+                options,
+            ),
+            matchName(
+                entityNames,
                 indirectObjectIndex,
                 filter.indirectObjectEntityName,
                 options,
             ),
-            matchTerms(names, indirectObjectIndex, otherTerms, options),
+            matchTerms(entityNames, indirectObjectIndex, otherTerms, options),
             matchVerbs(filter, options),
         ]);
         const entityActionIds = intersectUnionMultiple(
@@ -347,16 +356,16 @@ export async function createActionIndexOnStorage<TSourceId = any>(
             results.temporalSequence = await matchTimeRange(filter.timeRange);
         }
 
-        const names = await getNameIndex();
+        const entityNames = await getEntityNameIndex();
         const [
             subjectToActionIds,
             objectToActionIds,
             indirectToObjectIds,
             verbToActionIds,
         ] = await Promise.all([
-            matchTerms(names, subjectIndex, filter.terms, options),
-            matchTerms(names, objectIndex, filter.terms, options),
-            matchTerms(names, indirectObjectIndex, filter.terms, options),
+            matchTerms(entityNames, subjectIndex, filter.terms, options),
+            matchTerms(entityNames, objectIndex, filter.terms, options),
+            matchTerms(entityNames, indirectObjectIndex, filter.terms, options),
             matchVerbTerms(filter.verbs, undefined, options),
         ]);
         results.actionIds = [
@@ -443,17 +452,18 @@ export async function createActionIndexOnStorage<TSourceId = any>(
     }
 
     async function matchName(
-        names: TextIndex<string>,
+        entityNames: EntityNameIndex<string>,
         nameIndex: KeyValueIndex<string, ActionId>,
         name: string | undefined,
         options: ActionSearchOptions,
     ): Promise<IterableIterator<ActionId> | undefined> {
         if (isValidEntityName(name)) {
             // Possible names of entities
-            const nameIds = await names.getNearestText(
+            const nameIds = await entityNames.nameIndex.getNearestText(
                 name!,
                 options.maxMatches,
                 options.minScore,
+                entityNames.nameAliases,
             );
             if (nameIds && nameIds.length > 0) {
                 // Load all actions for those entities
@@ -484,7 +494,7 @@ export async function createActionIndexOnStorage<TSourceId = any>(
     }
 
     async function matchTerms(
-        names: TextIndex<string>,
+        entityNames: EntityNameIndex<string>,
         nameIndex: KeyValueIndex<string, ActionId>,
         terms: string[] | undefined,
         options: ActionSearchOptions,
@@ -495,7 +505,7 @@ export async function createActionIndexOnStorage<TSourceId = any>(
         const matches = await asyncArray.mapAsync(
             terms,
             settings.concurrency,
-            (term) => matchName(names, nameIndex, term, options),
+            (term) => matchName(entityNames, nameIndex, term, options),
         );
         return intersectUnionMultiple(...matches);
     }
@@ -578,7 +588,9 @@ export function actionToString(action: Action): string {
 
     function appendEntityName(text: string, name: string): string {
         if (isValidEntityName(name)) {
-            text += " ";
+            if (text.length > 0) {
+                text += " ";
+            }
             text += name;
         }
         return text;
@@ -595,7 +607,7 @@ export function actionVerbsToString(
     return text;
 }
 
-function actionParamToString(param: string | ActionParam): string {
+export function actionParamToString(param: string | ActionParam): string {
     return typeof param === "string"
         ? param
         : `${param.name}="${knowledgeValueToString(param.value)}"`;

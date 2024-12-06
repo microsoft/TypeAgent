@@ -1,5 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
+import { setFrom } from "../setOperations.js";
 import { NoEntityName } from "./knowledge.js";
 import { ActionTerm, TermFilterV2 } from "./knowledgeTermSearchSchema2.js";
 
@@ -23,6 +24,7 @@ export function getAllTermsInFilter(
         if (filter.searchTerms && filter.searchTerms.length > 0) {
             terms.push(...filter.searchTerms);
         }
+        terms = [...setFrom(terms).values()];
         return terms;
     }
     return filter.searchTerms ?? [];

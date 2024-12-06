@@ -88,7 +88,7 @@ export class RequestMetricsManager {
         return logger.measure(ProfileNames.command, true, requestId);
     }
 
-    public getMetrics(requestId: string): RequestMetrics | undefined {
+    private getReader(requestId: string) {
         const data = this.profileMap.get(requestId);
         if (data === undefined) {
             return undefined;
@@ -97,6 +97,17 @@ export class RequestMetricsManager {
         const entries = logger.getUnreadEntries();
         if (entries !== undefined) {
             reader.addEntries(entries);
+        }
+        return reader;
+    }
+
+    public getMeasures(requestId: string, name: ProfileNames) {
+        return this.getReader(requestId)?.getMeasures(name);
+    }
+    public getMetrics(requestId: string): RequestMetrics | undefined {
+        const reader = this.getReader(requestId);
+        if (reader == undefined) {
+            return undefined;
         }
         const commandMeasures = reader.getMeasures(ProfileNames.command);
         if (commandMeasures === undefined) {
