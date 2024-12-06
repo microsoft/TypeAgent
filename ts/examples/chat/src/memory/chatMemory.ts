@@ -1346,7 +1346,7 @@ export async function runChatMemory(): Promise<void> {
         if (namedArgs.v2) {
             searchOptions.skipEntitySearch = namedArgs.skipEntities;
             searchOptions.skipActionSearch = namedArgs.skipActions;
-            searchOptions.skipTopicSearch = namedArgs.skipTopicSearch;
+            searchOptions.skipTopicSearch = namedArgs.skipTopics;
             result = await searcher.searchTermsV2(
                 query,
                 undefined,
