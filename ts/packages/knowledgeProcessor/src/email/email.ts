@@ -340,7 +340,8 @@ async function setupEmailConversationManager(
     cm.searchProcessor.actions.requestInstructions =
         "The following is a user request about the messages in their email inbox. The email inbox belongs to:\n" +
         JSON.stringify(userProfile, undefined, 2) +
-        "\n";
+        "\n" +
+        "When generating the filter, ignore 'email', 'inbox' and 'message' as noise words\n";
     //"User specific first person pronouns are rewritten to use user's name, but general ones are not.";
 
     cm.searchProcessor.answers.settings.hints =
