@@ -645,12 +645,11 @@ export async function createTopicIndexOnStorage<
                         sourceName,
                         options,
                     );
-                    results.topicIds = [
-                        ...intersect(
-                            results.topicIds,
-                            topicIdsWithSource ? topicIdsWithSource : [],
-                        ),
-                    ];
+                    if (topicIdsWithSource) {
+                        results.topicIds = [
+                            ...intersect(results.topicIds, topicIdsWithSource),
+                        ];
+                    }
                 }
             }
         }
@@ -726,7 +725,8 @@ export async function createTopicIndexOnStorage<
             topicFilter,
             options,
             sourceName,
-            topics !== "*" ? getAllTermsInFilter(filter, false) : undefined,
+            //topics !== "*" ? getAllTermsInFilter(filter, false) : undefined,
+            undefined,
             possibleIds,
         );
     }
