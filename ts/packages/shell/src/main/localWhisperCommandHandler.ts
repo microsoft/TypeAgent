@@ -1,7 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ShellContext } from "./agent.js";
 import { ChildProcessWithoutNullStreams, spawn } from "child_process";
 import { CommandHandlerTable } from "@typeagent/agent-sdk/helpers/command";
 import {
@@ -120,7 +119,7 @@ export function getLocalWhisperCommandHandlers(): CommandHandlerTable {
         commands: {
             off: {
                 description: "Turn off Local Whisper integration",
-                run: async (context: ActionContext<ShellContext>) => {
+                run: async (context: ActionContext) => {
                     // This is process wide
                     if (closeLocalWhipser()) {
                         displayResult("Local Whisper disabled.", context);
@@ -134,7 +133,7 @@ export function getLocalWhisperCommandHandlers(): CommandHandlerTable {
             },
             on: {
                 description: "Turn on Local Whisper integration.",
-                run: async (context: ActionContext<ShellContext>) => {
+                run: async (context: ActionContext) => {
                     if (isLocalWhisperEnabled()) {
                         displayWarn(
                             "Local Whisper is already enabled.",

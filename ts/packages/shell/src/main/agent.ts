@@ -21,7 +21,7 @@ import {
 } from "@typeagent/agent-sdk/helpers/display";
 import { getLocalWhisperCommandHandlers } from "./localWhisperCommandHandler.js";
 
-export type ShellContext = {
+type ShellContext = {
     settings: ShellSettings;
 };
 
