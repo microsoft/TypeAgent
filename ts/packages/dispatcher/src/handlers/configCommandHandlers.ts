@@ -11,7 +11,6 @@ import {
 } from "./common/commandHandlerContext.js";
 import { getAppAgentName } from "../translation/agentTranslators.js";
 import { getServiceHostCommandHandlers } from "./serviceHost/serviceHostCommandHandler.js";
-import { getLocalWhisperCommandHandlers } from "./serviceHost/localWhisperCommandHandler.js";
 
 import { simpleStarRegex } from "common-utils";
 import { openai as ai, getChatModelNames } from "aiclient";
@@ -34,8 +33,6 @@ import {
 } from "@typeagent/agent-sdk/helpers/display";
 import { alwaysEnabledAgents } from "../agent/appAgentManager.js";
 import { getCacheFactory } from "../internal.js";
-import { Channel } from "diagnostics_channel";
-import { string } from "../../../actionSchema/dist/creator.js";
 
 const enum AgentToggle {
     Schema,
@@ -848,7 +845,6 @@ export function getConfigCommandHandlers(): CommandHandlerTable {
                 },
             },
             serviceHost: getServiceHostCommandHandlers(),
-            localWhisper: getLocalWhisperCommandHandlers(),
             dev: getToggleHandlerTable(
                 "development mode",
                 async (context, enable) => {

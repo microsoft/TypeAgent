@@ -64,6 +64,7 @@ import { getDefaultAppProviders } from "../../utils/defaultAppProviders.js";
 import path from "node:path";
 
 const debug = registerDebug("typeagent:dispatcher:init");
+const debugError = registerDebug("typeagent:dispatcher:init:error");
 
 export interface CommandResult {
     error?: boolean;
@@ -102,7 +103,6 @@ export type CommandHandlerContext = {
     currentScriptDir: string;
     logger?: Logger | undefined;
     serviceHost: ChildProcess | undefined;
-    localWhisper: ChildProcess | undefined;
     requestId?: RequestId;
     chatHistory: ChatHistory;
 
@@ -223,7 +223,7 @@ async function getSession(persistSession: boolean = false) {
         try {
             session = await Session.restoreLastSession();
         } catch (e: any) {
-            console.warn(`WARNING: ${e.message}. Creating new session.`);
+            debugError(`WARNING: ${e.message}. Creating new session.`);
         }
     }
     if (session === undefined) {
@@ -360,8 +360,7 @@ export async function initializeCommandHandlerContext(
         currentScriptDir: process.cwd(),
         chatHistory: createChatHistory(),
         logger,
-        serviceHost: serviceHost,
-        localWhisper: undefined,
+        serviceHost,
         metricsManager: metrics ? new RequestMetricsManager() : undefined,
         batchMode: false,
     };

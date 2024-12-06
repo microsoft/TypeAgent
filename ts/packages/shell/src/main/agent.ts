@@ -19,8 +19,9 @@ import {
     displaySuccess,
     displayWarn,
 } from "@typeagent/agent-sdk/helpers/display";
+import { getLocalWhisperCommandHandlers } from "./localWhisperCommandHandler.js";
 
-type ShellContext = {
+export type ShellContext = {
     settings: ShellSettings;
 };
 
@@ -214,14 +215,14 @@ const handlers: CommandHandlerTable = {
         topmost: new ShellSetTopMostCommandHandler(),
         open: new ShellOpenWebContentView(),
         close: new ShellCloseWebContentView(),
+        localWhisper: getLocalWhisperCommandHandlers(),
     },
 };
 
 const agent: AppAgent = {
-    async initializeAgentContext() {
+    async initializeAgentContext(): Promise<ShellContext> {
         return {
             settings: ShellSettings.getinstance(),
-            inlineWindow: undefined,
         };
     },
     ...getCommandInterface(handlers),

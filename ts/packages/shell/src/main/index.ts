@@ -35,6 +35,10 @@ import { BrowserAgentIpc } from "./browserIpc.js";
 import { WebSocketMessage } from "common-utils";
 import { AzureSpeech } from "./azureSpeech.js";
 import { auth } from "aiclient";
+import {
+    closeLocalWhipser,
+    isLocalWhisperEnabled,
+} from "./localWhisperCommandHandler.js";
 
 console.log(auth.AzureTokenScopes.CogServices);
 
@@ -414,10 +418,9 @@ async function getSpeechToken() {
     return speechToken;
 }
 
-async function triggerRecognitionOnce(dispatcher: Dispatcher) {
+async function triggerRecognitionOnce() {
     const speechToken = await getSpeechToken();
-    const useLocalWhisper =
-        typeof dispatcher.getContext().localWhisper !== "undefined";
+    const useLocalWhisper = isLocalWhisperEnabled();
     chatView?.webContents.send(
         "listen-event",
         "Alt+M",
@@ -583,7 +586,7 @@ async function setDynamicDisplay(
     );
 }
 
-async function initializeSpeech(dispatcher: Dispatcher) {
+async function initializeSpeech() {
     const key = process.env["SPEECH_SDK_KEY"];
     const region = process.env["SPEECH_SDK_REGION"];
     const endpoint = process.env["SPEECH_SDK_ENDPOINT"] as string;
@@ -607,7 +610,7 @@ async function initializeSpeech(dispatcher: Dispatcher) {
     }
 
     const ret = globalShortcut.register("Alt+M", () => {
-        triggerRecognitionOnce(dispatcher);
+        triggerRecognitionOnce();
     });
 
     if (ret) {
@@ -623,192 +626,214 @@ async function initializeSpeech(dispatcher: Dispatcher) {
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
-app.whenReady().then(async () => {
-    debugShell("Ready", performance.now() - time);
-    // Set app user model id for windows
-    electronApp.setAppUserModelId("com.electron");
+app.whenReady()
+    .then(async () => {
+        debugShell("Ready", performance.now() - time);
+        // Set app user model id for windows
+        electronApp.setAppUserModelId("com.electron");
 
-    const dispatcher = await createDispatcher("shell", {
-        appAgentProviders: [shellAgentProvider],
-        explanationAsynchronousMode: true,
-        persistSession: true,
-        enableServiceHost: true,
-        metrics: true,
-        clientIO,
-    });
+        const dispatcher = await createDispatcher("shell", {
+            appAgentProviders: [shellAgentProvider],
+            explanationAsynchronousMode: true,
+            persistSession: true,
+            enableServiceHost: true,
+            metrics: true,
+            clientIO,
+        });
 
-    let settingSummary: string = "";
-    async function processShellRequest(
-        text: string,
-        id: string,
-        images: string[],
-    ) {
-        if (typeof text !== "string" || typeof id !== "string") {
-            throw new Error("Invalid request");
+        let settingSummary: string = "";
+        async function processShellRequest(
+            text: string,
+            id: string,
+            images: string[],
+        ) {
+            if (typeof text !== "string" || typeof id !== "string") {
+                throw new Error("Invalid request");
+            }
+            debugShell(dispatcher.getPrompt(), text);
+
+            const metrics = await dispatcher.processCommand(text, id, images);
+            chatView?.webContents.send("send-demo-event", "CommandProcessed");
+            const newSettingSummary = dispatcher.getSettingSummary();
+            if (newSettingSummary !== settingSummary) {
+                settingSummary = newSettingSummary;
+                chatView?.webContents.send(
+                    "setting-summary-changed",
+                    newSettingSummary,
+                    dispatcher.getTranslatorNameToEmojiMap(),
+                );
+
+                mainWindow?.setTitle(
+                    `${newSettingSummary} Zoom: ${Math.round(chatView?.webContents.zoomFactor! * 100)}%`,
+                );
+            }
+
+            return metrics;
         }
-        debugShell(dispatcher.getPrompt(), text);
 
-        const metrics = await dispatcher.processCommand(text, id, images);
-        chatView?.webContents.send("send-demo-event", "CommandProcessed");
-        const newSettingSummary = dispatcher.getSettingSummary();
-        if (newSettingSummary !== settingSummary) {
-            settingSummary = newSettingSummary;
+        if (ShellSettings.getinstance().agentGreeting) {
+            processShellRequest("@greeting", "agent-0", []);
+        }
+
+        ipcMain.on(
+            "process-shell-request",
+            (_event, text: string, id: string, images: string[]) => {
+                processShellRequest(text, id, images)
+                    .then((metrics) =>
+                        chatView?.webContents.send(
+                            "process-shell-request-done",
+                            id,
+                            metrics,
+                        ),
+                    )
+                    .catch((error) => {
+                        chatView?.webContents.send(
+                            "process-shell-request-error",
+                            id,
+                            error.message,
+                        );
+                    });
+            },
+        );
+        ipcMain.handle(
+            "getCommandCompletion",
+            async (_event, prefix: string) => {
+                return dispatcher.getCommandCompletion(prefix);
+            },
+        );
+        ipcMain.handle(
+            "getTemplateCompletion",
+            async (
+                _event,
+                templateAgentName: string,
+                templateName: string,
+                data: unknown,
+                propertyName: string,
+            ) => {
+                return dispatcher.getTemplateCompletion(
+                    templateAgentName,
+                    templateName,
+                    data,
+                    propertyName,
+                );
+            },
+        );
+        ipcMain.handle(
+            "get-dynamic-display",
+            async (_event, appAgentName, id) =>
+                dispatcher.getDynamicDisplay(appAgentName, "html", id),
+        );
+        ipcMain.handle(
+            "get-template-schema",
+            async (_event, templateAgentName, templateName, data) => {
+                return dispatcher.getTemplateSchema(
+                    templateAgentName,
+                    templateName,
+                    data,
+                );
+            },
+        );
+        ipcMain.on("dom ready", async () => {
+            settingSummary = dispatcher.getSettingSummary();
             chatView?.webContents.send(
                 "setting-summary-changed",
-                newSettingSummary,
+                settingSummary,
                 dispatcher.getTranslatorNameToEmojiMap(),
             );
 
             mainWindow?.setTitle(
-                `${newSettingSummary} Zoom: ${Math.round(chatView?.webContents.zoomFactor! * 100)}%`,
+                `${settingSummary} Zoom: ${Math.round(chatView?.webContents.zoomFactor! * 100)}%`,
             );
-        }
+            mainWindow?.show();
 
-        return metrics;
-    }
+            // Send settings asap
+            ShellSettings.getinstance().onSettingsChanged!();
 
-    if (ShellSettings.getinstance().agentGreeting) {
-        processShellRequest("@greeting", "agent-0", []);
-    }
-
-    ipcMain.on(
-        "process-shell-request",
-        (_event, text: string, id: string, images: string[]) => {
-            processShellRequest(text, id, images)
-                .then((metrics) =>
-                    chatView?.webContents.send(
-                        "process-shell-request-done",
-                        id,
-                        metrics,
-                    ),
-                )
-                .catch((error) => {
-                    chatView?.webContents.send(
-                        "process-shell-request-error",
-                        id,
-                        error.message,
-                    );
-                });
-        },
-    );
-    ipcMain.handle("getCommandCompletion", async (_event, prefix: string) => {
-        return dispatcher.getCommandCompletion(prefix);
-    });
-    ipcMain.handle(
-        "getTemplateCompletion",
-        async (
-            _event,
-            templateAgentName: string,
-            templateName: string,
-            data: unknown,
-            propertyName: string,
-        ) => {
-            return dispatcher.getTemplateCompletion(
-                templateAgentName,
-                templateName,
-                data,
-                propertyName,
-            );
-        },
-    );
-    ipcMain.handle("get-dynamic-display", async (_event, appAgentName, id) =>
-        dispatcher.getDynamicDisplay(appAgentName, "html", id),
-    );
-    ipcMain.handle(
-        "get-template-schema",
-        async (_event, templateAgentName, templateName, data) => {
-            return dispatcher.getTemplateSchema(
-                templateAgentName,
-                templateName,
-                data,
-            );
-        },
-    );
-    ipcMain.on("dom ready", async () => {
-        settingSummary = dispatcher.getSettingSummary();
-        chatView?.webContents.send(
-            "setting-summary-changed",
-            settingSummary,
-            dispatcher.getTranslatorNameToEmojiMap(),
-        );
-
-        mainWindow?.setTitle(
-            `${settingSummary} Zoom: ${Math.round(chatView?.webContents.zoomFactor! * 100)}%`,
-        );
-        mainWindow?.show();
-
-        // Send settings asap
-        ShellSettings.getinstance().onSettingsChanged!();
-
-        // make sure links are opened in the external browser
-        mainWindow?.webContents.setWindowOpenHandler((details) => {
-            require("electron").shell.openExternal(details.url);
-            return { action: "deny" };
+            // make sure links are opened in the external browser
+            mainWindow?.webContents.setWindowOpenHandler((details) => {
+                require("electron").shell.openExternal(details.url);
+                return { action: "deny" };
+            });
         });
-    });
 
-    await initializeSpeech(dispatcher);
-    ipcMain.handle("get-localWhisper-status", async () => {
-        return typeof dispatcher.getContext().localWhisper !== "undefined";
-    });
-
-    ipcMain.on("save-settings", (_event, settings: ShellSettings) => {
-        // Save the shell configurable settings
-        ShellSettings.getinstance().microphoneId = settings.microphoneId;
-        ShellSettings.getinstance().microphoneName = settings.microphoneName;
-        ShellSettings.getinstance().tts = settings.tts;
-        ShellSettings.getinstance().ttsSettings = settings.ttsSettings;
-        ShellSettings.getinstance().agentGreeting = settings.agentGreeting;
-        ShellSettings.getinstance().partialCompletion =
-            settings.partialCompletion;
-        ShellSettings.getinstance().save();
-    });
-
-    ipcMain.on(
-        "send-to-browser-ipc",
-        async (_event, data: WebSocketMessage) => {
-            await BrowserAgentIpc.getinstance().send(data);
-        },
-    );
-    globalShortcut.register("Alt+Right", () => {
-        chatView?.webContents.send("send-demo-event", "Alt+Right");
-    });
-
-    setupQuit(dispatcher);
-
-    // Default open or close DevTools by F12 in development
-    // and ignore CommandOrControl + R in production.
-    // see https://github.com/alex8088/electron-toolkit/tree/master/packages/utils
-    app.on("browser-window-created", async (_, window) => {
-        optimizer.watchWindowShortcuts(window);
-        const browserExtensionPath = join(
-            app.getAppPath(),
-            "../agents/browser/dist/electron",
-        );
-        await window.webContents.session.loadExtension(browserExtensionPath, {
-            allowFileAccess: true,
+        await initializeSpeech();
+        ipcMain.handle("get-localWhisper-status", async () => {
+            return isLocalWhisperEnabled();
         });
-    });
 
-    createWindow();
+        ipcMain.on("save-settings", (_event, settings: ShellSettings) => {
+            // Save the shell configurable settings
+            ShellSettings.getinstance().microphoneId = settings.microphoneId;
+            ShellSettings.getinstance().microphoneName =
+                settings.microphoneName;
+            ShellSettings.getinstance().tts = settings.tts;
+            ShellSettings.getinstance().ttsSettings = settings.ttsSettings;
+            ShellSettings.getinstance().agentGreeting = settings.agentGreeting;
+            ShellSettings.getinstance().partialCompletion =
+                settings.partialCompletion;
+            ShellSettings.getinstance().save();
+        });
 
-    app.on("activate", function () {
-        // On macOS it's common to re-create a window in the app when the
-        // dock icon is clicked and there are no other windows open.
-        if (BrowserWindow.getAllWindows().length === 0) createWindow();
+        ipcMain.on(
+            "send-to-browser-ipc",
+            async (_event, data: WebSocketMessage) => {
+                await BrowserAgentIpc.getinstance().send(data);
+            },
+        );
+        globalShortcut.register("Alt+Right", () => {
+            chatView?.webContents.send("send-demo-event", "Alt+Right");
+        });
+
+        setupQuit(dispatcher);
+
+        // Default open or close DevTools by F12 in development
+        // and ignore CommandOrControl + R in production.
+        // see https://github.com/alex8088/electron-toolkit/tree/master/packages/utils
+        app.on("browser-window-created", async (_, window) => {
+            optimizer.watchWindowShortcuts(window);
+            const browserExtensionPath = join(
+                app.getAppPath(),
+                "../agents/browser/dist/electron",
+            );
+            await window.webContents.session.loadExtension(
+                browserExtensionPath,
+                {
+                    allowFileAccess: true,
+                },
+            );
+        });
+
+        createWindow();
+
+        app.on("activate", function () {
+            // On macOS it's common to re-create a window in the app when the
+            // dock icon is clicked and there are no other windows open.
+            if (BrowserWindow.getAllWindows().length === 0) createWindow();
+        });
+    })
+    .catch((error) => {
+        debugShellError(error);
+        console.error(`Error starting shell: ${error.message}`);
+        app.quit();
     });
-});
 
 function setupQuit(dispatcher: Dispatcher) {
     let quitting = false;
     let canQuit = false;
     async function quit() {
+        quitting = true;
+
         // Unregister all shortcuts.
         globalShortcut.unregisterAll();
 
-        quitting = true;
+        closeLocalWhipser();
+
         debugShell("Closing dispatcher");
-        await dispatcher.close();
+        try {
+            await dispatcher.close();
+        } catch (e) {
+            debugShellError("Error closing dispatcher", e);
+        }
         debugShell("Quitting");
         canQuit = true;
         app.quit();
