@@ -565,6 +565,7 @@ export function createSearchProcessor(
     ) {
         const sResult = await conversation.searchMessages(query, options);
         if (sResult) {
+            response.fallbackUsed = true;
             response.messageIds = sResult.messageIds;
             response.messages = sResult.messages;
             response.answer = await answers.generateAnswer(

@@ -1389,7 +1389,10 @@ export async function runChatMemory(): Promise<void> {
             writeResultStats(result.response);
             if (result.response.answer.answer) {
                 const answer = result.response.answer.answer;
-                printer.writeInColor(chalk.green, answer);
+                printer.writeInColor(
+                    result.response.fallbackUsed ? chalk.gray : chalk.green,
+                    answer,
+                );
             } else if (result.response.answer.whyNoAnswer) {
                 const answer = result.response.answer.whyNoAnswer;
                 printer.writeInColor(chalk.red, answer);

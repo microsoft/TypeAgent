@@ -633,7 +633,7 @@ export async function createTextIndex<
         value: string,
         minScore?: number,
     ): Promise<TextId | undefined> {
-        const match = await getNearestTextIdScored(value, minScore);
+        const match = await getNearestTextIdWithScore(value, minScore);
         return match ? match.item : undefined;
     }
 
@@ -695,17 +695,17 @@ export async function createTextIndex<
         }
         let matchedAliasIds: ScoredItem<TextId>[] | undefined;
         if (aliases) {
-            matchedAliasIds = await getTextIdsByAliasScored(value, aliases);
+            matchedAliasIds = await getTextIdsByAliasWithScore(value, aliases);
         }
         let nearestIds: ScoredItem<TextId>[] | undefined;
         if (maxMatches > 1) {
-            nearestIds = await getNearestTextIdsScored(
+            nearestIds = await getNearestTextIdsWithScore(
                 value,
                 maxMatches,
                 minScore,
             );
         } else if (!exactId) {
-            const nearestId = await getNearestTextIdScored(value, minScore);
+            const nearestId = await getNearestTextIdWithScore(value, minScore);
             if (nearestId) {
                 nearestIds = [nearestId];
             }
@@ -731,7 +731,13 @@ export async function createTextIndex<
         return undefined;
     }
 
-    async function getTextIdsByAliasScored(
+    /**
+     * Returns textIds of matching aliases, SORTED BY textId
+     * @param value
+     * @param aliases
+     * @returns
+     */
+    async function getTextIdsByAliasWithScore(
         value: string,
         aliases: knowLib.TextMatcher<TTextId>,
     ): Promise<ScoredItem<TextId>[] | undefined> {
@@ -752,7 +758,7 @@ export async function createTextIndex<
         maxMatches: number,
         minScore?: number,
     ): Promise<TextId[] | undefined> {
-        const scoredTextIds = await getNearestTextIdsScored(
+        const scoredTextIds = await getNearestTextIdsWithScore(
             value,
             maxMatches,
             minScore,
@@ -762,7 +768,7 @@ export async function createTextIndex<
             : undefined;
     }
 
-    async function getNearestTextIdScored(
+    async function getNearestTextIdWithScore(
         value: string,
         minScore?: number,
     ): Promise<ScoredItem<TextId> | undefined> {
@@ -771,13 +777,27 @@ export async function createTextIndex<
             : undefined;
     }
 
-    async function getNearestTextIdsScored(
+    /**
+     * Returns Ids with scores for each Id
+     * SORTED BY Ids, not by scores
+     * @param value
+     * @param maxMatches
+     * @param minScore
+     * @returns
+     */
+    async function getNearestTextIdsWithScore(
         value: string,
         maxMatches: number,
         minScore?: number,
     ): Promise<ScoredItem<TextId>[] | undefined> {
         return semanticIndex
-            ? semanticIndex.nearestNeighbors(value, maxMatches, minScore)
+            ? sortScoredItems(
+                  await semanticIndex.nearestNeighbors(
+                      value,
+                      maxMatches,
+                      minScore,
+                  ),
+              )
             : undefined;
     }
 
@@ -794,5 +814,10 @@ export async function createTextIndex<
             });
         }
         return items;
+    }
+
+    function sortScoredItems(matches: ScoredItem[]): ScoredItem[] {
+        matches.sort((x, y) => x.item - y.item);
+        return matches;
     }
 }
