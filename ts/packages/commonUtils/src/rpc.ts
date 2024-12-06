@@ -14,7 +14,7 @@ export type Transport<T = any> = {
     once(event: "disconnect", cb: () => void): void;
     off(event: "message", cb: (message: Partial<T>) => void): void;
     off(event: "disconnect", cb: () => void): void;
-    send(message: T): void;
+    send(message: T, cb?: (err: Error | null) => void): void;
 };
 
 type RpcFuncType<
@@ -112,11 +112,21 @@ export function createRpc<
     };
     transport.on("message", cb);
     transport.once("disconnect", () => {
+        debugError("disconnect");
         transport.off("message", cb);
+        const errorFunc = () => {
+            throw new Error("Agent process disconnected");
+        };
+        for (const r of pending.values()) {
+            r.reject(new Error("Agent process disconnected"));
+        }
+        pending.clear();
+        rpc.invoke = errorFunc;
+        rpc.send = errorFunc;
     });
 
     let nextCallId = 0;
-    return <any>{
+    const rpc = {
         invoke: async function <P, T>(
             name: keyof InvokeTargetFunctions,
             param: P,
@@ -127,9 +137,14 @@ export function createRpc<
                 name,
                 param,
             };
+
             return new Promise<T>((resolve, reject) => {
+                transport.send!(message, (err) => {
+                    if (err !== null) {
+                        reject(err);
+                    }
+                });
                 pending.set(message.callId, { resolve, reject });
-                transport.send!(message);
             });
         },
         send: <P>(name: keyof CallTargetFunctions, param?: P) => {
@@ -141,7 +156,8 @@ export function createRpc<
             };
             transport.send!(message);
         },
-    };
+    } as RpcReturn<InvokeTargetFunctions, CallTargetFunctions>;
+    return rpc;
 }
 
 function isCallMessage(message: any): message is CallMessage {

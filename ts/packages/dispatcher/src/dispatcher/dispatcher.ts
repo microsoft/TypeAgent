@@ -56,9 +56,6 @@ export interface Dispatcher {
     getPrompt(): string;
     getSettingSummary(): string;
     getTranslatorNameToEmojiMap(): Map<string, string>;
-
-    // TODO: Remove access to context
-    getContext(): CommandHandlerContext;
 }
 
 async function getDynamicDisplay(
@@ -163,9 +160,6 @@ export async function createDispatcher(
         },
         getTranslatorNameToEmojiMap() {
             return getTranslatorNameToEmojiMap(context);
-        },
-        getContext() {
-            return context;
         },
     };
 }
