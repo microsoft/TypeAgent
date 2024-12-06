@@ -123,6 +123,8 @@ export function createModels(): Models {
         ),
         */
     };
+    models.chatModel.completionSettings.seed = 123;
+    models.answerModel.completionSettings.seed = 123;
     return models;
 }
 
