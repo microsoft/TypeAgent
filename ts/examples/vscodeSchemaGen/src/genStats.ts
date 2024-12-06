@@ -5,6 +5,7 @@ import * as fs from "fs";
 import chalk from "chalk";
 import { similarity, SimilarityType } from "typeagent";
 import { SymbolNode, SchemaParser } from "action-schema";
+import { distance } from "fastest-levenshtein";
 
 export interface StatsResult {
     request: string;
@@ -13,6 +14,7 @@ export interface StatsResult {
     recall?: number;
     rank: number;
     rankActualAction: number;
+    scoreActualAction: number;
     top10Matches: { actionName: string; score: number }[];
     meanScore: number;
     medianScore: number;
@@ -87,6 +89,16 @@ function calcStdDeviation(values: number[]): number {
     return Math.sqrt(avgSquaredDiff);
 }
 
+function calcLevenshteinSimilarity(request: string, action: string): number {
+    const maxLength = Math.max(request.length, action.length);
+    if (maxLength === 0) return 1;
+    const levenshteinDistance = distance(
+        request.toLowerCase(),
+        action.toLowerCase(),
+    );
+    return 1 - levenshteinDistance / maxLength;
+}
+
 export function generateStats(data: any[], threshold: number = 0.7) {
     const allRequests = data.flatMap((action) =>
         action.requests.map((request: any) => ({
@@ -128,6 +140,13 @@ export function generateStats(data: any[], threshold: number = 0.7) {
                 (match) => match.actionName === actualActionName,
             ) + 1;
 
+        const actualActionMatch = allMatches.find(
+            (match) => match.actionName === actualActionName,
+        );
+        const scoreActualAction = actualActionMatch
+            ? actualActionMatch.score
+            : -1;
+
         const top10Matches = allMatches.slice(0, 10);
         const rank =
             rankActualAction <= 10
@@ -145,6 +164,7 @@ export function generateStats(data: any[], threshold: number = 0.7) {
             actualActionName,
             rank,
             rankActualAction,
+            scoreActualAction,
             top10Matches,
             meanScore,
             medianScore,
@@ -163,18 +183,18 @@ export function printDetailedMarkdownTable(
 ) {
     console.log(chalk.bold("\n## Results for User Request Matches\n"));
     console.log(
-        "| Request                            | Actual Action            | Rank | Mean Score | Median Score | Std Dev | Top Matches (Similarity)                                        |",
+        "| Request                            | Actual Action            | Actual Rank | Lev Score | Mean Score | Median Score | Std Dev | Top Matches (Similarity)                                        |",
     );
     console.log(
-        "|------------------------------------|--------------------------|------|------------|--------------|---------|-----------------------------------------------------------------|",
+        "|------------------------------------|--------------------------|-------------|-----------|--------------|---------|-----------------------------------------------------------------|",
     );
 
     let csvContent =
-        "Request,Actual Action,Actual Rank,Top 10 Rank,Mean Score,Median Score,Std Dev,Top Matches\n";
+        "Request,Actual Action,Actual Rank,Top 10 Rank,Actual Action Score,Lev Score,Mean Score,Median Score,Std Dev,Top Matches\n";
     fs.writeFileSync(statsfile, csvContent);
 
     let csvZeroRankContent =
-        "Request,Actual Action,Actual Rank,Comments,Mean Score,Median Score,Std Dev,Top Matches\n";
+        "Request,Actual Action,Actual Rank,Actual Action Score,Lev Score,Comments,Mean Score,Median Score,Std Dev,Top Matches\n";
 
     if (zerorankStatsFile !== undefined) {
         fs.writeFileSync(zerorankStatsFile, csvZeroRankContent);
@@ -187,15 +207,20 @@ export function printDetailedMarkdownTable(
             rank,
             rankActualAction,
             top10Matches,
+            scoreActualAction,
             meanScore,
             medianScore,
             stdDevScore,
         } = result;
 
+        const levScore = calcLevenshteinSimilarity(
+            request,
+            actualActionName,
+        ).toFixed(2);
         const topMatches = top10Matches
             .map(
                 (match: any) =>
-                    `${match.actionName} (${match.score.toFixed(2)})`,
+                    `${match.actionName} (${match.score.toFixed(2)},${calcLevenshteinSimilarity(request, match.actionName).toFixed(2)})`,
             )
             .join(", ");
 
@@ -214,9 +239,9 @@ export function printDetailedMarkdownTable(
 
         if (rank > 0) {
             console.log(res);
-            csvContent += `"${request}",${actualActionName},${rankActualAction.toFixed(2)},${rank.toFixed(2)},${meanScore.toFixed(2)},${medianScore.toFixed(2)},${stdDevScore.toFixed(2)},"${topMatches}"\n`;
+            csvContent += `"${request}",${actualActionName},${rankActualAction.toFixed(2)},${rank.toFixed(2)},${scoreActualAction},${levScore},${meanScore.toFixed(2)},${medianScore.toFixed(2)},${stdDevScore.toFixed(2)},"${topMatches}"\n`;
         } else {
-            csvZeroRankContent += `"${request}",${actualActionName},${rankActualAction.toFixed(2)},${
+            csvZeroRankContent += `"${request}",${actualActionName},${rankActualAction.toFixed(2)},${scoreActualAction},${levScore},${
                 comments.length > 0 ? `"${comments}"` : ""
             },${meanScore.toFixed(2)},${medianScore.toFixed(2)},${stdDevScore.toFixed(2)},"${topMatches}"\n`;
             console.log(`${chalk.red("**")} + ${res}`);
