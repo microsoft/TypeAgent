@@ -12,6 +12,9 @@ import {
 import { fileURLToPath } from "node:url";
 import { generateActionSchema } from "../src/generator.js";
 
+import prettier from "prettier";
+import { SchemaConfig } from "../src/schemaConfig.js";
+
 const dispatcherPath = fileURLToPath(
     new URL("../../../dispatcher", import.meta.url),
 );
@@ -20,6 +23,7 @@ const config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
 
 const tests: {
     source: string;
+    schemaConfig: SchemaConfig | undefined;
     schemaName: string;
     fileName: string;
     typeName: string;
@@ -37,8 +41,13 @@ function addTest(schemaName: string, config: Config, dir: string) {
     const schema = config.schema;
     if (schema) {
         const fileName = path.resolve(dir, schema.schemaFile);
+        const schemaConfigFileName = fileName.replace(/\.ts$/, ".json");
+        const schemaConfig = fs.existsSync(schemaConfigFileName)
+            ? JSON.parse(fs.readFileSync(schemaConfigFileName, "utf-8"))
+            : undefined;
         tests.push({
             source: fs.readFileSync(fileName, "utf-8"),
+            schemaConfig,
             schemaName,
             fileName,
             typeName: schema.schemaType,
@@ -63,7 +72,6 @@ for (const [name, entry] of Object.entries(config.agents) as [string, any][]) {
     addTest(name, manifest, manifestDir);
 }
 
-import prettier from "prettier";
 async function compare(original: string, regenerated: string) {
     // Remove original copy right.
     const lines = original.split("\n");
@@ -88,12 +96,13 @@ describe("Action Schema Regeneration", () => {
     //
     it.skip.each(tests)(
         "should regenerate $schemaName",
-        async ({ source, schemaName, fileName, typeName }) => {
+        async ({ source, schemaName, fileName, typeName, schemaConfig }) => {
             const actionSchemaFile = parseActionSchemaSource(
                 source,
                 schemaName,
                 typeName,
                 fileName,
+                schemaConfig,
                 true,
             );
             const regenerated = await generateActionSchema(actionSchemaFile, {

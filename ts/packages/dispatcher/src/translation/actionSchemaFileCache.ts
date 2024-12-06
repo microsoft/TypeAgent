@@ -7,6 +7,7 @@ import {
     ActionSchemaTypeDefinition,
     fromJSONActionSchemaFile,
     parseActionSchemaSource,
+    SchemaConfig,
     toJSONActionSchemaFile,
 } from "action-schema";
 import { ActionConfig, ActionConfigProvider } from "./agentTranslators.js";
@@ -16,11 +17,16 @@ import { DeepPartialUndefined } from "common-utils";
 import fs from "node:fs";
 import crypto from "node:crypto";
 import registerDebug from "debug";
+import { readSchemaConfig } from "../utils/loadSchemaConfig.js";
 
 const debug = registerDebug("typeagent:dispatcher:schema:cache");
 const debugError = registerDebug("typeagent:dispatcher:schema:cache:error");
-function hashString(str: string) {
-    return crypto.createHash("sha256").update(str).digest("base64");
+function hashStrings(...str: string[]) {
+    const hash = crypto.createHash("sha256");
+    for (const s of str) {
+        hash.update(s);
+    }
+    return hash.digest("base64");
 }
 
 type CacheEntry = {
@@ -59,7 +65,9 @@ export class ActionSchemaFileCache {
 
         const schemaFileFullPath = getPackageFilePath(actionConfig.schemaFile);
         const source = fs.readFileSync(schemaFileFullPath, "utf-8");
-        const hash = hashString(source);
+        const config = readSchemaConfig(schemaFileFullPath);
+
+        const hash = config ? hashStrings(source, config) : hashStrings(source);
         const key = `${actionConfig.schemaName}|${actionConfig.schemaType}|${schemaFileFullPath}`;
 
         const lastCached = this.prevSaved.get(key);
@@ -80,11 +88,15 @@ export class ActionSchemaFileCache {
             );
         }
 
+        const schemaConfig: SchemaConfig | undefined = config
+            ? JSON.parse(config)
+            : undefined;
         const parsed = parseActionSchemaSource(
             source,
             actionConfig.schemaName,
             actionConfig.schemaType,
             schemaFileFullPath,
+            schemaConfig,
         );
         this.actionSchemaFiles.set(key, parsed);
 

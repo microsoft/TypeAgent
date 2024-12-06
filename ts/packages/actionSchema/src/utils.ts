@@ -3,7 +3,7 @@
 
 import { SchemaType, ActionSchemaTypeDefinition } from "./type.js";
 
-function resolveReference(type?: SchemaType): SchemaType | undefined {
+export function resolveReference(type?: SchemaType): SchemaType | undefined {
     if (type === undefined) {
         return undefined;
     }

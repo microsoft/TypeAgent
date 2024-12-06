@@ -12,7 +12,8 @@
       "body": "wildcard"
     },
     "findEmail": {
-      "searchText": "wildcard"
+      "messageRef.subject": "wildcard",
+      "messageRef.content": "wildcard"
     }
   }
 }

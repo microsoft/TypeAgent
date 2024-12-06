@@ -44,9 +44,9 @@ import {
     getParamSpec,
     getParamRange,
     SchemaConfigProvider,
-    ParamSpec,
     getNamespaceForCache,
 } from "../schemaConfig.js";
+import { ParamSpec } from "action-schema";
 import { openai } from "aiclient";
 import {
     PropertyExplainer,

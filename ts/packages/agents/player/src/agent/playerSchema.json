@@ -13,7 +13,7 @@
     "playAlbum": {
       "albumName": "checked_wildcard",
       "artists.*": "checked_wildcard",
-      "trackNumber": "ordinal"
+      "trackNumber.*": "ordinal"
     },
     "playAlbumTrack": {
       "albumName": "checked_wildcard",
@@ -21,7 +21,7 @@
       "artists.*": "checked_wildcard"
     },
     "playArtist": {
-      "artistName": "checked_wildcard",
+      "artist": "checked_wildcard",
       "quantity": "number"
     },
     "playGenre": {

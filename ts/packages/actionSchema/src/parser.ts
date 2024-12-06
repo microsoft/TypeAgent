@@ -14,13 +14,107 @@ import {
     ActionSchemaTypeDefinition,
     ActionSchemaFile,
     ActionSchemaEntryTypeDefinition,
+    SchemaObjectField,
 } from "./type.js";
-
+import ts from "typescript";
+import { ActionParamSpecs, SchemaConfig } from "./schemaConfig.js";
+import { resolveReference } from "./utils.js";
 import registerDebug from "debug";
 const debug = registerDebug("typeagent:schema:parse");
 
+function checkParamSpecs(
+    paramSpecs: ActionParamSpecs,
+    parameterType: SchemaTypeObject<SchemaObjectFields>,
+    actionName: string,
+) {
+    for (const [propertyName, spec] of Object.entries(paramSpecs)) {
+        const properties = propertyName.split(".");
+        let currentType: SchemaType = parameterType;
+        for (const name of properties) {
+            if (
+                name === "__proto__" ||
+                name === "constructor" ||
+                name === "prototype"
+            ) {
+                throw new Error(
+                    `Schema Config Error:Invalid parameter name '${propertyName}' for action '${actionName}': Illegal parameter property name '${name}'`,
+                );
+            }
+            const maybeIndex = parseInt(name);
+            if (maybeIndex.toString() === name) {
+                throw new Error(
+                    `Schema Config Error: Invalid parameter name '${propertyName}' for action '${actionName}': paramSpec cannot be applied to specific array index ${maybeIndex}`,
+                );
+            }
+            if (name === "*") {
+                if (currentType.type !== "array") {
+                    throw new Error(
+                        `Schema Config Error: Invalid parameter name '${propertyName}' for action '${actionName}': '*' is only allowed for array types`,
+                    );
+                }
+                currentType = currentType.elementType;
+                continue;
+            }
+            if (currentType.type !== "object") {
+                throw new Error(
+                    `Schema Config Error: Invalid parameter name '${propertyName}' for action '${actionName}': Access property '${name}' of non-object`,
+                );
+            }
+            const field: SchemaObjectField | undefined =
+                currentType.fields[name];
+            if (field === undefined) {
+                throw new Error(
+                    `Schema Config Error: Invalid parameter name '${propertyName}' for action '${actionName}': property '${name}' does not exist`,
+                );
+            }
+            const resolvedType = resolveReference(field.type);
+            if (resolvedType === undefined) {
+                throw new Error(
+                    `Schema Config Error: Invalid parameter name '${propertyName}' for action '${actionName}': unresolved type reference for property '${name}'`,
+                );
+            }
+            currentType = resolvedType;
+        }
+        switch (spec) {
+            case "wildcard":
+            case "checked_wildcard":
+            case "time":
+                if (currentType.type !== "string") {
+                    throw new Error(
+                        `Schema Config Error: Parameter '${propertyName}' for action '${actionName}' has invalid type '${currentType.type}' for paramSpec '${spec}'. `,
+                    );
+                }
+                break;
+            case "literal":
+                if (
+                    currentType.type !== "string" &&
+                    currentType.type !== "string-union"
+                ) {
+                    throw new Error(
+                        `Schema Config Error: Parameter '${propertyName}' for action '${actionName}' has invalid type '${currentType.type}' for paramSpec '${spec}'. `,
+                    );
+                }
+                break;
+            case "number":
+            case "percentage":
+            case "ordinal":
+                if (currentType.type !== "number") {
+                    throw new Error(
+                        `Schema Config Error: Parameter '${propertyName}' for action '${actionName}' has invalid type '${currentType.type}' for paramSpec '${spec}'. `,
+                    );
+                }
+                break;
+            default:
+                throw new Error(
+                    `Schema Config Error: Parameter '${propertyName}' for action '${actionName}' has unknown paramSpec '${spec}'. `,
+                );
+        }
+    }
+}
+
 function checkActionSchema(
     definition: SchemaTypeDefinition,
+    schemaConfig: SchemaConfig | undefined,
 ): [string, ActionSchemaTypeDefinition] {
     const name = definition.name;
     if (definition.type.type !== "object") {
@@ -49,6 +143,7 @@ function checkActionSchema(
         );
     }
 
+    const actionNameString = actionName.type.typeEnum[0];
     const parameterFieldType = parameters?.type;
     if (
         parameterFieldType !== undefined &&
@@ -58,10 +153,17 @@ function checkActionSchema(
             `Schema Error: parameters field must be an object in action schema type ${name}`,
         );
     }
-    return [
-        actionName.type.typeEnum[0],
-        definition as ActionSchemaTypeDefinition,
-    ];
+
+    const actionDefinition = definition as ActionSchemaTypeDefinition;
+
+    const paramSpecs = schemaConfig?.paramSpec?.[actionNameString];
+    if (paramSpecs !== undefined) {
+        if (paramSpecs !== false) {
+            checkParamSpecs(paramSpecs, parameterFieldType, actionNameString);
+        }
+        actionDefinition.paramSpecs = paramSpecs;
+    }
+    return [actionNameString, actionDefinition];
 }
 
 export function createActionSchemaFile(
@@ -69,6 +171,7 @@ export function createActionSchemaFile(
     entry: SchemaTypeDefinition,
     order: Map<string, number> | undefined,
     strict: boolean,
+    schemaConfig?: SchemaConfig,
 ): ActionSchemaFile {
     if (strict && !entry.exported) {
         throw new Error(
@@ -82,7 +185,10 @@ export function createActionSchemaFile(
         const current = pending.shift()!;
         switch (current.type.type) {
             case "object":
-                const [actionName, actionSchema] = checkActionSchema(current);
+                const [actionName, actionSchema] = checkActionSchema(
+                    current,
+                    schemaConfig,
+                );
                 if (actionSchemas.get(actionName)) {
                     throw new Error(
                         `Schema Error: ${schemaName}: Duplicate action name '${actionName}'`,
@@ -138,6 +244,9 @@ export function createActionSchemaFile(
         schemaName,
         actionSchemas,
     };
+    if (schemaConfig?.actionNamespace === false) {
+        actionSchemaFile.actionNamespace = false;
+    }
     if (order) {
         actionSchemaFile.order = order;
     }
@@ -149,29 +258,34 @@ export function parseActionSchemaSource(
     schemaName: string,
     typeName: string,
     fileName: string = "",
+    schemaConfig?: SchemaConfig,
     strict: boolean = false,
 ): ActionSchemaFile {
     debug(`Parsing ${schemaName} for ${typeName}: ${fileName}`);
-    const sourceFile = ts.createSourceFile(
-        fileName,
-        source,
-        ts.ScriptTarget.ES5,
-    );
-    return ActionParser.parseSourceFile(
-        sourceFile,
-        schemaName,
-        typeName,
-        strict,
-    );
+    try {
+        const sourceFile = ts.createSourceFile(
+            fileName,
+            source,
+            ts.ScriptTarget.ES5,
+        );
+        return ActionParser.parseSourceFile(
+            sourceFile,
+            schemaName,
+            typeName,
+            schemaConfig,
+            strict,
+        );
+    } catch (e: any) {
+        throw new Error(`Error parsing ${schemaName}: ${e.message}`);
+    }
 }
-
-import ts, { CommentRange } from "typescript";
 
 class ActionParser {
     static parseSourceFile(
         sourceFile: ts.SourceFile,
         schemaName: string,
         typeName: string,
+        schemaConfig: SchemaConfig | undefined,
         strict: boolean,
     ) {
         const parser = new ActionParser();
@@ -184,6 +298,7 @@ class ActionParser {
             definition,
             parser.typeOrder,
             strict,
+            schemaConfig,
         );
         debug(`Parse Successful ${schemaName}`);
         return result;
@@ -435,7 +550,7 @@ class ActionParser {
         return this.processCommentRanges(commentRanges);
     }
 
-    private processCommentRanges(commentRanges: CommentRange[] | undefined) {
+    private processCommentRanges(commentRanges: ts.CommentRange[] | undefined) {
         if (commentRanges === undefined) {
             return undefined;
         }

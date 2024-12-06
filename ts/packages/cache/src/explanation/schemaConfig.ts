@@ -3,31 +3,13 @@
 
 import { simpleStarRegex } from "common-utils";
 import { Actions } from "./requestAction.js";
-
-export type ParamSpec =
-    | "wildcard"
-    | "checked_wildcard"
-    | "number"
-    | "percentage"
-    | "ordinal"
-    | "time"
-    | "literal";
+import { SchemaConfig, ParamSpec } from "action-schema";
 
 export type ParamRange = {
     min: string;
     max: string;
     step: string;
     convertToInt?: boolean;
-};
-
-export type SchemaConfig = {
-    // Key is the action name.
-    // If the value is false, then explanation/caching is disabled.
-    // Otherwise, the value is an object where the key is the parameter name, and the value the one of the ParamSpec above.
-    paramSpec?: { [key: string]: { [key: string]: ParamSpec } | false };
-
-    // separate the cache by action name
-    actionNamespace?: boolean; // default to false
 };
 
 export function getParamRange(spec: ParamSpec): ParamRange | undefined {

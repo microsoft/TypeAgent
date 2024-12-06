@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { ActionParamSpecs, ParamSpec } from "./schemaConfig.js";
+
 export interface SchemaBase {
     type:
         | "string"
@@ -16,6 +18,7 @@ export interface SchemaBase {
 
 export interface SchemaTypeString extends SchemaBase {
     type: "string";
+    paramSpec?: ParamSpec;
 }
 
 export interface SchemaTypeNumber extends SchemaBase {
@@ -104,6 +107,7 @@ export type SchemaType =
     | SchemaTypeObject
     | SchemaTypeArray;
 
+// Action Schema specializations
 export interface ActionSchemaObject extends SchemaTypeObject {
     fields: {
         actionName: SchemaObjectField<SchemaTypeStringUnion>;
@@ -117,9 +121,10 @@ export interface ActionSchemaObject extends SchemaTypeObject {
     };
 }
 
-export type ActionSchemaTypeDefinition =
+export type ActionSchemaTypeDefinition = (
     | SchemaTypeInterfaceDefinition<ActionSchemaObject>
-    | SchemaTypeAliasDefinition<ActionSchemaObject>;
+    | SchemaTypeAliasDefinition<ActionSchemaObject>
+) & { paramSpecs?: ActionParamSpecs };
 
 export type ActionSchemaEntryTypeDefinition =
     | ActionSchemaTypeDefinition
@@ -143,4 +148,7 @@ export type ActionSchemaGroup = {
 export type ActionSchemaFile = ActionSchemaGroup & {
     // Schema name
     schemaName: string;
+
+    // separate the cache by action name
+    actionNamespace?: boolean; // default to false
 };

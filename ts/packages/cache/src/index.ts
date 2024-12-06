@@ -11,7 +11,6 @@ export type {
 } from "./explanation/requestAction.js";
 
 export type { ConstructionStore } from "./cache/store.js";
-export type { SchemaConfig } from "./explanation/schemaConfig.js";
 export type {
     GenericExplanationResult,
     CorrectionRecord,
