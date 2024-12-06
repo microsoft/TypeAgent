@@ -23,6 +23,7 @@ import registerDebug from "debug";
 const debug = registerDebug("typeagent:schema:parse");
 
 function checkParamSpecs(
+    schemaName: string,
     paramSpecs: ActionParamSpecs,
     parameterType: SchemaTypeObject<SchemaObjectFields>,
     actionName: string,
@@ -37,19 +38,19 @@ function checkParamSpecs(
                 name === "prototype"
             ) {
                 throw new Error(
-                    `Schema Config Error:Invalid parameter name '${propertyName}' for action '${actionName}': Illegal parameter property name '${name}'`,
+                    `Schema Config Error: ${schemaName}: Invalid parameter name '${propertyName}' for action '${actionName}': Illegal parameter property name '${name}'`,
                 );
             }
             const maybeIndex = parseInt(name);
             if (maybeIndex.toString() === name) {
                 throw new Error(
-                    `Schema Config Error: Invalid parameter name '${propertyName}' for action '${actionName}': paramSpec cannot be applied to specific array index ${maybeIndex}`,
+                    `Schema Config Error: ${schemaName}: Invalid parameter name '${propertyName}' for action '${actionName}': paramSpec cannot be applied to specific array index ${maybeIndex}`,
                 );
             }
             if (name === "*") {
                 if (currentType.type !== "array") {
                     throw new Error(
-                        `Schema Config Error: Invalid parameter name '${propertyName}' for action '${actionName}': '*' is only allowed for array types`,
+                        `Schema Config Error: ${schemaName}: Invalid parameter name '${propertyName}' for action '${actionName}': '*' is only allowed for array types`,
                     );
                 }
                 currentType = currentType.elementType;
@@ -57,20 +58,20 @@ function checkParamSpecs(
             }
             if (currentType.type !== "object") {
                 throw new Error(
-                    `Schema Config Error: Invalid parameter name '${propertyName}' for action '${actionName}': Access property '${name}' of non-object`,
+                    `Schema Config Error: ${schemaName}: Invalid parameter name '${propertyName}' for action '${actionName}': Access property '${name}' of non-object`,
                 );
             }
             const field: SchemaObjectField | undefined =
                 currentType.fields[name];
             if (field === undefined) {
                 throw new Error(
-                    `Schema Config Error: Invalid parameter name '${propertyName}' for action '${actionName}': property '${name}' does not exist`,
+                    `Schema Config Error: ${schemaName}: Invalid parameter name '${propertyName}' for action '${actionName}': property '${name}' does not exist`,
                 );
             }
             const resolvedType = resolveReference(field.type);
             if (resolvedType === undefined) {
                 throw new Error(
-                    `Schema Config Error: Invalid parameter name '${propertyName}' for action '${actionName}': unresolved type reference for property '${name}'`,
+                    `Schema Config Error: ${schemaName}: Invalid parameter name '${propertyName}' for action '${actionName}': unresolved type reference for property '${name}'`,
                 );
             }
             currentType = resolvedType;
@@ -81,7 +82,7 @@ function checkParamSpecs(
             case "time":
                 if (currentType.type !== "string") {
                     throw new Error(
-                        `Schema Config Error: Parameter '${propertyName}' for action '${actionName}' has invalid type '${currentType.type}' for paramSpec '${spec}'. `,
+                        `Schema Config Error: ${schemaName}: Parameter '${propertyName}' for action '${actionName}' has invalid type '${currentType.type}' for paramSpec '${spec}'. `,
                     );
                 }
                 break;
@@ -91,7 +92,7 @@ function checkParamSpecs(
                     currentType.type !== "string-union"
                 ) {
                     throw new Error(
-                        `Schema Config Error: Parameter '${propertyName}' for action '${actionName}' has invalid type '${currentType.type}' for paramSpec '${spec}'. `,
+                        `Schema Config Error: ${schemaName}: Parameter '${propertyName}' for action '${actionName}' has invalid type '${currentType.type}' for paramSpec '${spec}'. `,
                     );
                 }
                 break;
@@ -100,38 +101,39 @@ function checkParamSpecs(
             case "ordinal":
                 if (currentType.type !== "number") {
                     throw new Error(
-                        `Schema Config Error: Parameter '${propertyName}' for action '${actionName}' has invalid type '${currentType.type}' for paramSpec '${spec}'. `,
+                        `Schema Config Error: ${schemaName}: Parameter '${propertyName}' for action '${actionName}' has invalid type '${currentType.type}' for paramSpec '${spec}'. `,
                     );
                 }
                 break;
             default:
                 throw new Error(
-                    `Schema Config Error: Parameter '${propertyName}' for action '${actionName}' has unknown paramSpec '${spec}'. `,
+                    `Schema Config Error: ${schemaName}: Parameter '${propertyName}' for action '${actionName}' has unknown paramSpec '${spec}'. `,
                 );
         }
     }
 }
 
 function checkActionSchema(
+    schemaName: string,
     definition: SchemaTypeDefinition,
     schemaConfig: SchemaConfig | undefined,
 ): [string, ActionSchemaTypeDefinition] {
     const name = definition.name;
     if (definition.type.type !== "object") {
         throw new Error(
-            `Schema Error: object type expect in action schema type ${name}, got ${definition.type.type}`,
+            `Schema Error: ${schemaName}: object type expect in action schema type ${name}, got ${definition.type.type}`,
         );
     }
 
     const { actionName, parameters } = definition.type.fields;
     if (actionName === undefined) {
         throw new Error(
-            `Schema Error: Missing actionName field in action schema type ${name}`,
+            `Schema Error: ${schemaName}: Missing actionName field in action schema type ${name}`,
         );
     }
     if (actionName.optional) {
         throw new Error(
-            `Schema Error: actionName field must be required in action schema type ${name}`,
+            `Schema Error: ${schemaName}: actionName field must be required in action schema type ${name}`,
         );
     }
     if (
@@ -139,7 +141,7 @@ function checkActionSchema(
         actionName.type.typeEnum.length !== 1
     ) {
         throw new Error(
-            `Schema Error: actionName field must be a string literal in action schema type ${name}`,
+            `Schema Error: ${schemaName}: actionName field must be a string literal in action schema type ${name}`,
         );
     }
 
@@ -150,7 +152,7 @@ function checkActionSchema(
         parameterFieldType.type !== "object"
     ) {
         throw new Error(
-            `Schema Error: parameters field must be an object in action schema type ${name}`,
+            `Schema Error: ${schemaName}: parameters field must be an object in action schema type ${name}`,
         );
     }
 
@@ -159,7 +161,12 @@ function checkActionSchema(
     const paramSpecs = schemaConfig?.paramSpec?.[actionNameString];
     if (paramSpecs !== undefined) {
         if (paramSpecs !== false) {
-            checkParamSpecs(paramSpecs, parameterFieldType, actionNameString);
+            checkParamSpecs(
+                schemaName,
+                paramSpecs,
+                parameterFieldType,
+                actionNameString,
+            );
         }
         actionDefinition.paramSpecs = paramSpecs;
     }
@@ -186,6 +193,7 @@ export function createActionSchemaFile(
         switch (current.type.type) {
             case "object":
                 const [actionName, actionSchema] = checkActionSchema(
+                    schemaName,
                     current,
                     schemaConfig,
                 );
