@@ -16,7 +16,6 @@ describe("TextMatchers", () => {
     let names = [
         "Kevin",
         "Kevin Andersen",
-        "Kevin Bacon",
         "Kevin Durant",
         "Jane Austen",
         "Jane Porter",
@@ -42,6 +41,7 @@ describe("TextMatchers", () => {
             await semanticList.pushMultiple(names);
 
             const searchOptions = createEntitySearchOptions();
+            searchOptions.nameSearchOptions?.maxMatches;
             const query = "Kevin";
             const matches = await semanticList.nearestNeighbors(
                 query,
