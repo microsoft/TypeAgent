@@ -11,12 +11,12 @@ export function getAllTermsInFilter(
     const action = filter.action;
     if (action) {
         let terms: string[] = [];
-        if (includeVerbs && action.verbs) {
-            terms.push(...action.verbs.words);
-        }
         const subject = getSubjectFromActionTerm(action);
         if (subject && subject !== NoEntityName) {
             terms.push(subject);
+        }
+        if (includeVerbs && action.verbs) {
+            terms.push(...action.verbs.words);
         }
         if (action.object) {
             terms.push(action.object);
