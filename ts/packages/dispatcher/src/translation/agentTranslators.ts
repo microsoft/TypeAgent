@@ -54,7 +54,7 @@ export interface ActionConfigProvider {
     tryGetActionConfig(schemaName: string): ActionConfig | undefined;
     getActionConfig(schemaName: string): ActionConfig;
     getActionConfigs(): [string, ActionConfig][];
-    getActionSchemaFileForConfig?(config: ActionConfig): ActionSchemaFile;
+    getActionSchemaFileForConfig(config: ActionConfig): ActionSchemaFile;
 }
 
 function collectActionConfigs(

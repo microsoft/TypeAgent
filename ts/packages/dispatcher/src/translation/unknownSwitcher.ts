@@ -5,7 +5,6 @@ import {
     InlineTranslatorSchemaDef,
     createJsonTranslatorFromSchemaDef,
 } from "common-utils";
-import { getActionSchemaFileForConfig } from "./actionSchemaFileCache.js";
 import { Result, success } from "typechat";
 import registerDebug from "debug";
 import { ActionConfigProvider } from "./agentTranslators.js";
@@ -26,10 +25,8 @@ function createSelectionActionTypeDefinition(
         // No need to select for injected schemas
         return undefined;
     }
-    const actionSchemaFile = getActionSchemaFileForConfig(
-        actionConfig,
-        provider,
-    );
+    const actionSchemaFile =
+        provider.getActionSchemaFileForConfig(actionConfig);
 
     const actionNames: string[] = [];
     const actionComments: string[] = [];

@@ -143,17 +143,6 @@ export class ActionSchemaFileCache {
     }
 }
 
-const globalCache = new ActionSchemaFileCache();
-export function getActionSchemaFileForConfig(
-    actionConfig: ActionConfig,
-    provider: ActionConfigProvider,
-): ActionSchemaFile {
-    if (provider.getActionSchemaFileForConfig !== undefined) {
-        return provider.getActionSchemaFileForConfig(actionConfig);
-    }
-    return globalCache.getActionSchemaFile(actionConfig);
-}
-
 export function getActionSchema(
     action: DeepPartialUndefined<AppAction>,
     provider: ActionConfigProvider,
@@ -167,7 +156,7 @@ export function getActionSchema(
         return undefined;
     }
 
-    const actionSchemaFile = getActionSchemaFileForConfig(config, provider);
+    const actionSchemaFile = provider.getActionSchemaFileForConfig(config);
     return actionSchemaFile.actionSchemas.get(actionName);
 }
 
@@ -176,15 +165,15 @@ export function getSchemaConfigProvider(
 ): SchemaConfigProvider {
     const result: SchemaConfigProvider = {
         getActionNamespace: (schemaName) =>
-            getActionSchemaFileForConfig(
+            provider.getActionSchemaFileForConfig(
                 provider.getActionConfig(schemaName),
-                provider,
             ).actionNamespace,
         getActionParamSpecs: (schemaName, actionName) => {
-            const actionSchema = getActionSchemaFileForConfig(
-                provider.getActionConfig(schemaName),
-                provider,
-            ).actionSchemas.get(actionName);
+            const actionSchema = provider
+                .getActionSchemaFileForConfig(
+                    provider.getActionConfig(schemaName),
+                )
+                .actionSchemas.get(actionName);
             if (actionSchema === undefined) {
                 throw new Error(
                     `Invalid action name ${actionName} for schema ${schemaName}`,

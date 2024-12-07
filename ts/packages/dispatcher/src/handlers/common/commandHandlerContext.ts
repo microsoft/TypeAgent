@@ -47,7 +47,6 @@ import {
     AppAgentStateOptions,
     SetStateResult,
 } from "../../agent/appAgentManager.js";
-import { loadTranslatorSchemaConfig } from "../../utils/loadSchemaConfig.js";
 import { AppAgentProvider } from "../../agent/agentProvider.js";
 import { RequestMetricsManager } from "../../utils/metrics.js";
 import { getTranslatorPrefix } from "../../action/actionHandlers.js";
@@ -159,10 +158,7 @@ export async function getTranslatorForSelectedActions(
     request: string,
     numActions: number,
 ): Promise<TypeAgentTranslator | undefined> {
-    const actionSchemaFile = context.agents.getActionSchemaFile(
-        schemaName,
-        false,
-    );
+    const actionSchemaFile = context.agents.tryGetActionSchemaFile(schemaName);
     if (
         actionSchemaFile === undefined ||
         actionSchemaFile.actionSchemas.size <= numActions

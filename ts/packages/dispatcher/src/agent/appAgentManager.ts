@@ -613,20 +613,9 @@ export class AppAgentManager implements ActionConfigProvider {
         return record;
     }
 
-    public getActionSchemaFile(
-        schemaName: string,
-        throwIfNotFound?: true,
-    ): ActionSchemaFile;
-    public getActionSchemaFile(
-        schemaName: string,
-        throwIfNotFound: false,
-    ): ActionSchemaFile | undefined;
-    public getActionSchemaFile(schemaName: string, throwIfNotFound = true) {
+    public tryGetActionSchemaFile(schemaName: string) {
         const config = this.tryGetActionConfig(schemaName);
         if (config === undefined) {
-            if (throwIfNotFound) {
-                throw new Error(`Unknown schema name: ${schemaName}`);
-            }
             return undefined;
         }
         return this.getActionSchemaFileForConfig(config);

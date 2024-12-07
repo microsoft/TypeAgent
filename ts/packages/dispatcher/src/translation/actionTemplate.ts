@@ -119,9 +119,8 @@ function toTemplate(
     translators: string[],
     action: Action,
 ) {
-    const actionSchemaFile = context.agents.getActionSchemaFile(
+    const actionSchemaFile = context.agents.tryGetActionSchemaFile(
         action.translatorName,
-        false,
     );
     if (actionSchemaFile === undefined) {
         return getDefaultActionTemplate(translators);
