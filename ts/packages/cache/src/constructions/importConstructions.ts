@@ -33,7 +33,7 @@ type ConstructionData = {
 function createConstructions(
     data: ExplanationData,
     explainer: GenericExplainer,
-    getSchemaConfig: SchemaConfigProvider | undefined,
+    schemaConfigProvider: SchemaConfigProvider | undefined,
     createConstruction: ConstructionFactory<any>,
 ) {
     const constructions: ConstructionData[] = [];
@@ -52,7 +52,7 @@ function createConstructions(
                 requestAction,
                 explanation,
                 {
-                    getSchemaConfig,
+                    schemaConfigProvider,
                 },
             );
 

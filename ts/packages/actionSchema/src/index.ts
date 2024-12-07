@@ -33,4 +33,4 @@ export {
 } from "./serialize.js";
 
 // Schema Config
-export { SchemaConfig, ParamSpec } from "./schemaConfig.js";
+export { SchemaConfig, ParamSpec, ActionParamSpecs } from "./schemaConfig.js";

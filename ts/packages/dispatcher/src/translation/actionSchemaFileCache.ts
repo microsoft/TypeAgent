@@ -18,6 +18,7 @@ import fs from "node:fs";
 import crypto from "node:crypto";
 import registerDebug from "debug";
 import { readSchemaConfig } from "../utils/loadSchemaConfig.js";
+import { SchemaConfigProvider } from "agent-cache";
 
 const debug = registerDebug("typeagent:dispatcher:schema:cache");
 const debugError = registerDebug("typeagent:dispatcher:schema:cache:error");
@@ -68,19 +69,19 @@ export class ActionSchemaFileCache {
         const config = readSchemaConfig(schemaFileFullPath);
 
         const hash = config ? hashStrings(source, config) : hashStrings(source);
-        const key = `${actionConfig.schemaName}|${actionConfig.schemaType}|${schemaFileFullPath}`;
+        const cacheKey = `${actionConfig.schemaName}|${actionConfig.schemaType}|${schemaFileFullPath}`;
 
-        const lastCached = this.prevSaved.get(key);
+        const lastCached = this.prevSaved.get(cacheKey);
         if (lastCached !== undefined) {
-            this.prevSaved.delete(key);
+            this.prevSaved.delete(cacheKey);
             if (lastCached.hash === hash) {
                 debug(`Cached parsed schema used: ${actionConfig.schemaName}`);
                 // Add and save the cache first before convert it back (which will modify the data)
-                this.addToCache(key, hash, lastCached.actionSchemaFile);
+                this.addToCache(cacheKey, hash, lastCached.actionSchemaFile);
                 const cached = fromJSONActionSchemaFile(
                     lastCached.actionSchemaFile,
                 );
-                this.actionSchemaFiles.set(key, cached);
+                this.actionSchemaFiles.set(actionConfig.schemaName, cached);
                 return cached;
             }
             debugError(
@@ -98,10 +99,10 @@ export class ActionSchemaFileCache {
             schemaFileFullPath,
             schemaConfig,
         );
-        this.actionSchemaFiles.set(key, parsed);
+        this.actionSchemaFiles.set(actionConfig.schemaName, parsed);
 
         if (this.cacheFilePath !== undefined) {
-            this.addToCache(key, hash, toJSONActionSchemaFile(parsed));
+            this.addToCache(cacheKey, hash, toJSONActionSchemaFile(parsed));
         }
         return parsed;
     }
@@ -168,4 +169,29 @@ export function getActionSchema(
 
     const actionSchemaFile = getActionSchemaFileForConfig(config, provider);
     return actionSchemaFile.actionSchemas.get(actionName);
+}
+
+export function getSchemaConfigProvider(
+    provider: ActionConfigProvider,
+): SchemaConfigProvider {
+    const result: SchemaConfigProvider = {
+        getActionNamespace: (schemaName) =>
+            getActionSchemaFileForConfig(
+                provider.getActionConfig(schemaName),
+                provider,
+            ).actionNamespace,
+        getActionParamSpecs: (schemaName, actionName) => {
+            const actionSchema = getActionSchemaFileForConfig(
+                provider.getActionConfig(schemaName),
+                provider,
+            ).actionSchemas.get(actionName);
+            if (actionSchema === undefined) {
+                throw new Error(
+                    `Invalid action name ${actionName} for schema ${schemaName}`,
+                );
+            }
+            return actionSchema.paramSpecs;
+        },
+    };
+    return result;
 }

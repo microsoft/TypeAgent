@@ -121,6 +121,7 @@ function toTemplate(
 ) {
     const actionSchemaFile = context.agents.getActionSchemaFile(
         action.translatorName,
+        false,
     );
     if (actionSchemaFile === undefined) {
         return getDefaultActionTemplate(translators);

@@ -266,28 +266,20 @@ function getPropertyInfo(
 function getPropertySpec(
     propertyName: string,
     actions: Actions,
-    getSchemaConfig: SchemaConfigProvider | undefined,
+    schemaConfigProvider?: SchemaConfigProvider,
 ): ParamSpec | undefined {
     const { action, parameterName } = getPropertyInfo(propertyName, actions);
     if (parameterName === undefined) {
         // fullActionName
         return "literal";
     }
-    const translatorName = action.translatorName;
-    if (translatorName === undefined) {
-        throw new Error("Action without translator name");
-    }
-    return getParamSpec(
-        getSchemaConfig?.(translatorName),
-        action.actionName,
-        parameterName,
-    );
+    return getParamSpec(schemaConfigProvider, action, parameterName);
 }
 
 function getPropertyTransformInfo(
     propertyName: string,
     actions: Actions,
-    getSchemaConfig: SchemaConfigProvider | undefined,
+    schemaConfigProvider?: SchemaConfigProvider,
 ): TransformInfo {
     const { action, parameterName, actionIndex } = getPropertyInfo(
         propertyName,
@@ -299,7 +291,7 @@ function getPropertyTransformInfo(
     }
     const namespace = parameterName
         ? getNamespaceForCache(
-              getSchemaConfig?.(translatorName),
+              schemaConfigProvider,
               translatorName,
               action.actionName,
           )
@@ -321,12 +313,13 @@ async function augmentExplanation(
 ) {
     // for each non-implicit parameter that matches a type in the schema config, generate all of the alternatives for that parameter
 
-    const getSchemaConfig = constructionCreationConfig.getSchemaConfig;
+    const schemaConfigProvider =
+        constructionCreationConfig.schemaConfigProvider;
     const actions = requestAction.actions;
 
     for (const param of explanation.propertyAlternatives) {
         // If we are handling it with a parser already, then no need to augment it.
-        if (getParserForPropertyValue(param, actions, getSchemaConfig)) {
+        if (getParserForPropertyValue(param, actions, schemaConfigProvider)) {
             // REVIEW: we don't use the parser if the subphrase for the property is used for multiple properties.
             // Should we continue augment those?
             continue;
@@ -334,7 +327,7 @@ async function augmentExplanation(
         const paramSpec = getPropertySpec(
             param.propertyName,
             actions,
-            getSchemaConfig,
+            schemaConfigProvider,
         );
         if (paramSpec) {
             const paramRange = getParamRange(paramSpec);
@@ -427,7 +420,7 @@ function collectAltParamMatches(
 function getParserForPropertyValue(
     propertyValue: PropertyValue,
     actions: Actions,
-    getSchemaConfig: SchemaConfigProvider | undefined,
+    schemaConfigProvider: SchemaConfigProvider | undefined,
 ) {
     if (propertyValue.propertySubPhrases.length !== 1) {
         return undefined;
@@ -436,7 +429,7 @@ function getParserForPropertyValue(
     const paramSpec = getPropertySpec(
         propertyValue.propertyName,
         actions,
-        getSchemaConfig,
+        schemaConfigProvider,
     );
     if (paramSpec === undefined) {
         return undefined;
@@ -517,7 +510,8 @@ export function createConstructionV5(
     constructionCreationConfig: ConstructionCreationConfig,
 ) {
     const actions = requestAction.actions;
-    const getSchemaConfig = constructionCreationConfig.getSchemaConfig;
+    const schemaConfigProvider =
+        constructionCreationConfig.schemaConfigProvider;
     const entityParameters = explanation.properties.filter(
         (param) => isEntityParameter(param) && param.entityIndex !== undefined,
     ) as EntityProperty[];
@@ -543,8 +537,11 @@ export function createConstructionV5(
         if (
             phrase.propertyNames.some(
                 (propertyName) =>
-                    getPropertySpec(propertyName, actions, getSchemaConfig) ===
-                    "literal",
+                    getPropertySpec(
+                        propertyName,
+                        actions,
+                        schemaConfigProvider,
+                    ) === "literal",
             )
         ) {
             phrase.propertyNames.forEach((propertyName) =>
@@ -578,7 +575,7 @@ export function createConstructionV5(
         const propertyParser = getParserForPropertyValue(
             param,
             actions,
-            getSchemaConfig,
+            schemaConfigProvider,
         );
         if (propertyParser !== undefined) {
             propertyParserMap.set(propertyName, propertyParser);
@@ -589,7 +586,7 @@ export function createConstructionV5(
         const transformInfo = getPropertyTransformInfo(
             propertyName,
             actions,
-            getSchemaConfig,
+            schemaConfigProvider,
         );
         const transforms = getTransforms(transformInfo.namespace);
         const entityIndex = entityParamMap.get(param.propertyName);
@@ -665,7 +662,7 @@ export function createConstructionV5(
         const spec = getPropertySpec(
             paramInfo.propertyName,
             actions,
-            getSchemaConfig,
+            schemaConfigProvider,
         );
         return spec === "wildcard"
             ? WildcardMode.Enabled
@@ -706,7 +703,7 @@ export function createConstructionV5(
                 const transformInfo = getPropertyTransformInfo(
                     propertyName,
                     actions,
-                    getSchemaConfig,
+                    schemaConfigProvider,
                 );
                 transformInfos.push(transformInfo);
                 if (entityParamMap.has(propertyName)) {

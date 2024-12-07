@@ -62,6 +62,8 @@ import {
 import registerDebug from "debug";
 import { getDefaultAppProviders } from "../../utils/defaultAppProviders.js";
 import path from "node:path";
+import { SchemaConfigProvider } from "agent-cache";
+import { getSchemaConfigProvider } from "../../translation/actionSchemaFileCache.js";
 
 const debug = registerDebug("typeagent:dispatcher:init");
 const debugError = registerDebug("typeagent:dispatcher:init:error");
@@ -157,7 +159,10 @@ export async function getTranslatorForSelectedActions(
     request: string,
     numActions: number,
 ): Promise<TypeAgentTranslator | undefined> {
-    const actionSchemaFile = context.agents.getActionSchemaFile(schemaName);
+    const actionSchemaFile = context.agents.getActionSchemaFile(
+        schemaName,
+        false,
+    );
     if (
         actionSchemaFile === undefined ||
         actionSchemaFile.actionSchemas.size <= numActions
@@ -191,10 +196,12 @@ async function getAgentCache(
 ) {
     const cacheFactory = getCacheFactory();
     const explainerName = session.explainerName;
+    const schemaConfigProvider: SchemaConfigProvider =
+        getSchemaConfigProvider(provider);
+
     const agentCache = cacheFactory.create(
         explainerName,
-        (translatorName: string) =>
-            loadTranslatorSchemaConfig(translatorName, provider),
+        schemaConfigProvider,
         session.cacheConfig,
         logger,
     );

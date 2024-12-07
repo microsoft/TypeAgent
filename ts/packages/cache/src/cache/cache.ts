@@ -122,7 +122,7 @@ export class AgentCache {
     constructor(
         public readonly explainerName: string,
         private readonly getExplainerForTranslator: ExplainerFactory,
-        private readonly getSchemaConfig?: SchemaConfigProvider,
+        private readonly schemaConfigProvider?: SchemaConfigProvider,
         cacheOptions?: CacheOptions,
         logger?: Telemetry.Logger,
     ) {
@@ -168,13 +168,9 @@ export class AgentCache {
         const checkExplainable = options?.checkExplainable;
         const actions = requestAction.actions;
         for (const action of actions) {
-            const translatorName = action.translatorName;
-            const translatorSchemaConfig = translatorName
-                ? this.getSchemaConfig?.(translatorName)
-                : undefined;
             const cacheAction = doCacheAction(
-                translatorSchemaConfig,
-                action.actionName,
+                this.schemaConfigProvider,
+                action,
             );
 
             if (!cacheAction) {
@@ -193,7 +189,7 @@ export class AgentCache {
             const actions = requestAction.actions;
             const explainer = this.getExplainerForActions(actions);
             const constructionCreationConfig = {
-                getSchemaConfig: this.getSchemaConfig,
+                schemaConfigProvider: this.schemaConfigProvider,
             };
 
             const explainerConfig = {
@@ -326,7 +322,7 @@ export class AgentCache {
         return this._constructionStore.import(
             data,
             this.getExplainerForTranslator,
-            this.getSchemaConfig,
+            this.schemaConfigProvider,
         );
     }
 }

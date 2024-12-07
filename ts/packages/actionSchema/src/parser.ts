@@ -252,8 +252,8 @@ export function createActionSchemaFile(
         schemaName,
         actionSchemas,
     };
-    if (schemaConfig?.actionNamespace === false) {
-        actionSchemaFile.actionNamespace = false;
+    if (schemaConfig?.actionNamespace === true) {
+        actionSchemaFile.actionNamespace = true;
     }
     if (order) {
         actionSchemaFile.order = order;

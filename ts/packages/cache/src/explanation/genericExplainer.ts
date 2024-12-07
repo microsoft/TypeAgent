@@ -37,7 +37,7 @@ export type ExplainerConfig = {
 };
 
 export type ConstructionCreationConfig = {
-    getSchemaConfig?: SchemaConfigProvider | undefined;
+    schemaConfigProvider?: SchemaConfigProvider | undefined;
 };
 
 export type ConstructionFactory<T> = (

@@ -19,6 +19,7 @@ import { getDispatcherConfig } from "./config.js";
 import { getUserProfileDir } from "./userData.js";
 import path from "node:path";
 import fs from "node:fs";
+import { getSchemaConfigProvider } from "../translation/actionSchemaFileCache.js";
 
 let builtinAppAgentProvider: AppAgentProvider | undefined;
 function getBuiltinAppAgentProvider(): AppAgentProvider {
@@ -122,11 +123,8 @@ export function getActionConfigProviderFromDefaultAppAgentProviders(): ActionCon
     };
 }
 
-export function loadSchemaConfigFromDefaultAppAgentProviders(
-    schemaName: string,
-) {
-    return loadTranslatorSchemaConfig(
-        schemaName,
+export function getSchemaConfigProviderFromDefaultAppAgentProviders() {
+    return getSchemaConfigProvider(
         getActionConfigProviderFromDefaultAppAgentProviders(),
     );
 }

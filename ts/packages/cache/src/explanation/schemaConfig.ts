@@ -2,8 +2,8 @@
 // Licensed under the MIT License.
 
 import { simpleStarRegex } from "common-utils";
-import { Actions } from "./requestAction.js";
-import { SchemaConfig, ParamSpec } from "action-schema";
+import { ParamSpec, ActionParamSpecs } from "action-schema";
+import { Action } from "./requestAction.js";
 
 export type ParamRange = {
     min: string;
@@ -24,26 +24,32 @@ export function getParamRange(spec: ParamSpec): ParamRange | undefined {
 }
 
 export function doCacheAction(
-    config: SchemaConfig | undefined,
-    actionName: string,
+    schemaConfigProvider: SchemaConfigProvider | undefined,
+    action: Action,
 ) {
-    return config?.paramSpec?.[actionName] !== false;
+    return (
+        schemaConfigProvider?.getActionParamSpecs(
+            action.translatorName,
+            action.actionName,
+        ) !== false
+    );
 }
 
 export function getParamSpec(
-    config: SchemaConfig | undefined,
-    actionName: string,
+    schemaConfigProvider: SchemaConfigProvider | undefined,
+    action: Action,
     paramName: string,
 ): ParamSpec | undefined {
-    if (config === undefined) {
-        return undefined;
-    }
-    const specs = config?.paramSpec?.[actionName];
-    if (typeof specs !== "object") {
+    const paramSpecs = schemaConfigProvider?.getActionParamSpecs(
+        action.translatorName,
+        action.actionName,
+    );
+
+    if (typeof paramSpecs !== "object") {
         return undefined;
     }
 
-    for (const [key, value] of Object.entries(specs)) {
+    for (const [key, value] of Object.entries(paramSpecs)) {
         if (key.includes("*")) {
             const regex = simpleStarRegex(key);
             if (regex.test(paramName)) {
@@ -56,41 +62,22 @@ export function getParamSpec(
 }
 
 export function getNamespaceForCache(
-    config: SchemaConfig | undefined,
-    translatorName: string,
+    schemaConfigProvider: SchemaConfigProvider | undefined,
+    schemaName: string,
     actionName: string,
 ): string {
-    if (config?.actionNamespace === true) {
+    if (schemaConfigProvider?.getActionNamespace(schemaName) === true) {
         // REVIEW: this requires that subtranslator name doesn't conflict with actionName
-        return `${translatorName}.${actionName}`;
+        return `${schemaName}.${actionName}`;
     }
 
-    return translatorName;
+    return schemaName;
 }
 
-export type SchemaConfigProvider = (
-    translatorName: string,
-) => SchemaConfig | undefined;
-
-export function getConstructionInfo(
-    actions: Actions,
-    getSchemaConfig?: SchemaConfigProvider,
-) {
-    const action = actions.action;
-    if (action === undefined) {
-        throw new Error("Multiple action not supported.");
-    }
-    const translatorName = action.translatorName;
-    if (translatorName === undefined) {
-        throw new Error("Construction not support without translator name");
-    }
-    const translatorSchemaConfig = getSchemaConfig?.(translatorName);
-
-    const namespace = getNamespaceForCache(
-        translatorSchemaConfig,
-        translatorName,
-        action.actionName,
-    );
-
-    return { translatorSchemaConfig, namespace };
-}
+export type SchemaConfigProvider = {
+    getActionParamSpecs: (
+        schemaName: string,
+        actionName: string,
+    ) => ActionParamSpecs | undefined;
+    getActionNamespace: (schemaName: string) => boolean | undefined; // default to false
+};

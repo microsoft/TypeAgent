@@ -28,6 +28,7 @@ export type {
     ProcessRequestActionResult,
     ExplanationOptions,
 } from "./cache/cache.js";
+export type { SchemaConfigProvider } from "./explanation/schemaConfig.js";
 
 // Functionalities
 export {

@@ -202,9 +202,7 @@ class ActionCommandHandler implements CommandHandler {
         const { translatorName, actionName } = params.args;
         const actionSchemaFile =
             systemContext.agents.getActionSchemaFile(translatorName);
-        if (actionSchemaFile === undefined) {
-            throw new Error(`Invalid schema name ${translatorName}`);
-        }
+
         const actionSchema = actionSchemaFile.actionSchemas.get(actionName);
         if (actionSchema === undefined) {
             throw new Error(
