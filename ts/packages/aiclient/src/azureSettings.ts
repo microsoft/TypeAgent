@@ -84,6 +84,13 @@ function azureChatApiSettingsFromEnv(
             EnvVars.AZURE_OPENAI_MAX_CHARS,
             endpointName,
         ),
+        enableModelRequestLogging:
+            getEnvSetting(
+                env,
+                EnvVars.ENABLE_MODEL_REQUEST_LOGGING,
+                undefined,
+                "false",
+            ) === "true",
     };
 }
 

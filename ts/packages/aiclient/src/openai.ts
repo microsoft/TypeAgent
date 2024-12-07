@@ -24,6 +24,7 @@ import { readServerEventStream } from "./serverEvents";
 import { priorityQueue } from "async";
 import registerDebug from "debug";
 import { TokenCounter } from "./tokenCounter";
+import { PromptLogger } from "./promptLogger";
 import {
     createOllamaChatModel,
     OllamaApiSettings,
@@ -59,6 +60,7 @@ export type CommonApiSettings = {
     retryPauseMs?: number;
     maxConcurrency?: number | undefined;
     throttler?: FetchThrottler;
+    enableModelRequestLogging?: boolean | undefined;
 };
 /**
  * Settings used by OpenAI clients
@@ -98,6 +100,8 @@ export enum EnvVars {
 
     AZURE_MAPS_ENDPOINT = "AZURE_MAPS_ENDPOINT",
     AZURE_MAPS_CLIENTID = "AZURE_MAPS_CLIENTID",
+
+    ENABLE_MODEL_REQUEST_LOGGING = "ENABLE_MODEL_REQUEST_LOGGING",
 }
 
 export const MAX_PROMPT_LENGTH_DEFAULT = 1000 * 60;
@@ -453,6 +457,15 @@ function createAzureOpenAIChatModel(
         }
 
         try {
+            if (settings.enableModelRequestLogging) {
+                // Log request
+                PromptLogger.getInstance().logModelRequest({
+                    prompt: messages as PromptSection[],
+                    response: data.choices[0].message?.content ?? "",
+                    tokenUsage: data.usage,
+                    tags: tags,
+                });
+            }
             // track token usage
             TokenCounter.getInstance().add(data.usage, tags);
         } catch {}
@@ -506,11 +519,25 @@ function createAzureOpenAIChatModel(
         if (!result.success) {
             return result;
         }
+
+        let fullResponseText = "";
+        let tokenUsage;
         return {
             success: true,
             data: (async function* () {
                 for await (const evt of readServerEventStream(result.data)) {
                     if (evt.data === "[DONE]") {
+                        try {
+                            if (settings.enableModelRequestLogging) {
+                                // Log request.
+                                PromptLogger.getInstance().logModelRequest({
+                                    prompt: messages as PromptSection[],
+                                    response: fullResponseText,
+                                    tokenUsageData: tokenUsage,
+                                    tags: tags,
+                                });
+                            }
+                        } catch {}
                         break;
                     }
                     const data = JSON.parse(evt.data) as ChatCompletionChunk;
@@ -518,11 +545,14 @@ function createAzureOpenAIChatModel(
                         if (data.choices && data.choices.length > 0) {
                             const delta = data.choices[0].delta?.content ?? "";
                             if (delta) {
+                                fullResponseText += delta;
                                 yield delta;
                             }
                         }
                         if (data.usage) {
+                            tokenUsage = data.usage;
                             try {
+                                // track token usage
                                 TokenCounter.getInstance().add(
                                     data.usage,
                                     tags,
