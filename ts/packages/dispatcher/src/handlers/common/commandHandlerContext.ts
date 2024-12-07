@@ -61,8 +61,7 @@ import {
 import registerDebug from "debug";
 import { getDefaultAppProviders } from "../../utils/defaultAppProviders.js";
 import path from "node:path";
-import { SchemaConfigProvider } from "agent-cache";
-import { getSchemaConfigProvider } from "../../translation/actionSchemaFileCache.js";
+import { createSchemaInfoProvider } from "../../translation/actionSchemaFileCache.js";
 
 const debug = registerDebug("typeagent:dispatcher:init");
 const debugError = registerDebug("typeagent:dispatcher:init:error");
@@ -192,12 +191,11 @@ async function getAgentCache(
 ) {
     const cacheFactory = getCacheFactory();
     const explainerName = session.explainerName;
-    const schemaConfigProvider: SchemaConfigProvider =
-        getSchemaConfigProvider(provider);
+    const actionSchemaProvider = createSchemaInfoProvider(provider);
 
     const agentCache = cacheFactory.create(
         explainerName,
-        schemaConfigProvider,
+        actionSchemaProvider,
         session.cacheConfig,
         logger,
     );

@@ -15,7 +15,7 @@ import {
     GenerateDataInput,
     getEmptyTestData,
     getTestDataFiles,
-    getSchemaConfigProviderFromDefaultAppAgentProviders,
+    createSchemaInfoProviderFromDefaultAppAgentProviders,
 } from "agent-dispatcher/internal";
 import {
     Actions,
@@ -484,7 +484,7 @@ export default class ExplanationDataRegenerateCommmand extends Command {
         if (builtinConstructionConfig !== undefined) {
             const agentCache = getCacheFactory().create(
                 flags.builtin!,
-                getSchemaConfigProviderFromDefaultAppAgentProviders(),
+                createSchemaInfoProviderFromDefaultAppAgentProviders(),
             );
             await agentCache.constructionStore.newCache(
                 flags.none ? undefined : builtinConstructionConfig.file,

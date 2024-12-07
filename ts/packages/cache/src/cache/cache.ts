@@ -11,9 +11,9 @@ import {
     RequestAction,
 } from "../explanation/requestAction.js";
 import {
-    SchemaConfigProvider,
+    SchemaInfoProvider,
     doCacheAction,
-} from "../explanation/schemaConfig.js";
+} from "../explanation/schemaInfoProvider.js";
 import { GenericExplanationResult } from "../index.js";
 import { ConstructionStore, ConstructionStoreImpl } from "./store.js";
 import { ExplainerFactory } from "./factory.js";
@@ -122,7 +122,7 @@ export class AgentCache {
     constructor(
         public readonly explainerName: string,
         private readonly getExplainerForTranslator: ExplainerFactory,
-        private readonly schemaConfigProvider?: SchemaConfigProvider,
+        private readonly schemaInfoProvider?: SchemaInfoProvider,
         cacheOptions?: CacheOptions,
         logger?: Telemetry.Logger,
     ) {
@@ -168,10 +168,7 @@ export class AgentCache {
         const checkExplainable = options?.checkExplainable;
         const actions = requestAction.actions;
         for (const action of actions) {
-            const cacheAction = doCacheAction(
-                this.schemaConfigProvider,
-                action,
-            );
+            const cacheAction = doCacheAction(action, this.schemaInfoProvider);
 
             if (!cacheAction) {
                 return getFailedResult(
@@ -189,7 +186,7 @@ export class AgentCache {
             const actions = requestAction.actions;
             const explainer = this.getExplainerForActions(actions);
             const constructionCreationConfig = {
-                schemaConfigProvider: this.schemaConfigProvider,
+                schemaInfoProvider: this.schemaInfoProvider,
             };
 
             const explainerConfig = {
@@ -322,7 +319,7 @@ export class AgentCache {
         return this._constructionStore.import(
             data,
             this.getExplainerForTranslator,
-            this.schemaConfigProvider,
+            this.schemaInfoProvider,
         );
     }
 }

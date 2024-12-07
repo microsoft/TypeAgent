@@ -24,11 +24,11 @@ export function getParamRange(spec: ParamSpec): ParamRange | undefined {
 }
 
 export function doCacheAction(
-    schemaConfigProvider: SchemaConfigProvider | undefined,
     action: Action,
+    schemaInfoProvider?: SchemaInfoProvider,
 ) {
     return (
-        schemaConfigProvider?.getActionParamSpecs(
+        schemaInfoProvider?.getActionParamSpecs(
             action.translatorName,
             action.actionName,
         ) !== false
@@ -36,11 +36,11 @@ export function doCacheAction(
 }
 
 export function getParamSpec(
-    schemaConfigProvider: SchemaConfigProvider | undefined,
     action: Action,
     paramName: string,
+    schemaInfoProvider?: SchemaInfoProvider,
 ): ParamSpec | undefined {
-    const paramSpecs = schemaConfigProvider?.getActionParamSpecs(
+    const paramSpecs = schemaInfoProvider?.getActionParamSpecs(
         action.translatorName,
         action.actionName,
     );
@@ -62,11 +62,11 @@ export function getParamSpec(
 }
 
 export function getNamespaceForCache(
-    schemaConfigProvider: SchemaConfigProvider | undefined,
     schemaName: string,
     actionName: string,
+    schemaInfoProvider?: SchemaInfoProvider,
 ): string {
-    if (schemaConfigProvider?.getActionNamespace(schemaName) === true) {
+    if (schemaInfoProvider?.getActionNamespace(schemaName) === true) {
         // REVIEW: this requires that subtranslator name doesn't conflict with actionName
         return `${schemaName}.${actionName}`;
     }
@@ -74,7 +74,7 @@ export function getNamespaceForCache(
     return schemaName;
 }
 
-export type SchemaConfigProvider = {
+export type SchemaInfoProvider = {
     getActionParamSpecs: (
         schemaName: string,
         actionName: string,

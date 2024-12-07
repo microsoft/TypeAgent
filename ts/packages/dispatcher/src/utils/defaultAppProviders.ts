@@ -20,7 +20,7 @@ import path from "node:path";
 import fs from "node:fs";
 import {
     ActionSchemaFileCache,
-    getSchemaConfigProvider,
+    createSchemaInfoProvider,
 } from "../translation/actionSchemaFileCache.js";
 
 let builtinAppAgentProvider: AppAgentProvider | undefined;
@@ -133,8 +133,8 @@ export function getActionConfigProviderFromDefaultAppAgentProviders(): ActionCon
     return actionConfigProvider;
 }
 
-export function getSchemaConfigProviderFromDefaultAppAgentProviders() {
-    return getSchemaConfigProvider(
+export function createSchemaInfoProviderFromDefaultAppAgentProviders() {
+    return createSchemaInfoProvider(
         getActionConfigProviderFromDefaultAppAgentProviders(),
     );
 }

@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { SchemaConfigProvider } from "../explanation/schemaConfig.js";
+import { SchemaInfoProvider } from "../explanation/schemaInfoProvider.js";
 import { Construction } from "./constructions.js";
 import { Actions, RequestAction } from "../explanation/requestAction.js";
 import {
@@ -33,7 +33,7 @@ type ConstructionData = {
 function createConstructions(
     data: ExplanationData,
     explainer: GenericExplainer,
-    schemaConfigProvider: SchemaConfigProvider | undefined,
+    schemaInfoProvider: SchemaInfoProvider | undefined,
     createConstruction: ConstructionFactory<any>,
 ) {
     const constructions: ConstructionData[] = [];
@@ -52,7 +52,7 @@ function createConstructions(
                 requestAction,
                 explanation,
                 {
-                    schemaConfigProvider,
+                    schemaInfoProvider: schemaInfoProvider,
                 },
             );
 
@@ -110,7 +110,7 @@ export function importConstructions(
     getExplainerForTranslator: ExplainerFactory,
     mergeMatchSets: boolean,
     cacheConflicts: boolean,
-    getSchemaConfig?: SchemaConfigProvider,
+    schemaInfoProvider?: SchemaInfoProvider,
 ): ImportConstructionResult {
     if (
         explanationData.some(
@@ -138,7 +138,7 @@ export function importConstructions(
         const constructions = createConstructions(
             data,
             explainer,
-            getSchemaConfig,
+            schemaInfoProvider,
             createConstruction,
         );
         newCount += constructions.length;

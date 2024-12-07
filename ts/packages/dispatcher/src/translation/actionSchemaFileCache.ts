@@ -18,7 +18,7 @@ import fs from "node:fs";
 import crypto from "node:crypto";
 import registerDebug from "debug";
 import { readSchemaConfig } from "../utils/loadSchemaConfig.js";
-import { SchemaConfigProvider } from "agent-cache";
+import { SchemaInfoProvider } from "agent-cache";
 
 const debug = registerDebug("typeagent:dispatcher:schema:cache");
 const debugError = registerDebug("typeagent:dispatcher:schema:cache:error");
@@ -160,10 +160,10 @@ export function getActionSchema(
     return actionSchemaFile.actionSchemas.get(actionName);
 }
 
-export function getSchemaConfigProvider(
+export function createSchemaInfoProvider(
     provider: ActionConfigProvider,
-): SchemaConfigProvider {
-    const result: SchemaConfigProvider = {
+): SchemaInfoProvider {
+    const result: SchemaInfoProvider = {
         getActionNamespace: (schemaName) =>
             provider.getActionSchemaFileForConfig(
                 provider.getActionConfig(schemaName),
