@@ -66,7 +66,7 @@ export function intersectUnionMultiple<T>(
     }
 
     const topKItems = combined.getTop();
-    return topKItems;
+    return topKItems.sort();
 }
 
 export function* union<T>(

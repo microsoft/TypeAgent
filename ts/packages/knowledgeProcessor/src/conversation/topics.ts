@@ -327,7 +327,7 @@ export function createTopicSearchOptions(
     isTopicSummary: boolean = false,
 ): TopicSearchOptions {
     return {
-        maxMatches: isTopicSummary ? Number.MAX_SAFE_INTEGER : 8,
+        maxMatches: isTopicSummary ? Number.MAX_SAFE_INTEGER : 25,
         minScore: 0.8,
         loadTopics: true,
         sourceNameSearchOptions: {
@@ -710,6 +710,7 @@ export async function createTopicIndexOnStorage<
     ): Promise<TopicSearchResult<TopicId>> {
         // We will just use the standard topic stuff for now, since that does the same thing
         const allTerms = getAllTermsInFilter(filter);
+        const useSourceName = false;
         let sourceName = getSubjectFromActionTerm(filter.action);
         if (!isValidEntityName(sourceName)) {
             sourceName = undefined;
@@ -724,7 +725,7 @@ export async function createTopicIndexOnStorage<
         return search(
             topicFilter,
             options,
-            sourceName,
+            useSourceName ? sourceName : undefined,
             //topics !== "*" ? getAllTermsInFilter(filter, false) : undefined,
             undefined,
             possibleIds,
