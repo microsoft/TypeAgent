@@ -37,14 +37,28 @@ type Config = {
     subActionManifests?: Record<string, Config>;
 };
 
+function loadSchmeaConfig(fileName: string) {
+    try {
+        const parsedFileName = path.parse(fileName);
+        const schemaConfigFileName = path.join(
+            parsedFileName.dir,
+            parsedFileName.name + ".json",
+        );
+        return fs.existsSync(schemaConfigFileName)
+            ? JSON.parse(fs.readFileSync(schemaConfigFileName, "utf-8"))
+            : undefined;
+    } catch (e: any) {
+        throw new Error(
+            `Failed to load schema config file: ${fileName}\n${e.message}`,
+        );
+    }
+}
+
 function addTest(schemaName: string, config: Config, dir: string) {
     const schema = config.schema;
     if (schema) {
         const fileName = path.resolve(dir, schema.schemaFile);
-        const schemaConfigFileName = fileName.replace(/\.ts$/, ".json");
-        const schemaConfig = fs.existsSync(schemaConfigFileName)
-            ? JSON.parse(fs.readFileSync(schemaConfigFileName, "utf-8"))
-            : undefined;
+        const schemaConfig = loadSchmeaConfig(fileName);
         tests.push({
             source: fs.readFileSync(fileName, "utf-8"),
             schemaConfig,
