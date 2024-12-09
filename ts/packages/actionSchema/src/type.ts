@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ActionParamSpecs, ParamSpec } from "./schemaConfig.js";
+import { ActionParamSpecs } from "./schemaConfig.js";
 
 export interface SchemaBase {
     type:
@@ -18,7 +18,6 @@ export interface SchemaBase {
 
 export interface SchemaTypeString extends SchemaBase {
     type: "string";
-    paramSpec?: ParamSpec;
 }
 
 export interface SchemaTypeNumber extends SchemaBase {
