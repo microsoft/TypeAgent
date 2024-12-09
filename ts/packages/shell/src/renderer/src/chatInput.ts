@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { _arrayBufferToBase64, ChatView } from "./chatView";
+import { _arrayBufferToBase64 } from "./chatView";
 import {
     iconMicrophone,
     iconMicrophoneListening,
@@ -11,8 +11,6 @@ import {
     iconSend,
 } from "./icon";
 import { getClientAPI } from "./main";
-import { setContent } from "./setContent";
-import { SettingsView } from "./settingsView";
 import { recognizeOnce } from "./speech";
 import { getSpeechToken } from "./speechToken";
 
@@ -149,42 +147,6 @@ export class ExpandableTextarea {
     public focus() {
         setTimeout(() => this.textEntry.focus(), 0);
     }
-}
-
-export function questionInput(
-    chatView: ChatView,
-    questionId: number,
-    message: string,
-    id: string,
-    settingsView: SettingsView,
-) {
-    // use this to type replacement JSON object for action
-    // first make a container div
-    const replacementContainer = document.createElement("div");
-    replacementContainer.className = "replacement-container";
-    // then add a title div to it
-    const title = document.createElement("div");
-    title.className = "replacement-title";
-    setContent(title, message, settingsView);
-    replacementContainer.appendChild(title);
-    // then add a replacement div to it
-    const textarea = new ExpandableTextarea(
-        "replacementDiv",
-        "replacement-textarea",
-        {
-            onSend: (html) => {
-                // REVIEW: text is from innerHTML, is that ok?
-                chatView.answer(questionId, html, id);
-            },
-        },
-    );
-    const replacementDiv = textarea.getTextEntry();
-    setTimeout(() => {
-        replacementDiv.focus();
-    }, 0);
-    replacementContainer.appendChild(textarea.getTextEntry());
-
-    return replacementContainer;
 }
 
 export class ChatInput {

@@ -42,11 +42,14 @@ A user query is handled using the following steps:
 - How to integrate it as an agent with shell/cli?
   Especially since the model needs access to conversation history, and the current assumption is that you focus on spelunking exclusively until you say you are (temporarily) done with it.
   Does the cli/shell have UI features for that?
+- Do what search engines do. (E.g. many parallelized specialized queries.)
+- How to extract and encode **meaning**? (Beyond embeddings.)
 
 ### Testing
 
 - How to measure the quality of the answers? This probably has to be a manual process.
   We might be able to have a standard set of queries about a particular code base and for each potential improvement decide which variant gives the better answer.
+- Anecdotally, GitHub Copilot in VS Code does a better job (possibly because it can see the project docs)
 
 ### Import process open questions
 
@@ -60,10 +63,11 @@ A user query is handled using the following steps:
 
 ### Query process open questions
 
+- Can we use a faster, cheaper (and dumber) model for step 1?
 - How much conversation history to include in the context for steps 1 and 4, and if not all, how to choose (anither proximity search perhaps?).
 - Prompt engineering to get the first LLM to come up with better queries. (Sometimes it puts stuff in the queries that feel poorly chosen.)
 - How many hits to request from each index (**maxHits**). And possibly how to determine **minScore**.
-- Algorithm for scoring chunks among hits. There are many possible ideas.
+- Algorithm for scoring chunks among hits. There are many possible ideas. E.g. different weight per index?
 - How many chunks to pass in the context for step 4. (Can it be dynamic?)
 - In which order to present the context for step 4.
 - Prompt engineering for step 4.

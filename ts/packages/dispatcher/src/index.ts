@@ -1,11 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-export {
-    createDispatcher,
-    Dispatcher,
-    CommandCompletionResult,
-} from "./dispatcher/dispatcher.js";
+export { createDispatcher, Dispatcher } from "./dispatcher/dispatcher.js";
+export type { CommandCompletionResult } from "./command/completion.js";
 export type { AppAgentProvider } from "./agent/agentProvider.js";
 export type {
     ClientIO,

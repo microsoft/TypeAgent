@@ -123,12 +123,6 @@ const api: ClientAPI = {
     sendProposedAction: (proposeActionId: number, replacement?: unknown) => {
         ipcRenderer.send("proposeActionResponse", proposeActionId, replacement);
     },
-    onQuestion(callback) {
-        ipcRenderer.on("question", callback);
-    },
-    sendAnswer: (questionId: number, answer?: string) => {
-        ipcRenderer.send("questionResponse", questionId, answer);
-    },
     getSpeechToken: () => {
         return ipcRenderer.invoke("get-speech-token");
     },

@@ -609,9 +609,23 @@ async function processQuery(
     );
     if (!proposedQueries) return; // Error message already printed by proposeQueries.
 
+    // Step 1a: If step 1 gave the answer, print it and exit.
+    if ("answer" in proposedQueries) {
+        await chunkyIndex.answerFolder.put(proposedQueries.answer);
+        reportQuery(
+            undefined,
+            undefined,
+            proposedQueries.answer,
+            io,
+            queryOptions.verbose,
+        );
+        writeNote(io, "[Answer produced by stage 1]");
+        return;
+    }
+
     // **Step 2:** Run those queries on the indexes.
 
-    const [message, chunkIdScores] = await runIndexQueries(
+    const [hitsByIndex, chunkIdScores] = await runIndexQueries(
         proposedQueries,
         chunkyIndex,
         io,
@@ -623,7 +637,7 @@ async function processQuery(
 
     const answer = await generateAnswer(
         input,
-        message,
+        hitsByIndex,
         chunkIdScores,
         recentAnswers,
         chunkyIndex,
@@ -635,7 +649,7 @@ async function processQuery(
     // **Step 4:** Print the answer. Also record it for posterity.
 
     await chunkyIndex.answerFolder.put(answer);
-    reportQuery(answer, io);
+    reportQuery(hitsByIndex, chunkIdScores, answer, io, queryOptions.verbose);
 }
 
 async function proposeQueries(
@@ -645,6 +659,8 @@ async function proposeQueries(
     io: iapp.InteractiveIo,
     queryOptions: QueryOptions,
 ): Promise<QuerySpecs | undefined> {
+    const t0 = Date.now();
+
     const promptPreamble = makeQueryMakerPrompt(recentAnswers);
     if (queryOptions.verbose) {
         for (const section of promptPreamble) {
@@ -656,7 +672,11 @@ async function proposeQueries(
         promptPreamble,
     );
     if (!result.success) {
-        writeError(io, `[Error: ${result.message}]`);
+        const t1 = Date.now();
+        writeError(
+            io,
+            `[Error: ${result.message} in ${((t1 - t0) * 0.001).toFixed(3)} seconds]`,
+        );
         return undefined;
     }
     const specs = result.data;
@@ -667,24 +687,33 @@ async function proposeQueries(
             util.inspect(specs, { depth: null, colors: true, compact: false }),
         );
     }
+    const t1 = Date.now();
+    writeNote(
+        io,
+        `[proposeQueries took ${((t1 - t0) * 0.001).toFixed(3)} seconds]`,
+    );
+
     return specs;
 }
+
+type HitsMap = Map<string, ScoredItem<knowLib.TextBlock<ChunkId>>[]>; // indexName -> hits from nearestNeighborsPairs
 
 async function runIndexQueries(
     proposedQueries: QuerySpecs,
     chunkyIndex: ChunkyIndex,
     io: iapp.InteractiveIo,
     queryOptions: QueryOptions,
-): Promise<
-    [string | undefined, Map<ChunkId, ScoredItem<ChunkId>> | undefined]
-> {
+): Promise<[HitsMap, Map<ChunkId, ScoredItem<ChunkId>> | undefined]> {
+    const t0 = Date.now();
+
+    const hitsByIndex: HitsMap = new Map();
     const chunkIdScores: Map<ChunkId, ScoredItem<ChunkId>> = new Map(); // Record score of each chunk id.
     const totalNumChunks = await chunkyIndex.chunkFolder.size(); // Nominator in IDF calculation.
 
     for (const [indexName, index] of chunkyIndex.allIndexes()) {
-        const spec: QuerySpec = (proposedQueries as any)[indexName];
-        if (spec.maxHits === 0) {
-            writeNote(io, `[${indexName}: no query]`);
+        const spec: QuerySpec | undefined = (proposedQueries as any)[indexName];
+        if (spec === undefined) {
+            writeNote(io, `[No query specified for ${indexName}]`);
             continue;
         }
 
@@ -708,6 +737,7 @@ async function runIndexQueries(
             );
             continue;
         }
+        hitsByIndex.set(indexName, hits);
 
         // Update chunk id scores.
         for (const hit of hits) {
@@ -718,7 +748,8 @@ async function runIndexQueries(
             for (const chunkId of hit.item.sourceIds ?? []) {
                 // Binary TF is 1 for all chunks in the list.
                 // As a tweak, we multiply by the term's relevance score.
-                const newScore = hit.score * idf;
+                const tf = hit.score;
+                const newScore = tf * idf;
                 const oldScoredItem = chunkIdScores.get(chunkId);
                 const oldScore = oldScoredItem?.score ?? 0;
                 // Combine scores by addition. (Alternatives: max, possibly others.)
@@ -759,22 +790,26 @@ async function runIndexQueries(
         );
     }
 
-    if (proposedQueries.message) {
-        writeNote(io, `[Message: ${proposedQueries.message}]`);
-    }
+    const t1 = Date.now();
+    writeNote(
+        io,
+        `[runIndexQueries took ${((t1 - t0) * 0.001).toFixed(3)} seconds]`,
+    );
 
-    return [proposedQueries.message, chunkIdScores];
+    return [hitsByIndex, chunkIdScores];
 }
 
 async function generateAnswer(
     input: string,
-    message: string | undefined,
+    hitsByIndex: HitsMap,
     chunkIdScores: Map<ChunkId, ScoredItem<ChunkId>>,
     recentAnswers: NameValue<AnswerSpecs>[],
     chunkyIndex: ChunkyIndex,
     io: iapp.InteractiveIo,
     queryOptions: QueryOptions,
 ): Promise<AnswerSpecs | undefined> {
+    const t0 = Date.now();
+
     // Step 3a: Compute array of ids sorted by score, truncated to some limit.
     const scoredChunkIds: ScoredItem<ChunkId>[] = Array.from(
         chunkIdScores.values(),
@@ -788,21 +823,31 @@ async function generateAnswer(
     const chunks: Chunk[] = [];
     const maxChunks = 30;
     // Take the top N chunks that actually exist.
-    for (const chunkId of scoredChunkIds) {
-        const maybeChunk = await chunkyIndex.chunkFolder.get(chunkId.item);
+    for (const scoredChunkId of scoredChunkIds) {
+        const maybeChunk = await chunkyIndex.chunkFolder.get(
+            scoredChunkId.item,
+        );
         if (maybeChunk) {
             chunks.push(maybeChunk);
+            if (queryOptions.verbose) {
+                writeVerboseReferences(
+                    io,
+                    [scoredChunkId.item],
+                    hitsByIndex,
+                    chunkIdScores,
+                );
+            }
             if (chunks.length >= maxChunks) {
                 break;
             }
         } else {
-            writeNote(io, `[Chunk ${chunkId.item} not found]`);
+            writeNote(io, `[Chunk ${scoredChunkId.item} not found]`);
         }
     }
 
     writeNote(io, `[Sending ${chunks.length} chunks to answerMaker]`);
 
-    const preamble = makeAnswerPrompt(message, recentAnswers, chunks);
+    const preamble = makeAnswerPrompt(recentAnswers, chunks);
     if (queryOptions.verbose) {
         const formatted = util.inspect(preamble, {
             depth: null,
@@ -830,6 +875,12 @@ async function generateAnswer(
         );
     }
 
+    const t1 = Date.now();
+    writeNote(
+        io,
+        `[generateAnswer took ${((t1 - t0) * 0.001).toFixed(3)} seconds]`,
+    );
+
     return answerResult.data;
 }
 
@@ -849,7 +900,13 @@ async function findRecentAnswers(
     return recentAnswers;
 }
 
-function reportQuery(answer: AnswerSpecs, io: iapp.InteractiveIo): void {
+function reportQuery(
+    hitsByIndex: HitsMap | undefined,
+    chunkIdScores: Map<ChunkId, ScoredItem<ChunkId>> | undefined,
+    answer: AnswerSpecs,
+    io: iapp.InteractiveIo,
+    verbose: boolean,
+): void {
     writeHeading(
         io,
         `\nAnswer (confidence ${answer.confidence.toFixed(3).replace(/0+$/, "")}):`,
@@ -865,8 +922,44 @@ function reportQuery(answer: AnswerSpecs, io: iapp.InteractiveIo): void {
             io,
             `\nReferences (${answer.references.length}): ${answer.references.join(",").replace(/,/g, ", ")}`,
         );
+        if (verbose && chunkIdScores && hitsByIndex) {
+            writeVerboseReferences(
+                io,
+                answer.references,
+                hitsByIndex,
+                chunkIdScores,
+            );
+        }
     }
     // NOTE: If the user wants to see the contents of any chunk, they can use the @chunk command.
+}
+
+function writeVerboseReferences(
+    io: iapp.InteractiveIo,
+    references: ChunkId[],
+    hitsByIndex: HitsMap,
+    chunkIdScores: Map<ChunkId, ScoredItem<ChunkId>>,
+): void {
+    for (const ref of references) {
+        const score = chunkIdScores.get(ref)?.score ?? 0;
+        writeColor(
+            io,
+            chalk.blue,
+            `  ${ref} (${chalk.white(score.toFixed(3))})`,
+        );
+        for (const indexName of hitsByIndex.keys()) {
+            const hits = hitsByIndex.get(indexName) ?? [];
+            for (const hit of hits) {
+                if (hit.item.sourceIds?.includes(ref)) {
+                    writeColor(
+                        io,
+                        chalk.green,
+                        `    ${chalk.gray(indexName)}: ${hit.item.value} (${chalk.white(hit.score.toFixed(3))})`,
+                    );
+                }
+            }
+        }
+    }
 }
 
 function makeQueryMakerPrompt(
@@ -883,7 +976,6 @@ Don't suggest "meta" queries about the conversation itself -- only the code is i
 }
 
 function makeAnswerPrompt(
-    message: string | undefined,
     recentAnswers: NameValue<AnswerSpecs>[],
     chunks: Chunk[],
 ): PromptSection[] {
@@ -891,10 +983,8 @@ function makeAnswerPrompt(
 Following are the chunks most relevant to the query.
 Use the preceding conversation items as context for the user query given later.
 `;
+
     const preamble = makeAnyPrompt(recentAnswers, prompt);
-    if (message) {
-        preamble.push({ role: "assistant", content: message });
-    }
     for (const chunk of chunks) {
         const chunkData = {
             fileName: chunk.fileName,

@@ -58,6 +58,7 @@ import {
 } from "../storageProvider.js";
 import { KeyValueIndex } from "../keyValueIndex.js";
 import { isValidEntityName } from "./knowledge.js";
+import { EntityNameIndex } from "./entities.js";
 
 export interface TopicExtractor {
     nextTopic(
@@ -326,7 +327,7 @@ export function createTopicSearchOptions(
     isTopicSummary: boolean = false,
 ): TopicSearchOptions {
     return {
-        maxMatches: isTopicSummary ? Number.MAX_SAFE_INTEGER : 8,
+        maxMatches: isTopicSummary ? Number.MAX_SAFE_INTEGER : 25,
         minScore: 0.8,
         loadTopics: true,
         sourceNameSearchOptions: {
@@ -415,7 +416,7 @@ export interface TopicIndex<TTopicId = any, TSourceId = any> {
 
 export async function createTopicIndex<TSourceId extends ValueType = string>(
     settings: TextIndexSettings,
-    getNameIndex: () => Promise<TextIndex<string>>,
+    getNameIndex: () => Promise<EntityNameIndex<string>>,
     rootPath: string,
     name: string,
     sourceIdType: ValueDataType<TSourceId>,
@@ -436,7 +437,7 @@ export async function createTopicIndexOnStorage<
     TSourceId extends ValueType = string,
 >(
     settings: TextIndexSettings,
-    getNameIndex: () => Promise<TextIndex<string>>,
+    getNameIndex: () => Promise<EntityNameIndex<string>>,
     basePath: string,
     name: string,
     storageProvider: StorageProvider,
@@ -585,8 +586,9 @@ export async function createTopicIndexOnStorage<
         }
 
         if (sourceName) {
-            const names = await getNameIndex();
-            const nameId = await names.getId(sourceName);
+            const entityNames = await getNameIndex();
+            // TODO: use aliases here for better matching
+            const nameId = await entityNames.nameIndex.getId(sourceName);
             if (nameId) {
                 await sourceNameToTopicIndex.put([topicId], nameId);
             }
@@ -636,19 +638,18 @@ export async function createTopicIndexOnStorage<
                     ];
                 }
                 if (sourceName) {
-                    const names = await getNameIndex();
+                    const entityNames = await getNameIndex();
                     const topicIdsWithSource = await matchName(
-                        names,
+                        entityNames,
                         sourceNameToTopicIndex,
                         sourceName,
                         options,
                     );
-                    results.topicIds = [
-                        ...intersect(
-                            results.topicIds,
-                            topicIdsWithSource ? topicIdsWithSource : [],
-                        ),
-                    ];
+                    if (topicIdsWithSource) {
+                        results.topicIds = [
+                            ...intersect(results.topicIds, topicIdsWithSource),
+                        ];
+                    }
                 }
             }
         }
@@ -709,6 +710,7 @@ export async function createTopicIndexOnStorage<
     ): Promise<TopicSearchResult<TopicId>> {
         // We will just use the standard topic stuff for now, since that does the same thing
         const allTerms = getAllTermsInFilter(filter);
+        const useSourceName = false;
         let sourceName = getSubjectFromActionTerm(filter.action);
         if (!isValidEntityName(sourceName)) {
             sourceName = undefined;
@@ -723,8 +725,9 @@ export async function createTopicIndexOnStorage<
         return search(
             topicFilter,
             options,
-            sourceName,
-            topics !== "*" ? getAllTermsInFilter(filter, false) : undefined,
+            useSourceName ? sourceName : undefined,
+            //topics !== "*" ? getAllTermsInFilter(filter, false) : undefined,
+            undefined,
             possibleIds,
         );
     }
@@ -778,17 +781,18 @@ export async function createTopicIndexOnStorage<
     }
 
     async function matchName(
-        names: TextIndex<string>,
+        names: EntityNameIndex<string>,
         nameIndex: KeyValueIndex<string, TopicId>,
         name: string | undefined,
         searchOptions: TopicSearchOptions,
     ): Promise<IterableIterator<TopicId> | undefined> {
         const options = searchOptions.sourceNameSearchOptions ?? searchOptions;
         // Possible names of entities
-        const nameIds = await names.getNearestText(
+        const nameIds = await names.nameIndex.getNearestText(
             name!,
             options.maxMatches,
             options.minScore,
+            names.nameAliases,
         );
         if (nameIds && nameIds.length > 0) {
             // Load all topic Ids for those entities

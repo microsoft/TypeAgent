@@ -19,6 +19,18 @@ export function parseDateString(dateString: string): Date | undefined {
     return parsedDate;
 }
 
+export function parseFuzzyDateString(dateString: string): Date | undefined {
+    let parsedDate = parseDateString(dateString);
+    if (!parsedDate) {
+        parsedDate = new Date(Date.parse(dateString));
+        // Node Date.parse() returns a fallback year of 2001 if the year is not provided
+        if (parsedDate.getFullYear() === 2001) {
+            parsedDate.setFullYear(new Date().getFullYear());
+        }
+    }
+    return isValid(parsedDate) ? parsedDate : undefined;
+}
+
 export function parseTimeString(timeString: string): string {
     const isPM = timeString.toLowerCase().includes("pm");
     const isAM = timeString.toLowerCase().includes("am");

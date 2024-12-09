@@ -16,7 +16,6 @@ import { DateTimeRange } from "./dateTimeSchema.js";
 // - facets: specific, inherent, defining, or non-immediate facet of an entity such as "blue", "old", "famous", "sister", "aunt_of", "weight: 4 kg"
 // Topics Terms:
 // - topic or subject of conversation
-// - use empty term array for summaries
 export type SearchTerm = string;
 
 export type VerbsTerm = {
@@ -43,9 +42,11 @@ export type ActionTerm = {
 // Search indexes for following search terms: typically single word keywords.
 export type TermFilterV2 = {
     action?: ActionTerm;
-    // Includes any search terms not already in action.
-    // skip generic terms like "topic" and "subject"
-    // Phrases like 'email address' or 'first name' are a single term
+    // searchTerms:
+    // - do not repeat search terms already specified as an ActionTerm
+    // - no generic terms like "topic" and "subject"
+    // - Phrases like 'email address' or 'first name' are a single term
+    // - use empty term array for summaries
     searchTerms?: SearchTerm[];
     // Use only if request explicitly asks for time range
     timeRange?: DateTimeRange | undefined; // in this time range

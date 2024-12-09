@@ -17,7 +17,6 @@ import {
     RequestAction,
 } from "agent-cache";
 import { randomUUID } from "crypto";
-import readline from "readline/promises";
 import {
     Session,
     SessionOptions,
@@ -25,24 +24,21 @@ import {
     setupBuiltInCache,
 } from "../../session/session.js";
 import {
-    getDefaultBuiltinSchemaName,
     loadAgentJsonTranslator,
     ActionConfigProvider,
     TypeAgentTranslator,
+    createTypeAgentTranslatorForSelectedActions,
 } from "../../translation/agentTranslators.js";
 import { getCacheFactory } from "../../utils/cacheFactory.js";
 import { createServiceHost } from "../serviceHost/serviceHostCommandHandler.js";
 import {
     ClientIO,
-    RequestIO,
-    getConsoleRequestIO,
-    getRequestIO,
     RequestId,
-    getNullRequestIO,
     DispatcherName,
+    nullClientIO,
 } from "./interactiveIO.js";
 import { ChatHistory, createChatHistory } from "./chatHistory.js";
-import { getUserId } from "../../utils/userData.js";
+import { ensureCacheDir, getUserId } from "../../utils/userData.js";
 import { ActionContext, AppAgentEvent } from "@typeagent/agent-sdk";
 import { Profiler } from "telemetry";
 import { conversation as Conversation } from "knowledge-processor";
@@ -50,17 +46,13 @@ import {
     AppAgentManager,
     AppAgentStateOptions,
     SetStateResult,
-} from "./appAgentManager.js";
-import {
-    getBuiltinAppAgentProvider,
-    getExternalAppAgentProvider,
-} from "../../agent/agentConfig.js";
+} from "../../agent/appAgentManager.js";
 import { loadTranslatorSchemaConfig } from "../../utils/loadSchemaConfig.js";
 import { AppAgentProvider } from "../../agent/agentProvider.js";
 import { RequestMetricsManager } from "../../utils/metrics.js";
 import { getTranslatorPrefix } from "../../action/actionHandlers.js";
 import { displayError } from "@typeagent/agent-sdk/helpers/display";
-import path from "path";
+
 import {
     EmbeddingCache,
     readEmbeddingCache,
@@ -68,8 +60,11 @@ import {
 } from "../../translation/actionSchemaSemanticMap.js";
 
 import registerDebug from "debug";
+import { getDefaultAppProviders } from "../../utils/defaultAppProviders.js";
+import path from "node:path";
 
 const debug = registerDebug("typeagent:dispatcher:init");
+const debugError = registerDebug("typeagent:dispatcher:init:error");
 
 export interface CommandResult {
     error?: boolean;
@@ -98,8 +93,7 @@ export type CommandHandlerContext = {
     developerMode?: boolean;
     explanationAsynchronousMode: boolean;
     dblogging: boolean;
-    clientIO: ClientIO | undefined | null;
-    requestIO: RequestIO;
+    clientIO: ClientIO;
 
     // Runtime context
     commandLock: Limiter; // Make sure we process one command at a time.
@@ -109,9 +103,10 @@ export type CommandHandlerContext = {
     currentScriptDir: string;
     logger?: Logger | undefined;
     serviceHost: ChildProcess | undefined;
-    localWhisper: ChildProcess | undefined;
     requestId?: RequestId;
     chatHistory: ChatHistory;
+
+    batchMode: boolean;
 
     // For @correct
     lastRequestAction?: RequestAction;
@@ -134,7 +129,7 @@ export function updateCorrectionContext(
     }
 }
 
-export function getTranslator(
+export function getTranslatorForSchema(
     context: CommandHandlerContext,
     translatorName: string,
 ) {
@@ -150,9 +145,43 @@ export function getTranslator(
         config.switch.inline ? getActiveTranslators(context) : undefined,
         config.multipleActions,
         config.schema.generation,
+        !config.schema.optimize.enabled,
     );
     context.translatorCache.set(translatorName, newTranslator);
     return newTranslator;
+}
+
+export async function getTranslatorForSelectedActions(
+    context: CommandHandlerContext,
+    schemaName: string,
+    request: string,
+    numActions: number,
+): Promise<TypeAgentTranslator | undefined> {
+    const actionSchemaFile = context.agents.getActionSchemaFile(schemaName);
+    if (
+        actionSchemaFile === undefined ||
+        actionSchemaFile.actionSchemas.size <= numActions
+    ) {
+        return undefined;
+    }
+    const nearestNeighbors = await context.agents.semanticSearchActionSchema(
+        request,
+        numActions,
+        (name) => name === schemaName,
+    );
+
+    if (nearestNeighbors === undefined) {
+        return undefined;
+    }
+    const config = context.session.getConfig().translation;
+    return createTypeAgentTranslatorForSelectedActions(
+        nearestNeighbors.map((e) => e.item.definition),
+        schemaName,
+        context.agents,
+        config.model,
+        config.switch.inline ? getActiveTranslators(context) : undefined,
+        config.multipleActions,
+    );
 }
 
 async function getAgentCache(
@@ -183,8 +212,7 @@ export type InitializeCommandHandlerContextOptions = SessionOptions & {
     appAgentProviders?: AppAgentProvider[];
     explanationAsynchronousMode?: boolean; // default to false
     persistSession?: boolean; // default to false,
-    stdio?: readline.Interface;
-    clientIO?: ClientIO | undefined | null; // default to console IO, null to disable
+    clientIO?: ClientIO | undefined; // undefined to disable any IO.
     enableServiceHost?: boolean; // default to false,
     metrics?: boolean; // default to false
 };
@@ -195,7 +223,7 @@ async function getSession(persistSession: boolean = false) {
         try {
             session = await Session.restoreLastSession();
         } catch (e: any) {
-            console.warn(`WARNING: ${e.message}. Creating new session.`);
+            debugError(`WARNING: ${e.message}. Creating new session.`);
         }
     }
     if (session === undefined) {
@@ -205,7 +233,7 @@ async function getSession(persistSession: boolean = false) {
     return session;
 }
 
-function getLoggerSink(isDbEnabled: () => boolean, requestIO: RequestIO) {
+function getLoggerSink(isDbEnabled: () => boolean, clientIO: ClientIO) {
     const debugLoggerSink = createDebugLoggerSink();
     let dbLoggerSink: LoggerSink | undefined;
 
@@ -216,10 +244,11 @@ function getLoggerSink(isDbEnabled: () => boolean, requestIO: RequestIO) {
             isDbEnabled,
         );
     } catch (e) {
-        requestIO.notify(
+        clientIO.notify(
             AppAgentEvent.Warning,
             undefined,
             `DB logging disabled. ${e}`,
+            DispatcherName,
         );
     }
 
@@ -233,30 +262,29 @@ function getLoggerSink(isDbEnabled: () => boolean, requestIO: RequestIO) {
 async function addAppAgentProvidres(
     context: CommandHandlerContext,
     appAgentProviders?: AppAgentProvider[],
-    sessionDirPath?: string,
+    cacheDirPath?: string,
 ) {
-    const embeddingCachePath = sessionDirPath
-        ? path.join(sessionDirPath, "embeddingCache.json")
+    const embeddingCachePath = cacheDirPath
+        ? path.join(cacheDirPath, "embeddingCache.json")
         : undefined;
     let embeddingCache: EmbeddingCache | undefined;
 
     if (embeddingCachePath) {
         try {
             embeddingCache = await readEmbeddingCache(embeddingCachePath);
-            debug("Action Schema Embedding cache loaded");
+            debug(
+                `Action Schema Embedding cache loaded: ${embeddingCachePath}`,
+            );
         } catch {
             // Ignore error
         }
     }
 
-    await context.agents.addProvider(
-        getBuiltinAppAgentProvider(context),
-        embeddingCache,
-    );
-    await context.agents.addProvider(
-        getExternalAppAgentProvider(context),
-        embeddingCache,
-    );
+    const appProviders = getDefaultAppProviders(context);
+
+    for (const provider of appProviders) {
+        await context.agents.addProvider(provider, embeddingCache);
+    }
     if (appAgentProviders) {
         for (const provider of appAgentProviders) {
             await context.agents.addProvider(provider, embeddingCache);
@@ -264,11 +292,13 @@ async function addAppAgentProvidres(
     }
     if (embeddingCachePath) {
         try {
-            await writeEmbeddingCache(
-                embeddingCachePath,
-                context.agents.getActionEmbeddings(),
-            );
-            debug("Action Schema Embedding cache saved");
+            const embeddings = context.agents.getActionEmbeddings();
+            if (embeddings) {
+                await writeEmbeddingCache(embeddingCachePath, embeddings);
+                debug(
+                    `Action Schema Embedding cache saved: ${embeddingCachePath}`,
+                );
+            }
         } catch {
             // Ignore error
         }
@@ -282,13 +312,13 @@ export async function initializeCommandHandlerContext(
     const metrics = options?.metrics ?? false;
     const explanationAsynchronousMode =
         options?.explanationAsynchronousMode ?? false;
-    const stdio = options?.stdio;
 
     const session = await getSession(options?.persistSession);
     if (options) {
         session.setConfig(options);
     }
     const sessionDirPath = session.getSessionDirPath();
+    debug(`Session directory: ${sessionDirPath}`);
     const conversationManager = sessionDirPath
         ? await Conversation.createConversationManager(
               {},
@@ -298,13 +328,8 @@ export async function initializeCommandHandlerContext(
           )
         : undefined;
 
-    const clientIO = options?.clientIO;
-    const requestIO = clientIO
-        ? getRequestIO(undefined, clientIO)
-        : clientIO === undefined
-          ? getConsoleRequestIO(stdio)
-          : getNullRequestIO();
-    const loggerSink = getLoggerSink(() => context.dblogging, requestIO);
+    const clientIO = options?.clientIO ?? nullClientIO;
+    const loggerSink = getLoggerSink(() => context.dblogging, clientIO);
     const logger = new ChildLogger(loggerSink, DispatcherName, {
         hostName,
         userId: getUserId(),
@@ -317,7 +342,8 @@ export async function initializeCommandHandlerContext(
         serviceHost = await createServiceHost();
     }
 
-    const agents = new AppAgentManager(sessionDirPath);
+    const cacheDirPath = ensureCacheDir();
+    const agents = new AppAgentManager(cacheDirPath);
     const context: CommandHandlerContext = {
         agents,
         session,
@@ -325,29 +351,28 @@ export async function initializeCommandHandlerContext(
         explanationAsynchronousMode,
         dblogging: true,
         clientIO,
-        requestIO,
 
         // Runtime context
         commandLock: createLimiter(1), // Make sure we process one command at a time.
         agentCache: await getAgentCache(session, agents, logger),
-        lastActionSchemaName: getDefaultBuiltinSchemaName(), // REVIEW: just default to the first one on initialize?
+        lastActionSchemaName: "",
         translatorCache: new Map<string, TypeAgentTranslator>(),
         currentScriptDir: process.cwd(),
         chatHistory: createChatHistory(),
         logger,
-        serviceHost: serviceHost,
-        localWhisper: undefined,
+        serviceHost,
         metricsManager: metrics ? new RequestMetricsManager() : undefined,
+        batchMode: false,
     };
-    context.requestIO.context = context;
 
     await addAppAgentProvidres(
         context,
         options?.appAgentProviders,
-        sessionDirPath,
+        cacheDirPath,
     );
 
     await setAppAgentStates(context, options);
+    debug("Context initialized");
     return context;
 }
 
@@ -365,7 +390,12 @@ async function setAppAgentStates(
     // Ignore the returned rollback state for initialization and keep the session setting as is.
 
     processSetAppAgentStateResult(result, context, (message) =>
-        context.requestIO.notify(AppAgentEvent.Error, undefined, message),
+        context.clientIO.notify(
+            AppAgentEvent.Error,
+            undefined,
+            message,
+            DispatcherName,
+        ),
     );
 }
 
@@ -428,6 +458,8 @@ export async function closeCommandHandlerContext(
     context: CommandHandlerContext,
 ) {
     context.serviceHost?.kill();
+    // Save the session because the token count is in it.
+    context.session.save();
     await context.agents.close();
 }
 
@@ -470,10 +502,10 @@ export async function changeContextConfig(
         changed.translation?.model !== undefined ||
         changed.translation?.switch?.inline !== undefined ||
         changed.translation?.multipleActions !== undefined ||
-        changed.translation?.schema?.generation !== undefined
+        changed.translation?.schema?.generation !== undefined ||
+        changed.translation?.schema?.optimize?.enabled !== undefined
     ) {
-        // The dynamic schema for change assistant is changed.
-        // Clear the cache to regenerate them.
+        // Schema changed, clear the cache to regenerate them.
         systemContext.translatorCache.clear();
     }
 

@@ -652,6 +652,12 @@ export function displayHelp(
 ) {
     if (args.length === 0) {
         displayCommands(handlers, io);
+
+        const helpArgs =
+            "\nHelp Arguments:\n" +
+            "<commandName>\n" +
+            "<commandName*>  Help for all commands with this prefix";
+        io.writer.writeLine(helpArgs);
         return;
     }
     const commandName = args[0];

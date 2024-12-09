@@ -5,7 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import chalk from "chalk";
-import { getToggleHandlerTable } from "./common/commandHandler.js";
+import { getToggleHandlerTable } from "../command/handlerUtils.js";
 import {
     CommandHandlerContext,
     changeContextConfig,
@@ -15,7 +15,7 @@ import { getPackageFilePath } from "../utils/getPackageFilePath.js";
 import { ConstructionStore, printImportConstructionResult } from "agent-cache";
 import { getSessionCacheDirPath } from "../explorer.js";
 import { getAppAgentName } from "../translation/agentTranslators.js";
-import { RequestIO } from "./common/interactiveIO.js";
+import { askYesNoWithContext } from "./common/interactiveIO.js";
 import { glob } from "glob";
 import { getDispatcherConfig } from "../utils/config.js";
 import {
@@ -32,27 +32,27 @@ import { ActionContext, ParsedCommandParams } from "@typeagent/agent-sdk";
 
 async function checkRecreateStore(
     constructionStore: ConstructionStore,
-    requestIO: RequestIO,
+    context: CommandHandlerContext,
 ) {
     if (!constructionStore.isModified()) {
         return;
     }
     const message =
         "Construction store has been modified.  All data will be lost!!! Continue?";
-    if (!(await requestIO.askYesNo(message, true))) {
+    if (!(await askYesNoWithContext(context, message, true))) {
         throw new Error("Aborted!");
     }
 }
 
 async function checkOverwriteFile(
     filePath: string | undefined,
-    requestIO: RequestIO,
+    context: CommandHandlerContext,
 ) {
     if (filePath === undefined || !fs.existsSync(filePath)) {
         return;
     }
     const message = `File '${filePath}' exists.  Overwrite?`;
-    if (!(await requestIO.askYesNo(message, true))) {
+    if (!(await askYesNoWithContext(context, message, true))) {
         throw new Error("Aborted!");
     }
 }
@@ -100,12 +100,12 @@ class ConstructionNewCommandHandler implements CommandHandler {
     ) {
         const systemContext = context.sessionContext.agentContext;
         const constructionStore = systemContext.agentCache.constructionStore;
-        await checkRecreateStore(constructionStore, systemContext.requestIO);
+        await checkRecreateStore(constructionStore, systemContext);
         const constructionPath = resolvePathWithSession(
             params.args.file,
             systemContext.session.dir,
         );
-        await checkOverwriteFile(constructionPath, systemContext.requestIO);
+        await checkOverwriteFile(constructionPath, systemContext);
 
         await changeContextConfig({ cache: { enabled: false } }, context);
         if (constructionPath) {
@@ -138,7 +138,7 @@ class ConstructionLoadCommandHandler implements CommandHandler {
     ) {
         const systemContext = context.sessionContext.agentContext;
         const constructionStore = systemContext.agentCache.constructionStore;
-        await checkRecreateStore(constructionStore, systemContext.requestIO);
+        await checkRecreateStore(constructionStore, systemContext);
         const constructionPath =
             resolvePathWithSession(
                 params.args.file,
@@ -184,7 +184,7 @@ class ConstructionSaveCommandHandler implements CommandHandler {
             params.args.file,
             systemContext.session.dir,
         );
-        await checkOverwriteFile(constructionPath, systemContext.requestIO);
+        await checkOverwriteFile(constructionPath, systemContext);
         if (await constructionStore.save(constructionPath)) {
             const filePath = constructionStore.getFilePath()!;
             systemContext.session.setCacheDataFilePath(filePath);
@@ -230,7 +230,7 @@ class ConstructionOffCommandHandler implements CommandHandlerNoParams {
     public async run(context: ActionContext<CommandHandlerContext>) {
         const systemContext = context.sessionContext.agentContext;
         const constructionStore = systemContext.agentCache.constructionStore;
-        await checkRecreateStore(constructionStore, systemContext.requestIO);
+        await checkRecreateStore(constructionStore, systemContext);
         await changeContextConfig({ cache: { enabled: false } }, context);
         displaySuccess("Construction store disabled.", context);
     }

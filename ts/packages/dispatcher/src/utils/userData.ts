@@ -143,7 +143,7 @@ function getProfilesDir() {
     return path.join(ensureUserDataDir(), "profiles");
 }
 
-function getUserProfileName() {
+function ensureUserProfileName() {
     const userConfig = ensureGlobalUserConfig();
 
     const instanceName = getInstanceName();
@@ -163,14 +163,36 @@ function getUserProfileName() {
     return newProfileName;
 }
 
-export function getUserProfileDir() {
+function getUserProfileName() {
+    const currentGlobalUserConfig = readGlobalUserConfig();
+    if (currentGlobalUserConfig !== undefined) {
+        const instanceName = getInstanceName();
+        const profileName = currentGlobalUserConfig.instances?.[instanceName];
+        if (profileName !== undefined) {
+            return profileName;
+        }
+    }
     return lockUserData(() => {
-        return path.join(getProfilesDir(), getUserProfileName());
+        return ensureUserProfileName();
     });
+}
+
+let userProfileDir: string | undefined;
+export function getUserProfileDir() {
+    if (userProfileDir === undefined) {
+        userProfileDir = path.join(getProfilesDir(), getUserProfileName());
+    }
+    return userProfileDir;
 }
 
 export function ensureUserProfileDir() {
     const dir = getUserProfileDir();
+    createDirectory(dir);
+    return dir;
+}
+
+export function ensureCacheDir() {
+    const dir = path.join(getUserProfileDir(), "cache");
     createDirectory(dir);
     return dir;
 }

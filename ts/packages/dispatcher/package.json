@@ -13,6 +13,7 @@
   "type": "module",
   "exports": {
     ".": "./dist/index.js",
+    "./helpers/console": "./dist/helpers/console.js",
     "./internal": "./dist/internal.js",
     "./explorer": "./dist/explorer.js"
   },

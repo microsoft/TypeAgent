@@ -144,40 +144,19 @@ export function createActionSchemaFile(
     return actionSchemaFile;
 }
 
-export function parseActionSchemaFile(
-    fileName: string,
-    schemaName: string,
-    typeName: string,
-    strict: boolean = false,
-): ActionSchemaFile {
-    // TODO: switch to read file and call parseSource?
-    const options: ts.CompilerOptions = {
-        target: ts.ScriptTarget.ES5,
-        module: ts.ModuleKind.CommonJS,
-    };
-
-    const program = ts.createProgram([fileName], options);
-    for (const sourceFile of program.getSourceFiles()) {
-        if (!sourceFile.isDeclarationFile) {
-            return ActionParser.parseSourceFile(
-                sourceFile,
-                schemaName,
-                typeName,
-                strict,
-            );
-        }
-    }
-
-    throw new Error(`File not found: ${fileName}`);
-}
-
 export function parseActionSchemaSource(
     source: string,
     schemaName: string,
     typeName: string,
+    fileName: string = "",
     strict: boolean = false,
 ): ActionSchemaFile {
-    const sourceFile = ts.createSourceFile("", source, ts.ScriptTarget.ES5);
+    debug(`Parsing ${schemaName} for ${typeName}: ${fileName}`);
+    const sourceFile = ts.createSourceFile(
+        fileName,
+        source,
+        ts.ScriptTarget.ES5,
+    );
     return ActionParser.parseSourceFile(
         sourceFile,
         schemaName,
@@ -195,7 +174,6 @@ class ActionParser {
         typeName: string,
         strict: boolean,
     ) {
-        debug(`Parsing ${schemaName} for ${typeName}: ${sourceFile.fileName}`);
         const parser = new ActionParser();
         const definition = parser.parseSchema(sourceFile, typeName);
         if (definition === undefined) {

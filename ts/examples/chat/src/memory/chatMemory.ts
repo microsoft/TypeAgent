@@ -123,6 +123,8 @@ export function createModels(): Models {
         ),
         */
     };
+    models.chatModel.completionSettings.seed = 123;
+    models.answerModel.completionSettings.seed = 123;
     return models;
 }
 
@@ -1046,7 +1048,7 @@ export async function runChatMemory(): Promise<void> {
                 verb: arg(
                     "Verb to search for. Compound verbs are comma separated",
                 ),
-                tense: arg("Verb tense: past | present | future", "past"),
+                tense: arg("Verb tense: past | present | future"),
                 count: argNum("Num action matches", 1),
                 verbCount: argNum("Num verb matches", 1),
                 nameCount: argNum("Num name matches", 3),
@@ -1128,7 +1130,7 @@ export async function runChatMemory(): Promise<void> {
                 eval: argBool("Evaluate search query", true),
                 debug: argBool("Show debug info", false),
                 save: argBool("Save the search", false),
-                v2: argBool("Run V2 match", false),
+                v2: argBool("Run V2 match", true),
                 chunk: argBool("Use chunking", true),
             },
         };
@@ -1346,7 +1348,7 @@ export async function runChatMemory(): Promise<void> {
         if (namedArgs.v2) {
             searchOptions.skipEntitySearch = namedArgs.skipEntities;
             searchOptions.skipActionSearch = namedArgs.skipActions;
-            searchOptions.skipTopicSearch = namedArgs.skipTopicSearch;
+            searchOptions.skipTopicSearch = namedArgs.skipTopics;
             result = await searcher.searchTermsV2(
                 query,
                 undefined,
@@ -1389,7 +1391,10 @@ export async function runChatMemory(): Promise<void> {
             writeResultStats(result.response);
             if (result.response.answer.answer) {
                 const answer = result.response.answer.answer;
-                printer.writeInColor(chalk.green, answer);
+                printer.writeInColor(
+                    result.response.fallbackUsed ? chalk.gray : chalk.green,
+                    answer,
+                );
             } else if (result.response.answer.whyNoAnswer) {
                 const answer = result.response.answer.whyNoAnswer;
                 printer.writeInColor(chalk.red, answer);

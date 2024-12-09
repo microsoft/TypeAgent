@@ -35,20 +35,23 @@ export interface SearchResponse<
     topicLevel: number;
     messageIds?: TMessageId[] | undefined;
     messages?: dateTime.Timestamped<TextBlock<TMessageId>>[] | undefined;
+    fallbackUsed?: boolean | undefined;
     //
     // Any actually generated answer response
     //
     answer?: AnswerResponse | undefined;
 
     responseStyle?: string;
-    topKSettings?: TopKSettings | undefined;
-
     /**
      * Did we get a valid answer?
      */
     hasAnswer(): boolean;
     getAnswer(): string;
     getTopics(): string[];
+
+    // Default TopK settings used by methods below
+    topKSettings?: TopKSettings | undefined;
+
     /**
      * Get the topK matched and *loaded* entities.
      * Composites all raw matched entities - which are very granular - into a whole

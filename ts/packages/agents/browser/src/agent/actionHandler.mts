@@ -108,14 +108,6 @@ async function updateBrowserContext(
               break;
             }
             case "browserActionResponse": {
-              /*
-              const requestIO = context.requestIO;
-              const requestId = context.requestId;
-              
-              if (requestIO && requestId && data.id === requestId) {
-                requestIO.success(data.body.message);
-              }
-              */
               break;
             }
             case "debugBrowserAction": {

@@ -6,29 +6,29 @@ import {
     SessionContext,
     AppAgentManifest,
 } from "@typeagent/agent-sdk";
-import { CommandHandlerContext } from "./commandHandlerContext.js";
+import { CommandHandlerContext } from "../handlers/common/commandHandlerContext.js";
 import {
     convertToActionConfig,
     getAppAgentName,
     ActionConfig,
     ActionConfigProvider,
-} from "../../translation/agentTranslators.js";
-import { createSessionContext } from "../../action/actionHandlers.js";
-import { AppAgentProvider } from "../../agent/agentProvider.js";
+} from "../translation/agentTranslators.js";
+import { createSessionContext } from "../action/actionHandlers.js";
+import { AppAgentProvider } from "./agentProvider.js";
 import registerDebug from "debug";
 import { DeepPartialUndefinedAndNull } from "common-utils";
-import { DispatcherName } from "./interactiveIO.js";
+import { DispatcherName } from "../handlers/common/interactiveIO.js";
 import {
     ActionSchemaSementicMap,
     EmbeddingCache,
-} from "../../translation/actionSchemaSemanticMap.js";
-import { ActionSchemaFileCache } from "../../translation/actionSchemaFileCache.js";
+} from "../translation/actionSchemaSemanticMap.js";
+import { ActionSchemaFileCache } from "../translation/actionSchemaFileCache.js";
 import { ActionSchemaFile } from "action-schema";
 import path from "path";
-import { callEnsureError } from "../../utils/exceptions.js";
+import { callEnsureError } from "../utils/exceptions.js";
 
-const debug = registerDebug("typeagent:agents");
-const debugError = registerDebug("typeagent:agents:error");
+const debug = registerDebug("typeagent:dispatcher:agents");
+const debugError = registerDebug("typeagent:dispatcher:agents:error");
 
 type AppAgentRecord = {
     name: string;
@@ -141,15 +141,23 @@ export class AppAgentManager implements ActionConfigProvider {
     private readonly injectedSchemaForActionName = new Map<string, string>();
     private readonly emojis: Record<string, string> = {};
     private readonly transientAgents: Record<string, boolean | undefined> = {};
-    private readonly actionSementicMap = new ActionSchemaSementicMap();
+    private readonly actionSementicMap?: ActionSchemaSementicMap;
     private readonly actionSchemaFileCache;
 
-    public constructor(sessionDirPath: string | undefined) {
+    public constructor(cacheDirPath: string | undefined) {
         this.actionSchemaFileCache = new ActionSchemaFileCache(
-            sessionDirPath
-                ? path.join(sessionDirPath, "actionSchemaFileCache.json")
+            cacheDirPath
+                ? path.join(cacheDirPath, "actionSchemaFileCache.json")
                 : undefined,
         );
+
+        try {
+            this.actionSementicMap = new ActionSchemaSementicMap();
+        } catch (e) {
+            if (process.env.NODE_ENV !== "test") {
+                console.log("Failed to create action semantic map", e);
+            }
+        }
     }
     public getAppAgentNames(): string[] {
         return Array.from(this.agents.keys());
@@ -217,11 +225,13 @@ export class AppAgentManager implements ActionConfigProvider {
     public async semanticSearchActionSchema(
         request: string,
         maxMatches: number = 1,
+        filter: (schemaName: string) => boolean = (schemaName) =>
+            this.isSchemaActive(schemaName),
     ) {
-        return this.actionSementicMap.nearestNeighbors(
+        return this.actionSementicMap?.nearestNeighbors(
             request,
-            this,
             maxMatches,
+            filter,
         );
     }
 
@@ -246,13 +256,17 @@ export class AppAgentManager implements ActionConfigProvider {
 
                 const actionSchemaFile =
                     this.actionSchemaFileCache.getActionSchemaFile(config);
-                semanticMapP.push(
-                    this.actionSementicMap.addActionSchemaFile(
-                        config,
-                        actionSchemaFile,
-                        actionEmbeddingCache,
-                    ),
-                );
+
+                if (this.actionSementicMap) {
+                    semanticMapP.push(
+                        this.actionSementicMap.addActionSchemaFile(
+                            config,
+                            actionSchemaFile,
+                            actionEmbeddingCache,
+                        ),
+                    );
+                }
+
                 if (config.transient) {
                     this.transientAgents[name] = false;
                 }
@@ -281,7 +295,7 @@ export class AppAgentManager implements ActionConfigProvider {
     }
 
     public getActionEmbeddings() {
-        return this.actionSementicMap.embeddings();
+        return this.actionSementicMap?.embeddings();
     }
     public tryGetActionConfig(mayBeSchemaName: string) {
         return this.actionConfigs.get(mayBeSchemaName);
@@ -419,6 +433,7 @@ export class AppAgentManager implements ActionConfigProvider {
                                     record.name,
                                     enableCommands,
                                 ]);
+                                debug(`Command enabled ${record.name}`);
                             } catch (e: any) {
                                 failedCommands.push([
                                     record.name,
@@ -429,6 +444,7 @@ export class AppAgentManager implements ActionConfigProvider {
                         })(),
                     );
                 } else {
+                    debug(`Command disabled ${record.name}`);
                     record.commands = false;
                     changedCommands.push([record.name, enableCommands]);
                     await this.checkCloseSessionContext(record);

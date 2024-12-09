@@ -42,15 +42,18 @@ import {
     TermFilterV2,
 } from "./knowledgeTermSearchSchema2.js";
 import { createTopicSearchOptions } from "./topics.js";
+import { EntitySearchOptions } from "./entities.js";
 
 export type SearchProcessorSettings = {
     contextProvider?: PromptSectionProvider | undefined;
+    defaultEntitySearchOptions?: EntitySearchOptions | undefined;
 };
 
 export type SearchProcessingOptions = {
     maxMatches: number;
     minScore: number;
     maxMessages: number;
+    entitySearch?: EntitySearchOptions | undefined;
     fallbackSearch?: SearchOptions | undefined;
     skipAnswerGeneration?: boolean;
     skipEntitySearch?: boolean;
@@ -512,7 +515,10 @@ export function createSearchProcessor(
         ) {
             const result = await conversation.searchMessages(
                 query,
-                processingOptions,
+                {
+                    // No min score. We already know that the messages are relevant. We are using embeddings to pick the most relevant
+                    maxMatches: processingOptions.maxMessages,
+                },
                 response.messageIds,
             );
             if (result) {
@@ -559,6 +565,7 @@ export function createSearchProcessor(
     ) {
         const sResult = await conversation.searchMessages(query, options);
         if (sResult) {
+            response.fallbackUsed = true;
             response.messageIds = sResult.messageIds;
             response.messages = sResult.messages;
             response.answer = await answers.generateAnswer(
@@ -579,11 +586,12 @@ export function createSearchProcessor(
         const topicOptions = createTopicSearchOptions(topLevelTopicSummary);
         topicOptions.minScore = options.minScore;
         const searchOptions: ConversationSearchOptions = {
-            entity: {
-                maxMatches: options.maxMatches,
-                minScore: options.minScore,
-                loadEntities: true,
-            },
+            entity: options.entitySearch ??
+                settings.defaultEntitySearchOptions ?? {
+                    maxMatches: options.maxMatches,
+                    minScore: options.minScore,
+                    loadEntities: true,
+                },
             topic: topicOptions,
             topicLevel,
             loadMessages: !topLevelTopicSummary,
