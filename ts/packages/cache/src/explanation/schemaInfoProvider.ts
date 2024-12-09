@@ -1,8 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { simpleStarRegex } from "common-utils";
-import { ParamSpec, ActionParamSpecs } from "action-schema";
+import { ParamSpec } from "action-schema";
 import { Action } from "./requestAction.js";
 
 export type ParamRange = {
@@ -27,11 +26,9 @@ export function doCacheAction(
     action: Action,
     schemaInfoProvider?: SchemaInfoProvider,
 ) {
-    return (
-        schemaInfoProvider?.getActionParamSpecs(
-            action.translatorName,
-            action.actionName,
-        ) !== false
+    return schemaInfoProvider?.getActionCacheEnabled(
+        action.translatorName,
+        action.actionName,
     );
 }
 
@@ -40,25 +37,11 @@ export function getParamSpec(
     paramName: string,
     schemaInfoProvider?: SchemaInfoProvider,
 ): ParamSpec | undefined {
-    const paramSpecs = schemaInfoProvider?.getActionParamSpecs(
+    return schemaInfoProvider?.getActionParamSpec(
         action.translatorName,
         action.actionName,
+        paramName,
     );
-
-    if (typeof paramSpecs !== "object") {
-        return undefined;
-    }
-
-    for (const [key, value] of Object.entries(paramSpecs)) {
-        if (key.includes("*")) {
-            const regex = simpleStarRegex(key);
-            if (regex.test(paramName)) {
-                return value;
-            }
-        } else if (key === paramName) {
-            return value;
-        }
-    }
 }
 
 export function getNamespaceForCache(
@@ -75,9 +58,13 @@ export function getNamespaceForCache(
 }
 
 export type SchemaInfoProvider = {
-    getActionParamSpecs: (
+    getActionParamSpec: (
         schemaName: string,
         actionName: string,
-    ) => ActionParamSpecs | undefined;
+        paramPattern: string,
+    ) => ParamSpec | undefined;
+
+    getActionCacheEnabled: (schemaName: string, actionName: string) => boolean;
     getActionNamespace: (schemaName: string) => boolean | undefined; // default to false
+    getActionSchemaHash: (schemaName: string, actionName: string) => string;
 };

@@ -6,6 +6,7 @@ import {
     ActionSchemaFileJSON,
     ActionSchemaTypeDefinition,
     fromJSONActionSchemaFile,
+    generateSchemaTypeDefinition,
     parseActionSchemaSource,
     SchemaConfig,
     toJSONActionSchemaFile,
@@ -13,7 +14,7 @@ import {
 import { ActionConfig, ActionConfigProvider } from "./agentTranslators.js";
 import { getPackageFilePath } from "../utils/getPackageFilePath.js";
 import { AppAction } from "@typeagent/agent-sdk";
-import { DeepPartialUndefined } from "common-utils";
+import { DeepPartialUndefined, simpleStarRegex } from "common-utils";
 import fs from "node:fs";
 import crypto from "node:crypto";
 import registerDebug from "debug";
@@ -163,23 +164,64 @@ export function getActionSchema(
 export function createSchemaInfoProvider(
     provider: ActionConfigProvider,
 ): SchemaInfoProvider {
+    const hashCache = new Map<string, string>();
+
+    const getActionSchemaFile = (schemaName: string) => {
+        return provider.getActionSchemaFileForConfig(
+            provider.getActionConfig(schemaName),
+        );
+    };
+
+    const getActionSchema = (schemaName: string, actionName: string) => {
+        const actionSchema =
+            getActionSchemaFile(schemaName).actionSchemas.get(actionName);
+        if (actionSchema === undefined) {
+            throw new Error(
+                `Invalid action name ${actionName} for schema ${schemaName}`,
+            );
+        }
+        return actionSchema;
+    };
     const result: SchemaInfoProvider = {
         getActionNamespace: (schemaName) =>
-            provider.getActionSchemaFileForConfig(
-                provider.getActionConfig(schemaName),
-            ).actionNamespace,
-        getActionParamSpecs: (schemaName, actionName) => {
-            const actionSchema = provider
-                .getActionSchemaFileForConfig(
-                    provider.getActionConfig(schemaName),
-                )
-                .actionSchemas.get(actionName);
-            if (actionSchema === undefined) {
-                throw new Error(
-                    `Invalid action name ${actionName} for schema ${schemaName}`,
-                );
+            getActionSchemaFile(schemaName).actionNamespace,
+        getActionCacheEnabled: (schemaName, actionName) => {
+            return getActionSchema(schemaName, actionName).paramSpecs !== false;
+        },
+        getActionParamSpec: (schemaName, actionName, paramName: string) => {
+            const paramSpecs = getActionSchema(
+                schemaName,
+                actionName,
+            ).paramSpecs;
+            if (typeof paramSpecs !== "object") {
+                return undefined;
             }
-            return actionSchema.paramSpecs;
+
+            for (const [key, value] of Object.entries(paramSpecs)) {
+                if (key.includes("*")) {
+                    const regex = simpleStarRegex(key);
+                    if (regex.test(paramName)) {
+                        return value;
+                    }
+                } else if (key === paramName) {
+                    return value;
+                }
+            }
+        },
+        getActionSchemaHash: (schemaName, actionName) => {
+            const key = `${schemaName}.${actionName}`;
+            const existing = hashCache.get(key);
+            if (existing) {
+                return existing;
+            }
+            const actionSchema = getActionSchema(schemaName, actionName);
+            const hashSource = [generateSchemaTypeDefinition(actionSchema)];
+            if (actionSchema.paramSpecs) {
+                hashSource.push(JSON.stringify(actionSchema.paramSpecs));
+            }
+            const hash = hashStrings(...hashSource);
+            hashCache.set(key, hash);
+            return hash;
         },
     };
     return result;
