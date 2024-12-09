@@ -100,6 +100,7 @@ describe("Action Schema Regeneration", () => {
             const actionSchemaFile = parseActionSchemaSource(
                 source,
                 schemaName,
+                "testHash", // Don't care about source hash in tests
                 typeName,
                 fileName,
                 schemaConfig,
@@ -118,6 +119,7 @@ describe("Action Schema Regeneration", () => {
             const actionSchemaFile = parseActionSchemaSource(
                 source,
                 schemaName,
+                "testHash", // Don't care about source hash in tests
                 typeName,
                 fileName,
             );
@@ -126,6 +128,7 @@ describe("Action Schema Regeneration", () => {
             const roundtrip = parseActionSchemaSource(
                 regenerated,
                 schemaName,
+                "testHash", // Don't care about source hash in tests
                 typeName,
             );
             const schema2 = await generateActionSchema(roundtrip);
@@ -141,6 +144,7 @@ describe("Action Schema Serialization", () => {
             const actionSchemaFile = parseActionSchemaSource(
                 source,
                 schemaName,
+                "testHash", // Don't care about source hash in tests
                 typeName,
                 fileName,
             );

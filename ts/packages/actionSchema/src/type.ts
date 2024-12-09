@@ -149,6 +149,9 @@ export type ActionSchemaFile = ActionSchemaGroup & {
     // Schema name
     schemaName: string;
 
+    // original file source hash
+    sourceHash: string;
+
     // separate the cache by action name
     actionNamespace?: boolean; // default to false
 };

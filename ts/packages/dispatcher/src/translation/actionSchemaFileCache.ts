@@ -96,6 +96,7 @@ export class ActionSchemaFileCache {
         const parsed = parseActionSchemaSource(
             source,
             actionConfig.schemaName,
+            hash,
             actionConfig.schemaType,
             schemaFileFullPath,
             schemaConfig,
@@ -183,16 +184,15 @@ export function createSchemaInfoProvider(
         return actionSchema;
     };
     const result: SchemaInfoProvider = {
+        getActionSchemaFileHash: (schemaName) =>
+            getActionSchemaFile(schemaName).sourceHash,
         getActionNamespace: (schemaName) =>
             getActionSchemaFile(schemaName).actionNamespace,
-        getActionCacheEnabled: (schemaName, actionName) => {
-            return getActionSchema(schemaName, actionName).paramSpecs !== false;
-        },
-        getActionParamSpec: (schemaName, actionName, paramName: string) => {
-            const paramSpecs = getActionSchema(
-                schemaName,
-                actionName,
-            ).paramSpecs;
+        getActionCacheEnabled: (schemaName, actionName) =>
+            getActionSchema(schemaName, actionName).paramSpecs !== false,
+        getActionParamSpec: (schemaName, actionName, paramName) => {
+            const actionSchema = getActionSchema(schemaName, actionName);
+            const paramSpecs = actionSchema.paramSpecs;
             if (typeof paramSpecs !== "object") {
                 return undefined;
             }
@@ -207,21 +207,6 @@ export function createSchemaInfoProvider(
                     return value;
                 }
             }
-        },
-        getActionSchemaHash: (schemaName, actionName) => {
-            const key = `${schemaName}.${actionName}`;
-            const existing = hashCache.get(key);
-            if (existing) {
-                return existing;
-            }
-            const actionSchema = getActionSchema(schemaName, actionName);
-            const hashSource = [generateSchemaTypeDefinition(actionSchema)];
-            if (actionSchema.paramSpecs) {
-                hashSource.push(JSON.stringify(actionSchema.paramSpecs));
-            }
-            const hash = hashStrings(...hashSource);
-            hashCache.set(key, hash);
-            return hash;
         },
     };
     return result;

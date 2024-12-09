@@ -6,6 +6,7 @@ import { ActionSchemaFile, SchemaType, SchemaTypeDefinition } from "./type.js";
 
 export type ActionSchemaFileJSON = {
     schemaName: string;
+    sourceHash: string;
     entry: string;
     types: Record<string, SchemaTypeDefinition>;
     actionNamespace?: boolean; // default to false
@@ -68,6 +69,7 @@ export function toJSONActionSchemaFile(
     collectTypes(definitions, entry.type);
     const result: ActionSchemaFileJSON = {
         schemaName: actionSchemaFile.schemaName,
+        sourceHash: actionSchemaFile.sourceHash,
         entry: entry.name,
         types: definitions,
     };
@@ -137,6 +139,7 @@ export function fromJSONActionSchemaFile(
         : undefined;
     return createActionSchemaFile(
         json.schemaName,
+        json.sourceHash,
         entry,
         order,
         true,

@@ -175,6 +175,7 @@ function checkActionSchema(
 
 export function createActionSchemaFile(
     schemaName: string,
+    sourceHash: string,
     entry: SchemaTypeDefinition,
     order: Map<string, number> | undefined,
     strict: boolean,
@@ -249,6 +250,7 @@ export function createActionSchemaFile(
     }
     const actionSchemaFile: ActionSchemaFile = {
         entry: entry as ActionSchemaEntryTypeDefinition,
+        sourceHash,
         schemaName,
         actionSchemas,
     };
@@ -264,6 +266,7 @@ export function createActionSchemaFile(
 export function parseActionSchemaSource(
     source: string,
     schemaName: string,
+    sourceHash: string,
     typeName: string,
     fileName: string = "",
     schemaConfig?: SchemaConfig,
@@ -279,6 +282,7 @@ export function parseActionSchemaSource(
         return ActionParser.parseSourceFile(
             sourceFile,
             schemaName,
+            sourceHash,
             typeName,
             schemaConfig,
             strict,
@@ -292,6 +296,7 @@ class ActionParser {
     static parseSourceFile(
         sourceFile: ts.SourceFile,
         schemaName: string,
+        sourceHash: string,
         typeName: string,
         schemaConfig: SchemaConfig | undefined,
         strict: boolean,
@@ -303,6 +308,7 @@ class ActionParser {
         }
         const result = createActionSchemaFile(
             schemaName,
+            sourceHash,
             definition,
             parser.typeOrder,
             strict,

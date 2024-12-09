@@ -61,10 +61,10 @@ export type SchemaInfoProvider = {
     getActionParamSpec: (
         schemaName: string,
         actionName: string,
-        paramPattern: string,
+        paramName: string,
     ) => ParamSpec | undefined;
 
     getActionCacheEnabled: (schemaName: string, actionName: string) => boolean;
     getActionNamespace: (schemaName: string) => boolean | undefined; // default to false
-    getActionSchemaHash: (schemaName: string, actionName: string) => string;
+    getActionSchemaFileHash: (schemaName: string) => string;
 };
