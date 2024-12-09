@@ -3,7 +3,7 @@
 
 import { getExplainerFactories } from "../explanation/explainerFactories.js";
 import { GenericExplainer } from "../explanation/genericExplainer.js";
-import { SchemaConfigProvider } from "../explanation/schemaConfig.js";
+import { SchemaInfoProvider } from "../explanation/schemaInfoProvider.js";
 import { CacheOptions, AgentCache } from "./cache.js";
 import { Logger } from "telemetry";
 
@@ -44,14 +44,14 @@ export class AgentCacheFactory {
 
     public create(
         explainerName: string = getDefaultExplainerName(),
-        getSchemaConfig?: SchemaConfigProvider,
+        schemaInfoProvider?: SchemaInfoProvider,
         cacheOptions?: CacheOptions,
         logger?: Logger,
     ) {
         return new AgentCache(
             explainerName,
             this.getExplainerFactory(explainerName),
-            getSchemaConfig,
+            schemaInfoProvider,
             cacheOptions,
             logger,
         );

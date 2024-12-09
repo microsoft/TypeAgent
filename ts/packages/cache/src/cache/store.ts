@@ -10,7 +10,7 @@ import { ExplanationData } from "../explanation/explanationData.js";
 import { importConstructions } from "../constructions/importConstructions.js";
 import { CacheConfig, CacheOptions } from "./cache.js";
 import { ExplainerFactory } from "./factory.js";
-import { SchemaConfigProvider } from "../explanation/schemaConfig.js";
+import { SchemaInfoProvider } from "../explanation/schemaInfoProvider.js";
 import { ConstructionCache } from "../indexBrowser.js";
 import { MatchOptions } from "../constructions/constructionCache.js";
 import {
@@ -177,7 +177,7 @@ export class ConstructionStoreImpl implements ConstructionStore {
     public async import(
         data: ExplanationData[],
         getExplainer: ExplainerFactory,
-        getSchemaConfig?: SchemaConfigProvider,
+        schemaInfoProvider?: SchemaInfoProvider,
     ) {
         const cache = this.ensureCache();
         const result = importConstructions(
@@ -186,7 +186,7 @@ export class ConstructionStoreImpl implements ConstructionStore {
             getExplainer,
             this.config.mergeMatchSets,
             this.config.cacheConflicts,
-            getSchemaConfig,
+            schemaInfoProvider,
         );
         this.modified = true;
         const p = this.doAutoSave();

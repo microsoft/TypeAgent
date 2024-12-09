@@ -10,7 +10,6 @@ import {
     ActionConfigProvider,
     convertToActionConfig,
 } from "../translation/agentTranslators.js";
-import { loadTranslatorSchemaConfig } from "./loadSchemaConfig.js";
 import {
     AgentInfo,
     createNpmAppAgentProvider,
@@ -19,6 +18,10 @@ import { getDispatcherConfig } from "./config.js";
 import { getUserProfileDir } from "./userData.js";
 import path from "node:path";
 import fs from "node:fs";
+import {
+    ActionSchemaFileCache,
+    createSchemaInfoProvider,
+} from "../translation/actionSchemaFileCache.js";
 
 let builtinAppAgentProvider: AppAgentProvider | undefined;
 function getBuiltinAppAgentProvider(): AppAgentProvider {
@@ -104,29 +107,34 @@ export function getSchemaNamesFromDefaultAppAgentProviders() {
     return Object.keys(actionConfigs);
 }
 
+let actionConfigProvider: ActionConfigProvider | undefined;
 export function getActionConfigProviderFromDefaultAppAgentProviders(): ActionConfigProvider {
-    return {
-        tryGetActionConfig(schemaName: string) {
-            return actionConfigs[schemaName];
-        },
-        getActionConfig(schemaName: string) {
-            const config = actionConfigs[schemaName];
-            if (!config) {
-                throw new Error(`Unknown translator: ${schemaName}`);
-            }
-            return config;
-        },
-        getActionConfigs() {
-            return Object.entries(actionConfigs);
-        },
-    };
+    if (actionConfigProvider === undefined) {
+        const actionSchemaFileCache = new ActionSchemaFileCache();
+        actionConfigProvider = {
+            tryGetActionConfig(schemaName: string) {
+                return actionConfigs[schemaName];
+            },
+            getActionConfig(schemaName: string) {
+                const config = actionConfigs[schemaName];
+                if (!config) {
+                    throw new Error(`Unknown translator: ${schemaName}`);
+                }
+                return config;
+            },
+            getActionConfigs() {
+                return Object.entries(actionConfigs);
+            },
+            getActionSchemaFileForConfig(actionConfig: ActionConfig) {
+                return actionSchemaFileCache.getActionSchemaFile(actionConfig);
+            },
+        };
+    }
+    return actionConfigProvider;
 }
 
-export function loadSchemaConfigFromDefaultAppAgentProviders(
-    schemaName: string,
-) {
-    return loadTranslatorSchemaConfig(
-        schemaName,
+export function createSchemaInfoProviderFromDefaultAppAgentProviders() {
+    return createSchemaInfoProvider(
         getActionConfigProviderFromDefaultAppAgentProviders(),
     );
 }
