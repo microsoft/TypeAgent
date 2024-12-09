@@ -6,7 +6,6 @@ import {
     ActionSchemaFileJSON,
     ActionSchemaTypeDefinition,
     fromJSONActionSchemaFile,
-    generateSchemaTypeDefinition,
     parseActionSchemaSource,
     SchemaConfig,
     toJSONActionSchemaFile,
@@ -31,20 +30,21 @@ function hashStrings(...str: string[]) {
     return hash.digest("base64");
 }
 
-type CacheEntry = {
-    hash: string;
-    actionSchemaFile: ActionSchemaFileJSON;
+const ActionSchemaFileCacheVersion = 1;
+type ActionSchemaFileCacheJSON = {
+    version: number;
+    entries: [string, ActionSchemaFileJSON][];
 };
 
 export class ActionSchemaFileCache {
     private readonly actionSchemaFiles = new Map<string, ActionSchemaFile>();
-    private readonly prevSaved = new Map<string, CacheEntry>();
+    private readonly prevSaved = new Map<string, ActionSchemaFileJSON>();
     public constructor(private readonly cacheFilePath?: string) {
         if (cacheFilePath !== undefined) {
             try {
-                const entries = this.loadExistingCache();
-                if (entries) {
-                    for (const [key, entry] of entries) {
+                const cache = this.loadExistingCache();
+                if (cache) {
+                    for (const [key, entry] of cache.entries) {
                         this.prevSaved.set(key, entry);
                     }
                     // We will rewrite it.
@@ -75,18 +75,16 @@ export class ActionSchemaFileCache {
         const lastCached = this.prevSaved.get(cacheKey);
         if (lastCached !== undefined) {
             this.prevSaved.delete(cacheKey);
-            if (lastCached.hash === hash) {
-                debug(`Cached parsed schema used: ${actionConfig.schemaName}`);
+            if (lastCached.sourceHash === hash) {
+                debug(`Cached action schema used: ${actionConfig.schemaName}`);
                 // Add and save the cache first before convert it back (which will modify the data)
-                this.addToCache(cacheKey, hash, lastCached.actionSchemaFile);
-                const cached = fromJSONActionSchemaFile(
-                    lastCached.actionSchemaFile,
-                );
+                this.addToCache(cacheKey, lastCached);
+                const cached = fromJSONActionSchemaFile(lastCached);
                 this.actionSchemaFiles.set(actionConfig.schemaName, cached);
                 return cached;
             }
             debugError(
-                `Cached parsed schema hash mismatch: ${actionConfig.schemaName}`,
+                `Cached action schema hash mismatch: ${actionConfig.schemaName}`,
             );
         }
 
@@ -104,26 +102,25 @@ export class ActionSchemaFileCache {
         this.actionSchemaFiles.set(actionConfig.schemaName, parsed);
 
         if (this.cacheFilePath !== undefined) {
-            this.addToCache(cacheKey, hash, toJSONActionSchemaFile(parsed));
+            this.addToCache(cacheKey, toJSONActionSchemaFile(parsed));
         }
         return parsed;
     }
 
-    private addToCache(
-        key: string,
-        hash: string,
-        actionSchemaFile: ActionSchemaFileJSON,
-    ) {
+    private addToCache(key: string, actionSchemaFile: ActionSchemaFileJSON) {
         if (this.cacheFilePath === undefined) {
             return;
         }
 
         try {
-            const entries = this.loadExistingCache() ?? [];
-            entries.push([key, { hash, actionSchemaFile }]);
+            const cache = this.loadExistingCache() ?? {
+                version: ActionSchemaFileCacheVersion,
+                entries: [],
+            };
+            cache.entries.push([key, actionSchemaFile]);
             fs.writeFileSync(
                 this.cacheFilePath,
-                JSON.stringify(entries),
+                JSON.stringify(cache),
                 "utf-8",
             );
         } catch (e: any) {
@@ -138,7 +135,14 @@ export class ActionSchemaFileCache {
         try {
             if (this.cacheFilePath) {
                 const data = fs.readFileSync(this.cacheFilePath, "utf-8");
-                return JSON.parse(data) as [string, CacheEntry][];
+                const content = JSON.parse(data) as any;
+                if (content.version !== ActionSchemaFileCacheVersion) {
+                    debugError(
+                        `Invalid cache version: ${this.cacheFilePath}: ${content.version}`,
+                    );
+                    return undefined;
+                }
+                return content as ActionSchemaFileCacheJSON;
             }
         } catch {}
         return undefined;
