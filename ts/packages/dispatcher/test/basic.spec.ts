@@ -4,10 +4,13 @@
 import { createNpmAppAgentProvider } from "../src/agent/npmAgentProvider.js";
 import { createDispatcher } from "../src/dispatcher/dispatcher.js";
 import { fileURLToPath } from "node:url";
+import { getBuiltinAppAgentProvider } from "../src/utils/defaultAppProviders.js";
 
 describe("basic", () => {
     it("startup and shutdown", async () => {
-        const dispatcher = await createDispatcher("test", {});
+        const dispatcher = await createDispatcher("test", {
+            appAgentProviders: [getBuiltinAppAgentProvider()],
+        });
         await dispatcher.close();
     });
     it("Custom NPM App Agent Provider", async () => {

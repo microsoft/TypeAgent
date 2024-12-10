@@ -33,6 +33,7 @@ export {
     getSchemaNamesFromDefaultAppAgentProviders,
     getActionConfigProviderFromDefaultAppAgentProviders,
     createSchemaInfoProviderFromDefaultAppAgentProviders,
+    getDefaultAppAgentProviders,
 } from "./utils/defaultAppProviders.js";
 export { getAssistantSelectionSchemas } from "./translation/unknownSwitcher.js";
 export { getActionSchema } from "./translation/actionSchemaFileCache.js";
