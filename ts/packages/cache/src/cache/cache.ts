@@ -311,11 +311,15 @@ export class AgentCache {
         }
     }
 
-    public async import(data: ExplanationData[]) {
+    public async import(
+        data: ExplanationData[],
+        ignoreSourceHash: boolean = false,
+    ) {
         return this._constructionStore.import(
             data,
             this.getExplainerForTranslator,
             this.schemaInfoProvider,
+            ignoreSourceHash,
         );
     }
 }

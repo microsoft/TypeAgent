@@ -44,6 +44,7 @@ export async function getImportedCache(
             .map(([testData, fileName]) =>
                 convertTestDataToExplanationData(testData, fileName),
             ),
+        true,
     );
     return cache;
 }

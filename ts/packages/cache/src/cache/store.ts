@@ -178,6 +178,7 @@ export class ConstructionStoreImpl implements ConstructionStore {
         data: ExplanationData[],
         getExplainer: ExplainerFactory,
         schemaInfoProvider?: SchemaInfoProvider,
+        ignoreSourceHash: boolean = false,
     ) {
         const cache = this.ensureCache();
         const result = importConstructions(
@@ -187,6 +188,7 @@ export class ConstructionStoreImpl implements ConstructionStore {
             this.config.mergeMatchSets,
             this.config.cacheConflicts,
             schemaInfoProvider,
+            ignoreSourceHash,
         );
         this.modified = true;
         const p = this.doAutoSave();

@@ -36,8 +36,9 @@ function createConstructions(
     explainer: GenericExplainer,
     schemaInfoProvider: SchemaInfoProvider | undefined,
     createConstruction: ConstructionFactory<any>,
+    ignoreSourceHash: boolean,
 ) {
-    if (schemaInfoProvider !== undefined) {
+    if (!ignoreSourceHash && schemaInfoProvider !== undefined) {
         for (let i = 0; i < data.schemaNames.length; i++) {
             const schemaName = data.schemaNames[i];
             const sourceHash = data.sourceHashes[i];
@@ -141,6 +142,7 @@ export function importConstructions(
     mergeMatchSets: boolean,
     cacheConflicts: boolean,
     schemaInfoProvider?: SchemaInfoProvider,
+    ignoreSourceHash: boolean = false,
 ): ImportConstructionResult {
     if (
         explanationData.some(
@@ -172,6 +174,7 @@ export function importConstructions(
             explainer,
             schemaInfoProvider,
             createConstruction,
+            ignoreSourceHash,
         );
         newCount += constructions.length;
         constructionData.push(...constructions);
