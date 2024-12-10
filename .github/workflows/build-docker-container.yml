@@ -8,7 +8,6 @@ name: Build and deploy Node.js app to Azure Web App - typeagent
 on:
   push:
     branches:
-      - main
       - dev/robgruen/storage_mounting
   workflow_dispatch:
 
