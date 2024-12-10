@@ -31,6 +31,7 @@ import { getUserProfileDir } from "../utils/userData.js";
 import { IncrementalJsonValueCallBack } from "common-utils";
 import { ProfileNames } from "../utils/profileNames.js";
 import { conversation } from "knowledge-processor";
+import { makeClientIOMessage } from "../handlers/common/interactiveIO.js";
 
 const debugActions = registerDebug("typeagent:dispatcher:actions");
 
@@ -51,25 +52,34 @@ function getActionContext(
     let context = systemContext;
     const sessionContext = context.agents.getSessionContext(appAgentName);
     const actionIO: ActionIO = {
-        get type() {
-            return context.requestIO.type;
-        },
         setDisplay(content: DisplayContent): void {
-            context.requestIO.setDisplay(content, actionIndex, appAgentName);
+            context.clientIO.setDisplay(
+                makeClientIOMessage(
+                    context,
+                    content,
+                    requestId,
+                    appAgentName,
+                    actionIndex,
+                ),
+            );
         },
         appendDisplay(
             content: DisplayContent,
             mode: DisplayAppendMode = "inline",
         ): void {
-            context.requestIO.appendDisplay(
-                content,
-                actionIndex,
-                appAgentName,
+            context.clientIO.appendDisplay(
+                makeClientIOMessage(
+                    context,
+                    content,
+                    requestId,
+                    appAgentName,
+                    actionIndex,
+                ),
                 mode,
             );
         },
         takeAction(action: string, data: unknown): void {
-            context.requestIO.takeAction(action, data);
+            context.clientIO.takeAction(action, data);
         },
     };
     const actionContext: ActionContext<unknown> = {
@@ -126,7 +136,7 @@ export function createSessionContext<T = unknown>(
             return profileStorage;
         },
         notify(event: AppAgentEvent, message: string) {
-            context.requestIO.notify(event, undefined, message, name);
+            context.clientIO.notify(event, undefined, message, name);
         },
         async toggleTransientAgent(subAgentName: string, enable: boolean) {
             if (!subAgentName.startsWith(`${name}.`)) {
@@ -255,7 +265,7 @@ async function executeAction(
             actionContext.actionIO.setDisplay(result.displayContent);
         }
         if (result.dynamicDisplayId !== undefined) {
-            systemContext.clientIO?.setDynamicDisplay(
+            systemContext.clientIO.setDynamicDisplay(
                 translatorName,
                 systemContext.requestId,
                 actionIndex,

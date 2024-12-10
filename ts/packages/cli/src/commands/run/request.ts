@@ -5,7 +5,8 @@ import { Args, Command, Flags } from "@oclif/core";
 import { createDispatcher } from "agent-dispatcher";
 import {
     getCacheFactory,
-    getBuiltinSchemaNames,
+    getSchemaNamesFromDefaultAppAgentProviders,
+    getDefaultAppAgentProviders,
 } from "agent-dispatcher/internal";
 import chalk from "chalk";
 import { getChatModelNames } from "aiclient";
@@ -28,7 +29,7 @@ export default class RequestCommand extends Command {
     static flags = {
         translator: Flags.string({
             description: "Schema name",
-            options: getBuiltinSchemaNames(),
+            options: getSchemaNamesFromDefaultAppAgentProviders(),
             multiple: true,
         }),
         explainer: Flags.string({
@@ -54,6 +55,7 @@ export default class RequestCommand extends Command {
             ? Object.fromEntries(flags.translator.map((name) => [name, true]))
             : undefined;
         const dispatcher = await createDispatcher("cli run request", {
+            appAgentProviders: getDefaultAppAgentProviders(),
             schemas,
             actions: schemas,
             commands: { dispatcher: true },

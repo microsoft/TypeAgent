@@ -7,7 +7,10 @@ dotenv.config({ path: new URL("../../../../.env", import.meta.url) });
 import path from "node:path";
 import fs from "node:fs";
 import { getCacheFactory } from "../src/utils/cacheFactory.js";
-import { readTestData } from "../src/utils/test/testData.js";
+import {
+    convertTestDataToExplanationData,
+    readTestData,
+} from "../src/utils/test/testData.js";
 import {
     Actions,
     AgentCache,
@@ -19,7 +22,7 @@ import {
     normalizeParamValue,
     normalizeParamString,
 } from "agent-cache";
-import { loadBuiltinTranslatorSchemaConfig } from "../src/translation/agentTranslators.js";
+import { createSchemaInfoProviderFromDefaultAppAgentProviders } from "../src/utils/defaultAppProviders.js";
 import { glob } from "glob";
 import { fileURLToPath } from "node:url";
 
@@ -29,13 +32,20 @@ export async function getImportedCache(
 ) {
     const cache = getCacheFactory().create(
         explainerName,
-        loadBuiltinTranslatorSchemaConfig,
+        createSchemaInfoProviderFromDefaultAppAgentProviders(),
         {
             mergeMatchSets: merge,
             cacheConflicts: true,
         },
     );
-    await cache.import(inputs.filter((i) => i.explainerName === explainerName));
+    await cache.import(
+        inputs
+            .filter(([i]) => i.explainerName === explainerName)
+            .map(([testData, fileName]) =>
+                convertTestDataToExplanationData(testData, fileName),
+            ),
+        true,
+    );
     return cache;
 }
 
@@ -51,12 +61,14 @@ const dataFiles =
 // Test result is impacted by the order of import (from conflicing transform).
 // Sort by file name to make the test result deterministic.
 const inputs = await Promise.all(
-    (await glob(dataFiles)).sort().map((f) => readTestData(f)),
+    (await glob(dataFiles)).sort().map(async (f) => {
+        return [await readTestData(f), f] as const;
+    }),
 );
 
-const testInput = inputs.flatMap((f) =>
+const testInput = inputs.flatMap(([f]) =>
     f.entries.map<[string, string, RequestAction, object, string[]]>((data) => [
-        f.translatorName,
+        f.schemaName,
         f.explainerName,
         new RequestAction(data.request, Actions.fromJSON(data.action)),
         data.explanation,

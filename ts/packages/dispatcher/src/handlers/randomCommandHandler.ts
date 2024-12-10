@@ -4,7 +4,7 @@
 import { CommandHandlerContext } from "./common/commandHandlerContext.js";
 import fs from "node:fs";
 import { randomInt } from "crypto";
-import { processCommandNoLock } from "../dispatcher/command.js";
+import { processCommandNoLock } from "../command/command.js";
 import { ChatModelWithStreaming, CompletionSettings, openai } from "aiclient";
 import { createTypeChat, promptLib } from "typeagent";
 import { PromptSection, Result, TypeChatJsonTranslator } from "typechat";
@@ -14,6 +14,7 @@ import {
     CommandHandlerTable,
 } from "@typeagent/agent-sdk/helpers/command";
 import { displayStatus } from "@typeagent/agent-sdk/helpers/display";
+import { DispatcherName } from "./common/interactiveIO.js";
 
 export type UserRequestList = {
     messages: UserRequest[];
@@ -49,17 +50,19 @@ class RandomOfflineCommandHandler implements CommandHandlerNoParams {
         const randomRequest = this.list[randomInt(0, this.list.length)];
 
         const systemContext = context.sessionContext.agentContext;
-        systemContext.requestIO.notify(
+        systemContext.clientIO.notify(
             "randomCommandSelected",
             systemContext.requestId,
             {
                 message: randomRequest,
             },
+            DispatcherName,
         );
-        systemContext.requestIO.notify(
+        systemContext.clientIO.notify(
             AppAgentEvent.Info,
             systemContext.requestId,
             randomRequest,
+            DispatcherName,
         );
 
         await processCommandNoLock(randomRequest, systemContext);
@@ -120,12 +123,13 @@ class RandomOnlineCommandHandler implements CommandHandlerNoParams {
                 ].message;
 
             const systemContext = context.sessionContext.agentContext;
-            systemContext.requestIO.notify(
+            systemContext.clientIO.notify(
                 "randomCommandSelected",
                 systemContext.requestId,
                 {
                     message: message,
                 },
+                DispatcherName,
             );
 
             await processCommandNoLock(message, systemContext);

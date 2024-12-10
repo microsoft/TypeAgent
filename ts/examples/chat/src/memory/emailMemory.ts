@@ -20,6 +20,7 @@ import {
     writeJsonFile,
 } from "typeagent";
 import {
+    arg,
     argBool,
     argNum,
     CommandHandler,
@@ -77,11 +78,13 @@ export async function createEmailMemory(
 
     const memory = await knowLib.email.createEmailMemory(
         models.chatModel,
+        models.answerModel,
         ReservedConversationNames.outlook,
         storePath,
         emailSettings,
         storage,
     );
+    memory.searchProcessor.answers.settings.chunking.fastStop = true;
     return memory;
 }
 
@@ -92,6 +95,9 @@ export function createEmailCommands(
     commands.importEmail = importEmail;
     commands.emailConvertMsg = emailConvertMsg;
     commands.emailStats = emailStats;
+    commands.emailFastStop = emailFastStop;
+    commands.emailNameAlias = emailNameAlias;
+    commands.emailActionItems = emailActionItems;
 
     //--------
     // Commands
@@ -190,6 +196,108 @@ export function createEmailCommands(
         }
     }
 
+    function emailFastStopDef(): CommandMetadata {
+        return {
+            description:
+                "Enable or disable fast stopping during answer generation",
+            options: {
+                enable: argBool("Enable"),
+            },
+        };
+    }
+    commands.emailFastStop.metadata = emailFastStopDef();
+    async function emailFastStop(args: string[]): Promise<void> {
+        const chunkingSettings =
+            context.emailMemory.searchProcessor.answers.settings.chunking;
+        if (args.length > 0) {
+            const namedArgs = parseNamedArguments(args, emailFastStopDef());
+            chunkingSettings.fastStop = namedArgs.enable;
+        } else {
+            context.printer.writeLine(
+                `Enabled ${chunkingSettings.fastStop ?? false}`,
+            );
+        }
+    }
+
+    function emailNameAliasDef(): CommandMetadata {
+        return {
+            description: "Add an alias for a person's name",
+            options: {
+                name: arg("Person's name"),
+                alias: arg("Alias"),
+            },
+        };
+    }
+    commands.emailNameAlias.metadata = emailNameAliasDef();
+    async function emailNameAlias(args: string[]): Promise<void> {
+        const namedArgs = parseNamedArguments(args, emailNameAliasDef());
+        const aliases = (
+            await context.emailMemory.conversation.getEntityIndex()
+        ).nameAliases;
+        if (namedArgs.name && namedArgs.alias) {
+            await aliases.addAlias(namedArgs.alias, namedArgs.name);
+        } else if (namedArgs.alias) {
+            const names = await aliases.getByAlias(namedArgs.alias);
+            if (names) {
+                context.printer.writeLines(names);
+            }
+        } else {
+            for await (const entry of aliases.entries()) {
+                context.printer.writeLine(entry.name);
+                context.printer.writeList(entry.value, { type: "ul" });
+            }
+        }
+    }
+
+    function emailActionItemsDef(): CommandMetadata {
+        return {
+            description: "Display action items for person",
+            args: {
+                name: arg("Name of person"),
+            },
+            options: {
+                verb: arg("Verb to look for"),
+                period: arg("past | present | future"),
+                showSnippet: argBool("Show message snippet", false),
+                showMessages: argBool("Show source messages", true),
+            },
+        };
+    }
+    commands.emailActionItems.metadata = emailActionItemsDef();
+    async function emailActionItems(args: string[]): Promise<void> {
+        const namedArgs = parseNamedArguments(args, emailActionItemsDef());
+        let tenses: string[] = [];
+        if (namedArgs.period) {
+            tenses.push(namedArgs.period);
+        } else {
+            tenses.push("past", "present", "future");
+        }
+        for (let tense of tenses) {
+            const actionItems = await emailActionItemsFromConversation(
+                context.emailMemory,
+                namedArgs.name,
+                namedArgs.verb,
+                tense as conversation.VerbTense,
+            );
+            if (actionItems) {
+                context.printer.writeTitle(tense.toUpperCase() + " Actions");
+                for (const actionItem of actionItems) {
+                    context.printer.writeAction(actionItem.action);
+                    if (namedArgs.showSnippet) {
+                        context.printer.writeBlocks(
+                            chalk.gray,
+                            actionItem.sourceBlocks,
+                        );
+                    }
+                    for (const source of actionItem.sourceBlocks) {
+                        writeMessageLinks(source.sourceIds);
+                    }
+                    context.printer.writeLine();
+                }
+            }
+        }
+    }
+
     //-------------
     // End commands
     //-------------
@@ -227,7 +335,7 @@ export function createEmailCommands(
                         `${email!.sourcePath}\n${emailLength} chars`,
                     );
 
-                    context.stats.startItem();
+                    context.stats!.startItem();
                     clock.start();
                     await knowLib.email.addEmailToConversation(
                         context.emailMemory,
@@ -235,12 +343,12 @@ export function createEmailCommands(
                         namedArgs.chunkSize,
                     );
                     clock.stop();
-                    context.stats.updateCurrent(clock.elapsedMs, emailLength);
+                    context.stats!.updateCurrent(clock.elapsedMs, emailLength);
                     await saveStats();
 
                     grandTotal++;
-                    const status = `[${clock.elapsedString()}, ${millisecondsToString(context.stats.totalStats.timeMs, "m")} for ${grandTotal} msgs.]`;
-
+                    const status = `[${clock.elapsedString()}, ${millisecondsToString(context.stats!.totalStats.timeMs, "m")} for ${grandTotal} msgs.]`;
+                    context.printer.writeLine();
                     context.printer.writeInColor(chalk.green, status);
                     context.printer.writeLine();
 
@@ -264,6 +372,7 @@ export function createEmailCommands(
         }
         context.printer.writeHeading("Indexing Stats");
         context.printer.writeIndexingStats(context.stats);
+        context.stats = undefined;
     }
 
     async function loadStats(clean: boolean): Promise<knowLib.IndexingStats> {
@@ -307,4 +416,57 @@ export function createEmailCommands(
         );
         return timestampedNames.map((t) => t.value);
     }
+
+    function writeMessageLinks(sourceIds: string[] | undefined) {
+        if (sourceIds) {
+            for (const id of sourceIds) {
+                context.printer.writeLink(id);
+            }
+        }
+    }
+}
+
+export type EmailActionItem = {
+    action: conversation.Action;
+    sourceBlocks: knowLib.TextBlock[];
+};
+
+export async function emailActionItemsFromConversation(
+    cm: conversation.ConversationManager,
+    subject: string,
+    action?: string,
+    timePeriod?: conversation.VerbTense,
+): Promise<EmailActionItem[] | undefined> {
+    const actionIndex = await cm.conversation.getActionIndex();
+    const filter: conversation.ActionFilter = {
+        filterType: "Action",
+        subjectEntityName: subject,
+    };
+    if (action) {
+        filter.verbFilter = { verbs: [action], verbTense: timePeriod };
+    }
+    const results = await actionIndex.search(
+        filter,
+        conversation.createActionSearchOptions(false),
+    );
+    const actionIds = results.actionIds;
+    if (!actionIds || actionIds.length === 0) {
+        return undefined;
+    }
+    const actions = await actionIndex.getMultiple(actionIds);
+    const messages = cm.conversation.messages;
+    const actionItems: EmailActionItem[] = [];
+    for (let i = 0; i < actions.length; ++i) {
+        const action = actions[i];
+        if (
+            knowLib.email.isEmailVerb(action.value.verbs) ||
+            (timePeriod && action.value.verbTense !== timePeriod)
+        ) {
+            continue;
+        }
+        const sourceBlocks = await messages.getMultipleText(action.sourceIds);
+        actionItems.push({ action: action.value, sourceBlocks });
+    }
+
+    return actionItems;
 }

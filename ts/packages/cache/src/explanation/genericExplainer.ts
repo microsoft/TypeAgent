@@ -4,7 +4,7 @@
 import { RequestAction } from "./requestAction.js";
 import { Construction } from "../constructions/constructions.js";
 import { ValidationError } from "./typeChatAgent.js";
-import { SchemaConfigProvider } from "./schemaConfig.js";
+import { SchemaInfoProvider } from "./schemaInfoProvider.js";
 
 export type CorrectionRecord<T> = {
     data: T;
@@ -37,7 +37,7 @@ export type ExplainerConfig = {
 };
 
 export type ConstructionCreationConfig = {
-    getSchemaConfig?: SchemaConfigProvider | undefined;
+    schemaInfoProvider?: SchemaInfoProvider | undefined;
 };
 
 export type ConstructionFactory<T> = (

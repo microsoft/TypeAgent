@@ -14,30 +14,126 @@ import {
     ActionSchemaTypeDefinition,
     ActionSchemaFile,
     ActionSchemaEntryTypeDefinition,
+    SchemaObjectField,
 } from "./type.js";
-
+import ts from "typescript";
+import { ActionParamSpecs, SchemaConfig } from "./schemaConfig.js";
+import { resolveReference } from "./utils.js";
 import registerDebug from "debug";
 const debug = registerDebug("typeagent:schema:parse");
 
+function checkParamSpecs(
+    schemaName: string,
+    paramSpecs: ActionParamSpecs,
+    parameterType: SchemaTypeObject<SchemaObjectFields>,
+    actionName: string,
+) {
+    for (const [propertyName, spec] of Object.entries(paramSpecs)) {
+        const properties = propertyName.split(".");
+        let currentType: SchemaType = parameterType;
+        for (const name of properties) {
+            if (
+                name === "__proto__" ||
+                name === "constructor" ||
+                name === "prototype"
+            ) {
+                throw new Error(
+                    `Schema Config Error: ${schemaName}: Invalid parameter name '${propertyName}' for action '${actionName}': Illegal parameter property name '${name}'`,
+                );
+            }
+            const maybeIndex = parseInt(name);
+            if (maybeIndex.toString() === name) {
+                throw new Error(
+                    `Schema Config Error: ${schemaName}: Invalid parameter name '${propertyName}' for action '${actionName}': paramSpec cannot be applied to specific array index ${maybeIndex}`,
+                );
+            }
+            if (name === "*") {
+                if (currentType.type !== "array") {
+                    throw new Error(
+                        `Schema Config Error: ${schemaName}: Invalid parameter name '${propertyName}' for action '${actionName}': '*' is only allowed for array types`,
+                    );
+                }
+                currentType = currentType.elementType;
+                continue;
+            }
+            if (currentType.type !== "object") {
+                throw new Error(
+                    `Schema Config Error: ${schemaName}: Invalid parameter name '${propertyName}' for action '${actionName}': Access property '${name}' of non-object`,
+                );
+            }
+            const field: SchemaObjectField | undefined =
+                currentType.fields[name];
+            if (field === undefined) {
+                throw new Error(
+                    `Schema Config Error: ${schemaName}: Invalid parameter name '${propertyName}' for action '${actionName}': property '${name}' does not exist`,
+                );
+            }
+            const resolvedType = resolveReference(field.type);
+            if (resolvedType === undefined) {
+                throw new Error(
+                    `Schema Config Error: ${schemaName}: Invalid parameter name '${propertyName}' for action '${actionName}': unresolved type reference for property '${name}'`,
+                );
+            }
+            currentType = resolvedType;
+        }
+        switch (spec) {
+            case "wildcard":
+            case "checked_wildcard":
+            case "time":
+                if (currentType.type !== "string") {
+                    throw new Error(
+                        `Schema Config Error: ${schemaName}: Parameter '${propertyName}' for action '${actionName}' has invalid type '${currentType.type}' for paramSpec '${spec}'. `,
+                    );
+                }
+                break;
+            case "literal":
+                if (
+                    currentType.type !== "string" &&
+                    currentType.type !== "string-union"
+                ) {
+                    throw new Error(
+                        `Schema Config Error: ${schemaName}: Parameter '${propertyName}' for action '${actionName}' has invalid type '${currentType.type}' for paramSpec '${spec}'. `,
+                    );
+                }
+                break;
+            case "number":
+            case "percentage":
+            case "ordinal":
+                if (currentType.type !== "number") {
+                    throw new Error(
+                        `Schema Config Error: ${schemaName}: Parameter '${propertyName}' for action '${actionName}' has invalid type '${currentType.type}' for paramSpec '${spec}'. `,
+                    );
+                }
+                break;
+            default:
+                throw new Error(
+                    `Schema Config Error: ${schemaName}: Parameter '${propertyName}' for action '${actionName}' has unknown paramSpec '${spec}'. `,
+                );
+        }
+    }
+}
+
 function checkActionSchema(
+    schemaName: string,
     definition: SchemaTypeDefinition,
+    schemaConfig: SchemaConfig | undefined,
 ): [string, ActionSchemaTypeDefinition] {
     const name = definition.name;
     if (definition.type.type !== "object") {
         throw new Error(
-            `Schema Error: object type expect in action schema type ${name}, got ${definition.type.type}`,
+            `Schema Error: ${schemaName}: object type expect in action schema type ${name}, got ${definition.type.type}`,
         );
     }
 
     const { actionName, parameters } = definition.type.fields;
     if (actionName === undefined) {
         throw new Error(
-            `Schema Error: Missing actionName field in action schema type ${name}`,
+            `Schema Error: ${schemaName}: Missing actionName field in action schema type ${name}`,
         );
     }
     if (actionName.optional) {
         throw new Error(
-            `Schema Error: actionName field must be required in action schema type ${name}`,
+            `Schema Error: ${schemaName}: actionName field must be required in action schema type ${name}`,
         );
     }
     if (
@@ -45,30 +141,45 @@ function checkActionSchema(
         actionName.type.typeEnum.length !== 1
     ) {
         throw new Error(
-            `Schema Error: actionName field must be a string literal in action schema type ${name}`,
+            `Schema Error: ${schemaName}: actionName field must be a string literal in action schema type ${name}`,
         );
     }
 
+    const actionNameString = actionName.type.typeEnum[0];
     const parameterFieldType = parameters?.type;
     if (
         parameterFieldType !== undefined &&
         parameterFieldType.type !== "object"
     ) {
         throw new Error(
-            `Schema Error: parameters field must be an object in action schema type ${name}`,
+            `Schema Error: ${schemaName}: parameters field must be an object in action schema type ${name}`,
         );
     }
-    return [
-        actionName.type.typeEnum[0],
-        definition as ActionSchemaTypeDefinition,
-    ];
+
+    const actionDefinition = definition as ActionSchemaTypeDefinition;
+
+    const paramSpecs = schemaConfig?.paramSpec?.[actionNameString];
+    if (paramSpecs !== undefined) {
+        if (paramSpecs !== false) {
+            checkParamSpecs(
+                schemaName,
+                paramSpecs,
+                parameterFieldType,
+                actionNameString,
+            );
+        }
+        actionDefinition.paramSpecs = paramSpecs;
+    }
+    return [actionNameString, actionDefinition];
 }
 
 export function createActionSchemaFile(
     schemaName: string,
+    sourceHash: string,
     entry: SchemaTypeDefinition,
     order: Map<string, number> | undefined,
     strict: boolean,
+    schemaConfig?: SchemaConfig,
 ): ActionSchemaFile {
     if (strict && !entry.exported) {
         throw new Error(
@@ -82,7 +193,11 @@ export function createActionSchemaFile(
         const current = pending.shift()!;
         switch (current.type.type) {
             case "object":
-                const [actionName, actionSchema] = checkActionSchema(current);
+                const [actionName, actionSchema] = checkActionSchema(
+                    schemaName,
+                    current,
+                    schemaConfig,
+                );
                 if (actionSchemas.get(actionName)) {
                     throw new Error(
                         `Schema Error: ${schemaName}: Duplicate action name '${actionName}'`,
@@ -135,67 +250,57 @@ export function createActionSchemaFile(
     }
     const actionSchemaFile: ActionSchemaFile = {
         entry: entry as ActionSchemaEntryTypeDefinition,
+        sourceHash,
         schemaName,
         actionSchemas,
     };
+    if (schemaConfig?.actionNamespace === true) {
+        actionSchemaFile.actionNamespace = true;
+    }
     if (order) {
         actionSchemaFile.order = order;
     }
     return actionSchemaFile;
 }
 
-export function parseActionSchemaFile(
-    fileName: string,
-    schemaName: string,
-    typeName: string,
-    strict: boolean = false,
-): ActionSchemaFile {
-    // TODO: switch to read file and call parseSource?
-    const options: ts.CompilerOptions = {
-        target: ts.ScriptTarget.ES5,
-        module: ts.ModuleKind.CommonJS,
-    };
-
-    const program = ts.createProgram([fileName], options);
-    for (const sourceFile of program.getSourceFiles()) {
-        if (!sourceFile.isDeclarationFile) {
-            return ActionParser.parseSourceFile(
-                sourceFile,
-                schemaName,
-                typeName,
-                strict,
-            );
-        }
-    }
-
-    throw new Error(`File not found: ${fileName}`);
-}
-
 export function parseActionSchemaSource(
     source: string,
     schemaName: string,
+    sourceHash: string,
     typeName: string,
+    fileName: string = "",
+    schemaConfig?: SchemaConfig,
     strict: boolean = false,
 ): ActionSchemaFile {
-    const sourceFile = ts.createSourceFile("", source, ts.ScriptTarget.ES5);
-    return ActionParser.parseSourceFile(
-        sourceFile,
-        schemaName,
-        typeName,
-        strict,
-    );
+    debug(`Parsing ${schemaName} for ${typeName}: ${fileName}`);
+    try {
+        const sourceFile = ts.createSourceFile(
+            fileName,
+            source,
+            ts.ScriptTarget.ES5,
+        );
+        return ActionParser.parseSourceFile(
+            sourceFile,
+            schemaName,
+            sourceHash,
+            typeName,
+            schemaConfig,
+            strict,
+        );
+    } catch (e: any) {
+        throw new Error(`Error parsing ${schemaName}: ${e.message}`);
+    }
 }
-
-import ts, { CommentRange } from "typescript";
 
 class ActionParser {
     static parseSourceFile(
         sourceFile: ts.SourceFile,
         schemaName: string,
+        sourceHash: string,
         typeName: string,
+        schemaConfig: SchemaConfig | undefined,
         strict: boolean,
     ) {
-        debug(`Parsing ${schemaName} for ${typeName}: ${sourceFile.fileName}`);
         const parser = new ActionParser();
         const definition = parser.parseSchema(sourceFile, typeName);
         if (definition === undefined) {
@@ -203,9 +308,11 @@ class ActionParser {
         }
         const result = createActionSchemaFile(
             schemaName,
+            sourceHash,
             definition,
             parser.typeOrder,
             strict,
+            schemaConfig,
         );
         debug(`Parse Successful ${schemaName}`);
         return result;
@@ -457,7 +564,7 @@ class ActionParser {
         return this.processCommentRanges(commentRanges);
     }
 
-    private processCommentRanges(commentRanges: CommentRange[] | undefined) {
+    private processCommentRanges(commentRanges: ts.CommentRange[] | undefined) {
         if (commentRanges === undefined) {
             return undefined;
         }

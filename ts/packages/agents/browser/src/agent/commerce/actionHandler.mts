@@ -6,7 +6,6 @@ import { BrowserActionContext } from "../actionHandler.mjs";
 import { BrowserConnector } from "../browserConnector.mjs";
 import { createCommercePageTranslator } from "./translator.mjs";
 import {
-  LocationInStore,
   ProductDetailsHeroTile,
   ProductTile,
   SearchInput,
@@ -40,7 +39,7 @@ export async function handleCommerceAction(
     case "answerPageQuestion":
       await handlePageChat(action);
       break;
-    case "findInStoreAction":
+    case "getLocationInStore":
       await handleFindInStore(action);
       break;
     case "findNearbyStoreAction":
@@ -90,6 +89,7 @@ export async function handleCommerceAction(
       "ProductTile",
       request,
     )) as ProductTile;
+    console.log(selector);
     await browser.clickOn(selector.detailsLinkSelector);
     await new Promise((r) => setTimeout(r, 200));
     await browser.awaitPageLoad();
@@ -119,26 +119,22 @@ export async function handleCommerceAction(
   }
 
   async function handleFindInStore(action: any) {
+    await searchForProduct(action.parameters.productName);
+    await selectSearchResult(action.parameters.productName);
+    console.log("Selected search result");
+
     const targetProduct = (await getComponentFromPage(
       "ProductDetailsHeroTile",
     )) as ProductDetailsHeroTile;
 
+    console.log(targetProduct);
+
     if (targetProduct && targetProduct.physicalLocationInStore) {
       message = `Found ${targetProduct.numberInStock} at ${targetProduct.physicalLocationInStore} in the ${targetProduct.storeName} store`;
       return;
-    }
-
-    await searchForProduct(action.parameters.productName);
-    await selectSearchResult(action.parameters.productName);
-
-    const locationInfo = (await getComponentFromPage(
-      "LocationInStore",
-    )) as LocationInStore;
-
-    console.log(locationInfo);
-
-    if (locationInfo.physicalLocationInStore) {
-      message = `Found ${locationInfo.numberInStock} at ${locationInfo.physicalLocationInStore} in the ${locationInfo.storeName} store`;
+    } else {
+      message = `Did not find target product in stock`;
+      console.log(targetProduct);
     }
   }
 

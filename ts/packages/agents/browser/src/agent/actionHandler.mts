@@ -108,14 +108,6 @@ async function updateBrowserContext(
               break;
             }
             case "browserActionResponse": {
-              /*
-              const requestIO = context.requestIO;
-              const requestId = context.requestId;
-              
-              if (requestIO && requestId && data.id === requestId) {
-                requestIO.success(data.body.message);
-              }
-              */
               break;
             }
             case "debugBrowserAction": {
@@ -155,13 +147,12 @@ async function executeBrowserAction(
   context: ActionContext<BrowserActionContext>,
 ) {
   const webSocketEndpoint = context.sessionContext.agentContext.webSocket;
+  const connector = context.sessionContext.agentContext.browserConnector;
   if (webSocketEndpoint) {
     try {
-      const callId = new Date().getTime().toString();
       context.actionIO.setDisplay("Running remote action.");
 
       let messageType = "browserActionRequest";
-      let target = "browser";
       if (action.translatorName === "browser.paleoBioDb") {
         messageType = "browserActionRequest.paleoBioDb";
       } else if (action.translatorName === "browser.crossword") {
@@ -172,15 +163,7 @@ async function executeBrowserAction(
         return createActionResult(commerceResult);
       }
 
-      webSocketEndpoint.send(
-        JSON.stringify({
-          source: "dispatcher",
-          target: target,
-          messageType,
-          id: callId,
-          body: action,
-        }),
-      );
+      await connector?.sendActionToBrowser(action, messageType);
     } catch (ex: any) {
       console.log(JSON.stringify(ex));
 

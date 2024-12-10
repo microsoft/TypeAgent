@@ -1,5 +1,5 @@
 {
-  "emojiChar": "🖐",
+  "emojiChar": "🖐️",
   "description": "Agent to generate greating messages",
   "schema": {
     "description": "Greeting agent that created personalized welcome messages.",

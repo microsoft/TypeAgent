@@ -6,8 +6,8 @@ import { composeTranslatorSchemas } from "common-utils";
 import {
     getAssistantSelectionSchemas,
     getFullSchemaText,
-    getBuiltinSchemaNames,
-    getBuiltinActionConfigProvider,
+    getSchemaNamesFromDefaultAppAgentProviders,
+    getActionConfigProviderFromDefaultAppAgentProviders,
     getActionSchema,
 } from "agent-dispatcher/internal";
 import { generateSchemaTypeDefinition } from "action-schema";
@@ -18,7 +18,7 @@ export default class Schema extends Command {
     static flags = {
         active: Flags.string({
             description:
-                "Active scheam to include in the inlined change assistant schema",
+                "Active schemas to include in the inlined change assistant schema",
             multiple: true,
         }),
         multiple: Flags.boolean({
@@ -39,7 +39,7 @@ export default class Schema extends Command {
         translator: Args.string({
             description: "Translator name",
             required: true,
-            options: getBuiltinSchemaNames(),
+            options: getSchemaNamesFromDefaultAppAgentProviders(),
         }),
         actionName: Args.string({
             description: "Action name",
@@ -49,7 +49,7 @@ export default class Schema extends Command {
 
     async run(): Promise<void> {
         const { args, flags } = await this.parse(Schema);
-        const provider = getBuiltinActionConfigProvider();
+        const provider = getActionConfigProviderFromDefaultAppAgentProviders();
         if (!flags.assistant) {
             if (args.actionName) {
                 const actionSchema = getActionSchema(
@@ -80,7 +80,7 @@ export default class Schema extends Command {
             );
         } else {
             const schemas = getAssistantSelectionSchemas(
-                getBuiltinSchemaNames(),
+                getSchemaNamesFromDefaultAppAgentProviders(),
                 provider,
             ).map((entry) => entry.schema);
             console.log(

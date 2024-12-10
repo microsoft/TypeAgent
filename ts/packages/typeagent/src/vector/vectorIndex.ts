@@ -44,6 +44,7 @@ const DefaultRetryAttempts = 3;
 
 /**
  * Generates a normalized embedding for the given value from the embedding model
+ * Batch support is available for text embeddings (see generateTextEmbeddings)
  * @param model embedding model
  * @param value value to generate an embedding for
  * @returns
@@ -59,6 +60,12 @@ export async function generateEmbedding<T = string>(
     return createNormalized(getData(result));
 }
 
+/**
+ * Generate an embedding for a single value
+ * Batch support is available for text embeddings (see generateTextEmbeddings)
+ * @param model embedding model
+ * @param value value to generate an embedding for
+ */
 export async function generateEmbeddingWithRetry<T>(
     model: EmbeddingModel<T>,
     value: T | NormalizedEmbedding,

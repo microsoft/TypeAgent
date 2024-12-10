@@ -4,14 +4,13 @@
 import {
     getToggleCommandHandlers,
     getToggleHandlerTable,
-} from "./common/commandHandler.js";
+} from "../command/handlerUtils.js";
 import {
     CommandHandlerContext,
     changeContextConfig,
 } from "./common/commandHandlerContext.js";
 import { getAppAgentName } from "../translation/agentTranslators.js";
 import { getServiceHostCommandHandlers } from "./serviceHost/serviceHostCommandHandler.js";
-import { getLocalWhisperCommandHandlers } from "./serviceHost/localWhisperCommandHandler.js";
 
 import { simpleStarRegex } from "common-utils";
 import { openai as ai, getChatModelNames } from "aiclient";
@@ -32,10 +31,8 @@ import {
     displayResult,
     displayWarn,
 } from "@typeagent/agent-sdk/helpers/display";
-import { alwaysEnabledAgents } from "./common/appAgentManager.js";
+import { alwaysEnabledAgents } from "../agent/appAgentManager.js";
 import { getCacheFactory } from "../internal.js";
-import { Channel } from "diagnostics_channel";
-import { string } from "../../../actionSchema/dist/creator.js";
 
 const enum AgentToggle {
     Schema,
@@ -244,12 +241,13 @@ function showAgentStatus(
     }
 
     const getRow = (
+        emoji: string,
         displayName: string,
         schemas?: string,
         actions?: string,
         commands?: string,
     ) => {
-        const displayEntry = [displayName];
+        const displayEntry = [emoji, displayName];
         if (showSchema) {
             displayEntry.push(schemas ?? "");
         }
@@ -263,16 +261,19 @@ function showAgentStatus(
     };
 
     const table: string[][] = [
-        getRow("Agent", "Schemas", "Actions", "Commands"),
+        getRow("", "Agent", "Schemas", "Actions", "Commands"),
     ];
 
     for (const [name, { schemas, actions, commands }] of entries) {
-        const displayName = getAppAgentName(name) !== name ? `  ${name}` : name;
-        table.push(getRow(displayName, schemas, actions, commands));
+        const isAppAgentName = getAppAgentName(name) === name;
+        const displayName = isAppAgentName ? name : `  ${name}`;
+        const emoji = isAppAgentName ? agents.getEmojis()[name] : "";
+        table.push(getRow(emoji, displayName, schemas, actions, commands));
     }
 
     displayResult(table, context);
 }
+
 class AgentToggleCommandHandler implements CommandHandler {
     public readonly description = `Toggle ${AgentToggleDescription[this.toggle]}`;
     public readonly parameters = {
@@ -515,6 +516,46 @@ class ConfigModelSetCommandHandler implements CommandHandler {
     }
 }
 
+class ConfigTranslationNumberOfInitialActionsCommandHandler
+    implements CommandHandler
+{
+    public readonly description =
+        "Set number of actions to use for initial translation";
+    public readonly parameters = {
+        args: {
+            count: {
+                description: "Number of actions",
+                type: "number",
+            },
+        },
+    } as const;
+    public async run(
+        context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const count = params.args.count;
+        if (count < 0) {
+            throw new Error("Count must be positive interger");
+        }
+        await changeContextConfig(
+            {
+                translation: {
+                    schema: {
+                        optimize: {
+                            numInitialActions: count,
+                        },
+                    },
+                },
+            },
+            context,
+        );
+        displayResult(
+            `Number of actions to use for initial translation is set to ${count}`,
+            context,
+        );
+    }
+}
+
 const configTranslationCommandHandlers: CommandHandlerTable = {
     description: "Translation configuration",
     defaultSubCommand: "on",
@@ -622,6 +663,30 @@ const configTranslationCommandHandlers: CommandHandlerTable = {
                         );
                     },
                 ),
+                optimize: {
+                    description: "Optimize schema",
+                    commands: {
+                        ...getToggleCommandHandlers(
+                            "schema optimization",
+                            async (context, enable) => {
+                                await changeContextConfig(
+                                    {
+                                        translation: {
+                                            schema: {
+                                                optimize: {
+                                                    enabled: enable,
+                                                },
+                                            },
+                                        },
+                                    },
+                                    context,
+                                );
+                            },
+                        ),
+                        actions:
+                            new ConfigTranslationNumberOfInitialActionsCommandHandler(),
+                    },
+                },
             },
         },
     },
@@ -780,7 +845,6 @@ export function getConfigCommandHandlers(): CommandHandlerTable {
                 },
             },
             serviceHost: getServiceHostCommandHandlers(),
-            localWhisper: getLocalWhisperCommandHandlers(),
             dev: getToggleHandlerTable(
                 "development mode",
                 async (context, enable) => {

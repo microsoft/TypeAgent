@@ -6,8 +6,10 @@ import { ActionSchemaFile, SchemaType, SchemaTypeDefinition } from "./type.js";
 
 export type ActionSchemaFileJSON = {
     schemaName: string;
+    sourceHash: string;
     entry: string;
     types: Record<string, SchemaTypeDefinition>;
+    actionNamespace?: boolean; // default to false
     order?: Record<string, number>;
 };
 
@@ -50,6 +52,13 @@ function collectTypes(
     }
 }
 
+/**
+ * Convert a ActionSchemaFile to a JSON-able object
+ * Data in the original ActionSchemaFile will not be modified.
+ *
+ * @param actionSchemaFile ActionSchemaFile to convert
+ * @returns
+ */
 export function toJSONActionSchemaFile(
     actionSchemaFile: ActionSchemaFile,
 ): ActionSchemaFileJSON {
@@ -60,9 +69,13 @@ export function toJSONActionSchemaFile(
     collectTypes(definitions, entry.type);
     const result: ActionSchemaFileJSON = {
         schemaName: actionSchemaFile.schemaName,
+        sourceHash: actionSchemaFile.sourceHash,
         entry: entry.name,
         types: definitions,
     };
+    if (actionSchemaFile.actionNamespace) {
+        result.actionNamespace = actionSchemaFile.actionNamespace;
+    }
     if (actionSchemaFile.order) {
         result.order = Object.fromEntries(actionSchemaFile.order.entries());
     }
@@ -102,6 +115,14 @@ function resolveTypes(
     }
 }
 
+/**
+ * Convert a ActionSchemaFileJSON back to a ActionSchemaFile
+ * Data in the JSON will be modified.
+ * Clone the data before passing into this function if you want to keep the original.
+ *
+ * @param json JSON data to convert
+ * @returns
+ */
 export function fromJSONActionSchemaFile(
     json: ActionSchemaFileJSON,
 ): ActionSchemaFile {
@@ -110,5 +131,18 @@ export function fromJSONActionSchemaFile(
     }
     const entry = json.types[json.entry];
     const order = json.order ? new Map(Object.entries(json.order)) : undefined;
-    return createActionSchemaFile(json.schemaName, entry, order, true);
+    // paramSpecs are already stored in each action definition.
+    const schemaConfig = json.actionNamespace
+        ? {
+              actionNamespace: json.actionNamespace,
+          }
+        : undefined;
+    return createActionSchemaFile(
+        json.schemaName,
+        json.sourceHash,
+        entry,
+        order,
+        true,
+        schemaConfig,
+    );
 }

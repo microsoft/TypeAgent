@@ -2,19 +2,22 @@
 // Licensed under the MIT License.
 
 import { Args, Command, Flags } from "@oclif/core";
-import readline from "readline/promises";
 import {
-    getBuiltinSchemaNames,
+    getSchemaNamesFromDefaultAppAgentProviders,
     getCacheFactory,
     processCommand,
-    processRequests,
     getPrompt,
     initializeCommandHandlerContext,
     CommandHandlerContext,
     closeCommandHandlerContext,
+    getDefaultAppAgentProviders,
 } from "agent-dispatcher/internal";
 import inspector from "node:inspector";
 import { getChatModelNames } from "aiclient";
+import {
+    processRequests,
+    createConsoleClientIO,
+} from "agent-dispatcher/helpers/console";
 
 const modelNames = await getChatModelNames();
 
@@ -23,7 +26,7 @@ export default class Interactive extends Command {
     static flags = {
         translator: Flags.string({
             description: "Schema names",
-            options: getBuiltinSchemaNames(),
+            options: getSchemaNamesFromDefaultAppAgentProviders(),
             multiple: true,
         }),
         explainer: Flags.string({
@@ -62,10 +65,6 @@ export default class Interactive extends Command {
         if (flags.debug) {
             inspector.open(undefined, undefined, true);
         }
-        const stdio = readline.createInterface({
-            input: process.stdin,
-            output: process.stdout,
-        });
 
         let context: CommandHandlerContext | undefined;
 
@@ -74,12 +73,13 @@ export default class Interactive extends Command {
             : undefined;
         try {
             context = await initializeCommandHandlerContext("cli interactive", {
+                appAgentProviders: getDefaultAppAgentProviders(),
                 schemas,
                 translation: { model: flags.model },
                 explainer: { name: flags.explainer },
-                stdio,
                 persistSession: !flags.memory,
                 enableServiceHost: true,
+                clientIO: createConsoleClientIO(),
             });
 
             if (args.input) {
@@ -91,7 +91,6 @@ export default class Interactive extends Command {
 
             await processRequests<CommandHandlerContext>(
                 getPrompt,
-                stdio,
                 processCommand,
                 context,
             );
@@ -99,7 +98,6 @@ export default class Interactive extends Command {
             if (context) {
                 await closeCommandHandlerContext(context);
             }
-            stdio?.close();
         }
 
         // Some background network (like monogo) might keep the process live, exit explicitly.

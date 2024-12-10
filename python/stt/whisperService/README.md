@@ -7,9 +7,15 @@ You can launch the service by running e.g. `python faster-whisper.py`.
 
 ### Prerequisites
 
+- [Python 3](https://wiki.python.org/moin/BeginnersGuide/Download)
+- [Pip](https://pip.pypa.io/en/stable/installation/)
 - **Windows**
   - [FFMpeg](https://www.gyan.dev/ffmpeg/builds/) - you can run `winget install ffmpeg` to install the package
-- **MaxOS**
+- **Linux**
+  - `apt-get -y install python3-pyaudio portaudio19-dev` - needed to install `pyaudio`
+  - `apt-get -y install ffmpeg libavcodec-extra` - needed for pydub
+  - `apt-get -y install cudnn9-cuda-12`- Follow instruction in [NVIDIA cuDNN on Linux](https://docs.nvidia.com/deeplearning/cudnn/latest/installation/linux.html) to enable NVIDIA network repository.
+- **MacOS**
   - `brew install portaudio` - needed to install `pyaudio`
 
 ### Install

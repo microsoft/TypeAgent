@@ -4,6 +4,7 @@
 import {
     PromptSection,
     Result,
+    TypeChatJsonTranslator,
     TypeChatLanguageModel,
     createJsonTranslator,
 } from "typechat";
@@ -15,6 +16,8 @@ import { SearchTermsAction } from "./knowledgeTermSearchSchema.js";
 import { SearchTermsActionV2 } from "./knowledgeTermSearchSchema2.js";
 
 export interface KnowledgeActionTranslator {
+    requestInstructions: string;
+
     translateSearch(
         userRequest: string,
         context?: PromptSection[],
@@ -37,6 +40,7 @@ export function createKnowledgeActionTranslator(
         ["dateTimeSchema.ts", "knowledgeSearchSchema.ts"],
         import.meta.url,
     );
+
     const validator = createTypeScriptJsonValidator<SearchAction>(
         searchActionSchema,
         typeName,
@@ -57,6 +61,7 @@ export function createKnowledgeActionTranslator(
             "SearchTermsAction",
         ),
     );
+
     const searchTermsTranslatorV2 = createJsonTranslator<SearchTermsActionV2>(
         model,
         createTypeScriptJsonValidator<SearchTermsActionV2>(
@@ -67,12 +72,17 @@ export function createKnowledgeActionTranslator(
             "SearchTermsActionV2",
         ),
     );
+    searchTermsTranslatorV2.createRequestPrompt = (request) =>
+        createSearchTermsPrompt(searchTermsTranslatorV2, request);
 
-    return {
+    const translators: KnowledgeActionTranslator = {
+        requestInstructions:
+            "The following is a user request about a conversation between one or more users and assistants:\n",
         translateSearch,
         translateSearchTerms,
         translateSearchTermsV2,
     };
+    return translators;
 
     async function translateSearch(
         userRequest: string,
@@ -99,7 +109,21 @@ export function createKnowledgeActionTranslator(
         return (
             `You are a service who translates user requests into a JSON object of type "${typeName}" according to the following TypeScript definitions:\n` +
             `\`\`\`\n${searchActionSchema}\`\`\`\n` +
-            `The following is a user request about a conversation between one or more users and assistants:\n` +
+            translators.requestInstructions +
+            `"""\n${request}\n"""\n\n` +
+            `The following is a JSON object with 2 spaces of indentation and no properties with the value undefined:\n`
+        );
+    }
+
+    function createSearchTermsPrompt<T extends object>(
+        translator: TypeChatJsonTranslator<T>,
+        request: string,
+    ) {
+        return (
+            `You are a service who translates user requests into a JSON object of type "${translator.validator.getTypeName()}" according to the following TypeScript definitions:\n` +
+            `\`\`\`\n${translator.validator.getSchemaText()}\`\`\`\n` +
+            "When translating user requests, ensure that all pronouns are contextualized and replaced with the person or entity they refer to.\n" +
+            translators.requestInstructions +
             `"""\n${request}\n"""\n\n` +
             `The following is a JSON object with 2 spaces of indentation and no properties with the value undefined:\n`
         );

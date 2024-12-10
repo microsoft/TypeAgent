@@ -4,8 +4,9 @@
 import {
     asyncArray,
     createChatTranslator,
-    dateTime,
     loadSchema,
+    PromptSectionProvider,
+    rewriteText,
 } from "typeagent";
 import { PromptSection } from "typechat";
 import { ChatModel } from "aiclient";
@@ -13,9 +14,11 @@ import { AnswerResponse } from "./answerSchema.js";
 import { flatten } from "../setOperations.js";
 import { SearchResponse, TopKSettings } from "./searchResponse.js";
 import registerDebug from "debug";
-import { CompositeEntity } from "./entities.js";
-import { splitLargeTextIntoChunks } from "../textChunker.js";
-import { ActionGroup } from "./actions.js";
+import {
+    AnswerContext,
+    answerContextToString,
+    splitAnswerContext,
+} from "./answerContext.js";
 
 const answerError = registerDebug("knowledge-processor:answerGenerator:error");
 
@@ -39,6 +42,7 @@ export type AnswerGeneratorSettings = {
     chunking: AnswerChunkingSettings;
     maxCharsInContext?: number | undefined;
     concurrency?: number;
+    contextProvider?: PromptSectionProvider | undefined;
     hints?: string | undefined;
 };
 
@@ -52,7 +56,7 @@ export function createAnswerGeneratorSettings(): AnswerGeneratorSettings {
         chunking: {
             enable: false,
             splitMessages: false,
-            fastStop: true,
+            fastStop: false,
         },
         maxCharsInContext: 1024 * 8,
     };
@@ -152,7 +156,11 @@ export function createAnswerGenerator(
                 structuredChunk,
                 false,
             );
-            if (structuredAnswer && structuredAnswer.type === "Answered") {
+            if (
+                structuredAnswer &&
+                structuredAnswer.type === "Answered" &&
+                settings.chunking.fastStop
+            ) {
                 return structuredAnswer;
             }
             chunks = chunks.slice(1);
@@ -199,17 +207,23 @@ export function createAnswerGenerator(
         if (trim && contextContent.length > getMaxContextLength()) {
             contextContent = trimContext(contextContent, getMaxContextLength());
         }
-        const contextSection: PromptSection = {
+        let preamble: PromptSection[] = [];
+        if (settings.contextProvider) {
+            preamble.push(
+                ...(await settings.contextProvider.getSections(question)),
+            );
+        }
+        preamble.push({
             role: "user",
             content: `[CONVERSATION HISTORY]\n${contextContent}`,
-        };
+        });
 
         const prompt = createAnswerPrompt(
             question,
             higherPrecision,
             answerStyle,
         );
-        const result = await translator.translate(prompt, [contextSection]);
+        const result = await translator.translate(prompt, preamble);
         return result.success ? result.data : undefined;
     }
 
@@ -251,17 +265,7 @@ export function createAnswerGenerator(
         text: string,
     ): Promise<string | undefined> {
         text = trim(text, settings.maxCharsInContext);
-        let prompt = `The following text answers the QUESTION "${question}".`;
-        prompt +=
-            " Rewrite it to remove all redundancy, duplication, contradiction, or anything that does not answer the question.";
-        prompt += "\nImprove formatting";
-        prompt += `\n"""\n${text}\n"""\n`;
-        const result = await model.complete(prompt);
-        if (result.success) {
-            return result.data;
-        }
-
-        return undefined;
+        return rewriteText(model, text, question);
     }
 
     function createAnswerPrompt(
@@ -271,8 +275,12 @@ export function createAnswerGenerator(
     ): string {
         let prompt = `The following is a user question about a conversation:\n${question}\n\n`;
         prompt +=
-            "Answer the question using only the relevant topics, entities, actions, messages and time ranges/timestamps found in CONVERSATION HISTORY.\n";
-        prompt += "Entities and topics are case-insensitive\n";
+            "The included CONVERSATION HISTORY contains information that MAY be relevant to answering the question.\n";
+        prompt +=
+            "Answer the question using only relevant topics, entities, actions, messages and time ranges/timestamps found in CONVERSATION HISTORY.\n";
+        prompt +=
+            "Use the name and type of the provided entities to select those highly relevant to answering the question.\n";
+        prompt += "Entities and topics are case-insensitive\n.";
         if (settings.hints) {
             prompt += "\n" + settings.hints;
         }
@@ -371,111 +379,4 @@ export function createAnswerGenerator(
 function log(where: string, message: string) {
     const errorText = `${where}\n${message}`;
     answerError(errorText);
-}
-
-export type AnswerContextItem<T> = {
-    timeRanges: (dateTime.DateRange | undefined)[];
-    values: T[];
-};
-
-export type AnswerContext = {
-    entities?: AnswerContextItem<CompositeEntity> | undefined;
-    topics?: AnswerContextItem<string> | undefined;
-    actions?: AnswerContextItem<ActionGroup> | undefined;
-    messages?: dateTime.Timestamped<string>[] | undefined;
-};
-
-export function* splitAnswerContext(
-    context: AnswerContext,
-    maxCharsPerChunk: number,
-    splitMessages: boolean = false,
-): IterableIterator<AnswerContext> {
-    let curChunk = splitStructuredChunks(context);
-    let curChunkLength = 0;
-    yield curChunk;
-
-    if (context.messages) {
-        newChunk();
-        if (splitMessages) {
-            for (const message of context.messages) {
-                for (const messageChunk of splitLargeTextIntoChunks(
-                    message.value,
-                    maxCharsPerChunk,
-                )) {
-                    curChunk.messages ??= [];
-                    curChunk.messages.push({
-                        timestamp: message.timestamp,
-                        value: messageChunk,
-                    });
-                    yield curChunk;
-                }
-                newChunk();
-            }
-        } else {
-            for (const message of context.messages) {
-                if (message.value.length + curChunkLength > maxCharsPerChunk) {
-                    if (curChunkLength > 0) {
-                        yield curChunk;
-                    }
-                    newChunk();
-                }
-                curChunk.messages ??= [];
-                curChunk.messages.push(message);
-                curChunkLength += message.value.length;
-            }
-        }
-    }
-    if (curChunkLength > 0) {
-        yield curChunk;
-    }
-
-    function newChunk() {
-        curChunk = {};
-        curChunkLength = 0;
-    }
-}
-
-export function answerContextToString(context: AnswerContext): string {
-    let json = "{\n";
-    let propertyCount = 0;
-    if (context.entities) {
-        json += add("entities", context.entities);
-    }
-    if (context.topics) {
-        json += add("topics", context.topics);
-    }
-    if (context.actions) {
-        json += add("actions", context.actions);
-    }
-    if (context.messages) {
-        json += add("messages", context.messages);
-    }
-    json += "\n}";
-    return json;
-
-    function add(name: string, value: any): string {
-        let text = "";
-        if (propertyCount > 0) {
-            text += ",\n";
-        }
-        text += `"${name}": ${JSON.stringify(value)}`;
-        propertyCount++;
-        return text;
-    }
-}
-
-function splitStructuredChunks(context: AnswerContext): AnswerContext {
-    // TODO: split entities, topics, actions
-
-    const chunk: AnswerContext = {};
-    if (context.entities) {
-        chunk.entities = context.entities;
-    }
-    if (context.topics) {
-        chunk.topics = context.topics;
-    }
-    if (context.actions) {
-        chunk.actions = context.actions;
-    }
-    return chunk;
 }

@@ -7,7 +7,7 @@ import {
     AnswerContext,
     answerContextToString,
     splitAnswerContext,
-} from "../src/conversation/answerGenerator.js";
+} from "../src/conversation/answerContext.js";
 import { mergeActions } from "../src/conversation/actions.js";
 import { Action } from "../src/conversation/knowledgeSchema.js";
 

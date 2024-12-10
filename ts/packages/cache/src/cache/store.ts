@@ -10,7 +10,7 @@ import { ExplanationData } from "../explanation/explanationData.js";
 import { importConstructions } from "../constructions/importConstructions.js";
 import { CacheConfig, CacheOptions } from "./cache.js";
 import { ExplainerFactory } from "./factory.js";
-import { SchemaConfigProvider } from "../explanation/schemaConfig.js";
+import { SchemaInfoProvider } from "../explanation/schemaInfoProvider.js";
 import { ConstructionCache } from "../indexBrowser.js";
 import { MatchOptions } from "../constructions/constructionCache.js";
 import {
@@ -177,7 +177,8 @@ export class ConstructionStoreImpl implements ConstructionStore {
     public async import(
         data: ExplanationData[],
         getExplainer: ExplainerFactory,
-        getSchemaConfig?: SchemaConfigProvider,
+        schemaInfoProvider?: SchemaInfoProvider,
+        ignoreSourceHash: boolean = false,
     ) {
         const cache = this.ensureCache();
         const result = importConstructions(
@@ -186,7 +187,8 @@ export class ConstructionStoreImpl implements ConstructionStore {
             getExplainer,
             this.config.mergeMatchSets,
             this.config.cacheConflicts,
-            getSchemaConfig,
+            schemaInfoProvider,
+            ignoreSourceHash,
         );
         this.modified = true;
         const p = this.doAutoSave();
@@ -297,12 +299,12 @@ export class ConstructionStoreImpl implements ConstructionStore {
 
     /**
      * Add a construction to the cache
-     * @param translatorNames separate the construction based on the translator names in the action.  Used to quickly enable/disable construction based on translator is enabled
+     * @param namespaceKeys separate the construction based on the schema name and hash in the action.  Used to quickly enable/disable construction based on translator is enabled
      * @param construction the construction to add
      * @returns the result of the construction addition
      */
     public async addConstruction(
-        translatorNames: string[],
+        namespaceKeys: string[],
         construction: Construction,
     ) {
         if (this.cache === undefined) {
@@ -310,7 +312,7 @@ export class ConstructionStoreImpl implements ConstructionStore {
         }
 
         const result = this.cache.addConstruction(
-            translatorNames,
+            namespaceKeys,
             construction,
             this.config.mergeMatchSets,
             this.config.cacheConflicts,

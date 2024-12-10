@@ -11,10 +11,12 @@ import {
 } from "agent-cache";
 import {
     getCacheFactory,
-    getBuiltinSchemaNames,
+    getSchemaNamesFromDefaultAppAgentProviders,
     initializeCommandHandlerContext,
     closeCommandHandlerContext,
+    getDefaultAppAgentProviders,
 } from "agent-dispatcher/internal";
+import { createConsoleClientIO } from "agent-dispatcher/helpers/console";
 
 // Default test case, that include multiple phrase action name (out of order) and implicit parameters (context)
 const testRequest = new RequestAction(
@@ -37,7 +39,7 @@ export default class ExplainCommand extends Command {
     static flags = {
         translator: Flags.string({
             description: "Translator names",
-            options: getBuiltinSchemaNames(),
+            options: getSchemaNamesFromDefaultAppAgentProviders(),
             multiple: true,
         }),
         explainer: Flags.string({
@@ -74,6 +76,7 @@ export default class ExplainCommand extends Command {
         const context = await initializeCommandHandlerContext(
             "cli run explain",
             {
+                appAgentProviders: getDefaultAppAgentProviders(),
                 schemas,
                 actions: null, // We don't need any actions
                 commands: null,
@@ -81,7 +84,8 @@ export default class ExplainCommand extends Command {
                     name: flags.explainer,
                 },
                 cache: { enabled: false },
-                clientIO: flags.repeat > 1 ? null : undefined,
+                clientIO:
+                    flags.repeat > 1 ? undefined : createConsoleClientIO(),
             },
         );
 

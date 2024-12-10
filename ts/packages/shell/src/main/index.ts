@@ -23,9 +23,10 @@ import {
     RequestId,
     Dispatcher,
     NotifyExplainedData,
+    IAgentMessage,
+    TemplateEditConfig,
 } from "agent-dispatcher";
-
-import { IAgentMessage, TemplateEditConfig } from "agent-dispatcher";
+import { getDefaultAppAgentProviders } from "agent-dispatcher/internal";
 import { ShellSettings } from "./shellSettings.js";
 import { unlinkSync } from "fs";
 import { existsSync } from "node:fs";
@@ -35,6 +36,10 @@ import { BrowserAgentIpc } from "./browserIpc.js";
 import { WebSocketMessage } from "common-utils";
 import { AzureSpeech } from "./azureSpeech.js";
 import { auth } from "aiclient";
+import {
+    closeLocalWhipser,
+    isLocalWhisperEnabled,
+} from "./localWhisperCommandHandler.js";
 
 console.log(auth.AzureTokenScopes.CogServices);
 
@@ -98,7 +103,7 @@ function setContentSize() {
 
 const time = performance.now();
 debugShell("Starting...");
-function createWindow(dispatcher: Dispatcher): void {
+function createWindow(): void {
     debugShell("Creating window", performance.now() - time);
 
     // Create the browser window.
@@ -168,8 +173,6 @@ function createWindow(dispatcher: Dispatcher): void {
             ShellSettings.getinstance().closeInlineBrowser();
             ShellSettings.getinstance().size = mainWindow.getSize();
         }
-
-        dispatcher.getContext().session.save();
     });
 
     mainWindow.on("closed", () => {
@@ -416,10 +419,9 @@ async function getSpeechToken() {
     return speechToken;
 }
 
-async function triggerRecognitionOnce(dispatcher: Dispatcher) {
+async function triggerRecognitionOnce() {
     const speechToken = await getSpeechToken();
-    const useLocalWhisper =
-        typeof dispatcher.getContext().localWhisper !== "undefined";
+    const useLocalWhisper = isLocalWhisperEnabled();
     chatView?.webContents.send(
         "listen-event",
         "Alt+M",
@@ -520,36 +522,6 @@ async function proposeAction(
     });
 }
 
-let maxQuestionId = 0;
-async function question(message: string, requestId: RequestId) {
-    // Ignore message without requestId
-    if (requestId === undefined) {
-        console.warn("question: requestId is undefined");
-        return undefined;
-    }
-    const currentQuestionId = maxQuestionId++;
-    return new Promise<string | undefined>((resolve) => {
-        const callback = (
-            _event: Electron.IpcMainEvent,
-            questionId: number,
-            response?: string,
-        ) => {
-            if (currentQuestionId !== questionId) {
-                return;
-            }
-            ipcMain.removeListener("questionResponse", callback);
-            resolve(response);
-        };
-        ipcMain.on("questionResponse", callback);
-        chatView?.webContents.send(
-            "question",
-            currentQuestionId,
-            message,
-            requestId,
-        );
-    });
-}
-
 const clientIO: ClientIO = {
     clear: () => {
         chatView?.webContents.send("clear");
@@ -559,7 +531,6 @@ const clientIO: ClientIO = {
     setDynamicDisplay,
     askYesNo,
     proposeAction,
-    question,
     notify(event: string, requestId: RequestId, data: any, source: string) {
         switch (event) {
             case "explained":
@@ -616,7 +587,7 @@ async function setDynamicDisplay(
     );
 }
 
-async function initializeSpeech(dispatcher: Dispatcher) {
+async function initializeSpeech() {
     const key = process.env["SPEECH_SDK_KEY"];
     const region = process.env["SPEECH_SDK_REGION"];
     const endpoint = process.env["SPEECH_SDK_ENDPOINT"] as string;
@@ -640,7 +611,7 @@ async function initializeSpeech(dispatcher: Dispatcher) {
     }
 
     const ret = globalShortcut.register("Alt+M", () => {
-        triggerRecognitionOnce(dispatcher);
+        triggerRecognitionOnce();
     });
 
     if (ret) {
@@ -656,13 +627,16 @@ async function initializeSpeech(dispatcher: Dispatcher) {
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
-app.whenReady().then(async () => {
+async function initialize() {
     debugShell("Ready", performance.now() - time);
     // Set app user model id for windows
     electronApp.setAppUserModelId("com.electron");
 
     const dispatcher = await createDispatcher("shell", {
-        appAgentProviders: [shellAgentProvider],
+        appAgentProviders: [
+            shellAgentProvider,
+            ...getDefaultAppAgentProviders(),
+        ],
         explanationAsynchronousMode: true,
         persistSession: true,
         enableServiceHost: true,
@@ -780,9 +754,9 @@ app.whenReady().then(async () => {
         });
     });
 
-    await initializeSpeech(dispatcher);
+    await initializeSpeech();
     ipcMain.handle("get-localWhisper-status", async () => {
-        return typeof dispatcher.getContext().localWhisper !== "undefined";
+        return isLocalWhisperEnabled();
     });
 
     ipcMain.on("save-settings", (_event, settings: ShellSettings) => {
@@ -797,16 +771,17 @@ app.whenReady().then(async () => {
         ShellSettings.getinstance().save();
     });
 
-    globalShortcut.register("Alt+Right", () => {
-        chatView?.webContents.send("send-demo-event", "Alt+Right");
-    });
-
     ipcMain.on(
         "send-to-browser-ipc",
         async (_event, data: WebSocketMessage) => {
             await BrowserAgentIpc.getinstance().send(data);
         },
     );
+    globalShortcut.register("Alt+Right", () => {
+        chatView?.webContents.send("send-demo-event", "Alt+Right");
+    });
+
+    setupQuit(dispatcher);
 
     // Default open or close DevTools by F12 in development
     // and ignore CommandOrControl + R in production.
@@ -822,20 +797,60 @@ app.whenReady().then(async () => {
         });
     });
 
-    createWindow(dispatcher);
+    createWindow();
 
     app.on("activate", function () {
         // On macOS it's common to re-create a window in the app when the
         // dock icon is clicked and there are no other windows open.
-        if (BrowserWindow.getAllWindows().length === 0)
-            createWindow(dispatcher);
+        if (BrowserWindow.getAllWindows().length === 0) createWindow();
     });
-});
+}
 
-app.on("will-quit", () => {
-    // Unregister all shortcuts.
-    globalShortcut.unregisterAll();
-});
+app.whenReady()
+    .then(initialize)
+    .catch((error) => {
+        debugShellError(error);
+        console.error(`Error starting shell: ${error.message}`);
+        app.quit();
+    });
+
+function setupQuit(dispatcher: Dispatcher) {
+    let quitting = false;
+    let canQuit = false;
+    async function quit() {
+        quitting = true;
+
+        // Unregister all shortcuts.
+        globalShortcut.unregisterAll();
+
+        closeLocalWhipser();
+
+        debugShell("Closing dispatcher");
+        try {
+            await dispatcher.close();
+        } catch (e) {
+            debugShellError("Error closing dispatcher", e);
+        }
+        debugShell("Quitting");
+        canQuit = true;
+        app.quit();
+    }
+
+    app.on("before-quit", (e) => {
+        if (canQuit) {
+            return;
+        }
+        // Stop the quiting to finish async tasks.
+        e.preventDefault();
+
+        // if we are already quitting, do nothing
+        if (quitting) {
+            return;
+        }
+
+        quit();
+    });
+}
 
 // Quit when all windows are closed, except on macOS. There, it's common
 // for applications and their menu bar to stay active until the user quits

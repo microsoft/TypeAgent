@@ -13,7 +13,7 @@ export {
     ActionSchemaUnion,
 } from "./type.js";
 
-export { parseActionSchemaFile, parseActionSchemaSource } from "./parser.js";
+export { parseActionSchemaSource } from "./parser.js";
 export {
     GenerateSchemaOptions,
     generateActionSchema,
@@ -31,3 +31,6 @@ export {
     toJSONActionSchemaFile,
     fromJSONActionSchemaFile,
 } from "./serialize.js";
+
+// Schema Config
+export { SchemaConfig, ParamSpec, ActionParamSpecs } from "./schemaConfig.js";

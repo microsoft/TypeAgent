@@ -8,7 +8,6 @@ import {
 import { RequestCommandHandler } from "../handlers/requestCommandHandler.js";
 import { TranslateCommandHandler } from "../handlers/translateCommandHandler.js";
 import { ExplainCommandHandler } from "../handlers/explainCommandHandler.js";
-import { CorrectCommandHandler } from "../handlers/correctCommandHandler.js";
 import { ActionContext, AppAction, AppAgent } from "@typeagent/agent-sdk";
 import { CommandHandlerContext } from "../internal.js";
 import { createActionResultNoDisplay } from "@typeagent/agent-sdk/helpers/action";
@@ -28,7 +27,6 @@ const dispatcherHandlers: CommandHandlerTable = {
         request: new RequestCommandHandler(),
         translate: new TranslateCommandHandler(),
         explain: new ExplainCommandHandler(),
-        correct: new CorrectCommandHandler(),
     },
 };
 

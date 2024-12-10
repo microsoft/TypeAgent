@@ -4,6 +4,7 @@
 import * as path from "path";
 import dotenv from "dotenv";
 import * as fs from "fs";
+import { finished } from "stream/promises";
 
 import {
     ChatModel,
@@ -12,7 +13,7 @@ import {
     openai,
 } from "aiclient";
 import { generateActionRequests } from "./actionGen.js";
-import { dedupeList, generateEmbedding, TypeSchema } from "typeagent";
+import { dedupeList, generateEmbeddingWithRetry, TypeSchema } from "typeagent";
 
 const envPath = new URL("../../../.env", import.meta.url);
 dotenv.config({ path: envPath });
@@ -32,12 +33,30 @@ async function getModelCompletionResponse(
     }
 }
 
+async function writeSchemaEmbeddingsDataToFile(
+    schemaData: any[],
+    outputPath: string,
+): Promise<void> {
+    const writeStream = fs.createWriteStream(outputPath);
+    return new Promise((resolve, reject) => {
+        schemaData.forEach((item) => {
+            try {
+                writeStream.write(JSON.stringify(item) + "\n");
+            } catch (error) {
+                reject(error);
+            }
+        });
+        writeStream.end();
+        writeStream.on("finish", resolve);
+        writeStream.on("error", reject);
+    });
+}
+
 export async function createVSCODESchemaGen(
     model: ChatModelWithStreaming,
     jsonSchema: any,
 ) {
     console.log("Generating VSCODE schema...");
-
     model.complete("Generate VSCODE schema").then((response: any) => {
         if (response.choices) {
             const schema = response.choices[0].text;
@@ -139,10 +158,122 @@ export async function generateEmbeddingForActionsRequests(
     const userRequestEmbeddings = await Promise.all(
         actionRequests.map(async (request: string) => ({
             request,
-            embedding: Array.from(await generateEmbedding(model, request)),
+            embedding: Array.from(
+                await generateEmbeddingWithRetry(model, request),
+            ),
         })),
     );
     return userRequestEmbeddings;
+}
+
+export async function genEmbeddingDataFromActionSchema(
+    model: ChatModel,
+    jsonFilePath: string,
+    schemaFilePath: string,
+    actionPrefix: string | undefined,
+    output_dir: string,
+    maxNodestoProcess: number = -1,
+) {
+    if (fs.existsSync(schemaFilePath)) {
+        const schema = fs.readFileSync(schemaFilePath, "utf8");
+        const schemaLines = schema.split("\n\n");
+        const schemaDefinitions: string[] = [];
+        for (const line of schemaLines) {
+            schemaDefinitions.push(line);
+        }
+
+        const embeddingModel = openai.createEmbeddingModel();
+        let aggrData: any = [];
+        let processedNodeCount = 0;
+
+        for (const schemaStr of schemaDefinitions) {
+            let actionSchemaData: any = parseTypeComponents(schemaStr);
+            const actionString: string = `${actionSchemaData.typeName} ${actionSchemaData.actionName} ${actionSchemaData.comments.join(" ")}`;
+            let actionEmbedding: Float32Array =
+                await generateEmbeddingWithRetry(
+                    embeddingModel,
+                    JSON.stringify(actionString),
+                );
+
+            let typeSchema: TypeSchema = {
+                typeName: actionSchemaData.typeName,
+                schemaText: schemaStr,
+            };
+
+            let actionRequests: string[] = await generateActionRequests(
+                "variations",
+                model,
+                typeSchema,
+                actionSchemaData.comments.join(" "),
+                25,
+            );
+
+            actionRequests = dedupeList(actionRequests);
+            actionRequests.sort();
+
+            let actionReqEmbeddings = await generateEmbeddingForActionsRequests(
+                embeddingModel,
+                actionRequests,
+            );
+
+            aggrData.push({
+                ...actionSchemaData,
+                schema: schemaStr,
+                embedding: Array.from(actionEmbedding),
+                requests: actionReqEmbeddings,
+            });
+
+            processedNodeCount++;
+
+            if (processedNodeCount % 50 === 0) {
+                console.log(
+                    `Processed ${processedNodeCount} schema definitions so far.`,
+                );
+            }
+        }
+
+        if (aggrData.length > 0) {
+            const jsonlFileName =
+                actionPrefix !== undefined && actionPrefix.length > 0
+                    ? path.join(
+                          output_dir,
+                          "aggr_data_[" + actionPrefix + "].jsonl",
+                      )
+                    : path.join(output_dir, "aggr_data.jsonl");
+            writeSchemaEmbeddingsDataToFile(aggrData, jsonlFileName);
+            console.log(
+                `Aggregate action and request data file: ${jsonlFileName}`,
+            );
+        }
+        console.log(
+            `Total action schema definitions processed: ${processedNodeCount}`,
+        );
+    } else {
+        console.log(`Schema file not found: ${schemaFilePath}`);
+    }
+}
+
+async function persistSchemaDefinitions(
+    schemaFilePath: string,
+    schemaDefinitions: string[],
+    processedNodeCount: number,
+    schemaCount: number,
+): Promise<void> {
+    const writeStream = fs.createWriteStream(schemaFilePath, {
+        encoding: "utf8",
+    });
+    for (const definition of schemaDefinitions) {
+        if (!writeStream.write(`${definition}\n\n`)) {
+            await new Promise((resolve) => writeStream.once("drain", resolve));
+        }
+    }
+    writeStream.end();
+    await finished(writeStream);
+
+    console.log(`Schema definitions file: ${schemaFilePath}`);
+    console.log(
+        `Total nodes processed: ${processedNodeCount}, Total schemas generated: ${schemaCount}`,
+    );
 }
 
 export async function processVscodeCommandsJsonFile(
@@ -193,10 +324,11 @@ export async function processVscodeCommandsJsonFile(
 
                 let actionSchemaData: any = parseTypeComponents(schemaStr);
                 const actionString: string = `${actionSchemaData.typeName} ${actionSchemaData.actionName} ${actionSchemaData.comments.join(" ")}`;
-                let actionEmbedding: Float32Array = await generateEmbedding(
-                    embeddingModel,
-                    JSON.stringify(actionString),
-                );
+                let actionEmbedding: Float32Array =
+                    await generateEmbeddingWithRetry(
+                        embeddingModel,
+                        JSON.stringify(actionString),
+                    );
 
                 let typeSchema: TypeSchema = {
                     typeName: actionSchemaData.typeName,
@@ -248,19 +380,22 @@ export async function processVscodeCommandsJsonFile(
         }
     }
 
-    fs.writeFileSync(schemaFilePath, schemaDefinitions.join("\n\n"));
-    console.log(`Schema definitions file: ${schemaFilePath}`);
-    console.log(
-        `Total nodes processed: ${processedNodeCount}, Total schemas generated: ${schemaCount}`,
+    persistSchemaDefinitions(
+        schemaFilePath,
+        schemaDefinitions,
+        processedNodeCount,
+        schemaCount,
     );
 
-    const jsonlData = aggrData
-        .map((item: any) => JSON.stringify(item))
-        .join("\n");
-    const jsonlFileName = path.join(
-        output_dir,
-        "aggr_data_[" + actionPrefix + "].jsonl",
-    );
-    fs.writeFileSync(jsonlFileName, jsonlData);
-    console.log(`Aggregate action and request data file: ${jsonlFileName}`);
+    if (aggrData.length > 0) {
+        const jsonlFileName =
+            actionPrefix !== undefined && actionPrefix.length > 0
+                ? path.join(
+                      output_dir,
+                      "aggr_data_[" + actionPrefix + "].jsonl",
+                  )
+                : path.join(output_dir, "aggr_data.jsonl");
+        writeSchemaEmbeddingsDataToFile(aggrData, jsonlFileName);
+        console.log(`Aggregate action and request data file: ${jsonlFileName}`);
+    }
 }

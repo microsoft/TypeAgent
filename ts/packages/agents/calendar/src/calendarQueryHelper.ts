@@ -6,6 +6,7 @@ import {
     getDateRelativeToDayV2,
     getISODayStartTime,
     getISODayEndTime,
+    parseFuzzyDateString,
 } from "graph-utils";
 
 export function generateEventReferenceCriteria(
@@ -184,6 +185,10 @@ export function generateQueryFromFuzzyDay(input: string): string | undefined {
             const { startDate: thisWeekStart, endDate: thisWeekEnd } =
                 getCurrentWeekDates();
             return `startdatetime=${thisWeekStart.toISOString()}&enddatetime=${thisWeekEnd.toISOString()}`;
+        case "next week":
+            const { startDateTime: nextWeekStart, endDateTime: nextWeekEnd } =
+                getNWeeksDateRangeISO(1);
+            return `startdatetime=${nextWeekStart}&enddatetime=${nextWeekEnd}`;
         case "this month":
             const { startDate: thisMonthStart, endDate: thisMonthEnd } =
                 getCurrentMonthDates();
@@ -197,7 +202,9 @@ export function generateQueryFromFuzzyDay(input: string): string | undefined {
                 getNextDaysDates(1);
             return `startdatetime=${tomorrowStart.toISOString()}&enddatetime=${tomorrowEnd.toISOString()}`;
         default:
-            const curDate = getDateRelativeToDayV2(input);
+            const curDate =
+                getDateRelativeToDayV2(input) ?? parseFuzzyDateString(input);
+
             if (curDate != undefined) {
                 return `startdatetime=${getISODayStartTime(
                     curDate,
