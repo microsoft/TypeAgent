@@ -118,6 +118,7 @@ export async function readTestData(
 
 export type GenerateTestDataResult = {
     testData: TestData;
+    fileName: string | undefined;
     elapsedMs: number;
 };
 
@@ -599,7 +600,7 @@ async function generateTestDataFile(
         );
     }
     console.log(`${fullPrefix}: Final stats ${messages.join(", ")}`);
-    return { testData, elapsedMs: totalElapsedMs };
+    return { testData, fileName: outputFile, elapsedMs: totalElapsedMs };
 }
 
 export function printTestDataStats(
@@ -652,11 +653,13 @@ export function printTestDataStats(
 
 export function convertTestDataToExplanationData(
     testData: TestData,
+    outputFile?: string,
 ): ExplanationData {
     return {
         schemaNames: [testData.schemaName],
         sourceHashes: [testData.sourceHash],
         explainerName: testData.explainerName,
         entries: testData.entries,
+        fileName: outputFile,
     };
 }

@@ -45,7 +45,10 @@ function createConstructions(
                 schemaInfoProvider.getActionSchemaFileHash(schemaName) !==
                 sourceHash
             ) {
-                throw new Error(`Schema hash mismatch for '${schemaName}'`);
+                const fileName = data.fileName ? ` in ${data.fileName}` : "";
+                throw new Error(
+                    `Schema hash mismatch for '${schemaName}'${fileName}`,
+                );
             }
         }
     }
@@ -120,9 +123,12 @@ function createConstructions(
             }
             constructions.push({ namespaceKeys, construction });
         } catch (e: any) {
-            console.error(
-                chalk.red(`ERROR: ${e.message}\n  Input: ${requestAction}`),
-            );
+            const lines = [`ERROR: ${e.message}`];
+            if (data.fileName !== undefined) {
+                lines.push(`  File: ${data.fileName}`);
+            }
+            lines.push(`  Input: ${requestAction}`);
+            console.error(chalk.red(lines.join("\n")));
         }
     }
     return constructions;
@@ -155,8 +161,10 @@ export function importConstructions(
         const explainer = getExplainerForTranslator(data.schemaNames);
         const createConstruction = explainer.createConstruction;
         if (createConstruction === undefined) {
+            const fileName =
+                data.fileName !== undefined ? `in file ${data.fileName}` : "";
             throw new Error(
-                `Explainer ${constructionStore.explainerName} does not support construction creation.`,
+                `Explainer ${constructionStore.explainerName} does not support construction creation with schema ${data.schemaNames.join(",")}${fileName}.`,
             );
         }
         const constructions = createConstructions(

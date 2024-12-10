@@ -40,8 +40,10 @@ export async function getImportedCache(
     );
     await cache.import(
         inputs
-            .filter((i) => i.explainerName === explainerName)
-            .map(convertTestDataToExplanationData),
+            .filter(([i]) => i.explainerName === explainerName)
+            .map(([testData, fileName]) =>
+                convertTestDataToExplanationData(testData, fileName),
+            ),
     );
     return cache;
 }
@@ -58,10 +60,12 @@ const dataFiles =
 // Test result is impacted by the order of import (from conflicing transform).
 // Sort by file name to make the test result deterministic.
 const inputs = await Promise.all(
-    (await glob(dataFiles)).sort().map((f) => readTestData(f)),
+    (await glob(dataFiles)).sort().map(async (f) => {
+        return [await readTestData(f), f] as const;
+    }),
 );
 
-const testInput = inputs.flatMap((f) =>
+const testInput = inputs.flatMap(([f]) =>
     f.entries.map<[string, string, RequestAction, object, string[]]>((data) => [
         f.schemaName,
         f.explainerName,

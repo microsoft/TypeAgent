@@ -194,6 +194,7 @@ export default class ExplanationDataAddCommand extends Command {
             if (flags.output && fs.existsSync(flags.output)) {
                 printTestDataStats([
                     {
+                        fileName: flags.output,
                         testData: await readTestData(flags.output),
                         elapsedMs: 0,
                     },

@@ -15,4 +15,5 @@ export type ExplanationData<T extends object = object> = {
     sourceHashes: string[];
     explainerName: string;
     entries: ExplanationDataEntry<T>[];
+    fileName: string | undefined;
 };
