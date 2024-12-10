@@ -28,12 +28,28 @@ RUN apt-get update
 RUN apt install -y gnome-keyring
 RUN curl -sL https://aka.ms/InstallAzureCLIDeb | bash
 
+# blobfuse
+RUN apt-get update \
+    && apt-get install -y wget apt-utils \
+    && wget https://packages.microsoft.com/config/ubuntu/20.04/packages-microsoft-prod.deb \
+    && dpkg -i packages-microsoft-prod.deb \
+    && apt-get update \
+    && apt-get install -y libfuse3-dev fuse3 libcurl3-gnutls libgnutls30
+
+RUN apt-get install blobfuse2
+RUN mkdir /blob
+
 EXPOSE 80:3000
 
-# setup start actions
+# start actions
+# az login
 RUN echo az login --identity >> start.sh
+# mount blob storage locally
+RUN echo blobfuse2 mount /blob --config-file=mount-blobfuse.yaml --log-level=LOG_debug --log-file-path=blob.log >> start.sh
+# run getKeys
 RUN echo node ../tools/scripts/getKeys.mjs >> start.sh
+# start API server
 RUN echo pnpm start >> start.sh
 
-# azure login, then start node application
+# run start script
 CMD bash start.sh
