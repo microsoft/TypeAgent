@@ -1,6 +1,7 @@
 {
   "version": 2,
-  "translatorName": "player",
+  "schemaName": "player",
+  "sourceHash": "/coyfq1j8qYAwzuqFo38QLrP2X7DZ/U6UJRPEiLjn7Q=",
   "explainerName": "v5",
   "entries": [
     {
@@ -72,10 +73,18 @@
                 "propertySubPhrases": [
                   "skip the song"
                 ]
+              },
+              {
+                "propertyValue": "player.previous",
+                "propertySubPhrases": [
+                  "play the previous song"
+                ]
               }
             ]
           }
-        ]
+        ],
+        "politePrefixes": [],
+        "politeSuffixes": []
       }
     },
     {
@@ -95,17 +104,17 @@
         ],
         "subPhrases": [
           {
-            "text": "How about you",
+            "text": "How about",
             "category": "filler",
             "synonyms": [
-              "What if you",
+              "What about",
               "Why don't you",
-              "Could you"
+              "Maybe"
             ],
             "isOptional": true
           },
           {
-            "text": "choose a song to play",
+            "text": "you choose a song to play",
             "category": "action",
             "propertyNames": [
               "fullActionName"
@@ -117,29 +126,37 @@
             "propertyName": "fullActionName",
             "propertyValue": "player.playRandom",
             "propertySubPhrases": [
-              "choose a song to play"
+              "you choose a song to play"
             ],
             "alternatives": [
               {
                 "propertyValue": "player.playNext",
                 "propertySubPhrases": [
-                  "play the next song"
+                  "you choose the next song to play"
                 ]
               },
               {
                 "propertyValue": "player.playPrevious",
                 "propertySubPhrases": [
-                  "play the previous song"
+                  "you choose the previous song to play"
                 ]
               },
               {
-                "propertyValue": "player.playSpecific",
+                "propertyValue": "player.playFavorite",
                 "propertySubPhrases": [
-                  "play a specific song"
+                  "you choose a favorite song to play"
                 ]
               }
             ]
           }
+        ],
+        "politePrefixes": [
+          "Could you please",
+          "Would you mind"
+        ],
+        "politeSuffixes": [
+          "Thank you!",
+          "If you don't mind."
         ]
       }
     },
@@ -202,9 +219,23 @@
                 "propertySubPhrases": [
                   "Play an album"
                 ]
+              },
+              {
+                "propertyValue": "player.playArtist",
+                "propertySubPhrases": [
+                  "Play music by"
+                ]
               }
             ]
           }
+        ],
+        "politePrefixes": [
+          "Could you please",
+          "Would you mind"
+        ],
+        "politeSuffixes": [
+          "Thank you",
+          "I would appreciate it"
         ]
       }
     },
@@ -237,7 +268,7 @@
             "synonyms": [
               "please",
               "if you could",
-              "kindly"
+              "would you mind"
             ],
             "isOptional": true
           }
@@ -251,25 +282,33 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "player.playPlaylist",
+                "propertyValue": "player.playMusic",
                 "propertySubPhrases": [
-                  "Play a playlist"
+                  "Play some music"
                 ]
               },
               {
-                "propertyValue": "player.playAlbum",
+                "propertyValue": "player.playSongs",
                 "propertySubPhrases": [
-                  "Play an album"
+                  "Play some songs"
                 ]
               },
               {
-                "propertyValue": "player.playSong",
+                "propertyValue": "player.playTracks",
                 "propertySubPhrases": [
-                  "Play a song"
+                  "Play some tracks"
                 ]
               }
             ]
           }
+        ],
+        "politePrefixes": [
+          "Could you please",
+          "Would you mind"
+        ],
+        "politeSuffixes": [
+          "Thank you",
+          "I would appreciate it"
         ]
       }
     },
@@ -332,19 +371,27 @@
                 ]
               },
               {
-                "propertyValue": "player.playPlaylist",
+                "propertyValue": "player.pause",
                 "propertySubPhrases": [
-                  "play a playlist"
+                  "pause the music"
                 ]
               },
               {
-                "propertyValue": "player.playAlbum",
+                "propertyValue": "player.stop",
                 "propertySubPhrases": [
-                  "play an album"
+                  "stop the music"
                 ]
               }
             ]
           }
+        ],
+        "politePrefixes": [
+          "Would you mind if we",
+          "Could we please"
+        ],
+        "politeSuffixes": [
+          "if that's okay with you?",
+          "if you don't mind?"
         ]
       }
     },
@@ -386,25 +433,33 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "player.getTopHits",
+                "propertyValue": "player.getPlaylist",
                 "propertySubPhrases": [
-                  "top hits"
+                  "my playlist"
                 ]
               },
               {
                 "propertyValue": "player.getRecent",
                 "propertySubPhrases": [
-                  "recently played songs"
+                  "my recent songs"
                 ]
               },
               {
-                "propertyValue": "player.getRecommended",
+                "propertyValue": "player.getTopHits",
                 "propertySubPhrases": [
-                  "recommended songs"
+                  "top hits"
                 ]
               }
             ]
           }
+        ],
+        "politePrefixes": [
+          "Could you please",
+          "Would you mind"
+        ],
+        "politeSuffixes": [
+          "thank you",
+          "if you don't mind"
         ]
       }
     },
@@ -436,8 +491,8 @@
             "category": "politeness",
             "synonyms": [
               "kindly",
-              "if you would",
-              "if you please"
+              "if you could",
+              "would you mind"
             ],
             "isOptional": true
           }
@@ -470,7 +525,9 @@
               }
             ]
           }
-        ]
+        ],
+        "politePrefixes": [],
+        "politeSuffixes": []
       }
     },
     {
@@ -538,8 +595,40 @@
               }
             ]
           }
+        ],
+        "politePrefixes": [
+          "Could you please",
+          "Would you mind"
+        ],
+        "politeSuffixes": [
+          "Thank you",
+          "I appreciate it"
         ]
-      }
+      },
+      "corrections": [
+        {
+          "data": {
+            "properties": [
+              {
+                "name": "fullActionName",
+                "value": "player.changeVolume",
+                "substrings": [
+                  "Turn up the volume"
+                ]
+              },
+              {
+                "name": "volumeChangePercentage",
+                "value": 10,
+                "isImplicit": true
+              }
+            ]
+          },
+          "correction": [
+            "Extraneous implicit parameter: 'volumeChangePercentage' is not a parameter in the action",
+            "Missing parameter: parameter 'parameters.volumeChangePercentage' in the action is missing from explanation"
+          ]
+        }
+      ]
     },
     {
       "request": "Would you mind playing some music?",
@@ -600,16 +689,12 @@
                 "propertySubPhrases": [
                   "playing some jazz"
                 ]
-              },
-              {
-                "propertyValue": "player.playArtist",
-                "propertySubPhrases": [
-                  "playing some music by The Beatles"
-                ]
               }
             ]
           }
-        ]
+        ],
+        "politePrefixes": [],
+        "politeSuffixes": []
       }
     },
     {
@@ -640,11 +725,11 @@
           },
           {
             "text": "can we get",
-            "category": "filler",
+            "category": "politeness",
             "synonyms": [
               "could we have",
               "may we get",
-              "shall we get"
+              "would it be possible to get"
             ],
             "isOptional": true
           },
@@ -657,11 +742,11 @@
           },
           {
             "text": "blastin' on these streets",
-            "category": "filler",
+            "category": "location",
             "synonyms": [
+              "playing here",
               "playing loudly",
-              "blasting out",
-              "booming"
+              "playing in this area"
             ],
             "isOptional": true
           }
@@ -677,7 +762,7 @@
               {
                 "propertyValue": "player.playRock",
                 "propertySubPhrases": [
-                  "some rock tunes"
+                  "some rock music"
                 ]
               },
               {
@@ -689,11 +774,25 @@
               {
                 "propertyValue": "player.playClassical",
                 "propertySubPhrases": [
-                  "some classical tunes"
+                  "some classical music"
+                ]
+              },
+              {
+                "propertyValue": "player.playHipHop",
+                "propertySubPhrases": [
+                  "some hip hop beats"
                 ]
               }
             ]
           }
+        ],
+        "politePrefixes": [
+          "Could you please",
+          "Would you mind"
+        ],
+        "politeSuffixes": [
+          "Thank you!",
+          "I would appreciate it!"
         ]
       }
     }

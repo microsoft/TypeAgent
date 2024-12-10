@@ -14,6 +14,7 @@ import registerDebug from "debug";
 import { ExplainerFactory } from "../cache/factory.js";
 import { printTransformNamespaces } from "../utils/print.js";
 import { ConstructionCache } from "./constructionCache.js";
+import { getSchemaNamespaceKeys } from "../cache/cache.js";
 
 const debugConstCreate = registerDebug("typeagent:const:create");
 const debugConstMerge = registerDebug("typeagent:const:merge");
@@ -26,7 +27,7 @@ export type ImportConstructionResult = {
 };
 
 type ConstructionData = {
-    translatorNames: string[];
+    namespaceKeys: string[];
     construction: Construction;
 };
 
@@ -35,7 +36,28 @@ function createConstructions(
     explainer: GenericExplainer,
     schemaInfoProvider: SchemaInfoProvider | undefined,
     createConstruction: ConstructionFactory<any>,
+    ignoreSourceHash: boolean,
 ) {
+    if (schemaInfoProvider !== undefined) {
+        for (let i = 0; i < data.schemaNames.length; i++) {
+            const schemaName = data.schemaNames[i];
+            const sourceHash = data.sourceHashes[i];
+            if (
+                schemaInfoProvider.getActionSchemaFileHash(schemaName) !==
+                sourceHash
+            ) {
+                const fileName = data.fileName ? ` in ${data.fileName}` : "";
+                const message = `Schema hash mismatch for '${schemaName}'${fileName}`;
+                if (ignoreSourceHash) {
+                    console.warn(`WARNING: ${message}`);
+                } else {
+                    throw new Error(message);
+                }
+            }
+        }
+    }
+
+    const dataSchemaNames = new Set(data.schemaNames);
     const constructions: ConstructionData[] = [];
     for (const entry of data.entries) {
         const requestAction = new RequestAction(
@@ -45,9 +67,18 @@ function createConstructions(
 
         try {
             const actions = requestAction.actions;
-
+            for (const action of actions) {
+                if (!dataSchemaNames.has(action.translatorName)) {
+                    throw new Error(
+                        `Schema name '${action.translatorName}' not found in data header`,
+                    );
+                }
+            }
             const explanation = entry.explanation;
-            const translatorNames = actions.translatorNames;
+            const namespaceKeys = getSchemaNamespaceKeys(
+                actions.translatorNames,
+                schemaInfoProvider,
+            );
             const construction = createConstruction(
                 requestAction,
                 explanation,
@@ -94,11 +125,14 @@ function createConstructions(
             if (debugConstCreate.enabled) {
                 debugConstCreate(`       Matched: ${chalk.green(matched)}`);
             }
-            constructions.push({ translatorNames, construction });
+            constructions.push({ namespaceKeys, construction });
         } catch (e: any) {
-            console.error(
-                chalk.red(`ERROR: ${e.message}\n  Input: ${requestAction}`),
-            );
+            const lines = [`ERROR: ${e.message}`];
+            if (data.fileName !== undefined) {
+                lines.push(`  File: ${data.fileName}`);
+            }
+            lines.push(`  Input: ${requestAction}`);
+            console.error(chalk.red(lines.join("\n")));
         }
     }
     return constructions;
@@ -111,6 +145,7 @@ export function importConstructions(
     mergeMatchSets: boolean,
     cacheConflicts: boolean,
     schemaInfoProvider?: SchemaInfoProvider,
+    ignoreSourceHash: boolean = false,
 ): ImportConstructionResult {
     if (
         explanationData.some(
@@ -128,11 +163,13 @@ export function importConstructions(
     let newCount = 0;
     for (const data of explanationData) {
         count += data.entries.length;
-        const explainer = getExplainerForTranslator(data.translatorName);
+        const explainer = getExplainerForTranslator(data.schemaNames);
         const createConstruction = explainer.createConstruction;
         if (createConstruction === undefined) {
+            const fileName =
+                data.fileName !== undefined ? `in file ${data.fileName}` : "";
             throw new Error(
-                `Explainer ${constructionStore.explainerName} does not support construction creation.`,
+                `Explainer ${constructionStore.explainerName} does not support construction creation with schema ${data.schemaNames.join(",")}${fileName}.`,
             );
         }
         const constructions = createConstructions(
@@ -140,15 +177,16 @@ export function importConstructions(
             explainer,
             schemaInfoProvider,
             createConstruction,
+            ignoreSourceHash,
         );
         newCount += constructions.length;
         constructionData.push(...constructions);
     }
 
     // Add the constructions to the store
-    for (const { translatorNames, construction } of constructionData) {
+    for (const { namespaceKeys, construction } of constructionData) {
         const result = constructionStore.addConstruction(
-            translatorNames,
+            namespaceKeys,
             construction,
             mergeMatchSets,
             cacheConflicts,

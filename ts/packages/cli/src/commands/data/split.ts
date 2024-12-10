@@ -53,7 +53,8 @@ export default class ExplanationDataSplitCommmand extends Command {
                 currFailed < failedCount
             ) {
                 const newData = getEmptyTestData(
-                    data.translatorName,
+                    data.schemaName,
+                    data.sourceHash,
                     data.explainerName,
                 );
                 if (currEntry < data.entries.length) {

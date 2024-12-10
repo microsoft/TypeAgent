@@ -279,7 +279,7 @@ export default class ExplanationDataStatCommmand extends Command {
                 const data = await readTestData(file);
                 if (
                     (flags.translator &&
-                        !flags.translator.includes(data.translatorName)) ||
+                        !flags.translator.includes(data.schemaName)) ||
                     (flags.explainer &&
                         !flags.explainer.includes(data.explainerName))
                 ) {

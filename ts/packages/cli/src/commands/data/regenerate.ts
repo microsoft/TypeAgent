@@ -16,6 +16,8 @@ import {
     getEmptyTestData,
     getTestDataFiles,
     createSchemaInfoProviderFromDefaultAppAgentProviders,
+    convertTestDataToExplanationData,
+    getActionConfigProviderFromDefaultAppAgentProviders,
 } from "agent-dispatcher/internal";
 import {
     Actions,
@@ -163,6 +165,10 @@ export default class ExplanationDataRegenerateCommmand extends Command {
             dependsOn: ["explanation"],
             default: false,
         }),
+        updateHash: Flags.boolean({
+            description: "Update source hash (ignore source mismatch)",
+            default: false,
+        }),
     };
     static description = "Regenerate the data in the explanation data file";
     static example = [
@@ -212,7 +218,12 @@ export default class ExplanationDataRegenerateCommmand extends Command {
               )
             : inputs;
 
+        if (pending.length === 0) {
+            throw new Error(`No input files found`);
+        }
+
         const explainerOverride = flags.builtin ?? flags.override;
+        const provider = getActionConfigProviderFromDefaultAppAgentProviders();
         const partialExplanationRegen =
             flags.correction ||
             flags.error ||
@@ -222,17 +233,32 @@ export default class ExplanationDataRegenerateCommmand extends Command {
             flags.resume ||
             flags.constructions ||
             flags.none;
+
+        const partialRegen =
+            partialExplanationRegen ||
+            flags.explanation ||
+            flags.request ||
+            flags.actionName ||
+            flags.entities;
+
         if (flags.output) {
             // Combine the data to the output now
             const failed: FailedTestDataEntry[] = [];
+
+            const targetSchemaName = pending[0].data.schemaName;
+            const config = provider.getActionConfig(targetSchemaName);
+            const sourceHash =
+                provider.getActionSchemaFileForConfig(config).sourceHash;
+
             const combinedData = getEmptyTestData(
-                pending[0].data.translatorName,
+                targetSchemaName,
+                sourceHash,
                 explainerOverride ?? pending[0].data.explainerName,
             );
             combinedData.failed = failed;
 
             for (const { data } of pending) {
-                if (combinedData.translatorName !== data.translatorName) {
+                if (combinedData.schemaName !== data.schemaName) {
                     throw new Error(
                         "Unable to process multiple translator from input files into a single output file",
                     );
@@ -273,28 +299,44 @@ export default class ExplanationDataRegenerateCommmand extends Command {
                     chalk.yellow(`${flags.output} will be overwritten`),
                 );
             }
-        } else if (explainerOverride !== undefined) {
-            for (const { data } of pending) {
-                if (data.explainerName !== explainerOverride) {
-                    if (partialExplanationRegen) {
+        } else {
+            for (const { file, data } of pending) {
+                const config = provider.getActionConfig(data.schemaName);
+                const sourceHash =
+                    provider.getActionSchemaFileForConfig(config).sourceHash;
+
+                if (sourceHash !== data.sourceHash) {
+                    if (partialRegen && !flags.updateHash) {
                         throw new Error(
-                            "Cannot to partially regenerate using --correction, --error, --validate, --succeeded, --failed, --resume, --constructions or --none with explainer override",
+                            `Existing schema source hash in ${file} doesn't match current source hash for schema '${data.schemaName}'`,
                         );
                     }
-                    data.failed = data.failed ?? [];
-                    data.failed.push(
-                        ...data.entries.map((e) => {
-                            return {
-                                ...e,
-                                message: "Not processed",
-                                explanation: undefined,
-                                corrections: undefined,
-                            };
-                        }),
-                    );
-                    data.entries = [];
-                    data.explainerName = explainerOverride;
+                    if (flags.updateHash) {
+                        console.log(`Updating source hash in '${file}'`);
+                    }
+                    data.sourceHash = sourceHash;
                 }
+                if (explainerOverride !== undefined)
+                    if (data.explainerName !== explainerOverride) {
+                        if (partialExplanationRegen) {
+                            throw new Error(
+                                "Cannot to partially regenerate using --correction, --error, --validate, --succeeded, --failed, --resume, --constructions or --none with explainer override",
+                            );
+                        }
+                        data.failed = data.failed ?? [];
+                        data.failed.push(
+                            ...data.entries.map((e) => {
+                                return {
+                                    ...e,
+                                    message: "Not processed",
+                                    explanation: undefined,
+                                    corrections: undefined,
+                                };
+                            }),
+                        );
+                        data.entries = [];
+                        data.explainerName = explainerOverride;
+                    }
             }
         }
 
@@ -405,7 +447,6 @@ export default class ExplanationDataRegenerateCommmand extends Command {
                             return undefined;
                         }
                         const entities = toEntities(Actions.fromJSON(e.action));
-                        e.action;
                         if (entities.length === 0) {
                             return undefined;
                         }
@@ -426,7 +467,7 @@ export default class ExplanationDataRegenerateCommmand extends Command {
                         }
 
                         const explainer = getCacheFactory().getExplainer(
-                            data.translatorName,
+                            [data.schemaName],
                             data.explainerName,
                         );
 
@@ -476,6 +517,7 @@ export default class ExplanationDataRegenerateCommmand extends Command {
         }
         const results = await generateTestDataFiles(
             dataInput,
+            provider,
             !flags.batch,
             limiter,
             flags.model,
@@ -490,7 +532,9 @@ export default class ExplanationDataRegenerateCommmand extends Command {
                 flags.none ? undefined : builtinConstructionConfig.file,
             );
             const result = await agentCache.import(
-                results.map((e) => e.testData),
+                results.map((e) =>
+                    convertTestDataToExplanationData(e.testData),
+                ),
             );
 
             printImportConstructionResult(result);

@@ -110,7 +110,7 @@ export function getActionConfigProviderFromDefaultAppAgentProviders(): ActionCon
             getActionConfig(schemaName: string) {
                 const config = actionConfigs[schemaName];
                 if (!config) {
-                    throw new Error(`Unknown translator: ${schemaName}`);
+                    throw new Error(`Unknown schema name: ${schemaName}`);
                 }
                 return config;
             },

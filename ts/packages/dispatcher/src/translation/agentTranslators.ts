@@ -57,6 +57,13 @@ export interface ActionConfigProvider {
     getActionSchemaFileForConfig(config: ActionConfig): ActionSchemaFile;
 }
 
+function isValidSubSchemaName(schemaNamePart: string) {
+    // . is use as a sub-schema separator
+    // | is used in the cache as as multiple schema name separator
+    // , is used in the cache as a separator between schema name and its hash
+    return !/[.|,]/.test(schemaNamePart);
+}
+
 function collectActionConfigs(
     actionConfigs: { [key: string]: ActionConfig },
     manifest: ActionManifest,
@@ -91,6 +98,9 @@ function collectActionConfigs(
     const subManifests = manifest.subActionManifests;
     if (subManifests) {
         for (const [subName, subManfiest] of Object.entries(subManifests)) {
+            if (!isValidSubSchemaName(subName)) {
+                throw new Error(`Invalid sub-schema name: ${subName}`);
+            }
             collectActionConfigs(
                 actionConfigs,
                 subManfiest,
@@ -109,6 +119,9 @@ export function convertToActionConfig(
     config: AppAgentManifest,
     actionConfigs: Record<string, ActionConfig> = {},
 ): Record<string, ActionConfig> {
+    if (!isValidSubSchemaName(name)) {
+        throw new Error(`Invalid schema name: ${name}`);
+    }
     const emojiChar = config.emojiChar;
     collectActionConfigs(
         actionConfigs,

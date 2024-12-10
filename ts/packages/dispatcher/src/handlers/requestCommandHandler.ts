@@ -69,7 +69,7 @@ export interface TranslatedAction {
 }
 
 const debugTranslate = registerDebug("typeagent:translate");
-const debugSementicSearch = registerDebug("typeagent:translate:sementic");
+const debugSemanticSearch = registerDebug("typeagent:translate:semantic");
 const debugExplain = registerDebug("typeagent:explain");
 const debugConstValidation = registerDebug("typeagent:const:validation");
 
@@ -191,11 +191,12 @@ async function matchRequest(
     if (constructionStore.isEnabled()) {
         const startTime = performance.now();
         const config = systemContext.session.getConfig();
-        const useTranslators = systemContext.agents.getActiveSchemas();
+        const activeSchemaNames = systemContext.agents.getActiveSchemas();
         const matches = constructionStore.match(request, {
             wildcard: config.cache.matchWildcard,
             rejectReferences: config.explainer.filter.reference.list,
-            useTranslators,
+            namespaceKeys:
+                systemContext.agentCache.getNamespaceKeys(activeSchemaNames),
             history,
         });
 
@@ -218,7 +219,7 @@ async function matchRequest(
                         actions: requestAction.actions,
                         replacedAction,
                         developerMode: systemContext.developerMode,
-                        translators: useTranslators,
+                        translators: activeSchemaNames,
                         explainerName: systemContext.agentCache.explainerName,
                         matchWildcard: config.cache.matchWildcard,
                         allMatches: matches.map((m) => {
@@ -575,12 +576,12 @@ async function pickInitialSchema(
     const firstUseEmbedding =
         systemContext.session.getConfig().translation.schema.firstUseEmbedding;
     if (firstUseEmbedding) {
-        debugSementicSearch(`Using embedding for schema selection`);
+        debugSemanticSearch(`Using embedding for schema selection`);
         // Use embedding to determine the most likely action schema and use the schema name for that.
         const result =
             await systemContext.agents.semanticSearchActionSchema(request);
         if (result) {
-            debugSementicSearch(
+            debugSemanticSearch(
                 `Semantic search result: ${result
                     .map(
                         (r) =>
