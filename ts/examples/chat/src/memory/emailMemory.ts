@@ -39,13 +39,14 @@ import {
     argPause,
     argSourceFileOrFolder,
     createChatUx,
+    getSearchQuestion,
     indexingStatsToCsv,
     pause,
 } from "./common.js";
 import chalk from "chalk";
 import { convertMsgFiles } from "./importer.js";
 import fs from "fs";
-import { getData } from "typechat";
+import { Result, success } from "typechat";
 
 export async function createEmailMemory(
     models: Models,
@@ -100,7 +101,7 @@ export function createEmailCommands(
     commands.emailFastStop = emailFastStop;
     commands.emailNameAlias = emailNameAlias;
     commands.emailActionItems = emailActionItems;
-    commands.emailQuery = emailQuery;
+    commands.emailInteractiveSearch = emailInteractiveSearch;
 
     //--------
     // Commands
@@ -307,38 +308,76 @@ export function createEmailCommands(
             args: {
                 query: arg("Query"),
             },
+            options: {
+                maxMessagesForAnswer: argNum(
+                    "Max messages to generate answers from",
+                    10,
+                ),
+                maxMessagesToMatch: argNum("Max messages to search for", 50),
+            },
         };
     }
-    async function emailQuery(
+    commands.emailInteractiveSearch.metadata = emailQueryDef();
+    async function emailInteractiveSearch(
         args: string[],
         io: InteractiveIo,
     ): Promise<void> {
         const namedArgs = parseNamedArguments(args, emailQueryDef());
         const query = namedArgs.query;
-        const ux = createChatUx(io);
-        let searchResponse = getData(
-            await context.emailMemory.searchProcessor.actions.translateSearchTermsV2(
-                query,
-            ),
-        );
-
-        conversation.interactivelyRefineValue(
+        const ux = createChatUx(io, chalk.cyan);
+        const searchProcessor = context.emailMemory.searchProcessor;
+        const options: conversation.SearchProcessingOptions = {
+            maxMatches: 2,
+            minScore: 0.8,
+            maxMessages: namedArgs.maxMessagesToMatch,
+            skipAnswerGeneration: true,
+        };
+        const result:
+            | Result<conversation.SearchTermsActionResponseV2>
+            | undefined = await conversation.interactivelyProcessUserInput(
             ux,
             query,
-            searchResponse,
-            (userInput, sr) => {
-                context.printer.writeJson(sr);
-                return "Follow up query?\n";
-            },
-            async (userInput, history) => {
-                return getData(
-                    await context.emailMemory.searchProcessor.actions.translateSearchTermsV2(
-                        userInput,
-                        history,
-                    ),
+            undefined,
+            async (userInput, previousUserInputs) => {
+                const searchResults = await searchProcessor.searchTermsV2(
+                    userInput,
+                    undefined,
+                    options,
+                    previousUserInputs,
                 );
+                context.printer.writeLine();
+                context.printer.writeResultStats(searchResults?.response);
+                context.printer.writeLine();
+                return success(searchResults);
+            },
+            async (userInput, previousUserInputs, value) => {
+                const r: conversation.SearchTermsActionResponseV2 = value;
+                const messageCount = r.response?.messageIds?.length ?? 0;
+                if (messageCount > namedArgs.maxMessagesForAnswer) {
+                    // Too many messages. Try to fine
+                    return {
+                        retVal: success(r),
+                        followUpMessageForUser:
+                            `${messageCount} messages matched. Recommend max is ${namedArgs.maxMessagesForAnswer}.\n` +
+                            "Please provide additional input to refine the search, or hit return.",
+                    };
+                }
+                return {
+                    retVal: success(r),
+                };
             },
         );
+        if (result?.success && result.data.response) {
+            // Generate answers
+            const answer =
+                await context.emailMemory.searchProcessor.generateAnswerV2(
+                    getSearchQuestion(result.data)!,
+                    result.data,
+                    options,
+                );
+            context.printer.writeLine();
+            context.printer.writeSearchTermsResult(answer, false);
+        }
     }
 
     //-------------

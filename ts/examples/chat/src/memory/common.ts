@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { openai } from "aiclient";
+import { ChalkInstance } from "chalk";
 import { ArgDef, askYesNo, InteractiveIo } from "interactive-app";
 import {
     conversation,
@@ -142,7 +143,10 @@ export function argChunkSize(defaultValue?: number | undefined): ArgDef {
     };
 }
 
-export function createChatUx(io: InteractiveIo): ChatUserInterface {
+export function createChatUx(
+    io: InteractiveIo,
+    inputColor?: ChalkInstance | undefined,
+): ChatUserInterface {
     return {
         showMessage,
         askYesNo: (q) => askYesNo(io, q),
@@ -154,6 +158,21 @@ export function createChatUx(io: InteractiveIo): ChatUserInterface {
     }
 
     async function getInput(message: string): Promise<string | undefined> {
-        return io.readline.question(message);
+        if (inputColor) {
+            message = inputColor(message);
+        }
+        return io.readline.question(message + "\n");
     }
+}
+
+export function getSearchQuestion(
+    result:
+        | conversation.SearchTermsActionResponse
+        | conversation.SearchTermsActionResponseV2,
+): string | undefined {
+    if (result.action && result.action.actionName === "getAnswer") {
+        const params = result.action.parameters;
+        return (params as any).question;
+    }
+    return undefined;
 }

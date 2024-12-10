@@ -91,6 +91,17 @@ export interface ConversationSearchProcessor {
         actionResponse: SearchTermsActionResponse,
         options: SearchProcessingOptions,
     ): Promise<SearchTermsActionResponse>;
+    /**
+     * Generate an answer to the prior search response
+     * @param query
+     * @param actionResponse
+     * @param options
+     */
+    generateAnswerV2(
+        query: string,
+        actionResponse: SearchTermsActionResponseV2,
+        options: SearchProcessingOptions,
+    ): Promise<SearchTermsActionResponseV2>;
     buildContext(
         query: string,
         options: SearchProcessingOptions,
@@ -116,6 +127,7 @@ export function createSearchProcessor(
         searchTermsV2,
         buildContext,
         generateAnswer,
+        generateAnswerV2,
     };
     return thisProcessor;
 
@@ -378,6 +390,24 @@ export function createSearchProcessor(
         actionResponse: SearchTermsActionResponse,
         options: SearchProcessingOptions,
     ): Promise<SearchTermsActionResponse> {
+        if (actionResponse.response) {
+            await generateAnswerForSearchTerms(
+                query,
+                actionResponse.response,
+                options,
+            );
+        }
+        return actionResponse;
+    }
+
+    async function generateAnswerV2(
+        query: string,
+        actionResponse: SearchTermsActionResponseV2,
+        options: SearchProcessingOptions,
+    ): Promise<SearchTermsActionResponseV2> {
+        if (actionResponse.action.actionName === "getAnswer") {
+            query = actionResponse.action.parameters.question;
+        }
         if (actionResponse.response) {
             await generateAnswerForSearchTerms(
                 query,
