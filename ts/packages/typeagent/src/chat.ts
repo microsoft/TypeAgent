@@ -10,6 +10,7 @@ import {
 } from "typechat";
 import { createTypeScriptJsonValidator } from "typechat/ts";
 import {
+    ChatHistory,
     createPromptBuilder,
     getContextFromHistory,
     getPreambleLength,
@@ -34,7 +35,7 @@ export function createTypeChat<T extends object>(
     schema: string,
     typeName: string,
     instructions: string | string[],
-    history: PromptSection[],
+    history: PromptSection[] | ChatHistory,
     maxPromptLength: number,
     maxWindowLength: number = Number.MAX_VALUE,
     stringify?: (value: T) => string,
@@ -157,4 +158,10 @@ export function createTranslator<T extends object>(
         };
     }
     return translator;
+}
+
+export interface ChatUserInterface {
+    showMessage(message: string): Promise<void>;
+    askYesNo(message: string): Promise<boolean>;
+    getInput(message: string): Promise<string | undefined>;
 }

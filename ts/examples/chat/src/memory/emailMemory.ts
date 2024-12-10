@@ -38,12 +38,14 @@ import {
     argDestFile,
     argPause,
     argSourceFileOrFolder,
+    createChatUx,
     indexingStatsToCsv,
     pause,
 } from "./common.js";
 import chalk from "chalk";
 import { convertMsgFiles } from "./importer.js";
 import fs from "fs";
+import { getData } from "typechat";
 
 export async function createEmailMemory(
     models: Models,
@@ -98,6 +100,7 @@ export function createEmailCommands(
     commands.emailFastStop = emailFastStop;
     commands.emailNameAlias = emailNameAlias;
     commands.emailActionItems = emailActionItems;
+    commands.emailQuery = emailQuery;
 
     //--------
     // Commands
@@ -296,6 +299,46 @@ export function createEmailCommands(
                 }
             }
         }
+    }
+
+    function emailQueryDef(): CommandMetadata {
+        return {
+            description: "Interactive querying",
+            args: {
+                query: arg("Query"),
+            },
+        };
+    }
+    async function emailQuery(
+        args: string[],
+        io: InteractiveIo,
+    ): Promise<void> {
+        const namedArgs = parseNamedArguments(args, emailQueryDef());
+        const query = namedArgs.query;
+        const ux = createChatUx(io);
+        let searchResponse = getData(
+            await context.emailMemory.searchProcessor.actions.translateSearchTermsV2(
+                query,
+            ),
+        );
+
+        conversation.interactivelyRefineValue(
+            ux,
+            query,
+            searchResponse,
+            (userInput, sr) => {
+                context.printer.writeJson(sr);
+                return "Follow up query?\n";
+            },
+            async (userInput, history) => {
+                return getData(
+                    await context.emailMemory.searchProcessor.actions.translateSearchTermsV2(
+                        userInput,
+                        history,
+                    ),
+                );
+            },
+        );
     }
 
     //-------------

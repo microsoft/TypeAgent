@@ -2,13 +2,13 @@
 // Licensed under the MIT License.
 
 import { openai } from "aiclient";
-import { ArgDef } from "interactive-app";
+import { ArgDef, askYesNo, InteractiveIo } from "interactive-app";
 import {
     conversation,
     ItemIndexingStats,
     SourceTextBlock,
 } from "knowledge-processor";
-import { asyncArray } from "typeagent";
+import { asyncArray, ChatUserInterface } from "typeagent";
 
 export async function pause(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
@@ -140,4 +140,20 @@ export function argChunkSize(defaultValue?: number | undefined): ArgDef {
         defaultValue,
         description: "Text chunk size",
     };
+}
+
+export function createChatUx(io: InteractiveIo): ChatUserInterface {
+    return {
+        showMessage,
+        askYesNo: (q) => askYesNo(io, q),
+        getInput,
+    };
+
+    async function showMessage(message: string): Promise<void> {
+        io.writer.writeLine(message);
+    }
+
+    async function getInput(message: string): Promise<string | undefined> {
+        return io.readline.question(message);
+    }
 }
