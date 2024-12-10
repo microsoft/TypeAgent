@@ -11,11 +11,7 @@ import {
     createDebugLoggerSink,
     createMongoDBLoggerSink,
 } from "telemetry";
-import {
-    AgentCache,
-    GenericExplanationResult,
-    RequestAction,
-} from "agent-cache";
+import { AgentCache } from "agent-cache";
 import { randomUUID } from "crypto";
 import {
     Session,
@@ -59,9 +55,9 @@ import {
 } from "../../translation/actionSchemaSemanticMap.js";
 
 import registerDebug from "debug";
-import { getDefaultAppProviders } from "../../utils/defaultAppProviders.js";
 import path from "node:path";
 import { createSchemaInfoProvider } from "../../translation/actionSchemaFileCache.js";
+import { createInlineAppAgentProvider } from "../../agent/inlineAgentProvider.js";
 
 const debug = registerDebug("typeagent:dispatcher:init");
 const debugError = registerDebug("typeagent:dispatcher:init:error");
@@ -266,11 +262,9 @@ async function addAppAgentProvidres(
         }
     }
 
-    const appProviders = getDefaultAppProviders(context);
+    const inlineAppProvider = createInlineAppAgentProvider(context);
+    await context.agents.addProvider(inlineAppProvider, embeddingCache);
 
-    for (const provider of appProviders) {
-        await context.agents.addProvider(provider, embeddingCache);
-    }
     if (appAgentProviders) {
         for (const provider of appAgentProviders) {
             await context.agents.addProvider(provider, embeddingCache);

@@ -3,8 +3,6 @@
 
 import { AppAgentManifest } from "@typeagent/agent-sdk";
 import { AppAgentProvider } from "../agent/agentProvider.js";
-import { createInlineAppAgentProvider } from "../agent/inlineAgentProvider.js";
-import { CommandHandlerContext } from "../internal.js";
 import {
     ActionConfig,
     ActionConfigProvider,
@@ -24,7 +22,7 @@ import {
 } from "../translation/actionSchemaFileCache.js";
 
 let builtinAppAgentProvider: AppAgentProvider | undefined;
-function getBuiltinAppAgentProvider(): AppAgentProvider {
+export function getBuiltinAppAgentProvider(): AppAgentProvider {
     if (builtinAppAgentProvider === undefined) {
         builtinAppAgentProvider = createNpmAppAgentProvider(
             getDispatcherConfig().agents,
@@ -69,21 +67,15 @@ function getExternalAppAgentProvider(): AppAgentProvider {
     return externalAppAgentProvider;
 }
 
-export function getDefaultAppProviders(
-    context?: CommandHandlerContext,
-): AppAgentProvider[] {
-    return [
-        createInlineAppAgentProvider(context),
-        getBuiltinAppAgentProvider(),
-        getExternalAppAgentProvider(),
-    ];
+export function getDefaultAppAgentProviders(): AppAgentProvider[] {
+    return [getBuiltinAppAgentProvider(), getExternalAppAgentProvider()];
 }
 
 let appAgentConfigs: Map<string, AppAgentManifest> | undefined;
 async function getDefaultAppAgentManifests() {
     if (appAgentConfigs === undefined) {
         appAgentConfigs = new Map();
-        const appAgentProviders = getDefaultAppProviders();
+        const appAgentProviders = getDefaultAppAgentProviders();
         for (const provider of appAgentProviders) {
             for (const name of provider.getAppAgentNames()) {
                 const manifest = await provider.getAppAgentManifest(name);

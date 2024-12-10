@@ -10,6 +10,7 @@ import {
     initializeCommandHandlerContext,
     CommandHandlerContext,
     closeCommandHandlerContext,
+    getDefaultAppAgentProviders,
 } from "agent-dispatcher/internal";
 import inspector from "node:inspector";
 import { getChatModelNames } from "aiclient";
@@ -72,6 +73,7 @@ export default class Interactive extends Command {
             : undefined;
         try {
             context = await initializeCommandHandlerContext("cli interactive", {
+                appAgentProviders: getDefaultAppAgentProviders(),
                 schemas,
                 translation: { model: flags.model },
                 explainer: { name: flags.explainer },
