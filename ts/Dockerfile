@@ -37,7 +37,9 @@ RUN apt-get update \
     && apt-get install -y libfuse3-dev fuse3 libcurl3-gnutls libgnutls30
 
 RUN apt-get install blobfuse2
-RUN mkdir /blob
+COPY --from=base mount-blobfuse.yaml mount-blobfuse.yaml
+RUN mkdir /mnt/blob
+RUN mkdir /blob-cache
 
 EXPOSE 80:3000
 
@@ -45,7 +47,7 @@ EXPOSE 80:3000
 # az login
 RUN echo az login --identity >> start.sh
 # mount blob storage locally
-RUN echo blobfuse2 mount /blob --config-file=mount-blobfuse.yaml --log-level=LOG_debug --log-file-path=blob.log >> start.sh
+RUN echo blobfuse2 mount /mnt/blob --config-file=mount-blobfuse.yaml >> start.sh
 # run getKeys
 RUN echo node ../tools/scripts/getKeys.mjs >> start.sh
 # start API server
