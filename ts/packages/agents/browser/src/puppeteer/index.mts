@@ -1,7 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import puppeteer, { Browser, Page } from "puppeteer";
+import { Browser, Page } from "puppeteer";
+import puppeteer from "puppeteer-extra";
+import StealthPlugin from "puppeteer-extra-plugin-stealth";
+// import AdblockerPlugin from 'puppeteer-extra-plugin-adblocker';
+
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import readline from "readline/promises";
@@ -32,6 +36,9 @@ export class HeadlessExtensionRunner implements ExtensionRunner {
       timeout: 2000, // Default timeout
       ...options,
     };
+
+    puppeteer.use(StealthPlugin());
+    // puppeteer.use(AdblockerPlugin({ blockTrackers: true }))
   }
 
   private async initializeBrowser(): Promise<void> {
@@ -41,6 +48,7 @@ export class HeadlessExtensionRunner implements ExtensionRunner {
         `--disable-extensions-except=${this.options.extensionPath}`,
         `--load-extension=${this.options.extensionPath}`,
         "--no-sandbox",
+        "--disable-setuid-sandbox",
       ],
     });
   }
@@ -89,9 +97,6 @@ export class HeadlessExtensionRunner implements ExtensionRunner {
 
       const page = await this.browser!.newPage();
       await this.setupRequestInterception(page);
-      await page.setUserAgent(
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-      );
 
       process.send?.("Success");
 
