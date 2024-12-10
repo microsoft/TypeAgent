@@ -857,9 +857,11 @@ async function runBrowserAction(action: any) {
     switch (actionName) {
         case "openTab": {
             if (action.parameters.url) {
-                await chrome.tabs.create({
+                const tab = await chrome.tabs.create({
                     url: action.parameters.url,
                 });
+
+                await awaitPageLoad(tab);
 
                 confirmationMessage = `Opened new tab to  ${action.parameters.url}`;
             } else {
