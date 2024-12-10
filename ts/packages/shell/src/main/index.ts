@@ -23,9 +23,10 @@ import {
     RequestId,
     Dispatcher,
     NotifyExplainedData,
+    IAgentMessage,
+    TemplateEditConfig,
 } from "agent-dispatcher";
-
-import { IAgentMessage, TemplateEditConfig } from "agent-dispatcher";
+import { getDefaultAppAgentProviders } from "agent-dispatcher/internal";
 import { ShellSettings } from "./shellSettings.js";
 import { unlinkSync } from "fs";
 import { existsSync } from "node:fs";
@@ -632,7 +633,10 @@ async function initialize() {
     electronApp.setAppUserModelId("com.electron");
 
     const dispatcher = await createDispatcher("shell", {
-        appAgentProviders: [shellAgentProvider],
+        appAgentProviders: [
+            shellAgentProvider,
+            ...getDefaultAppAgentProviders(),
+        ],
         explanationAsynchronousMode: true,
         persistSession: true,
         enableServiceHost: true,

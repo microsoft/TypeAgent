@@ -11,11 +11,7 @@ import {
     createDebugLoggerSink,
     createMongoDBLoggerSink,
 } from "telemetry";
-import {
-    AgentCache,
-    GenericExplanationResult,
-    RequestAction,
-} from "agent-cache";
+import { AgentCache } from "agent-cache";
 import { randomUUID } from "crypto";
 import {
     Session,
@@ -47,7 +43,6 @@ import {
     AppAgentStateOptions,
     SetStateResult,
 } from "../../agent/appAgentManager.js";
-import { loadTranslatorSchemaConfig } from "../../utils/loadSchemaConfig.js";
 import { AppAgentProvider } from "../../agent/agentProvider.js";
 import { RequestMetricsManager } from "../../utils/metrics.js";
 import { getTranslatorPrefix } from "../../action/actionHandlers.js";
@@ -60,8 +55,9 @@ import {
 } from "../../translation/actionSchemaSemanticMap.js";
 
 import registerDebug from "debug";
-import { getDefaultAppProviders } from "../../utils/defaultAppProviders.js";
 import path from "node:path";
+import { createSchemaInfoProvider } from "../../translation/actionSchemaFileCache.js";
+import { createInlineAppAgentProvider } from "../../agent/inlineAgentProvider.js";
 
 const debug = registerDebug("typeagent:dispatcher:init");
 const debugError = registerDebug("typeagent:dispatcher:init:error");
@@ -108,26 +104,11 @@ export type CommandHandlerContext = {
 
     batchMode: boolean;
 
-    // For @correct
-    lastRequestAction?: RequestAction;
-    lastExplanation?: object;
-
     streamingActionContext?: ActionContextWithClose | undefined;
 
     metricsManager?: RequestMetricsManager | undefined;
     commandProfiler?: Profiler | undefined;
 };
-
-export function updateCorrectionContext(
-    context: CommandHandlerContext,
-    requestAction: RequestAction,
-    explanationResult: GenericExplanationResult,
-) {
-    if (explanationResult.success) {
-        context.lastExplanation = explanationResult.data;
-        context.lastRequestAction = requestAction;
-    }
-}
 
 export function getTranslatorForSchema(
     context: CommandHandlerContext,
@@ -157,7 +138,7 @@ export async function getTranslatorForSelectedActions(
     request: string,
     numActions: number,
 ): Promise<TypeAgentTranslator | undefined> {
-    const actionSchemaFile = context.agents.getActionSchemaFile(schemaName);
+    const actionSchemaFile = context.agents.tryGetActionSchemaFile(schemaName);
     if (
         actionSchemaFile === undefined ||
         actionSchemaFile.actionSchemas.size <= numActions
@@ -191,10 +172,11 @@ async function getAgentCache(
 ) {
     const cacheFactory = getCacheFactory();
     const explainerName = session.explainerName;
+    const actionSchemaProvider = createSchemaInfoProvider(provider);
+
     const agentCache = cacheFactory.create(
         explainerName,
-        (translatorName: string) =>
-            loadTranslatorSchemaConfig(translatorName, provider),
+        actionSchemaProvider,
         session.cacheConfig,
         logger,
     );
@@ -280,11 +262,9 @@ async function addAppAgentProvidres(
         }
     }
 
-    const appProviders = getDefaultAppProviders(context);
+    const inlineAppProvider = createInlineAppAgentProvider(context);
+    await context.agents.addProvider(inlineAppProvider, embeddingCache);
 
-    for (const provider of appProviders) {
-        await context.agents.addProvider(provider, embeddingCache);
-    }
     if (appAgentProviders) {
         for (const provider of appAgentProviders) {
             await context.agents.addProvider(provider, embeddingCache);

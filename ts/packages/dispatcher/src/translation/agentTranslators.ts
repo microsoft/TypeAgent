@@ -54,11 +54,11 @@ export interface ActionConfigProvider {
     tryGetActionConfig(schemaName: string): ActionConfig | undefined;
     getActionConfig(schemaName: string): ActionConfig;
     getActionConfigs(): [string, ActionConfig][];
-    getActionSchemaFileForConfig?(config: ActionConfig): ActionSchemaFile;
+    getActionSchemaFileForConfig(config: ActionConfig): ActionSchemaFile;
 }
 
 function collectActionConfigs(
-    actionSchemaConfigs: { [key: string]: ActionConfig },
+    actionConfigs: { [key: string]: ActionConfig },
     manifest: ActionManifest,
     schemaName: string,
     emojiChar: string,
@@ -78,7 +78,7 @@ function collectActionConfigs(
 
     if (manifest.schema) {
         debugConfig(`Adding schema '${schemaName}'`);
-        actionSchemaConfigs[schemaName] = {
+        actionConfigs[schemaName] = {
             schemaName,
             emojiChar,
             ...manifest.schema,
@@ -92,7 +92,7 @@ function collectActionConfigs(
     if (subManifests) {
         for (const [subName, subManfiest] of Object.entries(subManifests)) {
             collectActionConfigs(
-                actionSchemaConfigs,
+                actionConfigs,
                 subManfiest,
                 `${schemaName}.${subName}`,
                 emojiChar,
@@ -242,12 +242,14 @@ function getInjectedSchemaDefs(
     multipleActions: boolean = false,
 ): TranslatorSchemaDef[] {
     // Add all injected schemas
-    const injectSchemaConfigs = getInjectedActionConfigs(
+    const injectedActionConfigs = getInjectedActionConfigs(
         translatorName,
         provider,
         activeTranslators,
     );
-    const injectedSchemaDefs = injectSchemaConfigs.map(getTranslatorSchemaDef);
+    const injectedSchemaDefs = injectedActionConfigs.map(
+        getTranslatorSchemaDef,
+    );
 
     // subAction for multiple action
     const subActionType = [type, ...injectedSchemaDefs.map((s) => s.typeName)];

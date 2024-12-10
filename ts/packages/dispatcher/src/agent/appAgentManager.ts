@@ -613,9 +613,12 @@ export class AppAgentManager implements ActionConfigProvider {
         return record;
     }
 
-    public getActionSchemaFile(schemaName: string) {
+    public tryGetActionSchemaFile(schemaName: string) {
         const config = this.tryGetActionConfig(schemaName);
-        return config ? this.getActionSchemaFileForConfig(config) : undefined;
+        if (config === undefined) {
+            return undefined;
+        }
+        return this.getActionSchemaFileForConfig(config);
     }
 
     public getActionSchemaFileForConfig(

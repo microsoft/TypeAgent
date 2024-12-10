@@ -19,7 +19,7 @@ import {
     normalizeParamValue,
     normalizeParamString,
 } from "agent-cache";
-import { loadSchemaConfigFromDefaultAppAgentProviders } from "../src/utils/defaultAppProviders.js";
+import { createSchemaInfoProviderFromDefaultAppAgentProviders } from "../src/utils/defaultAppProviders.js";
 import { glob } from "glob";
 import { fileURLToPath } from "node:url";
 
@@ -29,7 +29,7 @@ export async function getImportedCache(
 ) {
     const cache = getCacheFactory().create(
         explainerName,
-        loadSchemaConfigFromDefaultAppAgentProviders,
+        createSchemaInfoProviderFromDefaultAppAgentProviders(),
         {
             mergeMatchSets: merge,
             cacheConflicts: true,

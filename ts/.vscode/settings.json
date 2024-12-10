@@ -25,5 +25,8 @@
         {"name": "memoryProviders", "rootPath": "examples/memoryProviders"},
         {"name": "typeagent", "rootPath": "packages/typeagent"}
     ],
-    "jest.runMode": "on-demand"
+    "jest.runMode": "on-demand",
+    "[json]": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode"
+    }
 }

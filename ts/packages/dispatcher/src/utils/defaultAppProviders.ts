@@ -3,14 +3,11 @@
 
 import { AppAgentManifest } from "@typeagent/agent-sdk";
 import { AppAgentProvider } from "../agent/agentProvider.js";
-import { createInlineAppAgentProvider } from "../agent/inlineAgentProvider.js";
-import { CommandHandlerContext } from "../internal.js";
 import {
     ActionConfig,
     ActionConfigProvider,
     convertToActionConfig,
 } from "../translation/agentTranslators.js";
-import { loadTranslatorSchemaConfig } from "./loadSchemaConfig.js";
 import {
     AgentInfo,
     createNpmAppAgentProvider,
@@ -19,9 +16,13 @@ import { getDispatcherConfig } from "./config.js";
 import { getUserProfileDir } from "./userData.js";
 import path from "node:path";
 import fs from "node:fs";
+import {
+    ActionSchemaFileCache,
+    createSchemaInfoProvider,
+} from "../translation/actionSchemaFileCache.js";
 
 let builtinAppAgentProvider: AppAgentProvider | undefined;
-function getBuiltinAppAgentProvider(): AppAgentProvider {
+export function getBuiltinAppAgentProvider(): AppAgentProvider {
     if (builtinAppAgentProvider === undefined) {
         builtinAppAgentProvider = createNpmAppAgentProvider(
             getDispatcherConfig().agents,
@@ -66,21 +67,15 @@ function getExternalAppAgentProvider(): AppAgentProvider {
     return externalAppAgentProvider;
 }
 
-export function getDefaultAppProviders(
-    context?: CommandHandlerContext,
-): AppAgentProvider[] {
-    return [
-        createInlineAppAgentProvider(context),
-        getBuiltinAppAgentProvider(),
-        getExternalAppAgentProvider(),
-    ];
+export function getDefaultAppAgentProviders(): AppAgentProvider[] {
+    return [getBuiltinAppAgentProvider(), getExternalAppAgentProvider()];
 }
 
 let appAgentConfigs: Map<string, AppAgentManifest> | undefined;
 async function getDefaultAppAgentManifests() {
     if (appAgentConfigs === undefined) {
         appAgentConfigs = new Map();
-        const appAgentProviders = getDefaultAppProviders();
+        const appAgentProviders = getDefaultAppAgentProviders();
         for (const provider of appAgentProviders) {
             for (const name of provider.getAppAgentNames()) {
                 const manifest = await provider.getAppAgentManifest(name);
@@ -104,29 +99,34 @@ export function getSchemaNamesFromDefaultAppAgentProviders() {
     return Object.keys(actionConfigs);
 }
 
+let actionConfigProvider: ActionConfigProvider | undefined;
 export function getActionConfigProviderFromDefaultAppAgentProviders(): ActionConfigProvider {
-    return {
-        tryGetActionConfig(schemaName: string) {
-            return actionConfigs[schemaName];
-        },
-        getActionConfig(schemaName: string) {
-            const config = actionConfigs[schemaName];
-            if (!config) {
-                throw new Error(`Unknown translator: ${schemaName}`);
-            }
-            return config;
-        },
-        getActionConfigs() {
-            return Object.entries(actionConfigs);
-        },
-    };
+    if (actionConfigProvider === undefined) {
+        const actionSchemaFileCache = new ActionSchemaFileCache();
+        actionConfigProvider = {
+            tryGetActionConfig(schemaName: string) {
+                return actionConfigs[schemaName];
+            },
+            getActionConfig(schemaName: string) {
+                const config = actionConfigs[schemaName];
+                if (!config) {
+                    throw new Error(`Unknown translator: ${schemaName}`);
+                }
+                return config;
+            },
+            getActionConfigs() {
+                return Object.entries(actionConfigs);
+            },
+            getActionSchemaFileForConfig(actionConfig: ActionConfig) {
+                return actionSchemaFileCache.getActionSchemaFile(actionConfig);
+            },
+        };
+    }
+    return actionConfigProvider;
 }
 
-export function loadSchemaConfigFromDefaultAppAgentProviders(
-    schemaName: string,
-) {
-    return loadTranslatorSchemaConfig(
-        schemaName,
+export function createSchemaInfoProviderFromDefaultAppAgentProviders() {
+    return createSchemaInfoProvider(
         getActionConfigProviderFromDefaultAppAgentProviders(),
     );
 }

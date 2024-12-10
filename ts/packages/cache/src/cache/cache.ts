@@ -11,9 +11,9 @@ import {
     RequestAction,
 } from "../explanation/requestAction.js";
 import {
-    SchemaConfigProvider,
+    SchemaInfoProvider,
     doCacheAction,
-} from "../explanation/schemaConfig.js";
+} from "../explanation/schemaInfoProvider.js";
 import { GenericExplanationResult } from "../index.js";
 import { ConstructionStore, ConstructionStoreImpl } from "./store.js";
 import { ExplainerFactory } from "./factory.js";
@@ -122,7 +122,7 @@ export class AgentCache {
     constructor(
         public readonly explainerName: string,
         private readonly getExplainerForTranslator: ExplainerFactory,
-        private readonly getSchemaConfig?: SchemaConfigProvider,
+        private readonly schemaInfoProvider?: SchemaInfoProvider,
         cacheOptions?: CacheOptions,
         logger?: Telemetry.Logger,
     ) {
@@ -168,14 +168,7 @@ export class AgentCache {
         const checkExplainable = options?.checkExplainable;
         const actions = requestAction.actions;
         for (const action of actions) {
-            const translatorName = action.translatorName;
-            const translatorSchemaConfig = translatorName
-                ? this.getSchemaConfig?.(translatorName)
-                : undefined;
-            const cacheAction = doCacheAction(
-                translatorSchemaConfig,
-                action.actionName,
-            );
+            const cacheAction = doCacheAction(action, this.schemaInfoProvider);
 
             if (!cacheAction) {
                 return getFailedResult(
@@ -193,7 +186,7 @@ export class AgentCache {
             const actions = requestAction.actions;
             const explainer = this.getExplainerForActions(actions);
             const constructionCreationConfig = {
-                getSchemaConfig: this.getSchemaConfig,
+                schemaInfoProvider: this.schemaInfoProvider,
             };
 
             const explainerConfig = {
@@ -297,36 +290,11 @@ export class AgentCache {
         }
     }
 
-    public async correctExplanation(
-        requestAction: RequestAction,
-        explanation: object,
-        correction: string,
-    ): Promise<ProcessExplanationResult> {
-        const startTime = performance.now();
-        const actions = requestAction.actions;
-        const explainer = this.getExplainerForActions(actions);
-
-        if (!explainer.correct) {
-            throw new Error("Explainer doesn't support correction");
-        }
-        const result = await explainer.correct(
-            requestAction,
-            explanation,
-            correction,
-        );
-
-        return {
-            explanation: result,
-            elapsedMs: performance.now() - startTime,
-            toPrettyString: explainer.toPrettyString,
-        };
-    }
-
     public async import(data: ExplanationData[]) {
         return this._constructionStore.import(
             data,
             this.getExplainerForTranslator,
-            this.getSchemaConfig,
+            this.schemaInfoProvider,
         );
     }
 }
