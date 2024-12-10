@@ -28,7 +28,7 @@ RUN apt-get update
 RUN apt install -y gnome-keyring
 RUN curl -sL https://aka.ms/InstallAzureCLIDeb | bash
 
-# blobfuse
+# blobfuse - https://github.com/Azure/azure-storage-fuse/tree/main
 RUN apt-get update \
     && apt-get install -y wget apt-utils \
     && wget https://packages.microsoft.com/config/ubuntu/20.04/packages-microsoft-prod.deb \
