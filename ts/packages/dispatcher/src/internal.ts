@@ -26,6 +26,7 @@ export {
     printTestDataStats,
     TestDataEntry,
     FailedTestDataEntry,
+    convertTestDataToExplanationData,
 } from "./utils/test/testData.js";
 
 export { getBuiltinConstructionConfig } from "./utils/config.js";

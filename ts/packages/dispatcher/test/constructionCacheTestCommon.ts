@@ -7,7 +7,10 @@ dotenv.config({ path: new URL("../../../../.env", import.meta.url) });
 import path from "node:path";
 import fs from "node:fs";
 import { getCacheFactory } from "../src/utils/cacheFactory.js";
-import { readTestData } from "../src/utils/test/testData.js";
+import {
+    convertTestDataToExplanationData,
+    readTestData,
+} from "../src/utils/test/testData.js";
 import {
     Actions,
     AgentCache,
@@ -35,7 +38,11 @@ export async function getImportedCache(
             cacheConflicts: true,
         },
     );
-    await cache.import(inputs.filter((i) => i.explainerName === explainerName));
+    await cache.import(
+        inputs
+            .filter((i) => i.explainerName === explainerName)
+            .map(convertTestDataToExplanationData),
+    );
     return cache;
 }
 
@@ -56,7 +63,7 @@ const inputs = await Promise.all(
 
 const testInput = inputs.flatMap((f) =>
     f.entries.map<[string, string, RequestAction, object, string[]]>((data) => [
-        f.translatorName,
+        f.schemaName,
         f.explainerName,
         new RequestAction(data.request, Actions.fromJSON(data.action)),
         data.explanation,

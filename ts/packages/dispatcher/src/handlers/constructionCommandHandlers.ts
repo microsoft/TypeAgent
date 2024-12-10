@@ -10,15 +10,23 @@ import {
     CommandHandlerContext,
     changeContextConfig,
 } from "./common/commandHandlerContext.js";
-import { readTestData } from "../utils/test/testData.js";
+import {
+    convertTestDataToExplanationData,
+    readTestData,
+} from "../utils/test/testData.js";
 import { getPackageFilePath } from "../utils/getPackageFilePath.js";
-import { ConstructionStore, printImportConstructionResult } from "agent-cache";
+import {
+    ConstructionStore,
+    ExplanationData,
+    printImportConstructionResult,
+} from "agent-cache";
 import { getSessionCacheDirPath } from "../explorer.js";
 import { getAppAgentName } from "../translation/agentTranslators.js";
 import { askYesNoWithContext } from "./common/interactiveIO.js";
 import { glob } from "glob";
 import { getDispatcherConfig } from "../utils/config.js";
 import {
+    displayInfo,
     displayResult,
     displaySuccess,
     displayWarn,
@@ -365,26 +373,40 @@ class ConstructionImportCommandHandler implements CommandHandler {
 
         const data = await Promise.all(
             inputs.map(async (input) => {
-                return { file: input, data: await readTestData(input) };
+                return {
+                    file: input,
+                    data: await readTestData(input),
+                };
             }),
         );
 
-        const matched = data.filter(
-            (d) =>
-                d.data.explainerName === systemContext.agentCache.explainerName,
-        );
+        const matched = data.filter((d) => {
+            if (
+                d.data.explainerName !== systemContext.agentCache.explainerName
+            ) {
+                return false;
+            }
+
+            const actionSchemaFile =
+                systemContext.agents.tryGetActionSchemaFile(d.data.schemaName);
+            if (actionSchemaFile === undefined) {
+                return false;
+            }
+
+            return actionSchemaFile.sourceHash === d.data.sourceHash;
+        });
 
         if (matched.length === 0) {
             throw new Error(
                 `No matching data found for explainer ${systemContext.agentCache.explainerName}`,
             );
         }
-        console.log(chalk.gray(`Importing from:`));
+        displayInfo("Importing from:", context);
         matched.forEach((f) => {
-            console.log(chalk.grey(`  ${f.file}`));
+            displayInfo(`  ${f.file}`, context);
         });
         const result = await systemContext.agentCache.import(
-            matched.map((d) => d.data),
+            matched.map((d) => convertTestDataToExplanationData(d.data)),
         );
 
         printImportConstructionResult(result);

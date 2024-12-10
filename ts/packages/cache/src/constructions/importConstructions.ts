@@ -14,6 +14,7 @@ import registerDebug from "debug";
 import { ExplainerFactory } from "../cache/factory.js";
 import { printTransformNamespaces } from "../utils/print.js";
 import { ConstructionCache } from "./constructionCache.js";
+import { getSchemaNamespaceKeys } from "../cache/cache.js";
 
 const debugConstCreate = registerDebug("typeagent:const:create");
 const debugConstMerge = registerDebug("typeagent:const:merge");
@@ -26,7 +27,7 @@ export type ImportConstructionResult = {
 };
 
 type ConstructionData = {
-    translatorNames: string[];
+    schemaNameKeys: string[];
     construction: Construction;
 };
 
@@ -36,6 +37,20 @@ function createConstructions(
     schemaInfoProvider: SchemaInfoProvider | undefined,
     createConstruction: ConstructionFactory<any>,
 ) {
+    if (schemaInfoProvider !== undefined) {
+        for (let i = 0; i < data.schemaNames.length; i++) {
+            const schemaName = data.schemaNames[i];
+            const sourceHash = data.sourceHashes[i];
+            if (
+                schemaInfoProvider.getActionSchemaFileHash(schemaName) !==
+                sourceHash
+            ) {
+                throw new Error(`Schema hash mismatch for '${schemaName}'`);
+            }
+        }
+    }
+
+    const dataSchemaNames = new Set(data.schemaNames);
     const constructions: ConstructionData[] = [];
     for (const entry of data.entries) {
         const requestAction = new RequestAction(
@@ -45,9 +60,18 @@ function createConstructions(
 
         try {
             const actions = requestAction.actions;
-
+            for (const action of actions) {
+                if (!dataSchemaNames.has(action.translatorName)) {
+                    throw new Error(
+                        `Schema name '${action.translatorName}' not found in data header`,
+                    );
+                }
+            }
             const explanation = entry.explanation;
-            const translatorNames = actions.translatorNames;
+            const schemaNameKeys = getSchemaNamespaceKeys(
+                actions.translatorNames,
+                schemaInfoProvider,
+            );
             const construction = createConstruction(
                 requestAction,
                 explanation,
@@ -94,7 +118,7 @@ function createConstructions(
             if (debugConstCreate.enabled) {
                 debugConstCreate(`       Matched: ${chalk.green(matched)}`);
             }
-            constructions.push({ translatorNames, construction });
+            constructions.push({ schemaNameKeys, construction });
         } catch (e: any) {
             console.error(
                 chalk.red(`ERROR: ${e.message}\n  Input: ${requestAction}`),
@@ -128,7 +152,7 @@ export function importConstructions(
     let newCount = 0;
     for (const data of explanationData) {
         count += data.entries.length;
-        const explainer = getExplainerForTranslator(data.translatorName);
+        const explainer = getExplainerForTranslator(data.schemaNames);
         const createConstruction = explainer.createConstruction;
         if (createConstruction === undefined) {
             throw new Error(
@@ -146,9 +170,9 @@ export function importConstructions(
     }
 
     // Add the constructions to the store
-    for (const { translatorNames, construction } of constructionData) {
+    for (const { schemaNameKeys, construction } of constructionData) {
         const result = constructionStore.addConstruction(
-            translatorNames,
+            schemaNameKeys,
             construction,
             mergeMatchSets,
             cacheConflicts,

@@ -18,7 +18,7 @@ const inputs = await Promise.all(
 
 const testInput = inputs.flatMap((f) =>
     f.entries.map<[string, string, RequestAction, object, string[]]>((data) => [
-        f.translatorName,
+        f.schemaName,
         f.explainerName,
         new RequestAction(data.request, Actions.fromJSON(data.action)),
         data.explanation,
@@ -36,14 +36,14 @@ describe("construction", () => {
         it.each(testInput)(
             "[%s %s] '%s'",
             async (
-                translatorName,
+                schemaName,
                 explainerName,
                 requestAction,
                 explanation,
                 tags,
             ) => {
                 const explainer = getCacheFactory().getExplainer(
-                    translatorName,
+                    [schemaName],
                     explainerName,
                 );
 

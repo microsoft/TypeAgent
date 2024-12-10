@@ -3,6 +3,8 @@
     "cSpell.words": [
         "aiclient",
         "AUTOINCREMENT",
+        "Exif",
+        "exifreader",
         "lightgray",
         "NOCASE",
         "oclif",

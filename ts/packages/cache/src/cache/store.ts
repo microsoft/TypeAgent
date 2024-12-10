@@ -297,12 +297,12 @@ export class ConstructionStoreImpl implements ConstructionStore {
 
     /**
      * Add a construction to the cache
-     * @param translatorNames separate the construction based on the translator names in the action.  Used to quickly enable/disable construction based on translator is enabled
+     * @param namespaceKeys separate the construction based on the schema name and hash in the action.  Used to quickly enable/disable construction based on translator is enabled
      * @param construction the construction to add
      * @returns the result of the construction addition
      */
     public async addConstruction(
-        translatorNames: string[],
+        namespaceKeys: string[],
         construction: Construction,
     ) {
         if (this.cache === undefined) {
@@ -310,7 +310,7 @@ export class ConstructionStoreImpl implements ConstructionStore {
         }
 
         const result = this.cache.addConstruction(
-            translatorNames,
+            namespaceKeys,
             construction,
             this.config.mergeMatchSets,
             this.config.cacheConflicts,

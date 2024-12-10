@@ -109,6 +109,20 @@ function checkExplainableValues(
     }
 }
 
+// Construction namespace policy
+export function getSchemaNamespaceKeys(
+    schemaNames: string[],
+    schemaInfoProvider?: SchemaInfoProvider,
+) {
+    // Current namespace keys policy is just combining schema name its file hash
+    return schemaInfoProvider
+        ? schemaNames.map(
+              (name) =>
+                  `${name},${schemaInfoProvider.getActionSchemaFileHash(name)}`,
+          )
+        : schemaNames;
+}
+
 export class AgentCache {
     private _constructionStore: ConstructionStoreImpl;
     private queue: QueueObject<{
@@ -150,9 +164,13 @@ export class AgentCache {
         return this._constructionStore;
     }
 
+    public getNamespaceKeys(schemaNames: string[]) {
+        return getSchemaNamespaceKeys(schemaNames, this.schemaInfoProvider);
+    }
+
     private getExplainerForActions(actions: Actions) {
         return this.getExplainerForTranslator(
-            actions.action?.translatorName,
+            actions.translatorNames,
             this.model,
         );
     }
@@ -220,8 +238,11 @@ export class AgentCache {
                 if (construction === undefined) {
                     message = `Explainer '${this.explainerName}' doesn't support constructions.`;
                 } else {
-                    const result = await store.addConstruction(
+                    const schemaNameKeys = this.getNamespaceKeys(
                         actions.translatorNames,
+                    );
+                    const result = await store.addConstruction(
+                        schemaNameKeys,
                         construction,
                     );
                     if (result.added) {
