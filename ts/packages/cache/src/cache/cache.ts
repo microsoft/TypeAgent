@@ -290,31 +290,6 @@ export class AgentCache {
         }
     }
 
-    public async correctExplanation(
-        requestAction: RequestAction,
-        explanation: object,
-        correction: string,
-    ): Promise<ProcessExplanationResult> {
-        const startTime = performance.now();
-        const actions = requestAction.actions;
-        const explainer = this.getExplainerForActions(actions);
-
-        if (!explainer.correct) {
-            throw new Error("Explainer doesn't support correction");
-        }
-        const result = await explainer.correct(
-            requestAction,
-            explanation,
-            correction,
-        );
-
-        return {
-            explanation: result,
-            elapsedMs: performance.now() - startTime,
-            toPrettyString: explainer.toPrettyString,
-        };
-    }
-
     public async import(data: ExplanationData[]) {
         return this._constructionStore.import(
             data,

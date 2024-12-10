@@ -108,26 +108,11 @@ export type CommandHandlerContext = {
 
     batchMode: boolean;
 
-    // For @correct
-    lastRequestAction?: RequestAction;
-    lastExplanation?: object;
-
     streamingActionContext?: ActionContextWithClose | undefined;
 
     metricsManager?: RequestMetricsManager | undefined;
     commandProfiler?: Profiler | undefined;
 };
-
-export function updateCorrectionContext(
-    context: CommandHandlerContext,
-    requestAction: RequestAction,
-    explanationResult: GenericExplanationResult,
-) {
-    if (explanationResult.success) {
-        context.lastExplanation = explanationResult.data;
-        context.lastRequestAction = requestAction;
-    }
-}
 
 export function getTranslatorForSchema(
     context: CommandHandlerContext,

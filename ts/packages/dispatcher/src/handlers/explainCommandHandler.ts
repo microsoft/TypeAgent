@@ -6,10 +6,7 @@ import {
     displayResult,
     displayStatus,
 } from "@typeagent/agent-sdk/helpers/display";
-import {
-    CommandHandlerContext,
-    updateCorrectionContext,
-} from "./common/commandHandlerContext.js";
+import { CommandHandlerContext } from "./common/commandHandlerContext.js";
 import { RequestAction, printProcessRequestActionResult } from "agent-cache";
 
 export class ExplainCommandHandler implements CommandHandler {
@@ -34,11 +31,6 @@ export class ExplainCommandHandler implements CommandHandler {
         const result = await systemContext.agentCache.processRequestAction(
             requestAction,
             false,
-        );
-        updateCorrectionContext(
-            systemContext,
-            requestAction,
-            result.explanationResult.explanation,
         );
         displayResult((log) => {
             printProcessRequestActionResult(result, log);
