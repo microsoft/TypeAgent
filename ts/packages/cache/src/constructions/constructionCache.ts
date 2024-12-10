@@ -70,7 +70,7 @@ type Constructions = {
     // For assigning runtime id
     maxId: number;
 };
-
+export type NamespaceKeyFilter = (namespaceKey: string) => boolean;
 export type MatchOptions = {
     // namespace keys to filter.  If undefined, all constructions are used.
     namespaceKeys?: string[] | undefined;
@@ -92,6 +92,20 @@ export class ConstructionCache {
         let count = 0;
         for (const constructionNamespace of this.constructionNamespaces.values()) {
             count += constructionNamespace.constructions.length;
+        }
+        return count;
+    }
+
+    public getFilteredCount(filter: NamespaceKeyFilter) {
+        let count = 0;
+        for (const [
+            namespace,
+            constructionNamespace,
+        ] of this.constructionNamespaces.entries()) {
+            const keys = getNamespaceKeys(namespace);
+            if (keys.every((key) => filter(key))) {
+                count += constructionNamespace.constructions.length;
+            }
         }
         return count;
     }
@@ -239,6 +253,19 @@ export class ConstructionCache {
         return constructionNamespace.constructions.flatMap((construction) => {
             return construction.match(request, matchConfig);
         });
+    }
+
+    public prune(filter: NamespaceKeyFilter) {
+        let count = 0;
+        for (const namespace of this.constructionNamespaces.keys()) {
+            const keys = getNamespaceKeys(namespace);
+            if (!keys.every((key) => filter(key))) {
+                this.constructionNamespaces.delete(namespace);
+                debugConst(`Prune: ${namespace} deleted`);
+                count++;
+            }
+        }
+        return count;
     }
 
     public match(request: string, options?: MatchOptions): MatchResult[] {
