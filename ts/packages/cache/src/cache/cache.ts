@@ -238,11 +238,11 @@ export class AgentCache {
                 if (construction === undefined) {
                     message = `Explainer '${this.explainerName}' doesn't support constructions.`;
                 } else {
-                    const schemaNameKeys = this.getNamespaceKeys(
+                    const namespaceKeys = this.getNamespaceKeys(
                         actions.translatorNames,
                     );
                     const result = await store.addConstruction(
-                        schemaNameKeys,
+                        namespaceKeys,
                         construction,
                     );
                     if (result.added) {

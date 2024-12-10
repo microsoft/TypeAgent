@@ -27,7 +27,7 @@ export type ImportConstructionResult = {
 };
 
 type ConstructionData = {
-    schemaNameKeys: string[];
+    namespaceKeys: string[];
     construction: Construction;
 };
 
@@ -68,7 +68,7 @@ function createConstructions(
                 }
             }
             const explanation = entry.explanation;
-            const schemaNameKeys = getSchemaNamespaceKeys(
+            const namespaceKeys = getSchemaNamespaceKeys(
                 actions.translatorNames,
                 schemaInfoProvider,
             );
@@ -118,7 +118,7 @@ function createConstructions(
             if (debugConstCreate.enabled) {
                 debugConstCreate(`       Matched: ${chalk.green(matched)}`);
             }
-            constructions.push({ schemaNameKeys, construction });
+            constructions.push({ namespaceKeys, construction });
         } catch (e: any) {
             console.error(
                 chalk.red(`ERROR: ${e.message}\n  Input: ${requestAction}`),
@@ -170,9 +170,9 @@ export function importConstructions(
     }
 
     // Add the constructions to the store
-    for (const { schemaNameKeys, construction } of constructionData) {
+    for (const { namespaceKeys, construction } of constructionData) {
         const result = constructionStore.addConstruction(
-            schemaNameKeys,
+            namespaceKeys,
             construction,
             mergeMatchSets,
             cacheConflicts,
