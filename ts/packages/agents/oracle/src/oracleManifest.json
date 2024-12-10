@@ -1,0 +1,10 @@
+{
+  "emojiChar": "🌀",
+  "description": "Agent to produce oracular answers",
+  "schema": {
+    "description": "Oracle which gives mysterious answers",
+    "schemaFile": "./oracleSchema.ts",
+    "schemaType": "OracleAction",
+    "cached": false
+  }
+}
