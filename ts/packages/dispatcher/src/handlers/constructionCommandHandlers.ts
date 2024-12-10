@@ -207,8 +207,7 @@ class ConstructionInfoCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Show current construction store info";
     public async run(context: ActionContext<CommandHandlerContext>) {
         const systemContext = context.sessionContext.agentContext;
-        const constructionStore = systemContext.agentCache.constructionStore;
-        const info = constructionStore.getInfo();
+        const info = systemContext.agentCache.getInfo();
         if (info === undefined) {
             throw new Error("Construction is disabled.");
         }
@@ -217,12 +216,21 @@ class ConstructionInfoCommandHandler implements CommandHandlerNoParams {
             if (info.filePath) {
                 log(`  File: ${info.filePath}${info.modified ? "*" : ""}`);
             }
-            log(`  # of consts: ${info.constructionCount}`);
+            const diff =
+                info.constructionCount - info.filteredConstructionCount;
+            log(
+                `  # of consts: ${info.filteredConstructionCount}${diff ? ` (${diff} source hash mismatched)` : ""}`,
+            );
             log();
             if (info.builtInConstructionCount !== undefined) {
                 log(`Built-in constructions:`);
                 log(`  File: ${info.builtInCacheFilePath}`);
-                log(`  # of consts: ${info.builtInConstructionCount}`);
+                const diff =
+                    info.builtInConstructionCount -
+                    info.filteredBuiltInConstructionCount!;
+                log(
+                    `  # of consts: ${info.filteredBuiltInConstructionCount}${diff ? ` (${diff} source hash mismatched)` : ""}`,
+                );
                 log();
             }
             log(`Settings:`);
@@ -412,6 +420,15 @@ class ConstructionImportCommandHandler implements CommandHandler {
         printImportConstructionResult(result);
     }
 }
+class ConstructionPruneCommandHandler implements CommandHandlerNoParams {
+    public readonly description =
+        "Prune out of date construction from the cache";
+    public async run(context: ActionContext<CommandHandlerContext>) {
+        const systemContext = context.sessionContext.agentContext;
+        const count = await systemContext.agentCache.prune();
+        displaySuccess(`Pruned ${count} namespaces.`, context);
+    }
+}
 
 class ConstructionDeleteCommandHandler implements CommandHandler {
     public readonly description = "Delete a construction by id";
@@ -457,6 +474,7 @@ export function getConstructionCommandHandlers(): CommandHandlerTable {
             info: new ConstructionInfoCommandHandler(),
             list: new ConstructionListCommandHandler(),
             import: new ConstructionImportCommandHandler(),
+            prune: new ConstructionPruneCommandHandler(),
             delete: new ConstructionDeleteCommandHandler(),
             builtin: getToggleHandlerTable(
                 "construction built-in cache",
