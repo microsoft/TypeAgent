@@ -10,7 +10,11 @@ TypeAgent CLI includes addition commands to help with development.
 
 ## Running
 
-After setting up and building at the workspace root, there are several additional ways to start the CLI in this directory.
+After setting up and building at the workspace root (repo `ts` directory), there are several additional ways to start the CLI in this directory.
+
+### Workspace root (repo `ts` directory)
+
+At the repo `ts` directory, run `pnpm run cli` or `pnpm run cli:dev` to run the development version.
 
 ### Globally Link the package
 

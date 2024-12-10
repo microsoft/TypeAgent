@@ -20,7 +20,6 @@ import {
     CommandHandlerContext,
     getTranslatorForSchema,
     getTranslatorForSelectedActions,
-    updateCorrectionContext,
 } from "./common/commandHandlerContext.js";
 
 import {
@@ -964,13 +963,6 @@ async function requestExplain(
         );
         const processRequestActionResult = await processRequestActionP;
         notifyExplained(processRequestActionResult);
-
-        // Only capture if done synchronously.
-        updateCorrectionContext(
-            context,
-            requestAction,
-            processRequestActionResult.explanationResult.explanation,
-        );
 
         printProcessRequestActionResult(processRequestActionResult);
     }
