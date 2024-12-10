@@ -37,7 +37,7 @@ RUN apt-get update \
     && apt-get install -y libfuse3-dev fuse3 libcurl3-gnutls libgnutls30
 
 RUN apt-get install blobfuse2
-COPY --from=base mount-blobfuse.yaml mount-blobfuse.yaml
+COPY --from=build ./mount-blobfuse.yaml ./mount-blobfuse.yaml
 RUN mkdir /mnt/blob
 RUN mkdir /blob-cache
 
