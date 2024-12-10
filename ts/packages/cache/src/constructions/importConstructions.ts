@@ -38,7 +38,7 @@ function createConstructions(
     createConstruction: ConstructionFactory<any>,
     ignoreSourceHash: boolean,
 ) {
-    if (!ignoreSourceHash && schemaInfoProvider !== undefined) {
+    if (schemaInfoProvider !== undefined) {
         for (let i = 0; i < data.schemaNames.length; i++) {
             const schemaName = data.schemaNames[i];
             const sourceHash = data.sourceHashes[i];
@@ -47,9 +47,12 @@ function createConstructions(
                 sourceHash
             ) {
                 const fileName = data.fileName ? ` in ${data.fileName}` : "";
-                throw new Error(
-                    `Schema hash mismatch for '${schemaName}'${fileName}`,
-                );
+                const message = `Schema hash mismatch for '${schemaName}'${fileName}`;
+                if (ignoreSourceHash) {
+                    console.warn(`WARNING: ${message}`);
+                } else {
+                    throw new Error(message);
+                }
             }
         }
     }

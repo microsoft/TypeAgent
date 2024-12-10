@@ -233,6 +233,14 @@ export default class ExplanationDataRegenerateCommmand extends Command {
             flags.resume ||
             flags.constructions ||
             flags.none;
+
+        const partialRegen =
+            partialExplanationRegen ||
+            flags.explanation ||
+            flags.request ||
+            flags.actionName ||
+            flags.entities;
+
         if (flags.output) {
             // Combine the data to the output now
             const failed: FailedTestDataEntry[] = [];
@@ -298,12 +306,14 @@ export default class ExplanationDataRegenerateCommmand extends Command {
                     provider.getActionSchemaFileForConfig(config).sourceHash;
 
                 if (sourceHash !== data.sourceHash) {
-                    if (!flags.updateHash) {
+                    if (partialRegen && !flags.updateHash) {
                         throw new Error(
                             `Existing schema source hash in ${file} doesn't match current source hash for schema '${data.schemaName}'`,
                         );
                     }
-                    console.log(`Updating source hash in '${file}'`);
+                    if (flags.updateHash) {
+                        console.log(`Updating source hash in '${file}'`);
+                    }
                     data.sourceHash = sourceHash;
                 }
                 if (explainerOverride !== undefined)
@@ -437,7 +447,6 @@ export default class ExplanationDataRegenerateCommmand extends Command {
                             return undefined;
                         }
                         const entities = toEntities(Actions.fromJSON(e.action));
-                        e.action;
                         if (entities.length === 0) {
                             return undefined;
                         }
