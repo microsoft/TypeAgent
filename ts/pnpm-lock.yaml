@@ -1173,6 +1173,9 @@ importers:
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../agentSdk
+      action-schema:
+        specifier: workspace:*
+        version: link:../actionSchema
       aiclient:
         specifier: workspace:*
         version: link:../aiclient
@@ -15474,7 +15477,7 @@ snapshots:
       watchpack: 2.4.2
       webpack-sources: 3.2.3
     optionalDependencies:
-      webpack-cli: 5.1.4(webpack@5.94.0)
+      webpack-cli: 5.1.4(webpack-dev-server@5.0.4)(webpack@5.94.0)
     transitivePeerDependencies:
       - '@swc/core'
       - esbuild
