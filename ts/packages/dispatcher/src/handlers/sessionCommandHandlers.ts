@@ -29,6 +29,8 @@ import {
 } from "@typeagent/agent-sdk/helpers/display";
 import { getToggleHandlerTable } from "../command/handlerUtils.js";
 import { askYesNoWithContext } from "./common/interactiveIO.js";
+import fs from "node:fs";
+import { getUserProfileDir } from "../utils/userData.js";
 
 class SessionNewCommandHandler implements CommandHandler {
     public readonly description = "Create a new empty session";
@@ -268,6 +270,27 @@ class SessionInfoCommandHandler implements CommandHandlerNoParams {
     }
 }
 
+
+export class SessionDirCommandHandler implements CommandHandlerNoParams {
+    public readonly description = "Echos session root dir to the console.";
+    public async run(context: ActionContext<CommandHandlerContext>) {
+
+        displayResult((log: (message?: string) => void) => {
+
+            if (fs.existsSync("/mnt/blob")) {
+                log("/mnt/blob EXISTS!!!");
+                fs.writeFileSync("/mnt/blob/1.txt", "this is a test");
+            } else {
+                log("/mnt/blob NOT FOUND!!!");
+            }
+            
+            log(`Session Dir: ${getUserProfileDir()}`);
+
+        }, context);
+
+    }
+}
+
 export function getSessionCommandHandlers(): CommandHandlerTable {
     return {
         description: "Session commands",
@@ -279,6 +302,7 @@ export function getSessionCommandHandlers(): CommandHandlerTable {
             list: new SessionListCommandHandler(),
             delete: new SessionDeleteCommandHandler(),
             info: new SessionInfoCommandHandler(),
+            dir: new SessionDirCommandHandler(),
         },
     };
 }
