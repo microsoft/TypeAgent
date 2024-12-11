@@ -241,7 +241,7 @@ function getLoggerSink(isDbEnabled: () => boolean, clientIO: ClientIO) {
     );
 }
 
-async function addAppAgentProvidres(
+async function addAppAgentProviders(
     context: CommandHandlerContext,
     appAgentProviders?: AppAgentProvider[],
     cacheDirPath?: string,
@@ -335,7 +335,7 @@ export async function initializeCommandHandlerContext(
         // Runtime context
         commandLock: createLimiter(1), // Make sure we process one command at a time.
         agentCache: await getAgentCache(session, agents, logger),
-        lastActionSchemaName: "",
+        lastActionSchemaName: DispatcherName,
         translatorCache: new Map<string, TypeAgentTranslator>(),
         currentScriptDir: process.cwd(),
         chatHistory: createChatHistory(),
@@ -345,7 +345,7 @@ export async function initializeCommandHandlerContext(
         batchMode: false,
     };
 
-    await addAppAgentProvidres(
+    await addAppAgentProviders(
         context,
         options?.appAgentProviders,
         cacheDirPath,

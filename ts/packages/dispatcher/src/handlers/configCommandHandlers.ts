@@ -33,6 +33,7 @@ import {
 } from "@typeagent/agent-sdk/helpers/display";
 import { alwaysEnabledAgents } from "../agent/appAgentManager.js";
 import { getCacheFactory } from "../internal.js";
+import { resolveCommand } from "../command/command.js";
 
 const enum AgentToggle {
     Schema,
@@ -692,6 +693,105 @@ const configTranslationCommandHandlers: CommandHandlerTable = {
     },
 };
 
+async function checkRequestHandler(
+    appAgentName: string,
+    systemContext: CommandHandlerContext,
+    throwIfFailed: boolean = true,
+) {
+    const result = await resolveCommand(
+        `${appAgentName} request`,
+        systemContext,
+    );
+    if (result.descriptor === undefined) {
+        if (throwIfFailed) {
+            throw new Error(
+                `AppAgent '${appAgentName}' doesn't have request command handler`,
+            );
+        }
+        return false;
+    }
+
+    const args = result.descriptor.parameters?.args;
+    if (args === undefined) {
+        if (throwIfFailed) {
+            throw new Error(
+                `AppAgent '${appAgentName}' request command handler doesn't accept any parameter for natural language requests`,
+            );
+        }
+        return false;
+    }
+
+    const entries = Object.entries(args);
+    if (entries.length !== 1 || entries[0][1].implicitQuotes !== true) {
+        if (throwIfFailed) {
+            throw new Error(
+                `AppAgent '${appAgentName}' request command handler doesn't accept parameters resembling natural language requests`,
+            );
+        }
+        return false;
+    }
+    return true;
+}
+
+class ConfigRequestCommandHandler implements CommandHandler {
+    public readonly description =
+        "Set the agent that handle natural language requests";
+    public readonly parameters = {
+        args: {
+            appAgentName: {
+                description: "name of the agent",
+            },
+        },
+    } as const;
+    public async run(
+        context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const appAgentName = params.args.appAgentName;
+        const systemContext = context.sessionContext.agentContext;
+        const current = systemContext.session.getConfig().request;
+        if (current === appAgentName) {
+            displayWarn(
+                `Natural langue request handling agent is already set to '${appAgentName}'`,
+                context,
+            );
+            return;
+        }
+
+        await checkRequestHandler(appAgentName, systemContext);
+        await changeContextConfig({ request: appAgentName }, context);
+
+        displayResult(
+            `Natural langue request handling agent is set to '${appAgentName}'`,
+            context,
+        );
+    }
+    public async getCompletion(
+        context: SessionContext<CommandHandlerContext>,
+        params: PartialParsedCommandParams<ParameterDefinitions>,
+        names: string[],
+    ): Promise<string[]> {
+        const completions: string[] = [];
+        const systemContext = context.agentContext;
+        for (const name of names) {
+            if (name === "appAgentName") {
+                for (const appAgentName of systemContext.agents.getAppAgentNames()) {
+                    if (
+                        await checkRequestHandler(
+                            appAgentName,
+                            systemContext,
+                            false,
+                        )
+                    ) {
+                        completions.push(appAgentName);
+                    }
+                }
+            }
+        }
+        return completions;
+    }
+}
+
 export function getConfigCommandHandlers(): CommandHandlerTable {
     return {
         description: "Configuration commands",
@@ -700,6 +800,7 @@ export function getConfigCommandHandlers(): CommandHandlerTable {
             action: new AgentToggleCommandHandler(AgentToggle.Action),
             command: new AgentToggleCommandHandler(AgentToggle.Command),
             agent: new AgentToggleCommandHandler(AgentToggle.Agent),
+            request: new ConfigRequestCommandHandler(),
             translation: configTranslationCommandHandlers,
             explainer: {
                 description: "Explainer configuration",
