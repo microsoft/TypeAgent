@@ -10,10 +10,6 @@ export type AddToCartAction = {
 
 export type FindNearbyStoreAction = {
   actionName: "findNearbyStoreAction";
-  parameters: {
-    productName: string;
-    storeLocation?: string;
-  };
 };
 
 // Use this action for user queries such as "where is product X in the store"

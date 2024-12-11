@@ -79,18 +79,18 @@ export async function handleCommerceAction(
     await browser.clickOn(searchSelector);
     await browser.enterTextIn(productName, searchSelector);
     await browser.clickOn(selector.submitButtonCssSelector);
-    await new Promise((r) => setTimeout(r, 200));
+    await new Promise((r) => setTimeout(r, 400));
     await browser.awaitPageLoad();
   }
 
   async function selectSearchResult(productName: string) {
     const request = `Search result: ${productName}`;
-    const selector = (await getComponentFromPage(
+    const targetProduct = (await getComponentFromPage(
       "ProductTile",
       request,
     )) as ProductTile;
-    console.log(selector);
-    await browser.clickOn(selector.detailsLinkSelector);
+
+    await browser.clickOn(targetProduct.detailsLinkSelector);
     await new Promise((r) => setTimeout(r, 200));
     await browser.awaitPageLoad();
   }
@@ -121,13 +121,13 @@ export async function handleCommerceAction(
   async function handleFindInStore(action: any) {
     await searchForProduct(action.parameters.productName);
     await selectSearchResult(action.parameters.productName);
-    console.log("Selected search result");
+
+    // wait for delay-loaded items to settle aeven after pageLoad is declared
+    await new Promise((r) => setTimeout(r, 1000));
 
     const targetProduct = (await getComponentFromPage(
       "ProductDetailsHeroTile",
     )) as ProductDetailsHeroTile;
-
-    console.log(targetProduct);
 
     if (targetProduct && targetProduct.physicalLocationInStore) {
       message = `Found ${targetProduct.numberInStock} at ${targetProduct.physicalLocationInStore} in the ${targetProduct.storeName} store`;
