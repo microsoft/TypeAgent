@@ -276,16 +276,7 @@ export class SessionDirCommandHandler implements CommandHandlerNoParams {
     public async run(context: ActionContext<CommandHandlerContext>) {
 
         displayResult((log: (message?: string) => void) => {
-
-            if (fs.existsSync("/mnt/blob")) {
-                log("/mnt/blob EXISTS!!!");
-                fs.writeFileSync("/mnt/blob/1.txt", "this is a test");
-            } else {
-                log("/mnt/blob NOT FOUND!!!");
-            }
-            
             log(`Session Dir: ${getUserProfileDir()}`);
-
         }, context);
 
     }
