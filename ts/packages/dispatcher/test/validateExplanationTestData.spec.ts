@@ -15,7 +15,7 @@ const inputs = await Promise.all(
 
 const testInput = inputs.flatMap((f) =>
     f.entries.map<[string, string, RequestAction, any]>((data) => [
-        f.translatorName,
+        f.schemaName,
         f.explainerName,
         new RequestAction(data.request, Actions.fromJSON(data.action)),
         data.explanation,
@@ -25,9 +25,9 @@ const testInput = inputs.flatMap((f) =>
 describe("Validate Explanation Test Data", () => {
     it.each(testInput)(
         "[%s %s] '%s'",
-        async (translatorName, explainerName, requestAction, explanation) => {
+        async (schemaName, explainerName, requestAction, explanation) => {
             const explainer = getCacheFactory().getExplainer(
-                translatorName,
+                [schemaName],
                 explainerName,
             );
             expect(explainer.validate).not.toBeUndefined();

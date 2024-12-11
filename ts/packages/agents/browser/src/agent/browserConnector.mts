@@ -207,11 +207,20 @@ export class BrowserConnector {
     return this.sendActionToBrowser(textAction);
   }
 
-  async awaitPageLoad() {
+  async awaitPageLoad(timeout?: number) {
     const action = {
       actionName: "awaitPageLoad",
     };
 
-    return this.sendActionToBrowser(action, "browserActionRequest");
+    const actionPromise = this.sendActionToBrowser(
+      action,
+      "browserActionRequest",
+    );
+    if (timeout) {
+      const timeoutPromise = new Promise((f) => setTimeout(f, timeout));
+      return Promise.race([actionPromise, timeoutPromise]);
+    } else {
+      return actionPromise;
+    }
   }
 }

@@ -15,10 +15,7 @@
     },
     {
       "matches": [
-        "pause",
-        "stop",
-        "halt",
-        "freeze"
+        "pause"
       ],
       "basename": "M:action",
       "namespace": "player.pause::fullActionName",
@@ -38,10 +35,7 @@
     },
     {
       "matches": [
-        "pause the music",
-        "stop the music",
-        "halt the music",
-        "put the music on hold"
+        "pause the music"
       ],
       "basename": "M:action",
       "namespace": "player.pause::fullActionName",
@@ -50,10 +44,7 @@
     },
     {
       "matches": [
-        "play",
-        "start",
-        "put on",
-        "begin"
+        "play"
       ],
       "basename": "M:action",
       "namespace": "player.playTrack::fullActionName",
@@ -63,9 +54,6 @@
     {
       "matches": [
         "nocturne",
-        "nocturnes",
-        "nocturnal",
-        "nocturn",
         "prelude",
         "etude",
         "ballade"
@@ -77,10 +65,7 @@
     },
     {
       "matches": [
-        "by",
-        "from",
-        "composed by",
-        "performed by"
+        "by"
       ],
       "basename": "preposition",
       "canBeMerged": false,
@@ -89,9 +74,6 @@
     {
       "matches": [
         "chopin",
-        "frédéric chopin",
-        "f. chopin",
-        "chopins",
         "beethoven",
         "mozart",
         "bach"
@@ -114,10 +96,7 @@
     },
     {
       "matches": [
-        "some",
-        "any",
-        "a bit of",
-        "a little"
+        "some"
       ],
       "basename": "filler",
       "canBeMerged": false,
@@ -126,9 +105,6 @@
     {
       "matches": [
         "bach",
-        "johann sebastian bach",
-        "j.s. bach",
-        "bach's music",
         "beethoven",
         "mozart",
         "chopin"
@@ -163,7 +139,7 @@
   ],
   "constructionNamespaces": [
     {
-      "name": "player",
+      "name": "player,/coyfq1j8qYAwzuqFo38QLrP2X7DZ/U6UJRPEiLjn7Q=",
       "constructions": [
         {
           "parts": [
@@ -224,7 +200,7 @@
             },
             {
               "matchSet": "M:trackName_5",
-              "wildcard": true,
+              "wildcardMode": 2,
               "transformInfos": [
                 {
                   "namespace": "player",
@@ -238,7 +214,7 @@
             },
             {
               "matchSet": "M:artist_7",
-              "wildcard": true,
+              "wildcardMode": 2,
               "transformInfos": [
                 {
                   "namespace": "player",
@@ -260,6 +236,7 @@
             },
             {
               "matchSet": "M:artist_10",
+              "wildcardMode": 2,
               "transformInfos": [
                 {
                   "namespace": "player",
@@ -301,52 +278,10 @@
               }
             ],
             [
-              "stop",
-              {
-                "value": "player.pause",
-                "count": 0
-              }
-            ],
-            [
-              "halt",
-              {
-                "value": "player.pause",
-                "count": 0
-              }
-            ],
-            [
-              "freeze",
-              {
-                "value": "player.pause",
-                "count": 0
-              }
-            ],
-            [
               "pause the music",
               {
                 "value": "player.pause",
                 "count": 1
-              }
-            ],
-            [
-              "stop the music",
-              {
-                "value": "player.pause",
-                "count": 0
-              }
-            ],
-            [
-              "halt the music",
-              {
-                "value": "player.pause",
-                "count": 0
-              }
-            ],
-            [
-              "put the music on hold",
-              {
-                "value": "player.pause",
-                "count": 0
               }
             ]
           ]
@@ -364,27 +299,6 @@
               {
                 "value": "player.playTrack",
                 "count": 1
-              }
-            ],
-            [
-              "start",
-              {
-                "value": "player.playTrack",
-                "count": 0
-              }
-            ],
-            [
-              "put on",
-              {
-                "value": "player.playTrack",
-                "count": 0
-              }
-            ],
-            [
-              "begin",
-              {
-                "value": "player.playTrack",
-                "count": 0
               }
             ]
           ]
@@ -424,27 +338,6 @@
                 "value": "Ballade",
                 "count": 0
               }
-            ],
-            [
-              "nocturnes",
-              {
-                "value": "Nocturne",
-                "count": 0
-              }
-            ],
-            [
-              "nocturnal",
-              {
-                "value": "Nocturne",
-                "count": 0
-              }
-            ],
-            [
-              "nocturn",
-              {
-                "value": "Nocturne",
-                "count": 0
-              }
             ]
           ]
         },
@@ -478,27 +371,6 @@
                 "value": "Bach",
                 "count": 0
               }
-            ],
-            [
-              "frédéric chopin",
-              {
-                "value": "Chopin",
-                "count": 0
-              }
-            ],
-            [
-              "f. chopin",
-              {
-                "value": "Chopin",
-                "count": 0
-              }
-            ],
-            [
-              "chopins",
-              {
-                "value": "Chopin",
-                "count": 0
-              }
             ]
           ]
         },
@@ -530,27 +402,6 @@
               "chopin",
               {
                 "value": "Chopin",
-                "count": 0
-              }
-            ],
-            [
-              "johann sebastian bach",
-              {
-                "value": "Bach",
-                "count": 0
-              }
-            ],
-            [
-              "j.s. bach",
-              {
-                "value": "Bach",
-                "count": 0
-              }
-            ],
-            [
-              "bach's music",
-              {
-                "value": "Bach",
                 "count": 0
               }
             ]

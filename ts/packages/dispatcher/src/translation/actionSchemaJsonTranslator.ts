@@ -25,7 +25,6 @@ import {
     createChangeAssistantActionSchema,
 } from "./agentTranslators.js";
 import { createMultipleActionSchema } from "./multipleActionSchema.js";
-import { getActionSchemaFileForConfig } from "./actionSchemaFileCache.js";
 
 function createActionSchemaJsonValidator<T extends TranslatedAction>(
     actionSchemaGroup: ActionSchemaGroup,
@@ -84,10 +83,8 @@ class ActionSchemaBuilder {
     constructor(private readonly provider: ActionConfigProvider) {}
     addActionConfig(...configs: ActionConfig[]) {
         for (const config of configs) {
-            const actionSchemaFile = getActionSchemaFileForConfig(
-                config,
-                this.provider,
-            );
+            const actionSchemaFile =
+                this.provider.getActionSchemaFileForConfig(config);
             this.files.push(actionSchemaFile);
             this.definitions.push(actionSchemaFile.entry);
         }

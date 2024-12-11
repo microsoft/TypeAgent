@@ -14,6 +14,7 @@ import {
     getSchemaNamesFromDefaultAppAgentProviders,
     initializeCommandHandlerContext,
     closeCommandHandlerContext,
+    getDefaultAppAgentProviders,
 } from "agent-dispatcher/internal";
 import { createConsoleClientIO } from "agent-dispatcher/helpers/console";
 
@@ -75,6 +76,7 @@ export default class ExplainCommand extends Command {
         const context = await initializeCommandHandlerContext(
             "cli run explain",
             {
+                appAgentProviders: getDefaultAppAgentProviders(),
                 schemas,
                 actions: null, // We don't need any actions
                 commands: null,

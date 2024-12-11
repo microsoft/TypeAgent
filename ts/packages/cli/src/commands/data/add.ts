@@ -10,8 +10,9 @@ import {
     generateTestDataFiles,
     printTestDataStats,
     getEmptyTestData,
-    getSchemaNamesFromDefaultAppAgentProviders,
     getCacheFactory,
+    getSchemaNamesFromDefaultAppAgentProviders,
+    getActionConfigProviderFromDefaultAppAgentProviders,
 } from "agent-dispatcher/internal";
 import chalk from "chalk";
 import { getDefaultExplainerName } from "agent-cache";
@@ -65,6 +66,10 @@ export default class ExplanationDataAddCommand extends Command {
             description: "Model to use",
             options: modelNames,
         }),
+        updateHash: Flags.boolean({
+            description: "Update the source hash (ignore source mismatch)",
+            default: false,
+        }),
     };
 
     static description =
@@ -90,6 +95,7 @@ export default class ExplanationDataAddCommand extends Command {
             }
             inputs.push(args.request);
         }
+        const provider = getActionConfigProviderFromDefaultAppAgentProviders();
         if (inputs.length !== 0) {
             let existingData: TestData;
             if (
@@ -100,11 +106,26 @@ export default class ExplanationDataAddCommand extends Command {
                 existingData = await readTestData(flags.output);
                 if (
                     flags.translator !== undefined &&
-                    flags.translator !== existingData.translatorName
+                    flags.translator !== existingData.schemaName
                 ) {
                     throw new Error(
-                        `Existing data is for translator '${existingData.translatorName}' but input is for translator '${flags.translator}'`,
+                        `Existing data is for translator '${existingData.schemaName}' but input is for translator '${flags.translator}'`,
                     );
+                }
+
+                const config = provider.getActionConfig(
+                    existingData.schemaName,
+                );
+                const sourceHash =
+                    provider.getActionSchemaFileForConfig(config).sourceHash;
+                if (sourceHash !== existingData.sourceHash) {
+                    if (!flags.updateHash) {
+                        throw new Error(
+                            `Existing schema source hash in ${flags.output} doesn't match current source hash for schema '${existingData.schemaName}'`,
+                        );
+                    }
+                    console.log(`Updating source hash in '${flags.output}'`);
+                    existingData.sourceHash = sourceHash;
                 }
 
                 if (
@@ -115,15 +136,20 @@ export default class ExplanationDataAddCommand extends Command {
                         `Existing data is for translator '${existingData.explainerName}' but input is for translator '${flags.explainer}'`,
                     );
                 }
+
                 if (existingData.entries.length !== 0) {
                     console.log(
                         `${existingData.entries.length} existing entries loaded`,
                     );
                 }
             } else if (flags.translator) {
+                const config = provider.getActionConfig(flags.schemaName);
+                const sourceHash =
+                    provider.getActionSchemaFileForConfig(config).sourceHash;
                 // Create an empty existing data.
                 existingData = getEmptyTestData(
-                    flags.translator,
+                    flags.schemaName,
+                    sourceHash,
                     flags.explainer ?? getDefaultExplainerName(),
                 );
             } else {
@@ -149,6 +175,7 @@ export default class ExplanationDataAddCommand extends Command {
                         outputFile: flags.output,
                     },
                 ],
+                provider,
                 flags.batch,
                 concurrency,
                 flags.model,
@@ -167,6 +194,7 @@ export default class ExplanationDataAddCommand extends Command {
             if (flags.output && fs.existsSync(flags.output)) {
                 printTestDataStats([
                     {
+                        fileName: flags.output,
                         testData: await readTestData(flags.output),
                         elapsedMs: 0,
                     },

@@ -18,7 +18,7 @@ export default class Schema extends Command {
     static flags = {
         active: Flags.string({
             description:
-                "Active scheam to include in the inlined change assistant schema",
+                "Active schemas to include in the inlined change assistant schema",
             multiple: true,
         }),
         multiple: Flags.boolean({

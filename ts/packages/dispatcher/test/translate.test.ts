@@ -21,7 +21,7 @@ const inputs = await Promise.all(
 );
 const testInput = inputs.flatMap((f) =>
     f.entries.map<[string, string, JSONAction | JSONAction[]]>((data) => [
-        f.translatorName,
+        f.schemaName,
         data.request,
         data.action,
     ]),

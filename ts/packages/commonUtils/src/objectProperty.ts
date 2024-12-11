@@ -1,11 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-function isInvalidPropertyName(name: string) {
-    return (
-        name === "__proto__" || name === "constructor" || name === "prototype"
-    );
-}
 export function getObjectProperty(data: any, objectName: string, name: string) {
     if (name === "") {
         return data[objectName];
@@ -13,10 +8,13 @@ export function getObjectProperty(data: any, objectName: string, name: string) {
     const properties = name.split(".");
     let lastName: string | number = objectName;
     let curr: any = data;
-    for (let i = 0; i < properties.length; i++) {
-        const name = properties[i];
+    for (const name of properties) {
         // Protect against prototype pollution
-        if (isInvalidPropertyName(name)) {
+        if (
+            name === "__proto__" ||
+            name === "constructor" ||
+            name === "prototype"
+        ) {
             throw new Error(`Invalid property name: ${name}`);
         }
         const next = curr[lastName];
@@ -51,10 +49,13 @@ export function setObjectProperty(
     const properties = name.split(".");
     let lastName: string | number = objectName;
     let curr = data;
-    for (let i = 0; i < properties.length; i++) {
-        const name = properties[i];
+    for (const name of properties) {
         // Protect against prototype pollution
-        if (isInvalidPropertyName(name)) {
+        if (
+            name === "__proto__" ||
+            name === "constructor" ||
+            name === "prototype"
+        ) {
             throw new Error(`Invalid property name: ${name}`);
         }
 

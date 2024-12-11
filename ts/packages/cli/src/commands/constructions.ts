@@ -5,7 +5,8 @@ import { Args, Command, Flags } from "@oclif/core";
 import {
     readTestData,
     getCacheFactory,
-    loadSchemaConfigFromDefaultAppAgentProviders,
+    createSchemaInfoProviderFromDefaultAppAgentProviders,
+    convertTestDataToExplanationData,
 } from "agent-dispatcher/internal";
 import { printImportConstructionResult } from "agent-cache";
 import fs from "node:fs";
@@ -36,7 +37,7 @@ export default class ConstructionsCommand extends Command {
 
         const agentCache = getCacheFactory().create(
             testDataFile.explainerName,
-            loadSchemaConfigFromDefaultAppAgentProviders,
+            createSchemaInfoProviderFromDefaultAppAgentProviders(),
         );
         if (!flags.overwrite && args.output && fs.existsSync(args.output)) {
             await agentCache.constructionStore.load(args.output);
@@ -44,7 +45,9 @@ export default class ConstructionsCommand extends Command {
             await agentCache.constructionStore.newCache(args.output);
         }
 
-        const result = await agentCache.import([testDataFile]);
+        const result = await agentCache.import([
+            convertTestDataToExplanationData(testDataFile),
+        ]);
 
         printImportConstructionResult(result);
 

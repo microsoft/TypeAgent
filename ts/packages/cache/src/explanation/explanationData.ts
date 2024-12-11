@@ -11,7 +11,9 @@ export type ExplanationDataEntry<T extends object = object> = {
 };
 
 export type ExplanationData<T extends object = object> = {
-    translatorName: string;
+    schemaNames: string[];
+    sourceHashes: string[];
     explainerName: string;
     entries: ExplanationDataEntry<T>[];
+    fileName: string | undefined;
 };

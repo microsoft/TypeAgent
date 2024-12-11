@@ -10,9 +10,12 @@ import { ExplanationData } from "../explanation/explanationData.js";
 import { importConstructions } from "../constructions/importConstructions.js";
 import { CacheConfig, CacheOptions } from "./cache.js";
 import { ExplainerFactory } from "./factory.js";
-import { SchemaConfigProvider } from "../explanation/schemaConfig.js";
+import { SchemaInfoProvider } from "../explanation/schemaInfoProvider.js";
 import { ConstructionCache } from "../indexBrowser.js";
-import { MatchOptions } from "../constructions/constructionCache.js";
+import {
+    MatchOptions,
+    NamespaceKeyFilter,
+} from "../constructions/constructionCache.js";
 import {
     PrintOptions,
     printConstructionCache,
@@ -51,8 +54,10 @@ type ConstructionStoreInfo = {
     filePath: string | undefined;
     modified: boolean;
     constructionCount: number;
+    filteredConstructionCount: number;
     builtInCacheFilePath: string | undefined;
     builtInConstructionCount: number | undefined;
+    filteredBuiltInConstructionCount: number | undefined;
     config: CacheConfig;
 };
 
@@ -75,7 +80,6 @@ export interface ConstructionStore {
     save(filePath?: string): Promise<boolean>;
     clear(): void;
 
-    getInfo(): ConstructionStoreInfo | undefined;
     print(options: PrintOptions): void;
 
     // Editing
@@ -177,7 +181,8 @@ export class ConstructionStoreImpl implements ConstructionStore {
     public async import(
         data: ExplanationData[],
         getExplainer: ExplainerFactory,
-        getSchemaConfig?: SchemaConfigProvider,
+        schemaInfoProvider?: SchemaInfoProvider,
+        ignoreSourceHash: boolean = false,
     ) {
         const cache = this.ensureCache();
         const result = importConstructions(
@@ -186,7 +191,8 @@ export class ConstructionStoreImpl implements ConstructionStore {
             getExplainer,
             this.config.mergeMatchSets,
             this.config.cacheConflicts,
-            getSchemaConfig,
+            schemaInfoProvider,
+            ignoreSourceHash,
         );
         this.modified = true;
         const p = this.doAutoSave();
@@ -268,17 +274,27 @@ export class ConstructionStoreImpl implements ConstructionStore {
         await this.doAutoSave();
     }
 
-    public getInfo() {
+    public getInfo(
+        filter?: NamespaceKeyFilter,
+    ): ConstructionStoreInfo | undefined {
         if (this.cache === undefined) {
             return undefined;
         }
 
+        const constructionCount = this.cache.count;
+        const builtInConstructionCount = this.builtInCache?.count;
         return {
             filePath: this.filePath,
             modified: this.modified,
             constructionCount: this.cache.count,
+            filteredConstructionCount: filter
+                ? this.cache.getFilteredCount(filter)
+                : constructionCount,
             builtInCacheFilePath: this.builtInCacheFilePath,
-            builtInConstructionCount: this.builtInCache?.count,
+            builtInConstructionCount,
+            filteredBuiltInConstructionCount: filter
+                ? this.builtInCache?.getFilteredCount(filter)
+                : builtInConstructionCount,
             config: this.getConfig(),
         };
     }
@@ -297,12 +313,12 @@ export class ConstructionStoreImpl implements ConstructionStore {
 
     /**
      * Add a construction to the cache
-     * @param translatorNames separate the construction based on the translator names in the action.  Used to quickly enable/disable construction based on translator is enabled
+     * @param namespaceKeys separate the construction based on the schema name and hash in the action.  Used to quickly enable/disable construction based on translator is enabled
      * @param construction the construction to add
      * @returns the result of the construction addition
      */
     public async addConstruction(
-        translatorNames: string[],
+        namespaceKeys: string[],
         construction: Construction,
     ) {
         if (this.cache === undefined) {
@@ -310,7 +326,7 @@ export class ConstructionStoreImpl implements ConstructionStore {
         }
 
         const result = this.cache.addConstruction(
-            translatorNames,
+            namespaceKeys,
             construction,
             this.config.mergeMatchSets,
             this.config.cacheConflicts,
@@ -363,5 +379,16 @@ export class ConstructionStoreImpl implements ConstructionStore {
             }
         }
         return matches;
+    }
+
+    public async prune(filter: (namespaceKey: string) => boolean) {
+        if (this.cache === undefined) {
+            throw new Error("Construction cache not initialized");
+        }
+
+        const count = this.cache.prune(filter);
+        this.modified = true;
+        await this.doAutoSave();
+        return count;
     }
 }
