@@ -10,12 +10,12 @@ import {
     removeFile,
     writeJsonFile,
 } from "../objStream";
-import { slices } from "../lib/array";
 import { asyncArray } from "..";
 import {
     createFileNameGenerator,
     generateTimestampString,
 } from "./objectFolder";
+import { slices } from "../lib/array";
 
 export interface WorkQueue {
     onError?: (err: any) => void;
@@ -23,13 +23,11 @@ export interface WorkQueue {
     count(): Promise<number>;
     addTask(obj: any): Promise<void>;
     drain(
-        batchSize: number,
         concurrency: number,
         processor: (item: Path, index: number, total: number) => Promise<void>,
         maxItems?: number,
     ): Promise<number>;
     drainTask(
-        batchSize: number,
         concurrency: number,
         processor: (task: any, index: number, total: number) => Promise<void>,
         maxItems?: number,
@@ -82,13 +80,11 @@ export async function createWorkQueueFolder(
     }
 
     async function drainTask(
-        batchSize: number,
         concurrency: number,
         processor: (task: any, index: number, total: number) => Promise<void>,
         maxItems?: number,
     ) {
         return drain(
-            batchSize,
             concurrency,
             async (item, index, total) => {
                 const task = await readJsonFile(item);
@@ -99,7 +95,6 @@ export async function createWorkQueueFolder(
     }
 
     async function drain(
-        batchSize: number,
         concurrency: number,
         processor: (item: Path, index: number, total: number) => Promise<void>,
         maxItems?: number,
@@ -114,7 +109,7 @@ export async function createWorkQueueFolder(
         const total = fileNames.length;
         let startAt = 0;
         let successCount = 0;
-        for (let slice of slices(fileNames, batchSize)) {
+        for (let slice of slices(fileNames, concurrency)) {
             startAt = slice.startAt;
             await asyncArray.forEachAsync(
                 slice.value,

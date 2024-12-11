@@ -407,7 +407,6 @@ export function createEmailCommands(
         while (attempts <= maxAttempts) {
             const successCount = await queue.drain(
                 namedArgs.concurrency,
-                namedArgs.concurrency,
                 async (filePath, index, total) => {
                     context.printer.writeProgress(index + 1, total);
 

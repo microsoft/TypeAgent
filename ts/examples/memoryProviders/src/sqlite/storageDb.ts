@@ -6,7 +6,7 @@ import * as knowLib from "knowledge-processor";
 import { createDatabase, tablePath } from "./common.js";
 import { createTextIndex } from "./textTable.js";
 import { createObjectTable } from "./objectTable.js";
-import { ObjectFolder, ObjectFolderSettings } from "typeagent";
+import { ensureDir, ObjectFolder, ObjectFolderSettings } from "typeagent";
 import { createTemporalLogTable, TemporalTable } from "./temporalTable.js";
 import { TemporalLogSettings } from "knowledge-processor";
 import { createKeyValueTable, KeyValueTable } from "./keyValueTable.js";
@@ -23,6 +23,7 @@ export async function createStorageDb(
     name: string,
     createNew: boolean,
 ): Promise<StorageDb> {
+    await ensureDir(rootPath);
     const dbPath = path.join(rootPath, name);
     let db = await createDatabase(dbPath, createNew);
     let counter = 0;
