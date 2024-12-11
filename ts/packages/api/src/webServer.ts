@@ -10,17 +10,20 @@ import {
 } from "node:https";
 import path from "node:path";
 
+
 export type TypeAgentAPIServerConfig = {
     wwwroot: string;
     port: number;
     broadcast: boolean;
+    blobBackupEnabled: boolean;
 };
 
 export class TypeAgentAPIWebServer {
     public server: Server<any, any>;
-    private secureServer: SecureServer<any, any> | undefined;
+    private secureServer: SecureServer<any, any> | undefined;    
 
     constructor(config: TypeAgentAPIServerConfig) {
+
         // web server
         this.server = createServer((request: any, response: any) => {
             this.serve(config, request, response);
@@ -101,3 +104,4 @@ export class TypeAgentAPIWebServer {
         this.server.close();
     }
 }
+

@@ -54,7 +54,7 @@ function createDirectory(dir: string): void {
     }
 }
 
-function getUserDataDir() {
+export function getUserDataDir() {
     return path.join(os.homedir(), ".typeagent");
 }
 
