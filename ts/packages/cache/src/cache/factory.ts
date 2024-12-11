@@ -3,7 +3,7 @@
 
 import { getExplainerFactories } from "../explanation/explainerFactories.js";
 import { GenericExplainer } from "../explanation/genericExplainer.js";
-import { SchemaConfigProvider } from "../explanation/schemaConfig.js";
+import { SchemaInfoProvider } from "../explanation/schemaInfoProvider.js";
 import { CacheOptions, AgentCache } from "./cache.js";
 import { Logger } from "telemetry";
 
@@ -14,12 +14,12 @@ export function getDefaultExplainerName() {
 }
 
 export type ExplainerFactory = (
-    translatorName: string | undefined,
+    schemaNames: string[] | undefined,
     model?: string,
 ) => GenericExplainer;
 
 export type CustomExplainerFactory = (
-    translatorName: string,
+    schemaNames: string[],
 ) => GenericExplainer | undefined;
 
 export class AgentCacheFactory {
@@ -35,29 +35,29 @@ export class AgentCacheFactory {
     }
 
     public getExplainer(
-        translatorName: string,
+        schemaNames: string[],
         explainerName: string,
         model?: string,
     ) {
-        return this.getExplainerFactory(explainerName)(translatorName, model);
+        return this.getExplainerFactory(explainerName)(schemaNames, model);
     }
 
     public create(
         explainerName: string = getDefaultExplainerName(),
-        getSchemaConfig?: SchemaConfigProvider,
+        schemaInfoProvider?: SchemaInfoProvider,
         cacheOptions?: CacheOptions,
         logger?: Logger,
     ) {
         return new AgentCache(
             explainerName,
             this.getExplainerFactory(explainerName),
-            getSchemaConfig,
+            schemaInfoProvider,
             cacheOptions,
             logger,
         );
     }
 
-    private getExplainerFactory(explainerName: string) {
+    private getExplainerFactory(explainerName: string): ExplainerFactory {
         const existing = this.explainerFactories.get(explainerName);
         if (existing) {
             return existing;
@@ -80,16 +80,16 @@ export class AgentCacheFactory {
             defaultCache.set(key, explainer);
             return explainer;
         };
-        const factory = (translator: string | undefined, model?: string) => {
-            const key = `${translator ?? ""}|${model ?? ""}`;
+        const factory = (schemaNames: string[] | undefined, model?: string) => {
+            const key = `${schemaNames ? schemaNames.join("|") : ""}|${model ?? ""}`;
             const existing = cache.get(key);
             if (existing) {
                 return existing;
             }
 
             // Undefined translator is not overridable.
-            const customExplainer = translator
-                ? customFactory?.(translator)
+            const customExplainer = schemaNames
+                ? customFactory?.(schemaNames)
                 : undefined;
 
             if (customExplainer !== undefined && model !== undefined) {

@@ -201,10 +201,11 @@ class ActionCommandHandler implements CommandHandler {
         const systemContext = context.sessionContext.agentContext;
         const { translatorName, actionName } = params.args;
         const actionSchemaFile =
-            systemContext.agents.getActionSchemaFile(translatorName);
+            systemContext.agents.tryGetActionSchemaFile(translatorName);
         if (actionSchemaFile === undefined) {
             throw new Error(`Invalid schema name ${translatorName}`);
         }
+
         const actionSchema = actionSchemaFile.actionSchemas.get(actionName);
         if (actionSchema === undefined) {
             throw new Error(
@@ -234,8 +235,8 @@ class ActionCommandHandler implements CommandHandler {
         const completions: string[] = [];
         for (const name of names) {
             if (name === "translatorName") {
-                const translators = systemContext.agents.getActiveSchemas();
-                completions.push(...translators);
+                const schemaNames = systemContext.agents.getActiveSchemas();
+                completions.push(...schemaNames);
                 continue;
             }
 
@@ -245,7 +246,7 @@ class ActionCommandHandler implements CommandHandler {
                     continue;
                 }
                 const actionSchemaFile =
-                    systemContext.agents.getActionSchemaFile(translatorName);
+                    systemContext.agents.tryGetActionSchemaFile(translatorName);
                 if (actionSchemaFile === undefined) {
                     continue;
                 }

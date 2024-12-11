@@ -6,7 +6,6 @@ import { BrowserActionContext } from "../actionHandler.mjs";
 import { BrowserConnector } from "../browserConnector.mjs";
 import { createCommercePageTranslator } from "./translator.mjs";
 import {
-  LocationInStore,
   ProductDetailsHeroTile,
   ProductTile,
   SearchInput,
@@ -40,7 +39,7 @@ export async function handleCommerceAction(
     case "answerPageQuestion":
       await handlePageChat(action);
       break;
-    case "findInStoreAction":
+    case "getLocationInStore":
       await handleFindInStore(action);
       break;
     case "findNearbyStoreAction":
@@ -80,17 +79,18 @@ export async function handleCommerceAction(
     await browser.clickOn(searchSelector);
     await browser.enterTextIn(productName, searchSelector);
     await browser.clickOn(selector.submitButtonCssSelector);
-    await new Promise((r) => setTimeout(r, 200));
+    await new Promise((r) => setTimeout(r, 400));
     await browser.awaitPageLoad();
   }
 
   async function selectSearchResult(productName: string) {
     const request = `Search result: ${productName}`;
-    const selector = (await getComponentFromPage(
+    const targetProduct = (await getComponentFromPage(
       "ProductTile",
       request,
     )) as ProductTile;
-    await browser.clickOn(selector.detailsLinkSelector);
+
+    await browser.clickOn(targetProduct.detailsLinkSelector);
     await new Promise((r) => setTimeout(r, 200));
     await browser.awaitPageLoad();
   }
@@ -119,6 +119,12 @@ export async function handleCommerceAction(
   }
 
   async function handleFindInStore(action: any) {
+    await searchForProduct(action.parameters.productName);
+    await selectSearchResult(action.parameters.productName);
+
+    // wait for delay-loaded items to settle aeven after pageLoad is declared
+    await new Promise((r) => setTimeout(r, 1000));
+
     const targetProduct = (await getComponentFromPage(
       "ProductDetailsHeroTile",
     )) as ProductDetailsHeroTile;
@@ -126,19 +132,9 @@ export async function handleCommerceAction(
     if (targetProduct && targetProduct.physicalLocationInStore) {
       message = `Found ${targetProduct.numberInStock} at ${targetProduct.physicalLocationInStore} in the ${targetProduct.storeName} store`;
       return;
-    }
-
-    await searchForProduct(action.parameters.productName);
-    await selectSearchResult(action.parameters.productName);
-
-    const locationInfo = (await getComponentFromPage(
-      "LocationInStore",
-    )) as LocationInStore;
-
-    console.log(locationInfo);
-
-    if (locationInfo.physicalLocationInStore) {
-      message = `Found ${locationInfo.numberInStock} at ${locationInfo.physicalLocationInStore} in the ${locationInfo.storeName} store`;
+    } else {
+      message = `Did not find target product in stock`;
+      console.log(targetProduct);
     }
   }
 

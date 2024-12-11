@@ -1,0 +1,7 @@
+@browser launch hidden
+
+open homedepot.com
+
+get the location of aaa batteries in the store
+get the location of step ladders in the store
+get the location of table saws in the store

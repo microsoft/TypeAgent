@@ -10,6 +10,7 @@ import {
 } from "./webServer.js";
 import { WebAPIClientIO } from "./webClientIO.js";
 import { TypeAgentAPIWebSocketServer } from "./webSocketServer.js";
+import { getDefaultAppAgentProviders } from "agent-dispatcher/internal";
 
 export class TypeAgentServer {
     private dispatcher: Dispatcher | undefined;
@@ -26,7 +27,7 @@ export class TypeAgentServer {
         // dispatcher
         this.webClientIO = new WebAPIClientIO();
         this.dispatcher = await createDispatcher("api", {
-            appAgentProviders: [],
+            appAgentProviders: getDefaultAppAgentProviders(),
             explanationAsynchronousMode: true,
             persistSession: true,
             enableServiceHost: true,

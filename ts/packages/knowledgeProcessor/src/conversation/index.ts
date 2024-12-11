@@ -24,6 +24,7 @@ export * from "./searchProcessor.js";
 export * from "./answerSchema.js";
 export * from "./answerContext.js";
 export * from "./answerGenerator.js";
+export * from "./interactive.js";
 
 export * as testData from "./testData.js";
 export * as log from "./log.js";

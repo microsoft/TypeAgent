@@ -11,7 +11,6 @@ export type {
 } from "./explanation/requestAction.js";
 
 export type { ConstructionStore } from "./cache/store.js";
-export type { SchemaConfig } from "./explanation/schemaConfig.js";
 export type {
     GenericExplanationResult,
     CorrectionRecord,
@@ -29,6 +28,7 @@ export type {
     ProcessRequestActionResult,
     ExplanationOptions,
 } from "./cache/cache.js";
+export type { SchemaInfoProvider } from "./explanation/schemaInfoProvider.js";
 
 // Functionalities
 export {
@@ -44,7 +44,7 @@ export { AgentCacheFactory, getDefaultExplainerName } from "./cache/factory.js";
 export { MatchResult } from "./constructions/constructions.js";
 
 // Testing
-export { getNamespaceForCache } from "./explanation/schemaConfig.js";
+export { getNamespaceForCache } from "./explanation/schemaInfoProvider.js";
 export { createActionProps } from "./constructions/constructionValue.js";
 
 // Console printing.  REVIEW: move it to a separate export path?

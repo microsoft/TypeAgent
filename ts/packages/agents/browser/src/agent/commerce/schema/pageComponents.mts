@@ -1,11 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-export type AddToCartButton = {
-  // css selector for the add to cart button
-  cssSelector: string;
-};
-
 export type ProductTile = {
   productName: string;
   price: string;
@@ -25,9 +20,14 @@ export type ProductDetailsHeroTile = {
   // css selector for text input
   cssSelector: string;
 
-  addToCartButton?: AddToCartButton;
+  addToCartButton?: {
+    // css selector for the add to cart button
+    cssSelector: string;
+  };
+
   storeName?: string;
   // The physical location of the goods, such as the Aisle, Bay or Shelf
+  // Only provide this infomration if it present on the page
   physicalLocationInStore?: string;
   numberInStock?: string;
 };

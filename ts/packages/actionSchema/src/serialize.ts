@@ -6,8 +6,10 @@ import { ActionSchemaFile, SchemaType, SchemaTypeDefinition } from "./type.js";
 
 export type ActionSchemaFileJSON = {
     schemaName: string;
+    sourceHash: string;
     entry: string;
     types: Record<string, SchemaTypeDefinition>;
+    actionNamespace?: boolean; // default to false
     order?: Record<string, number>;
 };
 
@@ -67,9 +69,13 @@ export function toJSONActionSchemaFile(
     collectTypes(definitions, entry.type);
     const result: ActionSchemaFileJSON = {
         schemaName: actionSchemaFile.schemaName,
+        sourceHash: actionSchemaFile.sourceHash,
         entry: entry.name,
         types: definitions,
     };
+    if (actionSchemaFile.actionNamespace) {
+        result.actionNamespace = actionSchemaFile.actionNamespace;
+    }
     if (actionSchemaFile.order) {
         result.order = Object.fromEntries(actionSchemaFile.order.entries());
     }
@@ -125,5 +131,18 @@ export function fromJSONActionSchemaFile(
     }
     const entry = json.types[json.entry];
     const order = json.order ? new Map(Object.entries(json.order)) : undefined;
-    return createActionSchemaFile(json.schemaName, entry, order, true);
+    // paramSpecs are already stored in each action definition.
+    const schemaConfig = json.actionNamespace
+        ? {
+              actionNamespace: json.actionNamespace,
+          }
+        : undefined;
+    return createActionSchemaFile(
+        json.schemaName,
+        json.sourceHash,
+        entry,
+        order,
+        true,
+        schemaConfig,
+    );
 }

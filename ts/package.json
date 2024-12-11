@@ -19,7 +19,8 @@
     "check:policy": "node tools/scripts/repo-policy-check.mjs",
     "check:policy:fix": "node tools/scripts/repo-policy-check.mjs --fix",
     "clean": "fluid-build . -t clean",
-    "cli": "pnpm -C packages/cli exec npx --no .",
+    "cli": "pnpm -C packages/cli run start",
+    "cli:dev": "pnpm -C packages/cli run start:dev",
     "elevate": "node tools/scripts/elevate.js",
     "getKeys": "node tools/scripts/getKeys.mjs",
     "knowledgeVisualizer": "pnpm -C packages/knowledgeVisualizer exec npm run start",
@@ -29,10 +30,10 @@
     "prettier": "prettier --check .",
     "prettier:fix": "prettier --write .",
     "rebuild": "fluid-build . -t build --rebuild",
-    "regen": "pnpm -C packages/cli exec npm run regen",
-    "regen:builtin": "pnpm -C packages/cli exec npm run regen:builtin",
-    "shell": "pnpm -C packages/shell exec npm run dev",
-    "test": "pnpm run -r --parallel --stream test",
+    "regen": "pnpm -C packages/cli run regen",
+    "regen:builtin": "pnpm -C packages/cli run regen:builtin",
+    "shell": "pnpm -C packages/shell run dev",
+    "test": "pnpm -r --no-sort --stream --workspace-concurrency=0 run test",
     "test:full": "pnpm run -r --parallel --stream test:full"
   },
   "devDependencies": {
@@ -42,7 +43,7 @@
     "markdown-link-check": "^3.12.2",
     "prettier": "^3.2.5"
   },
-  "packageManager": "pnpm@9.12.3+sha512.cce0f9de9c5a7c95bef944169cc5dfe8741abfb145078c0d508b868056848a87c81e626246cb60967cbd7fd29a6c062ef73ff840d96b3c86c40ac92cf4a813ee",
+  "packageManager": "pnpm@9.15.0+sha512.76e2379760a4328ec4415815bcd6628dee727af3779aaa4c914e3944156c4299921a89f976381ee107d41f12cfa4b66681ca9c718f0668fa0831ed4c6d8ba56c",
   "engines": {
     "node": ">=18",
     "pnpm": ">=9"

@@ -7,7 +7,7 @@ dotenv.config({ path: new URL("../../../../.env", import.meta.url) });
 import { getCacheFactory } from "../src/utils/cacheFactory.js";
 import { readTestData } from "../src/utils/test/testData.js";
 import { Actions, RequestAction } from "agent-cache";
-import { loadSchemaConfigFromDefaultAppAgentProviders } from "../src/utils/defaultAppProviders.js";
+import { createSchemaInfoProviderFromDefaultAppAgentProviders } from "../src/utils/defaultAppProviders.js";
 import { glob } from "glob";
 
 const dataFiles = ["test/data/**/v5/*.json"];
@@ -18,7 +18,7 @@ const inputs = await Promise.all(
 
 const testInput = inputs.flatMap((f) =>
     f.entries.map<[string, string, RequestAction, object, string[]]>((data) => [
-        f.translatorName,
+        f.schemaName,
         f.explainerName,
         new RequestAction(data.request, Actions.fromJSON(data.action)),
         data.explanation,
@@ -36,14 +36,14 @@ describe("construction", () => {
         it.each(testInput)(
             "[%s %s] '%s'",
             async (
-                translatorName,
+                schemaName,
                 explainerName,
                 requestAction,
                 explanation,
                 tags,
             ) => {
                 const explainer = getCacheFactory().getExplainer(
-                    translatorName,
+                    [schemaName],
                     explainerName,
                 );
 
@@ -51,8 +51,8 @@ describe("construction", () => {
                     requestAction,
                     explanation,
                     {
-                        getSchemaConfig:
-                            loadSchemaConfigFromDefaultAppAgentProviders,
+                        schemaInfoProvider:
+                            createSchemaInfoProviderFromDefaultAppAgentProviders(),
                     },
                 );
 

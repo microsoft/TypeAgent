@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ParamSpec } from "../explanation/schemaConfig.js";
+import { ParamSpec } from "action-schema";
 import { ConstructionPart, WildcardMode } from "./constructions.js";
 import { isMatchPart } from "./matchPart.js";
 import { PropertyParser, getPropertyParser } from "./propertyParser.js";

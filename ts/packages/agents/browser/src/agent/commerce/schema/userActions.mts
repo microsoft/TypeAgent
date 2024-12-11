@@ -10,14 +10,11 @@ export type AddToCartAction = {
 
 export type FindNearbyStoreAction = {
   actionName: "findNearbyStoreAction";
-  parameters: {
-    productName: string;
-    storeLocation?: string;
-  };
 };
 
-export type FindInStoreAction = {
-  actionName: "findInStoreAction";
+// Use this action for user queries such as "where is product X in the store"
+export type GetLocationInStore = {
+  actionName: "getLocationInStore";
   parameters: {
     productName: string;
   };
@@ -50,7 +47,7 @@ export type AnswerQuestionBasedOnPage = {
 export type ShoppingActions =
   | AddToCartAction
   | FindNearbyStoreAction
-  | FindInStoreAction
+  | GetLocationInStore
   | SearchForProductAction
   | SelectSearchResult
   | AnswerQuestionBasedOnPage;

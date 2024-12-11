@@ -21,6 +21,7 @@ import {
 } from "../agent/appAgentManager.js";
 import { cloneConfig, mergeConfig } from "./options.js";
 import { TokenCounter, TokenCounterData } from "aiclient";
+import { DispatcherName } from "../handlers/common/interactiveIO.js";
 
 const debugSession = registerDebug("typeagent:session");
 
@@ -101,6 +102,7 @@ async function newSessionDir() {
 }
 
 type DispatcherConfig = {
+    request: string;
     translation: {
         enabled: boolean;
         model: string;
@@ -156,6 +158,8 @@ const defaultSessionConfig: SessionConfig = {
     actions: undefined,
     commands: undefined,
 
+    // default to dispatcher
+    request: DispatcherName,
     translation: {
         enabled: true,
         model: "",

@@ -80,6 +80,7 @@ export interface ConversationSearchProcessor {
         query: string,
         filters: TermFilterV2[] | undefined,
         options: SearchProcessingOptions,
+        history?: PromptSection[] | undefined,
     ): Promise<SearchTermsActionResponseV2 | undefined>;
     /**
      * Generate an answer using a prior search response
@@ -90,6 +91,17 @@ export interface ConversationSearchProcessor {
         actionResponse: SearchTermsActionResponse,
         options: SearchProcessingOptions,
     ): Promise<SearchTermsActionResponse>;
+    /**
+     * Generate an answer to the prior search response
+     * @param query
+     * @param actionResponse
+     * @param options
+     */
+    generateAnswerV2(
+        query: string,
+        actionResponse: SearchTermsActionResponseV2,
+        options: SearchProcessingOptions,
+    ): Promise<SearchTermsActionResponseV2>;
     buildContext(
         query: string,
         options: SearchProcessingOptions,
@@ -115,6 +127,7 @@ export function createSearchProcessor(
         searchTermsV2,
         buildContext,
         generateAnswer,
+        generateAnswerV2,
     };
     return thisProcessor;
 
@@ -122,7 +135,7 @@ export function createSearchProcessor(
         query: string,
         options: SearchProcessingOptions,
     ): Promise<SearchActionResponse | undefined> {
-        const context = await buildContext(query);
+        const context = await buildContext(query, options);
         const actionResult = await searchTranslator.translateSearch(
             query,
             context,
@@ -153,7 +166,7 @@ export function createSearchProcessor(
         filters: TermFilter[] | undefined,
         options: SearchProcessingOptions,
     ): Promise<SearchTermsActionResponse | undefined> {
-        const context = await buildContext(query);
+        const context = await buildContext(query, options);
         let action: SearchTermsAction | undefined;
         if (filters && filters.length > 0) {
             // Filters already provided
@@ -191,11 +204,12 @@ export function createSearchProcessor(
     }
 
     async function searchTermsV2(
-        query: string,
+        query: string | string,
         filters: TermFilterV2[] | undefined,
         options: SearchProcessingOptions,
+        history?: PromptSection[] | undefined,
     ): Promise<SearchTermsActionResponseV2 | undefined> {
-        const context = await buildContext(query);
+        const context = await buildContext(query, options, history);
         let action: SearchTermsActionV2 | undefined;
         if (filters && filters.length > 0) {
             // Filters already provided
@@ -235,6 +249,8 @@ export function createSearchProcessor(
 
     async function buildContext(
         query: string,
+        options: SearchProcessingOptions,
+        history?: PromptSection[] | undefined,
     ): Promise<PromptSection[] | undefined> {
         let context: PromptSection[] | undefined;
         const timeRange = await conversation.messages.getTimeRange();
@@ -250,6 +266,10 @@ export function createSearchProcessor(
             context.push(
                 ...(await settings.contextProvider.getSections(query)),
             );
+        }
+        if (history && history.length > 0) {
+            context ??= [];
+            context.push(...history);
         }
         return context;
     }
@@ -370,6 +390,24 @@ export function createSearchProcessor(
         actionResponse: SearchTermsActionResponse,
         options: SearchProcessingOptions,
     ): Promise<SearchTermsActionResponse> {
+        if (actionResponse.response) {
+            await generateAnswerForSearchTerms(
+                query,
+                actionResponse.response,
+                options,
+            );
+        }
+        return actionResponse;
+    }
+
+    async function generateAnswerV2(
+        query: string,
+        actionResponse: SearchTermsActionResponseV2,
+        options: SearchProcessingOptions,
+    ): Promise<SearchTermsActionResponseV2> {
+        if (actionResponse.action.actionName === "getAnswer") {
+            query = actionResponse.action.parameters.question;
+        }
         if (actionResponse.response) {
             await generateAnswerForSearchTerms(
                 query,

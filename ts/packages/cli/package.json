@@ -21,11 +21,11 @@
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
     "prettier": "prettier --check . --ignore-path ../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
-    "regen": "./bin/dev.js data regenerate -f ../dispatcher/test/data/**/**/*.json ../dispatcher/test/repo/explanations/**/**/*.json",
-    "regen:builtin": "./bin/dev.js data regenerate --builtin player",
-    "start": "npx --no .",
-    "start:dev": "npx --no agent-cli-dev",
-    "stat": "./bin/dev.js data stat -f ../dispatcher/test/data/**/**/*.json ../dispatcher/test/repo/explanations/**/**/*.json",
+    "regen": "node ./bin/run.js data regenerate ../dispatcher/test/data/**/**/*.json",
+    "regen:builtin": "node ./bin/run.js data regenerate --builtin v5",
+    "start": "node ./bin/run.js",
+    "start:dev": "node --loader ts-node/esm --no-warnings=ExperimentalWarning ./bin/dev.js",
+    "stat": "node ./bin/run.js data stat -f ../dispatcher/test/data/**/**/*.json",
     "tsc": "tsc -b"
   },
   "oclif": {

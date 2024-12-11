@@ -54,11 +54,18 @@ export interface ActionConfigProvider {
     tryGetActionConfig(schemaName: string): ActionConfig | undefined;
     getActionConfig(schemaName: string): ActionConfig;
     getActionConfigs(): [string, ActionConfig][];
-    getActionSchemaFileForConfig?(config: ActionConfig): ActionSchemaFile;
+    getActionSchemaFileForConfig(config: ActionConfig): ActionSchemaFile;
+}
+
+function isValidSubSchemaName(schemaNamePart: string) {
+    // . is use as a sub-schema separator
+    // | is used in the cache as as multiple schema name separator
+    // , is used in the cache as a separator between schema name and its hash
+    return !/[.|,]/.test(schemaNamePart);
 }
 
 function collectActionConfigs(
-    actionSchemaConfigs: { [key: string]: ActionConfig },
+    actionConfigs: { [key: string]: ActionConfig },
     manifest: ActionManifest,
     schemaName: string,
     emojiChar: string,
@@ -78,7 +85,7 @@ function collectActionConfigs(
 
     if (manifest.schema) {
         debugConfig(`Adding schema '${schemaName}'`);
-        actionSchemaConfigs[schemaName] = {
+        actionConfigs[schemaName] = {
             schemaName,
             emojiChar,
             ...manifest.schema,
@@ -91,8 +98,11 @@ function collectActionConfigs(
     const subManifests = manifest.subActionManifests;
     if (subManifests) {
         for (const [subName, subManfiest] of Object.entries(subManifests)) {
+            if (!isValidSubSchemaName(subName)) {
+                throw new Error(`Invalid sub-schema name: ${subName}`);
+            }
             collectActionConfigs(
-                actionSchemaConfigs,
+                actionConfigs,
                 subManfiest,
                 `${schemaName}.${subName}`,
                 emojiChar,
@@ -109,6 +119,9 @@ export function convertToActionConfig(
     config: AppAgentManifest,
     actionConfigs: Record<string, ActionConfig> = {},
 ): Record<string, ActionConfig> {
+    if (!isValidSubSchemaName(name)) {
+        throw new Error(`Invalid schema name: ${name}`);
+    }
     const emojiChar = config.emojiChar;
     collectActionConfigs(
         actionConfigs,
@@ -242,12 +255,14 @@ function getInjectedSchemaDefs(
     multipleActions: boolean = false,
 ): TranslatorSchemaDef[] {
     // Add all injected schemas
-    const injectSchemaConfigs = getInjectedActionConfigs(
+    const injectedActionConfigs = getInjectedActionConfigs(
         translatorName,
         provider,
         activeTranslators,
     );
-    const injectedSchemaDefs = injectSchemaConfigs.map(getTranslatorSchemaDef);
+    const injectedSchemaDefs = injectedActionConfigs.map(
+        getTranslatorSchemaDef,
+    );
 
     // subAction for multiple action
     const subActionType = [type, ...injectedSchemaDefs.map((s) => s.typeName)];

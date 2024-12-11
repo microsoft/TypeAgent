@@ -11,13 +11,14 @@ import {
     RequestAction,
 } from "../explanation/requestAction.js";
 import {
-    SchemaConfigProvider,
+    SchemaInfoProvider,
     doCacheAction,
-} from "../explanation/schemaConfig.js";
+} from "../explanation/schemaInfoProvider.js";
 import { GenericExplanationResult } from "../index.js";
 import { ConstructionStore, ConstructionStoreImpl } from "./store.js";
 import { ExplainerFactory } from "./factory.js";
 import { getLanguageTools } from "../utils/language.js";
+import { NamespaceKeyFilter } from "../constructions/constructionCache.js";
 
 export type ProcessExplanationResult = {
     explanation: GenericExplanationResult;
@@ -109,6 +110,20 @@ function checkExplainableValues(
     }
 }
 
+// Construction namespace policy
+export function getSchemaNamespaceKeys(
+    schemaNames: string[],
+    schemaInfoProvider?: SchemaInfoProvider,
+) {
+    // Current namespace keys policy is just combining schema name its file hash
+    return schemaInfoProvider
+        ? schemaNames.map(
+              (name) =>
+                  `${name},${schemaInfoProvider.getActionSchemaFileHash(name)}`,
+          )
+        : schemaNames;
+}
+
 export class AgentCache {
     private _constructionStore: ConstructionStoreImpl;
     private queue: QueueObject<{
@@ -117,12 +132,13 @@ export class AgentCache {
         reject: (reason?: any) => void;
     }>;
 
+    private readonly namespaceKeyFilter?: NamespaceKeyFilter;
     private readonly logger: Telemetry.Logger | undefined;
     public model?: string;
     constructor(
         public readonly explainerName: string,
         private readonly getExplainerForTranslator: ExplainerFactory,
-        private readonly getSchemaConfig?: SchemaConfigProvider,
+        private readonly schemaInfoProvider?: SchemaInfoProvider,
         cacheOptions?: CacheOptions,
         logger?: Telemetry.Logger,
     ) {
@@ -144,15 +160,39 @@ export class AgentCache {
                   explainerName,
               })
             : undefined;
+
+        if (schemaInfoProvider) {
+            this.namespaceKeyFilter = (namespaceKey) => {
+                const [schemaName, hash] = namespaceKey.split(",");
+                return (
+                    schemaInfoProvider.getActionSchemaFileHash(schemaName) ===
+                    hash
+                );
+            };
+        }
     }
 
     public get constructionStore(): ConstructionStore {
         return this._constructionStore;
     }
 
+    public getNamespaceKeys(schemaNames: string[]) {
+        return getSchemaNamespaceKeys(schemaNames, this.schemaInfoProvider);
+    }
+
+    public getInfo() {
+        return this._constructionStore.getInfo(this.namespaceKeyFilter);
+    }
+    public async prune() {
+        if (this.namespaceKeyFilter === undefined) {
+            throw new Error("Cannon prune cache without schema info provider");
+        }
+
+        return this._constructionStore.prune(this.namespaceKeyFilter);
+    }
     private getExplainerForActions(actions: Actions) {
         return this.getExplainerForTranslator(
-            actions.action?.translatorName,
+            actions.translatorNames,
             this.model,
         );
     }
@@ -168,14 +208,7 @@ export class AgentCache {
         const checkExplainable = options?.checkExplainable;
         const actions = requestAction.actions;
         for (const action of actions) {
-            const translatorName = action.translatorName;
-            const translatorSchemaConfig = translatorName
-                ? this.getSchemaConfig?.(translatorName)
-                : undefined;
-            const cacheAction = doCacheAction(
-                translatorSchemaConfig,
-                action.actionName,
-            );
+            const cacheAction = doCacheAction(action, this.schemaInfoProvider);
 
             if (!cacheAction) {
                 return getFailedResult(
@@ -193,7 +226,7 @@ export class AgentCache {
             const actions = requestAction.actions;
             const explainer = this.getExplainerForActions(actions);
             const constructionCreationConfig = {
-                getSchemaConfig: this.getSchemaConfig,
+                schemaInfoProvider: this.schemaInfoProvider,
             };
 
             const explainerConfig = {
@@ -227,8 +260,11 @@ export class AgentCache {
                 if (construction === undefined) {
                     message = `Explainer '${this.explainerName}' doesn't support constructions.`;
                 } else {
-                    const result = await store.addConstruction(
+                    const namespaceKeys = this.getNamespaceKeys(
                         actions.translatorNames,
+                    );
+                    const result = await store.addConstruction(
+                        namespaceKeys,
                         construction,
                     );
                     if (result.added) {
@@ -239,15 +275,16 @@ export class AgentCache {
                             "  \n",
                         )}`;
                     }
+                    const info = this.getInfo();
                     this.logger?.logEvent("construction", {
                         added,
                         message,
                         config: this._constructionStore.getConfig(),
-                        count: this._constructionStore.getInfo()
-                            ?.constructionCount,
-                        builtInCount:
-                            this._constructionStore.getInfo()
-                                ?.builtInConstructionCount,
+                        count: info?.constructionCount,
+                        filteredCount: info?.filteredConstructionCount,
+                        builtInCount: info?.builtInConstructionCount,
+                        filteredBuiltinCount:
+                            info?.filteredBuiltInConstructionCount,
                     });
                 }
                 return {
@@ -297,36 +334,15 @@ export class AgentCache {
         }
     }
 
-    public async correctExplanation(
-        requestAction: RequestAction,
-        explanation: object,
-        correction: string,
-    ): Promise<ProcessExplanationResult> {
-        const startTime = performance.now();
-        const actions = requestAction.actions;
-        const explainer = this.getExplainerForActions(actions);
-
-        if (!explainer.correct) {
-            throw new Error("Explainer doesn't support correction");
-        }
-        const result = await explainer.correct(
-            requestAction,
-            explanation,
-            correction,
-        );
-
-        return {
-            explanation: result,
-            elapsedMs: performance.now() - startTime,
-            toPrettyString: explainer.toPrettyString,
-        };
-    }
-
-    public async import(data: ExplanationData[]) {
+    public async import(
+        data: ExplanationData[],
+        ignoreSourceHash: boolean = false,
+    ) {
         return this._constructionStore.import(
             data,
             this.getExplainerForTranslator,
-            this.getSchemaConfig,
+            this.schemaInfoProvider,
+            ignoreSourceHash,
         );
     }
 }

@@ -31,3 +31,6 @@ export {
     toJSONActionSchemaFile,
     fromJSONActionSchemaFile,
 } from "./serialize.js";
+
+// Schema Config
+export { SchemaConfig, ParamSpec, ActionParamSpecs } from "./schemaConfig.js";

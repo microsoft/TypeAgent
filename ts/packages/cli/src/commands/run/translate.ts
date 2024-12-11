@@ -3,7 +3,10 @@
 
 import { Args, Command, Flags } from "@oclif/core";
 import { createDispatcher } from "agent-dispatcher";
-import { getSchemaNamesFromDefaultAppAgentProviders } from "agent-dispatcher/internal";
+import {
+    getSchemaNamesFromDefaultAppAgentProviders,
+    getDefaultAppAgentProviders,
+} from "agent-dispatcher/internal";
 import { getChatModelNames } from "aiclient";
 
 const modelNames = await getChatModelNames();
@@ -40,6 +43,7 @@ export default class TranslateCommand extends Command {
             : undefined;
 
         const dispatcher = await createDispatcher("cli run translate", {
+            appAgentProviders: getDefaultAppAgentProviders(),
             schemas,
             actions: null,
             commands: { dispatcher: true },
