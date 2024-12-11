@@ -157,8 +157,8 @@ async function parseCommand(
 ) {
     let input = originalInput.trim();
     if (!input.startsWith("@")) {
-        // default to dispatcher request
-        input = `dispatcher request ${input}`;
+        const requestHandlerAgent = context.session.getConfig().request;
+        input = `${requestHandlerAgent} request ${input}`;
     } else {
         input = input.substring(1);
     }
@@ -281,6 +281,10 @@ export const enum unicodeChar {
     convert = "🔄",
 }
 export function getSettingSummary(context: CommandHandlerContext) {
+    if (context.session.getConfig().request !== DispatcherName) {
+        const requestAgentName = context.session.getConfig().request;
+        return `{{${context.agents.getActionConfig(requestAgentName).emojiChar} ${requestAgentName.toUpperCase()}}}`;
+    }
     const prompt: string[] = [unicodeChar.robotFace];
 
     const names = context.agents.getActiveSchemas();
