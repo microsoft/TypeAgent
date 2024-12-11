@@ -309,10 +309,20 @@ export interface ChatHistory extends Iterable<PromptSection> {
 /**
  * Creates a chat history with a maximum past history using a circular buffer
  * @param maxPastMessages
+ * @param savedHistory Saved history, if any.. ordered by oldest message first
  * @returns
  */
-export function createChatHistory(maxPastMessages: number): ChatHistory {
-    return new CircularArray<PromptSection>(maxPastMessages);
+export function createChatHistory(
+    maxPastMessages: number,
+    savedHistory?: Iterable<PromptSection> | undefined,
+): ChatHistory {
+    const history = new CircularArray<PromptSection>(maxPastMessages);
+    if (savedHistory) {
+        for (const entry of history) {
+            history.push(entry);
+        }
+    }
+    return history;
 }
 
 /**
