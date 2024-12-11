@@ -13,7 +13,7 @@ import { TypeAgentAPIWebSocketServer } from "./webSocketServer.js";
 import { getDefaultAppAgentProviders } from "agent-dispatcher/internal";
 import { EnvVars } from "../../aiclient/dist/openai.js";
 import { env } from "node:process";
-import { BlobServiceClient, ContainerClient, ContainerListBlobsOptions } from "@azure/storage-blob";
+import { BlobServiceClient, BlockBlobClient, ContainerClient, ContainerListBlobsOptions } from "@azure/storage-blob";
 import { DefaultAzureCredential } from "@azure/identity";
 import { getEnvSetting } from "aiclient";
 import { StopWatch } from "../../telemetry/dist/stopWatch.js";
@@ -25,10 +25,18 @@ export class TypeAgentServer {
     private webClientIO: WebAPIClientIO | undefined;
     private webSocketServer: TypeAgentAPIWebSocketServer | undefined;
     private webServer: TypeAgentAPIWebServer | undefined;
+    private storageAccount: string;
+    private containerName: string;
+    private accountURL: string;
 
     constructor(private envPath: string) {
         // typeAgent config
         dotenv.config({ path: this.envPath });
+
+        // blob storage config
+        this.storageAccount = getEnvSetting(env, EnvVars.AZURE_STORAGE_ACCOUNT);
+        this.containerName = getEnvSetting(env, EnvVars.AZURE_STORAGE_CONTAINER, undefined, "sessions");
+        this.accountURL = `https://${this.storageAccount}.blob.core.windows.net`;
     }
 
     async start() {
@@ -38,12 +46,14 @@ export class TypeAgentServer {
             readFileSync("data/config.json").toString(),
         );
 
-        // restore session backup?
+        // restore & enable session backup?
         if (config.blobBackupEnabled) {
             const sw = new StopWatch();
             sw.start("Downloading Session Backup");
 
-            await this.syncBlobStorage();            
+            await this.syncBlobStorage();  
+            
+            this.syncLocalStorage();
 
             sw.stop("Downloaded Session Backup");
         }        
@@ -81,34 +91,22 @@ export class TypeAgentServer {
      * Downloads from session data blob storage to the local session store
      */
     async syncBlobStorage() {
-        // get storage account name
-        let storageAccount: string = getEnvSetting(env, EnvVars.AZURE_STORAGE_ACCOUNT);
-        let containerName: string = getEnvSetting(env, EnvVars.AZURE_STORAGE_CONTAINER, undefined, "sessions");
 
-        const accountURL = `https://${storageAccount}.blob.core.windows.net`;
         const blobServiceClient = new BlobServiceClient(
-            accountURL,
+            this.accountURL,
             new DefaultAzureCredential()
         );
 
-        const containerClient: ContainerClient = blobServiceClient.getContainerClient(containerName);
+        const containerClient: ContainerClient = blobServiceClient.getContainerClient(this.containerName);
         
-        await this.listBlobsFlat(containerClient);
-        // let i = 1;
-        // let iter = containerClient.listBlobsFlat();
-        // iter.next().then(async (blobItem: IteratorResult<BlobItem, null>) => {
-        //     while (!blobItem.done) {
-        //         console.log(`Blob ${i++}: ${blobItem.value.name}`);
-        //         blobItem = await iter.next();
-
-        //         const blobClient = containerClient.getBlobClient(blobItem.value!!.name);        
-        //         await blobClient.downloadToFile(path.join(getUserProfileDir(), blobItem.value!!.name));
-                
-        //     }
-        // });
+        await this.findBlobs(containerClient);
     }
 
-    async listBlobsFlat(
+    /**
+     * Enumerates and downloads the blobs for the supplied container client.
+     * @param containerClient The container client whose blobs we are enumerating.
+     */
+    async findBlobs(
         containerClient: ContainerClient
     ): Promise<void> {
         
@@ -138,5 +136,38 @@ export class TypeAgentServer {
                 }
             }
         }
-    }    
+    }
+    
+    /**
+     * Looks at the local typeagent storage and replicates any file changes to the blob storage
+     */
+    syncLocalStorage() {
+        const blobServiceClient = new BlobServiceClient(
+            this.accountURL,
+            new DefaultAzureCredential()
+        );
+
+        const containerClient: ContainerClient = blobServiceClient.getContainerClient(this.containerName);
+        const fileWriteDebouncer: Map<string, number> = new Map<string, number>();
+
+        fs.watch(
+            getUserDataDir(),
+            { recursive: true, persistent: false },
+            async (_, fileName) => {
+
+                // try to debounce this file write
+                if (fileWriteDebouncer.has(fileName)) {
+                    fileWriteDebouncer.set(fileName, 1)
+                }
+
+
+                let blobName = fileName?.replace(getUserDataDir(), "");
+
+                // Create blob client from container client
+                const blockBlobClient: BlockBlobClient = containerClient.getBlockBlobClient(blobName!!);
+                
+                await blockBlobClient.uploadFile(localFilePath);
+            },
+        );
+    }
 }
