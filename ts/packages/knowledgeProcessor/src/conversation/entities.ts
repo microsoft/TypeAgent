@@ -479,7 +479,7 @@ export async function createEntityIndexOnStorage<TSourceId = string>(
                 options.nameSearchOptions?.maxMatches ?? 0,
                 //options.facetSearchOptions?.maxMatches ?? 0,
             );
-        return topK ?? 3;
+        return topK === undefined || topK < 3 ? 3 : topK;
     }
 }
 
