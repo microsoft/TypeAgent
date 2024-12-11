@@ -28,26 +28,29 @@ RUN apt-get update
 RUN apt install -y gnome-keyring
 RUN curl -sL https://aka.ms/InstallAzureCLIDeb | bash
 
-# blobfuse - https://github.com/Azure/azure-storage-fuse/tree/main
-RUN apt-get update \
-    && apt-get install -y wget apt-utils \
-    && wget https://packages.microsoft.com/config/ubuntu/20.04/packages-microsoft-prod.deb \
-    && dpkg -i packages-microsoft-prod.deb \
-    && apt-get update \
-    && apt-get install -y libfuse3-dev fuse3 libcurl3-gnutls libgnutls30
-
-RUN apt-get install -y blobfuse2
-COPY --from=build /usr/src/app/mount-blobfuse.yaml ./mount-blobfuse.yaml
-RUN mkdir /mnt/blob
-RUN mkdir /blob-cache
+######################################### BLOB STORAGE MOUNT ######################################### 
+## blobfuse - https://github.com/Azure/azure-storage-fuse/tree/main
+## Uncomment the section below to use blobfuse to mount blob storage
+#RUN apt-get update \
+#    && apt-get install -y wget apt-utils \
+#    && wget https://packages.microsoft.com/config/ubuntu/20.04/packages-microsoft-prod.deb \
+#    && dpkg -i packages-microsoft-prod.deb \
+#    && apt-get update \
+#    && apt-get install -y libfuse3-dev fuse3 libcurl3-gnutls libgnutls30
+#
+#RUN apt-get install -y blobfuse2
+#COPY --from=build /usr/src/app/mount-blobfuse.yaml ./mount-blobfuse.yaml
+#RUN mkdir /mnt/blob
+#RUN mkdir /blob-cache
+######################################################################################################
 
 EXPOSE 80:3000
 
 # start actions
 # az login
 RUN echo az login --identity >> start.sh
-# mount blob storage locally
-RUN echo blobfuse2 mount /mnt/blob --config-file=mount-blobfuse.yaml >> start.sh
+## mount blob storage locally
+#RUN echo blobfuse2 mount /mnt/blob --config-file=mount-blobfuse.yaml >> start.sh
 # run getKeys
 RUN echo node ../tools/scripts/getKeys.mjs >> start.sh
 # start API server
