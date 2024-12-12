@@ -2,7 +2,11 @@
 // Licensed under the MIT License.
 
 import { conversation } from "knowledge-processor";
-import { ChatContext, Models } from "./chatMemory.js";
+import {
+    ChatContext,
+    Models,
+    ReservedConversationNames,
+} from "./chatMemory.js";
 import { sqlite } from "memory-providers";
 import {
     arg,
@@ -21,14 +25,13 @@ import { ensureDir, getFileName, writeJsonFile } from "typeagent";
 
 export async function createPodcastMemory(
     models: Models,
-    memoryName: string,
     storePath: string,
     settings: conversation.ConversationSettings,
     useSqlite: boolean = false,
     createNew: boolean = false,
 ) {
     const storageProvider = useSqlite
-        ? await sqlite.createStorageDb(storePath, memoryName + ".db", createNew)
+        ? await sqlite.createStorageDb(storePath, "podcast.db", createNew)
         : undefined;
     return conversation.createConversationManagerEx(
         {
@@ -36,7 +39,7 @@ export async function createPodcastMemory(
             answerModel: models.answerModel,
         },
         settings,
-        memoryName,
+        ReservedConversationNames.podcasts,
         storePath,
         storageProvider,
     );
@@ -70,26 +73,38 @@ export function createPodcastCommands(
         const endAt = startAt
             ? addMinutesToDate(startAt, namedArgs.length)
             : undefined;
+        await importTranscript(sourcePath, startAt, endAt);
+    }
 
+    return;
+    //---
+    // END Commands
+    //--
+    async function importTranscript(
+        sourcePath: string,
+        startAt?: Date | undefined,
+        endAt?: Date | undefined,
+    ) {
         const turns = await conversation.loadTranscriptFile(sourcePath);
         if (startAt && endAt) {
             conversation.timestampTranscriptTurns(turns, startAt, endAt);
         }
 
-        const destFolderPath = path.join(path.dirname(sourcePath), "turns");
+        const transcriptFileName = getFileName(sourcePath);
+        const destFolderPath = path.join(
+            path.dirname(sourcePath),
+            `${transcriptFileName}_turns`,
+        );
         context.printer.writeLine(
             `Saving ${turns.length} turns to ${destFolderPath}`,
         );
         await ensureDir(destFolderPath);
-        const baseFileName = getFileName(sourcePath);
         for (let i = 0; i < turns.length; ++i) {
             let turnFilePath = path.join(
                 destFolderPath,
-                `${baseFileName}_${i + 1}.json`,
+                `${transcriptFileName}_${i + 1}.json`,
             );
             await writeJsonFile(turnFilePath, turns[i]);
         }
     }
-
-    return;
 }
