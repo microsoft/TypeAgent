@@ -15,10 +15,7 @@ import {
     getYMDPrefix,
 } from "../utils/userData.js";
 import ExifReader from "exifreader";
-import {
-    AppAgentState,
-    AppAgentStateOptions,
-} from "./appAgentManager.js";
+import { AppAgentState, AppAgentStateOptions } from "./appAgentManager.js";
 import { cloneConfig, mergeConfig } from "./options.js";
 import { TokenCounter, TokenCounterData } from "aiclient";
 import { DispatcherName } from "./interactiveIO.js";

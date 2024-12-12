@@ -326,7 +326,6 @@ export interface TranslatedAction {
     parameters?: ParamObjectType;
 }
 
-
 /**
  *
  * @param translatorName name to get the translator for.

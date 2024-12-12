@@ -7,7 +7,7 @@ import chalk from "chalk";
 import {
     ActionConfigProvider,
     loadAgentJsonTranslator,
-    TranslatedAction
+    TranslatedAction,
 } from "../../translation/agentTranslators.js";
 import {
     JSONAction,

@@ -6,10 +6,7 @@ import {
     CommandHandlerTable,
 } from "@typeagent/agent-sdk/helpers/command";
 import { CommandHandlerContext } from "../../commandHandlerContext.js";
-import {
-    DispatcherName,
-    NotifyCommands,
-} from "../../interactiveIO.js";
+import { DispatcherName, NotifyCommands } from "../../interactiveIO.js";
 import { ActionContext } from "@typeagent/agent-sdk";
 
 class NotifyInfoCommandHandler implements CommandHandlerNoParams {
