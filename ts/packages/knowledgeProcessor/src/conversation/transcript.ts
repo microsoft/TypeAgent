@@ -8,6 +8,7 @@ import {
     ConversationManager,
     ConversationMessage,
 } from "./conversationManager.js";
+import { Action, KnowledgeResponse } from "./knowledgeSchema.js";
 
 /**
  * A turn in a transcript
@@ -19,6 +20,11 @@ export type TranscriptTurn = {
     timestamp?: string | undefined;
 };
 
+/**
+ * Converts a turn from a transcript into a conversation message
+ * @param turn
+ * @returns
+ */
 export function transcriptTurnToMessage(
     turn: TranscriptTurn,
 ): ConversationMessage {
@@ -26,6 +32,40 @@ export function transcriptTurnToMessage(
         sender: getSpeaker(turn),
         text: getMessageText(turn, true),
         timestamp: dateTime.stringToDate(turn.timestamp),
+        knowledge: transcriptTurnToKnowledge(turn),
+    };
+}
+
+enum TurnVerbs {
+    say = "say",
+}
+
+function transcriptTurnToKnowledge(turn: TranscriptTurn): KnowledgeResponse {
+    return {
+        entities: [],
+        actions: transcriptTurnToActions(turn),
+        inverseActions: [],
+        topics: [],
+    };
+}
+
+function transcriptTurnToActions(turn: TranscriptTurn): Action[] {
+    const actions: Action[] = [];
+    if (turn.speaker && turn.listeners) {
+        for (const listener of turn.listeners) {
+            actions.push(createAction(TurnVerbs.say, turn.speaker, listener));
+        }
+    }
+    return actions;
+}
+
+function createAction(verb: string, from: string, to: string): Action {
+    return {
+        verbs: [verb],
+        verbTense: "past",
+        subjectEntityName: from,
+        objectEntityName: "none",
+        indirectObjectEntityName: to,
     };
 }
 

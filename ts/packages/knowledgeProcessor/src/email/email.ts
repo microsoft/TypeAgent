@@ -28,6 +28,49 @@ import { KnownEntityTypes } from "../conversation/knowledge.js";
 import { StorageProvider } from "../storageProvider.js";
 import { createEntitySearchOptions } from "../conversation/entities.js";
 
+/**
+ * Convert an email to a conversation message
+ * Includes an knowledge that can be automatically extracted from the message
+ * @param email
+ * @returns
+ */
+export function emailToMessage(email: Email): ConversationMessage {
+    const sender = email.from.displayName;
+    return {
+        header: emailHeadersToString(email),
+        text: emailToTextBlock(email, false),
+        knowledge: emailToKnowledge(email),
+        timestamp: dateTime.stringToDate(email.sentOn),
+        sender,
+    };
+}
+
+/**
+ * Convert an email to multiple conversation messages.
+ * Large emails are broken into sub-messages.
+ * @param email
+ * @param maxCharsPerChunk
+ * @returns
+ */
+export function emailToMessages(
+    email: Email,
+    maxCharsPerChunk?: number | undefined,
+): ConversationMessage[] {
+    if (!isValidChunkSize(maxCharsPerChunk)) {
+        return [emailToMessage(email)];
+    }
+
+    const messages: ConversationMessage[] = [];
+    const text = email.body;
+    for (const chunk of splitLargeTextIntoChunks(text, maxCharsPerChunk!)) {
+        const emailChunk: Email = { ...email };
+        emailChunk.body = chunk;
+        messages.push(emailToMessage(emailChunk));
+    }
+
+    return messages;
+}
+
 export function emailAddressToString(address: EmailAddress): string {
     if (address.displayName) {
         return address.address
@@ -397,36 +440,6 @@ export async function addEmailFileToConversation(
         return true;
     }
     return false;
-}
-
-export function emailToMessage(email: Email): ConversationMessage {
-    const sender = email.from.displayName;
-    return {
-        header: emailHeadersToString(email),
-        text: emailToTextBlock(email, false),
-        knowledge: emailToKnowledge(email),
-        timestamp: dateTime.stringToDate(email.sentOn),
-        sender,
-    };
-}
-
-export function emailToMessages(
-    email: Email,
-    maxCharsPerChunk?: number | undefined,
-): ConversationMessage[] {
-    if (!isValidChunkSize(maxCharsPerChunk)) {
-        return [emailToMessage(email)];
-    }
-
-    const messages: ConversationMessage[] = [];
-    const text = email.body;
-    for (const chunk of splitLargeTextIntoChunks(text, maxCharsPerChunk!)) {
-        const emailChunk: Email = { ...email };
-        emailChunk.body = chunk;
-        messages.push(emailToMessage(emailChunk));
-    }
-
-    return messages;
 }
 
 function makeHeader(name: string, text: string | undefined): string {
