@@ -37,7 +37,7 @@ import { WebSocketMessage } from "common-utils";
 import { AzureSpeech } from "./azureSpeech.js";
 import { auth } from "aiclient";
 import {
-    closeLocalWhipser,
+    closeLocalWhisper,
     isLocalWhisperEnabled,
 } from "./localWhisperCommandHandler.js";
 
@@ -318,7 +318,7 @@ function createWindow(): void {
 }
 
 /**
- * Allows the application to gain access to camea devices
+ * Allows the application to gain access to camera devices
  * @param mainWindow the main browser window
  */
 function setupDevicePermissions(mainWindow: BrowserWindow) {
@@ -823,7 +823,7 @@ function setupQuit(dispatcher: Dispatcher) {
         // Unregister all shortcuts.
         globalShortcut.unregisterAll();
 
-        closeLocalWhipser();
+        closeLocalWhisper();
 
         debugShell("Closing dispatcher");
         try {
