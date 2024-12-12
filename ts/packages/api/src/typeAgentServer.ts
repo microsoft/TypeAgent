@@ -15,10 +15,10 @@ import { env } from "node:process";
 import { BlobServiceClient, BlockBlobClient, ContainerClient, ContainerListBlobsOptions } from "@azure/storage-blob";
 import { DefaultAzureCredential } from "@azure/identity";
 import { getEnvSetting, openai } from "aiclient";
-import { StopWatch } from "../../telemetry/dist/stopWatch.js";
+import { StopWatch } from "telemetry";
 import path from "node:path";
 import fs from "node:fs";
-import { isDirectoryPath } from "../../typeagent/dist/objStream.js";
+import { isDirectoryPath } from "typeagent";
 
 export class TypeAgentServer {
     private dispatcher: Dispatcher | undefined;
