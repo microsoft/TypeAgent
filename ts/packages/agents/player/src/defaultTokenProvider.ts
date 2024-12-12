@@ -33,7 +33,7 @@ const baseClientSecret = process.env.SPOTIFY_APP_CLISEC;
 const defaultPort = process.env.SPOTIFY_APP_PORT;
 export async function createTokenProvider(storage?: Storage) {
     if (baseClientId === undefined) {
-        throw new Error("SPOTIFY_APP_CLI not set");
+    throw new Error("SPOTIFY_APP_CLI not set");
     }
 
     if (baseClientSecret === undefined) {
