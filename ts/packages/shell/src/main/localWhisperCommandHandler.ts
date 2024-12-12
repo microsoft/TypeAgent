@@ -103,7 +103,7 @@ async function ensureLocalWhisper() {
     return localWhisperProcess;
 }
 
-export function closeLocalWhipser() {
+export function closeLocalWhisper() {
     if (localWhisperProcess) {
         localWhisperProcess.removeAllListeners();
         localWhisperProcess.kill();
@@ -121,7 +121,7 @@ export function getLocalWhisperCommandHandlers(): CommandHandlerTable {
                 description: "Turn off Local Whisper integration",
                 run: async (context: ActionContext) => {
                     // This is process wide
-                    if (closeLocalWhipser()) {
+                    if (closeLocalWhisper()) {
                         displayResult("Local Whisper disabled.", context);
                     } else {
                         displayWarn(

@@ -163,7 +163,7 @@ class ShellOpenWebContentView implements CommandHandler {
                 break;
             case "crossword":
                 targetUrl = new URL(
-                    "https://www.seattletimes.com/games-nytimes-crossword/",
+                    "https://aka.ms/typeagent/sample-crossword",
                 );
 
                 break;

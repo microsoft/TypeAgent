@@ -25,6 +25,7 @@ export async function getBoardSchema(
     const htmlFragments = await browser.getHtmlFragments();
     const agent = await createCrosswordPageTranslator("GPT_4_O_MINI");
 
+    let firstCandidateFragments = [];
     let candidateFragments = [];
     let pagePromises = [];
 
@@ -39,6 +40,11 @@ export async function getBoardSchema(
         continue;
       }
 
+      firstCandidateFragments.push({
+        frameId: htmlFragments[i].frameId,
+        content: htmlFragments[i].content,
+      });
+
       pagePromises.push(agent.checkIsCrosswordOnPage([htmlFragments[i]]));
     }
 
@@ -51,8 +57,8 @@ export async function getBoardSchema(
         const result = isPresent.data as CrosswordPresence;
         if (result.crossWordPresent) {
           candidateFragments.push({
-            frameId: htmlFragments[i].frameId,
-            content: htmlFragments[i].content,
+            frameId: firstCandidateFragments[i].frameId,
+            content: firstCandidateFragments[i].content,
           });
         }
       }
