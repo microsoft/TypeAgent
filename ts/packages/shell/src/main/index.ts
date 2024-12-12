@@ -37,7 +37,7 @@ import { WebSocketMessage } from "common-utils";
 import { AzureSpeech } from "./azureSpeech.js";
 import { auth } from "aiclient";
 import {
-    closeLocalWhipser,
+    closeLocalWhisper,
     isLocalWhisperEnabled,
 } from "./localWhisperCommandHandler.js";
 
@@ -823,7 +823,7 @@ function setupQuit(dispatcher: Dispatcher) {
         // Unregister all shortcuts.
         globalShortcut.unregisterAll();
 
-        closeLocalWhipser();
+        closeLocalWhisper();
 
         debugShell("Closing dispatcher");
         try {
