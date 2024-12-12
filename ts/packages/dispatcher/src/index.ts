@@ -15,3 +15,4 @@ export type {
     TemplateEditConfig,
     TemplateData,
 } from "./translation/actionTemplate.js";
+export { getUserDataDir } from "./utils/userData.js";

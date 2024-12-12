@@ -1,5 +1,6 @@
 {
   "wwwroot": "../shell/out/renderer",
   "port": 3000,
-  "broadcast": true
+  "broadcast": true,
+  "blobBackupEnabled": true
 }
