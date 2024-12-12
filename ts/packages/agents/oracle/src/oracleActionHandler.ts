@@ -3,20 +3,62 @@
 
 import {
     ActionContext,
+    ActionResult,
     AppAction,
     AppAgent,
-    SessionContext,
-    ActionResult,
+    ParameterDefinitions,
+    ParsedCommandParams,
 } from "@typeagent/agent-sdk";
 import { createActionResultFromTextDisplay } from "@typeagent/agent-sdk/helpers/action";
 import { OracleAction } from "./oracleSchema.js";
+import {
+    CommandHandler,
+    CommandHandlerTable,
+    getCommandInterface,
+} from "@typeagent/agent-sdk/helpers/command";
+
+class RequestCommandHandler implements CommandHandler {
+    public readonly description = "Send a request to the Oracle";
+    public readonly parameters: ParameterDefinitions = {
+        args: {
+            question: {
+                description: "Request for Oracle",
+                type: "string",
+                optional: false,
+                implicitQuotes: true,
+            },
+        },
+    };
+    public async run(
+        context: ActionContext<OracleActionContext>,
+        params: ParsedCommandParams<ParameterDefinitions>,
+    ): Promise<void> {
+        if (typeof params?.args?.question === "string") {
+            const action: OracleAction = {
+                actionName: "queryOracle",
+                parameters: {
+                    query: params.args.question,
+                },
+            };
+            const result = await executeOracleAction(action, context); // Or handleOracleAction?
+            context.actionIO.appendDisplay(result.displayContent);
+        }
+    }
+}
+
+const handlers: CommandHandlerTable = {
+    description: "Oracle commands",
+    defaultSubCommand: "request",
+    commands: {
+        request: new RequestCommandHandler(),
+    },
+};
 
 export function instantiate(): AppAgent {
     return {
         initializeAgentContext: initializeOracleContext,
-        updateAgentContext: updateOracleContext,
         executeAction: executeOracleAction,
-        validateWildcardMatch: validateOracleWildcardMatch,
+        ...getCommandInterface(handlers),
     };
 }
 
@@ -26,13 +68,6 @@ type OracleActionContext = {
 
 async function initializeOracleContext() {
     return { enabled: true };
-}
-
-async function updateOracleContext(
-    enable: boolean,
-    context: SessionContext<OracleActionContext>,
-): Promise<void> {
-    context.agentContext.enabled = enable;
 }
 
 async function executeOracleAction(
@@ -46,13 +81,6 @@ async function executeOracleAction(
     return result;
 }
 
-async function validateOracleWildcardMatch(
-    action: OracleAction,
-    context: SessionContext<OracleActionContext>,
-) {
-    return true;
-}
-
 const oracularResponses = `
 The river flows not where it begins, but where it is drawn by the quiet pull of unseen forces.
 A key fits no lock without the will to turn and the patience to find its groove.
@@ -61,7 +89,7 @@ The flame consumes, but it also warms; what you lose may yet light your way.
 A tree's roots are unseen, yet they hold the strength of its tallest branches.
 The bird does not ask where the wind comes from; it simply rises and soars.
 Stones do not float, but when gathered, they build bridges over the deepest waters.
-A question is like an echo—its answer returns in the shape of what you’ve cast into the void.
+A question is like an echo; its answer returns in the shape of what you’ve cast into the void.
 `
     .trim()
     .split("\n"); // Written by GPT-4o
