@@ -11,11 +11,10 @@ import {
 import { WebAPIClientIO } from "./webClientIO.js";
 import { TypeAgentAPIWebSocketServer } from "./webSocketServer.js";
 import { getDefaultAppAgentProviders } from "agent-dispatcher/internal";
-import { EnvVars } from "../../aiclient/dist/openai.js";
 import { env } from "node:process";
 import { BlobServiceClient, BlockBlobClient, ContainerClient, ContainerListBlobsOptions } from "@azure/storage-blob";
 import { DefaultAzureCredential } from "@azure/identity";
-import { getEnvSetting } from "aiclient";
+import { getEnvSetting, openai } from "aiclient";
 import { StopWatch } from "../../telemetry/dist/stopWatch.js";
 import path from "node:path";
 import fs from "node:fs";
@@ -36,8 +35,8 @@ export class TypeAgentServer {
         dotenv.config({ path: this.envPath });
 
         // blob storage config
-        this.storageAccount = getEnvSetting(env, EnvVars.AZURE_STORAGE_ACCOUNT, undefined, undefined);
-        this.containerName = getEnvSetting(env, EnvVars.AZURE_STORAGE_CONTAINER, undefined, "sessions");
+        this.storageAccount = getEnvSetting(env, openai.EnvVars.AZURE_STORAGE_ACCOUNT, undefined, undefined);
+        this.containerName = getEnvSetting(env, openai.EnvVars.AZURE_STORAGE_CONTAINER, undefined, "sessions");
         this.accountURL = `https://${this.storageAccount}.blob.core.windows.net`;
         
     }
@@ -62,7 +61,7 @@ export class TypeAgentServer {
 
                 sw.stop("Downloaded Session Backup");
             } else {
-                console.warn(`Blob backup enabled but NOT configured.  Missing env var ${EnvVars.AZURE_STORAGE_ACCOUNT}.`);
+                console.warn(`Blob backup enabled but NOT configured.  Missing env var ${openai.EnvVars.AZURE_STORAGE_ACCOUNT}.`);
             }
         }        
 

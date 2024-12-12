@@ -6,7 +6,7 @@ TypeAgent API is a HTTP+WS API server for **TypeAgent sample code**. It explores
 
 ## Running
 
-After setting up and building at the workspace root, there are several additional ways to start the server in this directory.
+After setting up and building at the workspace root, there are several additional ways to start the server in this directory. It is also possible to use the [docker image](../../Dockerfile) to host TypeAgent either locally or in a cloud hosted environment such as [Azure App Service](https://learn.microsoft.com/en-us/azure/app-service/quickstart-custom-container?tabs=dotnet&pivots=container-linux-vscode).
 
 ### Globally Link the package
 
