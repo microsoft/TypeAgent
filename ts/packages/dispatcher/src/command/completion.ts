@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import registerDebug from "debug";
-import { CommandHandlerContext } from "../handlers/common/commandHandlerContext.js";
+import { CommandHandlerContext } from "../context/commandHandlerContext.js";
 
 import {
     CommandDescriptor,

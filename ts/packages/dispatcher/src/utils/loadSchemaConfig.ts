@@ -3,7 +3,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { getPackageFilePath } from "../utils/getPackageFilePath.js";
+import { getPackageFilePath } from "./getPackageFilePath.js";
 
 export function readSchemaConfig(schemaFile: string): string | undefined {
     const parseSchemaFile = path.parse(getPackageFilePath(schemaFile));

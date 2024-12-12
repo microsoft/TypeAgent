@@ -23,7 +23,7 @@ type Entry = {
 
 export type EmbeddingCache = Map<string, NormalizedEmbedding>;
 
-export class ActionSchemaSementicMap {
+export class ActionSchemaSemanticMap {
     private readonly actionSementicMap = new Map<string, Entry>();
     private readonly model: TextEmbeddingModel;
     public constructor(model?: TextEmbeddingModel) {

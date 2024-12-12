@@ -6,7 +6,7 @@ import {
     CommandDescriptorTable,
 } from "@typeagent/agent-sdk";
 import chalk from "chalk";
-import { CommandHandlerContext } from "../internal.js";
+import { CommandHandlerContext } from "../context/commandHandlerContext.js";
 import {
     getFlagType,
     isCommandDescriptorTable,

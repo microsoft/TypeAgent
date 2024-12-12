@@ -22,14 +22,13 @@ import {
 } from "common-utils";
 
 import registerDebug from "debug";
-import { HistoryContext } from "agent-cache";
-import { createTypeAgentRequestPrompt } from "../handlers/common/chatHistoryPrompt.js";
+import { HistoryContext, ParamObjectType } from "agent-cache";
+import { createTypeAgentRequestPrompt } from "../context/chatHistoryPrompt.js";
 import {
     composeActionSchema,
     composeSelectedActionSchema,
     createActionJsonTranslatorFromSchemaDef,
 } from "./actionSchemaJsonTranslator.js";
-import { TranslatedAction } from "../handlers/requestCommandHandler.js";
 import {
     ActionSchemaTypeDefinition,
     generateActionSchema,
@@ -320,6 +319,13 @@ export type TypeAgentTranslator<T = object> = {
         cb?: IncrementalJsonValueCallBack,
     ) => Promise<Result<T>>;
 };
+
+// TranslatedAction are actions returned from the LLM without the translator name
+export interface TranslatedAction {
+    actionName: string;
+    parameters?: ParamObjectType;
+}
+
 
 /**
  *
