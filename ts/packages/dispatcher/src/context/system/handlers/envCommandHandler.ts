@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { CommandHandlerNoParams, CommandHandlerTable } from "@typeagent/agent-sdk/helpers/command";
-import { CommandHandlerContext } from "./common/commandHandlerContext.js";
+import { CommandHandlerContext } from "../../commandHandlerContext.js";
 import { ActionContext } from "@typeagent/agent-sdk";
 import { displayResult } from "@typeagent/agent-sdk/helpers/display";
 import dotenv from "dotenv";
