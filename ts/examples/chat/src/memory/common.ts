@@ -95,6 +95,14 @@ export function argDestFile(defaultValue?: string | undefined): ArgDef {
     };
 }
 
+export function argDestFolder(defaultValue?: string | undefined): ArgDef {
+    return {
+        description: "Path to destination folder",
+        type: "string",
+        defaultValue,
+    };
+}
+
 export function argConcurrency(value: number): ArgDef {
     return {
         description: "Concurrency",

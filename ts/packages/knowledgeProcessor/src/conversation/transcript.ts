@@ -1,9 +1,13 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { readAllText, readJsonFile } from "typeagent";
+import { dateTime, readAllText, readJsonFile, writeJsonFiles } from "typeagent";
 import { TextBlock, TextBlockType } from "../text.js";
 import { splitIntoLines } from "../textChunker.js";
+import {
+    ConversationManager,
+    ConversationMessage,
+} from "./conversationManager.js";
 
 /**
  * A turn in a transcript
@@ -13,6 +17,16 @@ export type TranscriptTurn = {
     speech: TextBlock;
     timestamp?: string | undefined;
 };
+
+export function transcriptTurnToMessage(
+    turn: TranscriptTurn,
+): ConversationMessage {
+    return {
+        sender: getSpeaker(turn),
+        text: getMessageText(turn),
+        timestamp: dateTime.stringToDate(turn.timestamp),
+    };
+}
 
 /**
  * A transcript of a conversation contains turns. Splits a transcript file into individual turns
@@ -71,7 +85,7 @@ export function splitTranscriptIntoTurns(transcript: string): TranscriptTurn[] {
  * @param filePath
  * @returns
  */
-export async function loadTranscriptFile(
+export async function loadTurnsFromTranscriptFile(
     filePath: string,
 ): Promise<TranscriptTurn[]> {
     const turns = splitTranscriptIntoTurns(await readAllText(filePath));
@@ -80,10 +94,23 @@ export async function loadTranscriptFile(
     return turns;
 }
 
+/**
+ * Load a transcript turn
+ * @param filePath
+ * @returns
+ */
 export async function loadTranscriptTurn(
     filePath: string,
 ): Promise<TranscriptTurn | undefined> {
     return readJsonFile<TranscriptTurn>(filePath);
+}
+
+export async function saveTranscriptTurns(
+    destFolderPath: string,
+    baseFileName: string,
+    turns: TranscriptTurn[],
+) {
+    await writeJsonFiles(destFolderPath, baseFileName, turns);
 }
 
 /**
@@ -127,14 +154,35 @@ export function timestampTranscriptTurns(
  */
 export function splitTranscriptIntoBlocks(transcript: string): TextBlock[] {
     const turns = splitTranscriptIntoTurns(transcript);
-    return turns.map((t) => {
-        if (t.speaker === "None") {
-            return t.speech;
-        } else {
-            return {
-                type: t.speech.type,
-                value: t.speaker + ":\n" + t.speech.value,
-            };
+    return turns.map((t) => getMessageText(t));
+}
+
+export async function addTranscriptTurnsToConversation(
+    cm: ConversationManager,
+    turns: TranscriptTurn | TranscriptTurn[],
+): Promise<void> {
+    const messages: ConversationMessage[] = [];
+    if (Array.isArray(turns)) {
+        for (const turn of turns) {
+            messages.push(transcriptTurnToMessage(turn));
         }
-    });
+    } else {
+        messages.push(transcriptTurnToMessage(turns));
+    }
+    await cm.addMessageBatch(messages);
+}
+
+function getSpeaker(t: TranscriptTurn) {
+    return t.speaker === "None" ? undefined : t.speaker;
+}
+
+function getMessageText(t: TranscriptTurn) {
+    if (t.speaker === "None") {
+        return t.speech;
+    } else {
+        return {
+            type: t.speech.type,
+            value: t.speaker + ":\n" + t.speech.value,
+        };
+    }
 }

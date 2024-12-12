@@ -710,7 +710,7 @@ export async function createTopicIndexOnStorage<
     ): Promise<TopicSearchResult<TopicId>> {
         // We will just use the standard topic stuff for now, since that does the same thing
         const allTerms = getAllTermsInFilter(filter);
-        const useSourceName = false;
+        const useSourceName = true;
         let sourceName = getSubjectFromActionTerm(filter.action);
         if (!isValidEntityName(sourceName)) {
             sourceName = undefined;

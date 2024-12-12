@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { openai } from "aiclient";
+import { readJsonFile, removeFile, writeJsonFile } from "typeagent";
 
 export type ItemIndexingStats = {
     name?: string | undefined;
@@ -81,4 +82,34 @@ export function createIndexingStats(
             total_tokens: 0,
         };
     }
+}
+
+/**
+ * Load indexing stats from a file
+ * @param statsFilePath
+ * @param clean
+ * @returns
+ */
+export async function loadIndexingStats(
+    statsFilePath: string,
+    clean: boolean,
+): Promise<IndexingStats> {
+    let stats: IndexingStats | undefined;
+    if (clean) {
+        await removeFile(statsFilePath);
+    } else {
+        stats = await readJsonFile<IndexingStats>(statsFilePath);
+    }
+    return createIndexingStats(stats);
+}
+
+export async function saveIndexingStats(
+    stats: IndexingStats,
+    statsFilePath: string,
+    clean: boolean,
+) {
+    if (clean) {
+        await removeFile(statsFilePath);
+    }
+    await writeJsonFile(statsFilePath, stats);
 }

@@ -16,6 +16,7 @@ import {
     generateTimestampString,
 } from "./objectFolder";
 import { slices } from "../lib/array";
+import { pause } from "../async";
 
 export interface WorkQueue {
     onError?: (err: any) => void;
@@ -26,11 +27,13 @@ export interface WorkQueue {
         concurrency: number,
         processor: (item: Path, index: number, total: number) => Promise<void>,
         maxItems?: number,
+        pauseMs?: number,
     ): Promise<number>;
     drainTask(
         concurrency: number,
         processor: (task: any, index: number, total: number) => Promise<void>,
         maxItems?: number,
+        pauseMs?: number,
     ): Promise<number>;
     requeue(): Promise<boolean>;
     requeueErrors(): Promise<boolean>;
@@ -83,6 +86,7 @@ export async function createWorkQueueFolder(
         concurrency: number,
         processor: (task: any, index: number, total: number) => Promise<void>,
         maxItems?: number,
+        pauseMs?: number,
     ) {
         return drain(
             concurrency,
@@ -91,6 +95,7 @@ export async function createWorkQueueFolder(
                 processor(task, index, total);
             },
             maxItems,
+            pauseMs,
         );
     }
 
@@ -98,6 +103,7 @@ export async function createWorkQueueFolder(
         concurrency: number,
         processor: (item: Path, index: number, total: number) => Promise<void>,
         maxItems?: number,
+        pauseMs?: number,
     ): Promise<number> {
         let fileNames = await fs.promises.readdir(queuePath);
         if (workItemFilter) {
@@ -116,6 +122,9 @@ export async function createWorkQueueFolder(
                 concurrency,
                 processFile,
             );
+            if (pauseMs && pauseMs > 0) {
+                await pause(pauseMs);
+            }
         }
         return successCount;
 
