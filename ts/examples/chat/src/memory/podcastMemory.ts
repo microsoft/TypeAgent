@@ -74,7 +74,7 @@ export function createPodcastCommands(
 ): void {
     commands.importPodcast = importPodcast;
     commands.podcastConvert = podcastConvert;
-    commands.prodcastIndex = podcastIndex;
+    commands.podcastIndex = podcastIndex;
     //-----------
     // COMMANDS
     //---------
@@ -89,10 +89,11 @@ export function createPodcastCommands(
                 length: argNum("Length of the podcast in minutes", 60),
                 clean: argClean(),
                 maxTurns: argNum("Max turns"),
-                pauseMs: argPause(),
+                pauseMs: argPause(1000),
             },
         };
     }
+    commands.importPodcast.metadata = importPodcastDef();
     async function importPodcast(args: string[]): Promise<void> {
         const namedArgs = parseNamedArguments(args, importPodcastDef());
         let sourcePath: string = namedArgs.sourcePath;
@@ -139,11 +140,11 @@ export function createPodcastCommands(
             options: {
                 clean: argClean(),
                 maxTurns: argNum("Max turns"),
-                pauseMs: argPause(),
+                pauseMs: argPause(1000),
             },
         };
     }
-    commands.importPodcast.metadata = podcastIndexDef();
+    commands.podcastIndex.metadata = podcastIndexDef();
     async function podcastIndex(args: string[] | NamedArgs) {
         const namedArgs = parseNamedArguments(args, podcastIndexDef());
         let sourcePath: string = namedArgs.sourcePath;

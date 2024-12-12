@@ -135,10 +135,10 @@ export function argClean(defaultValue = false): ArgDef {
     };
 }
 
-export function argPause(): ArgDef {
+export function argPause(defaultValue = 0): ArgDef {
     return {
         type: "number",
-        defaultValue: 0,
+        defaultValue,
         description: "Pause for given milliseconds after each iteration",
     };
 }
