@@ -32,7 +32,7 @@ import { getHistoryCommandHandlers } from "./handlers/historyCommandHandler.js";
 import { TraceCommandHandler } from "./handlers/traceCommandHandler.js";
 import { getRandomCommandHandlers } from "./handlers/randomCommandHandler.js";
 import { getNotifyCommandHandlers } from "./handlers/notifyCommandHandler.js";
-import { processRequests } from "agent-dispatcher/helpers/console";
+import { processCommands } from "agent-dispatcher/helpers/console";
 import {
     getDefaultSubCommandDescriptor,
     getParsedCommand,
@@ -159,7 +159,7 @@ class RunCommandScriptHandler implements CommandHandler {
             systemContext.batchMode = true;
 
             // Process the commands in the file.
-            await processRequests(
+            await processCommands(
                 getPrompt,
                 processCommandNoLock,
                 systemContext,
