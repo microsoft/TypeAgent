@@ -41,6 +41,7 @@ import {
 } from "./common.js";
 import { createEmailCommands, createEmailMemory } from "./emailMemory.js";
 import { pathToFileURL } from "url";
+import { createPodcastCommands } from "./podcastMemory.js";
 
 export type Models = {
     chatModel: ChatModel;
@@ -307,6 +308,7 @@ export async function runChatMemory(): Promise<void> {
         tokenLog,
     };
     createEmailCommands(context, commands);
+    createPodcastCommands(context, commands);
     addStandardHandlers(commands);
 
     function onStart(io: InteractiveIo): void {

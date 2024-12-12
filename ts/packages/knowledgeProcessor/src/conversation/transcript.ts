@@ -1,8 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { dateTime } from "typeagent";
-import { TextBlock, TextBlockType, timestampTextBlocks } from "../text.js";
+import { readAllText, readJsonFile } from "typeagent";
+import { TextBlock, TextBlockType } from "../text.js";
 import { splitIntoLines } from "../textChunker.js";
 
 /**
@@ -11,6 +11,7 @@ import { splitIntoLines } from "../textChunker.js";
 export type TranscriptTurn = {
     speaker: string;
     speech: TextBlock;
+    timestamp?: string | undefined;
 };
 
 /**
@@ -34,7 +35,7 @@ export function splitTranscriptIntoTurns(transcript: string): TranscriptTurn[] {
     for (const line of lines) {
         const match = regex.exec(line);
         if (match && match.groups) {
-            const speaker = match.groups["speaker"];
+            let speaker = match.groups["speaker"];
             const speech = match.groups["speech"];
             if (turn) {
                 if (speaker) {
@@ -46,6 +47,9 @@ export function splitTranscriptIntoTurns(transcript: string): TranscriptTurn[] {
                 }
             }
             if (!turn) {
+                if (speaker && speaker.endsWith(":")) {
+                    speaker = speaker.slice(0, speaker.length - 1);
+                }
                 turn = {
                     speaker: speaker ?? "None",
                     speech: {
@@ -60,6 +64,57 @@ export function splitTranscriptIntoTurns(transcript: string): TranscriptTurn[] {
         turns.push(turn);
     }
     return turns;
+}
+
+/**
+ * Load turns from a transcript file
+ * @param filePath
+ * @returns
+ */
+export async function loadTranscriptFile(
+    filePath: string,
+): Promise<TranscriptTurn[]> {
+    const turns = splitTranscriptIntoTurns(await readAllText(filePath));
+    const sourceId = [filePath];
+    turns.forEach((t) => (t.speech.sourceIds = sourceId));
+    return turns;
+}
+
+export async function loadTranscriptTurn(
+    filePath: string,
+): Promise<TranscriptTurn | undefined> {
+    return readJsonFile<TranscriptTurn>(filePath);
+}
+
+/**
+ * Text (such as a transcript) can be collected over a time range.
+ * This text can be partitioned into blocks. However, timestamps for individual blocks are not available.
+ * Assigns individual timestamps to blocks proportional to their lengths.
+ * @param turns Transcript turns to assign timestamps to
+ * @param startTimestamp starting
+ * @param endTimestamp
+ */
+export function timestampTranscriptTurns(
+    turns: TranscriptTurn[],
+    startTimestamp: Date,
+    endTimestamp: Date,
+): void {
+    let startTicks = startTimestamp.getTime();
+    const ticksLength = endTimestamp.getTime() - startTicks;
+    if (ticksLength <= 0) {
+        throw new Error(`${startTimestamp} is not < ${endTimestamp}`);
+    }
+    const textLength: number = turns.reduce(
+        (total: number, t) => total + t.speech.value.length,
+        0,
+    );
+    const ticksPerChar = ticksLength / textLength;
+    for (let turn of turns) {
+        turn.timestamp = new Date(startTicks).toISOString();
+        // Now, we will 'elapse' time .. proportional to length of the text
+        // This assumes that each speaker speaks equally fast...
+        startTicks += ticksPerChar * turn.speech.value.length;
+    }
 }
 
 /**
@@ -78,32 +133,8 @@ export function splitTranscriptIntoBlocks(transcript: string): TextBlock[] {
         } else {
             return {
                 type: t.speech.type,
-                value: t.speaker + "\n" + t.speech.value,
+                value: t.speaker + ":\n" + t.speech.value,
             };
         }
     });
-}
-
-/**
- * Splits a transcript into timestamped blocks, assigning individual timestamps to blocks
- * that are proportional to their length
- * @param transcript
- * @param startTimestamp
- * @param endTimestamp
- * @returns
- */
-export function splitTranscriptIntoTimestampedBlocks(
-    transcript: string,
-    startTimestamp: Date,
-    endTimestamp: Date,
-): dateTime.Timestamped<TextBlock>[] {
-    const textBlocks = splitTranscriptIntoBlocks(transcript);
-    return [
-        ...timestampTextBlocks(
-            textBlocks,
-            transcript.length,
-            startTimestamp,
-            endTimestamp,
-        ),
-    ];
 }

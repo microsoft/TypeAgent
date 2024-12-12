@@ -9,7 +9,7 @@ import {
     ItemIndexingStats,
     SourceTextBlock,
 } from "knowledge-processor";
-import { asyncArray, ChatUserInterface } from "typeagent";
+import { asyncArray, ChatUserInterface, dateTime } from "typeagent";
 
 export async function pause(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
@@ -141,6 +141,16 @@ export function argChunkSize(defaultValue?: number | undefined): ArgDef {
         defaultValue,
         description: "Text chunk size",
     };
+}
+
+export function argToDate(value: string | undefined): Date | undefined {
+    return value ? dateTime.stringToDate(value) : undefined;
+}
+
+export function addMinutesToDate(date: Date, minutes: number): Date {
+    const time = date.getTime();
+    const offsetMs = minutes * 60 * 1000;
+    return new Date(time + offsetMs);
 }
 
 export function createChatUx(

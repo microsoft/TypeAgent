@@ -105,34 +105,3 @@ export function* flattenTimestampedBlocks<TSourceId>(
         }
     }
 }
-
-/**
- * Text (such as a transcript) can be collected over a time range.
- * This text can be partitioned into blocks. However, timestamps for individual blocks are not available.
- * Assigns individual timestamps to blocks proportional to their lengths.
- * @param blocks text blocks extracted from source text
- * @param textLength Length of the text from which the blocks were extracted
- * @param startTimestamp starting
- * @param endTimestamp
- */
-export function* timestampTextBlocks(
-    blocks: Iterable<TextBlock>,
-    textLength: number,
-    startTimestamp: Date,
-    endTimestamp: Date,
-): IterableIterator<dateTime.Timestamped<TextBlock>> {
-    let startTicks = startTimestamp.getTime();
-    const ticksLength = endTimestamp.getTime() - startTicks;
-    if (ticksLength <= 0) {
-        throw new Error(`${startTimestamp} is not < ${endTimestamp}`);
-    }
-    const ticksPerChar = ticksLength / textLength;
-    for (let block of blocks) {
-        const timestamp = new Date(startTicks);
-        yield {
-            timestamp,
-            value: block,
-        };
-        startTicks += ticksPerChar * block.value.length;
-    }
-}
