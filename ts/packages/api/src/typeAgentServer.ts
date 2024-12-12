@@ -19,6 +19,7 @@ import { getEnvSetting } from "aiclient";
 import { StopWatch } from "../../telemetry/dist/stopWatch.js";
 import path from "node:path";
 import fs from "node:fs";
+import { isDirectoryPath } from "../../typeagent/dist/objStream.js";
 
 export class TypeAgentServer {
     private dispatcher: Dispatcher | undefined;
@@ -28,15 +29,17 @@ export class TypeAgentServer {
     private storageAccount: string;
     private containerName: string;
     private accountURL: string;
+    private fileWriteDebouncer: Map<string, number> = new Map<string, number>();
 
     constructor(private envPath: string) {
         // typeAgent config
         dotenv.config({ path: this.envPath });
 
         // blob storage config
-        this.storageAccount = getEnvSetting(env, EnvVars.AZURE_STORAGE_ACCOUNT);
+        this.storageAccount = getEnvSetting(env, EnvVars.AZURE_STORAGE_ACCOUNT, undefined, undefined);
         this.containerName = getEnvSetting(env, EnvVars.AZURE_STORAGE_CONTAINER, undefined, "sessions");
         this.accountURL = `https://${this.storageAccount}.blob.core.windows.net`;
+        
     }
 
     async start() {
@@ -48,14 +51,19 @@ export class TypeAgentServer {
 
         // restore & enable session backup?
         if (config.blobBackupEnabled) {
-            const sw = new StopWatch();
-            sw.start("Downloading Session Backup");
 
-            await this.syncBlobStorage();  
-            
-            this.syncLocalStorage();
+            if (this.storageAccount !== undefined) {
+                const sw = new StopWatch();
+                sw.start("Downloading Session Backup");
 
-            sw.stop("Downloaded Session Backup");
+                await this.syncBlobStorage();  
+                
+                this.startLocalStorageBackup();
+
+                sw.stop("Downloaded Session Backup");
+            } else {
+                console.warn(`Blob backup enabled but NOT configured.  Missing env var ${EnvVars.AZURE_STORAGE_ACCOUNT}.`);
+            }
         }        
 
         // dispatcher
@@ -130,8 +138,9 @@ export class TypeAgentServer {
                         fs.mkdirSync(dir, { recursive: true });
                     }
   
+                    // only download the file if it doesn't already exist
                     if (!fs.existsSync(filePath)) {
-                        await blobClient.downloadToFile(filePath, 0, undefined, );                
+                        await blobClient.downloadToFile(filePath, 0);                
                     }
                 }
             }
@@ -141,33 +150,75 @@ export class TypeAgentServer {
     /**
      * Looks at the local typeagent storage and replicates any file changes to the blob storage
      */
-    syncLocalStorage() {
-        const blobServiceClient = new BlobServiceClient(
-            this.accountURL,
-            new DefaultAzureCredential()
-        );
-
-        const containerClient: ContainerClient = blobServiceClient.getContainerClient(this.containerName);
-        const fileWriteDebouncer: Map<string, number> = new Map<string, number>();
-
+    startLocalStorageBackup() {
         fs.watch(
             getUserDataDir(),
             { recursive: true, persistent: false },
             async (_, fileName) => {
 
-                // try to debounce this file write
-                if (fileWriteDebouncer.has(fileName)) {
-                    fileWriteDebouncer.set(fileName, 1)
+                if (fileName === undefined || fileName === null || fileName?.toLowerCase().endsWith(".lock") || isDirectoryPath(path.join(getUserDataDir(), fileName!!))) {
+                    console.log(`Invalid file: ${fileName}`);
+                    return;
                 }
 
+                // start a debouncer for the file writes
+                if (!this.fileWriteDebouncer.has(fileName!!)) {
+                    this.fileWriteDebouncer.set(fileName!!, 0);
+                }
 
-                let blobName = fileName?.replace(getUserDataDir(), "");
+                // increase refcount
+                let refCount: number = this.fileWriteDebouncer.get(fileName!!) as number;
+                this.fileWriteDebouncer.set(fileName!!, ++refCount);
+
+                // debounce the file after some timeout
+                this.debounceFileThenUpload(fileName!!);
+            },
+        );
+    }
+
+    /**
+     * Debounces the refcount on a file write operation and then uploads the file to blob storage
+     * when the refcount is at zero
+     * @param fileName The file name to debounce then upload
+     */
+    debounceFileThenUpload(fileName: string) {
+        setTimeout(async () => {
+            if (!this.fileWriteDebouncer.has(fileName)) {
+                return;
+            }
+
+            // drop the file bounce counter by one
+            this.fileWriteDebouncer.set(fileName, this.fileWriteDebouncer.get(fileName)!! - 1);
+
+            // if the file hasn't been touched for the given timeout we can start uploading it
+            const debounceCount: number = this.fileWriteDebouncer.get(fileName)!!;
+            if (debounceCount == 0) {
+
+                const blobServiceClient = new BlobServiceClient(
+                    this.accountURL,
+                    new DefaultAzureCredential()
+                );
+        
+                const containerClient: ContainerClient = blobServiceClient.getContainerClient(this.containerName);                        
+
+                let blobName = fileName.replace(getUserDataDir(), "");
 
                 // Create blob client from container client
                 const blockBlobClient: BlockBlobClient = containerClient.getBlockBlobClient(blobName!!);
                 
-                await blockBlobClient.uploadFile(localFilePath);
-            },
-        );
+                try {
+                    const localPath: string = path.join(getUserDataDir(), fileName)
+                    await blockBlobClient.uploadFile(localPath);
+                    console.log(`Done uploading ${fileName} to ${blobName}`);
+                } catch (e) {
+                    console.log(e);
+                }
+                
+                // remove the file from the debouncer
+                this.fileWriteDebouncer.delete(fileName);
+            } else {
+                this.debounceFileThenUpload(fileName);
+            }
+        }, 5000);
     }
 }
