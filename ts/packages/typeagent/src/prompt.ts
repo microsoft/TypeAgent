@@ -6,6 +6,7 @@
 import { PromptSection } from "typechat";
 import { MessageSourceRole } from "./message";
 import { toJsonLine } from "./objStream";
+import { CircularArray } from "./lib/array";
 
 /**
  * Create Prompt Sections from given strings
@@ -86,44 +87,6 @@ export function getPreambleLength(preamble?: string | PromptSection[]): number {
         }
     }
     return 0;
-}
-
-/**
- * Given chat history, select messages that could go into context
- * @param history Chat history
- * @param maxContextLength max number of characters available for history
- * @param maxWindowLength maximum size of the chat context window...
- */
-export function* getContextFromHistory(
-    history: PromptSection[],
-    maxContextLength: number,
-    maxWindowLength: number = Number.MAX_VALUE,
-): IterableIterator<PromptSection> {
-    let totalLength = 0;
-    let sectionCount = 0;
-    let i: number = history.length - 1;
-    // Get the range of sections that could be pushed on, NEWEST first
-    while (i >= 0) {
-        const nextLength = history[i].content.length;
-        if (
-            nextLength + totalLength > maxContextLength ||
-            sectionCount >= maxWindowLength
-        ) {
-            ++i;
-            break;
-        }
-        totalLength += nextLength;
-        ++sectionCount;
-        --i;
-    }
-    if (i < 0) {
-        i = 0;
-    }
-    // Now that we know the range of messages that could be in context.
-    // We yield them oldest first, since the model wants to see them in order
-    for (; i < history.length; ++i) {
-        yield history[i];
-    }
 }
 
 /**
@@ -334,4 +297,75 @@ export function createPromptSectionBuilder(
 
 export interface PromptSectionProvider {
     getSections(request: string): Promise<PromptSection[]>;
+}
+
+export interface ChatHistory extends Iterable<PromptSection> {
+    readonly length: number;
+    get(index: number): PromptSection;
+    getEntries(maxEntries?: number): PromptSection[];
+    push(message: PromptSection): void;
+}
+
+/**
+ * Creates a chat history with a maximum past history using a circular buffer
+ * @param maxPastMessages
+ * @param savedHistory Saved history, if any.. ordered by oldest message first
+ * @returns
+ */
+export function createChatHistory(
+    maxPastMessages: number,
+    savedHistory?: Iterable<PromptSection> | undefined,
+): ChatHistory {
+    const history = new CircularArray<PromptSection>(maxPastMessages);
+    if (savedHistory) {
+        for (const entry of history) {
+            history.push(entry);
+        }
+    }
+    return history;
+}
+
+/**
+ * Given chat history, select messages that could go into context
+ * @param history Chat history
+ * @param maxContextLength max number of characters available for history
+ * @param maxWindowLength maximum size of the chat context window...
+ */
+export function* getContextFromHistory(
+    history: PromptSection[] | ChatHistory,
+    maxContextLength: number,
+    maxWindowLength: number = Number.MAX_VALUE,
+): IterableIterator<PromptSection> {
+    let totalLength = 0;
+    let sectionCount = 0;
+    let i: number = history.length - 1;
+    // Get the range of sections that could be pushed on, NEWEST first
+    while (i >= 0) {
+        const nextLength = getEntry(history, i).content.length;
+        if (
+            nextLength + totalLength > maxContextLength ||
+            sectionCount >= maxWindowLength
+        ) {
+            ++i;
+            break;
+        }
+        totalLength += nextLength;
+        ++sectionCount;
+        --i;
+    }
+    if (i < 0) {
+        i = 0;
+    }
+    // Now that we know the range of messages that could be in context.
+    // We yield them oldest first, since the model wants to see them in order
+    for (; i < history.length; ++i) {
+        yield getEntry(history, i);
+    }
+
+    function getEntry(
+        history: PromptSection[] | ChatHistory,
+        index: number,
+    ): PromptSection {
+        return Array.isArray(history) ? history[index] : history.get(index);
+    }
 }

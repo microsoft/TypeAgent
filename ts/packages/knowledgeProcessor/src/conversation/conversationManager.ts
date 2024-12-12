@@ -40,6 +40,7 @@ import { TermFilter } from "./knowledgeTermSearchSchema.js";
 import { TopicMerger } from "./topics.js";
 import { logError } from "../diagnostics.js";
 import assert from "assert";
+import { StorageProvider } from "../storageProvider.js";
 
 export type ConversationMessage = {
     /**
@@ -440,6 +441,30 @@ export async function createConversationManager(
             fallbackSearch: { maxMatches: maxMessages },
         };
     }
+}
+
+export async function createConversationManagerEx(
+    settings: ConversationManagerSettings,
+    conversationSettings: ConversationSettings,
+    name: string,
+    rootPath: string,
+    storageProvider?: StorageProvider,
+) {
+    const conversation = await createConversation(
+        conversationSettings,
+        rootPath,
+        undefined,
+        undefined,
+        storageProvider,
+    );
+    const cm = await createConversationManager(
+        settings,
+        name,
+        rootPath,
+        false,
+        conversation,
+    );
+    return cm;
 }
 
 /**

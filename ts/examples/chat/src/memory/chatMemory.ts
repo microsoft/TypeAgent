@@ -41,6 +41,7 @@ import {
 } from "./common.js";
 import { createEmailCommands, createEmailMemory } from "./emailMemory.js";
 import { pathToFileURL } from "url";
+import { createPodcastCommands, createPodcastMemory } from "./podcastMemory.js";
 
 export type Models = {
     chatModel: ChatModel;
@@ -68,6 +69,7 @@ export type ChatContext = {
     searcher: knowLib.conversation.ConversationSearchProcessor;
     searchMemory?: knowLib.conversation.ConversationManager;
     emailMemory: knowLib.conversation.ConversationManager;
+    podcastMemory: knowLib.conversation.ConversationManager;
 };
 
 export enum ReservedConversationNames {
@@ -75,6 +77,7 @@ export enum ReservedConversationNames {
     outlook = "outlook",
     play = "play",
     search = "search",
+    podcasts = "podcasts",
 }
 
 function isReservedConversation(context: ChatContext): boolean {
@@ -82,7 +85,8 @@ function isReservedConversation(context: ChatContext): boolean {
         context.conversationName === ReservedConversationNames.transcript ||
         context.conversationName === ReservedConversationNames.play ||
         context.conversationName === ReservedConversationNames.search ||
-        context.conversationName === ReservedConversationNames.outlook
+        context.conversationName === ReservedConversationNames.outlook ||
+        context.conversationName === ReservedConversationNames.podcasts
     );
 }
 
@@ -95,6 +99,8 @@ function getReservedConversation(
             break;
         case ReservedConversationNames.outlook:
             return context.emailMemory;
+        case ReservedConversationNames.podcasts:
+            return context.podcastMemory;
     }
     return undefined;
 }
@@ -183,6 +189,13 @@ export async function createChatMemoryContext(
             actionTopK,
         ),
         emailMemory: await createEmailMemory(
+            models,
+            storePath,
+            conversationSettings,
+            true,
+            false,
+        ),
+        podcastMemory: await createPodcastMemory(
             models,
             storePath,
             conversationSettings,
@@ -307,6 +320,7 @@ export async function runChatMemory(): Promise<void> {
         tokenLog,
     };
     createEmailCommands(context, commands);
+    createPodcastCommands(context, commands);
     addStandardHandlers(commands);
 
     function onStart(io: InteractiveIo): void {
@@ -329,7 +343,7 @@ export async function runChatMemory(): Promise<void> {
                 (q) => printer.writeJson(q),
             );
             if (results) {
-                await writeSearchTermsResult(results, true);
+                printer.writeSearchTermsResult(results);
             } else {
                 printer.writeLine("No matches");
             }
@@ -1130,7 +1144,7 @@ export async function runChatMemory(): Promise<void> {
                 eval: argBool("Evaluate search query", true),
                 debug: argBool("Show debug info", false),
                 save: argBool("Save the search", false),
-                v2: argBool("Run V2 match", true),
+                v2: argBool("Run V2 match", false),
                 chunk: argBool("Use chunking", true),
             },
         };
@@ -1366,7 +1380,7 @@ export async function runChatMemory(): Promise<void> {
             return undefined;
         }
         printer.writeLine();
-        await writeSearchTermsResult(result, namedArgs.debug);
+        printer.writeSearchTermsResult(result, namedArgs.debug);
         if (result.response && result.response.answer) {
             if (namedArgs.save && recordAnswer) {
                 let answer = result.response.answer.answer;
@@ -1379,31 +1393,6 @@ export async function runChatMemory(): Promise<void> {
             }
         }
         return result.response;
-    }
-
-    async function writeSearchTermsResult(
-        result:
-            | conversation.SearchTermsActionResponse
-            | conversation.SearchTermsActionResponseV2,
-        debug: boolean,
-    ) {
-        if (result.response && result.response.answer) {
-            writeResultStats(result.response);
-            if (result.response.answer.answer) {
-                const answer = result.response.answer.answer;
-                printer.writeInColor(
-                    result.response.fallbackUsed ? chalk.gray : chalk.green,
-                    answer,
-                );
-            } else if (result.response.answer.whyNoAnswer) {
-                const answer = result.response.answer.whyNoAnswer;
-                printer.writeInColor(chalk.red, answer);
-            }
-            printer.writeLine();
-            if (debug) {
-                printer.writeSearchResponse(result.response);
-            }
-        }
     }
 
     async function writeSearchResponse(
@@ -1463,44 +1452,6 @@ export async function runChatMemory(): Promise<void> {
                     links = undefined;
                 }
                 printer.writeList(links, { type: "ul" });
-            }
-        }
-    }
-
-    function writeResultStats(
-        response: conversation.SearchResponse | undefined,
-    ): void {
-        if (response !== undefined) {
-            const allTopics = response.getTopics();
-            if (allTopics && allTopics.length > 0) {
-                printer.writeLine(`Topic Hit Count: ${allTopics.length}`);
-            } else {
-                const topicIds = new Set(response.allTopicIds());
-                printer.writeLine(`Topic Hit Count: ${topicIds.size}`);
-            }
-            const allEntities = response.getEntities();
-            if (allEntities && allEntities.length > 0) {
-                printer.writeLine(`Entity Hit Count: ${allEntities.length}`);
-            } else {
-                const entityIds = new Set(response.allEntityIds());
-                printer.writeLine(
-                    `Entity to Message Hit Count: ${entityIds.size}`,
-                );
-            }
-            const allActions = response.getActions();
-            //const allActions = [...response.allActionIds()];
-            if (allActions && allActions.length > 0) {
-                printer.writeLine(`Action Hit Count: ${allActions.length}`);
-            } else {
-                const actionIds = new Set(response.allActionIds());
-                printer.writeLine(
-                    `Action to Message Hit Count: ${actionIds.size}`,
-                );
-            }
-            if (response.messages) {
-                printer.writeLine(
-                    `Message Hit Count: ${response.messages ? response.messages.length : 0}`,
-                );
             }
         }
     }

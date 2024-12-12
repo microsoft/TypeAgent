@@ -10,12 +10,13 @@ import {
     removeFile,
     writeJsonFile,
 } from "../objStream";
-import { slices } from "../lib/array";
 import { asyncArray } from "..";
 import {
     createFileNameGenerator,
     generateTimestampString,
 } from "./objectFolder";
+import { slices } from "../lib/array";
+import { pause } from "../async";
 
 export interface WorkQueue {
     onError?: (err: any) => void;
@@ -23,16 +24,16 @@ export interface WorkQueue {
     count(): Promise<number>;
     addTask(obj: any): Promise<void>;
     drain(
-        batchSize: number,
         concurrency: number,
         processor: (item: Path, index: number, total: number) => Promise<void>,
         maxItems?: number,
+        pauseMs?: number,
     ): Promise<number>;
     drainTask(
-        batchSize: number,
         concurrency: number,
         processor: (task: any, index: number, total: number) => Promise<void>,
         maxItems?: number,
+        pauseMs?: number,
     ): Promise<number>;
     requeue(): Promise<boolean>;
     requeueErrors(): Promise<boolean>;
@@ -82,27 +83,27 @@ export async function createWorkQueueFolder(
     }
 
     async function drainTask(
-        batchSize: number,
         concurrency: number,
         processor: (task: any, index: number, total: number) => Promise<void>,
         maxItems?: number,
+        pauseMs?: number,
     ) {
         return drain(
-            batchSize,
             concurrency,
             async (item, index, total) => {
                 const task = await readJsonFile(item);
                 processor(task, index, total);
             },
             maxItems,
+            pauseMs,
         );
     }
 
     async function drain(
-        batchSize: number,
         concurrency: number,
         processor: (item: Path, index: number, total: number) => Promise<void>,
         maxItems?: number,
+        pauseMs?: number,
     ): Promise<number> {
         let fileNames = await fs.promises.readdir(queuePath);
         if (workItemFilter) {
@@ -114,13 +115,16 @@ export async function createWorkQueueFolder(
         const total = fileNames.length;
         let startAt = 0;
         let successCount = 0;
-        for (let slice of slices(fileNames, batchSize)) {
+        for (let slice of slices(fileNames, concurrency)) {
             startAt = slice.startAt;
             await asyncArray.forEachAsync(
                 slice.value,
                 concurrency,
                 processFile,
             );
+            if (pauseMs && pauseMs > 0) {
+                await pause(pauseMs);
+            }
         }
         return successCount;
 

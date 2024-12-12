@@ -18,6 +18,7 @@ import { GenericExplanationResult } from "../index.js";
 import { ConstructionStore, ConstructionStoreImpl } from "./store.js";
 import { ExplainerFactory } from "./factory.js";
 import { getLanguageTools } from "../utils/language.js";
+import { NamespaceKeyFilter } from "../constructions/constructionCache.js";
 
 export type ProcessExplanationResult = {
     explanation: GenericExplanationResult;
@@ -131,6 +132,7 @@ export class AgentCache {
         reject: (reason?: any) => void;
     }>;
 
+    private readonly namespaceKeyFilter?: NamespaceKeyFilter;
     private readonly logger: Telemetry.Logger | undefined;
     public model?: string;
     constructor(
@@ -158,6 +160,16 @@ export class AgentCache {
                   explainerName,
               })
             : undefined;
+
+        if (schemaInfoProvider) {
+            this.namespaceKeyFilter = (namespaceKey) => {
+                const [schemaName, hash] = namespaceKey.split(",");
+                return (
+                    schemaInfoProvider.getActionSchemaFileHash(schemaName) ===
+                    hash
+                );
+            };
+        }
     }
 
     public get constructionStore(): ConstructionStore {
@@ -168,6 +180,16 @@ export class AgentCache {
         return getSchemaNamespaceKeys(schemaNames, this.schemaInfoProvider);
     }
 
+    public getInfo() {
+        return this._constructionStore.getInfo(this.namespaceKeyFilter);
+    }
+    public async prune() {
+        if (this.namespaceKeyFilter === undefined) {
+            throw new Error("Cannon prune cache without schema info provider");
+        }
+
+        return this._constructionStore.prune(this.namespaceKeyFilter);
+    }
     private getExplainerForActions(actions: Actions) {
         return this.getExplainerForTranslator(
             actions.translatorNames,
@@ -253,15 +275,16 @@ export class AgentCache {
                             "  \n",
                         )}`;
                     }
+                    const info = this.getInfo();
                     this.logger?.logEvent("construction", {
                         added,
                         message,
                         config: this._constructionStore.getConfig(),
-                        count: this._constructionStore.getInfo()
-                            ?.constructionCount,
-                        builtInCount:
-                            this._constructionStore.getInfo()
-                                ?.builtInConstructionCount,
+                        count: info?.constructionCount,
+                        filteredCount: info?.filteredConstructionCount,
+                        builtInCount: info?.builtInConstructionCount,
+                        filteredBuiltinCount:
+                            info?.filteredBuiltInConstructionCount,
                     });
                 }
                 return {

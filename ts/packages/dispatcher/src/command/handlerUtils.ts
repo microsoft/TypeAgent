@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { ActionContext } from "@typeagent/agent-sdk";
-import { CommandHandlerContext } from "../handlers/common/commandHandlerContext.js";
+import { CommandHandlerContext } from "../context/commandHandlerContext.js";
 import { CommandHandlerTable } from "@typeagent/agent-sdk/helpers/command";
 import { displaySuccess } from "@typeagent/agent-sdk/helpers/display";
 

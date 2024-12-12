@@ -2,13 +2,14 @@
 // Licensed under the MIT License.
 
 import { openai } from "aiclient";
-import { ArgDef } from "interactive-app";
+import { ChalkInstance } from "chalk";
+import { ArgDef, askYesNo, InteractiveIo } from "interactive-app";
 import {
     conversation,
     ItemIndexingStats,
     SourceTextBlock,
 } from "knowledge-processor";
-import { asyncArray } from "typeagent";
+import { asyncArray, ChatUserInterface, dateTime } from "typeagent";
 
 export async function pause(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
@@ -94,6 +95,14 @@ export function argDestFile(defaultValue?: string | undefined): ArgDef {
     };
 }
 
+export function argDestFolder(defaultValue?: string | undefined): ArgDef {
+    return {
+        description: "Path to destination folder",
+        type: "string",
+        defaultValue,
+    };
+}
+
 export function argConcurrency(value: number): ArgDef {
     return {
         description: "Concurrency",
@@ -140,4 +149,48 @@ export function argChunkSize(defaultValue?: number | undefined): ArgDef {
         defaultValue,
         description: "Text chunk size",
     };
+}
+
+export function argToDate(value: string | undefined): Date | undefined {
+    return value ? dateTime.stringToDate(value) : undefined;
+}
+
+export function addMinutesToDate(date: Date, minutes: number): Date {
+    const time = date.getTime();
+    const offsetMs = minutes * 60 * 1000;
+    return new Date(time + offsetMs);
+}
+
+export function createChatUx(
+    io: InteractiveIo,
+    inputColor?: ChalkInstance | undefined,
+): ChatUserInterface {
+    return {
+        showMessage,
+        askYesNo: (q) => askYesNo(io, q),
+        getInput,
+    };
+
+    async function showMessage(message: string): Promise<void> {
+        io.writer.writeLine(message);
+    }
+
+    async function getInput(message: string): Promise<string | undefined> {
+        if (inputColor) {
+            message = inputColor(message);
+        }
+        return io.readline.question(message + "\n");
+    }
+}
+
+export function getSearchQuestion(
+    result:
+        | conversation.SearchTermsActionResponse
+        | conversation.SearchTermsActionResponseV2,
+): string | undefined {
+    if (result.action && result.action.actionName === "getAnswer") {
+        const params = result.action.parameters;
+        return (params as any).question;
+    }
+    return undefined;
 }

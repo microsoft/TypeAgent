@@ -7,16 +7,16 @@ import {
     RequestId,
     DispatcherName,
     makeClientIOMessage,
-} from "../handlers/common/interactiveIO.js";
+} from "../context/interactiveIO.js";
 import { getDefaultExplainerName } from "agent-cache";
-import { CommandHandlerContext } from "../handlers/common/commandHandlerContext.js";
+import { CommandHandlerContext } from "../context/commandHandlerContext.js";
 
 import {
     CommandDescriptor,
     CommandDescriptors,
     CommandDescriptorTable,
 } from "@typeagent/agent-sdk";
-import { executeCommand } from "../action/actionHandlers.js";
+import { executeCommand } from "../execute/actionHandlers.js";
 import { isCommandDescriptorTable } from "@typeagent/agent-sdk/helpers/command";
 import { RequestMetrics } from "../utils/metrics.js";
 import { parseParams } from "./parameters.js";
@@ -157,8 +157,8 @@ async function parseCommand(
 ) {
     let input = originalInput.trim();
     if (!input.startsWith("@")) {
-        // default to dispatcher request
-        input = `dispatcher request ${input}`;
+        const requestHandlerAgent = context.session.getConfig().request;
+        input = `${requestHandlerAgent} request ${input}`;
     } else {
         input = input.substring(1);
     }
@@ -281,6 +281,10 @@ export const enum unicodeChar {
     convert = "🔄",
 }
 export function getSettingSummary(context: CommandHandlerContext) {
+    if (context.session.getConfig().request !== DispatcherName) {
+        const requestAgentName = context.session.getConfig().request;
+        return `{{${context.agents.getActionConfig(requestAgentName).emojiChar} ${requestAgentName.toUpperCase()}}}`;
+    }
     const prompt: string[] = [unicodeChar.robotFace];
 
     const names = context.agents.getActiveSchemas();

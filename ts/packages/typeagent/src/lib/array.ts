@@ -226,6 +226,15 @@ export function* mapIterate<T, TResult>(
     }
 }
 
+/**
+ * A Circular Array (Buffer) {@link https://en.wikipedia.org/wiki/Circular_buffer})
+ * Useful for implementing:
+ *  - Fixed length queues that automatically drop FIFO items when limit is hit 
+ *  - Buffers for "windowing" functions in streaming, chat histories etc. 
+ * Properties:
+ *  - Maximum allowed length
+ *  - Once maximum length is reached, a push replaces the oldest item (FIFO order)
+ */
 export class CircularArray<T> implements Iterable<T> {
     private buffer: T[];
     private count: number;
@@ -238,11 +247,19 @@ export class CircularArray<T> implements Iterable<T> {
         this.head = 0;
         this.tail = this.count;
     }
-
+    
+    /**
+     * Array length
+     */
     public get length(): number {
         return this.count;
     }
 
+    /**
+     * Return i'th item in the circular buffer
+     * @param index 
+     * @returns 
+     */
     public get(index: number): T {
         if (index >= this.count) {
             throw new Error(`${index} is out of range`);
@@ -250,11 +267,34 @@ export class CircularArray<T> implements Iterable<T> {
         return this.buffer[this.relativeToHead(index)];
     }
 
-    // Method to set an item at a given index
+    /**
+     * Returns a shallow copy of all items in the circular buffer
+     */
+    public getEntries(maxEntries?: number): T[] {
+        let arrayLength = this.length;
+        if (maxEntries) {
+            arrayLength = Math.min(arrayLength, maxEntries);
+        }
+        const entries: T[] = [];
+        for (let i = 0; i < arrayLength; ++i) {
+            entries.push(this.get(i));
+        }
+        return entries;
+    }
+
+    /**
+     * Method to set an item at a given index
+     * @param index 
+     * @param value 
+     */
     public set(index: number, value: T): void {
         this.buffer[this.relativeToHead(index)] = value;
     }
 
+    /**
+     * Push item onto the array. If array is full, replaces the oldest (in FIFO order) item in the array
+     * @param item 
+     */
     public push(item: T): void {
         if (this.isFull()) {
             // Queue is full. Drop the oldest item

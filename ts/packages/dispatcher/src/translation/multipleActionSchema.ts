@@ -3,7 +3,7 @@
 
 import { TranslatorSchemaDef } from "common-utils";
 import { AppAction } from "@typeagent/agent-sdk";
-import { TranslatedAction } from "../handlers/requestCommandHandler.js";
+import { TranslatedAction } from "./agentTranslators.js";
 import {
     ActionSchemaTypeDefinition,
     ActionSchemaUnion,

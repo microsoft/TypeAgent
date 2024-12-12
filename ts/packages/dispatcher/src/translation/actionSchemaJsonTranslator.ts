@@ -2,7 +2,6 @@
 // Licensed under the MIT License.
 
 import { error, Result, success, TypeChatJsonValidator } from "typechat";
-import { TranslatedAction } from "../handlers/requestCommandHandler.js";
 import {
     ActionSchemaFile,
     generateActionSchema,
@@ -23,6 +22,7 @@ import {
     ActionConfigProvider,
     ActionConfig,
     createChangeAssistantActionSchema,
+    TranslatedAction,
 } from "./agentTranslators.js";
 import { createMultipleActionSchema } from "./multipleActionSchema.js";
 

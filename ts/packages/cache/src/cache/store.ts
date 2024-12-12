@@ -12,7 +12,10 @@ import { CacheConfig, CacheOptions } from "./cache.js";
 import { ExplainerFactory } from "./factory.js";
 import { SchemaInfoProvider } from "../explanation/schemaInfoProvider.js";
 import { ConstructionCache } from "../indexBrowser.js";
-import { MatchOptions } from "../constructions/constructionCache.js";
+import {
+    MatchOptions,
+    NamespaceKeyFilter,
+} from "../constructions/constructionCache.js";
 import {
     PrintOptions,
     printConstructionCache,
@@ -51,8 +54,10 @@ type ConstructionStoreInfo = {
     filePath: string | undefined;
     modified: boolean;
     constructionCount: number;
+    filteredConstructionCount: number;
     builtInCacheFilePath: string | undefined;
     builtInConstructionCount: number | undefined;
+    filteredBuiltInConstructionCount: number | undefined;
     config: CacheConfig;
 };
 
@@ -75,7 +80,6 @@ export interface ConstructionStore {
     save(filePath?: string): Promise<boolean>;
     clear(): void;
 
-    getInfo(): ConstructionStoreInfo | undefined;
     print(options: PrintOptions): void;
 
     // Editing
@@ -270,17 +274,27 @@ export class ConstructionStoreImpl implements ConstructionStore {
         await this.doAutoSave();
     }
 
-    public getInfo() {
+    public getInfo(
+        filter?: NamespaceKeyFilter,
+    ): ConstructionStoreInfo | undefined {
         if (this.cache === undefined) {
             return undefined;
         }
 
+        const constructionCount = this.cache.count;
+        const builtInConstructionCount = this.builtInCache?.count;
         return {
             filePath: this.filePath,
             modified: this.modified,
             constructionCount: this.cache.count,
+            filteredConstructionCount: filter
+                ? this.cache.getFilteredCount(filter)
+                : constructionCount,
             builtInCacheFilePath: this.builtInCacheFilePath,
-            builtInConstructionCount: this.builtInCache?.count,
+            builtInConstructionCount,
+            filteredBuiltInConstructionCount: filter
+                ? this.builtInCache?.getFilteredCount(filter)
+                : builtInConstructionCount,
             config: this.getConfig(),
         };
     }
@@ -365,5 +379,16 @@ export class ConstructionStoreImpl implements ConstructionStore {
             }
         }
         return matches;
+    }
+
+    public async prune(filter: (namespaceKey: string) => boolean) {
+        if (this.cache === undefined) {
+            throw new Error("Construction cache not initialized");
+        }
+
+        const count = this.cache.prune(filter);
+        this.modified = true;
+        await this.doAutoSave();
+        return count;
     }
 }

@@ -3,11 +3,16 @@
 
 import * as knowLib from "knowledge-processor";
 import { conversation } from "knowledge-processor";
-import { InteractiveIo } from "interactive-app";
+import {
+    InteractiveIo,
+    millisecondsToString,
+    StopWatch,
+} from "interactive-app";
 import { collections, dateTime } from "typeagent";
 import { ChatPrinter } from "../chatPrinter.js";
 import chalk, { ChalkInstance } from "chalk";
 import { pathToFileURL } from "url";
+import { getSearchQuestion } from "./common.js";
 
 export class ChatMemoryPrinter extends ChatPrinter {
     constructor(io: InteractiveIo) {
@@ -252,5 +257,82 @@ export class ChatMemoryPrinter extends ChatPrinter {
         if (response.messages) {
             this.writeTemporalBlocks(chalk.cyan, response.messages);
         }
+    }
+
+    public writeResultStats(
+        response: conversation.SearchResponse | undefined,
+    ): void {
+        if (response !== undefined) {
+            const allTopics = response.getTopics();
+            if (allTopics && allTopics.length > 0) {
+                this.writeLine(`Topic Hit Count: ${allTopics.length}`);
+            } else {
+                const topicIds = new Set(response.allTopicIds());
+                this.writeLine(`Topic Hit Count: ${topicIds.size}`);
+            }
+            const allEntities = response.getEntities();
+            if (allEntities && allEntities.length > 0) {
+                this.writeLine(`Entity Hit Count: ${allEntities.length}`);
+            } else {
+                const entityIds = new Set(response.allEntityIds());
+                this.writeLine(
+                    `Entity to Message Hit Count: ${entityIds.size}`,
+                );
+            }
+            const allActions = response.getActions();
+            //const allActions = [...response.allActionIds()];
+            if (allActions && allActions.length > 0) {
+                this.writeLine(`Action Hit Count: ${allActions.length}`);
+            } else {
+                const actionIds = new Set(response.allActionIds());
+                this.writeLine(
+                    `Action to Message Hit Count: ${actionIds.size}`,
+                );
+            }
+            if (response.messages) {
+                this.writeLine(
+                    `Message Hit Count: ${response.messages ? response.messages.length : 0}`,
+                );
+            }
+        }
+    }
+
+    public writeSearchTermsResult(
+        result:
+            | conversation.SearchTermsActionResponse
+            | conversation.SearchTermsActionResponseV2,
+        debug: boolean = false,
+    ) {
+        const question = getSearchQuestion(result);
+        if (question) {
+            this.writeInColor(chalk.cyanBright, `Question: ${question}`);
+            this.writeLine();
+        }
+        if (result.response && result.response.answer) {
+            this.writeResultStats(result.response);
+            if (result.response.answer.answer) {
+                const answer = result.response.answer.answer;
+                this.writeInColor(
+                    result.response.fallbackUsed ? chalk.gray : chalk.green,
+                    answer,
+                );
+            } else if (result.response.answer.whyNoAnswer) {
+                const answer = result.response.answer.whyNoAnswer;
+                this.writeInColor(chalk.red, answer);
+            }
+            this.writeLine();
+            if (debug) {
+                this.writeSearchResponse(result.response);
+            }
+        }
+    }
+
+    public writeIndexingMetrics(
+        stats: knowLib.IndexingStats,
+        totalItems: number,
+        timing: StopWatch,
+    ): void {
+        const status = `[${timing.elapsedString()}, ${millisecondsToString(stats!.totalStats.timeMs, "m")} for ${totalItems} items]`;
+        this.writeInColor(chalk.green, status);
     }
 }
