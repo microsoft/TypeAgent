@@ -29,6 +29,8 @@ import {
     ensureDir,
     getFileName,
     isDirectoryPath,
+    isFilePath,
+    removeDir,
 } from "typeagent";
 import { runImportQueue } from "./importer.js";
 import chalk from "chalk";
@@ -70,12 +72,42 @@ export function createPodcastCommands(
     context: ChatContext,
     commands: Record<string, CommandHandler>,
 ): void {
-    commands.podcastConvert = podcastConvert;
     commands.importPodcast = importPodcast;
+    commands.podcastConvert = podcastConvert;
+    commands.prodcastIndex = podcastIndex;
     //-----------
     // COMMANDS
     //---------
-    function podcastParseDef(): CommandMetadata {
+    function importPodcastDef(): CommandMetadata {
+        return {
+            description: "Import a podcast transcript.",
+            args: {
+                sourcePath: argSourceFileOrFolder(),
+            },
+            options: {
+                startAt: arg("Start date and time"),
+                length: argNum("Length of the podcast in minutes", 60),
+                clean: argClean(),
+                maxTurns: argNum("Max turns"),
+                pauseMs: argPause(),
+            },
+        };
+    }
+    async function importPodcast(args: string[]): Promise<void> {
+        const namedArgs = parseNamedArguments(args, importPodcastDef());
+        let sourcePath: string = namedArgs.sourcePath;
+        if (!isFilePath(sourcePath)) {
+            context.printer.writeError(`${sourcePath} is not a file`);
+            return;
+        }
+
+        await podcastConvert(namedArgs);
+        const turnsFilePath = getTurnsFolderPath(sourcePath);
+        namedArgs.sourcePath = turnsFilePath;
+        await podcastIndex(namedArgs);
+    }
+
+    function podcastConvertDef(): CommandMetadata {
         return {
             description: "Parse a podcast transcript into turns and save them.",
             args: {
@@ -87,9 +119,9 @@ export function createPodcastCommands(
             },
         };
     }
-    commands.podcastConvert.metadata = podcastParseDef();
-    async function podcastConvert(args: string[]): Promise<void> {
-        const namedArgs = parseNamedArguments(args, podcastParseDef());
+    commands.podcastConvert.metadata = podcastConvertDef();
+    async function podcastConvert(args: string[] | NamedArgs): Promise<void> {
+        const namedArgs = parseNamedArguments(args, podcastConvertDef());
         const sourcePath = namedArgs.sourcePath;
         const startAt = argToDate(namedArgs.startAt);
         const endAt = startAt
@@ -98,7 +130,7 @@ export function createPodcastCommands(
         await importTranscript(sourcePath, startAt, endAt);
     }
 
-    function importPodcastDef(): CommandMetadata {
+    function podcastIndexDef(): CommandMetadata {
         return {
             description: "Import podcast turns from a folder",
             args: {
@@ -111,15 +143,20 @@ export function createPodcastCommands(
             },
         };
     }
-    commands.importPodcast.metadata = importPodcastDef();
-    async function importPodcast(args: string[]) {
-        const namedArgs = parseNamedArguments(args, importPodcastDef());
+    commands.importPodcast.metadata = podcastIndexDef();
+    async function podcastIndex(args: string[] | NamedArgs) {
+        const namedArgs = parseNamedArguments(args, podcastIndexDef());
         let sourcePath: string = namedArgs.sourcePath;
         let isDir = isDirectoryPath(sourcePath);
         if (isDir) {
-            await indexTurns(namedArgs, sourcePath);
+            await indexTurns(
+                sourcePath,
+                namedArgs.maxItems ?? Number.MAX_SAFE_INTEGER,
+                namedArgs.pauseMs,
+                namedArgs.clean,
+            );
         } else {
-            context.printer.writeLine("Individual files not supported yet.");
+            context.printer.writeError(`${sourcePath} is not a directory`);
         }
     }
     return;
@@ -128,25 +165,29 @@ export function createPodcastCommands(
     // END Commands
     //--
 
-    async function indexTurns(namedArgs: NamedArgs, sourcePath: string) {
+    async function indexTurns(
+        sourcePath: string,
+        maxItems: number,
+        pauseMs?: number,
+        clean?: boolean,
+    ) {
         if (!sourcePath.endsWith("turns")) {
             sourcePath = path.join(sourcePath, "turns");
         }
         context.printer.writeInColor(chalk.cyan, "Adding turns to memory");
-        if (namedArgs.clean) {
+        if (clean) {
             await context.podcastMemory.clear(true);
         }
         const queue = await createWorkQueueFolder(
             path.dirname(sourcePath),
             path.basename(sourcePath),
         );
-        const maxItems = namedArgs.maxItems ?? Number.MAX_SAFE_INTEGER;
         await runImportQueue(
             queue,
             getStatsFilePath(),
-            namedArgs.clean,
+            clean ?? false,
             maxItems,
-            namedArgs.pauseMs,
+            pauseMs ?? 0,
             context.printer,
             async (filePath) => {
                 const turn = await conversation.loadTranscriptTurn(filePath);
@@ -178,19 +219,28 @@ export function createPodcastCommands(
             conversation.timestampTranscriptTurns(turns, startAt, endAt);
         }
         const transcriptFileName = getFileName(sourcePath);
-        const destFolderPath = path.join(
-            path.dirname(sourcePath),
-            transcriptFileName,
-            "turns",
+        await removeDir(
+            path.join(path.dirname(sourcePath), transcriptFileName),
         );
+        const turnsFolderPath = getTurnsFolderPath(sourcePath);
         context.printer.writeLine(
-            `Saving ${turns.length} turns to ${destFolderPath}`,
+            `Saving ${turns.length} turns to ${turnsFolderPath}`,
         );
         await conversation.saveTranscriptTurns(
-            destFolderPath,
+            turnsFolderPath,
             transcriptFileName,
             turns,
         );
+    }
+
+    function getTurnsFolderPath(transcriptFilePath: string) {
+        const transcriptFileName = getFileName(transcriptFilePath);
+        const turnsFolderPath = path.join(
+            path.dirname(transcriptFilePath),
+            transcriptFileName,
+            "turns",
+        );
+        return turnsFolderPath;
     }
 
     function getStatsFilePath() {
