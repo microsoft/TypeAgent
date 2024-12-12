@@ -760,6 +760,9 @@ async function toggleSiteTranslator(targetTab: chrome.tabs.Tab) {
                 "https://www.denverpost.com/games/daily-crossword",
             ) ||
             targetTab.url.startsWith(
+                "https://www.denverpost.com/puzzles/?amu=/iwin-crossword",
+            ) ||
+            targetTab.url.startsWith(
                 "https://www.bestcrosswords.com/bestcrosswords/guestconstructor",
             )
         ) {

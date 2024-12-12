@@ -7,6 +7,7 @@ import {
   ActionContext,
   AppAction,
   AppAgent,
+  AppAgentEvent,
   SessionContext,
 } from "@typeagent/agent-sdk";
 import { createActionResult } from "@typeagent/agent-sdk/helpers/action";
@@ -99,6 +100,18 @@ async function updateBrowserContext(
                 context.agentContext.crossWordState =
                   await getBoardSchema(context);
                 sendSiteTranslatorStatus(data.body, "initialized", context);
+
+                if (context.agentContext.crossWordState) {
+                  context.notify(
+                    AppAgentEvent.Info,
+                    "Crossword board initialized.",
+                  );
+                } else {
+                  context.notify(
+                    AppAgentEvent.Error,
+                    "Crossword board initialization failed.",
+                  );
+                }
               }
               await context.toggleTransientAgent(data.body, true);
               break;
