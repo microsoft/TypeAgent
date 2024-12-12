@@ -5,19 +5,15 @@ import { Args, Command, Flags } from "@oclif/core";
 import {
     getSchemaNamesFromDefaultAppAgentProviders,
     getCacheFactory,
-    processCommand,
-    getPrompt,
-    initializeCommandHandlerContext,
-    CommandHandlerContext,
-    closeCommandHandlerContext,
     getDefaultAppAgentProviders,
 } from "agent-dispatcher/internal";
 import inspector from "node:inspector";
 import { getChatModelNames } from "aiclient";
 import {
-    processRequests,
+    processCommands,
     createConsoleClientIO,
 } from "agent-dispatcher/helpers/console";
+import { createDispatcher, Dispatcher } from "agent-dispatcher";
 
 const modelNames = await getChatModelNames();
 
@@ -66,13 +62,13 @@ export default class Interactive extends Command {
             inspector.open(undefined, undefined, true);
         }
 
-        let context: CommandHandlerContext | undefined;
-
         const schemas = flags.translator
             ? Object.fromEntries(flags.translator.map((name) => [name, true]))
             : undefined;
+
+        let closeDispatcher: Dispatcher | undefined;
         try {
-            context = await initializeCommandHandlerContext("cli interactive", {
+            const dispatcher = await createDispatcher("cli interactive", {
                 appAgentProviders: getDefaultAppAgentProviders(),
                 schemas,
                 translation: { model: flags.model },
@@ -81,26 +77,28 @@ export default class Interactive extends Command {
                 enableServiceHost: true,
                 clientIO: createConsoleClientIO(),
             });
+            closeDispatcher = dispatcher;
 
             if (args.input) {
-                await processCommand(`@run ${args.input}`, context);
+                await dispatcher.processCommand(`@run ${args.input}`);
                 if (flags.exit) {
                     return;
                 }
             }
 
-            await processRequests<CommandHandlerContext>(
-                getPrompt,
-                processCommand,
-                context,
+            await processCommands(
+                () => dispatcher.getPrompt(),
+                (command: string, dispatcher: Dispatcher) =>
+                    dispatcher.processCommand(command),
+                dispatcher,
             );
         } finally {
-            if (context) {
-                await closeCommandHandlerContext(context);
+            if (closeDispatcher) {
+                await closeDispatcher.close();
             }
         }
 
-        // Some background network (like monogo) might keep the process live, exit explicitly.
+        // Some background network (like mongo) might keep the process live, exit explicitly.
         process.exit(0);
     }
 }

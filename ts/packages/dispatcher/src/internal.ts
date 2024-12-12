@@ -9,9 +9,7 @@ export {
     CommandHandlerContext,
 } from "./context/commandHandlerContext.js";
 export {
-    processCommand,
     getSettingSummary,
-    getPrompt,
     getTranslatorNameToEmojiMap,
 } from "./command/command.js";
 export { getCacheFactory } from "./utils/cacheFactory.js";
