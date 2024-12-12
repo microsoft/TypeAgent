@@ -1,10 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { getPackageFilePath } from "../utils/getPackageFilePath.js";
+import { getPackageFilePath } from "./getPackageFilePath.js";
 import fs from "node:fs";
 import { glob } from "glob";
-import type { AgentInfo } from "../agent/npmAgentProvider.js";
+import type { AgentInfo } from "../agentProvider/npmAgentProvider.js";
 
 export type ExplainerConfig = {
     constructions?: {

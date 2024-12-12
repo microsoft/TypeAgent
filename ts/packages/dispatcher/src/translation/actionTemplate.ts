@@ -3,7 +3,7 @@
 
 import { Action, Actions } from "agent-cache";
 import { getActionSchema } from "./actionSchemaFileCache.js";
-import { CommandHandlerContext } from "../internal.js";
+import { CommandHandlerContext } from "../context/commandHandlerContext.js";
 import {
     TemplateFieldStringUnion,
     TemplateSchema,

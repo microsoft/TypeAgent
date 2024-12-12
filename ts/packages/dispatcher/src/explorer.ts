@@ -7,4 +7,4 @@ export {
     getSessionCacheDirPath,
     getSessionsDirPath,
     getSessionDirPath,
-} from "./session/session.js";
+} from "./context/session.js";
