@@ -141,7 +141,7 @@ export class AppAgentManager implements ActionConfigProvider {
     private readonly injectedSchemaForActionName = new Map<string, string>();
     private readonly emojis: Record<string, string> = {};
     private readonly transientAgents: Record<string, boolean | undefined> = {};
-    private readonly actionSementicMap?: ActionSchemaSemanticMap;
+    private readonly actionSemanticMap?: ActionSchemaSemanticMap;
     private readonly actionSchemaFileCache;
 
     public constructor(cacheDirPath: string | undefined) {
@@ -152,7 +152,7 @@ export class AppAgentManager implements ActionConfigProvider {
         );
 
         try {
-            this.actionSementicMap = new ActionSchemaSemanticMap();
+            this.actionSemanticMap = new ActionSchemaSemanticMap();
         } catch (e) {
             if (process.env.NODE_ENV !== "test") {
                 console.log("Failed to create action semantic map", e);
@@ -228,7 +228,7 @@ export class AppAgentManager implements ActionConfigProvider {
         filter: (schemaName: string) => boolean = (schemaName) =>
             this.isSchemaActive(schemaName),
     ) {
-        return this.actionSementicMap?.nearestNeighbors(
+        return this.actionSemanticMap?.nearestNeighbors(
             request,
             maxMatches,
             filter,
@@ -257,9 +257,9 @@ export class AppAgentManager implements ActionConfigProvider {
                 const actionSchemaFile =
                     this.actionSchemaFileCache.getActionSchemaFile(config);
 
-                if (this.actionSementicMap) {
+                if (this.actionSemanticMap) {
                     semanticMapP.push(
-                        this.actionSementicMap.addActionSchemaFile(
+                        this.actionSemanticMap.addActionSchemaFile(
                             config,
                             actionSchemaFile,
                             actionEmbeddingCache,
@@ -295,7 +295,7 @@ export class AppAgentManager implements ActionConfigProvider {
     }
 
     public getActionEmbeddings() {
-        return this.actionSementicMap?.embeddings();
+        return this.actionSemanticMap?.embeddings();
     }
     public tryGetActionConfig(mayBeSchemaName: string) {
         return this.actionConfigs.get(mayBeSchemaName);

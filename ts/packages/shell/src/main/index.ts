@@ -318,7 +318,7 @@ function createWindow(): void {
 }
 
 /**
- * Allows the application to gain access to camea devices
+ * Allows the application to gain access to camera devices
  * @param mainWindow the main browser window
  */
 function setupDevicePermissions(mainWindow: BrowserWindow) {
