@@ -24,7 +24,7 @@ file_cache:
 
 attr_cache:
   timeout-sec: 3600
-  
+
 azstorage:
   type: block
   use-http: false

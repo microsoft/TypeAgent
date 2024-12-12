@@ -349,7 +349,7 @@ const systemHandlers: CommandHandlerTable = {
         random: getRandomCommandHandlers(),
         notify: getNotifyCommandHandlers(),
         token: getTokenCommandHandlers(),
-        env: new EnvCommandHandler()
+        env: new EnvCommandHandler(),
     },
 };
 
