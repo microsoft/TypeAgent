@@ -332,7 +332,7 @@ export class ChatMemoryPrinter extends ChatPrinter {
         totalItems: number,
         timing: StopWatch,
     ): void {
-        const status = `[${timing.elapsedString()}, ${millisecondsToString(stats!.totalStats.timeMs, "m")} for ${totalItems} items.]`;
+        const status = `[${timing.elapsedString()}, ${millisecondsToString(stats!.totalStats.timeMs, "m")} for ${totalItems} items]`;
         this.writeInColor(chalk.green, status);
     }
 }

@@ -14,6 +14,7 @@ import {
  */
 export type TranscriptTurn = {
     speaker: string;
+    listeners?: string[] | undefined;
     speech: TextBlock;
     timestamp?: string | undefined;
 };
@@ -23,7 +24,7 @@ export function transcriptTurnToMessage(
 ): ConversationMessage {
     return {
         sender: getSpeaker(turn),
-        text: getMessageText(turn),
+        text: getMessageText(turn, true),
         timestamp: dateTime.stringToDate(turn.timestamp),
     };
 }
@@ -45,12 +46,13 @@ export function splitTranscriptIntoTurns(transcript: string): TranscriptTurn[] {
 
     const regex = /^(?<speaker>[A-Z0-9 ]+:)?(?<speech>.*)$/;
     const turns: TranscriptTurn[] = [];
+    const participants = new Set<string>();
     let turn: TranscriptTurn | undefined;
     for (const line of lines) {
         const match = regex.exec(line);
         if (match && match.groups) {
             let speaker = match.groups["speaker"];
-            const speech = match.groups["speech"];
+            let speech = match.groups["speech"];
             if (turn) {
                 if (speaker) {
                     turns.push(turn);
@@ -61,8 +63,13 @@ export function splitTranscriptIntoTurns(transcript: string): TranscriptTurn[] {
                 }
             }
             if (!turn) {
-                if (speaker && speaker.endsWith(":")) {
-                    speaker = speaker.slice(0, speaker.length - 1);
+                if (speaker) {
+                    speaker = speaker.trim();
+                    if (speaker.endsWith(":")) {
+                        speaker = speaker.slice(0, speaker.length - 1);
+                    }
+                    speaker = speaker.toUpperCase();
+                    participants.add(speaker);
                 }
                 turn = {
                     speaker: speaker ?? "None",
@@ -77,6 +84,7 @@ export function splitTranscriptIntoTurns(transcript: string): TranscriptTurn[] {
     if (turn) {
         turns.push(turn);
     }
+    assignTurnListeners(turns, participants);
     return turns;
 }
 
@@ -154,7 +162,7 @@ export function timestampTranscriptTurns(
  */
 export function splitTranscriptIntoBlocks(transcript: string): TextBlock[] {
     const turns = splitTranscriptIntoTurns(transcript);
-    return turns.map((t) => getMessageText(t));
+    return turns.map((t) => getMessageText(t, false));
 }
 
 export async function addTranscriptTurnsToConversation(
@@ -172,17 +180,53 @@ export async function addTranscriptTurnsToConversation(
     await cm.addMessageBatch(messages);
 }
 
+function assignTurnListeners(
+    turns: TranscriptTurn[],
+    participants: Set<string>,
+) {
+    for (const turn of turns) {
+        const speaker = getSpeaker(turn);
+        if (speaker) {
+            let listeners: string[] = [];
+            for (const p of participants) {
+                if (p !== speaker) {
+                    listeners.push(p);
+                }
+            }
+            turn.listeners = listeners;
+        }
+    }
+}
+
 function getSpeaker(t: TranscriptTurn) {
     return t.speaker === "None" ? undefined : t.speaker;
 }
 
-function getMessageText(t: TranscriptTurn) {
+function getMessageText(t: TranscriptTurn, includeHeader: boolean) {
+    t.speech.value = t.speech.value.trim();
     if (t.speaker === "None") {
         return t.speech;
-    } else {
+    } else if (!includeHeader) {
         return {
             type: t.speech.type,
             value: t.speaker + ":\n" + t.speech.value,
         };
+    } else {
+        const header = turnToHeaderString(t);
+        return {
+            type: t.speech.type,
+            value: header + t.speech.value,
+        };
     }
+}
+
+function turnToHeaderString(turn: TranscriptTurn): string {
+    let text = "";
+    if (turn.speaker) {
+        text += `"From: ${turn.speaker}\n`;
+    }
+    if (turn.listeners && turn.listeners.length > 0) {
+        text += `To: ${turn.listeners.join(", ")}\n"`;
+    }
+    return text;
 }
