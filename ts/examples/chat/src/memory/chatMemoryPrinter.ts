@@ -3,7 +3,11 @@
 
 import * as knowLib from "knowledge-processor";
 import { conversation } from "knowledge-processor";
-import { InteractiveIo } from "interactive-app";
+import {
+    InteractiveIo,
+    millisecondsToString,
+    StopWatch,
+} from "interactive-app";
 import { collections, dateTime } from "typeagent";
 import { ChatPrinter } from "../chatPrinter.js";
 import chalk, { ChalkInstance } from "chalk";
@@ -321,5 +325,14 @@ export class ChatMemoryPrinter extends ChatPrinter {
                 this.writeSearchResponse(result.response);
             }
         }
+    }
+
+    public writeIndexingMetrics(
+        stats: knowLib.IndexingStats,
+        totalItems: number,
+        timing: StopWatch,
+    ): void {
+        const status = `[${timing.elapsedString()}, ${millisecondsToString(stats!.totalStats.timeMs, "m")} for ${totalItems} items]`;
+        this.writeInColor(chalk.green, status);
     }
 }

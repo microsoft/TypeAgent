@@ -332,6 +332,33 @@ export async function writeJsonFile(
         : fs.promises.writeFile(filePath, json);
 }
 
+/**
+ * Writes an object array to a multiple json files, one per object
+ * @param destFolderPath
+ * @param baseFileName
+ * @param objects
+ * @param fSys
+ */
+export async function writeJsonFiles(
+    destFolderPath: string,
+    baseFileName: string,
+    objects: any[],
+) {
+    if (objects.length === 0) {
+        return;
+    }
+    await ensureDir(destFolderPath);
+    const padLength = objects.length.toString().length;
+    for (let i = 0; i < objects.length; ++i) {
+        let fileId = (i + 1).toString().padStart(padLength, "0");
+        let turnFilePath = path.join(
+            destFolderPath,
+            `${baseFileName}_${fileId}.json`,
+        );
+        await writeJsonFile(turnFilePath, objects[i]);
+    }
+}
+
 export async function readMapFile<K, V>(
     filePath: string,
     fSys?: FileSystem,

@@ -20,7 +20,7 @@ describe("storage.workQueue", () => {
             for (let i = 0; i < 2; ++i) {
                 expect(await queue.count()).toBe(tasks.length);
                 const completed: string[] = [];
-                await queue.drainTask(1, 1, async (task) => {
+                await queue.drainTask(1, async (task) => {
                     completed.push(task);
                 });
                 expect(completed).toHaveLength(tasks.length);

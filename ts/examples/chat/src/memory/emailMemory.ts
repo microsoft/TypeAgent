@@ -15,9 +15,6 @@ import {
     dateTime,
     ensureDir,
     isDirectoryPath,
-    readJsonFile,
-    removeFile,
-    writeJsonFile,
 } from "typeagent";
 import {
     arg,
@@ -117,7 +114,6 @@ export function createEmailCommands(
                 clean: argClean(),
                 chunkSize: argChunkSize(context.maxCharsPerChunk),
                 maxMessages: argNum("Max messages", 25),
-                index: argBool("Index imported files", true),
                 pauseMs: argPause(),
             },
         };
@@ -128,19 +124,17 @@ export function createEmailCommands(
         let sourcePath: string = namedArgs.sourcePath;
         let isDir = isDirectoryPath(sourcePath);
         let isJson = sourcePath.endsWith("json");
-        if (namedArgs.index) {
-            if (isDir) {
-                await indexEmails(namedArgs, sourcePath);
-            } else if (isJson) {
-                if (
-                    !(await knowLib.email.addEmailFileToConversation(
-                        context.emailMemory,
-                        sourcePath,
-                        namedArgs.chunkSize,
-                    ))
-                ) {
-                    context.printer.writeLine(`Could not load ${sourcePath}`);
-                }
+        if (isDir) {
+            await indexEmails(namedArgs, sourcePath);
+        } else if (isJson) {
+            if (
+                !(await knowLib.email.addEmailFileToConversation(
+                    context.emailMemory,
+                    sourcePath,
+                    namedArgs.chunkSize,
+                ))
+            ) {
+                context.printer.writeLine(`Could not load ${sourcePath}`);
             }
         }
     }
@@ -192,11 +186,13 @@ export function createEmailCommands(
             `Total chars: ${stats.totalStats.charCount}`,
         );
         context.printer.writeCompletionStats(stats.totalStats.tokenStats);
-        const csv = indexingStatsToCsv(stats.itemStats);
-        if (namedArgs.destFile) {
-            await fs.promises.writeFile(namedArgs.destFile, csv);
-        } else {
-            context.printer.writeLine(csv);
+        if (stats.itemStats && stats.itemStats) {
+            const csv = indexingStatsToCsv(stats.itemStats);
+            if (namedArgs.destFile) {
+                await fs.promises.writeFile(namedArgs.destFile, csv);
+            } else {
+                context.printer.writeLine(csv);
+            }
         }
     }
 
@@ -407,7 +403,6 @@ export function createEmailCommands(
         while (attempts <= maxAttempts) {
             const successCount = await queue.drain(
                 namedArgs.concurrency,
-                namedArgs.concurrency,
                 async (filePath, index, total) => {
                     context.printer.writeProgress(index + 1, total);
 
@@ -458,18 +453,17 @@ export function createEmailCommands(
     }
 
     async function loadStats(clean: boolean): Promise<knowLib.IndexingStats> {
-        const statsFilePath = getStatsFilePath();
-        let stats: knowLib.IndexingStats | undefined;
-        if (clean) {
-            await removeFile(statsFilePath);
-        } else {
-            stats = await readJsonFile<knowLib.IndexingStats>(statsFilePath);
-        }
-        return knowLib.createIndexingStats(stats);
+        return knowLib.loadIndexingStats(getStatsFilePath(), clean);
     }
 
     async function saveStats() {
-        await writeJsonFile(getStatsFilePath(), context.stats);
+        if (context.stats) {
+            await knowLib.saveIndexingStats(
+                context.stats,
+                getStatsFilePath(),
+                false,
+            );
+        }
     }
 
     function getStatsFilePath() {

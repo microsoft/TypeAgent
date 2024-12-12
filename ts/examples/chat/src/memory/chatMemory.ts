@@ -41,6 +41,7 @@ import {
 } from "./common.js";
 import { createEmailCommands, createEmailMemory } from "./emailMemory.js";
 import { pathToFileURL } from "url";
+import { createPodcastCommands, createPodcastMemory } from "./podcastMemory.js";
 
 export type Models = {
     chatModel: ChatModel;
@@ -68,6 +69,7 @@ export type ChatContext = {
     searcher: knowLib.conversation.ConversationSearchProcessor;
     searchMemory?: knowLib.conversation.ConversationManager;
     emailMemory: knowLib.conversation.ConversationManager;
+    podcastMemory: knowLib.conversation.ConversationManager;
 };
 
 export enum ReservedConversationNames {
@@ -75,6 +77,7 @@ export enum ReservedConversationNames {
     outlook = "outlook",
     play = "play",
     search = "search",
+    podcasts = "podcasts",
 }
 
 function isReservedConversation(context: ChatContext): boolean {
@@ -82,7 +85,8 @@ function isReservedConversation(context: ChatContext): boolean {
         context.conversationName === ReservedConversationNames.transcript ||
         context.conversationName === ReservedConversationNames.play ||
         context.conversationName === ReservedConversationNames.search ||
-        context.conversationName === ReservedConversationNames.outlook
+        context.conversationName === ReservedConversationNames.outlook ||
+        context.conversationName === ReservedConversationNames.podcasts
     );
 }
 
@@ -95,6 +99,8 @@ function getReservedConversation(
             break;
         case ReservedConversationNames.outlook:
             return context.emailMemory;
+        case ReservedConversationNames.podcasts:
+            return context.podcastMemory;
     }
     return undefined;
 }
@@ -183,6 +189,13 @@ export async function createChatMemoryContext(
             actionTopK,
         ),
         emailMemory: await createEmailMemory(
+            models,
+            storePath,
+            conversationSettings,
+            true,
+            false,
+        ),
+        podcastMemory: await createPodcastMemory(
             models,
             storePath,
             conversationSettings,
@@ -307,6 +320,7 @@ export async function runChatMemory(): Promise<void> {
         tokenLog,
     };
     createEmailCommands(context, commands);
+    createPodcastCommands(context, commands);
     addStandardHandlers(commands);
 
     function onStart(io: InteractiveIo): void {
