@@ -7,7 +7,7 @@ export {
     initializeCommandHandlerContext,
     closeCommandHandlerContext,
     CommandHandlerContext,
-} from "./handlers/common/commandHandlerContext.js";
+} from "./context/commandHandlerContext.js";
 export {
     processCommand,
     getSettingSummary,
@@ -38,5 +38,5 @@ export {
 } from "./utils/defaultAppProviders.js";
 export { getAssistantSelectionSchemas } from "./translation/unknownSwitcher.js";
 export { getActionSchema } from "./translation/actionSchemaFileCache.js";
-export { getTestDataFiles } from "./utils/config.js";
 export { getFullSchemaText } from "./translation/agentTranslators.js";
+export { getTestDataFiles } from "./utils/config.js";

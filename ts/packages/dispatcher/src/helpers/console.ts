@@ -11,7 +11,7 @@ import {
     ClientIO,
     IAgentMessage,
     RequestId,
-} from "../handlers/common/interactiveIO.js";
+} from "../context/interactiveIO.js";
 import { TemplateEditConfig } from "../translation/actionTemplate.js";
 import chalk from "chalk";
 import stringWidth from "string-width";

@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { AppAgentManifest } from "@typeagent/agent-sdk";
-import { AppAgentProvider } from "../agent/agentProvider.js";
+import { AppAgentProvider } from "../agentProvider/agentProvider.js";
 import {
     ActionConfig,
     ActionConfigProvider,
@@ -11,7 +11,7 @@ import {
 import {
     AgentInfo,
     createNpmAppAgentProvider,
-} from "../agent/npmAgentProvider.js";
+} from "../agentProvider/npmAgentProvider.js";
 import { getDispatcherConfig } from "./config.js";
 import { getUserProfileDir } from "./userData.js";
 import path from "node:path";
