@@ -44,7 +44,29 @@ Cache extensions:
 
 Output:
 
-- `getDyanmicDisplay` - For command/action result that needs to be updated periodically, the host will call this function to get the updated display.
+- `getDynamicDisplay` - For command/action result that needs to be updated periodically, the host will call this function to get the updated display.
+
+### SessionContext/ActionContext
+
+Display provide context objects to for display and storage functionality. It also tracks a "agent context" object the agent provided during `initializeAgentContext` for the agent to store runtime data between these calls.
+
+#### Display (ActionContext.actionIO)
+
+During execution of action or command, an `ActionContext` is provided with an `actionIO` object to display information to the user.
+
+`setDisplay` - replace the display with the message
+`appendDisplay` - append to the display message
+
+Display message is of type `DisplayContent` and can be simple `MessageContent` of text of any `string`, multi-line `string[]`, or a table of `string[][]`. `DisplayContext` can also be an object to specify addition information about the message:
+
+- `DisplayMessageKind` - automatic formatting of message based on kind (`info`, `status`, `warning`, `error`, `success`).
+- `DisplayType` - `text`, `html` or `iframe` (`html` content will be sanitize for security, `iframe` will be rendered in an iframe, and both only work in hosts that supports it (e.g. [Shell](../shell/)))
+
+Helper functions is available to help craft the `DisplayContent` object imported from `@typeagent/agent-sdk/helpers/display`. See [displayHelpers.ts](./src/helpers/displayHelpers.ts).
+
+#### Storage (ActionContext.profileStorage and ActionContext.sessionStorage)
+
+During execution of action or command, an `ActionContext` is provided with `profileStorage` and optionally `sessionStorage` to persist data. Agent may be running in a isolated environment that doesn't have permanent storage or access to storage.
 
 ## Trademarks
 
