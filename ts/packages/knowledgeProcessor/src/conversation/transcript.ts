@@ -270,3 +270,40 @@ function turnToHeaderString(turn: TranscriptTurn): string {
     }
     return text;
 }
+
+export type TranscriptMetadata = {
+    sourcePath: string;
+    name: string;
+    description?: string | undefined;
+    startAt?: string; // Should be parseable as a Date
+    lengthMinutes?: number | undefined;
+};
+
+export function createTranscriptOverview(
+    metadata: TranscriptMetadata,
+    turns: TranscriptTurn[],
+): string {
+    let participantSet = new Set<string>();
+    for (const turn of turns) {
+        let speaker = getSpeaker(turn);
+        if (speaker) {
+            participantSet.add(speaker);
+        }
+        if (turn.listeners && turn.listeners.length > 0) {
+            for (const listener of turn.listeners) {
+                participantSet.add(listener);
+            }
+        }
+    }
+    let overview = metadata.name;
+    if (metadata.description) {
+        overview += "\n";
+        overview += metadata.description;
+    }
+    const participants = [...participantSet.values()];
+    if (participants.length > 0) {
+        overview += "\nParticipants:\n";
+        overview += participants.join(", ");
+    }
+    return overview;
+}

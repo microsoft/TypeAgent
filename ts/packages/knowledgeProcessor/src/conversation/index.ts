@@ -18,6 +18,7 @@ export * from "./topics.js";
 export * from "./topicSchema.js";
 export * from "./transcript.js";
 export * from "./actions.js";
+export * from "./threads.js";
 
 export * from "./searchResponse.js";
 export * from "./searchProcessor.js";

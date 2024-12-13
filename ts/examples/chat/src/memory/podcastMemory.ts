@@ -26,6 +26,7 @@ import {
 import path from "path";
 import {
     createWorkQueueFolder,
+    dateTime,
     ensureDir,
     getFileName,
     isDirectoryPath,
@@ -75,6 +76,8 @@ export function createPodcastCommands(
     commands.importPodcast = importPodcast;
     commands.podcastConvert = podcastConvert;
     commands.podcastIndex = podcastIndex;
+    commands.podcastAddThread = podcastAddThread;
+
     //-----------
     // COMMANDS
     //---------
@@ -160,6 +163,56 @@ export function createPodcastCommands(
             context.printer.writeError(`${sourcePath} is not a directory`);
         }
     }
+
+    function podcastAddThreadDef(): CommandMetadata {
+        return {
+            description: "Add a sub-thread to the podcast index",
+            args: {
+                sourcePath: argSourceFileOrFolder(),
+                name: arg("Thread name"),
+                description: arg("Thread description"),
+            },
+            options: {
+                startAt: arg("Start date and time"),
+                length: argNum("Length of the podcast in minutes", 60),
+            },
+        };
+    }
+    commands.podcastAddThread.metadata = podcastAddThreadDef();
+    async function podcastAddThread(args: string[]): Promise<void> {
+        const namedArgs = parseNamedArguments(args, podcastConvertDef());
+        const sourcePath = namedArgs.sourcePath;
+        const timeRange = getTimeRange(namedArgs);
+        if (!timeRange) {
+            context.printer.writeError("Time range required");
+            return;
+        }
+        const turns =
+            await conversation.loadTurnsFromTranscriptFile(sourcePath);
+        const metadata: conversation.TranscriptMetadata = {
+            sourcePath,
+            name: namedArgs.name,
+            description: namedArgs.description,
+            startAt: namedArgs.startAt,
+            lengthMinutes: namedArgs.length,
+        };
+        const overview = conversation.createTranscriptOverview(metadata, turns);
+        context.printer.writeLine(overview);
+
+        const threadDef: conversation.ThreadTimeRange = {
+            type: "temporal",
+            description: overview,
+            timeRange,
+        };
+        const threads =
+            await context.podcastMemory.conversation.getThreadIndex();
+        await threads.add(threadDef);
+
+        for await (const t of threads.entries()) {
+            context.printer.writeJson(t);
+        }
+    }
+
     return;
 
     //---
@@ -249,5 +302,21 @@ export function createPodcastCommands(
             context.statsPath,
             `${context.podcastMemory.conversationName}_stats.json`,
         );
+    }
+
+    function getTimeRange(
+        namedArgs: NamedArgs,
+    ): dateTime.DateRange | undefined {
+        const startDate = argToDate(namedArgs.startAt);
+        const stopDate = startDate
+            ? addMinutesToDate(startDate, namedArgs.length)
+            : undefined;
+        if (startDate) {
+            return {
+                startDate,
+                stopDate,
+            };
+        }
+        return undefined;
     }
 }

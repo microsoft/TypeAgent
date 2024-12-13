@@ -380,12 +380,12 @@ export async function createEntityIndexOnStorage<TSourceId = string>(
 
         terms = terms.filter((t) => !noiseTerms.has(t));
         if (terms && terms.length > 0) {
-            const hitCounter = createHitTable<EntityId>();
+            const entityIdHitTable = createHitTable<EntityId>();
             const scoreBoost = terms.length;
             await Promise.all([
                 nameIndex.getNearestHitsMultiple(
                     terms,
-                    hitCounter,
+                    entityIdHitTable,
                     options.nameSearchOptions?.maxMatches ?? options.maxMatches,
                     options.nameSearchOptions?.minScore ?? options.minScore,
                     scoreBoost,
@@ -393,23 +393,25 @@ export async function createEntityIndexOnStorage<TSourceId = string>(
                 ),
                 typeIndex.getNearestHitsMultiple(
                     terms,
-                    hitCounter,
+                    entityIdHitTable,
                     options.maxMatches,
                     options.minScore,
                     scoreBoost,
                 ),
                 facetIndex.getNearestHitsMultiple(
                     terms,
-                    hitCounter,
+                    entityIdHitTable,
                     options.facetSearchOptions?.maxMatches,
                     options.facetSearchOptions?.minScore ?? options.minScore,
                 ),
             ]);
-            let entityHits = hitCounter.getTopK(determineTopK(options)).sort();
+            let entityIdHits = entityIdHitTable
+                .getTopK(determineTopK(options))
+                .sort();
 
             results.entityIds = [
                 ...intersectMultiple(
-                    entityHits,
+                    entityIdHits,
                     itemsFromTemporalSequence(results.temporalSequence),
                 ),
             ];
