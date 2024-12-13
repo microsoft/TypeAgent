@@ -21,6 +21,8 @@ import {
 class RequestCommandHandler implements CommandHandler {
     public readonly description = "Send a request to the Oracle";
     public readonly parameters: ParameterDefinitions = {
+        // Must have a single string parameter and implicit quotes
+        // in order to support '@config request <agent>'
         args: {
             question: {
                 description: "Request for Oracle",
@@ -45,6 +47,7 @@ const handlers: CommandHandlerTable = {
     description: "Oracle commands",
     defaultSubCommand: "request",
     commands: {
+        // Command name "request" is special for '@config request <agent>'
         request: new RequestCommandHandler(),
     },
 };
