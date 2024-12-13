@@ -61,8 +61,7 @@ function messageContentToText(message: MessageContent): string {
     return displayRows.join("\n");
 }
 
-export function createConsoleClientIO(): ClientIO {
-    initializeConsole();
+function createConsoleClientIO(): ClientIO {
     let lastAppendMode: DisplayAppendMode | undefined;
     function displayContent(
         content: DisplayContent,
@@ -185,13 +184,30 @@ import readline from "readline";
 function initializeConsole() {
     // set the input back to raw mode and resume the input to drain key press during action and not echo them
     process.stdin.setRawMode(true);
-    process.stdin.on("keypress", (str, key) => {
+    process.stdin.on("keypress", (_, key) => {
         if (key?.ctrl && key.name === "c") {
             process.emit("SIGINT");
         }
     });
     process.stdin.resume();
     readline.emitKeypressEvents(process.stdin);
+}
+
+let usingConsole = false;
+export async function withConsoleClientIO(
+    callback: (clientIO: ClientIO) => Promise<void>,
+) {
+    if (usingConsole) {
+        throw new Error("Cannot have multiple console clients");
+    }
+    usingConsole = true;
+    try {
+        initializeConsole();
+        await callback(createConsoleClientIO());
+    } finally {
+        process.stdin.pause();
+        usingConsole = false;
+    }
 }
 
 import { createInterface } from "readline/promises";

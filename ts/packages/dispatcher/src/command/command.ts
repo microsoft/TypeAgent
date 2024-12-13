@@ -26,8 +26,10 @@ const debugCommand = registerDebug("typeagent:dispatcher:command");
 const debugCommandError = registerDebug("typeagent:dispatcher:command:error");
 
 export type ResolveCommandResult = {
-    // The resolved app agent name
+    // the app agent name parsed from the input.
     parsedAppAgentName: string | undefined;
+
+    // The actual app agent name that is resolved.
     actualAppAgentName: string;
 
     // The resolved commands.
@@ -63,8 +65,6 @@ export async function resolveCommand(
     input: string,
     context: CommandHandlerContext,
 ): Promise<ResolveCommandResult> {
-    let parsedAppAgentName: string | undefined;
-
     let prev: string | undefined = undefined;
     let curr = input;
     const nextToken = () => {
@@ -86,14 +86,22 @@ export async function resolveCommand(
     };
 
     const first = nextToken();
-    if (first !== undefined) {
-        if (context.agents.isCommandEnabled(first)) {
-            parsedAppAgentName = first;
-        } else {
-            rollbackToken();
-        }
+
+    const appAgentName =
+        first !== undefined && context.agents.isAppAgentName(first)
+            ? first
+            : undefined;
+    let actualAppAgentName: string;
+    const useParsedAppAgentName =
+        appAgentName !== undefined &&
+        context.agents.isCommandEnabled(appAgentName);
+    if (useParsedAppAgentName) {
+        actualAppAgentName = appAgentName;
+    } else {
+        actualAppAgentName = "system";
+        rollbackToken();
     }
-    const actualAppAgentName = parsedAppAgentName ?? "system";
+
     const appAgent = context.agents.getAppAgent(actualAppAgentName);
     const sessionContext = context.agents.getSessionContext(actualAppAgentName);
     const descriptors = await appAgent.getCommands?.(sessionContext);
@@ -126,14 +134,15 @@ export async function resolveCommand(
             }
             table = current;
         }
-
-        table = table;
-        descriptor = descriptor;
     }
 
+    const parsedAppAgentName =
+        useParsedAppAgentName || commands.length === 0
+            ? appAgentName
+            : undefined;
     const result: ResolveCommandResult = {
         parsedAppAgentName,
-        actualAppAgentName,
+        actualAppAgentName: parsedAppAgentName ?? actualAppAgentName,
         commands,
         suffix: curr.trim(),
         table,
@@ -187,6 +196,15 @@ async function parseCommand(
         }
     }
     const command = getParsedCommand(result);
+
+    if (
+        result.parsedAppAgentName !== undefined &&
+        !context.agents.isCommandEnabled(result.parsedAppAgentName)
+    ) {
+        throw new Error(
+            `Command for '${result.parsedAppAgentName}' is not disabled.`,
+        );
+    }
 
     if (result.table === undefined) {
         throw new Error(`Unknown command '${input}'`);

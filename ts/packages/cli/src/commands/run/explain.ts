@@ -3,20 +3,14 @@
 
 import { Args, Command, Flags } from "@oclif/core";
 import chalk from "chalk";
-import { createLimiter, getElapsedString } from "common-utils";
-import {
-    RequestAction,
-    Actions,
-    printProcessRequestActionResult,
-} from "agent-cache";
+import { RequestAction, Actions } from "agent-cache";
 import {
     getCacheFactory,
-    getSchemaNamesFromDefaultAppAgentProviders,
-    initializeCommandHandlerContext,
-    closeCommandHandlerContext,
     getDefaultAppAgentProviders,
+    getSchemaNamesFromDefaultAppAgentProviders,
 } from "agent-dispatcher/internal";
-import { createConsoleClientIO } from "agent-dispatcher/helpers/console";
+import { withConsoleClientIO } from "agent-dispatcher/helpers/console";
+import { ClientIO, createDispatcher } from "agent-dispatcher";
 
 // Default test case, that include multiple phrase action name (out of order) and implicit parameters (context)
 const testRequest = new RequestAction(
@@ -73,102 +67,43 @@ export default class ExplainCommand extends Command {
         const schemas = flags.translator
             ? Object.fromEntries(flags.translator.map((name) => [name, true]))
             : undefined;
-        const context = await initializeCommandHandlerContext(
-            "cli run explain",
-            {
+
+        const command = ["@dispatcher explain"];
+        if (flags.filter?.includes("refValue")) {
+            command.push("--filterValueInRequest");
+        }
+        if (flags.filter?.includes("refList")) {
+            command.push("--filterReference");
+        }
+        if (flags.repeat > 1) {
+            command.push(`--repeat ${flags.repeat}`);
+            command.push(`--concurrency ${flags.concurrency}`);
+        }
+
+        if (args.request) {
+            command.push(args.request);
+        } else {
+            console.log(chalk.yellow("Request not specified, using default."));
+            command.push(testRequest.toString());
+        }
+
+        await withConsoleClientIO(async (clientIO: ClientIO) => {
+            const dispatcher = await createDispatcher("cli run explain", {
                 appAgentProviders: getDefaultAppAgentProviders(),
                 schemas,
                 actions: null, // We don't need any actions
-                commands: null,
+                commands: { dispatcher: true },
                 explainer: {
                     name: flags.explainer,
                 },
                 cache: { enabled: false },
-                clientIO:
-                    flags.repeat > 1 ? undefined : createConsoleClientIO(),
-            },
-        );
-
-        if (args.request === undefined) {
-            console.log(chalk.yellow("Request not specified, using default."));
-        }
-
-        const requestAction = args.request
-            ? RequestAction.fromString(args.request)
-            : testRequest;
-
-        const options = {
-            valueInRequest: flags.filter?.includes("refvalue") ?? false,
-            noReferences: flags.filter?.includes("reflist") ?? false,
-        };
-        console.log(chalk.grey(`Generate explanation for '${requestAction}'`));
-        if (flags.repeat > 1) {
-            console.log(
-                `Repeating ${flags.repeat} times with concurrency ${flags.concurrency}...`,
-            );
-            const limiter = createLimiter(
-                flags.concurrency > 0 ? flags.concurrency : 1,
-            );
-            const startTime = performance.now();
-            const promises = [];
-            let iteration = 1;
-            for (let i = 0; i < flags.repeat; i++) {
-                promises.push(
-                    limiter(async () => {
-                        const current = iteration++;
-                        console.log(`Iteration #${current} started.`);
-                        const result =
-                            await context.agentCache.processRequestAction(
-                                requestAction,
-                                false,
-                                { concurrent: true, ...options },
-                            );
-                        console.log(
-                            result.explanationResult.explanation.success
-                                ? chalk.green(
-                                      `Iteration #${current} succeeded. [${getElapsedString(result.explanationResult.elapsedMs)}]`,
-                                  )
-                                : chalk.red(
-                                      `Iteration #${current} failed. [${getElapsedString(result.explanationResult.elapsedMs)}]`,
-                                  ),
-                        );
-
-                        return result;
-                    }),
-                );
+                clientIO,
+            });
+            try {
+                await dispatcher.processCommand(command.join(" "));
+            } finally {
+                await dispatcher.close();
             }
-            const results = await Promise.all(promises);
-
-            const actualElapsedMs = performance.now() - startTime;
-            let successCount = 0;
-            let correctionCount = 0;
-            let elapsedMs = 0;
-            for (const result of results) {
-                if (result.explanationResult.explanation.success) {
-                    successCount++;
-                }
-                correctionCount +=
-                    result.explanationResult.explanation.corrections?.length ??
-                    0;
-                elapsedMs += result.explanationResult.elapsedMs;
-            }
-            const attemptCount = correctionCount + flags.repeat;
-            console.log(
-                `Result: ${successCount} (${(successCount / flags.repeat).toFixed(3)}), ${attemptCount} attempts (${(attemptCount / successCount).toFixed(3)})`,
-            );
-            console.log(`Total elapsed Time: ${getElapsedString(elapsedMs)}`);
-            console.log(
-                `Actual elapsed Time: ${getElapsedString(actualElapsedMs)}`,
-            );
-        } else {
-            const result = await context.agentCache.processRequestAction(
-                requestAction,
-                false,
-                options,
-            );
-
-            printProcessRequestActionResult(result);
-        }
-        await closeCommandHandlerContext(context);
+        });
     }
 }

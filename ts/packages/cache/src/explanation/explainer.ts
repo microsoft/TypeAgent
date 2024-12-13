@@ -14,8 +14,8 @@ export function getExactStringRequirementMessage(
     subphraseText: boolean = true,
 ) {
     const name: string = subphraseText ? "Sub-phrase text" : "Substring";
-    const wholdWords = subphraseText ? ", include whole words and" : "and";
-    return `${name} must be exact copy of part of the original request ${wholdWords} is not changed by correcting misspelling or grammar.`;
+    const wholeWords = subphraseText ? ", include whole words and" : "and";
+    return `${name} must be exact copy of part of the original request ${wholeWords} is not changed by correcting misspelling or grammar.`;
 }
 
 export function getSubphraseExplanationInstruction() {
