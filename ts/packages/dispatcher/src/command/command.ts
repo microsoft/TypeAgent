@@ -99,7 +99,9 @@ export async function resolveCommand(
         actualAppAgentName = appAgentName;
     } else {
         actualAppAgentName = "system";
-        rollbackToken();
+        if (first !== undefined) {
+            rollbackToken();
+        }
     }
 
     const appAgent = context.agents.getAppAgent(actualAppAgentName);
