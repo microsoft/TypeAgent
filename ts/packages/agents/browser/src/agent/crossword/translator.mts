@@ -216,8 +216,8 @@ export class CrosswordPageTranslator<T extends object> {
   }
 
   getIsCrosswordPresentPromptSections(fragments?: HtmlFragments[]) {
-    // const htmlSection = getHtmlPromptSection(fragments);
-    const htmlSection = getHtmlTextOnlyPromptSection(fragments);
+    const htmlSection = getHtmlPromptSection(fragments);
+    // const htmlSection = getHtmlTextOnlyPromptSection(fragments);
     const prefixSection = getBootstrapPrefixPromptSection();
     const promptSections = [
       ...prefixSection,

@@ -31,12 +31,7 @@ export async function getBoardSchema(
 
     for (let i = 0; i < htmlFragments.length; i++) {
       // skip html fragments that are too short to contain crossword
-      if (
-        !htmlFragments[i].content ||
-        htmlFragments[i].content.length < 500 ||
-        !htmlFragments[i].text ||
-        htmlFragments[i].text.length < 200
-      ) {
+      if (!htmlFragments[i].content || htmlFragments[i].content.length < 500) {
         continue;
       }
 
@@ -128,7 +123,7 @@ export async function handleCrosswordAction(
 
       if (selector) {
         await browser.clickOn(selector);
-        await browser.enterTextIn(text);
+        await browser.enterTextIn(text.replace(/\s/g, "")?.toUpperCase());
         message = `OK. Setting the value of ${number} ${direction} to "${text}"`;
       } else {
         message = `${number} ${direction} is not a valid position for this crossword`;
