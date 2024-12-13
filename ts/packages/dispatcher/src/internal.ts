@@ -3,11 +3,6 @@
 
 // Internal exports for CLI/testing/debugging purposes
 
-export {
-    initializeCommandHandlerContext,
-    closeCommandHandlerContext,
-    CommandHandlerContext,
-} from "./context/commandHandlerContext.js";
 export { getCacheFactory } from "./utils/cacheFactory.js";
 export {
     GenerateTestDataResult,

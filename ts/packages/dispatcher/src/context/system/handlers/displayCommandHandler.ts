@@ -3,7 +3,7 @@
 
 import { ActionContext, ParsedCommandParams } from "@typeagent/agent-sdk";
 import { CommandHandler } from "@typeagent/agent-sdk/helpers/command";
-import { CommandHandlerContext } from "../../../internal.js";
+import { CommandHandlerContext } from "../../commandHandlerContext.js";
 
 export class DisplayCommandHandler implements CommandHandler {
     public readonly description = "Send text to display";
