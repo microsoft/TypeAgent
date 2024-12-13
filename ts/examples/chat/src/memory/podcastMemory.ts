@@ -25,6 +25,7 @@ import {
 } from "./common.js";
 import path from "path";
 import {
+    asyncArray,
     createWorkQueueFolder,
     ensureDir,
     getFileName,
@@ -74,7 +75,10 @@ export function createPodcastCommands(
 ): void {
     commands.importPodcast = importPodcast;
     commands.podcastConvert = podcastConvert;
-    commands.prodcastIndex = podcastIndex;
+    commands.podcastIndex = podcastIndex;
+    commands.podcastAddThread = podcastAddThread;
+    commands.podcastListThreads = podcastListThreads;
+
     //-----------
     // COMMANDS
     //---------
@@ -83,16 +87,19 @@ export function createPodcastCommands(
             description: "Import a podcast transcript.",
             args: {
                 sourcePath: argSourceFileOrFolder(),
+                name: arg("Thread name"),
+                description: arg("Thread description"),
             },
             options: {
                 startAt: arg("Start date and time"),
                 length: argNum("Length of the podcast in minutes", 60),
                 clean: argClean(),
                 maxTurns: argNum("Max turns"),
-                pauseMs: argPause(),
+                pauseMs: argPause(1000),
             },
         };
     }
+    commands.importPodcast.metadata = importPodcastDef();
     async function importPodcast(args: string[]): Promise<void> {
         const namedArgs = parseNamedArguments(args, importPodcastDef());
         let sourcePath: string = namedArgs.sourcePath;
@@ -102,6 +109,7 @@ export function createPodcastCommands(
         }
 
         await podcastConvert(namedArgs);
+        await podcastAddThread(namedArgs);
         const turnsFilePath = getTurnsFolderPath(sourcePath);
         namedArgs.sourcePath = turnsFilePath;
         await podcastIndex(namedArgs);
@@ -139,11 +147,11 @@ export function createPodcastCommands(
             options: {
                 clean: argClean(),
                 maxTurns: argNum("Max turns"),
-                pauseMs: argPause(),
+                pauseMs: argPause(1000),
             },
         };
     }
-    commands.importPodcast.metadata = podcastIndexDef();
+    commands.podcastIndex.metadata = podcastIndexDef();
     async function podcastIndex(args: string[] | NamedArgs) {
         const namedArgs = parseNamedArguments(args, podcastIndexDef());
         let sourcePath: string = namedArgs.sourcePath;
@@ -159,6 +167,66 @@ export function createPodcastCommands(
             context.printer.writeError(`${sourcePath} is not a directory`);
         }
     }
+
+    function podcastAddThreadDef(): CommandMetadata {
+        return {
+            description: "Add a sub-thread to the podcast index",
+            args: {
+                sourcePath: argSourceFileOrFolder(),
+                name: arg("Thread name"),
+                description: arg("Thread description"),
+            },
+            options: {
+                startAt: arg("Start date and time"),
+                length: argNum("Length of the podcast in minutes", 60),
+            },
+        };
+    }
+    commands.podcastAddThread.metadata = podcastAddThreadDef();
+    async function podcastAddThread(args: string[] | NamedArgs): Promise<void> {
+        const namedArgs = parseNamedArguments(args, podcastConvertDef());
+        const sourcePath = namedArgs.sourcePath;
+        const timeRange = conversation.parseTranscriptDuration(
+            namedArgs.startAt,
+            namedArgs.length,
+        );
+        if (!timeRange) {
+            context.printer.writeError("Time range required");
+            return;
+        }
+        const turns =
+            await conversation.loadTurnsFromTranscriptFile(sourcePath);
+        const metadata: conversation.TranscriptMetadata = {
+            sourcePath,
+            name: namedArgs.name,
+            description: namedArgs.description,
+            startAt: namedArgs.startAt,
+            lengthMinutes: namedArgs.length,
+        };
+        const overview = conversation.createTranscriptOverview(metadata, turns);
+        const threadDef: conversation.ThreadTimeRange = {
+            type: "temporal",
+            description: overview,
+            timeRange,
+        };
+        const threads =
+            await context.podcastMemory.conversation.getThreadIndex();
+        await threads.add(threadDef);
+        writeThread(threadDef);
+    }
+    commands.podcastListThreads.metadata = "List all registered threads";
+    async function podcastListThreads(args: string[]) {
+        const threads =
+            await context.podcastMemory.conversation.getThreadIndex();
+        const allThreads: conversation.ConversationThread[] =
+            await asyncArray.toArray(threads.entries());
+        for (let i = 0; i < allThreads.length; ++i) {
+            const t = allThreads[i];
+            context.printer.writeLine(`[${i}]`);
+            writeThread(t);
+        }
+    }
+
     return;
 
     //---
@@ -248,5 +316,13 @@ export function createPodcastCommands(
             context.statsPath,
             `${context.podcastMemory.conversationName}_stats.json`,
         );
+    }
+
+    function writeThread(t: conversation.ConversationThread) {
+        context.printer.writeLine(t.description);
+        const range = conversation.toDateRange(t.timeRange);
+        context.printer.writeLine(range.startDate.toISOString());
+        context.printer.writeLine(range.stopDate!.toISOString());
+        context.printer.writeLine();
     }
 }

@@ -57,6 +57,7 @@ import {
     StorageProvider,
 } from "../storageProvider.js";
 import { RecentItems, createRecentItemsWindow } from "../temporal.js";
+import { createThreadIndexOnStorage, ThreadIndex } from "./threads.js";
 
 export interface ConversationSettings {
     indexSettings: TextIndexSettings;
@@ -147,6 +148,7 @@ export interface Conversation<
      * Returns the index of
      */
     getActionIndex(): Promise<ActionIndex<TActionId, MessageId>>;
+    getThreadIndex(): Promise<ThreadIndex<string>>;
     /**
      *
      * @param removeMessages If you want the original messages also removed. Set to false if you just want to rebuild the indexes
@@ -279,6 +281,8 @@ export async function createConversation(
     let entityIndex: EntityIndex | undefined;
     const actionPath = path.join(rootPath, "actions");
     let actionIndex: ActionIndex | undefined;
+    const threadsPath = path.join(rootPath, "threads");
+    let threadIndex: ThreadIndex | undefined;
 
     const thisConversation: Conversation<string, string, string> = {
         settings,
@@ -288,6 +292,7 @@ export async function createConversation(
         getEntityIndex,
         getTopicsIndex,
         getActionIndex,
+        getThreadIndex,
         clear,
         addMessage,
         addKnowledgeForMessage,
@@ -342,6 +347,22 @@ export async function createConversation(
             );
         }
         return actionIndex;
+    }
+
+    async function getThreadIndex(): Promise<ThreadIndex> {
+        if (!threadIndex) {
+            // Using file provider until stable
+            const provider = createFileSystemStorageProvider(
+                rootPath,
+                folderSettings,
+                fSys,
+            );
+            threadIndex = await createThreadIndexOnStorage(
+                threadsPath,
+                provider,
+            );
+        }
+        return threadIndex;
     }
 
     async function getTopicsIndex(level?: number): Promise<TopicIndex> {

@@ -321,6 +321,7 @@ export interface TopicSearchOptions extends SearchOptions {
     sourceNameSearchOptions?: SearchOptions;
     loadTopics?: boolean | undefined;
     useHighLevel?: boolean | undefined;
+    filterBySourceName?: boolean | undefined;
 }
 
 export function createTopicSearchOptions(
@@ -710,7 +711,6 @@ export async function createTopicIndexOnStorage<
     ): Promise<TopicSearchResult<TopicId>> {
         // We will just use the standard topic stuff for now, since that does the same thing
         const allTerms = getAllTermsInFilter(filter);
-        const useSourceName = false;
         let sourceName = getSubjectFromActionTerm(filter.action);
         if (!isValidEntityName(sourceName)) {
             sourceName = undefined;
@@ -725,7 +725,7 @@ export async function createTopicIndexOnStorage<
         return search(
             topicFilter,
             options,
-            useSourceName ? sourceName : undefined,
+            options.filterBySourceName ? sourceName : undefined,
             //topics !== "*" ? getAllTermsInFilter(filter, false) : undefined,
             undefined,
             possibleIds,

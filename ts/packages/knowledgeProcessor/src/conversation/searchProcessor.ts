@@ -55,6 +55,7 @@ export type SearchProcessingOptions = {
     maxMessages: number;
     entitySearch?: EntitySearchOptions | undefined;
     fallbackSearch?: SearchOptions | undefined;
+    threadSearch?: SearchOptions | undefined;
     skipAnswerGeneration?: boolean;
     skipEntitySearch?: boolean;
     skipTopicSearch?: boolean;
@@ -373,6 +374,13 @@ export function createSearchProcessor(
             options,
             false,
         );
+        if (options.threadSearch) {
+            await applyThreadFilters(
+                action.parameters.question,
+                action.parameters.filters,
+                options.threadSearch,
+            );
+        }
         const response = await conversation.searchTermsV2(
             action.parameters.filters,
             searchOptions,
@@ -612,6 +620,28 @@ export function createSearchProcessor(
                 response,
                 true,
             );
+        }
+    }
+
+    async function applyThreadFilters(
+        query: string,
+        filters: TermFilterV2[],
+        options: SearchOptions,
+    ) {
+        const threadIndex = await conversation.getThreadIndex();
+        const threads = await threadIndex.getNearest(
+            query,
+            options.maxMatches,
+            options.minScore,
+        );
+        if (threads.length === 0) {
+            return;
+        }
+        const thread = threads[0];
+        for (const filter of filters) {
+            if (!filter.timeRange) {
+                filter.timeRange = thread.timeRange;
+            }
         }
     }
 
