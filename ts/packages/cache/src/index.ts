@@ -26,8 +26,8 @@ export type {
     AgentCache,
     CacheConfig,
     ProcessRequestActionResult,
-    ExplanationOptions,
 } from "./cache/cache.js";
+export type { ExplanationOptions } from "./cache/explainWorkQueue.js";
 export type { SchemaInfoProvider } from "./explanation/schemaInfoProvider.js";
 
 // Functionalities

@@ -11,7 +11,7 @@ import inspector from "node:inspector";
 import { getChatModelNames } from "aiclient";
 import {
     processCommands,
-    createConsoleClientIO,
+    withConsoleClientIO,
 } from "agent-dispatcher/helpers/console";
 import { createDispatcher, Dispatcher } from "agent-dispatcher";
 
@@ -66,8 +66,7 @@ export default class Interactive extends Command {
             ? Object.fromEntries(flags.translator.map((name) => [name, true]))
             : undefined;
 
-        let closeDispatcher: Dispatcher | undefined;
-        try {
+        await withConsoleClientIO(async (clientIO) => {
             const dispatcher = await createDispatcher("cli interactive", {
                 appAgentProviders: getDefaultAppAgentProviders(),
                 schemas,
@@ -75,28 +74,28 @@ export default class Interactive extends Command {
                 explainer: { name: flags.explainer },
                 persistSession: !flags.memory,
                 enableServiceHost: true,
-                clientIO: createConsoleClientIO(),
+                clientIO,
             });
-            closeDispatcher = dispatcher;
+            try {
+                if (args.input) {
+                    await dispatcher.processCommand(`@run ${args.input}`);
+                    if (flags.exit) {
+                        return;
+                    }
+                }
 
-            if (args.input) {
-                await dispatcher.processCommand(`@run ${args.input}`);
-                if (flags.exit) {
-                    return;
+                await processCommands(
+                    () => dispatcher.getPrompt(),
+                    (command: string, dispatcher: Dispatcher) =>
+                        dispatcher.processCommand(command),
+                    dispatcher,
+                );
+            } finally {
+                if (dispatcher) {
+                    await dispatcher.close();
                 }
             }
-
-            await processCommands(
-                () => dispatcher.getPrompt(),
-                (command: string, dispatcher: Dispatcher) =>
-                    dispatcher.processCommand(command),
-                dispatcher,
-            );
-        } finally {
-            if (closeDispatcher) {
-                await closeDispatcher.close();
-            }
-        }
+        });
 
         // Some background network (like mongo) might keep the process live, exit explicitly.
         process.exit(0);

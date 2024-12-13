@@ -3,12 +3,10 @@
 
 import { getElapsedString, getColorElapsedString } from "common-utils";
 import chalk from "chalk";
-import {
-    ProcessExplanationResult,
-    ProcessRequestActionResult,
-} from "../cache/cache.js";
+import { ProcessRequestActionResult } from "../cache/cache.js";
 import { ImportConstructionResult } from "../index.js";
 import { Transforms } from "../constructions/transforms.js";
+import { ProcessExplanationResult } from "../cache/explainWorkQueue.js";
 
 export function printProcessExplanationResult(
     result: ProcessExplanationResult,
@@ -27,9 +25,7 @@ export function printProcessExplanationResult(
         log(`Explanation${suffix}: ${getColorElapsedString(result.elapsedMs)}`);
 
         if (result.toPrettyString) {
-            console.log(
-                chalk.cyanBright(result.toPrettyString(explanation.data)),
-            );
+            log(chalk.cyanBright(result.toPrettyString(explanation.data)));
         }
     } else {
         log(
