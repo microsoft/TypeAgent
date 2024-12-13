@@ -25,6 +25,7 @@ import {
 } from "./common.js";
 import path from "path";
 import {
+    asyncArray,
     createWorkQueueFolder,
     ensureDir,
     getFileName,
@@ -80,6 +81,7 @@ export function createPodcastCommands(
     commands.podcastConvert = podcastConvert;
     commands.podcastIndex = podcastIndex;
     commands.podcastAddThread = podcastAddThread;
+    commands.podcastListThreads = podcastListThreads;
 
     //-----------
     // COMMANDS
@@ -213,9 +215,21 @@ export function createPodcastCommands(
         const threads =
             await context.podcastMemory.conversation.getThreadIndex();
         await threads.add(threadDef);
-
-        for await (const t of threads.entries()) {
-            context.printer.writeJson(t);
+    }
+    commands.podcastListThreads.metadata = "List all registered threads";
+    async function podcastListThreads(args: string[]) {
+        const threads =
+            await context.podcastMemory.conversation.getThreadIndex();
+        const allThreads: conversation.ConversationThread[] =
+            await asyncArray.toArray(threads.entries());
+        for (let i = 0; i < allThreads.length; ++i) {
+            const t = allThreads[i];
+            context.printer.writeLine(`[${i}]`);
+            context.printer.writeLine(t.description);
+            const range = conversation.toDateRange(t.timeRange);
+            context.printer.writeLine(range.startDate.toISOString());
+            context.printer.writeLine(range.stopDate!.toISOString());
+            context.printer.writeLine();
         }
     }
 
