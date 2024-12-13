@@ -199,7 +199,7 @@ export function dateTimeToDate(dateTime: DateTime): Date {
 
 export function dateToDateTime(dt: Date): DateTime {
     const date: DateVal = {
-        day: dt.getDay(),
+        day: dt.getDate(),
         month: dt.getMonth() + 1,
         year: dt.getFullYear(),
     };
