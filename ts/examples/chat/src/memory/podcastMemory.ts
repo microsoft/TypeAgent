@@ -66,10 +66,6 @@ export async function createPodcastMemory(
         storageProvider,
     );
     cm.searchProcessor.answers.settings.chunking.fastStop = true;
-    cm.searchProcessor.settings.threadSearch = {
-        maxMatches: 1,
-        minScore: 8,
-    };
     return cm;
 }
 

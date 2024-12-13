@@ -47,7 +47,6 @@ import { EntitySearchOptions } from "./entities.js";
 export type SearchProcessorSettings = {
     contextProvider?: PromptSectionProvider | undefined;
     defaultEntitySearchOptions?: EntitySearchOptions | undefined;
-    threadSearch?: SearchOptions | undefined;
 };
 
 export type SearchProcessingOptions = {
@@ -56,6 +55,7 @@ export type SearchProcessingOptions = {
     maxMessages: number;
     entitySearch?: EntitySearchOptions | undefined;
     fallbackSearch?: SearchOptions | undefined;
+    threadSearch?: SearchOptions | undefined;
     skipAnswerGeneration?: boolean;
     skipEntitySearch?: boolean;
     skipTopicSearch?: boolean;
@@ -374,11 +374,11 @@ export function createSearchProcessor(
             options,
             false,
         );
-        if (settings.threadSearch) {
+        if (options.threadSearch) {
             await applyThreadFilters(
                 action.parameters.question,
                 action.parameters.filters,
-                settings.threadSearch,
+                options.threadSearch,
             );
         }
         const response = await conversation.searchTermsV2(
