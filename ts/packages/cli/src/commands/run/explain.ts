@@ -77,7 +77,9 @@ export default class ExplainCommand extends Command {
         }
         if (flags.repeat > 1) {
             command.push(`--repeat ${flags.repeat}`);
+            command.push(`--concurrency ${flags.concurrency}`);
         }
+
         if (args.request) {
             command.push(args.request);
         } else {
