@@ -91,6 +91,8 @@ export function createPodcastCommands(
             description: "Import a podcast transcript.",
             args: {
                 sourcePath: argSourceFileOrFolder(),
+                name: arg("Thread name"),
+                description: arg("Thread description"),
             },
             options: {
                 startAt: arg("Start date and time"),
@@ -111,6 +113,7 @@ export function createPodcastCommands(
         }
 
         await podcastConvert(namedArgs);
+        await podcastAddThread(namedArgs);
         const turnsFilePath = getTurnsFolderPath(sourcePath);
         namedArgs.sourcePath = turnsFilePath;
         await podcastIndex(namedArgs);
@@ -184,7 +187,7 @@ export function createPodcastCommands(
         };
     }
     commands.podcastAddThread.metadata = podcastAddThreadDef();
-    async function podcastAddThread(args: string[]): Promise<void> {
+    async function podcastAddThread(args: string[] | NamedArgs): Promise<void> {
         const namedArgs = parseNamedArguments(args, podcastConvertDef());
         const sourcePath = namedArgs.sourcePath;
         const timeRange = conversation.parseTranscriptDuration(
@@ -205,8 +208,6 @@ export function createPodcastCommands(
             lengthMinutes: namedArgs.length,
         };
         const overview = conversation.createTranscriptOverview(metadata, turns);
-        context.printer.writeLine(overview);
-
         const threadDef: conversation.ThreadTimeRange = {
             type: "temporal",
             description: overview,
@@ -215,6 +216,7 @@ export function createPodcastCommands(
         const threads =
             await context.podcastMemory.conversation.getThreadIndex();
         await threads.add(threadDef);
+        writeThread(threadDef);
     }
     commands.podcastListThreads.metadata = "List all registered threads";
     async function podcastListThreads(args: string[]) {
@@ -225,11 +227,7 @@ export function createPodcastCommands(
         for (let i = 0; i < allThreads.length; ++i) {
             const t = allThreads[i];
             context.printer.writeLine(`[${i}]`);
-            context.printer.writeLine(t.description);
-            const range = conversation.toDateRange(t.timeRange);
-            context.printer.writeLine(range.startDate.toISOString());
-            context.printer.writeLine(range.stopDate!.toISOString());
-            context.printer.writeLine();
+            writeThread(t);
         }
     }
 
@@ -322,5 +320,13 @@ export function createPodcastCommands(
             context.statsPath,
             `${context.podcastMemory.conversationName}_stats.json`,
         );
+    }
+
+    function writeThread(t: conversation.ConversationThread) {
+        context.printer.writeLine(t.description);
+        const range = conversation.toDateRange(t.timeRange);
+        context.printer.writeLine(range.startDate.toISOString());
+        context.printer.writeLine(range.stopDate!.toISOString());
+        context.printer.writeLine();
     }
 }
