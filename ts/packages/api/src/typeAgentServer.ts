@@ -63,7 +63,12 @@ export class TypeAgentServer {
 
         // restore & enable session backup?
         if (config.blobBackupEnabled) {
-            if (this.storageAccount !== undefined && this.storageAccount.length > 0 && this.containerName != undefined && this.containerName.length > 0) {
+            if (
+                this.storageAccount !== undefined &&
+                this.storageAccount.length > 0 &&
+                this.containerName != undefined &&
+                this.containerName.length > 0
+            ) {
                 const sw = new StopWatch();
                 sw.start("Downloading Session Backup");
 
