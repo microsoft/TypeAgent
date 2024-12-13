@@ -24,6 +24,8 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
+    "@azure/identity": "^4.2.1",
+    "@azure/storage-blob": "^12.26.0",
     "@typeagent/agent-sdk": "workspace:*",
     "agent-cache": "workspace:*",
     "agent-dispatcher": "workspace:*",
@@ -35,7 +37,9 @@
     "find-config": "^1.0.0",
     "node-http": "0.0.5",
     "rimraf": "^5.0.5",
+    "telemetry": "workspace:*",
     "ts-node": "^10.9.1",
+    "typeagent": "workspace:*",
     "typechat": "^0.1.1",
     "typescript": "^5.4.3",
     "ws": "^8.17.1"

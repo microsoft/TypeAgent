@@ -23,8 +23,8 @@ type Entry = {
 
 export type EmbeddingCache = Map<string, NormalizedEmbedding>;
 
-export class ActionSchemaSementicMap {
-    private readonly actionSementicMap = new Map<string, Entry>();
+export class ActionSchemaSemanticMap {
+    private readonly actionSemanticMap = new Map<string, Entry>();
     private readonly model: TextEmbeddingModel;
     public constructor(model?: TextEmbeddingModel) {
         this.model = model ?? openai.createEmbeddingModel();
@@ -41,7 +41,7 @@ export class ActionSchemaSementicMap {
             const key = `${config.schemaName} ${config.description} ${name} ${definition.comments?.[0] ?? ""}`;
             const embedding = cache?.get(key);
             if (embedding) {
-                this.actionSementicMap.set(key, {
+                this.actionSemanticMap.set(key, {
                     embedding,
                     actionSchemaFile,
                     definition,
@@ -56,7 +56,7 @@ export class ActionSchemaSementicMap {
             keys,
         );
         for (let i = 0; i < keys.length; i++) {
-            this.actionSementicMap.set(keys[i], {
+            this.actionSemanticMap.set(keys[i], {
                 embedding: embeddings[i],
                 actionSchemaFile,
                 definition: definitions[i],
@@ -72,7 +72,7 @@ export class ActionSchemaSementicMap {
     ): Promise<ScoredItem<Entry>[]> {
         const embedding = await generateEmbeddingWithRetry(this.model, request);
         const matches = new TopNCollection<Entry>(maxMatches, {} as Entry);
-        for (const entry of this.actionSementicMap.values()) {
+        for (const entry of this.actionSemanticMap.values()) {
             if (!filter(entry.actionSchemaFile.schemaName)) {
                 continue;
             }
@@ -89,7 +89,7 @@ export class ActionSchemaSementicMap {
     }
 
     public embeddings(): [string, NormalizedEmbedding][] {
-        return Array.from(this.actionSementicMap.entries()).map(
+        return Array.from(this.actionSemanticMap.entries()).map(
             ([key, entry]) => [key, entry.embedding],
         );
     }

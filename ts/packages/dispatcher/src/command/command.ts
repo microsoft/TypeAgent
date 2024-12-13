@@ -7,16 +7,16 @@ import {
     RequestId,
     DispatcherName,
     makeClientIOMessage,
-} from "../handlers/common/interactiveIO.js";
+} from "../context/interactiveIO.js";
 import { getDefaultExplainerName } from "agent-cache";
-import { CommandHandlerContext } from "../handlers/common/commandHandlerContext.js";
+import { CommandHandlerContext } from "../context/commandHandlerContext.js";
 
 import {
     CommandDescriptor,
     CommandDescriptors,
     CommandDescriptorTable,
 } from "@typeagent/agent-sdk";
-import { executeCommand } from "../action/actionHandlers.js";
+import { executeCommand } from "../execute/actionHandlers.js";
 import { isCommandDescriptorTable } from "@typeagent/agent-sdk/helpers/command";
 import { RequestMetrics } from "../utils/metrics.js";
 import { parseParams } from "./parameters.js";

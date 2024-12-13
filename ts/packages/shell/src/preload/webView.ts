@@ -83,7 +83,10 @@ export async function awaitPageLoad() {
     */
 }
 
-export async function getTabHTMLFragments(fullSize: boolean) {
+export async function getTabHTMLFragments(
+    fullSize: boolean,
+    extactText: boolean,
+) {
     let htmlFragments: any[] = [];
     let htmlPromises: Promise<any>[] = [];
 
@@ -131,15 +134,18 @@ export async function getTabHTMLFragments(fullSize: boolean) {
     for (let i = 0; i < htmlResults.length; i++) {
         const frameHTML = htmlResults[i];
         if (frameHTML) {
-            const frameText = await sendScriptAction(
-                {
-                    type: "get_page_text",
-                    inputHtml: frameHTML,
-                    frameId: i,
-                },
-                1000,
-                frames[i],
-            );
+            let frameText = "";
+            if (extactText) {
+                frameText = await sendScriptAction(
+                    {
+                        type: "get_page_text",
+                        inputHtml: frameHTML,
+                        frameId: i,
+                    },
+                    1000,
+                    frames[i],
+                );
+            }
 
             htmlFragments.push({
                 frameId: i,
@@ -303,6 +309,7 @@ async function runBrowserAction(action: any) {
         case "getHTML": {
             responseObject = await getTabHTMLFragments(
                 action.parameters.fullHTML,
+                action.parameters?.extractText,
             );
 
             break;

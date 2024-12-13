@@ -11,7 +11,7 @@ import {
     ClientIO,
     IAgentMessage,
     RequestId,
-} from "../handlers/common/interactiveIO.js";
+} from "../context/interactiveIO.js";
 import { TemplateEditConfig } from "../translation/actionTemplate.js";
 import chalk from "chalk";
 import stringWidth from "string-width";
@@ -260,9 +260,9 @@ function getNextInput(prompt: string, inputs: string[]): string {
  * @param inputFileName Input text file name, if any.
  * @param processRequest Async callback function that is invoked for each interactive input or each line in text file.
  */
-export async function processRequests<T>(
+export async function processCommands<T>(
     interactivePrompt: string | ((context: T) => string),
-    processRequest: (request: string, context: T) => Promise<any>,
+    processCommand: (request: string, context: T) => Promise<any>,
     context: T,
     inputs?: string[],
 ) {
@@ -280,13 +280,11 @@ export async function processRequests<T>(
                 request.toLowerCase() === "quit" ||
                 request.toLowerCase() === "exit"
             ) {
-                (context as any)?.session.save(); // save session state
                 break;
             } else {
                 try {
-                    await processRequest(request, context);
+                    await processCommand(request, context);
                     history.push(request);
-                    (context as any)?.session.save(); // save session state
                 } catch (error) {
                     console.log("### ERROR:");
                     console.log(error);

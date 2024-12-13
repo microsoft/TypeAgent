@@ -14,6 +14,7 @@ export type TypeAgentAPIServerConfig = {
     wwwroot: string;
     port: number;
     broadcast: boolean;
+    blobBackupEnabled: boolean;
 };
 
 export class TypeAgentAPIWebServer {

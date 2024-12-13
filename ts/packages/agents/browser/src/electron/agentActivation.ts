@@ -32,6 +32,9 @@ function setupSiteAgent() {
                 "https://www.denverpost.com/games/daily-crossword",
             ) ||
             pageUrl.startsWith(
+                "https://www.denverpost.com/puzzles/?amu=/iwin-crossword",
+            ) ||
+            pageUrl.startsWith(
                 "https://www.bestcrosswords.com/bestcrosswords/guestconstructor",
             )
         ) {

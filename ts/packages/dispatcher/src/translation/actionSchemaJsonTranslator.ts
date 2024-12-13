@@ -2,7 +2,6 @@
 // Licensed under the MIT License.
 
 import { error, Result, success, TypeChatJsonValidator } from "typechat";
-import { TranslatedAction } from "../handlers/requestCommandHandler.js";
 import {
     ActionSchemaFile,
     generateActionSchema,
@@ -23,6 +22,7 @@ import {
     ActionConfigProvider,
     ActionConfig,
     createChangeAssistantActionSchema,
+    TranslatedAction,
 } from "./agentTranslators.js";
 import { createMultipleActionSchema } from "./multipleActionSchema.js";
 
@@ -127,7 +127,7 @@ class ActionSchemaBuilder {
                     for (const t of currentType.types) {
                         if (t.definition === undefined) {
                             throw new Error(
-                                `Schema Builder Error: unresolved type reference '${t.name}' in entry tryp union`,
+                                `Schema Builder Error: unresolved type reference '${t.name}' in entry type union`,
                             );
                         }
                         pending.push(t.definition);
@@ -136,7 +136,7 @@ class ActionSchemaBuilder {
                 case "type-reference":
                     if (currentType.definition === undefined) {
                         throw new Error(
-                            `Schema Builder Error: unresolved type reference '${currentType.name}' in entry tryp union`,
+                            `Schema Builder Error: unresolved type reference '${currentType.name}' in entry type union`,
                         );
                     }
                     pending.push(currentType.definition);
@@ -167,8 +167,9 @@ class ActionSchemaBuilder {
 export function composeActionSchema(
     schemaName: string,
     provider: ActionConfigProvider,
-    activeSchemas: { [key: string]: boolean } | undefined,
-    multipleActions: boolean = false,
+    activeSchemas: { [key: string]: boolean },
+    changeAgentAction: boolean,
+    multipleActions: boolean,
 ) {
     const builder = new ActionSchemaBuilder(provider);
     builder.addActionConfig(provider.getActionConfig(schemaName));
@@ -177,6 +178,7 @@ export function composeActionSchema(
         schemaName,
         provider,
         activeSchemas,
+        changeAgentAction,
         multipleActions,
         false,
     );
@@ -186,8 +188,9 @@ export function composeSelectedActionSchema(
     definitions: ActionSchemaTypeDefinition[],
     schemaName: string,
     provider: ActionConfigProvider,
-    activeSchemas: { [key: string]: boolean } | undefined,
-    multipleActions: boolean = false,
+    activeSchemas: { [key: string]: boolean },
+    changeAgentAction: boolean,
+    multipleActions: boolean,
 ) {
     const builder = new ActionSchemaBuilder(provider);
     for (const definition of definitions) {
@@ -198,6 +201,7 @@ export function composeSelectedActionSchema(
         schemaName,
         provider,
         activeSchemas,
+        changeAgentAction,
         multipleActions,
         true,
     );
@@ -207,7 +211,8 @@ function finalizeActionSchemaBuilder(
     builder: ActionSchemaBuilder,
     schemaName: string,
     provider: ActionConfigProvider,
-    activeSchemas: { [key: string]: boolean } | undefined,
+    activeSchemas: { [key: string]: boolean },
+    changeAgentAction: boolean,
     multipleActions: boolean,
     partial: boolean,
 ) {
@@ -215,7 +220,7 @@ function finalizeActionSchemaBuilder(
         ...getInjectedActionConfigs(schemaName, provider, activeSchemas),
     );
 
-    if (activeSchemas) {
+    if (changeAgentAction) {
         const changeAssistantActionSchema = createChangeAssistantActionSchema(
             provider,
             schemaName,

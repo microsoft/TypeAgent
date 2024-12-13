@@ -589,6 +589,7 @@ async function getTabHTMLFragments(
     targetTab: chrome.tabs.Tab,
     fullSize: boolean,
     downloadAsFile: boolean,
+    extractText: boolean,
     maxFragmentSize: 16000,
 ) {
     const frames = await chrome.webNavigation.getAllFrames({
@@ -612,15 +613,18 @@ async function getTabHTMLFragments(
                 );
 
                 if (frameHTML) {
-                    const frameText = await chrome.tabs.sendMessage(
-                        targetTab.id!,
-                        {
-                            type: "get_page_text",
-                            inputHtml: frameHTML,
-                            frameId: frames[i].frameId,
-                        },
-                        { frameId: frames[i].frameId },
-                    );
+                    let frameText = "";
+                    if (extractText) {
+                        frameText = await chrome.tabs.sendMessage(
+                            targetTab.id!,
+                            {
+                                type: "get_page_text",
+                                inputHtml: frameHTML,
+                                frameId: frames[i].frameId,
+                            },
+                            { frameId: frames[i].frameId },
+                        );
+                    }
 
                     if (downloadAsFile) {
                         await downloadStringAsFile(
@@ -758,6 +762,9 @@ async function toggleSiteTranslator(targetTab: chrome.tabs.Tab) {
             ) ||
             targetTab.url.startsWith(
                 "https://www.denverpost.com/games/daily-crossword",
+            ) ||
+            targetTab.url.startsWith(
+                "https://www.denverpost.com/puzzles/?amu=/iwin-crossword",
             ) ||
             targetTab.url.startsWith(
                 "https://www.bestcrosswords.com/bestcrosswords/guestconstructor",
@@ -1123,6 +1130,7 @@ async function runBrowserAction(action: any) {
                 targetTab,
                 action.parameters?.fullHTML,
                 action.parameters?.downloadAsFile,
+                action.parameters?.extractText,
                 16000,
             );
             break;

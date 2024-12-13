@@ -1,6 +1,13 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+// Display content to the dispatcher host.  It is up to the host to determine how to display the content
+// Support for some display options varies from host to host.
+
+// The content type to tell the host the format of the MessageContent:
+// - text can supports use ANSI escape code to control additional text color and style
+//   - depending on host support, host is expected to strip ANI escape code if not supported.
+// - html and iframe might not be supported by all hosts.
 export type DisplayType = "html" | "iframe" | "text";
 
 export type DynamicDisplay = {
@@ -12,7 +19,7 @@ export type DynamicDisplay = {
 export type MessageContent = string | string[] | string[][];
 
 export type DisplayContent =
-    | MessageContent // each string in the MessageContext is treated as text
+    | MessageContent // each string in the MessageContext is treated as DisplayType "text"
     | {
           type: DisplayType; // Type of the content
           content: MessageContent; // each string in the MessageContext is treated as what `type` specifies
@@ -20,6 +27,7 @@ export type DisplayContent =
           speak?: boolean; // Optional flag to indicate if the content should be spoken
       };
 
+// Optional message kind for client specific styling
 export type DisplayMessageKind =
     | "info"
     | "status"
@@ -27,6 +35,10 @@ export type DisplayMessageKind =
     | "error"
     | "success";
 
+// Actual interpretation of DisplayAppendMode up to the dispatcher host.
+// Block - message will be show with in a separate block from the surrounding message (new line for prev and next message)
+// Inline - message will be show next the previous "inline" message.
+// Temporary - same as "block", but will be replace by the next message.
 export type DisplayAppendMode = "inline" | "block" | "temporary";
 
 export type ClientAction =

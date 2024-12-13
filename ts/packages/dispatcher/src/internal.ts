@@ -7,13 +7,7 @@ export {
     initializeCommandHandlerContext,
     closeCommandHandlerContext,
     CommandHandlerContext,
-} from "./handlers/common/commandHandlerContext.js";
-export {
-    processCommand,
-    getSettingSummary,
-    getPrompt,
-    getTranslatorNameToEmojiMap,
-} from "./command/command.js";
+} from "./context/commandHandlerContext.js";
 export { getCacheFactory } from "./utils/cacheFactory.js";
 export {
     GenerateTestDataResult,
@@ -38,5 +32,5 @@ export {
 } from "./utils/defaultAppProviders.js";
 export { getAssistantSelectionSchemas } from "./translation/unknownSwitcher.js";
 export { getActionSchema } from "./translation/actionSchemaFileCache.js";
-export { getTestDataFiles } from "./utils/config.js";
 export { getFullSchemaText } from "./translation/agentTranslators.js";
+export { getTestDataFiles } from "./utils/config.js";

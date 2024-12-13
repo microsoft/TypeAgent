@@ -7,6 +7,7 @@ import chalk from "chalk";
 import {
     ActionConfigProvider,
     loadAgentJsonTranslator,
+    TranslatedAction,
 } from "../../translation/agentTranslators.js";
 import {
     JSONAction,
@@ -23,8 +24,6 @@ import { getElapsedString, createLimiter, Limiter } from "common-utils";
 import { getCacheFactory } from "../cacheFactory.js";
 import { Result } from "typechat";
 import { isMultipleAction } from "../../translation/multipleActionSchema.js";
-import { TranslatedAction } from "../../handlers/requestCommandHandler.js";
-import { getActionConfigProviderFromDefaultAppAgentProviders } from "../defaultAppProviders.js";
 
 const testDataJSONVersion = 2;
 export type TestDataEntry<T extends object = object> =
@@ -279,6 +278,10 @@ function getSafeTranslateFn(
     const translator = loadAgentJsonTranslator<TranslatedAction>(
         schemaName,
         provider,
+        {},
+        false,
+        false,
+        true,
         model,
     );
     return async (request: string): Promise<Result<TranslatedAction>> => {

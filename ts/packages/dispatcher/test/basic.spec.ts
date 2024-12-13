@@ -1,15 +1,15 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { createNpmAppAgentProvider } from "../src/agent/npmAgentProvider.js";
-import { createDispatcher } from "../src/dispatcher/dispatcher.js";
+import { createNpmAppAgentProvider } from "../src/agentProvider/npmAgentProvider.js";
+import { createDispatcher } from "../src/dispatcher.js";
 import { fileURLToPath } from "node:url";
 import { getBuiltinAppAgentProvider } from "../src/utils/defaultAppProviders.js";
 import {
     ClientIO,
     IAgentMessage,
     nullClientIO,
-} from "../src/handlers/common/interactiveIO.js";
+} from "../src/context/interactiveIO.js";
 
 const testAppAgentProvider = createNpmAppAgentProvider(
     {

@@ -78,6 +78,7 @@ export class BrowserConnector {
       parameters: {
         fullHTML: false,
         downloadAsFile: false,
+        extractText: false,
       },
     };
 
