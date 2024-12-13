@@ -34,8 +34,8 @@ class RequestCommandHandler implements CommandHandler {
         context: ActionContext<OracleActionContext>,
         params: ParsedCommandParams<ParameterDefinitions>,
     ): Promise<void> {
-        if (typeof params?.args?.question === "string") {
-            const result = makeRandomResponse();
+        if (typeof params.args?.question === "string") {
+            const result = makeRandomResponse(params.args.question);
             context.actionIO.appendDisplay(result.displayContent);
         }
     }
@@ -122,7 +122,7 @@ async function handleOracleAction(
 ): Promise<ActionResult> {
     switch (action.actionName) {
         case "queryOracle": {
-            return makeRandomResponse();
+            return makeRandomResponse(action.parameters.query);
             break;
         }
         default:
@@ -130,7 +130,7 @@ async function handleOracleAction(
     }
 }
 
-function makeRandomResponse(): ActionResultSuccess {
+function makeRandomResponse(input: string): ActionResultSuccess {
     const randomIndex = Math.floor(Math.random() * oracularResponses.length);
     const displayText = oracularResponses[randomIndex];
     return createActionResultFromTextDisplay(displayText, displayText);
