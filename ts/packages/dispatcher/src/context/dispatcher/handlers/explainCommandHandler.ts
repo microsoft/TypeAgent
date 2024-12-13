@@ -54,8 +54,9 @@ export class ExplainCommandHandler implements CommandHandler {
         const systemContext = context.sessionContext.agentContext;
 
         if (flags.repeat > 1) {
-            console.log(
+            displayResult(
                 `Repeating ${flags.repeat} times with concurrency ${flags.concurrency}...`,
+                context,
             );
             const limiter = createLimiter(
                 flags.concurrency > 0 ? flags.concurrency : 1,

@@ -168,12 +168,18 @@ export class AppAgentManager implements ActionConfigProvider {
         return record.manifest.description;
     }
 
+    public isAppAgentName(appAgentName: string) {
+        return this.agents.get(appAgentName) !== undefined;
+    }
+
+    // Throws if schemaName is invalid.
     public isSchemaEnabled(schemaName: string) {
         const appAgentName = getAppAgentName(schemaName);
         const record = this.getRecord(appAgentName);
         return record.schemas.has(schemaName);
     }
 
+    // Throws if schemaName is invalid.
     public isSchemaActive(schemaName: string) {
         return (
             this.isSchemaEnabled(schemaName) &&
@@ -187,6 +193,7 @@ export class AppAgentManager implements ActionConfigProvider {
         );
     }
 
+    // Throws if schemaName is invalid.
     public isActionActive(schemaName: string) {
         return (
             this.isActionEnabled(schemaName) &&
@@ -194,24 +201,25 @@ export class AppAgentManager implements ActionConfigProvider {
         );
     }
 
+    // Throws if schemaName is invalid.
     public isActionEnabled(schemaName: string) {
         const appAgentName = getAppAgentName(schemaName);
         const record = this.getRecord(appAgentName);
         return record.actions.has(schemaName);
     }
 
+    // Throws if appAgentName is invalid.
     public isCommandEnabled(appAgentName: string) {
-        const record = this.agents.get(appAgentName);
-        return record !== undefined
-            ? record.commands && record.appAgent?.executeCommand !== undefined
-            : false;
+        const record = this.getRecord(appAgentName);
+        return record.commands && record.appAgent?.executeCommand !== undefined;
     }
 
     // Return undefined if we don't know because the agent isn't loaded yet.
     // Return null if the agent doesn't support commands.
+    // Throws if appAgentName is invalid.
     public getCommandEnabledState(appAgentName: string) {
-        const record = this.agents.get(appAgentName);
-        return record !== undefined && record.appAgent !== undefined
+        const record = this.getRecord(appAgentName);
+        return record.appAgent !== undefined
             ? record.appAgent.executeCommand !== undefined
                 ? record.commands
                 : null

@@ -86,7 +86,7 @@ export default class ExplainCommand extends Command {
             appAgentProviders: getDefaultAppAgentProviders(),
             schemas,
             actions: null, // We don't need any actions
-            commands: null,
+            commands: { dispatcher: true },
             explainer: {
                 name: flags.explainer,
             },
