@@ -405,6 +405,7 @@ export async function createEntityIndexOnStorage<TSourceId = string>(
                     options.facetSearchOptions?.minScore ?? options.minScore,
                 ),
             ]);
+            entityIdHitTable.roundScores(2);
             let entityIdHits = entityIdHitTable
                 .getTopK(determineTopK(options))
                 .sort();
@@ -474,13 +475,7 @@ export async function createEntityIndexOnStorage<TSourceId = string>(
     }
 
     function determineTopK(options: EntitySearchOptions): number {
-        const topK =
-            options.topK ??
-            Math.max(
-                options.maxMatches,
-                options.nameSearchOptions?.maxMatches ?? 0,
-                //options.facetSearchOptions?.maxMatches ?? 0,
-            );
+        const topK = options.topK;
         return topK === undefined || topK < 3 ? 3 : topK;
     }
 }
