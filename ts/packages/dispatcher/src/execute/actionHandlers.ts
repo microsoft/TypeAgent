@@ -253,7 +253,7 @@ async function executeAction(
         debugActions(actionResultToString(result));
     }
     if (result.error !== undefined) {
-        displayError(result.error, context);
+        displayError(result.error, actionContext);
         systemContext.chatHistory.addEntry(
             `Action ${action.fullActionName} failed: ${result.error}`,
             [],
