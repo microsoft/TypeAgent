@@ -278,6 +278,10 @@ function getSafeTranslateFn(
     const translator = loadAgentJsonTranslator<TranslatedAction>(
         schemaName,
         provider,
+        {},
+        false,
+        false,
+        true,
         model,
     );
     return async (request: string): Promise<Result<TranslatedAction>> => {

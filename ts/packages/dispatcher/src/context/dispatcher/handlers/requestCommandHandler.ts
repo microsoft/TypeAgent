@@ -568,9 +568,9 @@ async function pickInitialSchema(
     // Start with the last translator used
     let schemaName = systemContext.lastActionSchemaName;
 
-    const firstUseEmbedding =
-        systemContext.session.getConfig().translation.schema.firstUseEmbedding;
-    if (firstUseEmbedding) {
+    const embedding =
+        systemContext.session.getConfig().translation.switch.embedding;
+    if (embedding) {
         debugSemanticSearch(`Using embedding for schema selection`);
         // Use embedding to determine the most likely action schema and use the schema name for that.
         const result =
@@ -685,10 +685,10 @@ export async function translateRequest(
     return requestAction;
 }
 
-function canExecute(
+async function canExecute(
     requestAction: RequestAction,
     context: ActionContext<CommandHandlerContext>,
-): boolean {
+): Promise<boolean> {
     const actions = requestAction.actions;
     const systemContext = context.sessionContext.agentContext;
     const unknown: UnknownAction[] = [];
@@ -706,17 +706,57 @@ function canExecute(
     }
 
     if (unknown.length > 0) {
-        const message = `Unable to determine ${actions.action === undefined ? "one or more actions in" : "action for"} the request.`;
-        const details = `- ${unknown.map((action) => action.parameters.request).join("\n- ")}`;
-        const fullMessage = `${message}\n${details}`;
+        const unknownRequests = unknown.map(
+            (action) => action.parameters.request,
+        );
+        const lines = [
+            `Unable to determine ${actions.action === undefined ? "one or more actions in" : "action for"} the request.`,
+            ...unknownRequests.map((s) => `- ${s}`),
+        ];
         systemContext.chatHistory.addEntry(
-            fullMessage,
+            lines.join("\n"),
             [],
             "assistant",
             systemContext.requestId,
         );
 
-        displayError(fullMessage, context);
+        const config = systemContext.session.getConfig();
+        if (
+            !config.translation.switch.search &&
+            !config.translation.switch.embedding &&
+            !config.translation.switch.inline
+        ) {
+            lines.push("");
+            lines.push("Switching agents is disabled");
+        } else {
+            const entries = await Promise.all(
+                unknownRequests.map((request) =>
+                    systemContext.agents.semanticSearchActionSchema(
+                        request,
+                        1,
+                        () => true, // don't filter
+                    ),
+                ),
+            );
+            const schemaNames = new Set(
+                entries
+                    .filter((e) => e !== undefined)
+                    .map((e) => e![0].item.actionSchemaFile.schemaName)
+                    .filter(
+                        (schemaName) =>
+                            !systemContext.agents.isSchemaActive(schemaName),
+                    ),
+            );
+
+            if (schemaNames.size > 0) {
+                lines.push("");
+                lines.push(
+                    `Possible agent${schemaNames.size > 1 ? "s" : ""} to handle the request${unknownRequests.length > 1 ? "s" : ""} are not active: ${Array.from(schemaNames).join(", ")}`,
+                );
+            }
+        }
+
+        displayError(lines, context);
         return false;
     }
 
@@ -740,7 +780,7 @@ async function requestExecute(
     requestAction: RequestAction,
     context: ActionContext<CommandHandlerContext>,
 ) {
-    if (!canExecute(requestAction, context)) {
+    if (!(await canExecute(requestAction, context))) {
         return;
     }
 

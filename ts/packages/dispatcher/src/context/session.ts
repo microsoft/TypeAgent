@@ -108,6 +108,7 @@ type DispatcherConfig = {
             additionalInstructions: boolean;
         };
         switch: {
+            embedding: boolean; // use embedding to determine the first schema to use.
             inline: boolean;
             search: boolean;
         };
@@ -115,7 +116,6 @@ type DispatcherConfig = {
         history: boolean;
         schema: {
             generation: boolean;
-            firstUseEmbedding: boolean; // use embedding to determine the first schema to use.
             optimize: {
                 enabled: boolean;
                 numInitialActions: number; // 0 means no limit
@@ -165,6 +165,7 @@ const defaultSessionConfig: SessionConfig = {
             additionalInstructions: true,
         },
         switch: {
+            embedding: true,
             inline: true,
             search: true,
         },
@@ -172,7 +173,6 @@ const defaultSessionConfig: SessionConfig = {
         history: true,
         schema: {
             generation: true,
-            firstUseEmbedding: true,
             optimize: {
                 enabled: true,
                 numInitialActions: 5,

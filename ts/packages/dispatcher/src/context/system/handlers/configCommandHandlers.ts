@@ -557,6 +557,58 @@ class ConfigTranslationNumberOfInitialActionsCommandHandler
     }
 }
 
+class FixedSchemaCommandHandler implements CommandHandler {
+    public readonly description = "Set a fixed schema disable switching";
+    public readonly parameters = {
+        args: {
+            schemaName: {
+                description: "name of the schema",
+            },
+        },
+    };
+    public async run(
+        context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const schemaName = params.args.schemaName;
+        const systemContext = context.sessionContext.agentContext;
+        if (!systemContext.agents.isActionActive(schemaName)) {
+            throw new Error(`Schema '${schemaName}' is not active.`);
+        }
+        await changeContextConfig(
+            {
+                translation: {
+                    switch: {
+                        embedding: false,
+                        inline: false,
+                        search: false,
+                    },
+                },
+            },
+            context,
+        );
+        context.sessionContext.agentContext.lastActionSchemaName = schemaName;
+        displayResult(
+            `Switching schema disabled. Schema is fixed set to '${schemaName}'`,
+            context,
+        );
+    }
+    public async getCompletion(
+        context: SessionContext<CommandHandlerContext>,
+        params: PartialParsedCommandParams<ParameterDefinitions>,
+        names: string[],
+    ): Promise<string[]> {
+        const completions: string[] = [];
+        const systemContext = context.agentContext;
+        for (const name of names) {
+            if (name === "schemaName") {
+                return systemContext.agents.getActiveSchemas();
+            }
+        }
+        return completions;
+    }
+}
+
 const configTranslationCommandHandlers: CommandHandlerTable = {
     description: "Translation configuration",
     defaultSubCommand: "on",
@@ -587,6 +639,7 @@ const configTranslationCommandHandlers: CommandHandlerTable = {
                             {
                                 translation: {
                                     switch: {
+                                        embedding: enable,
                                         inline: enable,
                                         search: enable,
                                     },
@@ -596,6 +649,7 @@ const configTranslationCommandHandlers: CommandHandlerTable = {
                         );
                     },
                 ),
+                fix: new FixedSchemaCommandHandler(),
                 inline: getToggleHandlerTable(
                     "inject inline switch",
                     async (context, enable: boolean) => {
@@ -619,6 +673,21 @@ const configTranslationCommandHandlers: CommandHandlerTable = {
                                 translation: {
                                     switch: {
                                         search: enable,
+                                    },
+                                },
+                            },
+                            context,
+                        );
+                    },
+                ),
+                embedding: getToggleHandlerTable(
+                    "Use embedding for initial pick of schema",
+                    async (context, enable: boolean) => {
+                        await changeContextConfig(
+                            {
+                                translation: {
+                                    switch: {
+                                        embedding: enable,
                                     },
                                 },
                             },
