@@ -193,14 +193,20 @@ function initializeConsole() {
     readline.emitKeypressEvents(process.stdin);
 }
 
+let usingConsole = false;
 export async function withConsoleClientIO(
     callback: (clientIO: ClientIO) => Promise<void>,
 ) {
+    if (usingConsole) {
+        throw new Error("Cannot have multiple console clients");
+    }
+    usingConsole = true;
     try {
         initializeConsole();
         await callback(createConsoleClientIO());
     } finally {
         process.stdin.pause();
+        usingConsole = false;
     }
 }
 

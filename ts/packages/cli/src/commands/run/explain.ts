@@ -75,6 +75,9 @@ export default class ExplainCommand extends Command {
         if (flags.filter?.includes("refList")) {
             command.push("--filterReference");
         }
+        if (flags.repeat > 1) {
+            command.push(`--repeat ${flags.repeat}`);
+        }
         if (args.request) {
             command.push(args.request);
         } else {
