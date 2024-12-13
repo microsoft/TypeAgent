@@ -6,11 +6,11 @@ import chalk from "chalk";
 import { RequestAction, Actions } from "agent-cache";
 import {
     getCacheFactory,
-    getSchemaNamesFromDefaultAppAgentProviders,
     getDefaultAppAgentProviders,
+    getSchemaNamesFromDefaultAppAgentProviders,
 } from "agent-dispatcher/internal";
-import { createConsoleClientIO } from "agent-dispatcher/helpers/console";
-import { createDispatcher } from "agent-dispatcher";
+import { withConsoleClientIO } from "agent-dispatcher/helpers/console";
+import { ClientIO, createDispatcher } from "agent-dispatcher";
 
 // Default test case, that include multiple phrase action name (out of order) and implicit parameters (context)
 const testRequest = new RequestAction(
@@ -82,19 +82,23 @@ export default class ExplainCommand extends Command {
             command.push(testRequest.toString());
         }
 
-        const dispatcher = await createDispatcher("cli run explain", {
-            appAgentProviders: getDefaultAppAgentProviders(),
-            schemas,
-            actions: null, // We don't need any actions
-            commands: { dispatcher: true },
-            explainer: {
-                name: flags.explainer,
-            },
-            cache: { enabled: false },
-            clientIO: createConsoleClientIO(),
+        await withConsoleClientIO(async (clientIO: ClientIO) => {
+            const dispatcher = await createDispatcher("cli run explain", {
+                appAgentProviders: getDefaultAppAgentProviders(),
+                schemas,
+                actions: null, // We don't need any actions
+                commands: { dispatcher: true },
+                explainer: {
+                    name: flags.explainer,
+                },
+                cache: { enabled: false },
+                clientIO,
+            });
+            try {
+                await dispatcher.processCommand(command.join(" "));
+            } finally {
+                await dispatcher.close();
+            }
         });
-
-        await dispatcher.processCommand(command.join(" "));
-        await dispatcher.close();
     }
 }
