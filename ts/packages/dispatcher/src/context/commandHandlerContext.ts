@@ -122,10 +122,11 @@ export function getTranslatorForSchema(
     const newTranslator = loadAgentJsonTranslator(
         translatorName,
         context.agents,
-        config.model,
-        config.switch.inline ? getActiveTranslators(context) : undefined,
+        getActiveTranslators(context),
+        config.switch.inline,
         config.multipleActions,
         config.schema.generation,
+        config.model,
         !config.schema.optimize.enabled,
     );
     context.translatorCache.set(translatorName, newTranslator);
@@ -159,9 +160,10 @@ export async function getTranslatorForSelectedActions(
         nearestNeighbors.map((e) => e.item.definition),
         schemaName,
         context.agents,
-        config.model,
-        config.switch.inline ? getActiveTranslators(context) : undefined,
+        getActiveTranslators(context),
+        config.switch.inline,
         config.multipleActions,
+        config.model,
     );
 }
 

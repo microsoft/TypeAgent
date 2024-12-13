@@ -39,7 +39,11 @@ async function executeDispatcherAction(
     action: DispatcherActions | ClarifyRequestAction,
     context: ActionContext<CommandHandlerContext>,
 ) {
-    if (action.actionName === "clarifyRequest") {
+    if (
+        action.actionName === "clarifyMultiplePossibleActionName" ||
+        action.actionName === "clarifyMissingParameter" ||
+        action.actionName === "clarifyUnresolvedReference"
+    ) {
         return clarifyRequestAction(action, context);
     }
 

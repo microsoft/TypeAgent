@@ -247,15 +247,15 @@ export async function fetchWithRetry(
                 !isTransientHttpError(result.status) ||
                 retryCount >= retryMaxAttempts
             ) {
-                return error(`fetch error\n${await getErrorMessage(result)}`);
+                return error(`fetch error: ${await getErrorMessage(result)}`);
             }
             // See if the service tells how long to wait to retry
             const pauseMs = getRetryAfterMs(result, retryPauseMs);
             await sleep(pauseMs);
             retryCount++;
         }
-    } catch (e) {
-        return error(`fetch error:\n${e}`);
+    } catch (e: any) {
+        return error(`fetch error: ${e.cause?.message ?? e.message}`);
     }
 }
 
