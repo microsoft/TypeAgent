@@ -43,7 +43,7 @@ import {
 import chalk from "chalk";
 import { convertMsgFiles } from "./importer.js";
 import fs from "fs";
-import { Result, success } from "typechat";
+import { error, Result, success } from "typechat";
 
 export async function createEmailMemory(
     models: Models,
@@ -341,7 +341,11 @@ export function createEmailCommands(
                     options,
                     previousUserInputs,
                 );
+                if (!searchResults) {
+                    return error("No search results");
+                }
                 context.printer.writeLine();
+                context.printer.writeSearchQuestion(searchResults);
                 context.printer.writeResultStats(searchResults?.response);
                 context.printer.writeLine();
                 return success(searchResults);
