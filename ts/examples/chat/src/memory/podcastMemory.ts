@@ -26,7 +26,6 @@ import {
 import path from "path";
 import {
     createWorkQueueFolder,
-    dateTime,
     ensureDir,
     getFileName,
     isDirectoryPath,
@@ -66,6 +65,10 @@ export async function createPodcastMemory(
         storageProvider,
     );
     cm.searchProcessor.answers.settings.chunking.fastStop = true;
+    cm.searchProcessor.settings.threadSearch = {
+        maxMatches: 1,
+        minScore: 8,
+    };
     return cm;
 }
 
@@ -182,7 +185,10 @@ export function createPodcastCommands(
     async function podcastAddThread(args: string[]): Promise<void> {
         const namedArgs = parseNamedArguments(args, podcastConvertDef());
         const sourcePath = namedArgs.sourcePath;
-        const timeRange = getTimeRange(namedArgs);
+        const timeRange = conversation.parseTranscriptDuration(
+            namedArgs.startAt,
+            namedArgs.length,
+        );
         if (!timeRange) {
             context.printer.writeError("Time range required");
             return;
@@ -302,21 +308,5 @@ export function createPodcastCommands(
             context.statsPath,
             `${context.podcastMemory.conversationName}_stats.json`,
         );
-    }
-
-    function getTimeRange(
-        namedArgs: NamedArgs,
-    ): dateTime.DateRange | undefined {
-        const startDate = argToDate(namedArgs.startAt);
-        const stopDate = startDate
-            ? addMinutesToDate(startDate, namedArgs.length)
-            : undefined;
-        if (startDate) {
-            return {
-                startDate,
-                stopDate,
-            };
-        }
-        return undefined;
     }
 }

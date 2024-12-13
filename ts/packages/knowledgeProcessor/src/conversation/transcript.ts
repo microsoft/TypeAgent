@@ -9,6 +9,8 @@ import {
     ConversationMessage,
 } from "./conversationManager.js";
 import { Action, KnowledgeResponse } from "./knowledgeSchema.js";
+import { DateTimeRange } from "./dateTimeSchema.js";
+import { dateToDateTime } from "./knowledgeActions.js";
 
 /**
  * A turn in a transcript
@@ -306,4 +308,17 @@ export function createTranscriptOverview(
         overview += participants.join(", ");
     }
     return overview;
+}
+
+export function parseTranscriptDuration(
+    startAt: string,
+    lengthMinutes: number,
+): DateTimeRange {
+    const startDate = dateTime.stringToDate(startAt)!;
+    const offsetMs = lengthMinutes * 60 * 1000;
+    const stopDate = new Date(startDate.getTime() + offsetMs);
+    return {
+        startDate: dateToDateTime(startDate),
+        stopDate: dateToDateTime(stopDate),
+    };
 }

@@ -11,7 +11,7 @@ import {
 import { createTypeScriptJsonValidator } from "typechat/ts";
 import { SearchAction } from "./knowledgeSearchSchema.js";
 import { dateTime, loadSchema } from "typeagent";
-import { DateTime, DateTimeRange } from "./dateTimeSchema.js";
+import { DateTime, DateTimeRange, DateVal, TimeVal } from "./dateTimeSchema.js";
 import { SearchTermsAction } from "./knowledgeTermSearchSchema.js";
 import { SearchTermsActionV2 } from "./knowledgeTermSearchSchema2.js";
 
@@ -195,4 +195,21 @@ export function dateTimeToDate(dateTime: DateTime): Date {
         );
     }
     return dt;
+}
+
+export function dateToDateTime(dt: Date): DateTime {
+    const date: DateVal = {
+        day: dt.getDay(),
+        month: dt.getMonth() + 1,
+        year: dt.getFullYear(),
+    };
+    const time: TimeVal = {
+        hour: dt.getHours(),
+        minute: dt.getMinutes(),
+        seconds: dt.getSeconds(),
+    };
+    return {
+        date,
+        time,
+    };
 }

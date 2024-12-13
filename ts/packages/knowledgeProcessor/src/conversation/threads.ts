@@ -1,9 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { asyncArray, dateTime } from "typeagent";
+import { asyncArray } from "typeagent";
 import { StorageProvider } from "../storageProvider.js";
 import { removeUndefined } from "../setOperations.js";
+import { DateTimeRange } from "./dateTimeSchema.js";
 
 export interface ThreadDefinition {
     description: string;
@@ -12,15 +13,10 @@ export interface ThreadDefinition {
 
 export interface ThreadTimeRange extends ThreadDefinition {
     type: "temporal";
-    timeRange: dateTime.DateRange;
+    timeRange: DateTimeRange;
 }
 
-export interface ThreadId extends ThreadDefinition {
-    type: "id";
-    id: number;
-}
-
-export type ConversationThread = ThreadTimeRange | ThreadId;
+export type ConversationThread = ThreadTimeRange;
 
 export interface ThreadIndex<TId = any> {
     entries(): AsyncIterableIterator<ConversationThread>;
