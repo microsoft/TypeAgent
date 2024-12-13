@@ -19,7 +19,11 @@ import { pathToFileURL } from "url";
 import path from "path";
 import { valueToString } from "./text.js";
 
+export type TemporalLogSettings = {
+    concurrency: number;
+};
 /**
+ * A mutable log of timestamped items
  * @template TId the type of the log entry Id
  * @template T type of object stored in the log
  */
@@ -49,10 +53,14 @@ export interface TemporalLog<TId = any, T = any> {
     getUrl?: (id: TId) => URL;
 }
 
-export type TemporalLogSettings = {
-    concurrency: number;
-};
-
+/**
+ * Create a temporal log using files
+ * @param settings
+ * @param folderPath
+ * @param folderSettings
+ * @param fSys
+ * @returns
+ */
 export async function createTemporalLog<T>(
     settings: TemporalLogSettings,
     folderPath: string,
@@ -268,21 +276,35 @@ export function getRangeOfTemporalSequence(
         stopDate: sequence[sequence.length - 1].timestamp,
     };
 }
+
+/**
+ * A window of recent items
+ */
 export interface RecentItems<T> {
-    readonly entries: collections.CircularArray<T>;
+    /**
+     * Returns all recent entries, ordered by most recent first
+     */
+    getEntries(): T[];
     push(items: T | T[]): void;
     getContext(maxContextLength: number): string[];
     getUnique(): T[];
     reset(): void;
 }
 
+/**
+ * Create a 'window' to track the most recent items in a "stream"
+ * Uses a circular array
+ * @param windowSize
+ * @param stringify
+ * @returns
+ */
 export function createRecentItemsWindow<T>(
     windowSize: number,
     stringify?: (value: T) => string,
 ): RecentItems<T> {
     const entries = new collections.CircularArray<T>(windowSize);
     return {
-        entries,
+        getEntries: () => entries.getEntries(),
         push,
         getContext,
         getUnique,

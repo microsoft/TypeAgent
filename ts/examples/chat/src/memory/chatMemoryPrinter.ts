@@ -297,17 +297,29 @@ export class ChatMemoryPrinter extends ChatPrinter {
         }
     }
 
+    public writeSearchQuestion(
+        result:
+            | conversation.SearchTermsActionResponse
+            | conversation.SearchTermsActionResponseV2
+            | undefined,
+        debug: boolean = false,
+    ) {
+        if (result) {
+            const question = getSearchQuestion(result);
+            if (question) {
+                this.writeInColor(chalk.cyanBright, `Question: ${question}`);
+                this.writeLine();
+            }
+        }
+    }
+
     public writeSearchTermsResult(
         result:
             | conversation.SearchTermsActionResponse
             | conversation.SearchTermsActionResponseV2,
         debug: boolean = false,
     ) {
-        const question = getSearchQuestion(result);
-        if (question) {
-            this.writeInColor(chalk.cyanBright, `Question: ${question}`);
-            this.writeLine();
-        }
+        this.writeSearchQuestion(result);
         if (result.response && result.response.answer) {
             this.writeResultStats(result.response);
             if (result.response.answer.answer) {

@@ -8,6 +8,9 @@ import {
     ConversationManager,
     ConversationMessage,
 } from "./conversationManager.js";
+import { Action, KnowledgeResponse } from "./knowledgeSchema.js";
+import { DateTimeRange } from "./dateTimeSchema.js";
+import { dateToDateTime } from "./knowledgeActions.js";
 
 /**
  * A turn in a transcript
@@ -19,6 +22,11 @@ export type TranscriptTurn = {
     timestamp?: string | undefined;
 };
 
+/**
+ * Converts a turn from a transcript into a conversation message
+ * @param turn
+ * @returns
+ */
 export function transcriptTurnToMessage(
     turn: TranscriptTurn,
 ): ConversationMessage {
@@ -26,6 +34,40 @@ export function transcriptTurnToMessage(
         sender: getSpeaker(turn),
         text: getMessageText(turn, true),
         timestamp: dateTime.stringToDate(turn.timestamp),
+        knowledge: transcriptTurnToKnowledge(turn),
+    };
+}
+
+enum TurnVerbs {
+    say = "say",
+}
+
+function transcriptTurnToKnowledge(turn: TranscriptTurn): KnowledgeResponse {
+    return {
+        entities: [],
+        actions: transcriptTurnToActions(turn),
+        inverseActions: [],
+        topics: [],
+    };
+}
+
+function transcriptTurnToActions(turn: TranscriptTurn): Action[] {
+    const actions: Action[] = [];
+    if (turn.speaker && turn.listeners) {
+        for (const listener of turn.listeners) {
+            actions.push(createAction(TurnVerbs.say, turn.speaker, listener));
+        }
+    }
+    return actions;
+}
+
+function createAction(verb: string, from: string, to: string): Action {
+    return {
+        verbs: [verb],
+        verbTense: "past",
+        subjectEntityName: from,
+        objectEntityName: "none",
+        indirectObjectEntityName: to,
     };
 }
 
@@ -229,4 +271,54 @@ function turnToHeaderString(turn: TranscriptTurn): string {
         text += `To: ${turn.listeners.join(", ")}\n"`;
     }
     return text;
+}
+
+export type TranscriptMetadata = {
+    sourcePath: string;
+    name: string;
+    description?: string | undefined;
+    startAt?: string; // Should be parseable as a Date
+    lengthMinutes?: number | undefined;
+};
+
+export function createTranscriptOverview(
+    metadata: TranscriptMetadata,
+    turns: TranscriptTurn[],
+): string {
+    let participantSet = new Set<string>();
+    for (const turn of turns) {
+        let speaker = getSpeaker(turn);
+        if (speaker) {
+            participantSet.add(speaker);
+        }
+        if (turn.listeners && turn.listeners.length > 0) {
+            for (const listener of turn.listeners) {
+                participantSet.add(listener);
+            }
+        }
+    }
+    let overview = metadata.name;
+    if (metadata.description) {
+        overview += "\n";
+        overview += metadata.description;
+    }
+    const participants = [...participantSet.values()];
+    if (participants.length > 0) {
+        overview += "\nParticipants:\n";
+        overview += participants.join(", ");
+    }
+    return overview;
+}
+
+export function parseTranscriptDuration(
+    startAt: string,
+    lengthMinutes: number,
+): DateTimeRange {
+    const startDate = dateTime.stringToDate(startAt)!;
+    const offsetMs = lengthMinutes * 60 * 1000;
+    const stopDate = new Date(startDate.getTime() + offsetMs);
+    return {
+        startDate: dateToDateTime(startDate),
+        stopDate: dateToDateTime(stopDate),
+    };
 }

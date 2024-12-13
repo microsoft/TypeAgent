@@ -1158,6 +1158,7 @@ export async function runChatMemory(): Promise<void> {
         def.options.skipEntities = argBool("Skip entity matching", false);
         def.options.skipActions = argBool("Skip action matching", false);
         def.options.skipTopics = argBool("Skip topics matching", false);
+        def.options.threads = argBool("Use most likely thread", false);
         return def;
     }
     commands.search.metadata = searchDef();
@@ -1332,6 +1333,9 @@ export async function runChatMemory(): Promise<void> {
         };
         if (namedArgs.fallback) {
             searchOptions.fallbackSearch = { maxMatches: 10 };
+        }
+        if (namedArgs.threads) {
+            searchOptions.threadSearch = { maxMatches: 1, minScore: 0.8 };
         }
         if (!namedArgs.eval) {
             // just translate user query into structured query without eval
