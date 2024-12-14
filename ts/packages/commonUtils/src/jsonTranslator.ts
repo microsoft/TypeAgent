@@ -336,7 +336,7 @@ export function createJsonTranslatorWithValidator<T extends object>(
             `\`\`\`\n${validator.getSchemaText()}\`\`\`\n` +
             `The following is the latest user request:\n` +
             `"""\n${request}\n"""\n` +
-            `Based on all available information in our chat history including images previoiusly provided, the following is the latest user request translated into a JSON object with 2 spaces of indentation and no properties with the value undefined:\n`
+            `Based on all available information in our chat history including images previously provided, the following is the latest user request translated into a JSON object with 2 spaces of indentation and no properties with the value undefined:\n`
         );
     };
     return translator;
