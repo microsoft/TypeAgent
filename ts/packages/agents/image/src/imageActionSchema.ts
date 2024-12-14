@@ -3,9 +3,9 @@
 
 export type ImageAction = FindImageAction | CreateImageAction;
 
-// Choose this action if the request is to "see", "show", "lookup" pictures/images/photos/memes or implicitly requesting visual output
+// Choose this action if the user wants to "see", "show", "find", "lookup" pictures/images/photos/memes or otherwise requesting visual output
 // Finds images on the internet to show the user
-// if the user asks for "some", randomly select anywere betwee 3 and 10 images
+// if the user asks doesn't specify a quantity, randomly select anywere betwee 3 and 10 images
 export type FindImageAction = {
     actionName: "findImageAction";
     parameters: {

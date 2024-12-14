@@ -366,7 +366,7 @@ document.addEventListener("DOMContentLoaded", async function () {
         (window as any).electron.ipcRenderer.send("dom ready");
     }
 
-    if (Android) {
+    if (Android !== undefined) {
         Bridge.interfaces.Android.domReady((userMessage: string) => {
             chatView.addUserMessage(userMessage);
         });
