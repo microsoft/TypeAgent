@@ -99,7 +99,9 @@ export async function resolveCommand(
         actualAppAgentName = appAgentName;
     } else {
         actualAppAgentName = "system";
-        rollbackToken();
+        if (first !== undefined) {
+            rollbackToken();
+        }
     }
 
     const appAgent = context.agents.getAppAgent(actualAppAgentName);
@@ -202,7 +204,7 @@ async function parseCommand(
         !context.agents.isCommandEnabled(result.parsedAppAgentName)
     ) {
         throw new Error(
-            `Command for '${result.parsedAppAgentName}' is not disabled.`,
+            `Command for '${result.parsedAppAgentName}' is disabled.`,
         );
     }
 
@@ -210,9 +212,11 @@ async function parseCommand(
         throw new Error(`Unknown command '${input}'`);
     }
     const message =
-        result.suffix.length === 0
-            ? `@${command}' requires a subcommand.`
-            : `'${result.suffix}' is not a subcommand for '@${command}'`;
+        command.length === 0
+            ? "Command or agent name required."
+            : result.suffix.length === 0
+              ? `'@${command}' requires a subcommand.`
+              : `'${result.suffix}' is not a subcommand for '@${command}'.`;
 
     throw new Error(
         `${message}\n\n${chalk.black(getHandlerTableUsage(result.table, command, context))}`,
