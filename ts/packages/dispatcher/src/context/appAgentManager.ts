@@ -380,7 +380,7 @@ export class AppAgentManager implements ActionConfigProvider {
                 } else {
                     record.schemas.delete(name);
                     changedSchemas.push([name, enableSchema]);
-                    debug(`Schema disnabled ${name}`);
+                    debug(`Schema disabled ${name}`);
                 }
             }
 
