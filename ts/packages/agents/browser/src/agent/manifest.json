@@ -34,6 +34,15 @@
         "schemaFile": "./commerce/schema/userActions.mts",
         "schemaType": "ShoppingActions"
       }
+    },
+    "instacart": {
+      "defaultEnabled": false,
+      "transient": true,
+      "schema": {
+        "description": "This allows users to interact with Instacart to find, compare and purchase various products.",
+        "schemaFile": "./instacart/schema/userActions.mts",
+        "schemaType": "InstacartActions"
+      }
     }
   }
 }

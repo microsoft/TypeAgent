@@ -29,6 +29,7 @@ import {
   CommandHandlerTable,
   getCommandInterface,
 } from "@typeagent/agent-sdk/helpers/command";
+import { handleInstacartAction } from "./instacart/actionHandler.mjs";
 
 export function instantiate(): AppAgent {
   return {
@@ -174,6 +175,9 @@ async function executeBrowserAction(
       } else if (action.translatorName === "browser.commerce") {
         const commerceResult = await handleCommerceAction(action, context);
         return createActionResult(commerceResult);
+      } else if (action.translatorName === "browser.instacart") {
+        const instacartResult = await handleInstacartAction(action, context);
+        return createActionResult(instacartResult);
       }
 
       await connector?.sendActionToBrowser(action, messageType);
