@@ -789,6 +789,12 @@ async function toggleSiteTranslator(targetTab: chrome.tabs.Tab) {
             currentSiteTranslator = "browser.commerce";
         }
 
+        if (host === "instacart.com" || host === "www.instacart.com") {
+            messageType = "enableSiteTranslator";
+            messageBody = "browser.instacart";
+            currentSiteTranslator = "browser.instacart";
+        }
+
         // trigger translator change
         if (
             webSocket &&

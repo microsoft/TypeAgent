@@ -36,18 +36,9 @@ export type SelectSearchResult = {
   };
 };
 
-// select this action when the user's request needs an answer based on the content on the current webpage
-export type AnswerQuestionBasedOnPage = {
-  actionName: "answerPageQuestion";
-  parameters: {
-    question: string;
-  };
-};
-
 export type ShoppingActions =
   | AddToCartAction
   | FindNearbyStoreAction
   | GetLocationInStore
   | SearchForProductAction
-  | SelectSearchResult
-  | AnswerQuestionBasedOnPage;
+  | SelectSearchResult;
