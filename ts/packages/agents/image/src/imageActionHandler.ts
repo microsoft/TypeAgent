@@ -248,10 +248,9 @@ function createCarouselForImages(
     <a class="prev" onclick="slideShow_${hash}.plusSlides(-1)">&#10094;</a>
     <a class="next" onclick="slideShow_${hash}.plusSlides(1)">&#10095;</a>
     </div>
-    <br>
     
     <!-- The dots/circles -->
-    <div style="text-align:center">
+    <div style="text-align:center; margin: 10px 0px;">
     ${carouselDots}
     </div>    
     </div>`;
