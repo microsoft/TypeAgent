@@ -222,7 +222,7 @@ export function createPodcastCommands(
             await asyncArray.toArray(threads.entries());
         for (let i = 0; i < allThreads.length; ++i) {
             const t = allThreads[i];
-            context.printer.writeLine(`[${i}]`);
+            context.printer.writeLine(`[${i + 1}]`);
             writeThread(t);
         }
     }
