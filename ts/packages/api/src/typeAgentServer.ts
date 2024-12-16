@@ -30,8 +30,8 @@ export class TypeAgentServer {
     private webClientIO: WebAPIClientIO | undefined;
     private webSocketServer: TypeAgentAPIWebSocketServer | undefined;
     private webServer: TypeAgentAPIWebServer | undefined;
-    private storageAccount: string;
-    private containerName: string;
+    private storageAccount: string | undefined;
+    private containerName: string | undefined;
     private accountURL: string;
     private fileWriteDebouncer: Map<string, number> = new Map<string, number>();
 
@@ -50,7 +50,7 @@ export class TypeAgentServer {
             env,
             openai.EnvVars.AZURE_STORAGE_CONTAINER,
             undefined,
-            "sessions",
+            "",
         );
         this.accountURL = `https://${this.storageAccount}.blob.core.windows.net`;
     }
@@ -63,7 +63,12 @@ export class TypeAgentServer {
 
         // restore & enable session backup?
         if (config.blobBackupEnabled) {
-            if (this.storageAccount !== undefined) {
+            if (
+                this.storageAccount !== undefined &&
+                this.storageAccount.length > 0 &&
+                this.containerName != undefined &&
+                this.containerName.length > 0
+            ) {
                 const sw = new StopWatch();
                 sw.start("Downloading Session Backup");
 
@@ -118,7 +123,7 @@ export class TypeAgentServer {
         );
 
         const containerClient: ContainerClient =
-            blobServiceClient.getContainerClient(this.containerName);
+            blobServiceClient.getContainerClient(this.containerName!!);
 
         await this.findBlobs(containerClient);
     }
@@ -221,7 +226,7 @@ export class TypeAgentServer {
                 );
 
                 const containerClient: ContainerClient =
-                    blobServiceClient.getContainerClient(this.containerName);
+                    blobServiceClient.getContainerClient(this.containerName!!);
 
                 let blobName = fileName.replace(getUserDataDir(), "");
 

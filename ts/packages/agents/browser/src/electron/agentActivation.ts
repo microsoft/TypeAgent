@@ -46,12 +46,16 @@ function setupSiteAgent() {
             "www.homedepot.com",
             "www.target.com",
             "www.walmart.com",
-            "www.instacart.com",
         ];
 
         if (commerceHosts.includes(host)) {
             siteAgent = "browser.commerce";
             window.browserConnect.enableSiteAgent("browser.commerce");
+        }
+
+        if (host === "instacart.com" || host === "www.instacart.com") {
+            siteAgent = "browser.instacart";
+            window.browserConnect.enableSiteAgent("browser.instacart");
         }
     } else {
         console.log("browserconnect not found by UI events script");

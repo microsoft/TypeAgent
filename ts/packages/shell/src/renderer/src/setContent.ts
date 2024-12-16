@@ -171,7 +171,7 @@ export function setContent(
         <head>
         ${css}
         </head>
-        <body style="height: auto; overflow: hidden;">${message}</body></html>`;
+        <body style="height: auto; overflow: hidden; background: transparent;">${message}</body></html>`;
 
         // give the iframe the same stylesheet as the host page
 

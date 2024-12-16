@@ -570,7 +570,7 @@ async function pickInitialSchema(
 
     const embedding =
         systemContext.session.getConfig().translation.switch.embedding;
-    if (embedding) {
+    if (embedding && request.length > 0) {
         debugSemanticSearch(`Using embedding for schema selection`);
         // Use embedding to determine the most likely action schema and use the schema name for that.
         const result =

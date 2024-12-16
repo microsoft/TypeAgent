@@ -68,6 +68,7 @@ export type WebPage = {
 
 export type Image = {
     contentUrl: string;
+    thumbnailUrl: string;
 };
 
 export type WebAnswer = {

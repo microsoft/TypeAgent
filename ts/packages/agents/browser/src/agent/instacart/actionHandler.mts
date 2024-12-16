@@ -4,15 +4,14 @@
 import { ActionContext } from "@typeagent/agent-sdk";
 import { BrowserActionContext } from "../actionHandler.mjs";
 import { BrowserConnector } from "../browserConnector.mjs";
-import { createCommercePageTranslator } from "./translator.mjs";
+import { createInstacartPageTranslator } from "./translator.mjs";
 import {
   ProductDetailsHeroTile,
   ProductTile,
   SearchInput,
-  StoreLocation,
 } from "./schema/pageComponents.mjs";
 
-export async function handleCommerceAction(
+export async function handleInstacartAction(
   action: any,
   context: ActionContext<BrowserActionContext>,
 ) {
@@ -24,23 +23,17 @@ export async function handleCommerceAction(
   const browser: BrowserConnector =
     context.sessionContext.agentContext.browserConnector;
 
-  const agent = await createCommercePageTranslator("GPT_4_O_MINI");
+  const agent = await createInstacartPageTranslator("GPT_4_O_MINI");
 
   switch (action.actionName) {
     case "searchForProductAction":
-      await searchForProduct(action.parameters.productName);
+      await searchForProduct(action.parameters.keyword);
       break;
     case "selectSearchResult":
       await selectSearchResult(action.parameters.productName);
       break;
     case "addToCartAction":
       await handleAddToCart(action);
-      break;
-    case "getLocationInStore":
-      await handleFindInStore(action);
-      break;
-    case "findNearbyStoreAction":
-      await handleFindNearbyStore(action);
       break;
   }
 
@@ -99,38 +92,6 @@ export async function handleCommerceAction(
 
     if (targetProduct.addToCartButton) {
       await browser.clickOn(targetProduct.addToCartButton.cssSelector);
-    }
-  }
-
-  async function handleFindInStore(action: any) {
-    await searchForProduct(action.parameters.productName);
-    await selectSearchResult(action.parameters.productName);
-
-    // wait for delay-loaded items to settle aeven after pageLoad is declared
-    await new Promise((r) => setTimeout(r, 1000));
-
-    const targetProduct = (await getComponentFromPage(
-      "ProductDetailsHeroTile",
-    )) as ProductDetailsHeroTile;
-
-    if (targetProduct && targetProduct.physicalLocationInStore) {
-      message = `Found ${targetProduct.numberInStock} at ${targetProduct.physicalLocationInStore} in the ${targetProduct.storeName} store`;
-      return;
-    } else {
-      message = `Did not find target product in stock`;
-      console.log(targetProduct);
-    }
-  }
-
-  async function handleFindNearbyStore(action: any) {
-    //StoreLocation
-
-    const storeInfo = (await getComponentFromPage(
-      "StoreLocation",
-    )) as StoreLocation;
-
-    if (storeInfo.locationName) {
-      message = `Nearest store is ${storeInfo.locationName} (${storeInfo.zipCode})`;
     }
   }
 
