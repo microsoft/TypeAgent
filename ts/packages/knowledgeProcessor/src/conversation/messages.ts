@@ -11,7 +11,7 @@ import {
     createSemanticIndex,
 } from "typeagent";
 import path from "path";
-import { TextIndexSettings } from "../knowledgeIndex.js";
+import { TextIndexSettings } from "../textIndex.js";
 
 export interface MessageIndex<TMessageId> extends SemanticIndex<TMessageId> {
     nearestNeighborsInSubset(

@@ -74,17 +74,22 @@ export interface TextIndex<TTextId = any, TSourceId = any> {
      * @param id
      */
     getText(id: TTextId): Promise<string | undefined>;
-    // TODO: rename put to "add"
     /**
      * Add postings for the given text.
      * Merges the new postings with the existing postings
+     * TODO: rename to addUpdate
      * @param text
      * @param postings
      */
     put(text: string, postings?: TSourceId[]): Promise<TTextId>;
+    /**
+     *  TODO: rename to addUpdateMultiple
+     * @param values
+     */
     putMultiple(values: TextBlock<TSourceId>[]): Promise<TTextId[]>;
     /**
      * Add source Ids for the given text Id
+     * TODO: rename to addUpdateSources
      * @param id
      * @param postings
      */

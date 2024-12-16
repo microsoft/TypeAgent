@@ -14,7 +14,7 @@ import {
     TextIndex,
     TextIndexSettings,
     createTermSet,
-} from "../knowledgeIndex.js";
+} from "../textIndex.js";
 import {
     KnowledgeStore,
     createKnowledgeStoreOnStorage,

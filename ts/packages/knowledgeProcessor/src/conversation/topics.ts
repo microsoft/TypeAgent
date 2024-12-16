@@ -17,7 +17,7 @@ import {
     createJsonTranslator,
 } from "typechat";
 import { AggregateTopicResponse } from "./aggregateTopicSchema.js";
-import { TextIndex, TextIndexSettings } from "../knowledgeIndex.js";
+import { TextIndex, TextIndexSettings } from "../textIndex.js";
 import path from "path";
 import {
     SourceTextBlock,

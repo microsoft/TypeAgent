@@ -22,10 +22,7 @@ import {
     createTopicMerger,
     createTopicSearchOptions,
 } from "./topics.js";
-import {
-    TextIndexSettings,
-    removeSemanticIndexFolder,
-} from "../knowledgeIndex.js";
+import { TextIndexSettings, removeSemanticIndexFolder } from "../textIndex.js";
 import {
     EntityIndex,
     EntityNameIndex,

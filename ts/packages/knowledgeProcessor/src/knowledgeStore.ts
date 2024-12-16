@@ -6,7 +6,7 @@ import {
     ObjectFolder,
     ObjectFolderSettings,
 } from "typeagent";
-import { TextIndexSettings } from "./knowledgeIndex.js";
+import { TextIndex, TextIndexSettings } from "./textIndex.js";
 import { TemporalLog } from "./temporal.js";
 import { removeUndefined } from "./setOperations.js";
 import {
@@ -23,6 +23,11 @@ export interface KnowledgeStore<T, TId = any> {
     getMultiple(ids: TId[]): Promise<T[]>;
     add(item: T, id?: TId): Promise<TId>;
     addNext(items: T[], timestamp?: Date | undefined): Promise<TId[]>;
+
+    getTagIndex(): Promise<TextIndex<TId>>;
+
+    addTag(tag: string, tIds: TId | TId[]): Promise<void>;
+    getByTag(tag: string): Promise<TId[] | undefined>;
 }
 
 export async function createKnowledgeStore<T>(
@@ -52,7 +57,7 @@ export async function createKnowledgeStoreOnStorage<T>(
         ),
         storageProvider.createObjectFolder<T>(rootPath, "entries"),
     ]);
-
+    let tagIndex: TextIndex | undefined;
     return {
         settings,
         store: entries,
@@ -62,6 +67,9 @@ export async function createKnowledgeStoreOnStorage<T>(
         getMultiple,
         add,
         addNext,
+        getTagIndex,
+        addTag,
+        getByTag,
     };
 
     async function getMultiple(ids: TId[]): Promise<T[]> {
@@ -88,5 +96,31 @@ export async function createKnowledgeStoreOnStorage<T>(
 
     async function add(item: T, id?: TId): Promise<TId> {
         return id ? id : await entries.put(item, id);
+    }
+
+    async function addTag(tag: string, tIds: TId | TId[]): Promise<void> {
+        const tagIndex = await getTagIndex();
+        await tagIndex.put(tag, Array.isArray(tIds) ? tIds : [tIds]);
+    }
+
+    async function getByTag(tag: string): Promise<TId[] | undefined> {
+        const tagIndex = await getTagIndex();
+        return await tagIndex.get(tag);
+    }
+
+    async function getTagIndex(): Promise<TextIndex<TId>> {
+        if (!tagIndex) {
+            tagIndex = await storageProvider.createTextIndex<TId>(
+                {
+                    caseSensitive: false,
+                    semanticIndex: undefined,
+                    concurrency: settings.concurrency,
+                },
+                rootPath,
+                "tags",
+                "TEXT",
+            );
+        }
+        return tagIndex;
     }
 }
