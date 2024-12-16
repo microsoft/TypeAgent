@@ -20,7 +20,7 @@ import { useIdentityPlugin } from "@azure/identity";
 import { cachePersistencePlugin } from "@azure/identity-cache-persistence";
 import { readFileSync, existsSync, writeFileSync } from "fs";
 import path from "path";
-
+import lockfile from "proper-lockfile";
 import registerDebug from "debug";
 import chalk from "chalk";
 import os from "os";
@@ -44,8 +44,8 @@ export interface AppSettings {
     tenantId: string;
     clientSecret: string;
     graphUserScopes: string[];
-    username?: string;
-    password?: string;
+    username?: string | undefined;
+    password?: string | undefined;
 }
 
 export interface DynamicObject {
@@ -57,6 +57,21 @@ type AuthCacheContent = {
     tokenExpiration: number;
 };
 
+const debugGraph = registerDebug("typeagent:graphUtils:graphClient");
+const debugGraphError = registerDebug("typeagent:graphUtils:graphClient:error");
+
+async function withLockFile(
+    file: string,
+    fn: () => Promise<void>,
+): Promise<void> {
+    let release = await lockfile.lock(file);
+    try {
+        await fn();
+    } finally {
+        release();
+    }
+}
+
 export class GraphClient {
     private _settings: AppSettings | undefined = undefined;
     private _deviceCodeCredential: DeviceCodeCredential | undefined = undefined;
@@ -66,7 +81,6 @@ export class GraphClient {
         path.join(os.homedir(), ".typeagent"),
         "tokencache.bin",
     );
-    private readonly logger = registerDebug("typeagent:graphUtils:graphClient");
 
     private _usernamePasswordCredential:
         | UsernamePasswordCredential
@@ -92,9 +106,9 @@ export class GraphClient {
 
             await instance.graphLock(async () => {
                 if (!GraphClient.instance) {
-                    let loadSettings: boolean = instance.loadMSGraphSettings();
+                    const settings = instance.loadMSGraphSettings();
 
-                    if (loadSettings) {
+                    if (settings !== undefined) {
                         let fInitialized =
                             await instance.initializeGraphFromDeviceCode();
 
@@ -108,13 +122,16 @@ export class GraphClient {
         return GraphClient.instance;
     }
 
-    public loadMSGraphSettings(): boolean {
-        this._settings = {
+    public loadMSGraphSettings(): AppSettings | undefined {
+        if (this._settings !== undefined) {
+            return this._settings;
+        }
+        const settings = {
             clientId: process.env["MSGRAPH_APP_CLIENTID"] ?? "",
             clientSecret: process.env["MSGRAPH_APP_CLIENTSECRET"] ?? "",
             tenantId: process.env["MSGRAPH_APP_TENANTID"] ?? "",
-            username: process.env["MSGRAPH_APP_USERNAME"] ?? "",
-            password: process.env["MSGRAPH_APP_PASSWD"] ?? "",
+            username: process.env["MSGRAPH_APP_USERNAME"],
+            password: process.env["MSGRAPH_APP_PASSWD"],
             graphUserScopes: [
                 "user.read",
                 "mail.read",
@@ -125,21 +142,22 @@ export class GraphClient {
         };
 
         if (
-            this._settings.clientId === "" ||
-            this._settings.clientSecret === "" ||
-            this._settings.tenantId === ""
+            settings.clientId === "" ||
+            settings.clientSecret === "" ||
+            settings.tenantId === ""
         ) {
-            this.logger(
+            debugGraphError(
                 chalk.red(
                     "Please provide valid clientId, clientSecret and tenantId",
                 ),
             );
-            return false;
+            return undefined;
         }
-        return true;
+        this._settings = settings;
+        return settings;
     }
 
-    public readFileSafely(filePath: string): string | undefined {
+    private readFileSafely(filePath: string): string | undefined {
         try {
             if (existsSync(filePath)) {
                 const fileContent = readFileSync(filePath, {
@@ -158,11 +176,11 @@ export class GraphClient {
             await this.refreshTokenFromDeviceCodeCred();
             return true;
         } catch (error) {
-            this.logger(chalk.red(`Error refreshing token:${error}`));
+            debugGraphError(chalk.red(`Error refreshing token:${error}`));
         }
         return false;
     }
-
+    /*
     public async authenticateUserFromCache(): Promise<boolean> {
         if (this._deviceCodeCredential) {
             let authRecord: AuthCacheContent | undefined =
@@ -177,12 +195,12 @@ export class GraphClient {
         }
         return false;
     }
+*/
+    private async initializeGraphFromDeviceCode(): Promise<boolean> {
+        const settings = this.loadMSGraphSettings();
 
-    public async initializeGraphFromDeviceCode(): Promise<boolean> {
-        let isValidSettings: boolean = this.loadMSGraphSettings();
-
-        if (!isValidSettings || !this._settings) {
-            this.logger(chalk.red("Unable to load settings"));
+        if (settings === undefined) {
+            debugGraphError(chalk.red("Unable to load settings"));
             return false;
         }
 
@@ -193,12 +211,10 @@ export class GraphClient {
             authRecord = deserializeAuthenticationRecord(fileContent);
         }
 
-        if (this._settings === undefined) return false;
-
         if (authRecord !== undefined) {
             this._deviceCodeCredential = new DeviceCodeCredential({
-                clientId: this._settings.clientId,
-                tenantId: this._settings.tenantId,
+                clientId: settings.clientId,
+                tenantId: settings.tenantId,
                 authenticationRecord: authRecord,
                 tokenCachePersistenceOptions: {
                     enabled: true,
@@ -207,8 +223,8 @@ export class GraphClient {
             });
         } else {
             this._deviceCodeCredential = new DeviceCodeCredential({
-                clientId: this._settings.clientId,
-                tenantId: this._settings.tenantId,
+                clientId: settings.clientId,
+                tenantId: settings.tenantId,
                 tokenCachePersistenceOptions: {
                     enabled: true,
                     name: "typeagent-tokencache",
@@ -216,54 +232,49 @@ export class GraphClient {
             });
         }
 
-        if (this._deviceCodeCredential) {
-            this.createClient(this._deviceCodeCredential);
-        }
-
+        this.createClient(this._deviceCodeCredential);
         return true;
     }
 
     public async initializeGraphFromUserCred() {
-        let isValidSettings: boolean = this.loadMSGraphSettings();
+        const settings = this.loadMSGraphSettings();
 
-        if (!isValidSettings || !this._settings) {
-            this.logger(chalk.red("Unable to load settings"));
+        if (settings === undefined) {
+            debugGraphError(chalk.red("Unable to load settings"));
+            return false;
         }
 
-        let options: UsernamePasswordCredentialOptions = {
+        if (!settings.username || !settings.password) {
+            debugGraphError(
+                chalk.red("Need valid username and password in setting"),
+            );
+            return false;
+        }
+
+        const options: UsernamePasswordCredentialOptions = {
             tokenCachePersistenceOptions: {
                 enabled: true,
             },
         };
-
-        if (!this._settings?.username || !this._settings?.password) {
-            this.logger(
-                chalk.red("Need valid username and password in setting"),
-            );
-            return;
-        }
-
         this._usernamePasswordCredential = new UsernamePasswordCredential(
-            this._settings.tenantId,
-            this._settings.clientId,
-            this._settings.username,
-            this._settings.password,
+            settings.tenantId,
+            settings.clientId,
+            settings.username,
+            settings.password,
             options,
         );
 
-        if (this._usernamePasswordCredential) {
-            let token = await this._usernamePasswordCredential.getToken(
-                this.MSGRAPH_AUTH_URL,
-            );
-            if (token === undefined) {
-                this.logger(chalk.red("Failed to get token"));
-                this._usernamePasswordCredential = undefined;
-                return;
-            }
-
-            await this.refreshTokenFromUsernamePasswdCred();
-            this.createClient(this._usernamePasswordCredential);
+        const token = await this._usernamePasswordCredential.getToken(
+            this.MSGRAPH_AUTH_URL,
+        );
+        if (token === undefined) {
+            debugGraphError(chalk.red("Failed to get token"));
+            this._usernamePasswordCredential = undefined;
+            return;
         }
+
+        await this.refreshTokenFromUsernamePasswdCred();
+        this.createClient(this._usernamePasswordCredential);
     }
 
     private createClient(credential: TokenCredential) {
@@ -328,13 +339,13 @@ export class GraphClient {
                         this.AUTH_RECORD_PATH,
                         JSON.stringify(content, null, 2),
                     );
-                    this.logger(
+                    debugGraph(
                         chalk.green("Token refreshed and expiration saved."),
                     );
                 }
             }
         } catch (error) {
-            this.logger(
+            debugGraphError(
                 chalk.red(`Error writing auth record to file: ${error}`),
             );
         }
@@ -351,7 +362,9 @@ export class GraphClient {
                     await this.handleTokenExpiration();
                     return;
                 } catch (error) {
-                    this.logger(chalk.red(`Error refreshing token:${error}`));
+                    debugGraphError(
+                        chalk.red(`Error refreshing token:${error}`),
+                    );
                 }
             }
         }
@@ -401,7 +414,9 @@ export class GraphClient {
                     }
                     return;
                 } catch (error) {
-                    this.logger(chalk.red(`Error refreshing token:${error}`));
+                    debugGraphError(
+                        chalk.red(`Error refreshing token:${error}`),
+                    );
                 }
             }
         }
@@ -420,7 +435,7 @@ export class GraphClient {
             const content: AuthCacheContent = JSON.parse(fileContent);
             return content;
         } catch (error) {
-            this.logger(
+            debugGraphError(
                 chalk.red(`Error reading auth record from cache:${error}`),
             );
             return undefined;
@@ -429,7 +444,8 @@ export class GraphClient {
 
     public async getUserTokenAsync(): Promise<string> {
         if (!this._settings?.graphUserScopes) {
-            this.logger(chalk.red(`Setting "scopes" cannot be undefined`));
+            debugGraphError(chalk.red(`Setting "scopes" cannot be undefined`));
+            return "";
         }
 
         if (this._deviceCodeCredential && this._settings?.graphUserScopes) {
@@ -454,9 +470,7 @@ export class GraphClient {
 
     public async ensureTokenIsValid(): Promise<void> {
         if (!this._userClient) {
-            this.logger(
-                chalk.red("Graph has not been initialized for user auth"),
-            );
+            throw new Error("Graph has not been initialized for user auth");
         }
         this._deviceCodeCredential
             ? await this.refreshTokenFromDeviceCodeCred()
@@ -481,7 +495,7 @@ export class GraphClient {
                 .get();
             return response.value;
         } catch (error) {
-            this.logger(chalk.red(`Error finding events${error}`));
+            debugGraphError(chalk.red(`Error finding events${error}`));
         }
         return [];
     }
@@ -505,7 +519,7 @@ export class GraphClient {
                 }
             }
         } catch (error) {
-            this.logger(
+            debugGraphError(
                 chalk.red(`Error loading user email addresses:${error}`),
             );
         }
@@ -529,7 +543,9 @@ export class GraphClient {
                 }
             }
         } catch (error) {
-            this.logger(chalk.red(`Error fetching email addresses:${error}`));
+            debugGraphError(
+                chalk.red(`Error fetching email addresses:${error}`),
+            );
         }
         return emailAddresses;
     }
@@ -553,7 +569,7 @@ export class GraphClient {
                 }
             }
         } catch (error) {
-            this.logger(chalk.red(`Error fetching email addresses:${error}`));
+            debugGraphError(`Error fetching email addresses:${error}`);
         }
         return emailAddresses;
     }
