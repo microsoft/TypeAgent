@@ -32,6 +32,7 @@ export function transcriptTurnToMessage(
 ): ConversationMessage {
     return {
         sender: getSpeaker(turn),
+        recipients: turn.listeners,
         text: getMessageText(turn, true),
         timestamp: dateTime.stringToDate(turn.timestamp),
         knowledge: transcriptTurnToKnowledge(turn),
@@ -320,5 +321,30 @@ export function parseTranscriptDuration(
     return {
         startDate: dateToDateTime(startDate),
         stopDate: dateToDateTime(stopDate),
+    };
+}
+
+export type Transcript = {
+    metadata: TranscriptMetadata;
+    turns: TranscriptTurn[];
+};
+
+export async function loadTranscript(
+    sourcePath: string,
+    name: string,
+    description: string,
+    startAt: string,
+    lengthMinutes: number,
+): Promise<Transcript> {
+    const turns = await loadTurnsFromTranscriptFile(sourcePath);
+    return {
+        turns,
+        metadata: {
+            sourcePath,
+            name,
+            description,
+            startAt,
+            lengthMinutes,
+        },
     };
 }

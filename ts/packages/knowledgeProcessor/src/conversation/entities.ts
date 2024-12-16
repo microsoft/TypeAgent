@@ -396,7 +396,10 @@ export async function createEntityIndexOnStorage<TSourceId = string>(
                     toStopDate(timeRange.stopDate),
                 );
         }
-
+        let tagMatchIds: string[] | undefined;
+        if (tags) {
+            tagMatchIds = await entityStore.getByTag(tags);
+        }
         terms = terms.filter((t) => !noiseTerms.has(t));
         if (terms && terms.length > 0) {
             const entityIdHitTable = createHitTable<EntityId>();
@@ -432,6 +435,7 @@ export async function createEntityIndexOnStorage<TSourceId = string>(
             results.entityIds = [
                 ...intersectMultiple(
                     entityIdHits,
+                    tagMatchIds,
                     itemsFromTemporalSequence(results.temporalSequence),
                 ),
             ];

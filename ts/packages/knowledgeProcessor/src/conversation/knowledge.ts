@@ -140,6 +140,7 @@ export type ExtractedKnowledge<TSourceId = any> = {
     topics?: TextBlock<TSourceId>[] | undefined;
     actions?: ExtractedAction<TSourceId>[] | undefined;
     sourceEntityName?: string | undefined;
+    tags?: string[] | undefined;
 };
 
 /**
