@@ -8,12 +8,16 @@ import {
     cleanDir,
     createTestModels,
     getRootDataPath,
+    hasTestKeys,
     loadData,
-    shouldSkip,
-    skipTest,
+    testIf,
     TestModels,
 } from "./testCore.js";
-import { conversation, createKnowledgeStore } from "../src/index.js";
+import {
+    conversation,
+    createKnowledgeStore,
+    KnowledgeStore,
+} from "../src/index.js";
 import { asyncArray } from "typeagent";
 import path from "path";
 
@@ -27,45 +31,56 @@ describe("KnowledgeExtractor", () => {
     beforeAll(() => {
         getContext();
     });
-    shouldSkip()
-        ? skipTest("extract")
-        : test(
-              "generate",
-              async () => {
-                  const context = getContext();
-                  const testFile = "test/data/play.txt";
-                  const blocks = await loadData(testFile);
-                  const extractor = conversation.createKnowledgeExtractor(
-                      context.models.chat,
-                  );
-                  const knowledge = await asyncArray.mapAsync(
-                      blocks,
-                      4,
-                      (block) => extractor.extract(block.value),
-                  );
-                  expect(knowledge).not.toBeUndefined();
-                  expect(knowledge.length).toBeGreaterThan(0);
-                  for (const k of knowledge) {
-                      if (k) {
-                          expect(k.entities.length).toBeGreaterThan(0);
-                      }
-                  }
-              },
-              testTimeout,
-          );
+    testIf(
+        "generate",
+        () => hasTestKeys(),
+        async () => {
+            const context = getContext();
+            const testFile = "test/data/play.txt";
+            const blocks = await loadData(testFile);
+            const extractor = conversation.createKnowledgeExtractor(
+                context.models.chat,
+            );
+            const knowledge = await asyncArray.mapAsync(blocks, 4, (block) =>
+                extractor.extract(block.value),
+            );
+            expect(knowledge).not.toBeUndefined();
+            expect(knowledge.length).toBeGreaterThan(0);
+            for (const k of knowledge) {
+                if (k) {
+                    expect(k.entities.length).toBeGreaterThan(0);
+                }
+            }
+        },
+        testTimeout,
+    );
     test("tags", async () => {
         //const context = getContext();
         const store = await createStore("tags");
+        let fruitItems = ["Banana", "Apple", "Orange"];
+        await addTags(store, fruitItems, "Fruit");
+
+        let veggieItems = ["Spinach", "Broccoli", "Carrot"];
+        await addTags(store, veggieItems, "Veggies");
+
+        const allIds = await store.getByTag(["Fruit", "Veggies"]);
+        expect(allIds).toHaveLength(fruitItems.length + veggieItems.length);
+    });
+
+    async function addTags(
+        store: KnowledgeStore<string>,
+        item: string[],
+        tag: string,
+    ) {
         let items = ["Banana", "Apple", "Orange"];
         let itemIds = await asyncArray.mapAsync(items, 1, (item) =>
             store.add(item),
         );
-        let tag = "Fruit";
         await store.addTag(tag, itemIds);
         let foundIds = await store.getByTag(tag);
         expect(foundIds).toBeDefined();
         expect(foundIds).toEqual(itemIds);
-    });
+    }
 
     async function createStore(name: string) {
         //const context = getContext();

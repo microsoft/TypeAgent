@@ -213,3 +213,13 @@ export function dateToDateTime(dt: Date): DateTime {
         time,
     };
 }
+
+export type FilterWithTagScope<TFilter = any> = {
+    filter: TFilter;
+    scopeType: "tags";
+    tags: string[];
+};
+
+export function isFilterWithTagScope(obj: any): obj is FilterWithTagScope {
+    return obj.hasOwnProperty("scopeType") && obj.scopeType === "tags";
+}

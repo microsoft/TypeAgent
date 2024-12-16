@@ -42,7 +42,12 @@ import {
     getRangeOfTemporalSequence,
     itemsFromTemporalSequence,
 } from "../temporal.js";
-import { toStopDate, toStartDate } from "./knowledgeActions.js";
+import {
+    toStopDate,
+    toStartDate,
+    FilterWithTagScope,
+    isFilterWithTagScope,
+} from "./knowledgeActions.js";
 import { ConcreteEntity, Facet } from "./knowledgeSchema.js";
 import { TermFilter } from "./knowledgeTermSearchSchema.js";
 import { TermFilterV2 } from "./knowledgeTermSearchSchema2.js";
@@ -109,7 +114,7 @@ export interface EntityIndex<TEntityId = any, TSourceId = any, TTextId = any>
         options: EntitySearchOptions,
     ): Promise<EntitySearchResult<TEntityId>>;
     searchTermsV2(
-        filter: TermFilterV2,
+        filter: TermFilterV2 | FilterWithTagScope<TermFilterV2>,
         options: EntitySearchOptions,
     ): Promise<EntitySearchResult<TEntityId>>;
     loadSourceIds(
@@ -355,11 +360,24 @@ export async function createEntityIndexOnStorage<TSourceId = string>(
     }
 
     async function searchTermsV2(
-        filter: TermFilterV2,
+        filterOrScoped: TermFilterV2 | FilterWithTagScope<TermFilterV2>,
         options: EntitySearchOptions,
     ): Promise<EntitySearchResult<EntityId>> {
+        let filter: TermFilterV2;
+        let tags: string[] | undefined;
+        if (isFilterWithTagScope(filterOrScoped)) {
+            filter = filterOrScoped.filter;
+            tags = filterOrScoped.tags;
+        } else {
+            filter = filterOrScoped;
+        }
         if (filter.searchTerms && filter.searchTerms.length > 0) {
-            return matchEntities(filter.searchTerms, filter.timeRange, options);
+            return matchEntities(
+                filter.searchTerms,
+                filter.timeRange,
+                options,
+                tags,
+            );
         }
         return createSearchResults();
     }
@@ -368,6 +386,7 @@ export async function createEntityIndexOnStorage<TSourceId = string>(
         terms: string[],
         timeRange: DateTimeRange | undefined,
         options: EntitySearchOptions,
+        tags?: string[],
     ): Promise<EntitySearchResult<EntityId>> {
         const results = createSearchResults();
         if (timeRange) {

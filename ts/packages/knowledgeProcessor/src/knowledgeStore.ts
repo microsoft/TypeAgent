@@ -8,7 +8,7 @@ import {
 } from "typeagent";
 import { TextIndex, TextIndexSettings } from "./textIndex.js";
 import { TemporalLog } from "./temporal.js";
-import { removeUndefined } from "./setOperations.js";
+import { removeUndefined, unionMultiple } from "./setOperations.js";
 import {
     createFileSystemStorageProvider,
     StorageProvider,
@@ -26,8 +26,8 @@ export interface KnowledgeStore<T, TId = any> {
 
     getTagIndex(): Promise<TextIndex<TId>>;
 
-    addTag(tag: string, tIds: TId | TId[]): Promise<void>;
-    getByTag(tag: string): Promise<TId[] | undefined>;
+    addTag(tag: string, tIds: TId | TId[]): Promise<string>;
+    getByTag(tag: string | string[]): Promise<TId[] | undefined>;
 }
 
 export async function createKnowledgeStore<T>(
@@ -49,6 +49,7 @@ export async function createKnowledgeStoreOnStorage<T>(
     storageProvider: StorageProvider,
 ): Promise<KnowledgeStore<T, string>> {
     type TId = string;
+    type TagId = string;
     const [sequence, entries] = await Promise.all([
         storageProvider.createTemporalLog<TId[]>(
             { concurrency: settings.concurrency },
@@ -98,17 +99,30 @@ export async function createKnowledgeStoreOnStorage<T>(
         return id ? id : await entries.put(item, id);
     }
 
-    async function addTag(tag: string, tIds: TId | TId[]): Promise<void> {
+    async function addTag(tag: string, tIds: TId | TId[]): Promise<TagId> {
         const tagIndex = await getTagIndex();
-        await tagIndex.put(tag, Array.isArray(tIds) ? tIds : [tIds]);
+        return await tagIndex.put(tag, Array.isArray(tIds) ? tIds : [tIds]);
     }
 
-    async function getByTag(tag: string): Promise<TId[] | undefined> {
+    async function getByTag(
+        tag: string | string[],
+    ): Promise<TId[] | undefined> {
         const tagIndex = await getTagIndex();
-        return await tagIndex.get(tag);
+        let tagMatches: string[] | undefined;
+        if (Array.isArray(tag)) {
+            const ids = await asyncArray.mapAsync(
+                tag,
+                settings.concurrency,
+                (t) => tagIndex.get(t),
+            );
+            tagMatches = [...unionMultiple(...ids)];
+        } else {
+            tagMatches = await tagIndex.get(tag);
+        }
+        return tagMatches && tagMatches.length > 0 ? tagMatches : undefined;
     }
 
-    async function getTagIndex(): Promise<TextIndex<TId>> {
+    async function getTagIndex(): Promise<TextIndex<TagId, TId>> {
         if (!tagIndex) {
             tagIndex = await storageProvider.createTextIndex<TId>(
                 {
