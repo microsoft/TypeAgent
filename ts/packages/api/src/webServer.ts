@@ -108,17 +108,16 @@ export class TypeAgentAPIWebServer {
     }
 
     printHeaders(request: any, response: any): boolean {
-        const headers = request.headers;  
-  
-        // Convert headers object to a JSON string  
-        const headersJson = JSON.stringify(headers, null, 2);  
+        const headers = request.headers;
+
+        // Convert headers object to a JSON string
+        const headersJson = JSON.stringify(headers, null, 2);
 
         response.writeHead(200, {
             "Content-Type": "text/html",
         });
 
-        
-        // Send the HTML page with headers  
+        // Send the HTML page with headers
         response.end(`  
           <!DOCTYPE html>  
           <html lang="en">  
@@ -133,10 +132,10 @@ export class TypeAgentAPIWebServer {
             <pre>${headersJson}</pre>  
           </body>  
           </html>  
-        `);   
+        `);
 
         console.warn(`Served HTTP headers for ${request.url}`);
-        
+
         return true;
     }
 }
