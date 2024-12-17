@@ -11,32 +11,60 @@ import {
 import { generateNotes } from "typeagent";
 import { openai } from "aiclient";
 import { ActionContext, AppAgent, SessionContext } from "@typeagent/agent-sdk";
-import {
-    createActionResultFromHtmlDisplay,
-    createActionResultFromError,
-} from "@typeagent/agent-sdk/helpers/action";
+import { createActionResultFromHtmlDisplay } from "@typeagent/agent-sdk/helpers/action";
 import {
     CommandHandlerNoParams,
     CommandHandlerTable,
     getCommandInterface,
 } from "@typeagent/agent-sdk/helpers/command";
+import {
+    displayStatus,
+    displaySuccess,
+    displayWarn,
+} from "@typeagent/agent-sdk/helpers/display";
 
-export class MailClientLoginCommandHandler implements CommandHandlerNoParams {
+import registerDebug from "debug";
+const debug = registerDebug("typeagent:email");
+
+class MailClientLoginCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Log into the MS Graph to access email";
+    public async run(context: ActionContext<EmailActionContext>) {
+        const mailClient = context.sessionContext.agentContext.mailClient;
+        if (mailClient === undefined) {
+            throw new Error("Mail client not initialized");
+        }
+        if (mailClient.isAuthenticated()) {
+            displayWarn("Already logged in", context);
+            return;
+        }
+
+        await mailClient.login((prompt) => displayStatus(prompt, context));
+        displaySuccess("Successfully logged in", context);
+    }
+}
+
+class MailClientLogoutCommandHandler implements CommandHandlerNoParams {
+    public readonly description = "Log out of MS Graph to access email";
     public async run(context: ActionContext<EmailActionContext>) {
         const mailClient: MailClient | undefined =
             context.sessionContext.agentContext.mailClient;
-        if (!mailClient?.isGraphClientInitialized()) {
-            await mailClient?.initGraphClient(true);
+        if (mailClient === undefined) {
+            throw new Error("Calendar client not initialized");
+        }
+        if (mailClient.logout()) {
+            displaySuccess("Successfully logged out", context);
+        } else {
+            displayWarn("Already logged out", context);
         }
     }
 }
 
 const handlers: CommandHandlerTable = {
-    description: "Email login commmand",
+    description: "Email login command",
     defaultSubCommand: "login",
     commands: {
         login: new MailClientLoginCommandHandler(),
+        logout: new MailClientLogoutCommandHandler(),
     },
 };
 
@@ -75,10 +103,12 @@ async function executeEmailAction(
     context: ActionContext<EmailActionContext>,
 ) {
     const { mailClient } = context.sessionContext.agentContext;
-    if (!mailClient || !mailClient?.isGraphClientInitialized()) {
-        return createActionResultFromError(
-            "Use @email login to log into MS Graph.",
-        );
+    if (mailClient === undefined) {
+        throw new Error("Mail client not initialized");
+    }
+
+    if (!mailClient.isAuthenticated()) {
+        await mailClient.login();
     }
 
     let result = await handleEmailAction(action, context);
@@ -144,7 +174,7 @@ async function handleEmailAction(
                 }
             }
 
-            console.log(chalk.green("Handling sendEmail action ..."));
+            debug(chalk.green("Handling sendEmail action ..."));
             res = await mailClient.sendMailAsync(
                 action.parameters.subject,
                 genContent.length > 0

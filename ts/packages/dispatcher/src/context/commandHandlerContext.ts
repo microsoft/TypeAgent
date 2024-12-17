@@ -428,6 +428,7 @@ function processSetAppAgentStateResult(
                 stateName === "commands"
                     ? systemContext.agents.getEmojis()[translatorName]
                     : getSchemaNamePrefix(translatorName, systemContext);
+            debugError(e);
             cbError(
                 `${prefix}: Failed to ${enable ? "enable" : "disable"} ${stateName}: ${e.message}`,
             );
