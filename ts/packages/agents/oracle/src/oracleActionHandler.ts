@@ -61,11 +61,10 @@ export function instantiate(): AppAgent {
 }
 
 type OracleActionContext = {
-    enabled: boolean;
 };
 
 async function initializeOracleContext(): Promise<OracleActionContext> {
-    return { enabled: true };
+    return { };
 }
 
 async function executeOracleAction(
