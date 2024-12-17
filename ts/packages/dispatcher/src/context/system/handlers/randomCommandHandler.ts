@@ -46,7 +46,7 @@ class RandomOfflineCommandHandler implements CommandHandlerNoParams {
 
         if (this.list == undefined || this.list.length == 0) {
             this.list = await this.getRequests();
-            }
+        }
 
         const randomRequest = this.list[randomInt(0, this.list.length)];
 

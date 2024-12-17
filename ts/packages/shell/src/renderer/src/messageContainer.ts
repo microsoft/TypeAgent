@@ -123,7 +123,8 @@ export class MessageContainer {
             const sourceIcon = this.agents.get(source);
 
             // set source and source icon
-            (this.timestampDiv.firstChild as HTMLDivElement).innerText = actionName ?? source; // name
+            (this.timestampDiv.firstChild as HTMLDivElement).innerText =
+                actionName ?? source; // name
             this.iconDiv.innerText = sourceIcon ?? "❔"; // icon
         }
     }

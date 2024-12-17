@@ -23,7 +23,10 @@ import {
 } from "@typeagent/agent-sdk/helpers/command";
 import { ChatModelWithStreaming, CompletionSettings, openai } from "aiclient";
 import { PromptSection, Result, TypeChatJsonTranslator } from "typechat";
-import { displayError, displayResult } from "@typeagent/agent-sdk/helpers/display";
+import {
+    displayError,
+    displayResult,
+} from "@typeagent/agent-sdk/helpers/display";
 
 export function instantiate(): AppAgent {
     return {

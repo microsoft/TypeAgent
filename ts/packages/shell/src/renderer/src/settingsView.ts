@@ -265,8 +265,7 @@ export class SettingsView {
         });
 
         this.devUICheckBox = this.addCheckbox("Auto-hide metrics", () => {
-            this._shellSettings.devUI =
-                !this.agentGreetingCheckBox.checked;
+            this._shellSettings.devUI = !this.agentGreetingCheckBox.checked;
             chatView.setMetricsVisible(!this.devUICheckBox.checked);
         });
     }

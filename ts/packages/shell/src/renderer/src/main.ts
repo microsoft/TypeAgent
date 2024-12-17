@@ -164,11 +164,7 @@ function addEvents(
                 showNotifications(requestId, chatView, notifications, true);
                 break;
             case NotifyCommands.ShowSummary:
-                summarizeNotifications(
-                    requestId,
-                    chatView,
-                    notifications,
-                );
+                summarizeNotifications(requestId, chatView, notifications);
                 break;
             case NotifyCommands.ShowUnread:
                 showNotifications(requestId, chatView, notifications);

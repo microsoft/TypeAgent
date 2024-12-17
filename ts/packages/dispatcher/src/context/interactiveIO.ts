@@ -94,7 +94,7 @@ export function makeClientIOMessage(
             requestId !== undefined
                 ? context?.metricsManager?.getMetrics(requestId)
                 : undefined,
-        actionName: context?.lastActionName
+        actionName: context?.lastActionName,
     };
 }
 

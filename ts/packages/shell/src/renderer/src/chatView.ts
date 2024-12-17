@@ -442,7 +442,12 @@ export class ChatView {
             return;
         }
 
-        agentMessage.setMessage(content, msg.source, options?.appendMode, msg.actionName);
+        agentMessage.setMessage(
+            content,
+            msg.source,
+            options?.appendMode,
+            msg.actionName,
+        );
 
         if (!dynamicUpdate) {
             this.updateScroll();
