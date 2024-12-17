@@ -56,16 +56,16 @@ function getDefaultActionTemplate(
     return template;
 }
 
-function toTemplateTypeObject(type: ActionParamObject, value: any) {
+function toTemplateTypeObject(type: ActionParamObject) {
     const templateType: TemplateFieldObject = {
         type: "object",
         fields: {},
     };
 
     for (const [key, field] of Object.entries(type.fields)) {
-        const type = toTemplateType(field.type, value[key]);
+        const type = toTemplateType(field.type);
         if (type === undefined) {
-            // Skip undefined fileds.
+            // Skip undefined fields.
             continue;
         }
         templateType.fields[key] = { optional: field.optional, type };
@@ -73,10 +73,10 @@ function toTemplateTypeObject(type: ActionParamObject, value: any) {
     return templateType;
 }
 
-function toTemplateTypeArray(type: ActionParamArray, value: any) {
-    const elementType = toTemplateType(type.elementType, value[0]);
+function toTemplateTypeArray(type: ActionParamArray) {
+    const elementType = toTemplateType(type.elementType);
     if (elementType === undefined) {
-        // Skip undefined fileds.
+        // Skip undefined fields.
         return undefined;
     }
     const templateType: TemplateFieldArray = {
@@ -86,24 +86,21 @@ function toTemplateTypeArray(type: ActionParamArray, value: any) {
     return templateType;
 }
 
-function toTemplateType(
-    type: ActionParamType,
-    value: any,
-): TemplateType | undefined {
+function toTemplateType(type: ActionParamType): TemplateType | undefined {
     switch (type.type) {
         case "type-union":
             // TODO: smarter about type unions.
-            return toTemplateType(type.types[0], value);
+            return toTemplateType(type.types[0]);
         case "type-reference":
             // TODO: need to handle circular references (or error on circular references)
             if (type.definition === undefined) {
                 throw new Error(`Unresolved type reference: ${type.name}`);
             }
-            return toTemplateType(type.definition.type, value);
+            return toTemplateType(type.definition.type);
         case "object":
-            return toTemplateTypeObject(type, value);
+            return toTemplateTypeObject(type);
         case "array":
-            return toTemplateTypeArray(type, value[0]);
+            return toTemplateTypeArray(type);
         case "undefined":
             return undefined;
         case "string":
@@ -147,7 +144,7 @@ function toTemplate(
 
     const parameterType = actionSchema.type.fields.parameters?.type;
     if (parameterType) {
-        const type = toTemplateType(parameterType, action.parameters);
+        const type = toTemplateType(parameterType);
         if (type !== undefined) {
             template.fields.parameters = {
                 // ActionParam types are compatible with TemplateFields
