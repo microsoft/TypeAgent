@@ -37,16 +37,51 @@ import {
     CommandHandlerTable,
     getCommandInterface,
 } from "@typeagent/agent-sdk/helpers/command";
+import {
+    displayStatus,
+    displaySuccess,
+    displayWarn,
+} from "@typeagent/agent-sdk/helpers/display";
 
+import registerDebug from "debug";
+const debug = registerDebug("typeagent:calendar");
 export class CalendarClientLoginCommandHandler
     implements CommandHandlerNoParams
 {
-    public readonly description = "Log into the MS Graph to access calendar";
+    public readonly description = "Log into MS Graph to access calendar";
     public async run(context: ActionContext<CalendarActionContext>) {
         const calendarClient: CalendarClient | undefined =
             context.sessionContext.agentContext.calendarClient;
-        if (!calendarClient?.isGraphClientInitialized()) {
-            await calendarClient?.initGraphClient(true);
+        if (calendarClient === undefined) {
+            throw new Error("Calendar client not initialized");
+        }
+        if (calendarClient.isAuthenticated()) {
+            displayWarn("Already logged in", context);
+            return;
+        }
+
+        await calendarClient.login((prompt) => {
+            displayStatus(prompt, context);
+        });
+
+        displaySuccess("Successfully logged in", context);
+    }
+}
+
+export class CalendarClientLogoutCommandHandler
+    implements CommandHandlerNoParams
+{
+    public readonly description = "Log out of MS Graph to access calendar";
+    public async run(context: ActionContext<CalendarActionContext>) {
+        const calendarClient: CalendarClient | undefined =
+            context.sessionContext.agentContext.calendarClient;
+        if (calendarClient === undefined) {
+            throw new Error("Calendar client not initialized");
+        }
+        if (calendarClient.logout()) {
+            displaySuccess("Successfully logged out", context);
+        } else {
+            displayWarn("Already logged out", context);
         }
     }
 }
@@ -56,6 +91,7 @@ const handlers: CommandHandlerTable = {
     defaultSubCommand: "login",
     commands: {
         login: new CalendarClientLoginCommandHandler(),
+        logout: new CalendarClientLogoutCommandHandler(),
     },
 };
 
@@ -193,12 +229,12 @@ function findEventsDisplayHtml(events: any[] | GraphEntity): string {
 
 async function getParticipantsToAdd(
     participants: string[] | undefined,
-    calendarClient: CalendarClient | undefined,
+    calendarClient: CalendarClient,
 ): Promise<string[] | undefined> {
     let participantsToAdd: string[] | undefined = [];
     if (participants && participants.length > 0) {
         participantsToAdd =
-            await calendarClient?.getEmailAddressesOfUsernamesLocal(
+            await calendarClient.getEmailAddressesOfUsernamesLocal(
                 participants,
             );
         if (!participantsToAdd || participantsToAdd?.length === 0) {
@@ -213,10 +249,8 @@ async function addParticipantsToMeeting(
     participantsToAdd: string[] | undefined,
     description: string,
     dateInfo: any,
-    calendarClient: CalendarClient | undefined,
+    calendarClient: CalendarClient,
 ): Promise<string | undefined | ErrorResponse> {
-    if (!calendarClient) return undefined;
-
     let emailAddrsInMeeting: string[] | undefined = await getParticipantsToAdd(
         participantsInMeeting,
         calendarClient,
@@ -229,7 +263,7 @@ async function addParticipantsToMeeting(
 
     let eventId = undefined;
     if (emailAddrsToAdd && emailAddrsToAdd.length > 0) {
-        eventId = await calendarClient?.addParticipantsToMeeting(
+        eventId = await calendarClient.addParticipantsToMeeting(
             description,
             dateInfo ? dateInfo.startDate : undefined,
             dateInfo ? dateInfo.endDate : undefined,
@@ -291,28 +325,22 @@ export async function handleCalendarAction(
     calendarContext: CalendarActionContext,
 ) {
     let actionEvent: EventReference | Event | undefined;
+    const client = calendarContext.calendarClient;
 
-    if (
-        !calendarContext.calendarClient ||
-        !calendarContext.calendarClient?.isGraphClientInitialized()
-    ) {
-        return createActionResultFromError(
-            "Use @calendar login to log into MS Graph and then try your requesy again.",
-        );
+    if (client === undefined) {
+        throw new Error("Calendar client not initialized");
     }
-
+    if (!client.isAuthenticated()) {
+        await client.login();
+    }
     switch (action.actionName) {
         case "addEvent":
-            console.log(chalk.green("Handling ADD_EVENT action ..."));
-            const err =
-                "To set up a meeting, please provide more details such as the date, time, participants, and description of the event.";
-
+            debug(chalk.green("Handling ADD_EVENT action ..."));
             actionEvent = action.parameters.event;
             let response: any = undefined;
             if (
-                actionEvent != undefined &&
-                (actionEvent.day != undefined ||
-                    actionEvent.timeRange != undefined)
+                actionEvent.day != undefined ||
+                actionEvent.timeRange != undefined
             ) {
                 response = await getNormalizedDateTimes(
                     actionEvent.day,
@@ -368,20 +396,19 @@ export async function handleCalendarAction(
                         actionEvent.participants.length > 0
                     ) {
                         participantsToAdd =
-                            await calendarContext.calendarClient?.getEmailAddressesOfUsernamesLocal(
+                            await client.getEmailAddressesOfUsernamesLocal(
                                 actionEvent.participants,
                             );
                     }
 
-                    let eventid =
-                        await calendarContext.calendarClient?.createCalendarEvent(
-                            actionEvent.description,
-                            actionEvent.description ?? "",
-                            response.startDate,
-                            response.endDate,
-                            getTimeZoneName(),
-                            participantsToAdd,
-                        );
+                    let eventid = await client.createCalendarEvent(
+                        actionEvent.description,
+                        actionEvent.description ?? "",
+                        response.startDate,
+                        response.endDate,
+                        getTimeZoneName(),
+                        participantsToAdd,
+                    );
                     if (eventid != undefined) {
                         const localId = addCalendarEntity(
                             calendarContext,
@@ -389,7 +416,7 @@ export async function handleCalendarAction(
                             actionEvent.description,
                             participantsToAdd ?? [],
                         );
-                        console.log(
+                        debug(
                             chalk.bgCyanBright(
                                 `Successfully added the (local eventid:${localId}) event:${eventid}`,
                             ),
@@ -400,7 +427,7 @@ export async function handleCalendarAction(
                             actionEvent.description,
                             eventid,
                         );
-                        console.log(displayText);
+                        debug(displayText);
 
                         let result =
                             createActionResultFromHtmlDisplay(displayText);
@@ -418,7 +445,7 @@ export async function handleCalendarAction(
                             return result;
                         }
                     } else {
-                        console.log(
+                        debug(
                             chalk.bgRedBright(
                                 "Failed to add the event, please try again!",
                             ),
@@ -427,30 +454,12 @@ export async function handleCalendarAction(
                             "Failed to add the event, please try again!",
                         );
                     }
-                } else {
-                    console.log(
-                        chalk.bgYellowBright(
-                            action.parameters.fuzzyResponse
-                                ? action.parameters.fuzzyResponse
-                                : err,
-                        ),
-                    );
-                    return createActionResultFromError(err);
                 }
-            } else {
-                console.log(
-                    chalk.bgYellowBright(
-                        action.parameters.fuzzyResponse
-                            ? action.parameters.fuzzyResponse
-                            : err,
-                    ),
-                );
-                return createActionResultFromError(err);
             }
             break;
 
         case "findEvents":
-            console.log(chalk.green("Handling FIND_EVENTS action ..."));
+            debug(chalk.green("Handling FIND_EVENTS action ..."));
             actionEvent = action.parameters.eventReference as EventReference;
 
             if (actionEvent && actionEvent.eventid) {
@@ -471,16 +480,16 @@ export async function handleCalendarAction(
                 } else {
                     // the eventid is coming from the cache, but it's not in the mapGraphEntity
                     if (actionEvent && actionEvent.description) {
-                        calendarContext.calendarClient
-                            ?.findEventsFromEmbeddings(actionEvent?.description)
-                            .then((events) => {
-                                if (events) {
-                                    return populateMeetingDetailsFromEvent(
-                                        actionEvent?.description!,
-                                        events,
-                                    );
-                                }
-                            });
+                        const events = await client.findEventsFromEmbeddings(
+                            actionEvent?.description,
+                        );
+
+                        if (events) {
+                            return populateMeetingDetailsFromEvent(
+                                actionEvent?.description!,
+                                events,
+                            );
+                        }
                     }
                 }
             } else if (
@@ -492,9 +501,7 @@ export async function handleCalendarAction(
                 let findQuery = getTimeRangeBasedQuery(actionEvent);
                 if (findQuery !== undefined) {
                     let results: any =
-                        await calendarContext.calendarClient?.findCalendarEventsByDateRange(
-                            findQuery,
-                        );
+                        await client.findCalendarEventsByDateRange(findQuery);
                     return populateMeetingDetailsFromEvent(
                         actionEvent.description!,
                         results,
@@ -502,20 +509,18 @@ export async function handleCalendarAction(
                 } else {
                     const err =
                         "Please provide a valid date and time range to search for events.";
-                    console.log(chalk.bgYellowBright(err));
+                    debug(chalk.bgYellowBright(err));
                     return createActionResultFromError(err);
                 }
             } else if (actionEvent && actionEvent.description) {
-                let findResults =
-                    await calendarContext.calendarClient?.findEventsFromEmbeddings(
+                let findResults = await client.findEventsFromEmbeddings(
+                    actionEvent.description,
+                );
+
+                if (findResults?.length === 0) {
+                    findResults = await client.findCalendarEventsBySubject(
                         actionEvent.description,
                     );
-
-                if (findResults.length === 0) {
-                    findResults =
-                        await calendarContext.calendarClient?.findCalendarEventsBySubject(
-                            actionEvent.description,
-                        );
                 }
 
                 return populateMeetingDetailsFromEvent(
@@ -532,11 +537,9 @@ export async function handleCalendarAction(
                     actionEvent?.participants?.length > 0 &&
                     findQuery !== undefined
                 ) {
-                    console.log(findQuery);
+                    debug(findQuery);
                     let results: any =
-                        await calendarContext.calendarClient?.findCalendarEventsByDateRange(
-                            findQuery,
-                        );
+                        await client.findCalendarEventsByDateRange(findQuery);
 
                     if (Array.isArray(results)) {
                         const findResults = results.filter((result) => {
@@ -568,19 +571,19 @@ export async function handleCalendarAction(
                 } else {
                     const err =
                         "Please provide a valid date and time range to search for events.";
-                    console.log(chalk.bgYellowBright(err));
+                    debug(chalk.bgYellowBright(err));
                     return createActionResultFromError(err);
                 }
             } else {
                 const err =
                     "Please provide participant and  valid date and time range to search for events.";
-                console.log(chalk.bgYellowBright(err));
+                debug(chalk.bgYellowBright(err));
                 return createActionResultFromError(err);
             }
             break;
 
         case "addParticipants":
-            console.log(chalk.green("Handling ADD_PARTICIPANTS action ..."));
+            debug(chalk.green("Handling ADD_PARTICIPANTS action ..."));
             actionEvent = action.parameters.eventReference;
             let participantsToAdd = action.parameters.participants;
             if (
@@ -612,7 +615,7 @@ export async function handleCalendarAction(
                     participantsToAdd,
                     actionEvent.description ?? "** Generated Event **",
                     dateInfo,
-                    calendarContext.calendarClient,
+                    client,
                 );
 
                 if (eventId && typeof eventId === "string") {
@@ -624,7 +627,7 @@ export async function handleCalendarAction(
                         participantsToAdd,
                     );
 
-                    console.log(
+                    debug(
                         chalk.bgCyanBright(
                             `Successfully added pariticipant(s) for (local eventid:${localId}) event:${eventId}`,
                         ),
@@ -635,7 +638,7 @@ export async function handleCalendarAction(
                         actionEvent.description,
                         eventId,
                     );
-                    console.log(displayText);
+                    debug(displayText);
 
                     let result = createActionResultFromHtmlDisplay(displayText);
                     if (result && localId) {
@@ -650,7 +653,7 @@ export async function handleCalendarAction(
                         return result;
                     }
                 } else {
-                    console.log(
+                    debug(
                         chalk.bgRedBright(
                             "Failed to add the event, please try again!",
                         ),
@@ -680,13 +683,13 @@ export async function handleCalendarAction(
                             let emailAddrsInMeeting: string[] | undefined =
                                 await getParticipantsToAdd(
                                     participantsInMeeting,
-                                    calendarContext.calendarClient,
+                                    client,
                                 );
 
                             let emailAddrsToAdd: string[] | undefined =
                                 await getParticipantsToAdd(
                                     participantsToAdd,
-                                    calendarContext.calendarClient,
+                                    client,
                                 );
 
                             if (
@@ -695,7 +698,7 @@ export async function handleCalendarAction(
                                 emailAddrsToAdd.length > 0
                             ) {
                                 let eventId =
-                                    await calendarContext.calendarClient?.addParticipantsToExistingMeeting(
+                                    await client.addParticipantsToExistingMeeting(
                                         lastGraphEventId,
                                         emailAddrsInMeeting,
                                         emailAddrsToAdd,
@@ -710,7 +713,7 @@ export async function handleCalendarAction(
                                         lastLocalEventId,
                                         meeting,
                                     );
-                                    console.log(
+                                    debug(
                                         chalk.bgCyanBright(
                                             `Successfully added the participants to the (local eventid:${lastLocalEventId}) event:${eventId}`,
                                         ),
@@ -721,7 +724,7 @@ export async function handleCalendarAction(
                                             meeting.subject,
                                             eventId,
                                         );
-                                    console.log(displayText);
+                                    debug(displayText);
 
                                     let result =
                                         createActionResultFromHtmlDisplay(

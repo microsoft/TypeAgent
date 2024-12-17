@@ -9,15 +9,10 @@ export type CalendarAction =
     | ChangeDescriptionAction
     | FindEventsAction;
 
-// Don't use the translation history or context to fill the properties of the AddEventAction object
-// The parameters should be based on current user input only
 export type AddEventAction = {
     actionName: "addEvent";
     parameters: {
-        event?: Event;
-        // For user requests where action is interpreted but the event is not defined, provide a
-        // response to the user that mentions that they need to provide more information
-        fuzzyResponse?: string;
+        event: Event;
     };
 };
 
@@ -109,7 +104,7 @@ export type EventReference = {
     // the event time range if the requester specifies the time range
     // as in 1pm to 2pm or starts at 1:00pm and runs for 2 hours
     timeRange?: EventTimeRange;
-    // the default value should be empty if not specifed by the user
+    // the default value should be empty if not specified by the user
     description?: string;
     location?: string;
     // only specified if the requester specifies the participants
