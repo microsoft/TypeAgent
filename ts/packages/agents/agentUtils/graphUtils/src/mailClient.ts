@@ -20,7 +20,7 @@ export class MailClient extends GraphClient {
     }
 
     public async getInboxAsync(): Promise<PageCollection | undefined> {
-        const client = await this.getClient();
+        const client = await this.ensureClient();
         return client
             .api("/me/mailFolders/inbox/messages")
             .select(["from", "isRead", "receivedDateTime", "subject"])
@@ -86,7 +86,7 @@ export class MailClient extends GraphClient {
         cc_addrs: string[] | undefined,
         bcc_addrs: string[] | undefined,
     ): Promise<Boolean> {
-        const client = await this.getClient();
+        const client = await this.ensureClient();
         let fSent = false;
         try {
             const message: Message = {
@@ -133,7 +133,7 @@ export class MailClient extends GraphClient {
         cc_addrs: string[] | undefined,
         bcc_addrs: string[] | undefined,
     ): Promise<Boolean> {
-        const client = await this.getClient();
+        const client = await this.ensureClient();
         try {
             const reply = {
                 message: {},
@@ -181,7 +181,7 @@ export class MailClient extends GraphClient {
         cc_addrs: string[] | undefined,
         bcc_addrs: string[] | undefined,
     ): Promise<Boolean> {
-        const client = await this.getClient();
+        const client = await this.ensureClient();
         try {
             const message: DynamicObject = {
                 comment: `${content}`,
@@ -224,7 +224,7 @@ export class MailClient extends GraphClient {
         startDateTime: string | undefined,
         endDateTime: string | undefined,
     ): Promise<string | undefined> {
-        const client = await this.getClient();
+        const client = await this.ensureClient();
         try {
             if (sender && sender.length > 0) {
                 let msgs = await client

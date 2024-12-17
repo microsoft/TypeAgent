@@ -25,6 +25,7 @@ import lockfile from "proper-lockfile";
 import registerDebug from "debug";
 import chalk from "chalk";
 import os from "os";
+import { EventEmitter } from "node:events";
 
 try {
     useIdentityPlugin(cachePersistencePlugin);
@@ -124,7 +125,9 @@ function loadMSGraphSettings(): AppSettings {
     return settings;
 }
 
-export class GraphClient {
+export type DevicePromptCallback = (prompt: string) => void;
+
+export class GraphClient extends EventEmitter {
     private _userClient: Client | undefined = undefined;
     private AUTH_RECORD_PATH: string = path.join(
         path.join(os.homedir(), ".typeagent"),
@@ -141,11 +144,12 @@ export class GraphClient {
 
     private readonly _settings: AppSettings;
     protected constructor(private readonly authCommand: string) {
+        super();
         this._settings = loadMSGraphSettings();
     }
 
     private async initializeGraphFromDeviceCode(
-        cb?: (prompt: string) => void,
+        cb?: DevicePromptCallback,
     ): Promise<Client> {
         return withLockFile(this.AUTH_RECORD_PATH, async () => {
             const options: DeviceCodeCredentialOptions = {
@@ -246,10 +250,11 @@ export class GraphClient {
             throw new Error("Unable to query graph with client");
         }
         this._userClient = client;
+        this.emit("connected", client);
         return client;
     }
 
-    private async initialize(cb?: (prompt: string) => void) {
+    private async initialize(cb?: DevicePromptCallback): Promise<Client> {
         if (this._userClient !== undefined) {
             return this._userClient;
         }
@@ -264,7 +269,7 @@ export class GraphClient {
         return await this.initializeGraphFromUserCred();
     }
 
-    public async login(cb?: (prompt: string) => void): Promise<boolean> {
+    public async login(cb?: DevicePromptCallback): Promise<boolean> {
         try {
             await this.initialize(cb);
             return true;
@@ -279,6 +284,7 @@ export class GraphClient {
     public logout() {
         if (this._userClient !== undefined) {
             this._userClient = undefined;
+            this.emit("disconnected");
             return true;
         }
         return false;
@@ -288,12 +294,12 @@ export class GraphClient {
         return this._userClient !== undefined;
     }
 
-    protected async getClient(cb?: (prompt: string) => void): Promise<Client> {
+    protected async ensureClient(cb?: DevicePromptCallback): Promise<Client> {
         try {
             return await this.initialize(cb);
         } catch (error: any) {
-            debugGraphError(`Error initializing graph: ${error.message}`);
             if (cb === undefined) {
+                debugGraphError(`Error initializing graph: ${error.message}`);
                 throw new Error(
                     `Not authenticated. Use ${this.authCommand} to log into MS Graph and try your request again.`,
                 );
@@ -301,8 +307,17 @@ export class GraphClient {
             throw error;
         }
     }
+    protected async getClient(): Promise<Client | undefined> {
+        try {
+            return await this.initialize();
+        } catch (error: any) {
+            debugGraphError(`Error initializing graph: ${error.message}`);
+            return undefined;
+        }
+    }
+
     public async getUserAsync(): Promise<User> {
-        const client = await this.getClient();
+        const client = await this.ensureClient();
         return client
             .api("/me")
             .select(["displayName", "mail", "userPrincipalName"])
@@ -310,7 +325,7 @@ export class GraphClient {
     }
 
     public async getUserInfo(nameHint: string): Promise<any[]> {
-        const client = await this.getClient();
+        const client = await this.ensureClient();
         try {
             const response = await client
                 .api("/users")
@@ -325,7 +340,7 @@ export class GraphClient {
     }
 
     public async loadUserEmailAddresses(): Promise<void> {
-        const client = await this.getClient();
+        const client = await this.ensureClient();
         try {
             const response = await client
                 .api("/users")
@@ -377,7 +392,7 @@ export class GraphClient {
     public async getEmailAddressesOfUsernames(
         usernames: string[],
     ): Promise<string[]> {
-        const client = await this.getClient();
+        const client = await this.ensureClient();
         let emailAddresses: string[] = [];
         try {
             for (const username of usernames) {

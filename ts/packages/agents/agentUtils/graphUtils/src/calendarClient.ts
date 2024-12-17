@@ -5,6 +5,7 @@ import { GraphClient, DynamicObject, ErrorResponse } from "./graphClient.js";
 import registerDebug from "debug";
 import chalk from "chalk";
 import { createCalendarDataIndex } from "./calendarDataIndex.js";
+import { Client } from "@microsoft/microsoft-graph-client";
 
 const debug = registerDebug("typeagent:graphUtils:calendarclient");
 const debugError = registerDebug("typeagent:graphUtils:calendarclient:error");
@@ -17,27 +18,18 @@ export class CalendarClient extends GraphClient {
     private readonly calendarDataIndex = createCalendarDataIndex();
     private readonly calendarDataMap = new Map<string, any>();
     private fCalendarIndexed = false;
+    private abortController: AbortController | undefined;
+    private abortCurrentTask: (() => Promise<void>) | undefined;
 
     constructor() {
         super("@calendar login");
         this.login();
-    }
-
-    public async login(cb?: (prompt: string) => void): Promise<boolean> {
-        if (await super.login(cb)) {
-            this.indexCalendarEvents();
-            this.startSyncThread();
-            return true;
-        }
-        return false;
-    }
-
-    public logout() {
-        if (super.logout()) {
+        this.on("connected", (client: Client) => {
+            this.startSyncThread(client);
+        });
+        this.on("disconnected", () => {
             this.stopSyncThread();
-            return true;
-        }
-        return false;
+        });
     }
 
     private async generateEmbedding(events: any, fSync: boolean = false) {
@@ -64,66 +56,78 @@ export class CalendarClient extends GraphClient {
         }
     }
 
-    async indexCalendarEvents() {
-        const client = await this.getClient();
+    private indexCalendarEvents(client: Client) {
+        const abortController = new AbortController();
 
-        if (client === undefined) {
-            debugError("Sync thread: Graph client not authenticated.");
-            return;
-        }
+        const task = async () => {
+            this.abortController = new AbortController();
+            let allEvents: any[] = [];
+            let nextPageLink = null;
 
-        let allEvents: any[] = [];
-        let nextPageLink = null;
+            const startDate = new Date();
+            startDate.setDate(startDate.getDate() - 15);
+            const startDateStr = startDate.toISOString();
 
-        const startDate = new Date();
-        startDate.setDate(startDate.getDate() - 15);
-        const startDateStr = startDate.toISOString();
+            const endDate = new Date();
+            endDate.setDate(endDate.getDate() + 30);
+            const endDateStr = endDate.toISOString();
 
-        const endDate = new Date();
-        endDate.setDate(endDate.getDate() + 30);
-        const endDateStr = endDate.toISOString();
+            do {
+                try {
+                    let response: any = undefined;
+                    response = nextPageLink
+                        ? client.api(nextPageLink)
+                        : client
+                              .api("/me/events")
+                              .query({
+                                  startDateTime: startDateStr,
+                                  endDateTime: endDateStr,
+                              })
+                              .select("id,subject,bodyPreview,attendees");
 
-        do {
+                    let responseData = await response?.get();
+
+                    allEvents = allEvents.concat(responseData.value || []);
+                    nextPageLink = responseData["@odata.nextLink"];
+                } catch (error) {
+                    debugError(chalk.yellow(`Error fetching events:${error}`));
+                    break;
+                }
+                if (this.abortController.signal.aborted) {
+                    return;
+                }
+            } while (nextPageLink);
+
             try {
-                let response: any = undefined;
-                response = nextPageLink
-                    ? client.api(nextPageLink)
-                    : client
-                          .api("/me/events")
-                          .query({
-                              startDateTime: startDateStr,
-                              endDateTime: endDateStr,
-                          })
-                          .select("id,subject,bodyPreview,attendees");
-
-                let responseData = await response?.get();
-
-                allEvents = allEvents.concat(responseData.value || []);
-                nextPageLink = responseData["@odata.nextLink"];
+                await this.generateEmbedding(allEvents, true);
+                if (!this.fCalendarIndexed) {
+                    this.fCalendarIndexed = true;
+                    debug(`Calendar events indexed successfully.`);
+                }
             } catch (error) {
-                debugError(chalk.yellow(`Error fetching events:${error}`));
-                break;
+                debugError(`Error while embedding calendar events:${error}`);
             }
-        } while (nextPageLink);
-
-        try {
-            await this.generateEmbedding(allEvents, true);
-            if (!this.fCalendarIndexed) {
-                this.fCalendarIndexed = true;
-                debug(`Calendar events indexed successfully.`);
-            }
-        } catch (error) {
-            debugError(`Error while embedding calendar events:${error}`);
-        }
+        };
+        const p = task();
+        return async () => {
+            abortController.abort();
+            await p;
+        };
     }
 
-    private startSyncThread() {
+    private async startSyncThread(client: Client) {
         if (this._syncIntervalId !== null) {
-            return;
+            await this.stopSyncThread();
+        }
+
+        if (!this.fCalendarIndexed) {
+            this.abortCurrentTask = this.indexCalendarEvents(client);
         }
 
         const syncCalendarEvents = async () => {
-            await this.indexCalendarEvents();
+            if (this.abortCurrentTask === undefined) {
+                this.abortCurrentTask = this.indexCalendarEvents(client);
+            }
         };
 
         this._syncIntervalId = setInterval(() => {
@@ -133,10 +137,13 @@ export class CalendarClient extends GraphClient {
         }, this._syncInterval);
     }
 
-    private stopSyncThread() {
+    private async stopSyncThread() {
         if (this._syncIntervalId !== null) {
             clearInterval(this._syncIntervalId);
             this._syncIntervalId = null;
+            if (this.abortCurrentTask) {
+                await this.abortCurrentTask();
+            }
             debug("Sync thread stopped.");
         } else {
             debugError("No sync thread is currently running.");
@@ -151,7 +158,7 @@ export class CalendarClient extends GraphClient {
         timeZone: string,
         attendees: string[] | undefined,
     ): Promise<string | undefined> {
-        const client = await this.getClient();
+        const client = await this.ensureClient();
         try {
             const newEvent: DynamicObject = {
                 subject: subject,
@@ -200,7 +207,7 @@ export class CalendarClient extends GraphClient {
     }
 
     public async deleteCalendarEvent(eventId: string): Promise<boolean> {
-        const client = await this.getClient();
+        const client = await this.ensureClient();
         try {
             await client.api(`/me/events/${eventId}`).delete();
             this.calendarDataIndex.remove(eventId);
@@ -216,7 +223,7 @@ export class CalendarClient extends GraphClient {
         endTime: string,
         durationInMinutes: number,
     ): Promise<any[]> {
-        const client = await this.getClient();
+        const client = await this.ensureClient();
         const requestBody = {
             startTime: {
                 dateTime: startTime,
@@ -346,7 +353,7 @@ export class CalendarClient extends GraphClient {
         participantsInMeeting: string[],
         participants: string[] | undefined,
     ): Promise<string | undefined | ErrorResponse> {
-        const client = await this.getClient();
+        const client = await this.ensureClient();
 
         if (participants && participants.length > 0) {
             try {
@@ -453,7 +460,7 @@ export class CalendarClient extends GraphClient {
         attendees: any,
         participants: string[],
     ): Promise<string | ErrorResponse | undefined> {
-        const client = await this.getClient();
+        const client = await this.ensureClient();
         try {
             const payload: DynamicObject = {
                 attendees: [],
@@ -511,7 +518,7 @@ export class CalendarClient extends GraphClient {
         timeZone: string,
         attendees: string[],
     ): Promise<string | undefined> {
-        const client = await this.getClient();
+        const client = await this.ensureClient();
         try {
             const meetingPayload: DynamicObject = {
                 subject: subject,
@@ -556,7 +563,7 @@ export class CalendarClient extends GraphClient {
     }
 
     public async findCalendarEvents(criteria: any): Promise<any[]> {
-        const client = await this.getClient();
+        const client = await this.ensureClient();
         try {
             const response = await client
                 .api("/me/events")
@@ -575,7 +582,7 @@ export class CalendarClient extends GraphClient {
             return [];
         }
 
-        const client = await this.getClient();
+        const client = await this.ensureClient();
         let allEvents: any[] = [];
         try {
             let nextPageLink = null;
@@ -608,7 +615,7 @@ export class CalendarClient extends GraphClient {
     }
 
     public async findCalendarEventsByDateRange(query: any): Promise<any[]> {
-        const client = await this.getClient();
+        const client = await this.ensureClient();
         let allEvents: any[] = [];
         let nextLink: string | undefined =
             `/me/calendarView?${query}&$select=subject,bodyPreview,start,end,attendees`;
@@ -627,7 +634,7 @@ export class CalendarClient extends GraphClient {
     }
 
     public async findCalendarView(query: string): Promise<any[]> {
-        const client = await this.getClient();
+        const client = await this.ensureClient();
         try {
             const uri = `/me/calendarView?${query}`;
             const response = await client.api(uri).get();
