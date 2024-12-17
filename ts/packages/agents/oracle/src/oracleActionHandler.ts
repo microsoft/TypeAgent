@@ -60,11 +60,10 @@ export function instantiate(): AppAgent {
     };
 }
 
-type OracleActionContext = {
-};
+type OracleActionContext = {};
 
 async function initializeOracleContext(): Promise<OracleActionContext> {
-    return { };
+    return {};
 }
 
 async function executeOracleAction(
