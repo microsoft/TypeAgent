@@ -73,7 +73,7 @@ export class SearchMenu {
                 }
                 event.preventDefault();
                 return true;
-            } else if (event.key === "Enter") {
+            } else if (event.key === "Enter" || event.key === "Tab") {
                 if (this.selected >= 0 && this.selected < this.items.length) {
                     this.selectCompletion(this.selected);
                     event.preventDefault();
@@ -173,9 +173,14 @@ export class SearchMenu {
                 li.appendChild(resultSpan);
                 this.completions.appendChild(li);
 
-                li.onclick = () => {
+                // handle mouse events
+                li.onmouseup = () => {
                     this.onCompletion(item);
                 };
+                li.onmouseenter = () => {
+                    this.selected = i;
+                    this.updateDisplay(prefix);
+                }                
 
                 if (i === this.items.length - 1) {
                     break;
