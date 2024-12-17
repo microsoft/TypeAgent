@@ -10,16 +10,13 @@ import { Client } from "@microsoft/microsoft-graph-client";
 const debug = registerDebug("typeagent:graphUtils:calendarclient");
 const debugError = registerDebug("typeagent:graphUtils:calendarclient:error");
 
+const syncInterval = 30 * 60 * 1000;
 export class CalendarClient extends GraphClient {
-    private _syncIntervalId: NodeJS.Timeout | null = null;
-    private _syncInterval = 30 * 60 * 1000;
-
     private readonly useEmbeddings: Boolean = true;
     private readonly calendarDataIndex = createCalendarDataIndex();
     private readonly calendarDataMap = new Map<string, any>();
     private fCalendarIndexed = false;
-    private abortController: AbortController | undefined;
-    private abortCurrentTask: (() => Promise<void>) | undefined;
+    private stopCurrentSyncThread: (() => Promise<void>) | undefined;
 
     constructor() {
         super("@calendar login");
@@ -56,11 +53,8 @@ export class CalendarClient extends GraphClient {
         }
     }
 
-    private indexCalendarEvents(client: Client) {
-        const abortController = new AbortController();
-
-        const task = async () => {
-            this.abortController = new AbortController();
+    private async indexCalendarEvents(client: Client, signal: AbortSignal) {
+        try {
             let allEvents: any[] = [];
             let nextPageLink = null;
 
@@ -72,6 +66,7 @@ export class CalendarClient extends GraphClient {
             endDate.setDate(endDate.getDate() + 30);
             const endDateStr = endDate.toISOString();
 
+            debug(`Feting calendar events.`);
             do {
                 try {
                     let response: any = undefined;
@@ -90,15 +85,16 @@ export class CalendarClient extends GraphClient {
                     allEvents = allEvents.concat(responseData.value || []);
                     nextPageLink = responseData["@odata.nextLink"];
                 } catch (error) {
-                    debugError(chalk.yellow(`Error fetching events:${error}`));
-                    break;
+                    debugError(`Error fetching events:${error}`);
+                    return;
                 }
-                if (this.abortController.signal.aborted) {
+                if (signal.aborted) {
                     return;
                 }
             } while (nextPageLink);
 
             try {
+                debug(`Embedding calendar events.`);
                 await this.generateEmbedding(allEvents, true);
                 if (!this.fCalendarIndexed) {
                     this.fCalendarIndexed = true;
@@ -107,44 +103,50 @@ export class CalendarClient extends GraphClient {
             } catch (error) {
                 debugError(`Error while embedding calendar events:${error}`);
             }
-        };
-        const p = task();
-        return async () => {
-            abortController.abort();
-            await p;
-        };
+        } catch (error) {
+            debugError(`Error while syncing calendar events:${error}`);
+        }
     }
 
     private async startSyncThread(client: Client) {
-        if (this._syncIntervalId !== null) {
-            await this.stopSyncThread();
-        }
+        await this.stopCurrentSyncThread?.();
 
-        if (!this.fCalendarIndexed) {
-            this.abortCurrentTask = this.indexCalendarEvents(client);
-        }
+        let timeoutId: NodeJS.Timeout;
+        const abortController = new AbortController();
+        let currentInvocation: Promise<void> | undefined;
+        const task = async () => {
+            currentInvocation = this.indexCalendarEvents(
+                client,
+                abortController.signal,
+            );
+            await currentInvocation;
 
-        const syncCalendarEvents = async () => {
-            if (this.abortCurrentTask === undefined) {
-                this.abortCurrentTask = this.indexCalendarEvents(client);
+            if (!abortController.signal.aborted) {
+                debug(`Scheduled sync thread: ${syncInterval}ms`);
+                timeoutId = setTimeout(task, syncInterval);
             }
         };
 
-        this._syncIntervalId = setInterval(() => {
-            syncCalendarEvents().catch((error) =>
-                debugError("Error during periodic calendar sync:", error),
-            );
-        }, this._syncInterval);
+        debug("Sync thread starting.");
+        if (!this.fCalendarIndexed) {
+            task();
+        } else {
+            debug(`Scheduled sync thread: ${syncInterval}ms`);
+            timeoutId = setTimeout(task, syncInterval);
+        }
+
+        this.stopCurrentSyncThread = async () => {
+            clearTimeout(timeoutId);
+            abortController.abort();
+            await currentInvocation;
+            this.stopCurrentSyncThread = undefined;
+            debug("Sync thread stopped.");
+        };
     }
 
     private async stopSyncThread() {
-        if (this._syncIntervalId !== null) {
-            clearInterval(this._syncIntervalId);
-            this._syncIntervalId = null;
-            if (this.abortCurrentTask) {
-                await this.abortCurrentTask();
-            }
-            debug("Sync thread stopped.");
+        if (this.stopCurrentSyncThread) {
+            await this.stopCurrentSyncThread();
         } else {
             debugError("No sync thread is currently running.");
         }
