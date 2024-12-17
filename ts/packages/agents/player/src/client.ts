@@ -171,18 +171,18 @@ function getIdPart(uri: string) {
 }
 
 export async function loadHistoryFile(
-    profileStorage: Storage,
+    instanceStorage: Storage,
     historyPath: string,
     context: IClientContext,
 ) {
-    if (!(await profileStorage.exists(historyPath))) {
+    if (!(await instanceStorage.exists(historyPath))) {
         throw new Error(`History file not found: ${historyPath}`);
     }
     if (!context.userData) {
         throw new Error("User data not enabled");
     }
     try {
-        const rawData = await profileStorage.read(historyPath, "utf8");
+        const rawData = await instanceStorage.read(historyPath, "utf8");
         let data: SpotifyRecord[] = JSON.parse(rawData);
         for (const record of data) {
             console.log(`${record.master_metadata_track_name}`);
@@ -199,7 +199,7 @@ export async function loadHistoryFile(
                 id: getIdPart(r.spotify_track_uri),
             })),
         );
-        await saveUserData(profileStorage, context.userData.data);
+        await saveUserData(instanceStorage, context.userData.data);
     } catch (e: any) {
         throw new Error(`Error reading history file: ${e.message}`);
     }
@@ -337,10 +337,10 @@ async function updateTrackListAndPrint(
 }
 
 export async function getClientContext(
-    profileStorage?: Storage,
+    instanceStorage?: Storage,
 ): Promise<IClientContext> {
     const service = new SpotifyService(
-        await createTokenProvider(profileStorage),
+        await createTokenProvider(instanceStorage),
     );
     await service.init();
     debugSpotify("Service initialized");
@@ -361,8 +361,8 @@ export async function getClientContext(
     return {
         deviceId,
         service,
-        userData: profileStorage
-            ? await initializeUserData(profileStorage, service)
+        userData: instanceStorage
+            ? await initializeUserData(instanceStorage, service)
             : undefined,
     };
 }

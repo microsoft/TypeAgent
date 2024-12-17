@@ -64,6 +64,7 @@ export default class RequestCommand extends Command {
                 ? { enabled: true, name: flags.explainer }
                 : { enabled: false },
             cache: { enabled: false },
+            persist: true,
         });
         await dispatcher.processCommand(
             `@dispatcher request ${args.request}`,

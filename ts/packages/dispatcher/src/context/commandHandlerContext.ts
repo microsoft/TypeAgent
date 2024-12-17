@@ -14,6 +14,7 @@ import {
 import { AgentCache } from "agent-cache";
 import { randomUUID } from "crypto";
 import {
+    getSessionName,
     Session,
     SessionOptions,
     setupAgentCache,
@@ -34,7 +35,12 @@ import {
     nullClientIO,
 } from "./interactiveIO.js";
 import { ChatHistory, createChatHistory } from "./chatHistory.js";
-import { ensureCacheDir, getUserId } from "../utils/userData.js";
+import {
+    ensureCacheDir,
+    getInstanceDir,
+    getUserId,
+    lockInstanceDir,
+} from "../utils/userData.js";
 import { ActionContext, AppAgentEvent } from "@typeagent/agent-sdk";
 import { Profiler } from "telemetry";
 import { conversation as Conversation } from "knowledge-processor";
@@ -84,6 +90,7 @@ export type CommandHandlerContext = {
     agents: AppAgentManager;
     session: Session;
 
+    instanceDir?: string | undefined;
     conversationManager?: Conversation.ConversationManager | undefined;
     // Per activation configs
     developerMode?: boolean;
@@ -109,6 +116,8 @@ export type CommandHandlerContext = {
 
     metricsManager?: RequestMetricsManager | undefined;
     commandProfiler?: Profiler | undefined;
+
+    instanceDirLock: (() => Promise<void>) | undefined;
 };
 
 export function getTranslatorForSchema(
@@ -197,23 +206,24 @@ export type InitializeCommandHandlerContextOptions = SessionOptions & {
     appAgentProviders?: AppAgentProvider[];
     explanationAsynchronousMode?: boolean; // default to false
     persistSession?: boolean; // default to false,
+    persist?: boolean; // default to false,
     clientIO?: ClientIO | undefined; // undefined to disable any IO.
     enableServiceHost?: boolean; // default to false,
     metrics?: boolean; // default to false
 };
 
-async function getSession(persistSession: boolean = false) {
+async function getSession(instanceDir?: string) {
     let session: Session | undefined;
-    if (persistSession) {
+    if (instanceDir !== undefined) {
         try {
-            session = await Session.restoreLastSession();
+            session = await Session.restoreLastSession(instanceDir);
         } catch (e: any) {
             debugError(`WARNING: ${e.message}. Creating new session.`);
         }
     }
     if (session === undefined) {
         // fill in the translator/action later.
-        session = await Session.create(undefined, persistSession);
+        session = await Session.create(undefined, instanceDir);
     }
     return session;
 }
@@ -296,68 +306,91 @@ export async function initializeCommandHandlerContext(
     const explanationAsynchronousMode =
         options?.explanationAsynchronousMode ?? false;
 
-    const session = await getSession(options?.persistSession);
-    if (options) {
-        session.setConfig(options);
-    }
-    const sessionDirPath = session.getSessionDirPath();
-    debug(`Session directory: ${sessionDirPath}`);
-    const conversationManager = sessionDirPath
-        ? await Conversation.createConversationManager(
-              {},
-              "conversation",
-              sessionDirPath,
-              false,
-          )
+    const persistSession = options?.persistSession ?? false;
+    const persist = options?.persist ?? persistSession;
+    const instanceDir = persist ? getInstanceDir() : undefined;
+    const instanceDirLock = instanceDir
+        ? await lockInstanceDir(instanceDir)
         : undefined;
 
-    const clientIO = options?.clientIO ?? nullClientIO;
-    const loggerSink = getLoggerSink(() => context.dblogging, clientIO);
-    const logger = new ChildLogger(loggerSink, DispatcherName, {
-        hostName,
-        userId: getUserId(),
-        sessionId: () => context.session.dir,
-        activationId: randomUUID(),
-    });
+    try {
+        const session = await getSession(
+            persistSession ? instanceDir : undefined,
+        );
+        if (options) {
+            session.setConfig(options);
+        }
+        const sessionDirPath = session.getSessionDirPath();
+        debug(`Session directory: ${sessionDirPath}`);
+        const conversationManager = sessionDirPath
+            ? await Conversation.createConversationManager(
+                  {},
+                  "conversation",
+                  sessionDirPath,
+                  false,
+              )
+            : undefined;
 
-    var serviceHost = undefined;
-    if (options?.enableServiceHost) {
-        serviceHost = await createServiceHost();
+        const clientIO = options?.clientIO ?? nullClientIO;
+        const loggerSink = getLoggerSink(() => context.dblogging, clientIO);
+        const logger = new ChildLogger(loggerSink, DispatcherName, {
+            hostName,
+            userId: getUserId(),
+            sessionId: () =>
+                context.session.sessionDirPath
+                    ? getSessionName(context.session.sessionDirPath)
+                    : undefined,
+            activationId: randomUUID(),
+        });
+
+        var serviceHost = undefined;
+        if (options?.enableServiceHost) {
+            serviceHost = await createServiceHost();
+        }
+
+        const cacheDirPath = instanceDir
+            ? ensureCacheDir(instanceDir)
+            : undefined;
+        const agents = new AppAgentManager(cacheDirPath);
+        const context: CommandHandlerContext = {
+            agents,
+            session,
+            instanceDir,
+            conversationManager,
+            explanationAsynchronousMode,
+            dblogging: true,
+            clientIO,
+
+            // Runtime context
+            commandLock: createLimiter(1), // Make sure we process one command at a time.
+            agentCache: await getAgentCache(session, agents, logger),
+            lastActionSchemaName: DispatcherName,
+            lastActionName: "request",
+            translatorCache: new Map<string, TypeAgentTranslator>(),
+            currentScriptDir: process.cwd(),
+            chatHistory: createChatHistory(),
+            logger,
+            serviceHost,
+            metricsManager: metrics ? new RequestMetricsManager() : undefined,
+            batchMode: false,
+            instanceDirLock,
+        };
+
+        await addAppAgentProviders(
+            context,
+            options?.appAgentProviders,
+            cacheDirPath,
+        );
+
+        await setAppAgentStates(context, options);
+        debug("Context initialized");
+        return context;
+    } catch (e) {
+        if (instanceDirLock) {
+            instanceDirLock();
+        }
+        throw e;
     }
-
-    const cacheDirPath = ensureCacheDir();
-    const agents = new AppAgentManager(cacheDirPath);
-    const context: CommandHandlerContext = {
-        agents,
-        session,
-        conversationManager,
-        explanationAsynchronousMode,
-        dblogging: true,
-        clientIO,
-
-        // Runtime context
-        commandLock: createLimiter(1), // Make sure we process one command at a time.
-        agentCache: await getAgentCache(session, agents, logger),
-        lastActionSchemaName: DispatcherName,
-        lastActionName: "request",
-        translatorCache: new Map<string, TypeAgentTranslator>(),
-        currentScriptDir: process.cwd(),
-        chatHistory: createChatHistory(),
-        logger,
-        serviceHost,
-        metricsManager: metrics ? new RequestMetricsManager() : undefined,
-        batchMode: false,
-    };
-
-    await addAppAgentProviders(
-        context,
-        options?.appAgentProviders,
-        cacheDirPath,
-    );
-
-    await setAppAgentStates(context, options);
-    debug("Context initialized");
-    return context;
 }
 
 async function setAppAgentStates(
@@ -446,6 +479,9 @@ export async function closeCommandHandlerContext(
     // Save the session because the token count is in it.
     context.session.save();
     await context.agents.close();
+    if (context.instanceDirLock) {
+        await context.instanceDirLock();
+    }
 }
 
 export async function setSessionOnCommandHandlerContext(
@@ -466,7 +502,7 @@ export async function reloadSessionOnCommandHandlerContext(
     context: CommandHandlerContext,
     persist: boolean,
 ) {
-    const session = await getSession(persist);
+    const session = await getSession(persist ? context.instanceDir : undefined);
     await setSessionOnCommandHandlerContext(context, session);
 }
 

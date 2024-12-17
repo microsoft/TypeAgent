@@ -99,6 +99,7 @@ export async function createAgentProcess(
     ): ContextParams {
         return {
             contextId: contextMap.getId(context),
+            hasInstanceStorage: context.instanceStorage !== undefined,
             hasSessionStorage: context.sessionStorage !== undefined,
             agentContextId: context.agentContext?.contextId,
         };
@@ -139,7 +140,7 @@ export async function createAgentProcess(
     ) {
         const storage = param.session
             ? context.sessionStorage
-            : context.profileStorage;
+            : context.instanceStorage;
         if (storage === undefined) {
             throw new Error("Storage not available");
         }
