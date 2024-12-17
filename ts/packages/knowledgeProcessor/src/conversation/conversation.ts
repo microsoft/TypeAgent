@@ -549,10 +549,13 @@ export async function createConversation(
     ): Promise<void> {
         if (knowledge.entities && knowledge.entities.length > 0) {
             const entityIndex = await getEntityIndex();
-            await entityIndex.addMultiple(
+            const entityIds = await entityIndex.addMultiple(
                 knowledge.entities,
                 knowledgeIds.entityIds,
             );
+            if (knowledge.tags && knowledge.tags.length > 0) {
+                await entityIndex.addTag(knowledge.tags, entityIds);
+            }
         }
     }
 

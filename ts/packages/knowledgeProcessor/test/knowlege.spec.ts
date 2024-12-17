@@ -27,6 +27,8 @@ describe("KnowledgeExtractor", () => {
         models: TestModels;
     }
     let g_context: TestContext | undefined;
+    let fruitItems = ["Banana", "Apple", "Orange"];
+    let veggieItems = ["Spinach", "Broccoli", "Carrot"];
 
     beforeAll(() => {
         getContext();
@@ -57,22 +59,36 @@ describe("KnowledgeExtractor", () => {
     test("tags", async () => {
         //const context = getContext();
         const store = await createStore("tags");
-        let fruitItems = ["Banana", "Apple", "Orange"];
         await addTags(store, fruitItems, "Fruit");
-
-        let veggieItems = ["Spinach", "Broccoli", "Carrot"];
         await addTags(store, veggieItems, "Veggies");
 
         const allIds = await store.getByTag(["Fruit", "Veggies"]);
         expect(allIds).toHaveLength(fruitItems.length + veggieItems.length);
     });
+    test("nameTags", async () => {
+        const store = await createStore("nameTags");
+        const itemIds = await addItems(store, fruitItems);
+
+        let fullName = " Jane  Austen ";
+        const name = conversation.splitPersonName(fullName);
+        expect(name).toBeDefined();
+        if (name) {
+            expect(name.firstName).toEqual("Jane");
+            expect(name.lastName).toEqual("Austen");
+
+            await store.addTag(name.firstName, itemIds);
+            await store.addTag(name.lastName!, itemIds);
+            const foundIds = await store.getByTag(name.firstName);
+            expect(foundIds).toEqual(itemIds);
+        }
+    });
 
     async function addTags(
         store: KnowledgeStore<string>,
-        item: string[],
+        items: string[],
         tag: string,
     ) {
-        let items = ["Banana", "Apple", "Orange"];
+        await addItems(store, items);
         let itemIds = await asyncArray.mapAsync(items, 1, (item) =>
             store.add(item),
         );
@@ -80,6 +96,13 @@ describe("KnowledgeExtractor", () => {
         let foundIds = await store.getByTag(tag);
         expect(foundIds).toBeDefined();
         expect(foundIds).toEqual(itemIds);
+    }
+
+    async function addItems(
+        store: KnowledgeStore<string>,
+        items: string[],
+    ): Promise<string[]> {
+        return await asyncArray.mapAsync(items, 1, (item) => store.add(item));
     }
 
     async function createStore(name: string) {
