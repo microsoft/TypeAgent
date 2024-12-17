@@ -441,7 +441,7 @@ export class ChatView {
         if (agentMessage === undefined) {
             return;
         }
-        //agentMessage.updateActionName(msg.actionName ?? msg.source);
+
         agentMessage.setMessage(content, msg.source, options?.appendMode, msg.actionName);
 
         if (!dynamicUpdate) {

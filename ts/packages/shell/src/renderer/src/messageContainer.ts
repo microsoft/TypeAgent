@@ -25,10 +25,6 @@ function createTimestampDiv(timestamp: Date, className: string) {
     nameSpan.className = "agent-name";
     timeStampDiv.appendChild(nameSpan); // name placeholder
 
-    // const actionNameSpan = document.createElement("span");
-    // actionNameSpan.className = "action-name";
-    // timeStampDiv.appendChild(actionNameSpan); // action name placeholder
-
     const dateSpan = document.createElement("span");
     dateSpan.className = "timestring";
     timeStampDiv.appendChild(dateSpan); // time string
