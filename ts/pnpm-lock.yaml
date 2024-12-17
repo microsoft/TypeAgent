@@ -992,6 +992,22 @@ importers:
         specifier: ^5.0.4
         version: 5.0.4(debug@4.3.4)(webpack-cli@5.1.4)(webpack@5.94.0)
 
+  packages/agents/oracle:
+    dependencies:
+      '@typeagent/agent-sdk':
+        specifier: workspace:*
+        version: link:../../agentSdk
+    devDependencies:
+      prettier:
+        specifier: ^3.2.5
+        version: 3.2.5
+      rimraf:
+        specifier: ^5.0.5
+        version: 5.0.5
+      typescript:
+        specifier: ^5.4.2
+        version: 5.4.3
+
   packages/agents/photo:
     dependencies:
       '@typeagent/agent-sdk':
@@ -1611,6 +1627,9 @@ importers:
       music:
         specifier: workspace:*
         version: link:../agents/player
+      oracle-agent:
+        specifier: workspace:*
+        version: link:../agents/oracle
       photo-agent:
         specifier: workspace:*
         version: link:../agents/photo
