@@ -180,7 +180,7 @@ export class SearchMenu {
                 li.onmouseenter = () => {
                     this.selected = i;
                     this.updateDisplay(prefix);
-                }                
+                };
 
                 if (i === this.items.length - 1) {
                     break;
