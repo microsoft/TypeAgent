@@ -385,7 +385,7 @@ export async function executeCommand(
 
         // update the last action name
         if (commands.length > 0) {
-            context.lastActionName = `${appAgentName}.${commands.join(",")}`; 
+            context.lastActionName = `${appAgentName}.${commands.join(".")}`; 
         } else {
             context.lastActionName = undefined;
         }
