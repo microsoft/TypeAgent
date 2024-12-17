@@ -403,6 +403,7 @@ export async function executeCommand(
     } finally {
         actionContext.profiler?.stop();
         actionContext.profiler = undefined;
+        context.lastActionName = undefined;
         closeActionContext();
     }
 }
