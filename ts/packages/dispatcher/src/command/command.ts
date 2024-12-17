@@ -258,6 +258,7 @@ export async function processCommandNoLock(
                 },
                 context.requestId,
                 DispatcherName,
+                undefined,
             ),
             "block",
         );

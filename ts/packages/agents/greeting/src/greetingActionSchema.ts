@@ -10,7 +10,7 @@ export type GreetingAction = PersonalizedGreetingAction;
 // Come up with a spontaneous greeting that conveys one of the following moods: friendly, enthusiastic, excited, polite, cheerful, happy, positive, welcoming, affectionate, warm, jovial, lively, energetic, radiant, or breezy.
 // The goal is to create a warm and inviting atmosphere for the person you're greeting, so feel free to be creative and use your own style
 export interface PersonalizedGreetingAction {
-    actionName: "personalizedGreetingResponse";
+    actionName: "personalizedGreetingAction";
     parameters: {
         // the original request/greeting from the user
         originalRequest: string;
