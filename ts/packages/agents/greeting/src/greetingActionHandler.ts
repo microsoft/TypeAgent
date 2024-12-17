@@ -23,6 +23,7 @@ import {
 } from "@typeagent/agent-sdk/helpers/command";
 import { ChatModelWithStreaming, CompletionSettings, openai } from "aiclient";
 import { PromptSection, Result, TypeChatJsonTranslator } from "typechat";
+import { displayError, displayResult } from "@typeagent/agent-sdk/helpers/display";
 
 export function instantiate(): AppAgent {
     return {
@@ -89,9 +90,9 @@ export class GreetingCommandHandler implements CommandHandlerNoParams {
             let result: ActionResultSuccess = handlePersonalizedGreetingAction(
                 response.data as PersonalizedGreetingAction,
             ) as ActionResultSuccess;
-            context.actionIO.setDisplay(result.literalText!);
+            displayResult(result.literalText!, context);
         } else {
-            context.actionIO.appendDisplay("Unable to generate greeting.");
+            displayError("Unable to generate greeting.", context);
         }
     }
 
@@ -157,7 +158,7 @@ async function handleGreetingAction(
     context: ActionContext,
 ) {
     switch (action.actionName) {
-        case "personalizedGreetingResponse": {
+        case "personalizedGreetingAction": {
             return handlePersonalizedGreetingAction(
                 action as PersonalizedGreetingAction,
             );

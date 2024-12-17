@@ -190,6 +190,9 @@ async function executeAction(
     // Update the last action translator.
     systemContext.lastActionSchemaName = translatorName;
 
+    // Update the last action name.
+    systemContext.lastActionName = action.fullActionName;
+
     if (appAgent.executeAction === undefined) {
         throw new Error(
             `Agent ${appAgentName} does not support executeAction.`,
@@ -379,6 +382,14 @@ export async function executeCommand(
     );
 
     try {
+
+        // update the last action name
+        if (commands.length > 0) {
+            context.lastActionName = `${appAgentName}.${commands.join(",")}`; 
+        } else {
+            context.lastActionName = undefined;
+        }
+
         actionContext.profiler = context.commandProfiler?.measure(
             ProfileNames.executeCommand,
             true,

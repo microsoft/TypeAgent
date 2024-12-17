@@ -167,7 +167,6 @@ function addEvents(
                 summarizeNotifications(
                     requestId,
                     chatView,
-                    agents,
                     notifications,
                 );
                 break;
@@ -255,6 +254,7 @@ function showNotifications(
             message: { type: "html", content: html },
             source: "shell",
             requestId: requestId,
+            actionName: "shell.showNotifications",
         },
         { notification: true },
     );
@@ -263,7 +263,6 @@ function showNotifications(
 function summarizeNotifications(
     requestId: string,
     chatView: ChatView,
-    agents: Map<string, string>,
     messages: Array<any>,
 ) {
     const msgMap: Map<AppAgentEvent, number> = new Map<AppAgentEvent, number>();
@@ -295,7 +294,8 @@ function summarizeNotifications(
             content: summary,
         },
         requestId: requestId,
-        source: agents.get("shell")!,
+        source: "shell",
+        actionName: "shell.notificationSummary",
     });
 }
 
