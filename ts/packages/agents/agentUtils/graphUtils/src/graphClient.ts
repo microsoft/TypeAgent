@@ -6,6 +6,7 @@ import {
     DeviceCodeCredential,
     UsernamePasswordCredential,
     UsernamePasswordCredentialOptions,
+    DeviceCodeCredentialOptions,
 } from "@azure/identity";
 import {
     AuthenticationRecord,
@@ -24,7 +25,6 @@ import lockfile from "proper-lockfile";
 import registerDebug from "debug";
 import chalk from "chalk";
 import os from "os";
-import { Limiter, createLimiter } from "common-utils";
 
 try {
     useIdentityPlugin(cachePersistencePlugin);
@@ -52,203 +52,153 @@ export interface DynamicObject {
     [key: string]: any;
 }
 
-type AuthCacheContent = {
-    authRecord: string;
-    tokenExpiration: number;
-};
-
 const debugGraph = registerDebug("typeagent:graphUtils:graphClient");
 const debugGraphError = registerDebug("typeagent:graphUtils:graphClient:error");
 
-async function withLockFile(
-    file: string,
-    fn: () => Promise<void>,
-): Promise<void> {
+function readFileSafely(filePath: string): string | undefined {
+    try {
+        if (existsSync(filePath)) {
+            const fileContent = readFileSync(filePath, {
+                encoding: "utf-8",
+            });
+            return fileContent;
+        }
+    } catch (error) {
+        debugGraphError("Error reading file:", error);
+        return undefined;
+    }
+}
+
+function writeFileSafety(filePath: string, content: string) {
+    try {
+        writeFileSync(filePath, content);
+    } catch (error) {
+        debugGraphError("Error writing file:", error);
+    }
+}
+
+async function withLockFile<T>(file: string, fn: () => Promise<T>): Promise<T> {
     let release = await lockfile.lock(file);
     try {
-        await fn();
+        return await fn();
     } finally {
         release();
     }
 }
 
-export class GraphClient {
-    private _settings: AppSettings | undefined = undefined;
-    private _deviceCodeCredential: DeviceCodeCredential | undefined = undefined;
+const invalidSettings = {
+    clientId: "",
+    clientSecret: "",
+    tenantId: "",
+    graphUserScopes: [],
+};
 
+function loadMSGraphSettings(): AppSettings {
+    const settings = {
+        clientId: process.env["MSGRAPH_APP_CLIENTID"] ?? "",
+        clientSecret: process.env["MSGRAPH_APP_CLIENTSECRET"] ?? "",
+        tenantId: process.env["MSGRAPH_APP_TENANTID"] ?? "",
+        username: process.env["MSGRAPH_APP_USERNAME"],
+        password: process.env["MSGRAPH_APP_PASSWD"],
+        graphUserScopes: [
+            "user.read",
+            "mail.read",
+            "mail.send",
+            "user.read.all",
+            "calendars.readwrite",
+        ],
+    };
+
+    if (
+        settings.clientId === "" ||
+        settings.clientSecret === "" ||
+        settings.tenantId === ""
+    ) {
+        debugGraphError(
+            chalk.red(
+                "Please provide valid clientId, clientSecret and tenantId",
+            ),
+        );
+        return invalidSettings;
+    }
+    return settings;
+}
+
+export class GraphClient {
     private _userClient: Client | undefined = undefined;
     private AUTH_RECORD_PATH: string = path.join(
         path.join(os.homedir(), ".typeagent"),
         "tokencache.bin",
     );
 
-    private _usernamePasswordCredential:
-        | UsernamePasswordCredential
-        | undefined = undefined;
-
     private _userEmailAddresses: Map<string, string> = new Map<
         string,
         string
     >();
 
-    private graphLock: Limiter;
-    private static instance: GraphClient | undefined = undefined;
     private readonly MSGRAPH_AUTH_URL: string =
         "https://graph.microsoft.com/.default";
 
-    private constructor() {
-        this.graphLock = createLimiter(1);
+    private readonly _settings: AppSettings;
+    protected constructor(private readonly authCommand: string) {
+        this._settings = loadMSGraphSettings();
     }
 
-    public static async getInstance(): Promise<GraphClient | undefined> {
-        if (!GraphClient.instance) {
-            const instance = new GraphClient();
+    private async initializeGraphFromDeviceCode(
+        cb?: (prompt: string) => void,
+    ): Promise<Client> {
+        return withLockFile(this.AUTH_RECORD_PATH, async () => {
+            const options: DeviceCodeCredentialOptions = {
+                clientId: this._settings.clientId,
+                tenantId: this._settings.tenantId,
+                disableAutomaticAuthentication: true,
 
-            await instance.graphLock(async () => {
-                if (!GraphClient.instance) {
-                    const settings = instance.loadMSGraphSettings();
-
-                    if (settings !== undefined) {
-                        let fInitialized =
-                            await instance.initializeGraphFromDeviceCode();
-
-                        if (fInitialized && instance._userClient) {
-                            GraphClient.instance = instance;
-                        }
-                    }
+                tokenCachePersistenceOptions: {
+                    enabled: true,
+                    name: "typeagent-tokencache",
+                },
+            };
+            if (cb) {
+                options.userPromptCallback = (deviceCodeInfo) =>
+                    cb(deviceCodeInfo.message);
+            }
+            const fileContent = readFileSafely(this.AUTH_RECORD_PATH);
+            if (fileContent !== undefined) {
+                const authRecord: AuthenticationRecord =
+                    deserializeAuthenticationRecord(fileContent);
+                if (authRecord.authority !== undefined) {
+                    options.authenticationRecord = authRecord;
                 }
-            });
-        }
-        return GraphClient.instance;
-    }
+            }
 
-    public loadMSGraphSettings(): AppSettings | undefined {
-        if (this._settings !== undefined) {
-            return this._settings;
-        }
-        const settings = {
-            clientId: process.env["MSGRAPH_APP_CLIENTID"] ?? "",
-            clientSecret: process.env["MSGRAPH_APP_CLIENTSECRET"] ?? "",
-            tenantId: process.env["MSGRAPH_APP_TENANTID"] ?? "",
-            username: process.env["MSGRAPH_APP_USERNAME"],
-            password: process.env["MSGRAPH_APP_PASSWD"],
-            graphUserScopes: [
-                "user.read",
-                "mail.read",
-                "mail.send",
-                "user.read.all",
-                "calendars.readwrite",
-            ],
-        };
+            const credential = new DeviceCodeCredential(options);
+            if (cb === undefined) {
+                // getToken to make sure we can authenticate silently
+                await credential.getToken(this.MSGRAPH_AUTH_URL);
+                if (options.authenticationRecord !== undefined) {
+                    return this.createClient(credential);
+                }
+            }
 
-        if (
-            settings.clientId === "" ||
-            settings.clientSecret === "" ||
-            settings.tenantId === ""
-        ) {
-            debugGraphError(
-                chalk.red(
-                    "Please provide valid clientId, clientSecret and tenantId",
-                ),
+            // This will ask for user interaction
+            const authRecord = await credential.authenticate(
+                this.MSGRAPH_AUTH_URL,
             );
-            return undefined;
-        }
-        this._settings = settings;
-        return settings;
-    }
 
-    private readFileSafely(filePath: string): string | undefined {
-        try {
-            if (existsSync(filePath)) {
-                const fileContent = readFileSync(filePath, {
-                    encoding: "utf-8",
-                });
-                return fileContent;
+            if (authRecord) {
+                const serializedAuthRecord =
+                    serializeAuthenticationRecord(authRecord);
+                writeFileSafety(this.AUTH_RECORD_PATH, serializedAuthRecord);
+                debugGraph("Authenticated");
             }
-        } catch (error) {
-            console.error("Error reading file:", error);
-            return undefined;
-        }
+            return this.createClient(credential);
+        });
     }
 
-    public async authenticateUser(): Promise<boolean> {
-        try {
-            await this.refreshTokenFromDeviceCodeCred();
-            return true;
-        } catch (error) {
-            debugGraphError(chalk.red(`Error refreshing token:${error}`));
-        }
-        return false;
-    }
-    /*
-    public async authenticateUserFromCache(): Promise<boolean> {
-        if (this._deviceCodeCredential) {
-            let authRecord: AuthCacheContent | undefined =
-                await this.getAuthRecordFromCache();
-            if (authRecord != undefined) {
-                const currentTime = new Date().getTime();
-                if (currentTime >= authRecord.tokenExpiration) {
-                    await this.ensureTokenIsValid();
-                }
-                return true;
-            }
-        }
-        return false;
-    }
-*/
-    private async initializeGraphFromDeviceCode(): Promise<boolean> {
-        const settings = this.loadMSGraphSettings();
-
-        if (settings === undefined) {
-            debugGraphError(chalk.red("Unable to load settings"));
-            return false;
-        }
-
-        const fileContent = this.readFileSafely(this.AUTH_RECORD_PATH);
-
-        let authRecord: AuthenticationRecord | undefined = undefined;
-        if (fileContent) {
-            authRecord = deserializeAuthenticationRecord(fileContent);
-        }
-
-        if (authRecord !== undefined) {
-            this._deviceCodeCredential = new DeviceCodeCredential({
-                clientId: settings.clientId,
-                tenantId: settings.tenantId,
-                authenticationRecord: authRecord,
-                tokenCachePersistenceOptions: {
-                    enabled: true,
-                    name: "typeagent-tokencache",
-                },
-            });
-        } else {
-            this._deviceCodeCredential = new DeviceCodeCredential({
-                clientId: settings.clientId,
-                tenantId: settings.tenantId,
-                tokenCachePersistenceOptions: {
-                    enabled: true,
-                    name: "typeagent-tokencache",
-                },
-            });
-        }
-
-        this.createClient(this._deviceCodeCredential);
-        return true;
-    }
-
-    public async initializeGraphFromUserCred() {
-        const settings = this.loadMSGraphSettings();
-
-        if (settings === undefined) {
-            debugGraphError(chalk.red("Unable to load settings"));
-            return false;
-        }
-
+    private async initializeGraphFromUserCred(): Promise<Client> {
+        const settings = this._settings;
         if (!settings.username || !settings.password) {
-            debugGraphError(
-                chalk.red("Need valid username and password in setting"),
-            );
-            return false;
+            throw new Error("Need valid username and password in setting");
         }
 
         const options: UsernamePasswordCredentialOptions = {
@@ -256,7 +206,7 @@ export class GraphClient {
                 enabled: true,
             },
         };
-        this._usernamePasswordCredential = new UsernamePasswordCredential(
+        const credential = new UsernamePasswordCredential(
             settings.tenantId,
             settings.clientId,
             settings.username,
@@ -264,232 +214,106 @@ export class GraphClient {
             options,
         );
 
-        const token = await this._usernamePasswordCredential.getToken(
-            this.MSGRAPH_AUTH_URL,
-        );
+        const token = await credential.getToken(this.MSGRAPH_AUTH_URL);
         if (token === undefined) {
-            debugGraphError(chalk.red("Failed to get token"));
-            this._usernamePasswordCredential = undefined;
-            return;
+            throw new Error("Failed to get token");
         }
 
-        await this.refreshTokenFromUsernamePasswdCred();
-        this.createClient(this._usernamePasswordCredential);
+        return this.createClient(credential);
     }
 
-    private createClient(credential: TokenCredential) {
-        if (credential && this._settings?.graphUserScopes) {
-            const authProvider = new TokenCredentialAuthenticationProvider(
-                credential,
-                {
-                    scopes: this._settings?.graphUserScopes,
-                },
-            );
+    private async createClient(credential: TokenCredential): Promise<Client> {
+        const authProvider = new TokenCredentialAuthenticationProvider(
+            credential,
+            {
+                scopes: this._settings.graphUserScopes,
+            },
+        );
 
-            if (authProvider) {
-                this._userClient = Client.initWithMiddleware({
-                    authProvider: authProvider,
-                });
-            }
+        const client = Client.initWithMiddleware({
+            authProvider,
+        });
+
+        // Make sure the credential is valid
+        const response = await client
+            .api("/me")
+            .select(["displayName", "mail", "userPrincipalName"])
+            .get();
+        if (
+            response === undefined ||
+            response.userPrincipalName === undefined
+        ) {
+            throw new Error("Unable to query graph with client");
         }
+        this._userClient = client;
+        return client;
     }
 
-    public getClient(): Client | undefined {
-        return this._userClient;
-    }
-
-    private async handleTokenExpiration(): Promise<void> {
-        const authRecordPath = this.AUTH_RECORD_PATH;
-
-        if (!existsSync(authRecordPath)) {
-            await this.writeAuthRecordToFile();
-        } else {
-            const fileContent = JSON.parse(
-                readFileSync(authRecordPath, "utf8"),
-            );
-            const tokenExpiration = fileContent.tokenExpiration || 0;
-
-            // Check if the token is expiring within 5 minutes (300,000 ms)
-            if (Date.now() >= tokenExpiration - 300000) {
-                await this.writeAuthRecordToFile();
-            }
+    private async initialize(cb?: (prompt: string) => void) {
+        if (this._userClient !== undefined) {
+            return this._userClient;
         }
+
+        const settings = this._settings;
+        if (settings === invalidSettings) {
+            throw new Error("Missing graph settings in environment variables");
+        }
+        if (!settings.username || !settings.password) {
+            return await this.initializeGraphFromDeviceCode(cb);
+        }
+        return await this.initializeGraphFromUserCred();
     }
 
-    private async writeAuthRecordToFile(): Promise<void> {
+    public async login(cb?: (prompt: string) => void): Promise<boolean> {
         try {
-            if (this._deviceCodeCredential !== undefined) {
-                const token = await this._deviceCodeCredential.getToken(
-                    this.MSGRAPH_AUTH_URL,
+            await this.initialize(cb);
+            return true;
+        } catch (e: any) {
+            if (cb === undefined) {
+                return false;
+            }
+            throw e;
+        }
+    }
+
+    public logout() {
+        if (this._userClient !== undefined) {
+            this._userClient = undefined;
+            return true;
+        }
+        return false;
+    }
+
+    public isAuthenticated() {
+        return this._userClient !== undefined;
+    }
+
+    protected async getClient(cb?: (prompt: string) => void): Promise<Client> {
+        try {
+            return await this.initialize(cb);
+        } catch (error: any) {
+            debugGraphError(`Error initializing graph: ${error.message}`);
+            if (cb === undefined) {
+                throw new Error(
+                    `Not authenticated. Use ${this.authCommand} to log into MS Graph and try your request again.`,
                 );
-
-                const authRecord =
-                    await this._deviceCodeCredential.authenticate(
-                        this.MSGRAPH_AUTH_URL,
-                    );
-
-                if (authRecord) {
-                    const serializedAuthRecord =
-                        serializeAuthenticationRecord(authRecord);
-                    const content = {
-                        authRecord: serializedAuthRecord,
-                        tokenExpiration: token.expiresOnTimestamp, // Add token expiration timestamp
-                    };
-                    writeFileSync(
-                        this.AUTH_RECORD_PATH,
-                        JSON.stringify(content, null, 2),
-                    );
-                    debugGraph(
-                        chalk.green("Token refreshed and expiration saved."),
-                    );
-                }
             }
-        } catch (error) {
-            debugGraphError(
-                chalk.red(`Error writing auth record to file: ${error}`),
-            );
+            throw error;
         }
     }
-
-    public async refreshTokenFromDeviceCodeCred(): Promise<void> {
-        const retries = 3;
-        if (
-            this._deviceCodeCredential !== undefined &&
-            this._userClient !== undefined
-        ) {
-            for (let i = 0; i < retries; i++) {
-                try {
-                    await this.handleTokenExpiration();
-                    return;
-                } catch (error) {
-                    debugGraphError(
-                        chalk.red(`Error refreshing token:${error}`),
-                    );
-                }
-            }
-        }
-    }
-
-    public async refreshTokenFromUsernamePasswdCred(): Promise<void> {
-        const retries = 3;
-
-        if (
-            this._usernamePasswordCredential !== undefined &&
-            this._userClient !== undefined
-        ) {
-            for (let i = 0; i < retries; i++) {
-                try {
-                    if (this._userClient !== undefined) {
-                        try {
-                            let response = await this._userClient
-                                ?.api("/me")
-                                .select([
-                                    "displayName",
-                                    "mail",
-                                    "userPrincipalName",
-                                ])
-                                .get();
-                            if (
-                                response === undefined ||
-                                response.userPrincipalName === undefined
-                            )
-                                throw new Error(
-                                    "Unable to query graph with client",
-                                );
-                        } catch (error) {
-                            this._userClient = undefined;
-                        } finally {
-                            this._userClient = undefined;
-                            await this._usernamePasswordCredential.getToken(
-                                this.MSGRAPH_AUTH_URL,
-                            );
-
-                            if (this._settings) {
-                                this.createClient(
-                                    this._usernamePasswordCredential,
-                                );
-                            }
-                            return;
-                        }
-                    }
-                    return;
-                } catch (error) {
-                    debugGraphError(
-                        chalk.red(`Error refreshing token:${error}`),
-                    );
-                }
-            }
-        }
-    }
-
-    public async getAuthRecordFromCache(): Promise<
-        AuthCacheContent | undefined
-    > {
-        const authRecordPath = path.join(process.cwd(), this.AUTH_RECORD_PATH);
-        if (!existsSync(authRecordPath)) {
-            return undefined;
-        }
-
-        const fileContent = readFileSync(authRecordPath, { encoding: "utf-8" });
-        try {
-            const content: AuthCacheContent = JSON.parse(fileContent);
-            return content;
-        } catch (error) {
-            debugGraphError(
-                chalk.red(`Error reading auth record from cache:${error}`),
-            );
-            return undefined;
-        }
-    }
-
-    public async getUserTokenAsync(): Promise<string> {
-        if (!this._settings?.graphUserScopes) {
-            debugGraphError(chalk.red(`Setting "scopes" cannot be undefined`));
-            return "";
-        }
-
-        if (this._deviceCodeCredential && this._settings?.graphUserScopes) {
-            const token = await this._deviceCodeCredential.getToken(
-                this._settings?.graphUserScopes,
-            );
-            return token.token;
-        }
-
-        if (
-            this._usernamePasswordCredential &&
-            this._settings?.graphUserScopes
-        ) {
-            const token = await this._usernamePasswordCredential.getToken(
-                this._settings?.graphUserScopes,
-            );
-            return token.token;
-        }
-
-        return "";
-    }
-
-    public async ensureTokenIsValid(): Promise<void> {
-        if (!this._userClient) {
-            throw new Error("Graph has not been initialized for user auth");
-        }
-        this._deviceCodeCredential
-            ? await this.refreshTokenFromDeviceCodeCred()
-            : await this.refreshTokenFromUsernamePasswdCred();
-    }
-
     public async getUserAsync(): Promise<User> {
-        this.ensureTokenIsValid();
-        return this._userClient
-            ?.api("/me")
+        const client = await this.getClient();
+        return client
+            .api("/me")
             .select(["displayName", "mail", "userPrincipalName"])
             .get();
     }
 
     public async getUserInfo(nameHint: string): Promise<any[]> {
-        this.ensureTokenIsValid();
+        const client = await this.getClient();
         try {
-            const response = await this._userClient
-                ?.api("/users")
+            const response = await client
+                .api("/users")
                 .filter(`startsWith(displayName, '${nameHint}')`)
                 .select("displayName,mail")
                 .get();
@@ -501,10 +325,10 @@ export class GraphClient {
     }
 
     public async loadUserEmailAddresses(): Promise<void> {
-        await this.ensureTokenIsValid();
+        const client = await this.getClient();
         try {
-            const response = await this._userClient
-                ?.api("/users")
+            const response = await client
+                .api("/users")
                 .select("displayName,userPrincipalName")
                 .get();
 
@@ -553,12 +377,12 @@ export class GraphClient {
     public async getEmailAddressesOfUsernames(
         usernames: string[],
     ): Promise<string[]> {
-        await this.ensureTokenIsValid();
+        const client = await this.getClient();
         let emailAddresses: string[] = [];
         try {
             for (const username of usernames) {
-                const response = await this._userClient
-                    ?.api("/users")
+                const response = await client
+                    .api("/users")
                     .filter(`startsWith(displayName, '${username}')`)
                     .select("displayName,userPrincipalName ")
                     .get();

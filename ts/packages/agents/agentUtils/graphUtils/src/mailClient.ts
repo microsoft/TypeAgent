@@ -13,33 +13,16 @@ enum AddressToType {
     "bcc",
 }
 
-export class MailClient {
+export class MailClient extends GraphClient {
     private readonly logger = registerDebug("typeagent:graphUtils:mailClient");
-    private graphClient: GraphClient | undefined = undefined;
-    public constructor() {}
-
-    public isGraphClientInitialized(): boolean {
-        return this.graphClient && this.graphClient.getClient() ? true : false;
-    }
-
-    public async initGraphClient(fLogin: boolean): Promise<void> {
-        if (this.graphClient === undefined) {
-            this.graphClient = await GraphClient.getInstance();
-            this.graphClient?.authenticateUser();
-        } else if (fLogin) {
-            await this.graphClient.ensureTokenIsValid();
-            this.graphClient.loadUserEmailAddresses();
-        }
-        return;
+    public constructor() {
+        super("@email login");
     }
 
     public async getInboxAsync(): Promise<PageCollection | undefined> {
-        if (this.graphClient === undefined) return undefined;
-
-        this.graphClient.ensureTokenIsValid();
-        return this.graphClient
-            .getClient()
-            ?.api("/me/mailFolders/inbox/messages")
+        const client = await this.getClient();
+        return client
+            .api("/me/mailFolders/inbox/messages")
             .select(["from", "isRead", "receivedDateTime", "subject"])
             .top(25)
             .orderby("receivedDateTime DESC")
@@ -103,9 +86,7 @@ export class MailClient {
         cc_addrs: string[] | undefined,
         bcc_addrs: string[] | undefined,
     ): Promise<Boolean> {
-        if (this.graphClient === undefined) return false;
-
-        this.graphClient.ensureTokenIsValid();
+        const client = await this.getClient();
         let fSent = false;
         try {
             const message: Message = {
@@ -128,9 +109,8 @@ export class MailClient {
                 this.addEmailsToMessage(bcc_addrs, message, AddressToType.bcc);
             }
 
-            await this.graphClient
-                .getClient()
-                ?.api("me/sendMail")
+            await client
+                .api("me/sendMail")
                 .post({
                     message: message,
                 })
@@ -153,9 +133,7 @@ export class MailClient {
         cc_addrs: string[] | undefined,
         bcc_addrs: string[] | undefined,
     ): Promise<Boolean> {
-        if (this.graphClient === undefined) return false;
-
-        this.graphClient.ensureTokenIsValid();
+        const client = await this.getClient();
         try {
             const reply = {
                 message: {},
@@ -178,9 +156,8 @@ export class MailClient {
                 );
             }
 
-            let res = await this.graphClient
-                .getClient()
-                ?.api(`me/messages/${msg_id}/reply`)
+            let res = await client
+                .api(`me/messages/${msg_id}/reply`)
                 .post(reply);
 
             if (res) {
@@ -204,9 +181,7 @@ export class MailClient {
         cc_addrs: string[] | undefined,
         bcc_addrs: string[] | undefined,
     ): Promise<Boolean> {
-        if (this.graphClient === undefined) return false;
-
-        this.graphClient.ensureTokenIsValid();
+        const client = await this.getClient();
         try {
             const message: DynamicObject = {
                 comment: `${content}`,
@@ -224,9 +199,8 @@ export class MailClient {
                 this.addEmailsToMessage(bcc_addrs, message, AddressToType.bcc);
             }
 
-            let res = await this.graphClient
-                .getClient()
-                ?.api(`me/messages/${msg_id}/forward`)
+            let res = await client
+                .api(`me/messages/${msg_id}/forward`)
                 .post(message);
 
             if (res) {
@@ -250,14 +224,11 @@ export class MailClient {
         startDateTime: string | undefined,
         endDateTime: string | undefined,
     ): Promise<string | undefined> {
-        if (this.graphClient === undefined) return undefined;
-
-        this.graphClient.ensureTokenIsValid();
+        const client = await this.getClient();
         try {
             if (sender && sender.length > 0) {
-                let msgs = await this.graphClient
-                    .getClient()
-                    ?.api("/me/messages")
+                let msgs = await client
+                    .api("/me/messages")
                     .filter(`from/emailAddress/address eq '${sender}'`)
                     .select(["from", "id", "receivedDateTime", "subject"])
                     .top(5)
@@ -274,16 +245,8 @@ export class MailClient {
         }
         return undefined;
     }
-
-    public async getEmailAddressesOfUsernamesLocal(
-        usernames: string[],
-    ): Promise<string[]> {
-        if (this.graphClient === undefined) return [];
-        return this.graphClient.getEmailAddressesOfUsernamesLocal(usernames);
-    }
 }
 
 export async function createMailGraphClient(): Promise<MailClient> {
-    //return new MailClient(await GraphClient.getInstance());
     return new MailClient();
 }
