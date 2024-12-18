@@ -496,6 +496,9 @@ class FieldScalar extends FieldBase {
                 this.cancelSearchMenu();
             }, 250);
         });
+        input.onwheel = (event) => {
+            this.editUI?.searchMenu?.handleMouseWheel(event.deltaY);
+        }        
         return searchMenu;
     }
 

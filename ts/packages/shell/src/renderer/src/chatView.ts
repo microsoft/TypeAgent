@@ -136,6 +136,9 @@ export class ChatView {
 
                 return true;
             },
+            (_eta: ExpandableTextarea, miv: WheelEvent) => {
+                this.partialCompletion?.handleMouseWheel(miv);
+            },
         );
         this.inputContainer = this.chatInput.getInputContainer();
         this.topDiv.appendChild(this.messageDiv);

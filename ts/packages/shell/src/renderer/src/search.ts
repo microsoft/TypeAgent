@@ -18,6 +18,7 @@ export class SearchMenu {
     private selected: number = -1;
     private onCompletion: (item: SearchMenuItem) => void;
     private items: SearchMenuItem[] = [];
+    private prefix: string | undefined;
     visibleItemsCount: number = 15;
     top: number = 0;
 
@@ -41,6 +42,20 @@ export class SearchMenu {
             });
             this.searchContainer.appendChild(this.searchInput);
         }
+
+        this.searchContainer.onfocus = () => {
+            console.log("Search container Focus");
+        }
+
+        this.searchContainer.onblur = () => {
+            console.log("Search container blur");
+        }
+
+        this.searchContainer.onwheel = (event) => {
+            console.log(`SearchContainer onwheel deltaY ${event.deltaY} `);
+            this.handleMouseWheel(event.deltaY);
+        }
+
     }
 
     public getContainer() {
@@ -59,17 +74,18 @@ export class SearchMenu {
 
     public handleSpecialKeys(event: KeyboardEvent, prefix: string) {
         if (this.completions) {
+            this.prefix = prefix;
             if (event.key === "ArrowDown") {
                 if (this.selected < this.items.length - 1) {
                     this.selected++;
-                    this.updateDisplay(prefix);
+                    this.updateDisplay();
                 }
                 event.preventDefault();
                 return true;
             } else if (event.key === "ArrowUp") {
                 if (this.selected > 0) {
                     this.selected--;
-                    this.updateDisplay(prefix);
+                    this.updateDisplay();
                 }
                 event.preventDefault();
                 return true;
@@ -111,10 +127,11 @@ export class SearchMenu {
 
     // add completions to the search menu
     public replaceItems(prefix: string, items: SearchMenuItem[]) {
+        this.prefix = prefix;
         this.items = items;
         this.selected = 0;
         this.top = 0;
-        this.updateDisplay(prefix);
+        this.updateDisplay();
     }
 
     // add legend to top of the search menu, with minimum
@@ -127,7 +144,17 @@ export class SearchMenu {
         this.searchContainer.prepend(legendDiv);
     }
 
-    public updateDisplay(prefix: string) {
+    public handleMouseWheel(deltaY: number) {
+        if (deltaY > 0 && this.selected < this.items.length - 1) {
+            this.selected++;
+        } else if (deltaY < 0 && this.selected > 0) {
+            this.selected--;
+        }
+
+        this.updateDisplay();
+    }
+
+    public updateDisplay() {
         if (this.completions) {
             this.searchContainer.removeChild(this.completions);
             this.completions = undefined;
@@ -136,6 +163,7 @@ export class SearchMenu {
         if (this.items.length > 0) {
             this.completions = document.createElement("ul");
             this.completions.className = "completions";
+
             if (
                 this.selected < this.top ||
                 this.selected >= this.top + this.visibleItemsCount
@@ -163,10 +191,10 @@ export class SearchMenu {
                 // make a span for the prefix
                 const prefixSpan = document.createElement("span");
                 prefixSpan.className = "search-prefix";
-                prefixSpan.innerText = prefix;
+                prefixSpan.innerText = this.prefix ?? "";
                 li.appendChild(prefixSpan);
                 // make a span for the suffix
-                const suffix = item.matchText.substring(prefix.length);
+                const suffix = item.matchText.substring(this.prefix!!.length);
                 const resultSpan = document.createElement("span");
                 resultSpan.className = "search-suffix";
                 resultSpan.innerText = suffix;
@@ -174,12 +202,14 @@ export class SearchMenu {
                 this.completions.appendChild(li);
 
                 // handle mouse events
-                li.onmouseup = () => {
+                li.onmousedown = () => {
                     this.onCompletion(item);
                 };
-                li.onmouseenter = () => {
-                    this.selected = i;
-                    this.updateDisplay(prefix);
+                li.onmousemove = () => {
+                    if (this.selected != i) {
+                        this.selected = i;
+                        this.updateDisplay();
+                    }
                 };
 
                 if (i === this.items.length - 1) {
