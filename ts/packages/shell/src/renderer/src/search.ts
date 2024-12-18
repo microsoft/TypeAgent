@@ -12,6 +12,8 @@ export type SearchMenuItem = {
 
 export class SearchMenu {
     private searchContainer: HTMLDivElement;
+    private scrollBar: HTMLDivElement;
+    private scrollBarIndicator: HTMLDivElement;
     private searchInput: HTMLInputElement | undefined = undefined;
     private completions: HTMLUListElement | undefined;
     private trie: TST<SearchMenuItem> = new TST<SearchMenuItem>();
@@ -56,6 +58,12 @@ export class SearchMenu {
             this.handleMouseWheel(event.deltaY);
         }
 
+        this.scrollBar = document.createElement("div");
+        this.scrollBar.classList.add("autocomplete-scrollbar");
+        this.scrollBarIndicator = document.createElement("div");
+        this.scrollBarIndicator.classList.add("autocomplete-scrollbar-indicator");
+        this.scrollBar.appendChild(this.scrollBarIndicator);
+        this.searchContainer.append(this.scrollBar);
     }
 
     public getContainer() {
@@ -218,6 +226,20 @@ export class SearchMenu {
             }
             this.searchContainer.appendChild(this.completions);
             this.searchContainer.style.visibility = "visible";
+
+            // calculate scrollbar indicator offset and height
+            this.setScrollBarPosition();
         }
+    }
+
+    /**
+     * Sets the offset and size of the scrollbar indicator
+     */
+    setScrollBarPosition() {
+        const heightPercentage = this.visibleItemsCount / this.items.length;
+        this.scrollBarIndicator.style.height = `${this.searchContainer.scrollHeight * heightPercentage }px`;
+
+        const offsetPercentage = this.top / this.items.length;
+        this.scrollBarIndicator.style.top = `${this.searchContainer.scrollHeight * offsetPercentage}px`;
     }
 }
