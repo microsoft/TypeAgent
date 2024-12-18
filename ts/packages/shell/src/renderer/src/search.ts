@@ -47,21 +47,23 @@ export class SearchMenu {
 
         this.searchContainer.onfocus = () => {
             console.log("Search container Focus");
-        }
+        };
 
         this.searchContainer.onblur = () => {
             console.log("Search container blur");
-        }
+        };
 
         this.searchContainer.onwheel = (event) => {
             console.log(`SearchContainer onwheel deltaY ${event.deltaY} `);
             this.handleMouseWheel(event.deltaY);
-        }
+        };
 
         this.scrollBar = document.createElement("div");
         this.scrollBar.classList.add("autocomplete-scrollbar");
         this.scrollBarIndicator = document.createElement("div");
-        this.scrollBarIndicator.classList.add("autocomplete-scrollbar-indicator");
+        this.scrollBarIndicator.classList.add(
+            "autocomplete-scrollbar-indicator",
+        );
         this.scrollBar.appendChild(this.scrollBarIndicator);
         this.searchContainer.append(this.scrollBar);
     }
@@ -237,7 +239,7 @@ export class SearchMenu {
      */
     setScrollBarPosition() {
         const heightPercentage = this.visibleItemsCount / this.items.length;
-        this.scrollBarIndicator.style.height = `${this.searchContainer.scrollHeight * heightPercentage }px`;
+        this.scrollBarIndicator.style.height = `${this.searchContainer.scrollHeight * heightPercentage}px`;
 
         const offsetPercentage = this.top / this.items.length;
         this.scrollBarIndicator.style.top = `${this.searchContainer.scrollHeight * offsetPercentage}px`;
