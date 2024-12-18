@@ -271,6 +271,7 @@ function getStorage(contextId: number, session: boolean): Storage {
 
 function createSessionContextShim(
     contextId: number,
+    hasInstanceStorage: boolean,
     hasSessionStorage: boolean,
     context: any,
 ): SessionContext<any> {
@@ -279,7 +280,9 @@ function createSessionContextShim(
         sessionStorage: hasSessionStorage
             ? getStorage(contextId, true)
             : undefined,
-        profileStorage: getStorage(contextId, false),
+        instanceStorage: hasInstanceStorage
+            ? getStorage(contextId, false)
+            : undefined,
         notify: (event: AppAgentEvent, message: string): void => {
             rpc.send("notify", {
                 contextId,
@@ -321,9 +324,13 @@ function getAgentContext(agentContextId: number) {
 }
 
 function getSessionContextShim(param: Partial<ContextParams>): SessionContext {
-    const { contextId, hasSessionStorage, agentContextId } = param;
+    const { contextId, hasInstanceStorage, hasSessionStorage, agentContextId } =
+        param;
     if (contextId === undefined) {
         throw new Error("Invalid context param: missing contextId");
+    }
+    if (hasInstanceStorage === undefined) {
+        throw new Error("Invalid context param: missing hasInstanceStorage");
     }
     if (hasSessionStorage === undefined) {
         throw new Error("Invalid context param: missing hasSessionStorage");
@@ -334,7 +341,12 @@ function getSessionContextShim(param: Partial<ContextParams>): SessionContext {
             ? getAgentContext(agentContextId)
             : undefined;
 
-    return createSessionContextShim(contextId, hasSessionStorage, agentContext);
+    return createSessionContextShim(
+        contextId,
+        hasInstanceStorage,
+        hasSessionStorage,
+        agentContext,
+    );
 }
 
 function getActionContextShim(

@@ -3,9 +3,10 @@
 
 import Server from "webpack-dev-server";
 import {
-    getSessionNames,
-    getSessionCaches,
-    getSessionCacheDirPath,
+    getInstanceSessionNames,
+    getSessionConstructionDirPaths,
+    getSessionConstructionDirPath,
+    getInstanceSessionDirPath,
 } from "agent-dispatcher/explorer";
 import path from "node:path";
 import fs from "node:fs";
@@ -16,14 +17,15 @@ export function setupMiddlewares(
 ) {
     const app = devServer.app!;
     app.get("/sessions", async (req, res) => {
-        const sessions = await getSessionNames();
+        const sessions = await getInstanceSessionNames();
         res.json(sessions);
     });
 
     app.get("/session/:session/caches", async (req, res) => {
         try {
-            const sessionDir = req.params.session;
-            const caches = await getSessionCaches(sessionDir);
+            const sessionName = req.params.session;
+            const sessionDir = getInstanceSessionDirPath(sessionName);
+            const caches = await getSessionConstructionDirPaths(sessionDir);
             res.json(caches);
         } catch (e: any) {
             res.json([]);
@@ -31,7 +33,8 @@ export function setupMiddlewares(
     });
 
     app.get("/session/:session/cache/:cache", async (req, res) => {
-        const cacheDir = getSessionCacheDirPath(req.params.session);
+        const sessionDir = getInstanceSessionDirPath(req.params.session);
+        const cacheDir = getSessionConstructionDirPath(sessionDir);
         res.json(
             JSON.parse(
                 await fs.promises.readFile(

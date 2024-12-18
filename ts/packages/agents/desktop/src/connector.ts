@@ -334,7 +334,7 @@ async function ensureProgramNameIndex(
 
 export async function setupDesktopActionContext(
     agentContext: DesktopActionContext,
-    storage: Storage,
+    storage?: Storage,
 ) {
     await ensureAutomationProcess(agentContext);
     return ensureProgramNameIndex(agentContext, storage);

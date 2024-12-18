@@ -43,10 +43,12 @@ function getUserDataFilePath() {
     return "userdata.json";
 }
 
-async function loadUserData(profileStorage: Storage): Promise<SpotifyUserData> {
+async function loadUserData(
+    instanceStorage: Storage,
+): Promise<SpotifyUserData> {
     const userDataPath = getUserDataFilePath();
-    if (await profileStorage.exists(userDataPath)) {
-        const content = await profileStorage.read(userDataPath, "utf8");
+    if (await instanceStorage.exists(userDataPath)) {
+        const content = await instanceStorage.read(userDataPath, "utf8");
         const json: SpotifyUserDataJSON = JSON.parse(content);
         return {
             lastUpdated: json.lastUpdated,
@@ -329,18 +331,18 @@ export type UserData = {
 
 const updateFrequency = 24 * 60 * 60 * 1000; // 24 hours
 export async function initializeUserData(
-    profileStorage: Storage,
+    instanceStorage: Storage,
     service: SpotifyService,
 ) {
     debugData("Loading saved user data");
-    const data = await loadUserData(profileStorage);
+    const data = await loadUserData(instanceStorage);
     const result: UserData = { data };
     debugData(
         `Tracks: ${data.tracks.size}, Artists: ${data.artists.size}, Albums: ${data.albums.size}`,
     );
     // Update once a day
     const update = async () => {
-        await updateUserData(profileStorage, service, data);
+        await updateUserData(instanceStorage, service, data);
         result.timeoutId = setTimeout(update, updateFrequency);
     };
     const newUpdateTime = data.lastUpdated + updateFrequency;
