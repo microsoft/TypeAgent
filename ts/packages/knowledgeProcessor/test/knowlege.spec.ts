@@ -5,7 +5,6 @@ import dotenv from "dotenv";
 dotenv.config({ path: new URL("../../../../.env", import.meta.url) });
 
 import {
-    cleanDir,
     createTestModels,
     getRootDataPath,
     hasTestKeys,
@@ -18,7 +17,7 @@ import {
     createKnowledgeStore,
     KnowledgeStore,
 } from "../src/index.js";
-import { asyncArray } from "typeagent";
+import { asyncArray, cleanDir } from "typeagent";
 import path from "path";
 
 describe("KnowledgeExtractor", () => {
@@ -70,7 +69,7 @@ describe("KnowledgeExtractor", () => {
         const itemIds = await addItems(store, fruitItems);
 
         let fullName = " Jane  Austen ";
-        const name = conversation.splitPersonName(fullName);
+        const name = conversation.splitListenerName(fullName);
         expect(name).toBeDefined();
         if (name) {
             expect(name.firstName).toEqual("Jane");

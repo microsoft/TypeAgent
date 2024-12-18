@@ -17,7 +17,6 @@ import { createTypeScriptJsonValidator } from "typechat/ts";
 import { SourceTextBlock, TextBlock, TextBlockType } from "../text.js";
 import { mergeEntityFacet } from "./entities.js";
 import { unionArrays } from "../setOperations.js";
-import { split } from "../textChunker.js";
 
 export interface KnowledgeExtractor {
     readonly settings: KnowledgeExtractorSettings;
@@ -315,31 +314,4 @@ function prepareEntityForMerge(entity: ConcreteEntity) {
 
 export function isValidEntityName(name: string | undefined): boolean {
     return name !== undefined && name.length > 0 && name !== NoEntityName;
-}
-
-export type PersonName = {
-    firstName: string;
-    lastName?: string | undefined;
-    middleName?: string | undefined;
-};
-
-export function splitPersonName(fullName: string): PersonName | undefined {
-    const parts = split(fullName, /\s+/, {
-        trim: true,
-        removeEmpty: true,
-    });
-    switch (parts.length) {
-        case 0:
-            return undefined;
-        case 1:
-            return { firstName: parts[0] };
-        case 2:
-            return { firstName: parts[0], lastName: parts[1] };
-        case 3:
-            return {
-                firstName: parts[0],
-                middleName: parts[1],
-                lastName: parts[2],
-            };
-    }
 }

@@ -1,9 +1,19 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { dateTime, readAllText, readJsonFile, writeJsonFiles } from "typeagent";
+import {
+    asyncArray,
+    cleanDir,
+    dateTime,
+    ensureDir,
+    getFileName,
+    readAllText,
+    readJsonFile,
+    writeJsonFile,
+    writeJsonFiles,
+} from "typeagent";
 import { TextBlock, TextBlockType } from "../text.js";
-import { splitIntoLines } from "../textChunker.js";
+import { split, splitIntoLines } from "../textChunker.js";
 import {
     ConversationManager,
     ConversationMessage,
@@ -11,6 +21,100 @@ import {
 import { Action, KnowledgeResponse } from "./knowledgeSchema.js";
 import { DateTimeRange } from "./dateTimeSchema.js";
 import { dateToDateTime } from "./knowledgeActions.js";
+import { AliasMatcher } from "../textMatcher.js";
+import path from "path";
+
+export type TranscriptMetadata = {
+    sourcePath: string;
+    name: string;
+    description?: string | undefined;
+    startAt?: string | undefined; // Should be parsable as a Date
+    lengthMinutes?: number | undefined;
+};
+
+export type Transcript = {
+    metadata: TranscriptMetadata;
+    turns: TranscriptTurn[];
+};
+
+export async function createTranscript(
+    transcriptFilePath: string,
+    name: string,
+    description: string,
+    startAt: string,
+    lengthMinutes: number,
+): Promise<Transcript> {
+    const turns = await loadTurnsFromTranscriptFile(transcriptFilePath);
+    const transcript = {
+        turns,
+        metadata: {
+            sourcePath: transcriptFilePath,
+            name,
+            description,
+            startAt,
+            lengthMinutes,
+        },
+    };
+    dateTime.stringToDate;
+    const startTimestamp = new Date(startAt);
+    if (!startTimestamp) {
+        throw new Error("Invalid startAt");
+    }
+    const endTimestamp = dateTime.addMinutesToDate(
+        startTimestamp,
+        lengthMinutes,
+    );
+    timestampTranscriptTurns(transcript.turns, startTimestamp, endTimestamp);
+    return transcript;
+}
+
+export async function importTranscript(
+    transcriptFilePath: string,
+    name: string,
+    description: string,
+    startAt: string,
+    lengthMinutes: number,
+    clean: boolean = true,
+) {
+    const transcript = await createTranscript(
+        transcriptFilePath,
+        name,
+        description,
+        startAt,
+        lengthMinutes,
+    );
+    const transcriptFileName = getFileName(transcriptFilePath);
+    const destFolderPath = path.join(
+        path.dirname(transcriptFilePath),
+        transcriptFileName,
+    );
+    await saveTranscriptToFolder(
+        transcript,
+        destFolderPath,
+        transcriptFileName,
+    );
+    return transcript;
+}
+
+export async function saveTranscriptToFolder(
+    transcript: Transcript,
+    destPath: string,
+    baseTurnFileName: string,
+    clean: boolean = true,
+): Promise<void> {
+    const metadataPath = path.join(destPath, "metadata.json");
+    const turnsPath = path.join(destPath, "turns");
+    if (clean) {
+        await cleanDir(destPath);
+    }
+    await ensureDir(turnsPath);
+    await writeJsonFile(metadataPath, transcript.metadata);
+    await saveTranscriptTurnsToFolder(
+        turnsPath,
+        baseTurnFileName,
+        transcript.turns,
+    );
+}
 
 /**
  * A turn in a transcript
@@ -156,7 +260,7 @@ export async function loadTranscriptTurn(
     return readJsonFile<TranscriptTurn>(filePath);
 }
 
-export async function saveTranscriptTurns(
+export async function saveTranscriptTurnsToFolder(
     destFolderPath: string,
     baseFileName: string,
     turns: TranscriptTurn[],
@@ -221,6 +325,7 @@ export async function addTranscriptTurnsToConversation(
         messages.push(transcriptTurnToMessage(turns));
     }
     await cm.addMessageBatch(messages);
+    await addTranscriptTurnAliases(cm, turns);
 }
 
 function assignTurnListeners(
@@ -274,14 +379,6 @@ function turnToHeaderString(turn: TranscriptTurn): string {
     return text;
 }
 
-export type TranscriptMetadata = {
-    sourcePath: string;
-    name: string;
-    description?: string | undefined;
-    startAt?: string; // Should be parseable as a Date
-    lengthMinutes?: number | undefined;
-};
-
 export function createTranscriptOverview(
     metadata: TranscriptMetadata,
     turns: TranscriptTurn[],
@@ -324,27 +421,59 @@ export function parseTranscriptDuration(
     };
 }
 
-export type Transcript = {
-    metadata: TranscriptMetadata;
-    turns: TranscriptTurn[];
+export type ParticipantName = {
+    firstName: string;
+    lastName?: string | undefined;
+    middleName?: string | undefined;
 };
 
-export async function loadTranscript(
-    sourcePath: string,
-    name: string,
-    description: string,
-    startAt: string,
-    lengthMinutes: number,
-): Promise<Transcript> {
-    const turns = await loadTurnsFromTranscriptFile(sourcePath);
-    return {
-        turns,
-        metadata: {
-            sourcePath,
-            name,
-            description,
-            startAt,
-            lengthMinutes,
-        },
-    };
+export function splitListenerName(
+    fullName: string,
+): ParticipantName | undefined {
+    const parts = split(fullName, /\s+/, {
+        trim: true,
+        removeEmpty: true,
+    });
+    switch (parts.length) {
+        case 0:
+            return undefined;
+        case 1:
+            return { firstName: parts[0] };
+        case 2:
+            return { firstName: parts[0], lastName: parts[1] };
+        case 3:
+            return {
+                firstName: parts[0],
+                middleName: parts[1],
+                lastName: parts[2],
+            };
+    }
+}
+
+export async function addTranscriptTurnAliases(
+    cm: ConversationManager,
+    turns: TranscriptTurn | TranscriptTurn[],
+) {
+    const aliases = (await cm.conversation.getEntityIndex()).nameAliases;
+    if (Array.isArray(turns)) {
+        await asyncArray.forEachAsync(turns, 1, (t) =>
+            addListenersAlias(aliases, t.listeners),
+        );
+    } else {
+        await addListenersAlias(aliases, turns.listeners);
+    }
+}
+
+async function addListenersAlias(
+    aliases: AliasMatcher,
+    listeners: string[] | undefined,
+) {
+    if (listeners && listeners.length > 0) {
+        await asyncArray.forEachAsync(listeners, 1, async (listener) => {
+            const parts = splitListenerName(listener);
+            if (parts && parts.firstName) {
+                await aliases.addAlias(parts.firstName, listener);
+            }
+        });
+    }
 }

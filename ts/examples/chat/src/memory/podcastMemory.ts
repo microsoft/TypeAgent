@@ -87,8 +87,8 @@ export function createPodcastCommands(
             description: "Import a podcast transcript.",
             args: {
                 sourcePath: argSourceFileOrFolder(),
-                name: arg("Thread name"),
-                description: arg("Thread description"),
+                name: arg("Podcast name"),
+                description: arg("Podcast description"),
             },
             options: {
                 startAt: arg("Start date and time"),
@@ -109,6 +109,15 @@ export function createPodcastCommands(
         }
 
         await podcastConvert(namedArgs);
+        /*
+        await conversation.importTranscript(
+            sourcePath,
+            namedArgs.name,
+            namedArgs.description,
+            namedArgs.startAt,
+            namedArgs.length,
+        );
+        */
         await podcastAddThread(namedArgs);
         const turnsFilePath = getTurnsFolderPath(sourcePath);
         namedArgs.sourcePath = turnsFilePath;
@@ -294,7 +303,7 @@ export function createPodcastCommands(
         context.printer.writeLine(
             `Saving ${turns.length} turns to ${turnsFolderPath}`,
         );
-        await conversation.saveTranscriptTurns(
+        await conversation.saveTranscriptTurnsToFolder(
             turnsFolderPath,
             transcriptFileName,
             turns,
