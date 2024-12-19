@@ -98,6 +98,7 @@ export default class ExplainCommand extends Command {
                 },
                 cache: { enabled: false },
                 clientIO,
+                persist: true,
             });
             try {
                 await dispatcher.processCommand(command.join(" "));

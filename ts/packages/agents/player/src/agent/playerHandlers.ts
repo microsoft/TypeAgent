@@ -88,7 +88,7 @@ async function updatePlayerContext(
 }
 
 async function enableSpotify(context: SessionContext<PlayerActionContext>) {
-    const clientContext = await getClientContext(context.profileStorage);
+    const clientContext = await getClientContext(context.instanceStorage);
     context.agentContext.spotify = clientContext;
 
     return clientContext.service.retrieveUser().username;
