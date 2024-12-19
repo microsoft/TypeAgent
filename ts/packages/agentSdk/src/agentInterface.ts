@@ -27,7 +27,7 @@ export type SchemaManifest = {
 
 export type ActionManifest = {
     defaultEnabled?: boolean;
-    translationDefaultEnabled?: boolean;
+    schemaDefaultEnabled?: boolean;
     actionDefaultEnabled?: boolean;
     transient?: boolean; // whether the translator is transient, default is false
 

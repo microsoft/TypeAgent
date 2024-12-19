@@ -368,7 +368,7 @@ export class AppAgentManager implements ActionConfigProvider {
                 "schemas",
                 name,
                 useDefault,
-                config.translationDefaultEnabled,
+                config.schemaDefaultEnabled,
                 record.schemas.has(name),
                 failedSchemas,
             );
