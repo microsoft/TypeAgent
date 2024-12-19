@@ -40,7 +40,7 @@ import {
     processCommandNoLock,
     resolveCommand,
 } from "../../command/command.js";
-import { getHandlerTableUsage, getUsage } from "../../command/commandHelp.js";
+import { getHandlerTableUsage, getUsage, printStructuredHandlerTableUsage } from "../../command/commandHelp.js";
 import { DisplayCommandHandler } from "./handlers/displayCommandHandler.js";
 import {
     getActionCompletion,
@@ -90,10 +90,7 @@ class HelpCommandHandler implements CommandHandler {
     ) {
         const systemContext = context.sessionContext.agentContext;
         if (params.args.command === undefined) {
-            displayResult(
-                getHandlerTableUsage(systemHandlers, undefined, systemContext),
-                context,
-            );
+            printStructuredHandlerTableUsage(systemHandlers, undefined, context);            
         } else {
             const result = await resolveCommand(
                 params.args.command,
@@ -127,10 +124,7 @@ class HelpCommandHandler implements CommandHandler {
                 throw new Error(`Unknown command '${params.args.command}'`);
             }
 
-            displayResult(
-                getHandlerTableUsage(result.table, command, systemContext),
-                context,
-            );
+            printStructuredHandlerTableUsage(result.table, command, context);
         }
     }
 }

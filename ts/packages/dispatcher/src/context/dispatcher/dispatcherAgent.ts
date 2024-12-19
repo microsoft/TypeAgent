@@ -70,7 +70,7 @@ function clarifyRequestAction(
 
 export const dispatcherManifest: AppAgentManifest = {
     emojiChar: "🤖",
-    description: "Built-in agent to dispatch request",
+    description: "Built-in agent to dispatch requests",
     schema: {
         description: "",
         schemaType: "DispatcherActions",
