@@ -2,7 +2,7 @@
 
 **Sample code** and early ideas that explore how to:
 
-- Use TypeChat to extract **_structured knowledge_** from conversations, transcripts and documents.
+- Use TypeChat to extract **_structured knowledge_** from conversations, transcripts, images, and documents.
 - Implement a **Structured RAG**. The exploration includes ideas on how to:
   - Index the extracted knowledge and source text for retrieval.
   - Use TypeChat to generate **structured queries** for structured knowledge.\*\*

@@ -16,3 +16,4 @@ export * as sets from "./setOperations.js";
 
 export * as conversation from "./conversation/index.js";
 export * as email from "./email/index.js";
+export * as image from "./images/index.js";

@@ -42,6 +42,7 @@ import {
 import { createEmailCommands, createEmailMemory } from "./emailMemory.js";
 import { pathToFileURL } from "url";
 import { createPodcastCommands, createPodcastMemory } from "./podcastMemory.js";
+import { createImageCommands } from "./imageMemory.js";
 
 export type Models = {
     chatModel: ChatModel;
@@ -321,7 +322,8 @@ export async function runChatMemory(): Promise<void> {
     };
     createEmailCommands(context, commands);
     createPodcastCommands(context, commands);
-    addStandardHandlers(commands);
+    createImageCommands(context, commands);
+    addStandardHandlers(commands); 
 
     function onStart(io: InteractiveIo): void {
         if (io !== context.printer.io) {
