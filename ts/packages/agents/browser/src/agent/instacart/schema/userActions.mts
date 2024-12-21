@@ -74,6 +74,9 @@ export type DeleteRecipeAction = {
 
 export type SetPreferredStoreAction = {
   actionName: "setPreferredStoreAction";
+  parameters: {
+    storeName: string;
+  };
 };
 
 export type FindNearbyStoreAction = {

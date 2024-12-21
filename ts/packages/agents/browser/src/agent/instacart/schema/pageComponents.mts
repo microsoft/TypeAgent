@@ -30,6 +30,11 @@ export type ProductDetailsHeroTile = {
     cssSelector: string;
   };
 
+  addToListButton?: {
+    // css selector for the add to cart button
+    cssSelector: string;
+  };
+
   storeName?: string;
   // The physical location of the goods, such as the Aisle, Bay or Shelf
   // Only provide this infomration if it present on the page
@@ -45,10 +50,16 @@ export type SearchInput = {
   submitButtonCssSelector: string;
 };
 
+// The Instacart brand link at the top of the page. Clicking this takes you to the homepage.
+export type HomeLink = {
+  linkCssSelector: string;
+};
+
 // Information the Physical store location
-export type StoreLocation = {
-  locationName: string;
-  zipCode: string;
+export type StoreInfo = {
+  name: string;
+  subtitle: string;
+  storeLinkCssSelector: string;
 };
 
 export type RecipeBuyButton = {
@@ -60,4 +71,14 @@ export type RecipeBuyButton = {
 export type RecipeInfo = {
   name: string;
   ingredients: ProductTile[];
+};
+
+export type AllListsInfo = {
+  lists: [
+    {
+      name: string;
+      cssSelector: string;
+    },
+  ];
+  submitButtonCssSelector: string;
 };
