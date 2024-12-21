@@ -59,6 +59,7 @@ import {
 } from "action-schema";
 import { EnvCommandHandler } from "./handlers/envCommandHandler.js";
 import { executeNotificationAction } from "./action/notificationActionHandler.js";
+import { executeHistoryAction } from "./action/historyActionHandler.js";
 
 function executeSystemAction(
     action: AppAction,
@@ -71,6 +72,8 @@ function executeSystemAction(
             return executeConfigAction(action, context);
         case "system.notify":
             return executeNotificationAction(action, context);
+        case "system.history":
+            return executeHistoryAction(action, context);
     }
 
     throw new Error(`Invalid system sub-translator: ${action.translatorName}`);
@@ -376,6 +379,14 @@ export const systemManifest: AppAgentManifest = {
                 schemaFile:
                     "./src/context/system/schema/notificationActionSchema.ts",
                 schemaType: "NotificationAction",
+            },
+        },    
+        history: {
+            schema: {
+                description: "System agent that helps manage chat history.",
+                schemaFile:
+                    "./src/context/system/schema/HistoryActionSchema.ts",
+                schemaType: "HistoryAction",
             },
         },        
     },

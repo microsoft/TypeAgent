@@ -21,6 +21,7 @@ export type ShowNotificationSummaryAction = {
     actionName: "summary";
 }
 
+// Clears the notifications
 export type ClearNotificationsAction = {
     actionName: "clear";
 }
