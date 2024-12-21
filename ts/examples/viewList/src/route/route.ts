@@ -3,11 +3,11 @@
 
 import Server from "webpack-dev-server";
 import fs from "fs";
-import { getSessionsDirPath } from "agent-dispatcher/explorer";
+import { getInstanceSessionsDirPath } from "agent-dispatcher/explorer";
 import path from "node:path";
 
 function getListFilePath() {
-    const sessionsDir = getSessionsDirPath();
+    const sessionsDir = getInstanceSessionsDirPath();
     const dirent = fs.readdirSync(sessionsDir, { withFileTypes: true });
     const sessions = dirent.filter((d) => d.isDirectory()).map((d) => d.name);
 
@@ -22,7 +22,12 @@ function getListFilePath() {
         }
     });
 
-    return path.join(getSessionsDirPath(), sessions[0], "list", "lists.json");
+    return path.join(
+        getInstanceSessionsDirPath(),
+        sessions[0],
+        "list",
+        "lists.json",
+    );
 }
 
 export function setupMiddlewares(

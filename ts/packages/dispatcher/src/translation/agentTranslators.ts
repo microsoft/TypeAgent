@@ -43,7 +43,7 @@ const debugConfig = registerDebug("typeagent:dispatcher:schema:config");
 export type ActionConfig = {
     emojiChar: string;
 
-    translationDefaultEnabled: boolean;
+    schemaDefaultEnabled: boolean;
     actionDefaultEnabled: boolean;
     transient: boolean;
     schemaName: string;
@@ -69,14 +69,14 @@ function collectActionConfigs(
     schemaName: string,
     emojiChar: string,
     transient: boolean,
-    translationDefaultEnabled: boolean,
+    schemaDefaultEnabled: boolean,
     actionDefaultEnabled: boolean,
 ) {
     transient = manifest.transient ?? transient; // inherit from parent if not specified
-    translationDefaultEnabled =
-        manifest.translationDefaultEnabled ??
+    schemaDefaultEnabled =
+        manifest.schemaDefaultEnabled ??
         manifest.defaultEnabled ??
-        translationDefaultEnabled; // inherit from parent if not specified
+        schemaDefaultEnabled; // inherit from parent if not specified
     actionDefaultEnabled =
         manifest.actionDefaultEnabled ??
         manifest.defaultEnabled ??
@@ -89,7 +89,7 @@ function collectActionConfigs(
             emojiChar,
             ...manifest.schema,
             transient,
-            translationDefaultEnabled,
+            schemaDefaultEnabled,
             actionDefaultEnabled,
         };
     }
@@ -106,7 +106,7 @@ function collectActionConfigs(
                 `${schemaName}.${subName}`,
                 emojiChar,
                 transient, // propagate default transient
-                translationDefaultEnabled, // propagate default translationDefaultEnabled
+                schemaDefaultEnabled, // propagate default schemaDefaultEnabled
                 actionDefaultEnabled, // propagate default actionDefaultEnabled
             );
         }

@@ -13,7 +13,8 @@ import {
     deleteSession,
     getSessionNames,
     getDefaultSessionConfig,
-    getSessionCaches,
+    getSessionConstructionDirPaths,
+    getSessionName,
 } from "../../session.js";
 import chalk from "chalk";
 import { ActionContext, ParsedCommandParams } from "@typeagent/agent-sdk";
@@ -29,6 +30,7 @@ import {
 } from "@typeagent/agent-sdk/helpers/display";
 import { getToggleHandlerTable } from "../../../command/handlerUtils.js";
 import { askYesNoWithContext } from "../../interactiveIO.js";
+import path from "node:path";
 
 class SessionNewCommandHandler implements CommandHandler {
     public readonly description = "Create a new empty session";
@@ -53,11 +55,17 @@ class SessionNewCommandHandler implements CommandHandler {
     ) {
         const systemContext = context.sessionContext.agentContext;
         const { flags } = params;
+        if (flags.persist && systemContext.instanceDir === undefined) {
+            throw new Error("User data storage disabled.");
+        }
         await setSessionOnCommandHandlerContext(
             systemContext,
             await Session.create(
                 flags.keep ? systemContext.session.getConfig() : undefined,
-                flags.persist ?? systemContext.session.dir !== undefined,
+                flags.persist ??
+                    systemContext.session.sessionDirPath !== undefined
+                    ? systemContext.instanceDir
+                    : undefined,
             ),
         );
 
@@ -65,8 +73,8 @@ class SessionNewCommandHandler implements CommandHandler {
 
         displaySuccess(
             `New session created${
-                systemContext.session.dir
-                    ? `: ${systemContext.session.dir}`
+                systemContext.session.sessionDirPath
+                    ? `: ${getSessionName(systemContext.session.sessionDirPath)}`
                     : ""
             }`,
             context,
@@ -87,10 +95,16 @@ class SessionOpenCommandHandler implements CommandHandler {
         context: ActionContext<CommandHandlerContext>,
         params: ParsedCommandParams<typeof this.parameters>,
     ) {
-        const session = await Session.load(params.args.session);
         const systemContext = context.sessionContext.agentContext;
+        if (systemContext.instanceDir === undefined) {
+            throw new Error("User data storage disabled.");
+        }
+        const session = await Session.load(
+            systemContext.instanceDir,
+            params.args.session,
+        );
         await setSessionOnCommandHandlerContext(systemContext, session);
-        displaySuccess(`Session opened: ${session.dir}`, context);
+        displaySuccess(`Session opened: ${params.args.session}`, context);
     }
 }
 
@@ -115,14 +129,14 @@ class SessionClearCommandHandler implements CommandHandlerNoParams {
         "Delete all data on the current sessions, keeping current settings";
     public async run(context: ActionContext<CommandHandlerContext>) {
         const systemContext = context.sessionContext.agentContext;
-        if (systemContext.session.dir === undefined) {
+        if (systemContext.session.sessionDirPath === undefined) {
             throw new Error("Session is not persisted. Nothing to clear.");
         }
 
         if (
             !(await askYesNoWithContext(
                 systemContext,
-                `Are you sure you want to clear data for current session '${systemContext.session.dir}'?`,
+                `Are you sure you want to clear data for current session '${getSessionName(systemContext.session.sessionDirPath)}'?`,
                 false,
             ))
         ) {
@@ -162,7 +176,10 @@ class SessionDeleteCommandHandler implements CommandHandler {
         params: ParsedCommandParams<typeof this.parameters>,
     ) {
         const systemContext = context.sessionContext.agentContext;
-        const persist = systemContext.session.dir !== undefined;
+        if (systemContext.instanceDir === undefined) {
+            throw new Error("Persist profile disabled.");
+        }
+        const persist = systemContext.session.sessionDirPath !== undefined;
         if (params.flags.all === true) {
             if (
                 !(await askYesNoWithContext(
@@ -174,16 +191,21 @@ class SessionDeleteCommandHandler implements CommandHandler {
                 displayWarn("Cancelled!", context);
                 return;
             }
-            await deleteAllSessions();
+            await deleteAllSessions(systemContext.instanceDir);
             displaySuccess("All session deleted.", context);
         } else {
-            const del = params.args.session ?? systemContext.session.dir;
+            const currentSessionName = systemContext.session.sessionDirPath
+                ? getSessionName(systemContext.session.sessionDirPath)
+                : undefined;
+            const del = params.args.session ?? currentSessionName;
             if (del === undefined) {
                 throw new Error(
                     "The current session is not persisted. Nothing to clear.",
                 );
             }
-            const sessionNames = await getSessionNames();
+            const sessionNames = await getSessionNames(
+                systemContext.instanceDir,
+            );
             if (!sessionNames.includes(del)) {
                 throw new Error(`'${del}' is not a session name`);
             }
@@ -197,9 +219,9 @@ class SessionDeleteCommandHandler implements CommandHandler {
                 displayWarn("Cancelled!", context);
                 return;
             }
-            await deleteSession(del);
+            await deleteSession(systemContext.instanceDir, del);
             displaySuccess(`Session '${del}' deleted.`, context);
-            if (del !== systemContext.session.dir) {
+            if (del !== currentSessionName) {
                 return;
             }
         }
@@ -212,11 +234,16 @@ class SessionListCommandHandler implements CommandHandlerNoParams {
         "List all sessions. The current session is marked green.";
     public async run(context: ActionContext<CommandHandlerContext>) {
         const systemContext = context.sessionContext.agentContext;
-        const names = await getSessionNames();
+        if (systemContext.instanceDir === undefined) {
+            throw new Error("User data storage disabled.");
+        }
+        const names = await getSessionNames(systemContext.instanceDir);
         displayResult(
             names
                 .map((n) =>
-                    n === systemContext.session.dir ? chalk.green(n) : n,
+                    n === systemContext.session.sessionDirPath
+                        ? chalk.green(n)
+                        : n,
                 )
                 .join("\n"),
             context,
@@ -228,14 +255,20 @@ class SessionInfoCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Show info about the current session";
     public async run(context: ActionContext<CommandHandlerContext>) {
         const systemContext = context.sessionContext.agentContext;
-        const constructionFiles = systemContext.session.dir
-            ? await getSessionCaches(systemContext.session.dir)
+        const constructionFiles = systemContext.session.sessionDirPath
+            ? await getSessionConstructionDirPaths(
+                  systemContext.session.sessionDirPath,
+              )
             : [];
         displayResult((log: (message?: string) => void) => {
             log(
                 `Session settings (${
-                    systemContext.session.dir
-                        ? chalk.green(systemContext.session.dir)
+                    systemContext.session.sessionDirPath
+                        ? chalk.green(
+                              getSessionName(
+                                  systemContext.session.sessionDirPath,
+                              ),
+                          )
                         : "in-memory"
                 }):`,
             );

@@ -27,7 +27,7 @@ export type SchemaManifest = {
 
 export type ActionManifest = {
     defaultEnabled?: boolean;
-    translationDefaultEnabled?: boolean;
+    schemaDefaultEnabled?: boolean;
     actionDefaultEnabled?: boolean;
     transient?: boolean; // whether the translator is transient, default is false
 
@@ -107,7 +107,7 @@ export enum AppAgentEvent {
 export interface SessionContext<T = unknown> {
     readonly agentContext: T;
     readonly sessionStorage: Storage | undefined;
-    readonly profileStorage: Storage; // storage that are preserved across sessions
+    readonly instanceStorage: Storage | undefined; // storage that are preserved across sessions
 
     notify(event: AppAgentEvent, message: string): void;
 
