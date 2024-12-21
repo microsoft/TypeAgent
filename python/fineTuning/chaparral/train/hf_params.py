@@ -8,7 +8,7 @@ import json
 class HFTrainerParams:
 
     output_dir: str
-    per_device_train_batch_size: int = 8
+    per_device_train_batch_size: int = 2
     gradient_accumulation_steps: int = 1
     num_train_epochs: int = 3
     learning_rate: float = 1e-4
