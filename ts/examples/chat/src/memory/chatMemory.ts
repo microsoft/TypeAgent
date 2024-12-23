@@ -40,6 +40,7 @@ import {
     getMessagesAndCount,
 } from "./common.js";
 import { createEmailCommands, createEmailMemory } from "./emailMemory.js";
+import { createImageMemory } from "./imageMemory.js";
 import { pathToFileURL } from "url";
 import { createPodcastCommands, createPodcastMemory } from "./podcastMemory.js";
 import { createImageCommands } from "./imageMemory.js";
@@ -71,6 +72,7 @@ export type ChatContext = {
     searchMemory?: knowLib.conversation.ConversationManager;
     emailMemory: knowLib.conversation.ConversationManager;
     podcastMemory: knowLib.conversation.ConversationManager;
+    imageMemory: knowLib.conversation.ConversationManager;
 };
 
 export enum ReservedConversationNames {
@@ -79,6 +81,7 @@ export enum ReservedConversationNames {
     play = "play",
     search = "search",
     podcasts = "podcasts",
+    images = "images",
 }
 
 function isReservedConversation(context: ChatContext): boolean {
@@ -203,6 +206,13 @@ export async function createChatMemoryContext(
             true,
             false,
         ),
+        imageMemory: await createImageMemory(
+            models,
+            storePath,
+            conversationSettings,
+            true, 
+            false
+        )
     };
     context.searchMemory = await createSearchMemory(context);
     return context;
