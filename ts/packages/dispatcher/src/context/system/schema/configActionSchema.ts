@@ -2,15 +2,22 @@
 // Licensed under the MIT License.
 
 export type ConfigAction =
-    | ToggleBotAction
+    | ListAgents
+    | ToggleAgent
     | ToggleExplanationAction
     | ToggleDeveloperModeAction;
 
-// Toggle use of LLM, bot or AI.
-export type ToggleBotAction = {
-    actionName: "toggleBot";
+// Shows the list of available agents
+export type ListAgents = {
+    actionName: "listAgents";
+}
+
+// Toggle use of LLM, agent or AI.
+export type ToggleAgent = {
+    actionName: "toggleAgent";
     parameters: {
         enable: boolean;
+        agentNames: string[];
     };
 };
 
