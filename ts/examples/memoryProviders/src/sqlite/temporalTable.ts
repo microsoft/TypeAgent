@@ -44,7 +44,7 @@ export function createTemporalLogTable<
 ): TemporalTable<TLogId, T> {
     const [isIdInt, idSerializer] = getTypeSerializer<TLogId>(keyType);
     const isValueInt = valueType === "INTEGER";
-    const schemaSql = `  
+    const schemaSql = `
     CREATE TABLE IF NOT EXISTS ${tableName} (
       logId INTEGER PRIMARY KEY AUTOINCREMENT,
       timestamp TEXT NOT NULL,
@@ -81,19 +81,19 @@ export function createTemporalLogTable<
     const sql_oldest = db.prepare(
         `SELECT dateTime, value FROM ${tableName}
          WHERE timestamp IN (
-            SELECT DISTINCT timestamp 
-            FROM ${tableName} 
-            ORDER BY timestamp ASC 
+            SELECT DISTINCT timestamp
+            FROM ${tableName}
+            ORDER BY timestamp ASC
             LIMIT ?
         )
         ORDER BY timestamp ASC`,
     );
     const sql_newest = create_sql_newest();
     const sql_minMax = db.prepare(`
-        SELECT 
-            (SELECT timestamp from ${tableName} ORDER BY timestamp ASC LIMIT 1) 
+        SELECT
+            (SELECT timestamp from ${tableName} ORDER BY timestamp ASC LIMIT 1)
             AS start,
-            (SELECT timestamp from ${tableName} ORDER BY timestamp DESC LIMIT 1) 
+            (SELECT timestamp from ${tableName} ORDER BY timestamp DESC LIMIT 1)
             AS end`);
     return {
         size,
@@ -341,9 +341,9 @@ export function createTemporalLogTable<
         return db.prepare(
             `SELECT dateTime, value FROM ${tableName}
              WHERE timestamp IN (
-                SELECT DISTINCT timestamp 
-                FROM ${tableName} 
-                ORDER BY timestamp DESC 
+                SELECT DISTINCT timestamp
+                FROM ${tableName}
+                ORDER BY timestamp DESC
                 LIMIT ?
             )
             ORDER BY timestamp DESC`,

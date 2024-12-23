@@ -8,6 +8,7 @@ import {
     ReservedConversationNames,
 } from "./chatMemory.js";
 import { sqlite } from "memory-providers";
+import { elastic } from "memory-providers";
 import {
     arg,
     argNum,
@@ -41,6 +42,7 @@ export async function createPodcastMemory(
     storePath: string,
     settings: conversation.ConversationSettings,
     useSqlite: boolean = false,
+    useElastic: boolean = false,
     createNew: boolean = false,
 ) {
     const podcastStorePath = path.join(
@@ -48,13 +50,20 @@ export async function createPodcastMemory(
         ReservedConversationNames.podcasts,
     );
     await ensureDir(podcastStorePath);
-    const storageProvider = useSqlite
-        ? await sqlite.createStorageDb(
-              podcastStorePath,
-              "podcast.db",
-              createNew,
-          )
-        : undefined;
+    let storageProvider = undefined;
+    if (useElastic) {
+        storageProvider = await elastic.createStorageIndex(
+            createNew,
+        );
+    }
+    else if (useSqlite) {
+        storageProvider = await sqlite.createStorageDb(
+            podcastStorePath,
+            "podcast.db",
+            createNew,
+        );
+    }
+
     const cm = await conversation.createConversationManagerEx(
         {
             model: models.chatModel,

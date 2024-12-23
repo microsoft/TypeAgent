@@ -137,7 +137,7 @@ export function createModels(): Models {
 export async function createChatMemoryContext(
     completionCallback?: (req: any, resp: any) => void,
 ): Promise<ChatContext> {
-    const storePath = "/data/testChat";
+    const storePath = "./elasticData/testChat";
     const statsPath = path.join(storePath, "stats");
     await ensureDir(storePath);
     await ensureDir(statsPath);
@@ -199,6 +199,7 @@ export async function createChatMemoryContext(
             models,
             storePath,
             conversationSettings,
+            false,
             true,
             false,
         ),
@@ -384,7 +385,7 @@ export async function runChatMemory(): Promise<void> {
         io: InteractiveIo,
     ): Promise<void> {
         const namedArgs = parseNamedArguments(args, importChatDef());
-        const chatPath = namedArgs.chatPath ?? "/data/testChat/transcript.txt";
+        const chatPath = namedArgs.chatPath ?? "./elasticData/testChat/transcript.txt";
         const addToCurrent = namedArgs.addToCurrent;
         if (!addToCurrent) {
             await loadConversation(context, path.parse(chatPath).name);
@@ -443,7 +444,7 @@ export async function runChatMemory(): Promise<void> {
         io: InteractiveIo,
     ): Promise<void> {
         const namedArgs = parseNamedArguments(args, importChatDef());
-        const playPath = namedArgs.chatPath ?? "/data/testChat/play.txt";
+        const playPath = namedArgs.chatPath ?? "./elasticData/testChat/play.txt";
         printer.writeLine(`Importing ${playPath}`);
         await loadConversation(context, path.parse(playPath).name);
 

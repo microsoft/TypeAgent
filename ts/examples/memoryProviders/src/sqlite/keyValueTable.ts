@@ -40,11 +40,11 @@ export function createKeyValueTable<
     valueType: ValueDataType<TValueId>,
     ensureExists: boolean = true,
 ): KeyValueTable<TKeyId, TValueId> {
-    const schemaSql = `  
-    CREATE TABLE IF NOT EXISTS ${tableName} (  
+    const schemaSql = `
+    CREATE TABLE IF NOT EXISTS ${tableName} (
       keyId ${keyType} NOT NULL,
       valueId ${valueType} NOT NULL,
-      PRIMARY KEY(keyId, valueId)  
+      PRIMARY KEY(keyId, valueId)
     );`;
 
     if (ensureExists) {
@@ -55,7 +55,7 @@ export function createKeyValueTable<
         `SELECT valueId from ${tableName} WHERE keyId = ? ORDER BY valueId ASC`,
     );
     const sql_getScored = db.prepare(
-        `SELECT valueId as item, @score as score 
+        `SELECT valueId as item, @score as score
         FROM ${tableName} WHERE keyId = @keyId ORDER BY valueId ASC`,
     );
     const sql_add = db.prepare(
@@ -123,8 +123,8 @@ export function createKeyValueTable<
             return iterate(ids[0]);
         }
 
-        const sql = `SELECT DISTINCT valueId FROM ${tableName} 
-        WHERE keyId IN (${ids}) 
+        const sql = `SELECT DISTINCT valueId FROM ${tableName}
+        WHERE keyId IN (${ids})
         ORDER BY valueId ASC`;
         const stmt = db.prepare(sql);
         const rows = stmt.iterate();
@@ -178,11 +178,11 @@ export function createKeyValueTable<
         const sql = join
             ? `SELECT valueId AS item, count(*) AS score FROM ${tableName}
         ${join} AND keyId IN (${ids})
-        GROUP BY valueId 
+        GROUP BY valueId
         ORDER BY score DESC`
             : `SELECT valueId AS item, count(*) AS score FROM ${tableName}
         WHERE keyId IN (${ids})
-        GROUP BY valueId 
+        GROUP BY valueId
         ORDER BY score DESC`;
         const stmt = db.prepare(sql);
         for (const row of stmt.iterate()) {
@@ -229,7 +229,7 @@ export function createKeyValueTable<
             if (sql.length > 0) {
                 sql += "\nUNION ALL\n";
             }
-            sql += `SELECT valueId as item, ${item.score} as score 
+            sql += `SELECT valueId as item, ${item.score} as score
             FROM ${tableName} WHERE keyId = ${item.item}`;
         }
         sql += "\nORDER BY valueId ASC";
