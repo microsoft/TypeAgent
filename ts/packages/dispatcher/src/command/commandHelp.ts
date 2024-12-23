@@ -122,10 +122,13 @@ export function getHandlerTableUsage(
     return output.join("\n");
 }
 
-export function printStructuredHandlerTableUsage(table: CommandDescriptorTable, command: string | undefined, context: ActionContext<CommandHandlerContext>) {
-
+export function printStructuredHandlerTableUsage(
+    table: CommandDescriptorTable,
+    command: string | undefined,
+    context: ActionContext<CommandHandlerContext>,
+) {
     let index: number = 0;
-    const commands: string[][] = []; 
+    const commands: string[][] = [];
 
     if (command) {
         const defaultSubCommand = getDefaultSubCommandDescriptor(table);
@@ -139,14 +142,26 @@ export function printStructuredHandlerTableUsage(table: CommandDescriptorTable, 
             return;
         }
 
-        displayResult(`${chalk.bold(chalk.underline(`Subcommands: ${table.description}`))}`, context);
+        displayResult(
+            `${chalk.bold(chalk.underline(`Subcommands: ${table.description}`))}`,
+            context,
+        );
         displayResult("\n", context);
-        displayResult(`${chalk.bold("Usage")}: @${command} <subcommand> ...`, context);
-        displayResult("\n", context)
+        displayResult(
+            `${chalk.bold("Usage")}: @${command} <subcommand> ...`,
+            context,
+        );
+        displayResult("\n", context);
     } else {
-        displayResult(`${chalk.bold(chalk.underline(table.description))}`, context);
+        displayResult(
+            `${chalk.bold(chalk.underline(table.description))}`,
+            context,
+        );
         displayResult("\n", context);
-        displayResult(`${chalk.bold("Usage")}: @[<agentName>] <subcommand> ...`, context);
+        displayResult(
+            `${chalk.bold("Usage")}: @[<agentName>] <subcommand> ...`,
+            context,
+        );
         displayResult("\n", context);
 
         commands[index] = ["Agent Name (* default agent)", "Description"];
@@ -156,14 +171,16 @@ export function printStructuredHandlerTableUsage(table: CommandDescriptorTable, 
         for (const name of systemContext.agents.getAppAgentNames()) {
             if (systemContext.agents.isCommandEnabled(name)) {
                 commands[index] = [];
-            
-                if (name == 'system') {
+
+                if (name == "system") {
                     commands[index].push(`${name} *`);
                 } else {
                     commands[index].push(name);
                 }
 
-                commands[index].push(systemContext.agents.getAppAgentDescription(name));
+                commands[index].push(
+                    systemContext.agents.getAppAgentDescription(name),
+                );
 
                 index++;
             }

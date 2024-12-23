@@ -20,10 +20,12 @@ export async function executeConfigAction(
             break;
         case "toggleAgent":
             const agentAction = configAction as ToggleAgent;
-            const cmdParam: string = (configAction.parameters.enable) ? `` : `--off`;
+            const cmdParam: string = configAction.parameters.enable
+                ? ``
+                : `--off`;
 
             await processCommandNoLock(
-                `@config agent ${cmdParam} ${configAction.parameters.agentNames.join(' ')}`,
+                `@config agent ${cmdParam} ${configAction.parameters.agentNames.join(" ")}`,
                 context.sessionContext.agentContext,
             );
             break;

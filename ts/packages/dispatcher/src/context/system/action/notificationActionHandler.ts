@@ -2,7 +2,10 @@
 // Licensed under the MIT License.
 
 import { ActionContext, AppAction } from "@typeagent/agent-sdk";
-import { NotificationAction, ShowNotificationsAction } from "../schema/notificationActionSchema.js";
+import {
+    NotificationAction,
+    ShowNotificationsAction,
+} from "../schema/notificationActionSchema.js";
 import { CommandHandlerContext } from "../../commandHandlerContext.js";
 import { processCommandNoLock } from "../../../command/command.js";
 
@@ -14,16 +17,16 @@ export async function executeNotificationAction(
     switch (notificationAction.actionName) {
         case "show":
             const showAction = notificationAction as ShowNotificationsAction;
-            await processCommandNoLock(                
+            await processCommandNoLock(
                 `@notify show ${showAction.parameters.filter}`,
                 context.sessionContext.agentContext,
-            );            
+            );
             break;
         case "summary":
             await processCommandNoLock(
                 `@notify info`,
                 context.sessionContext.agentContext,
-            );            
+            );
             break;
         case "clear":
             await processCommandNoLock(
@@ -32,7 +35,7 @@ export async function executeNotificationAction(
             );
             break;
         default:
-            throw new Error(`Invalid action name: ${action.actionName}`);    
+            throw new Error(`Invalid action name: ${action.actionName}`);
     }
     return undefined;
 }

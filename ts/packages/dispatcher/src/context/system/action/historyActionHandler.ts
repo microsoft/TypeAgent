@@ -4,7 +4,10 @@
 import { ActionContext, AppAction } from "@typeagent/agent-sdk";
 import { CommandHandlerContext } from "../../commandHandlerContext.js";
 import { processCommandNoLock } from "../../../command/command.js";
-import { DeleteHistoryAction, HistoryAction } from "../schema/historyActionSchema.js";
+import {
+    DeleteHistoryAction,
+    HistoryAction,
+} from "../schema/historyActionSchema.js";
 
 export async function executeHistoryAction(
     action: AppAction,
@@ -14,16 +17,16 @@ export async function executeHistoryAction(
     switch (historyAction.actionName) {
         case "delete":
             const deleteAction = historyAction as DeleteHistoryAction;
-            await processCommandNoLock(                
+            await processCommandNoLock(
                 `@history delete ${deleteAction.parameters.messageNumber}`,
                 context.sessionContext.agentContext,
-            );            
+            );
             break;
         case "clear":
             await processCommandNoLock(
                 `@history clear`,
                 context.sessionContext.agentContext,
-            );            
+            );
             break;
         case "list":
             await processCommandNoLock(
@@ -32,7 +35,7 @@ export async function executeHistoryAction(
             );
             break;
         default:
-            throw new Error(`Invalid action name: ${action.actionName}`);    
+            throw new Error(`Invalid action name: ${action.actionName}`);
     }
     return undefined;
 }

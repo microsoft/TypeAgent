@@ -40,7 +40,11 @@ import {
     processCommandNoLock,
     resolveCommand,
 } from "../../command/command.js";
-import { getHandlerTableUsage, getUsage, printStructuredHandlerTableUsage } from "../../command/commandHelp.js";
+import {
+    getHandlerTableUsage,
+    getUsage,
+    printStructuredHandlerTableUsage,
+} from "../../command/commandHelp.js";
 import { DisplayCommandHandler } from "./handlers/displayCommandHandler.js";
 import {
     getActionCompletion,
@@ -96,7 +100,11 @@ class HelpCommandHandler implements CommandHandler {
     ) {
         const systemContext = context.sessionContext.agentContext;
         if (params.args.command === undefined) {
-            printStructuredHandlerTableUsage(systemHandlers, undefined, context);            
+            printStructuredHandlerTableUsage(
+                systemHandlers,
+                undefined,
+                context,
+            );
         } else {
             const result = await resolveCommand(
                 params.args.command,
@@ -380,7 +388,7 @@ export const systemManifest: AppAgentManifest = {
                     "./src/context/system/schema/notificationActionSchema.ts",
                 schemaType: "NotificationAction",
             },
-        },    
+        },
         history: {
             schema: {
                 description: "System agent that helps manage chat history.",
@@ -388,7 +396,7 @@ export const systemManifest: AppAgentManifest = {
                     "./src/context/system/schema/HistoryActionSchema.ts",
                 schemaType: "HistoryAction",
             },
-        },        
+        },
     },
 };
 

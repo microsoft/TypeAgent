@@ -10,7 +10,7 @@ export type ConfigAction =
 // Shows the list of available agents
 export type ListAgents = {
     actionName: "listAgents";
-}
+};
 
 // Toggle use of LLM, agent or AI.
 export type ToggleAgent = {
