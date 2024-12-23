@@ -4,7 +4,6 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import chalk from "chalk";
 import { getToggleHandlerTable } from "../../../command/handlerUtils.js";
 import {
     CommandHandlerContext,
@@ -15,12 +14,8 @@ import {
     readTestData,
 } from "../../../utils/test/testData.js";
 import { getPackageFilePath } from "../../../utils/getPackageFilePath.js";
-import {
-    ConstructionStore,
-    ExplanationData,
-    printImportConstructionResult,
-} from "agent-cache";
-import { getSessionCacheDirPath } from "../../../explorer.js";
+import { ConstructionStore, printImportConstructionResult } from "agent-cache";
+import { getSessionConstructionDirPath } from "../../session.js";
 import { getAppAgentName } from "../../../translation/agentTranslators.js";
 import { askYesNoWithContext } from "../../interactiveIO.js";
 import { glob } from "glob";
@@ -80,7 +75,7 @@ function resolvePathWithSession(
         !param.startsWith(".")
     ) {
         const sessionConstructionPath = path.join(
-            getSessionCacheDirPath(sessionDir),
+            getSessionConstructionDirPath(sessionDir),
             param,
         );
         if (!exists || fs.existsSync(sessionConstructionPath)) {
@@ -111,7 +106,7 @@ class ConstructionNewCommandHandler implements CommandHandler {
         await checkRecreateStore(constructionStore, systemContext);
         const constructionPath = resolvePathWithSession(
             params.args.file,
-            systemContext.session.dir,
+            systemContext.session.sessionDirPath,
         );
         await checkOverwriteFile(constructionPath, systemContext);
 
@@ -119,7 +114,7 @@ class ConstructionNewCommandHandler implements CommandHandler {
         if (constructionPath) {
             await fs.promises.writeFile(constructionPath, "");
         }
-        systemContext.session.setCacheDataFilePath(constructionPath);
+        systemContext.session.setConstructionDataFilePath(constructionPath);
         await changeContextConfig({ cache: { enabled: true } }, context);
         const filePath = constructionStore.getFilePath();
         displaySuccess(
@@ -150,9 +145,9 @@ class ConstructionLoadCommandHandler implements CommandHandler {
         const constructionPath =
             resolvePathWithSession(
                 params.args.file,
-                systemContext.session.dir,
+                systemContext.session.sessionDirPath,
                 true,
-            ) ?? systemContext.session.getCacheDataFilePath();
+            ) ?? systemContext.session.getConstructionDataFilePath();
         if (constructionPath === undefined) {
             throw new Error(
                 `No construction file specified and no existing construction file in session to load.`,
@@ -164,7 +159,7 @@ class ConstructionLoadCommandHandler implements CommandHandler {
         }
 
         await changeContextConfig({ cache: { enabled: false } }, context);
-        systemContext.session.setCacheDataFilePath(constructionPath);
+        systemContext.session.setConstructionDataFilePath(constructionPath);
         await changeContextConfig({ cache: { enabled: true } }, context);
 
         displaySuccess(`Construction loaded: ${constructionPath}`, context);
@@ -190,12 +185,12 @@ class ConstructionSaveCommandHandler implements CommandHandler {
         const constructionStore = systemContext.agentCache.constructionStore;
         const constructionPath = resolvePathWithSession(
             params.args.file,
-            systemContext.session.dir,
+            systemContext.session.sessionDirPath,
         );
         await checkOverwriteFile(constructionPath, systemContext);
         if (await constructionStore.save(constructionPath)) {
             const filePath = constructionStore.getFilePath()!;
-            systemContext.session.setCacheDataFilePath(filePath);
+            systemContext.session.setConstructionDataFilePath(filePath);
             displaySuccess(`Construction saved: ${filePath}`, context);
         } else {
             displayWarn(`Construction not modified. Nothing written.`, context);

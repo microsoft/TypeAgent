@@ -33,10 +33,14 @@ const loadHandler: CommandHandler = {
         if (agentContext.spotify === undefined) {
             throw new Error("Spotify integration is not enabled.");
         }
+
+        if (sessionContext.instanceStorage === undefined) {
+            throw new Error("User data storage disabled.");
+        }
         context.actionIO.setDisplay("Loading Spotify user data...");
 
         await loadHistoryFile(
-            sessionContext.profileStorage,
+            sessionContext.instanceStorage,
             params.args.file,
             agentContext.spotify,
         );

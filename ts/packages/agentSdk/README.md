@@ -64,9 +64,9 @@ Display message is of type `DisplayContent` and can be simple `MessageContent` o
 
 Helper functions is available to help craft the `DisplayContent` object imported from `@typeagent/agent-sdk/helpers/display`. See [displayHelpers.ts](./src/helpers/displayHelpers.ts).
 
-#### Storage (ActionContext.profileStorage and ActionContext.sessionStorage)
+#### Storage (ActionContext.instanceStorage and ActionContext.sessionStorage)
 
-During execution of action or command, an `ActionContext` is provided with `profileStorage` and optionally `sessionStorage` to persist data. Agent may be running in a isolated environment that doesn't have permanent storage or access to storage.
+During execution of action or command, an `ActionContext` is provided with `instanceStorage` and optionally `sessionStorage` to persist data. Agent may be running in a isolated environment that doesn't have permanent storage or access to storage.
 
 ## Trademarks
 
