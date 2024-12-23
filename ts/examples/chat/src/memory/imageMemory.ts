@@ -52,6 +52,9 @@ export function createImageCommands(context: ChatContext, commands: Record<strin
         } else {
             context.printer.writeLine(`Could not find part of the file path '${sourcePath}'`);
         }
+    }
 
+    async function indexImages(namesArgs: NamedArgs, sourcePath: string) {
+        
     }
 }
