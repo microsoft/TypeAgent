@@ -393,7 +393,7 @@ export const systemManifest: AppAgentManifest = {
             schema: {
                 description: "System agent that helps manage chat history.",
                 schemaFile:
-                    "./src/context/system/schema/HistoryActionSchema.ts",
+                    "./src/context/system/schema/historyActionSchema.ts",
                 schemaType: "HistoryAction",
             },
         },
