@@ -72,8 +72,6 @@ export async function createKeyValueIndex<
             valueIds: postings
         };
 
-        console.log("ELASTIC PUT", id, entry);
-
         const putResponse = await elasticClient.index<ElasticEntry>({
             index: indexName,
             id: id as string,

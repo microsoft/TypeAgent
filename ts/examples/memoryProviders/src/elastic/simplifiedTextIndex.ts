@@ -233,9 +233,15 @@ export async function createTextIndex<
     }
 
     async function put(text: string, postings?: TSourceId[]): Promise<TTexId> {
-        console.log("ELASTIC TEXT PUT", text, postings);
         const textId = generateTextId(text);
         const embedding = await generateEmbedding(embeddingModel, text);
+        let convertedEmbedding: number[] = [];
+        embedding.forEach((value) => {
+            convertedEmbedding.push(value);
+        });
+        if (postings === undefined) {
+            postings = [];
+        }
         const putResult = await elasticClient.index({
             index: indexName,
             id: textId,
@@ -243,13 +249,14 @@ export async function createTextIndex<
                 text : text,
                 textId : textId,
                 sourceIds: postings,
-                textVector: embedding
+                textVector: convertedEmbedding
             },
         });
         return putResult._id as TTexId;
     }
 
-    async function putMultiple(values: TextBlock<TSourceId>[]): Promise<TTexId[]> {
+    /*async function putMultiple(values: TextBlock<TSourceId>[]): Promise<TTexId[]> {
+        console.log("ELASTIC TEXT PUT MULTIPLE", values);
         const valuesWithTextId = values.map(value => {
             const newTextId = generateTextId(value.value);
             return {
@@ -262,13 +269,43 @@ export async function createTextIndex<
             {
                 text: value.value,
                 textId: value.textId,
-                sourceIds: value.sourceIds,
+                sourceIds: value.sourceIds === undefined ? [] : value.sourceIds,
                 textVector: await generateEmbedding(embeddingModel, value.value)
             },
         ]));
         await elasticClient.bulk({ body: bulkOps });
         return values.map(value => value.value as TTexId);
-    }
+    }*/
+
+    async function putMultiple(values: TextBlock<TSourceId>[]): Promise<TTexId[]> {
+        const valuesWithTextId = values.map(value => ({
+          ...value,
+          textId: generateTextId(value.value)
+        }));
+      
+        // We'll build 'bulkOps' in one flat array.
+        const bulkOps: any[] = [];
+      
+        for (const v of valuesWithTextId) {
+          const embedding = await generateEmbedding(embeddingModel, v.value);
+      
+          // First line: action/metadata.
+          bulkOps.push({ index: { _index: indexName, _id: v.textId } });
+      
+          // Second line: the actual document.
+          bulkOps.push({
+            text: v.value,
+            textId: v.textId,
+            sourceIds: v.sourceIds ?? [],
+            textVector: embedding
+          });
+        }
+      
+        // Now 'bulkOps' is a flat array of objects.
+        await elasticClient.bulk({ body: bulkOps });
+      
+        return values.map(value => value.value as TTexId);
+      }
 
     async function addSources(id: TTexId, postings: TSourceId[]): Promise<void> {
         // Elastic script to add in place to an array

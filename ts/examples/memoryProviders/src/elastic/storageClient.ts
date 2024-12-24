@@ -79,6 +79,6 @@ export async function createStorageIndex(
     }
 
     async function clear() {
-        console.log("clear");
+        console.log("CLEARING CHECK")
     }
 }

@@ -87,6 +87,7 @@ export function createPodcastCommands(
     commands.podcastIndex = podcastIndex;
     commands.podcastAddThread = podcastAddThread;
     commands.podcastListThreads = podcastListThreads;
+    commands.podcastEntities = podcastEntities;
 
     //-----------
     // COMMANDS
@@ -122,6 +123,23 @@ export function createPodcastCommands(
         const turnsFilePath = getTurnsFolderPath(sourcePath);
         namedArgs.sourcePath = turnsFilePath;
         await podcastIndex(namedArgs);
+    }
+
+    function podcastEntitiesDef(): CommandMetadata {
+        return {
+            description: "See podcast entities",
+        }
+    }
+    commands.podcastEntities.metadata = podcastEntitiesDef();
+    async function podcastEntities(args: string[]): Promise<void> {
+        const index = await context.podcastMemory.conversation.getEntityIndex();
+        const entityArray = await asyncArray.toArray(index.entities());
+        const entities = [
+            ...conversation.toCompositeEntities(entityArray),
+        ];
+        entities.sort((x, y) => x.name.localeCompare(y.name));
+        let printer = context.printer;
+        printer.writeCompositeEntities(entities);
     }
 
     function podcastConvertDef(): CommandMetadata {
