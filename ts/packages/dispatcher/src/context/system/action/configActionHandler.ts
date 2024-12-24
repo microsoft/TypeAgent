@@ -3,7 +3,7 @@
 
 import { processCommandNoLock } from "../../../command/command.js";
 import { CommandHandlerContext } from "../../commandHandlerContext.js";
-import { ConfigAction } from "../schema/configActionSchema.js";
+import { ConfigAction, ToggleAgent } from "../schema/configActionSchema.js";
 import { AppAction, ActionContext } from "@typeagent/agent-sdk";
 
 export async function executeConfigAction(
@@ -12,9 +12,20 @@ export async function executeConfigAction(
 ) {
     const configAction = action as unknown as ConfigAction;
     switch (configAction.actionName) {
-        case "toggleBot":
+        case "listAgents":
             await processCommandNoLock(
-                `@config bot ${configAction.parameters.enable ? "on" : "off"}`,
+                `@config agent`,
+                context.sessionContext.agentContext,
+            );
+            break;
+        case "toggleAgent":
+            const agentAction = configAction as ToggleAgent;
+            const cmdParam: string = configAction.parameters.enable
+                ? ``
+                : `--off`;
+
+            await processCommandNoLock(
+                `@config agent ${cmdParam} ${configAction.parameters.agentNames.join(" ")}`,
                 context.sessionContext.agentContext,
             );
             break;
