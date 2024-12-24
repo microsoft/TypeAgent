@@ -11,7 +11,10 @@ class DataReader:
 
     def load_text_file(self, filename: str) -> Dataset:
         with open(filename, "r") as file:
-            raw_data = json.load(file)
+            try:
+               raw_data = json.load(file)
+            except(json.JSONDecodeError):
+                raise ValueError("Invalid JSON file")
 
             dataset = None
             if isinstance(raw_data, list):
