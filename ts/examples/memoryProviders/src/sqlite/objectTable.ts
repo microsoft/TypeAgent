@@ -28,8 +28,8 @@ export function createObjectTable<T>(
     const tableSettings = settings ?? {};
     const fileNameGenerator = createNameGenerator();
 
-    const schemaSql = `
-    CREATE TABLE IF NOT EXISTS ${tableName} (
+    const schemaSql = `  
+    CREATE TABLE IF NOT EXISTS ${tableName} (  
       name TEXT PRIMARY KEY NOT NULL,
       text TEXT,
       blob BLOB
