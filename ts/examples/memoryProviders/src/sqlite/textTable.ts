@@ -55,11 +55,11 @@ export function createStringTable(
     caseSensitive: boolean = false,
     ensureExists: boolean = true,
 ): StringTable {
-    const schemaSql = `
-    CREATE TABLE IF NOT EXISTS ${tableName} (
+    const schemaSql = `  
+    CREATE TABLE IF NOT EXISTS ${tableName} (  
       stringId INTEGER PRIMARY KEY AUTOINCREMENT,
       value TEXT ${caseSensitive ? "" : "COLLATE NOCASE"} NOT NULL,
-      UNIQUE(value)
+      UNIQUE(value)  
     );`;
 
     if (ensureExists) {
@@ -219,18 +219,18 @@ export async function createTextIndex<
         ensureExists,
     );
     const sql_getPostings = db.prepare(
-        `SELECT valueId
-         FROM ${textTable.tableName}
-         INNER JOIN ${postingsTable.tableName}
-         ON keyId = stringId
-         WHERE value = ?
+        `SELECT valueId 
+         FROM ${textTable.tableName} 
+         INNER JOIN ${postingsTable.tableName} 
+         ON keyId = stringId          
+         WHERE value = ? 
          ORDER BY valueId ASC`,
     );
     const sql_getFreq = db.prepare(
-        `SELECT count(valueId) as count
-         FROM ${textTable.tableName}
-         INNER JOIN ${postingsTable.tableName}
-         ON keyId = stringId
+        `SELECT count(valueId) as count 
+         FROM ${textTable.tableName} 
+         INNER JOIN ${postingsTable.tableName} 
+         ON keyId = stringId          
          WHERE value = ?`,
     );
 
