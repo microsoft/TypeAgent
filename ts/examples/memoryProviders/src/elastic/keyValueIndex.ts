@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation and Henry Lucco.
+// Licensed under the MIT License.
+
 import { Client } from "@elastic/elasticsearch";
 import { KeyValueIndex, ValueType } from "knowledge-processor";
 import { toValidIndexName } from "./common.js";

@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation and Henry Lucco.
+// Licensed under the MIT License.
+
 import { Client } from "@elastic/elasticsearch";
 import { createHash } from "crypto";
 
@@ -5,10 +8,6 @@ export async function createElasicClient(
     uri: string,
     createNew: boolean,
 ): Promise<Client> {
-    if (createNew) {
-        await deleteDatabase(uri);
-    }
-
     const elasticApiKey = process.env.ELASTIC_API_KEY;
     if (!elasticApiKey) {
         throw new Error("ELASTIC_API_KEY environment variable not set");
@@ -21,15 +20,27 @@ export async function createElasicClient(
               apiKey : elasticApiKey
             }
         });
+
+        if (createNew) {
+            await deleteIndeces(elasticClient);
+        }
+
         return elasticClient;
     } catch (err) {
         throw new Error(`Failed to create elastic client: ${err}`);
     }
 }
 
-export async function deleteDatabase(filePath: string): Promise<void> {
-    // TODO
-    console.log("deleteDatabase");
+export async function deleteIndeces(elasticClient: Client): Promise<void> {
+    const infoArray = await elasticClient.cat.indices({ format: 'json' });
+    infoArray.forEach(indexInfo => {
+        const indexName = indexInfo.index || undefined
+        if (indexName !== undefined) {
+            elasticClient.indices.delete({
+                index: indexName
+            });
+        }
+    })
 }
 
 export function generateTextId(text: string): string {

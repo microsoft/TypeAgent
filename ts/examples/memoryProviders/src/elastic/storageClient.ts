@@ -1,7 +1,10 @@
+// Copyright (c) Microsoft Corporation and Henry Lucco.
+// Licensed under the MIT License.
+
 import { ObjectFolder, ObjectFolderSettings, createObjectFolder } from "typeagent";
 import { TemporalLogSettings, StorageProvider, createTemporalLog } from "knowledge-processor";
 import * as knowLib from "knowledge-processor";
-import { createElasicClient } from "./common.js";
+import { createElasicClient, deleteIndeces } from "./common.js";
 import { createKeyValueIndex } from "./keyValueIndex.js";
 import { createTextIndex } from "./simplifiedTextIndex.js";
 
@@ -27,12 +30,19 @@ export async function createStorageIndex(
         clear
     }
 
+    async function ensureOpen(): Promise<void> {
+        if (elasticClient !== undefined) {
+            return;
+        }
+        throw new Error("Unable to establish connection to Elastic instance");
+    }
+
     async function _createObjectFolder<T>(
         basePath: string,
         name: string,
         settings?: ObjectFolderSettings,
     ): Promise<ObjectFolder<T>> {
-        // TODO: check to make sure the database is open
+        ensureOpen();
         return createObjectFolder<T>(
             basePath,
             settings
@@ -56,8 +66,7 @@ export async function createStorageIndex(
         name: string,
         sourceIdType: knowLib.ValueDataType<TSourceId>
     ) {
-
-        // TODO: check to make sure the database is open
+        ensureOpen();
         return createTextIndex<string, TSourceId>(
             settings,
             basePath+name,
@@ -71,7 +80,7 @@ export async function createStorageIndex(
         name: string,
         valueType: knowLib.ValueDataType<TValueId>,
     ): Promise<knowLib.KeyValueIndex<string, TValueId>> {
-        // TODO: check to make sure the database is open
+        ensureOpen();
         return createKeyValueIndex<string, TValueId>(
             elasticClient,
             basePath+name
@@ -79,6 +88,6 @@ export async function createStorageIndex(
     }
 
     async function clear() {
-        console.log("CLEARING CHECK")
+        await deleteIndeces(elasticClient);
     }
 }

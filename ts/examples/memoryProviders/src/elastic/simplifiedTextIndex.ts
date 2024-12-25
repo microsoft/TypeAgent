@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation and Henry Lucco.
+// Licensed under the MIT License.
+
 import { Client } from "@elastic/elasticsearch";
 import { TextBlock, TextBlockType, TextIndex, TextIndexSettings, ValueDataType, ValueType } from "knowledge-processor";
 import { generateTextId, toValidIndexName } from "./common.js";
@@ -254,28 +257,6 @@ export async function createTextIndex<
         });
         return putResult._id as TTexId;
     }
-
-    /*async function putMultiple(values: TextBlock<TSourceId>[]): Promise<TTexId[]> {
-        console.log("ELASTIC TEXT PUT MULTIPLE", values);
-        const valuesWithTextId = values.map(value => {
-            const newTextId = generateTextId(value.value);
-            return {
-              ...value,
-              textId: newTextId
-            };
-          });
-        const bulkOps = await Promise.all(valuesWithTextId.flatMap(async (value) => [
-            { index: { _index: indexName, _id: value.textId} },
-            {
-                text: value.value,
-                textId: value.textId,
-                sourceIds: value.sourceIds === undefined ? [] : value.sourceIds,
-                textVector: await generateEmbedding(embeddingModel, value.value)
-            },
-        ]));
-        await elasticClient.bulk({ body: bulkOps });
-        return values.map(value => value.value as TTexId);
-    }*/
 
     async function putMultiple(values: TextBlock<TSourceId>[]): Promise<TTexId[]> {
         const valuesWithTextId = values.map(value => ({
