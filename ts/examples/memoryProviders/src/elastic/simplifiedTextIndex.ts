@@ -21,6 +21,14 @@ export async function createTextIndex<
 
     indexName = toValidIndexName(indexName);
 
+    const apiSettings = openAIApiSettingsFromEnv(
+        ModelType.Embedding
+    );
+
+    const embeddingModel = createEmbeddingModel(
+        apiSettings,
+    );
+
     // Create the textIndex in elastic search
     if (!await elasticClient.indices.exists({ index: indexName })) {
         await elasticClient.indices.create({
@@ -32,7 +40,7 @@ export async function createTextIndex<
                     sourceIds: { type: 'keyword' },
                     textVector : {
                         type: 'dense_vector',
-                        dims: 1536, // TODO need to get dimensions from somewhere that isn't hardcoded
+                        dims: parseInt(process.env.OPENAI_MODEL_EMBEDDING_DIM || "1536"),
                         index: true,
                         similarity: 'cosine',
                     }
@@ -40,13 +48,6 @@ export async function createTextIndex<
             },
         })
     }
-
-    const apiSettings = openAIApiSettingsFromEnv(
-        ModelType.Embedding
-    );
-    const embeddingModel = createEmbeddingModel(
-        apiSettings,
-    );
 
     interface ElasticEntry {
         text: string;
@@ -80,6 +81,8 @@ export async function createTextIndex<
         remove,
     }
 
+    // This should be an AsyncIterableIterator in the
+    // interface definition.
     function values(): IterableIterator<string> {
         const query = {
             "_source": false,
@@ -263,16 +266,16 @@ export async function createTextIndex<
           ...value,
           textId: generateTextId(value.value)
         }));
-      
+
         // We'll build 'bulkOps' in one flat array.
         const bulkOps: any[] = [];
-      
+
         for (const v of valuesWithTextId) {
           const embedding = await generateEmbedding(embeddingModel, v.value);
-      
+
           // First line: action/metadata.
           bulkOps.push({ index: { _index: indexName, _id: v.textId } });
-      
+
           // Second line: the actual document.
           bulkOps.push({
             text: v.value,
@@ -281,10 +284,10 @@ export async function createTextIndex<
             textVector: embedding
           });
         }
-      
+
         // Now 'bulkOps' is a flat array of objects.
         await elasticClient.bulk({ body: bulkOps });
-      
+
         return values.map(value => value.value as TTexId);
       }
 
