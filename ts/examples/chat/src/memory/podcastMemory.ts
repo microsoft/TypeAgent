@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { conversation } from "knowledge-processor";
+import * as knowLib from "knowledge-processor";
 import {
     ChatContext,
     Models,
@@ -11,6 +12,7 @@ import { sqlite } from "memory-providers";
 import { elastic } from "memory-providers";
 import {
     arg,
+    argBool,
     argNum,
     CommandHandler,
     CommandMetadata,
@@ -28,6 +30,7 @@ import path from "path";
 import {
     asyncArray,
     createWorkQueueFolder,
+    dateTime,
     ensureDir,
     getFileName,
     isDirectoryPath,
@@ -125,13 +128,160 @@ export function createPodcastCommands(
         await podcastIndex(namedArgs);
     }
 
-    function podcastEntitiesDef(): CommandMetadata {
-        return {
-            description: "See podcast entities",
+    // Eventually we should unite these functions with their
+    // counterparts in @entities command in chatMemory.ts but 
+    // need input.
+    async function loadMessages(
+        ids?: string[],
+    ): Promise<(dateTime.Timestamped<knowLib.TextBlock> | undefined)[]> {
+        if (ids && ids.length > 0) {
+            return await context.podcastMemory.conversation.messages.getMultiple(ids);
+        }
+        return [];
+    }
+
+    async function writeEntitiesById(
+        index: knowLib.conversation.EntityIndex,
+        entityIds: string[],
+        showMessages?: boolean,
+    ): Promise<void> {
+        if (!entityIds || entityIds.length === 0) {
+            return;
+        }
+        if (showMessages) {
+            const messages = await loadMessages(
+                await index.getSourceIds(entityIds),
+            );
+            context.printer.writeTemporalBlocks(chalk.cyan, messages);
+        } else {
+            const entities = await asyncArray.mapAsync(
+                entityIds,
+                context.searchConcurrency,
+                (id) => index.get(id),
+            );
+            const composite = conversation.mergeEntities(
+                knowLib.sets.removeUndefined(entities.map((e) => e?.value)),
+            );
+            for (const value of composite.values()) {
+                context.printer.writeCompositeEntity(value.value);
+                context.printer.writeLine();
+            }
         }
     }
+
+    async function searchEntities(
+        query: string,
+        name: boolean,
+        exact: boolean,
+        count: number,
+        minScore: number,
+        showMessages?: boolean,
+    ) {
+        const index = await context.podcastMemory.conversation.getEntityIndex();
+        const matches = await knowLib.searchIndex(
+            name ? index.nameIndex : index.typeIndex,
+            query,
+            exact,
+            count,
+            minScore,
+        );
+        for (const match of matches) {
+            context.printer.writeInColor(chalk.green, `[${match.score}]`);
+            await writeEntitiesById(index, match.item, showMessages);
+        }
+    }
+
+    async function searchEntities_Multi(
+        name: string | undefined,
+        type: string | undefined,
+        facet: string | undefined,
+        count: number,
+        faceCount: number,
+        minScore: number,
+        showMessages?: boolean,
+    ) {
+        const index = await context.podcastMemory.conversation.getEntityIndex();
+        let nameMatches: string[] | undefined;
+        let typeMatches: string[] | undefined;
+        let facetMatches: string[] | undefined;
+        if (name) {
+            nameMatches = await index.nameIndex.getNearest(
+                name,
+                count,
+                minScore,
+            );
+        }
+        if (type) {
+            typeMatches = await index.typeIndex.getNearest(
+                type,
+                count,
+                minScore,
+            );
+        }
+        if (facet) {
+            facetMatches = await index.facetIndex.getNearest(
+                facet,
+                faceCount,
+                minScore,
+            );
+        }
+        const matches = [
+            ...knowLib.sets.intersectMultiple(
+                nameMatches,
+                typeMatches,
+                facetMatches,
+            ),
+        ];
+        await writeEntitiesById(index, matches, showMessages);
+    }
+
+    function podcastEntitiesDef(): CommandMetadata {
+        return {
+            description: "Search for podcast entities",
+            options: {
+                name: arg("Names to search for"),
+                type: arg("Type to search for"),
+                facet: arg("Facet to search for"),
+                exact: argBool("Exact match?"),
+                count: argNum("Num matches", 1),
+                facetCount: argNum("Num facet matches", 10),
+                minScore: argNum("Min score", 0),
+                showMessages: argBool(),
+            },
+        };
+    }
     commands.podcastEntities.metadata = podcastEntitiesDef();
+    // Same as @entities but for the podcast index.
     async function podcastEntities(args: string[]): Promise<void> {
+        const namedArgs = parseNamedArguments(args, podcastEntitiesDef());
+        let query = namedArgs.name ?? namedArgs.type ?? namedArgs.facet;
+        if (query) {
+            const isMultipart =
+                namedArgs.facet || (namedArgs.name && namedArgs.type);
+            if (namedArgs.exact || !isMultipart) {
+                await searchEntities(
+                    query,
+                    namedArgs.name !== undefined,
+                    namedArgs.exact,
+                    namedArgs.count,
+                    namedArgs.minScore,
+                    namedArgs.showMessages,
+                );
+            } else {
+                // Multipart query
+                await searchEntities_Multi(
+                    namedArgs.name,
+                    namedArgs.type,
+                    namedArgs.facet,
+                    namedArgs.count,
+                    namedArgs.facetCount,
+                    namedArgs.minScore,
+                    namedArgs.showMessages,
+                );
+            }
+            return;
+        }
+
         const index = await context.podcastMemory.conversation.getEntityIndex();
         const entityArray = await asyncArray.toArray(index.entities());
         const entities = [
