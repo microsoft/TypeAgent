@@ -319,12 +319,16 @@ export async function createTextIndex<
                 field: "textVector",
                 k: k,
                 query_vector: convertedQuery,
-                num_candidates: 1,
+                num_candidates: 100,
             },
             _source: ["text", "textId", "sourceIds"]
         });
 
         const topHit = response.hits.hits[0];
+        if (topHit === undefined) {
+            return undefined;
+        }
+
         if (topHit._source === undefined) {
             return undefined;
         }

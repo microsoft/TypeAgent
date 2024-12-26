@@ -16,6 +16,7 @@ import {
     argNum,
     CommandHandler,
     CommandMetadata,
+    InteractiveIo,
     NamedArgs,
     parseNamedArguments,
 } from "interactive-app";
@@ -91,6 +92,7 @@ export function createPodcastCommands(
     commands.podcastAddThread = podcastAddThread;
     commands.podcastListThreads = podcastListThreads;
     commands.podcastEntities = podcastEntities;
+    commands.podcastSearch = podcastSearch;
 
     //-----------
     // COMMANDS
@@ -290,6 +292,157 @@ export function createPodcastCommands(
         entities.sort((x, y) => x.name.localeCompare(y.name));
         let printer = context.printer;
         printer.writeCompositeEntities(entities);
+    }
+
+    function recordQuestionAnswer(
+        question: string,
+        timestampQ: Date,
+        answer: string,
+        timestampA: Date,
+    ) {
+        // Don't record questions about the search history
+        if (
+            context.searchMemory &&
+            context.searchMemory.conversationName !== context.conversationName
+        ) {
+            try {
+                context.searchMemory.queueAddMessage({
+                    text: `USER:\n${question}`,
+                    timestamp: timestampQ,
+                });
+                context.searchMemory.queueAddMessage({
+                    text: `ASSISTANT:\n${answer}`,
+                    timestamp: timestampA,
+                });
+            } catch (e) {
+                context.printer.writeError(`Error updating history\n${e}`);
+            }
+        }
+    }
+
+    async function searchConversation(
+        searcher: conversation.ConversationSearchProcessor,
+        recordAnswer: boolean,
+        namedArgs: NamedArgs,
+    ): Promise<conversation.SearchResponse | undefined> {
+        const maxMatches = namedArgs.maxMatches;
+        const minScore = namedArgs.minScore;
+        let query = namedArgs.query.trim();
+        if (!query || query.length === 0) {
+            return undefined;
+        }
+        const searchOptions: conversation.SearchProcessingOptions = {
+            maxMatches,
+            minScore,
+            maxMessages: 10,
+            progress: (value) => context.printer.writeJson(value),
+        };
+        if (namedArgs.fallback) {
+            searchOptions.fallbackSearch = { maxMatches: 10 };
+        }
+        if (namedArgs.threads) {
+            searchOptions.threadSearch = { maxMatches: 1, minScore: 0.8 };
+        }
+        if (!namedArgs.eval) {
+            // just translate user query into structured query without eval
+            const translationContext = await context.searcher.buildContext(
+                query,
+                searchOptions,
+            );
+            const searchResult: any = namedArgs.v2
+                ? await searcher.actions.translateSearchTermsV2(
+                      query,
+                      translationContext,
+                  )
+                : await context.searcher.actions.translateSearch(
+                      query,
+                      translationContext,
+                  );
+            context.printer.writeJson(searchResult);
+            return undefined;
+        }
+
+        searcher.answers.settings.chunking.enable = true; //namedArgs.chunk === true;
+
+        const timestampQ = new Date();
+        let result:
+            | conversation.SearchTermsActionResponse
+            | conversation.SearchTermsActionResponseV2
+            | undefined;
+        if (namedArgs.v2) {
+            searchOptions.skipEntitySearch = namedArgs.skipEntities;
+            searchOptions.skipActionSearch = namedArgs.skipActions;
+            searchOptions.skipTopicSearch = namedArgs.skipTopics;
+            result = await searcher.searchTermsV2(
+                query,
+                undefined,
+                searchOptions,
+            );
+        } else {
+            result = await searcher.searchTerms(
+                query,
+                undefined,
+                searchOptions,
+            );
+        }
+        if (!result) {
+            context.printer.writeError("No result");
+            return undefined;
+        }
+        context.printer.writeLine();
+        context.printer.writeSearchTermsResult(result, namedArgs.debug);
+        if (result.response && result.response.answer) {
+            if (namedArgs.save && recordAnswer) {
+                let answer = result.response.answer.answer;
+                if (!answer) {
+                    answer = result.response.answer.whyNoAnswer;
+                }
+                if (answer) {
+                    recordQuestionAnswer(query, timestampQ, answer, new Date());
+                }
+            }
+        }
+        return result.response;
+    }
+
+    function podcastSearchDefBase(): CommandMetadata {
+        return {
+            description: "Natural language search on a podcast",
+            args: {
+                query: arg("Search query"),
+            },
+            options: {
+                maxMatches: argNum("Maximum fuzzy matches", 2),
+                minScore: argNum("Minimum similarity score", 0.8),
+                fallback: argBool("Fallback to message search", true),
+                eval: argBool("Evaluate search query", true),
+                debug: argBool("Show debug info", false),
+                save: argBool("Save the search", false),
+                v2: argBool("Run V2 match", false),
+                chunk: argBool("Use chunking", true),
+            },
+        };
+    }
+
+    function podcastSearchDef(): CommandMetadata {
+        const def = podcastSearchDefBase();
+        if (!def.options) {
+            def.options = {};
+        }
+        def.options.skipEntities = argBool("Skip entity matching", false);
+        def.options.skipActions = argBool("Skip action matching", false);
+        def.options.skipTopics = argBool("Skip topics matching", false);
+        def.options.threads = argBool("Use most likely thread", false);
+        return def;
+    }
+    // Just supports query for now
+    commands.search.metadata = podcastSearchDef();
+    async function podcastSearch(args: string[], io: InteractiveIo): Promise<void> {
+        await searchConversation(
+            context.podcastMemory.searchProcessor,
+            true,
+            parseNamedArguments(args, podcastSearchDef()),
+        );
     }
 
     function podcastConvertDef(): CommandMetadata {
