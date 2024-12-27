@@ -35,16 +35,17 @@ export async function createKeyValueIndex<
     }
 
     async function get(id: TKeyId): Promise<TValueId[] | undefined> {
-        const response = await elasticClient.get<ElasticEntry>({
-            index: indexName,
-            id: id as string
-        });
-
-        if (response._source === undefined) {
+        try {
+            const response = await elasticClient.get<ElasticEntry>({
+                index: indexName,
+                id: id as string
+            });
+    
+            return response._source?.valueIds;
+        } catch (e) {
+            // id is not found, return undefined
             return undefined;
         }
-
-        return response._source?.valueIds;
     }
 
     async function getMultiple(ids: TKeyId[]): Promise<TValueId[][]> {

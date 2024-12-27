@@ -307,8 +307,8 @@ export async function createTextIndex<
         score: number;
     }
 
-    async function nearestHelper(text: string, k: number): Promise<ElasticResponse | undefined> {
-        const queryEmbedding = await generateEmbedding(embeddingModel, text);
+    async function nearestHelper(value: string, maxMatches: number): Promise<ElasticResponse | undefined> {
+        const queryEmbedding = await generateEmbedding(embeddingModel, value);
         let convertedQuery: number[] = [];
         queryEmbedding.forEach((value) => {
             convertedQuery.push(value);
@@ -317,9 +317,9 @@ export async function createTextIndex<
             index: indexName,
             knn: {
                 field: "textVector",
-                k: k,
+                k: maxMatches,
                 query_vector: convertedQuery,
-                num_candidates: 100,
+                num_candidates: 10000,
             },
             _source: ["text", "textId", "sourceIds"]
         });
