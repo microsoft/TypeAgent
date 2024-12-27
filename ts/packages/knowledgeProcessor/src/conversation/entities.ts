@@ -570,7 +570,7 @@ export function appendCompositeEntity(
 }
 
 export function toCompositeEntity(entity: ConcreteEntity): CompositeEntity {
-    // Hack but ignoring these for now
+    // In case an entity is undefined
     if (entity === undefined) {
         return {
             name: "undefined",
