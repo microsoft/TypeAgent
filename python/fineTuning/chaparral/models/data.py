@@ -3,7 +3,7 @@
 
 from dataclasses import dataclass
 from chaparral.models.knowledge import KnowledgeResponse
-from chaparral.models.mistral import MixtralDataset
+from chaparral.models.mistral import MixtralFormat
 from chaparral.prompts.knowledge import get_knowledge_prompt
 from typing import List
 
@@ -35,7 +35,7 @@ class InfoPair:
         }
 
 @dataclass
-class Dataset:
+class ChapparalDataset:
     prompt: str
     info_pairs: list[InfoPair]
 
@@ -71,18 +71,18 @@ class Dataset:
     def create_train_eval_sets(self, split_ratio: float = 0.8):
         train_size = int(len(self.info_pairs) * split_ratio)
 
-        train_set = Dataset(self.prompt, self.info_pairs[:train_size])
-        eval_set = Dataset(self.prompt, self.info_pairs[train_size:])
+        train_set = ChapparalDataset(self.prompt, self.info_pairs[:train_size])
+        eval_set = ChapparalDataset(self.prompt, self.info_pairs[train_size:])
 
         return train_set, eval_set
     
     def format(self, model_name: str) -> dict:
         format_map = {
-            "mistralai/Mixtral-8x7b-v0.1": MixtralDataset,
-            "google/gemma-2-2b": MixtralDataset,
-            "meta-llama/Llama-3.1-8B": MixtralDataset,
-            "meta-llama/Llama-3.2-3B-Instruct": MixtralDataset,
-            "meta-llama/Llama-3.2-1B-Instruct": MixtralDataset
+            "mistralai/Mixtral-8x7b-v0.1": MixtralFormat,
+            "google/gemma-2-2b": MixtralFormat,
+            "meta-llama/Llama-3.1-8B": MixtralFormat,
+            "meta-llama/Llama-3.2-3B-Instruct": MixtralFormat,
+            "meta-llama/Llama-3.2-1B-Instruct": MixtralFormat
         }
 
         dataset_type = format_map.get(model_name, None)

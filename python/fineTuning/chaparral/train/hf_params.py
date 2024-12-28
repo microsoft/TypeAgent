@@ -36,7 +36,7 @@ class HFParams:
 
     @classmethod
     def from_dict(cls, data: dict) -> "HFParams":
-        hf_trainer_params = HFTrainerParams.from_dict(data["hf_trainer_params"])
+        hf_trainer_params = HFTrainerParams.from_dict(data.get("hf_trainer_params", {}))
         data["hf_trainer_params"] = hf_trainer_params
         return cls(**data)
     

@@ -1,27 +1,33 @@
 # Copyright (c) Microsoft Corporation and Henry Lucco.
 # Licensed under the MIT License.
 
+from peft.mapping import get_peft_model
+from peft.peft_model import PeftModel
+from peft.tuners.lora import LoraConfig
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
+    PreTrainedTokenizer,
     Trainer,
     TrainingArguments,
-    DataCollatorForLanguageModeling
+    DataCollatorForLanguageModeling,
+    PreTrainedModel,
 )
-from peft import LoraConfig, get_peft_model
-from chaparral.models.data import Dataset
+from transformers.pipelines.base import Dataset
 from chaparral.train.hf_params import HFParams
 import torch
 from dotenv import load_dotenv
-
+from datasets import Dataset
+from chaparral.models.data import ChapparalDataset
 
 class HFModel:
 
     model_name: str
-    model: AutoModelForCausalLM
-    tokenizer: AutoTokenizer
-    train_set: Dataset | None = None
+    model: PreTrainedModel
+    tokenizer: PreTrainedTokenizer
     params: HFParams
+    train_set: ChapparalDataset | None = None
+    peft_model: PeftModel | None = None
 
     def __init__(self, params: HFParams):
         self.params = params
@@ -41,8 +47,11 @@ class HFModel:
             bias="none",
             task_type="CAUSAL_LM"
         )
+        peft_model = get_peft_model(self.model, config)
+        if not isinstance(peft_model, PeftModel):
+            raise ValueError("PEFT model not initialized properly")
 
-        self.model = get_peft_model(self.model, config)
+        self.peft_model = peft_model
 
     def save_model(self, path: str):
         self.model.save_pretrained(path)
@@ -66,10 +75,13 @@ class HFModel:
         if self.params.use_peft:
             self.init_peft()
 
-    def predict(self, dataset: Dataset):
+    def prep_dataset(self, dataset: ChapparalDataset):
         data_dict = dataset.format(self.model_name)
-        test_data = list(
-            map(lambda x: self.tokenize(str(x)), data_dict["items"]))
+        train_dataset = Dataset.from_dict(data_dict)
+        return train_dataset.map(lambda x: self.tokenize(str(x)))
+
+    def predict(self, dataset: ChapparalDataset):
+        test_data = self.prep_dataset(dataset)
 
         trainer = Trainer(
             model=self.model,
@@ -77,12 +89,14 @@ class HFModel:
                 self.tokenizer, mlm=False)
         )
 
-        return trainer.predict(test_data)
+        # this needs to be a pytorch dataset?
+        # instead of a huggingface dataset.
+        # adding the ignore flag here because the type
+        # is correct
+        return trainer.predict(test_data) #type: ignore
 
-    def evaluate(self, dataset: Dataset):
-        data_dict = dataset.format(self.model_name)
-        eval_data = list(
-            map(lambda x: self.tokenize(str(x)), data_dict["items"]))
+    def evaluate(self, dataset: ChapparalDataset):
+        eval_data = self.prep_dataset(dataset)
 
         trainer = Trainer(
             model=self.model,
@@ -110,8 +124,8 @@ class HFModel:
             self.model_name,
             torch_dtype=torch.float32,
             cache_dir=self.params.cache_dir,
-            load_in_4bit=True if self.params.use_peft else False,
-            device_map="auto",
+            # load_in_4bit=True if self.params.use_peft else False,
+            # device_map="auto",
         )
 
         self.tokenizer = AutoTokenizer.from_pretrained(
@@ -123,12 +137,16 @@ class HFModel:
         if self.params.use_peft:
             self.init_peft()
 
-    def load_training_data(self, dataset: Dataset):
+    def load_training_data(self, dataset: ChapparalDataset):
         self.train_set = dataset
 
     def tokenize(self, text: str):
+        eos_token = self.tokenizer.eos_token
+        if not isinstance(eos_token, str):
+            eos_token = self.tokenizer.decode(eos_token)
+
         return self.tokenizer(
-            text + self.tokenizer.eos_token,
+            text + eos_token,
             truncation=True,
             max_length=self.params.cutoff_length,
             padding="max_length"
@@ -140,8 +158,9 @@ class HFModel:
             raise ValueError("No training data loaded")
 
         data_dict = self.train_set.format(self.model_name)
-        training_data = list(
-            map(lambda x: self.tokenize(str(x)), data_dict["items"]))
+        train_dataset = Dataset.from_dict(data_dict)
+        training_data = train_dataset.map(lambda x: self.tokenize(str(x)))
+        # training_data = list(map(lambda x: self.tokenize(str(x)), data_dict["items"]))
 
         trainer = Trainer(
             model=self.model,
@@ -167,12 +186,12 @@ class HFModel:
         trainable_params = sum(p.numel()
                                for p in self.model.parameters() if p.requires_grad)
         all_params = sum(p.numel() for p in self.model.parameters())
-        print(f"trainable params: {trainable_params} || all params: {
-              all_params} || trainable%: {100 * trainable_params / all_params}")
+        print(f"trainable params: {trainable_params} || all params: {all_params} || trainable%: {100 * trainable_params / all_params}")
 
 
 if __name__ == "__main__":
     load_dotenv(".env")
-    model = HFModel("mistralai/Mixtral-8x7b-v0.1")
+    params = HFParams.from_file("params.json")
+    model = HFModel(params)
     print("Model loaded successfully ✅")
     model.print_trainable_parameters()
