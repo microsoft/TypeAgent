@@ -42,7 +42,7 @@ class HFModel:
             r=LORA_R,
             lora_alpha=LORA_ALPHA,
             # Only Training the "expert" layers
-            target_modules=["w1", "w2", "w3"],
+            # target_modules=["w1", "w2", "w3"],
             lora_dropout=LORA_DROPOUT,
             bias="none",
             task_type="CAUSAL_LM"
@@ -60,7 +60,7 @@ class HFModel:
     def load_local_model(self, path: str):
         self.model = AutoModelForCausalLM.from_pretrained(
             path,
-            torch_dtype=torch.float32,
+            torch_dtype=torch.float16,
             cache_dir=self.params.cache_dir,
             load_in_4bit=True if self.params.use_peft else False,
             device_map="auto",
@@ -77,7 +77,7 @@ class HFModel:
 
     def prep_dataset(self, dataset: ChapparalDataset):
         data_dict = dataset.format(self.model_name)
-        train_dataset = Dataset.from_dict(data_dict)
+        train_dataset = Dataset.from_dict(data_dict) #type: ignore
         return train_dataset.map(lambda x: self.tokenize(str(x)))
 
     def predict(self, dataset: ChapparalDataset):
@@ -157,15 +157,15 @@ class HFModel:
         if not self.train_set:
             raise ValueError("No training data loaded")
 
-        data_dict = self.train_set.format(self.model_name)
-        train_dataset = Dataset.from_dict(data_dict)
-        training_data = train_dataset.map(lambda x: self.tokenize(str(x)))
         # training_data = list(map(lambda x: self.tokenize(str(x)), data_dict["items"]))
+        training_data = self.prep_dataset(self.train_set)
 
+        print("initialization of trainer")
         trainer = Trainer(
             model=self.model,
             train_dataset=training_data,
             args=TrainingArguments(
+                fp16=True,
                 per_device_train_batch_size=self.params.hf_trainer_params.per_device_train_batch_size,
                 gradient_accumulation_steps=self.params.hf_trainer_params.gradient_accumulation_steps,
                 num_train_epochs=self.params.hf_trainer_params.num_train_epochs,
@@ -180,6 +180,7 @@ class HFModel:
         )
 
         self.model.config.use_cache = False
+        print("training has started...")
         trainer.train()
 
     def print_trainable_parameters(self):
