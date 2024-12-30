@@ -76,6 +76,19 @@ class ChapparalDataset:
 
         return train_set, eval_set
     
+    def format_v2(self, eos_token: str = "\n\n####\n\n") -> dict:
+        items = []
+        for pair in self.info_pairs:
+            items.append({
+                "prompt" : get_knowledge_prompt(pair.message)+eos_token,
+                "completion" : pair.knowledge.to_str()
+            })
+
+        return {
+            "items": items
+        }
+
+    
     def format(self, model_name: str) -> dict:
         format_map = {
             "mistralai/Mixtral-8x7b-v0.1": MixtralFormat,

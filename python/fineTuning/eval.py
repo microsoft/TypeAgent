@@ -5,6 +5,8 @@ from chaparral.util.datareader import DataReader
 from chaparral.train.hf_model import HFModel
 from chaparral.train.hf_params import HFParams
 import argparse
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
 
 def parse_args():
@@ -30,11 +32,34 @@ if __name__ == "__main__":
     # format data into train and eval sets
     train_set, eval_set = dataset.create_train_eval_sets()
 
-    model = HFModel(params)
+    # model = HFModel(params)
+    # Load the model
+    model = AutoModelForCausalLM.from_pretrained(
+        "./hf_output_llama_1b_half_epoch/checkpoint-10",
+        # "meta-llama/Llama-3.2-1B-Instruct"
+    )
+
+    print("model loaded")
+
+    # Load the tokenizer
+    tokenizer = AutoTokenizer.from_pretrained(
+        # "google/gemma-2-2b",
+        "meta-llama/Llama-3.2-1B-Instruct"
+    )
 
     print("Model loaded")
 
-    model.load_local_model("./test_output")
-    print(model.evaluate(eval_set))
-    print(model.generate(dataset.get_filled_prompt(
-        "The quick brown fox jumps over the lazy dog")))
+    # Prepare the input text
+    # input_text = "[Game Minecraft 1.19.2] Player Asked: How do I craft a bed? Answer:"
+    input_text = dataset.get_filled_prompt("The quick brown fox jumps over the lazy dog")
+
+    # Tokenize the input text
+    inputs = tokenizer(input_text, return_tensors="pt")
+
+    # Generate output (you can adjust max_length and other parameters as needed)
+    outputs = model.generate(inputs["input_ids"], max_length=5000)
+
+    # Decode the generated tokens to get the output text
+    output_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
+
+    print("Output Text:", output_text)

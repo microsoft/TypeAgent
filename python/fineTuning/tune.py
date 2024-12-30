@@ -28,11 +28,11 @@ if __name__ == "__main__":
 
     model = HFModel(params)
 
-    print("Model loaded")
-
     model.load_training_data(train_set)
     
     model.load_model()
+
+    print("Model loaded")
 
     model.train()
 

@@ -60,7 +60,7 @@ class HFModel:
     def load_local_model(self, path: str):
         self.model = AutoModelForCausalLM.from_pretrained(
             path,
-            torch_dtype=torch.float16,
+            torch_dtype=torch.float32,
             cache_dir=self.params.cache_dir,
             load_in_4bit=True if self.params.use_peft else False,
             device_map="auto",
@@ -76,9 +76,10 @@ class HFModel:
             self.init_peft()
 
     def prep_dataset(self, dataset: ChapparalDataset):
-        data_dict = dataset.format(self.model_name)
-        train_dataset = Dataset.from_dict(data_dict) #type: ignore
-        return train_dataset.map(lambda x: self.tokenize(str(x)))
+        data_dict = dataset.format_v2()
+        print(data_dict["items"][0])
+        training_data = list(map(lambda x: self.tokenize(str(x)), data_dict["items"]))
+        return training_data
 
     def predict(self, dataset: ChapparalDataset):
         test_data = self.prep_dataset(dataset)
@@ -157,7 +158,6 @@ class HFModel:
         if not self.train_set:
             raise ValueError("No training data loaded")
 
-        # training_data = list(map(lambda x: self.tokenize(str(x)), data_dict["items"]))
         training_data = self.prep_dataset(self.train_set)
 
         print("initialization of trainer")
