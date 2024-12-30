@@ -74,8 +74,8 @@ export async function interactiveQueryLoop(
         search,
         summaries,
         keywords,
-        topics,
-        goals,
+        tags,
+        synonyms,
         dependencies,
         files,
         purgeFile,
@@ -168,8 +168,9 @@ export async function interactiveQueryLoop(
                                 writeNote(io, "SUMMARY: None");
                             }
                         } else {
-                            const docItem: string[] | undefined =
-                                chunkDoc[name];
+                            const docItem: string[] | undefined = (
+                                chunkDoc as any
+                            )[name];
                             if (docItem?.length) {
                                 writeNote(
                                     io,
@@ -291,32 +292,32 @@ export async function interactiveQueryLoop(
         await _reportIndex(args, io, "keywords");
     }
 
-    function topicsDef(): iapp.CommandMetadata {
+    function tagsDef(): iapp.CommandMetadata {
         return {
-            description: "Show all recorded topics and their postings.",
+            description: "Show all recorded tags and their postings.",
             options: commonOptions(),
         };
     }
-    handlers.topics.metadata = topicsDef();
-    async function topics(
+    handlers.tags.metadata = tagsDef();
+    async function tags(
         args: string[] | iapp.NamedArgs,
         io: iapp.InteractiveIo,
     ): Promise<void> {
-        await _reportIndex(args, io, "topics");
+        await _reportIndex(args, io, "tags");
     }
 
-    function goalsDef(): iapp.CommandMetadata {
+    function synonymsDef(): iapp.CommandMetadata {
         return {
-            description: "Show all recorded goals and their postings.",
+            description: "Show all recorded synonyms and their postings.",
             options: commonOptions(),
         };
     }
-    handlers.goals.metadata = goalsDef();
-    async function goals(
+    handlers.synonyms.metadata = synonymsDef();
+    async function synonyms(
         args: string[] | iapp.NamedArgs,
         io: iapp.InteractiveIo,
     ): Promise<void> {
-        await _reportIndex(args, io, "goals");
+        await _reportIndex(args, io, "synonyms");
     }
 
     function dependenciesDef(): iapp.CommandMetadata {
