@@ -42,7 +42,7 @@ class HFModel:
             r=LORA_R,
             lora_alpha=LORA_ALPHA,
             # Only Training the "expert" layers
-            # target_modules=["w1", "w2", "w3"],
+            target_modules=["w1", "w2", "w3"],
             lora_dropout=LORA_DROPOUT,
             bias="none",
             task_type="CAUSAL_LM"
@@ -165,7 +165,7 @@ class HFModel:
             model=self.model,
             train_dataset=training_data,
             args=TrainingArguments(
-                fp16=True,
+                # fp16=True,
                 per_device_train_batch_size=self.params.hf_trainer_params.per_device_train_batch_size,
                 gradient_accumulation_steps=self.params.hf_trainer_params.gradient_accumulation_steps,
                 num_train_epochs=self.params.hf_trainer_params.num_train_epochs,
