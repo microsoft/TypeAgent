@@ -159,6 +159,7 @@ export type InitializeMessage = {
 
 export type ContextParams = {
     contextId: number;
+    hasInstanceStorage: boolean;
     hasSessionStorage: boolean;
     agentContextId: number | undefined;
 };

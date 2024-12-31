@@ -33,7 +33,7 @@ async function updateDesktopContext(
 ): Promise<void> {
     const agentContext = context.agentContext;
     if (enable) {
-        await setupDesktopActionContext(agentContext, context.profileStorage);
+        await setupDesktopActionContext(agentContext, context.instanceStorage);
     } else {
         await disableDesktopActionContext(agentContext);
     }
