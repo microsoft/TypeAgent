@@ -100,6 +100,10 @@ export interface EntityIndex<TEntityId = any, TSourceId = any, TTextId = any>
     getMultiple(ids: TEntityId[]): Promise<ExtractedEntity<TSourceId>[]>;
     getSourceIds(ids: TEntityId[]): Promise<TSourceId[]>;
     getEntities(ids: TEntityId[]): Promise<ConcreteEntity[]>;
+    getEntityIdsInTimeRange(
+        startAt: Date,
+        stopAt?: Date,
+    ): Promise<TEntityId[] | undefined>;
     add(entity: ExtractedEntity<TSourceId>, id?: TEntityId): Promise<TEntityId>;
     addMultiple(
         entities: ExtractedEntity<TSourceId>[],
@@ -189,6 +193,7 @@ export async function createEntityIndexOnStorage<TSourceId = string>(
         getMultiple,
         getSourceIds,
         getEntities,
+        getEntityIdsInTimeRange,
         add,
         addMultiple,
         search,
@@ -227,6 +232,18 @@ export async function createEntityIndexOnStorage<TSourceId = string>(
                 return entity.value;
             },
         );
+    }
+
+    async function getEntityIdsInTimeRange(
+        startAt: Date,
+        stopAt?: Date,
+    ): Promise<EntityId[] | undefined> {
+        // Get all entity ids seen in this date range
+        const temporalSequence = await entityStore.sequence.getEntriesInRange(
+            startAt,
+            stopAt,
+        );
+        return itemsFromTemporalSequence(temporalSequence);
     }
 
     async function add(

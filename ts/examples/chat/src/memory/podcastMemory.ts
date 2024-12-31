@@ -260,26 +260,24 @@ export function createPodcastCommands(
                 namedArgs.sourcePath,
             ),
         );
-        context.printer.writeTitle("Tags:");
+        context.printer.writeTitle(`${threadTags.length} tags:`);
         context.printer.writeList(threadTags);
-        const entities =
+        context.printer.writeLine();
+        const entityIndex =
             await context.podcastMemory.conversation.getEntityIndex();
 
-        const sequenceEntries = await entities.sequence.getEntriesInRange(
+        const entityIds = await entityIndex.getEntityIdsInTimeRange(
             conversation.toStartDate(timeRange.startDate),
             conversation.toStopDate(timeRange.stopDate),
         );
-        context.printer.writeLine(`${sequenceEntries.length} entities`);
-        for (const entry of sequenceEntries) {
-            const entityIds = entry.value;
-            await asyncArray.mapAsync(threadTags, 1, (t) =>
-                entities.addTag(t, entityIds),
+        await writeEntities(entityIndex, entityIds);
+        if (entityIds && entityIds.length > 0) {
+            context.printer.writeLine(
+                `Adding tags to ${entityIds.length} entities`,
             );
-            const e = await entities.getMultiple(entityIds);
-            if (e) {
-                context.printer.writeExtractedEntities(e);
-                context.printer.writeLine("###");
-            }
+            await asyncArray.forEachAsync(threadTags, 1, async (tag) => {
+                await entityIndex.addTag(tag, entityIds);
+            });
         }
     }
 
@@ -306,10 +304,7 @@ export function createPodcastCommands(
         const entityIndex =
             await context.podcastMemory.conversation.getEntityIndex();
         const entityIds = await entityIndex.getByTag(threadTags);
-        if (entityIds && entityIds.length > 0) {
-            const entities = await entityIndex.getMultiple(entityIds);
-            context.printer.writeExtractedEntities(entities);
-        }
+        await writeEntities(entityIndex, entityIds);
     }
 
     return;
@@ -409,5 +404,25 @@ export function createPodcastCommands(
         context.printer.writeLine(range.startDate.toISOString());
         context.printer.writeLine(range.stopDate!.toISOString());
         context.printer.writeLine();
+    }
+
+    async function writeEntities(
+        entityIndex: conversation.EntityIndex,
+        entityIds: string[] | undefined,
+    ) {
+        if (entityIds && entityIds.length > 0) {
+            context.printer.writeInColor(
+                chalk.green,
+                `### ${entityIds.length} entities ###`,
+            );
+            const entities = await entityIndex.getMultiple(entityIds);
+            context.printer.writeExtractedEntities(entities);
+            context.printer.writeInColor(
+                chalk.green,
+                `### ${entityIds.length} entities ###`,
+            );
+        } else {
+            context.printer.writeLine("No entities");
+        }
     }
 }
