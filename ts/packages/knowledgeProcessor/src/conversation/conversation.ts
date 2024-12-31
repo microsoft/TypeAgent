@@ -6,6 +6,7 @@ import {
     ObjectFolder,
     ObjectFolderSettings,
     SearchOptions,
+    asyncArray,
     createObjectFolder,
     dateTime,
     removeDir,
@@ -554,7 +555,9 @@ export async function createConversation(
                 knowledgeIds.entityIds,
             );
             if (knowledge.tags && knowledge.tags.length > 0) {
-                await entityIndex.addTag(knowledge.tags, entityIds);
+                await asyncArray.mapAsync(knowledge.tags, 1, (t) =>
+                    entityIndex.addTag(t, entityIds),
+                );
             }
         }
     }

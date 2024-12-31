@@ -78,6 +78,8 @@ export function createPodcastCommands(
     commands.podcastIndex = podcastIndex;
     commands.podcastAddThread = podcastAddThread;
     commands.podcastListThreads = podcastListThreads;
+    commands.podcastAddThreadTags = podcastAddThreadTags;
+    commands.podcastListThreadEntities = podcastListThreadEntities;
 
     //-----------
     // COMMANDS
@@ -233,6 +235,80 @@ export function createPodcastCommands(
             const t = allThreads[i];
             context.printer.writeLine(`[${i + 1}]`);
             writeThread(t);
+        }
+    }
+
+    function podcastAddThreadTagsDef(): CommandMetadata {
+        return {
+            description: "Add tags for a sub-thread to the podcast index",
+            args: {
+                sourcePath: argSourceFileOrFolder(),
+                startAt: arg("Start date and time"),
+                length: argNum("Length of the podcast in minutes", 60),
+            },
+        };
+    }
+    commands.podcastAddThreadTags.metadata = podcastAddThreadTagsDef();
+    async function podcastAddThreadTags(args: string[]) {
+        const namedArgs = parseNamedArguments(args, podcastAddThreadTagsDef());
+        const timeRange = conversation.parseTranscriptDuration(
+            namedArgs.startAt,
+            namedArgs.length,
+        );
+        const threadTags = conversation.getTranscriptTags(
+            await conversation.loadTurnsFromTranscriptFile(
+                namedArgs.sourcePath,
+            ),
+        );
+        context.printer.writeTitle("Tags:");
+        context.printer.writeList(threadTags);
+        const entities =
+            await context.podcastMemory.conversation.getEntityIndex();
+
+        const sequenceEntries = await entities.sequence.getEntriesInRange(
+            conversation.toStartDate(timeRange.startDate),
+            conversation.toStopDate(timeRange.stopDate),
+        );
+        context.printer.writeLine(`${sequenceEntries.length} entities`);
+        for (const entry of sequenceEntries) {
+            const entityIds = entry.value;
+            await asyncArray.mapAsync(threadTags, 1, (t) =>
+                entities.addTag(t, entityIds),
+            );
+            const e = await entities.getMultiple(entityIds);
+            if (e) {
+                context.printer.writeExtractedEntities(e);
+                context.printer.writeLine("###");
+            }
+        }
+    }
+
+    function podcastListThreadEntitiesDef() {
+        return {
+            description: "List tags for a sub-thread to the podcast index",
+            args: {
+                sourcePath: argSourceFileOrFolder(),
+            },
+        };
+    }
+    commands.podcastListThreadEntities.metadata =
+        podcastListThreadEntitiesDef();
+    async function podcastListThreadEntities(args: string[]) {
+        const namedArgs = parseNamedArguments(
+            args,
+            podcastListThreadEntitiesDef(),
+        );
+        const threadTags = conversation.getTranscriptTags(
+            await conversation.loadTurnsFromTranscriptFile(
+                namedArgs.sourcePath,
+            ),
+        );
+        const entityIndex =
+            await context.podcastMemory.conversation.getEntityIndex();
+        const entityIds = await entityIndex.getByTag(threadTags);
+        if (entityIds && entityIds.length > 0) {
+            const entities = await entityIndex.getMultiple(entityIds);
+            context.printer.writeExtractedEntities(entities);
         }
     }
 

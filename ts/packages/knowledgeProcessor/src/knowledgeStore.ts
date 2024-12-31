@@ -25,8 +25,12 @@ export interface KnowledgeStore<T, TId = any> {
     addNext(items: T[], timestamp?: Date | undefined): Promise<TId[]>;
 
     getTagIndex(): Promise<TextIndex<TId>>;
-
-    addTag(tag: string | string[], tIds: TId | TId[]): Promise<string>;
+    /**
+     * Add tag for knowledge entries with the given ids
+     * @param tag
+     * @param ids
+     */
+    addTag(tag: string, ids: TId | TId[]): Promise<string>;
     getByTag(tag: string | string[]): Promise<TId[] | undefined>;
 }
 

@@ -227,6 +227,12 @@ export async function putTimestampedObject(
     return store.put(tValue, id);
 }
 
+/**
+ * Get the timestamped object with the given Id from the object store
+ * @param store
+ * @param id
+ * @returns
+ */
 export async function getTimestampedObject<T>(
     store: ObjectFolder<string>,
     id: string,

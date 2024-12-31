@@ -383,6 +383,23 @@ export function createTranscriptOverview(
     metadata: TranscriptMetadata,
     turns: TranscriptTurn[],
 ): string {
+    let participantSet = getTranscriptParticipants(turns);
+    let overview = metadata.name;
+    if (metadata.description) {
+        overview += "\n";
+        overview += metadata.description;
+    }
+    const participants = [...participantSet.values()];
+    if (participants.length > 0) {
+        overview += "\nParticipants:\n";
+        overview += participants.join(", ");
+    }
+    return overview;
+}
+
+export function getTranscriptParticipants(
+    turns: TranscriptTurn[],
+): Set<string> {
     let participantSet = new Set<string>();
     for (const turn of turns) {
         let speaker = getSpeaker(turn);
@@ -395,17 +412,20 @@ export function createTranscriptOverview(
             }
         }
     }
-    let overview = metadata.name;
-    if (metadata.description) {
-        overview += "\n";
-        overview += metadata.description;
+    return participantSet;
+}
+
+export function getTranscriptTags(turns: TranscriptTurn[]): string[] {
+    const participants = getTranscriptParticipants(turns);
+    const tags = new Set<string>();
+    for (const p of participants.values()) {
+        tags.add(p);
+        const nameTags = splitParticipantName(p);
+        if (nameTags) {
+            tags.add(nameTags.firstName);
+        }
     }
-    const participants = [...participantSet.values()];
-    if (participants.length > 0) {
-        overview += "\nParticipants:\n";
-        overview += participants.join(", ");
-    }
-    return overview;
+    return [...tags.values()];
 }
 
 export function parseTranscriptDuration(
@@ -427,7 +447,7 @@ export type ParticipantName = {
     middleName?: string | undefined;
 };
 
-export function splitListenerName(
+export function splitParticipantName(
     fullName: string,
 ): ParticipantName | undefined {
     const parts = split(fullName, /\s+/, {
@@ -470,7 +490,7 @@ async function addListenersAlias(
 ) {
     if (listeners && listeners.length > 0) {
         await asyncArray.forEachAsync(listeners, 1, async (listener) => {
-            const parts = splitListenerName(listener);
+            const parts = splitParticipantName(listener);
             if (parts && parts.firstName) {
                 await aliases.addAlias(parts.firstName, listener);
             }

@@ -69,7 +69,7 @@ describe("KnowledgeExtractor", () => {
         const itemIds = await addItems(store, fruitItems);
 
         let fullName = " Jane  Austen ";
-        const name = conversation.splitListenerName(fullName);
+        const name = conversation.splitParticipantName(fullName);
         expect(name).toBeDefined();
         if (name) {
             expect(name.firstName).toEqual("Jane");
