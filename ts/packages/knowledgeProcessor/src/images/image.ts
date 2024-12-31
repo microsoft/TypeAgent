@@ -87,7 +87,7 @@ export async function addImageToConversation(
     const messages: ConversationMessage[] = [];
     if (Array.isArray(images)) {
         for (const image of images) {
-            messages.push(...imageToMessage(images));
+            messages.push(...imageToMessage(image));
         }
     } else {
         messages.push(...imageToMessage(images));
@@ -110,4 +110,8 @@ export function imageToMessage(image: Image): ConversationMessage {
     //     timestamp: dateTime.stringToDate(email.sentOn),
     //     sender,
     // };
+
+    // TODO:    get image caption
+    //          EXIF data
+    //          Create "taken by" knowledge
 }
