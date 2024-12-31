@@ -65,6 +65,9 @@ export async function createPodcastMemory(
         podcastStorePath,
         storageProvider,
     );
+    cm.searchProcessor.settings.defaultEntitySearchOptions =
+        conversation.createEntitySearchOptions(true);
+    //cm.searchProcessor.settings.defaultEntitySearchOptions.alwaysUseTags = true;
     cm.searchProcessor.answers.settings.chunking.fastStop = true;
     return cm;
 }

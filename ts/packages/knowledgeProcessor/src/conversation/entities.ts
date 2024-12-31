@@ -68,6 +68,7 @@ export interface EntitySearchOptions extends SearchOptions {
      * E.g. 3 means that the 3 highest scores are picked and any items with those scores selected
      */
     topK?: number;
+    alwaysUseTags?: boolean | undefined;
 }
 
 export function createEntitySearchOptions(
@@ -84,6 +85,7 @@ export function createEntitySearchOptions(
         },
         combinationSetOp: SetOp.IntersectUnion,
         loadEntities,
+        alwaysUseTags: false,
     };
 }
 
@@ -389,6 +391,9 @@ export async function createEntityIndexOnStorage<TSourceId = string>(
             filter = filterOrScoped;
         }
         if (filter.searchTerms && filter.searchTerms.length > 0) {
+            if (options.alwaysUseTags && !tags) {
+                tags = filter.searchTerms;
+            }
             return matchEntities(
                 filter.searchTerms,
                 filter.timeRange,
