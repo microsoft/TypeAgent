@@ -22,6 +22,7 @@ import {
     argPause,
     argSourceFileOrFolder,
     argToDate,
+    manageConversationAlias,
 } from "./common.js";
 import path from "path";
 import {
@@ -83,6 +84,7 @@ export function createPodcastCommands(
     commands.podcastListThreads = podcastListThreads;
     commands.podcastAddThreadTags = podcastAddThreadTags;
     commands.podcastListThreadEntities = podcastListThreadEntities;
+    commands.podcastAlias = podcastAlias;
 
     //-----------
     // COMMANDS
@@ -310,6 +312,26 @@ export function createPodcastCommands(
         await writeEntities(entityIndex, entityIds);
     }
 
+    function podcastAliasDef(): CommandMetadata {
+        return {
+            description: "Add an alias for a participants's name",
+            options: {
+                name: arg("Person's name"),
+                alias: arg("Alias"),
+            },
+        };
+    }
+    commands.podcastAlias.metadata = podcastAliasDef();
+    async function podcastAlias(args: string[]) {
+        const namedArgs = parseNamedArguments(args, podcastAliasDef());
+        await manageConversationAlias(
+            context.podcastMemory,
+            context.printer,
+            namedArgs.name,
+            namedArgs.alias,
+        );
+    }
+
     return;
 
     //---
@@ -419,7 +441,9 @@ export function createPodcastCommands(
                 `### ${entityIds.length} entities ###`,
             );
             const entities = await entityIndex.getMultiple(entityIds);
-            context.printer.writeExtractedEntities(entities);
+            context.printer.writeCompositeEntities([
+                ...conversation.toCompositeEntities(entities),
+            ]);
             context.printer.writeInColor(
                 chalk.green,
                 `### ${entityIds.length} entities ###`,

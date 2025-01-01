@@ -171,6 +171,8 @@ export class ChatMemoryPrinter extends ChatPrinter {
         entities: (conversation.CompositeEntity | undefined)[],
     ): void {
         if (entities && entities.length > 0) {
+            entities = knowLib.sets.removeUndefined(entities);
+            entities.sort((x, y) => x!.name.localeCompare(y!.name));
             this.writeTitle("Entities");
             for (const entity of entities) {
                 this.writeCompositeEntity(entity);
