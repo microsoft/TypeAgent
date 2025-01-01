@@ -12,6 +12,8 @@ import { intersectMultiple, removeUndefined } from "./setOperations.js";
 import {
     createFileSystemStorageProvider,
     StorageProvider,
+    ValueDataType,
+    ValueType,
 } from "./storageProvider.js";
 
 export interface KnowledgeStore<T, TId = any> {
@@ -140,5 +142,58 @@ export async function createKnowledgeStoreOnStorage<T>(
             );
         }
         return tagIndex;
+    }
+}
+
+export interface TagIndexSettings {
+    concurrency: number;
+}
+
+export interface TagIndex<TTagId = any, TId = any> {
+    addTag(tag: string, ids: TId | TId[]): Promise<TTagId>;
+    getByTag(tag: string | string[]): Promise<TId[] | undefined>;
+}
+
+export async function createTagIndexOnStorage<TId extends ValueType = string>(
+    settings: TagIndexSettings,
+    rootPath: string,
+    storageProvider: StorageProvider,
+    sourceIdType: ValueDataType<TId>,
+): Promise<TagIndex<string, TId>> {
+    type TagId = string;
+    const tagIndex = await storageProvider.createTextIndex<TId>(
+        {
+            caseSensitive: false,
+            semanticIndex: undefined,
+            concurrency: settings.concurrency,
+        },
+        rootPath,
+        "tags",
+        sourceIdType,
+    );
+    return {
+        addTag,
+        getByTag,
+    };
+
+    async function addTag(tag: string, tIds: TId | TId[]): Promise<TagId> {
+        return await tagIndex.put(tag, Array.isArray(tIds) ? tIds : [tIds]);
+    }
+
+    async function getByTag(
+        tag: string | string[],
+    ): Promise<TId[] | undefined> {
+        let tagMatches: TId[] | undefined;
+        if (Array.isArray(tag)) {
+            const ids = await asyncArray.mapAsync(
+                tag,
+                settings.concurrency,
+                (t) => tagIndex.get(t),
+            );
+            tagMatches = [...intersectMultiple(...ids)];
+        } else {
+            tagMatches = await tagIndex.get(tag);
+        }
+        return tagMatches && tagMatches.length > 0 ? tagMatches : undefined;
     }
 }

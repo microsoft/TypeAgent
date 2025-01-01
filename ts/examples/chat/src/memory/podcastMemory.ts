@@ -32,6 +32,7 @@ import {
     getFileName,
     isDirectoryPath,
     isFilePath,
+    NameValue,
     removeDir,
 } from "typeagent";
 import { runImportQueue } from "./importer.js";
@@ -234,12 +235,12 @@ export function createPodcastCommands(
     async function podcastListThreads(args: string[]) {
         const threads =
             await context.podcastMemory.conversation.getThreadIndex();
-        const allThreads: conversation.ConversationThread[] =
+        const allThreads: NameValue<conversation.ConversationThread>[] =
             await asyncArray.toArray(threads.entries());
         for (let i = 0; i < allThreads.length; ++i) {
             const t = allThreads[i];
-            context.printer.writeLine(`[${i + 1}]`);
-            writeThread(t);
+            context.printer.writeLine(`[${i + 1}] Id: ${t.name}`);
+            writeThread(t.value);
         }
     }
 
