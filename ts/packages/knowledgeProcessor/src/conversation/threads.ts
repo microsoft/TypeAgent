@@ -5,7 +5,7 @@ import { asyncArray, NameValue } from "typeagent";
 import { StorageProvider } from "../storageProvider.js";
 import { removeUndefined } from "../setOperations.js";
 import { DateTimeRange } from "./dateTimeSchema.js";
-import { createTagIndexOnStorage } from "../knowledgeStore.js";
+import { createTagIndexOnStorage, TagIndex } from "../knowledgeStore.js";
 
 export interface ThreadDefinition {
     description: string;
@@ -20,6 +20,7 @@ export interface ThreadTimeRange extends ThreadDefinition {
 export type ConversationThread = ThreadTimeRange;
 
 export interface ThreadIndex<TThreadId = any> {
+    readonly tagIndex: TagIndex;
     entries(): AsyncIterableIterator<NameValue<ConversationThread>>;
     add(threadDef: ConversationThread): Promise<TThreadId>;
     getIds(description: string): Promise<TThreadId[] | undefined>;
@@ -30,9 +31,6 @@ export interface ThreadIndex<TThreadId = any> {
         maxMatches: number,
         minScore?: number,
     ): Promise<ConversationThread[]>;
-
-    addTag(tag: string, ids: TThreadId | TThreadId[]): Promise<string>;
-    getByTag(tag: string | string[]): Promise<TThreadId[] | undefined>;
 }
 
 export async function createThreadIndexOnStorage(
@@ -55,17 +53,15 @@ export async function createThreadIndexOnStorage(
         { concurrency: 1 },
         rootPath,
         storageProvider,
-        "TEXT",
     );
     return {
+        tagIndex,
         entries: () => threadStore.all(),
         add,
         getById,
         getIds,
         get,
         getNearest,
-        addTag,
-        getByTag,
     };
 
     async function add(threadDef: ConversationThread): Promise<EntryId> {
@@ -115,13 +111,5 @@ export async function createThreadIndexOnStorage(
             threadStore.get(id),
         );
         return removeUndefined(threads);
-    }
-
-    function addTag(tag: string, ids: EntryId | EntryId[]): Promise<EntryId> {
-        return tagIndex.addTag(tag, ids);
-    }
-
-    function getByTag(tag: string | string[]): Promise<EntryId[] | undefined> {
-        return tagIndex.getByTag(tag);
     }
 }

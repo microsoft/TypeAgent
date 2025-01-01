@@ -12,9 +12,8 @@ import { intersectMultiple, removeUndefined } from "./setOperations.js";
 import {
     createFileSystemStorageProvider,
     StorageProvider,
-    ValueDataType,
-    ValueType,
 } from "./storageProvider.js";
+import path from "path";
 
 export interface KnowledgeStore<T, TId = any> {
     readonly settings: TextIndexSettings;
@@ -150,34 +149,51 @@ export interface TagIndexSettings {
 }
 
 export interface TagIndex<TTagId = any, TId = any> {
-    addTag(tag: string, ids: TId | TId[]): Promise<TTagId>;
+    tags(): Promise<string[]>;
+    addTag(tag: string, id: TId): Promise<TTagId>;
     getByTag(tag: string | string[]): Promise<TId[] | undefined>;
+    getTagsFor(id: TId): Promise<string[] | undefined>;
 }
 
-export async function createTagIndexOnStorage<TId extends ValueType = string>(
+export async function createTagIndexOnStorage(
     settings: TagIndexSettings,
     rootPath: string,
     storageProvider: StorageProvider,
-    sourceIdType: ValueDataType<TId>,
-): Promise<TagIndex<string, TId>> {
+): Promise<TagIndex<string, string>> {
     type TagId = string;
+    type TId = string;
+    const storePath = path.join(rootPath, "tags");
     const tagIndex = await storageProvider.createTextIndex<TId>(
         {
             caseSensitive: false,
             semanticIndex: undefined,
             concurrency: settings.concurrency,
         },
-        rootPath,
-        "tags",
-        sourceIdType,
+        storePath,
+        "tagToSrc",
+        "TEXT",
     );
+    const sourceIndex = await storageProvider.createIndex<TagId>(
+        storePath,
+        "srcToTag",
+        "TEXT",
+    );
+
     return {
+        tags,
         addTag,
         getByTag,
+        getTagsFor,
     };
 
-    async function addTag(tag: string, tIds: TId | TId[]): Promise<TagId> {
-        return await tagIndex.put(tag, Array.isArray(tIds) ? tIds : [tIds]);
+    async function tags(): Promise<string[]> {
+        return Promise.resolve([...tagIndex.text()]);
+    }
+
+    async function addTag(tag: string, id: TId): Promise<TagId> {
+        const tagId = await tagIndex.put(tag, [id]);
+        await sourceIndex.put([tagId], id);
+        return tagId;
     }
 
     async function getByTag(
@@ -195,5 +211,18 @@ export async function createTagIndexOnStorage<TId extends ValueType = string>(
             tagMatches = await tagIndex.get(tag);
         }
         return tagMatches && tagMatches.length > 0 ? tagMatches : undefined;
+    }
+
+    async function getTagsFor(id: TId): Promise<string[] | undefined> {
+        const postings = await sourceIndex.get(id);
+        if (postings && postings.length > 0) {
+            const tags = await asyncArray.mapAsync(
+                postings,
+                settings.concurrency,
+                (id) => tagIndex.getText(id),
+            );
+            return removeUndefined(tags);
+        }
+        return undefined;
     }
 }

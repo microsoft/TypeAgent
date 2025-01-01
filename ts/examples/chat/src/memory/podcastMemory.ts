@@ -84,7 +84,7 @@ export function createPodcastCommands(
     commands.podcastAddThread = podcastAddThread;
     commands.podcastListThreads = podcastListThreads;
     commands.podcastAddThreadTags = podcastAddThreadTags;
-    commands.podcastListThreadEntities = podcastListThreadEntities;
+    //commands.podcastListThreadEntities = podcastListThreadEntities;
     commands.podcastAlias = podcastAlias;
 
     //-----------
@@ -248,6 +248,33 @@ export function createPodcastCommands(
         return {
             description: "Add tags for a sub-thread to the podcast index",
             args: {
+                threadId: arg("Thread Id"),
+                tag: arg("Tag"),
+            },
+        };
+    }
+    commands.podcastAddThreadTags.metadata = podcastAddThreadTagsDef();
+    async function podcastAddThreadTags(args: string[]) {
+        const namedArgs = parseNamedArguments(args, podcastAddThreadTagsDef());
+        const threadIndex =
+            await context.podcastMemory.conversation.getThreadIndex();
+        const threadId = namedArgs.threadId;
+        const thread = await threadIndex.getById(threadId);
+        if (thread) {
+            context.printer.writeLine(
+                `Tag ${namedArgs.tag} added to:\n${thread.description}`,
+            );
+            threadIndex.tagIndex.addTag(namedArgs.tag, threadId);
+        } else {
+            context.printer.writeLine("Thread not found");
+        }
+    }
+
+    /*
+    function podcastAddThreadTagsDef(): CommandMetadata {
+        return {
+            description: "Add tags for a sub-thread to the podcast index",
+            args: {
                 sourcePath: argSourceFileOrFolder(),
                 startAt: arg("Start date and time"),
                 length: argNum("Length of the podcast in minutes", 60),
@@ -312,6 +339,7 @@ export function createPodcastCommands(
         const entityIds = await entityIndex.getByTag(threadTags);
         await writeEntities(entityIndex, entityIds);
     }
+    */
 
     function podcastAliasDef(): CommandMetadata {
         return {
@@ -432,6 +460,7 @@ export function createPodcastCommands(
         context.printer.writeLine();
     }
 
+    /*
     async function writeEntities(
         entityIndex: conversation.EntityIndex,
         entityIds: string[] | undefined,
@@ -452,5 +481,5 @@ export function createPodcastCommands(
         } else {
             context.printer.writeLine("No entities");
         }
-    }
+    }*/
 }
