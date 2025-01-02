@@ -6,6 +6,8 @@ import { StorageProvider } from "../storageProvider.js";
 import { removeUndefined } from "../setOperations.js";
 import { DateTimeRange } from "./dateTimeSchema.js";
 import { createTagIndexOnStorage, TagIndex } from "../knowledgeStore.js";
+import { TermFilterV2 } from "./knowledgeTermSearchSchema2.js";
+import { getAllTermsInFilter } from "./knowledgeTermSearch2.js";
 
 export interface ThreadDefinition {
     description: string;
@@ -31,19 +33,20 @@ export interface ThreadIndex<TThreadId = any> {
         maxMatches: number,
         minScore?: number,
     ): Promise<ConversationThread[]>;
+    matchTags(filters: TermFilterV2[]): Promise<TThreadId[] | undefined>;
 }
 
 export async function createThreadIndexOnStorage(
     rootPath: string,
     storageProvider: StorageProvider,
 ): Promise<ThreadIndex<string>> {
-    type EntryId = string;
+    type ThreadId = string;
     const threadStore =
         await storageProvider.createObjectFolder<ConversationThread>(
             rootPath,
             "entries",
         );
-    const textIndex = await storageProvider.createTextIndex<EntryId>(
+    const textIndex = await storageProvider.createTextIndex<ThreadId>(
         { caseSensitive: false, semanticIndex: true, concurrency: 1 },
         rootPath,
         "description",
@@ -62,19 +65,20 @@ export async function createThreadIndexOnStorage(
         getIds,
         get,
         getNearest,
+        matchTags,
     };
 
-    async function add(threadDef: ConversationThread): Promise<EntryId> {
+    async function add(threadDef: ConversationThread): Promise<ThreadId> {
         const entryId = await threadStore.put(threadDef);
         await textIndex.put(threadDef.description, [entryId]);
         return entryId;
     }
 
-    function getById(id: EntryId): Promise<ConversationThread | undefined> {
+    function getById(id: ThreadId): Promise<ConversationThread | undefined> {
         return threadStore.get(id);
     }
 
-    function getIds(description: string): Promise<EntryId[] | undefined> {
+    function getIds(description: string): Promise<ThreadId[] | undefined> {
         return textIndex.get(description);
     }
 
@@ -105,11 +109,26 @@ export async function createThreadIndexOnStorage(
     }
 
     async function getByIds(
-        entryIds: EntryId[],
+        entryIds: ThreadId[],
     ): Promise<ConversationThread[]> {
         const threads = await asyncArray.mapAsync(entryIds, 1, (id) =>
             threadStore.get(id),
         );
         return removeUndefined(threads);
+    }
+
+    async function matchTags(
+        filters: TermFilterV2[],
+    ): Promise<ThreadId[] | undefined> {
+        let matches: ThreadId[] | undefined;
+        for (const filter of filters) {
+            const terms = getAllTermsInFilter(filter, false);
+            const threadIds = await tagIndex.getByTag(terms);
+            if (threadIds && threadIds.length > 0) {
+                matches ??= [];
+                matches.push(...threadIds);
+            }
+        }
+        return matches && matches.length > 0 ? matches : undefined;
     }
 }
