@@ -83,7 +83,7 @@ export function createPodcastCommands(
     commands.podcastIndex = podcastIndex;
     commands.podcastAddThread = podcastAddThread;
     commands.podcastListThreads = podcastListThreads;
-    commands.podcastAddThreadTags = podcastAddThreadTags;
+    commands.podcastAddThreadTag = podcastAddThreadTag;
     //commands.podcastListThreadEntities = podcastListThreadEntities;
     commands.podcastAlias = podcastAlias;
 
@@ -240,31 +240,51 @@ export function createPodcastCommands(
         for (let i = 0; i < allThreads.length; ++i) {
             const t = allThreads[i];
             context.printer.writeLine(`[${i + 1}] Id: ${t.name}`);
-            writeThread(t.value);
+            const tags = await threads.tagIndex.getTagsFor(t.name);
+            writeThread(t.value, tags);
         }
     }
 
-    function podcastAddThreadTagsDef(): CommandMetadata {
+    function podcastAddThreadTagDef(): CommandMetadata {
         return {
             description: "Add tags for a sub-thread to the podcast index",
             args: {
                 threadId: arg("Thread Id"),
+            },
+            options: {
+                name: arg("name"),
                 tag: arg("Tag"),
             },
         };
     }
-    commands.podcastAddThreadTags.metadata = podcastAddThreadTagsDef();
-    async function podcastAddThreadTags(args: string[]) {
-        const namedArgs = parseNamedArguments(args, podcastAddThreadTagsDef());
+    commands.podcastAddThreadTag.metadata = podcastAddThreadTagDef();
+    async function podcastAddThreadTag(args: string[]) {
+        const namedArgs = parseNamedArguments(args, podcastAddThreadTagDef());
         const threadIndex =
             await context.podcastMemory.conversation.getThreadIndex();
         const threadId = namedArgs.threadId;
         const thread = await threadIndex.getById(threadId);
         if (thread) {
-            context.printer.writeLine(
-                `Tag ${namedArgs.tag} added to:\n${thread.description}`,
-            );
-            threadIndex.tagIndex.addTag(namedArgs.tag, threadId);
+            const tags: string[] = [];
+            if (namedArgs.name) {
+                const pName = conversation.splitParticipantName(namedArgs.name);
+                if (pName) {
+                    tags.push(pName.firstName);
+                    tags.push(namedArgs.name);
+                }
+            }
+            if (namedArgs.tag) {
+                tags.push(namedArgs.tag);
+            }
+            if (tags && tags.length > 0) {
+                context.printer.writeLine(
+                    `Adding tags to: ${thread.description}\n---`,
+                );
+                for (const tag of tags) {
+                    context.printer.writeLine(tag);
+                    await threadIndex.tagIndex.addTag(tag, threadId);
+                }
+            }
         } else {
             context.printer.writeLine("Thread not found");
         }
@@ -452,11 +472,20 @@ export function createPodcastCommands(
         );
     }
 
-    function writeThread(t: conversation.ConversationThread) {
+    function writeThread(
+        t: conversation.ConversationThread,
+        tags: string[] | undefined = undefined,
+    ) {
         context.printer.writeLine(t.description);
         const range = conversation.toDateRange(t.timeRange);
         context.printer.writeLine(range.startDate.toISOString());
         context.printer.writeLine(range.stopDate!.toISOString());
+        if (tags && tags.length > 0) {
+            context.printer.writeInColor(
+                chalk.cyan,
+                "Tags: " + tags.join(", "),
+            );
+        }
         context.printer.writeLine();
     }
 
