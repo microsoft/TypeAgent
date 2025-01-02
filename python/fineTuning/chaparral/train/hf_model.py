@@ -13,12 +13,13 @@ from transformers import (
     DataCollatorForLanguageModeling,
     PreTrainedModel,
 )
-from transformers.pipelines.base import Dataset
+from trl import SFTTrainer
 from chaparral.train.hf_params import HFParams
 import torch
 from dotenv import load_dotenv
-from datasets import Dataset
 from chaparral.models.data import ChapparalDataset
+from unsloth import to_sharegpt, standardize_sharegpt, apply_chat_template
+from datasets import load_dataset
 
 class HFModel:
 
@@ -34,15 +35,24 @@ class HFModel:
         self.model_name = params.model_name
 
     def init_peft(self):
-        LORA_R = 8
-        LORA_ALPHA = 2 * LORA_R
-        LORA_DROPOUT = 0.1
+        LORA_R = 16
+        LORA_ALPHA = 16
+        LORA_DROPOUT = 0
 
         config = LoraConfig(
             r=LORA_R,
             lora_alpha=LORA_ALPHA,
             # Only Training the "expert" layers
-            target_modules=["w1", "w2", "w3"],
+            # target_modules=["w1", "w2", "w3"],
+            target_modules = [
+                "q_proj", 
+                "k_proj", 
+                "v_proj", 
+                "o_proj",
+                "gate_proj", 
+                "up_proj", 
+                "down_proj",
+            ],
             lora_dropout=LORA_DROPOUT,
             bias="none",
             task_type="CAUSAL_LM"
@@ -134,12 +144,42 @@ class HFModel:
             cache_dir=self.params.cache_dir
         )
 
-        self.tokenizer.pad_token = self.params.pad_token
+        self.tokenizer.pad_token = self.tokenizer.eos_token
         if self.params.use_peft:
             self.init_peft()
 
     def load_training_data(self, dataset: ChapparalDataset):
         self.train_set = dataset
+
+    def init_data(self):
+        dataset = load_dataset("hlucco/npr_gpt4o_train_200")["train"]
+        print(dataset.column_names)
+
+        dataset = to_sharegpt(
+            dataset,
+            merged_prompt = "{instruction}",
+            output_column_name = "output",
+            conversation_extension = 3, # Select more to handle longer conversations
+        )
+
+        dataset = standardize_sharegpt(dataset)
+
+        chat_template = """Below are some instructions that describe some tasks. Write responses that appropriately complete each request.
+
+### Instruction:
+{INPUT}
+
+### Response:
+{OUTPUT}"""
+
+        dataset = apply_chat_template(
+            dataset,
+            tokenizer = self.tokenizer,
+            chat_template = chat_template,
+            # default_system_message = "You are a helpful assistant", << [OPTIONAL]
+        )
+
+        self.dataset = dataset
 
     def tokenize(self, text: str):
         eos_token = self.tokenizer.eos_token
@@ -149,23 +189,57 @@ class HFModel:
         return self.tokenizer(
             text + eos_token,
             truncation=True,
-            max_length=self.params.cutoff_length,
-            padding="max_length"
         )
+    
+    def sft_train(self):
+        trainer = SFTTrainer(
+            model = self.model,
+            tokenizer = self.tokenizer,
+            train_dataset = self.dataset,
+            dataset_text_field = "text",
+            max_seq_length = 8024,
+            dataset_num_proc = 2,
+            packing = False, # Can make training 5x faster for short sequences.
+            args = TrainingArguments(
+                per_device_train_batch_size = 2,
+                gradient_accumulation_steps = 4,
+                warmup_steps = 5,
+                max_steps = 60,
+                # num_train_epochs = 1, # For longer training runs!
+                learning_rate = 2e-4,
+                fp16 = True,
+                bf16 = False,
+                logging_steps = 1,
+                optim = "adamw_8bit",
+                weight_decay = 0.01,
+                lr_scheduler_type = "linear",
+                seed = 3407,
+                output_dir = "outputs",
+                report_to = "none", # Use this for WandB etc
+            ),
+        )
+        self.model.config.use_cache = False
+        print("training has started...")
+        trainer.train()
 
     def train(self):
 
-        if not self.train_set:
-            raise ValueError("No training data loaded")
-
-        training_data = self.prep_dataset(self.train_set)
+        # training_data = self.prep_dataset(self.train_set)
 
         print("initialization of trainer")
         trainer = Trainer(
             model=self.model,
-            train_dataset=training_data,
+            tokenizer=self.tokenizer,
+            # train_dataset=training_data,
+            train_dataset=self.dataset,
+            dataset_text_field = "text",
+            max_seq_length = 8024,
             args=TrainingArguments(
-                # fp16=True,
+                fp16=True,
+                max_steps=20,
+                weight_decay=0.01,
+                lr_scheduler_type="linear",
+                seed=3407,
                 per_device_train_batch_size=self.params.hf_trainer_params.per_device_train_batch_size,
                 gradient_accumulation_steps=self.params.hf_trainer_params.gradient_accumulation_steps,
                 num_train_epochs=self.params.hf_trainer_params.num_train_epochs,

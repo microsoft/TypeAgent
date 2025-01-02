@@ -6,7 +6,7 @@ from chaparral.train.hf_model import HFModel
 from chaparral.train.hf_params import HFParams
 import argparse
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, TextStreamer
 
 
 def parse_args():
@@ -35,8 +35,10 @@ if __name__ == "__main__":
     # model = HFModel(params)
     # Load the model
     model = AutoModelForCausalLM.from_pretrained(
-        "./hf_output_llama_1b_half_epoch/checkpoint-10",
+        # "./hf_output_llama_1b_half_epoch/checkpoint-10",
+        # "./test_output"
         # "meta-llama/Llama-3.2-1B-Instruct"
+        "./llama_peft_1/checkpoint-60"
     )
 
     print("model loaded")
@@ -45,6 +47,8 @@ if __name__ == "__main__":
     tokenizer = AutoTokenizer.from_pretrained(
         # "google/gemma-2-2b",
         "meta-llama/Llama-3.2-1B-Instruct"
+        # "./llama_peft_1/checkpoint-60"
+        # "./test_output"
     )
 
     print("Model loaded")
@@ -56,8 +60,11 @@ if __name__ == "__main__":
     # Tokenize the input text
     inputs = tokenizer(input_text, return_tensors="pt")
 
+    text_streamer = TextStreamer(tokenizer, skip_prompt = True)
+
     # Generate output (you can adjust max_length and other parameters as needed)
-    outputs = model.generate(inputs["input_ids"], max_length=5000)
+    _ = model.generate(inputs["input_ids"], streamer=text_streamer, pad_token_id = tokenizer.eos_token_id, max_length=5000)
+    exit()
 
     # Decode the generated tokens to get the output text
     output_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
