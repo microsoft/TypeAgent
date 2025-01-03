@@ -56,10 +56,11 @@ export type SearchProcessingOptions = {
     entitySearch?: EntitySearchOptions | undefined;
     fallbackSearch?: SearchOptions | undefined;
     threadSearch?: SearchOptions | undefined;
-    skipAnswerGeneration?: boolean;
-    skipEntitySearch?: boolean;
-    skipTopicSearch?: boolean;
-    skipActionSearch?: boolean;
+    skipAnswerGeneration?: boolean | undefined;
+    skipEntitySearch?: boolean | undefined;
+    skipTopicSearch?: boolean | undefined;
+    skipActionSearch?: boolean | undefined;
+    skipMessages?: boolean | undefined;
     progress?: ((action: any) => void) | undefined;
 };
 
@@ -687,6 +688,9 @@ export function createSearchProcessor(
         }
         if (options.skipActionSearch) {
             searchOptions.action = undefined;
+        }
+        if (options.skipMessages) {
+            searchOptions.loadMessages = false;
         }
         return searchOptions;
     }
