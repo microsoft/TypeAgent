@@ -561,19 +561,28 @@ export async function purgeNormalizedFile(
     );
 
     // Step 2: Remove chunk ids from indexes.
-    const deletions: ChunkId[] = Array.from(toDelete);
+    const chunkIdsToDelete: ChunkId[] = Array.from(toDelete);
     for (const [name, index] of chunkyIndex.allIndexes()) {
-        let updates = 0;
+        const affectedValues: string[] = [];
+        // Collect values from which we need to remove the chunk ids about to be deleted.
         for await (const textBlock of index.entries()) {
-            if (textBlock?.sourceIds?.some((id) => deletions.includes(id))) {
+            if (textBlock?.sourceIds?.some((id) => chunkIdsToDelete.includes(id))) {
                 if (verbose) {
                     writeNote(io, `[Purging ${name} entry ${textBlock.value}]`);
                 }
-                await index.remove(textBlock.value, deletions);
-                updates++;
+                affectedValues.push(textBlock.value);
             }
         }
-        writeNote(io, `[Purged ${updates} ${name}]`); // name is plural, e.g. "keywords".
+        // Actually update the index (can't modify it while it's being iterated over).
+        for (const value of affectedValues) {
+            const id = await index.getId(value);
+            if (!id) {
+                writeWarning(io, `[No id for value {value}]`);
+            } else {
+                await index.remove(id, chunkIdsToDelete);
+            }
+        }
+        writeNote(io, `[Purged ${affectedValues.length} ${name}]`); // name is plural, e.g. "keywords".
     }
 
     // Step 3: Remove chunks (do this last so if step 2 fails we can try again).
