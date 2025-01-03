@@ -6,6 +6,7 @@ from chaparral.train.hf_model import HFModel
 from chaparral.train.hf_params import HFParams
 import argparse
 import torch
+from unsloth import FastLanguageModel
 from transformers import AutoModelForCausalLM, AutoTokenizer, TextStreamer
 
 
@@ -32,22 +33,49 @@ if __name__ == "__main__":
     # format data into train and eval sets
     train_set, eval_set = dataset.create_train_eval_sets()
 
+
     # model = HFModel(params)
     # Load the model
+    """
     model = AutoModelForCausalLM.from_pretrained(
         # "./hf_output_llama_1b_half_epoch/checkpoint-10",
         # "./test_output"
         # "meta-llama/Llama-3.2-1B-Instruct"
         "./llama_peft_1/checkpoint-60"
     )
+    """
+
+    model = AutoModelForCausalLM.from_pretrained(
+        "./llama_peft_1/checkpoint-20",
+        load_in_4bit = True,
+    )
+    tokenizer = AutoTokenizer.from_pretrained(
+        # "google/gemma-2-2b",
+        # "meta-llama/Llama-3.2-1B-Instruct"
+        "./llama_peft_1/checkpoint-20"
+        # "./test_output"
+    )
+
+    messages = [                    # Change below!
+        {"role": "user", "content": dataset.get_filled_prompt("The quick brown fox jumps over the lazy dog")},
+    ]
+    input_ids = tokenizer.apply_chat_template(
+        messages,
+        add_generation_prompt = True,
+        return_tensors = "pt",
+    ).to("cuda")
+
+    text_streamer = TextStreamer(tokenizer, skip_prompt = True)
+    _ = model.generate(input_ids, streamer = text_streamer, max_new_tokens = 128, pad_token_id = tokenizer.eos_token_id)
+    exit()
 
     print("model loaded")
 
     # Load the tokenizer
     tokenizer = AutoTokenizer.from_pretrained(
         # "google/gemma-2-2b",
-        "meta-llama/Llama-3.2-1B-Instruct"
-        # "./llama_peft_1/checkpoint-60"
+        # "meta-llama/Llama-3.2-1B-Instruct"
+        "./llama_peft_1/checkpoint-60"
         # "./test_output"
     )
 

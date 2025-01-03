@@ -1,6 +1,7 @@
 # Copyright (c) Microsoft Corporation and Henry Lucco.
 # Licensed under the MIT License.
 
+from transformers import TextStreamer
 from peft.mapping import get_peft_model
 from peft.peft_model import PeftModel
 from peft.tuners.lora import LoraConfig
@@ -129,6 +130,19 @@ class HFModel:
                                          self.model.device),
                                      pad_token_id=self.tokenizer.eos_token_id)
         return self.tokenizer.decode(output[0], skip_special_tokens=True)
+    
+    def generate_v2(self, message: str):
+        messages = [
+            {"role": "user", "content": message},
+        ]
+        input_ids = self.tokenizer.apply_chat_template(
+            messages,
+            add_generation_prompt = True,
+            return_tensors = "pt",
+        ).to("cuda")
+
+        text_streamer = TextStreamer(self.tokenizer, skip_prompt = True)
+        _ = self.model.generate(input_ids, streamer = text_streamer, max_new_tokens = 128, pad_token_id = tokenizer.eos_token_id)
 
     def load_model(self):
         self.model = AutoModelForCausalLM.from_pretrained(
@@ -204,7 +218,7 @@ class HFModel:
                 per_device_train_batch_size = 2,
                 gradient_accumulation_steps = 4,
                 warmup_steps = 5,
-                max_steps = 60,
+                max_steps = 10,
                 # num_train_epochs = 1, # For longer training runs!
                 learning_rate = 2e-4,
                 fp16 = True,
