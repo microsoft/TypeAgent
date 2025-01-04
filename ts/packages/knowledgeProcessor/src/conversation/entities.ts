@@ -425,7 +425,7 @@ export async function createEntityIndexOnStorage<TSourceId = string>(
         terms = terms.filter((t) => !noiseTerms.has(t));
         if (terms && terms.length > 0) {
             const entityIdHitTable = createHitTable<EntityId>();
-            const scoreBoost = terms.length;
+            const scoreBoost = 100;
             await Promise.all([
                 nameIndex.getNearestHitsMultiple(
                     terms,
