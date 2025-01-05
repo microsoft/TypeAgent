@@ -85,6 +85,7 @@ A user query is handled using the following steps:
   Each hit includes a list of chunk IDs that produced its key (e.g. all chunks whose topic was "database management").
 
 - When computing the score of a chunk relative to a query result (consisting of multiple hits), we compute the score using TF\*IDF.
+
   - We keep a mapping from chunk IDs to TF\*IDF scores. Initially each chunk's score is 0.
   - For each index, for each hit, we compute the TF\*IDF score for each chunk referenced by the hit.
   - The TF\*IDF score for the chunk is then added to the previous cumulative score for that chunk in the mapping mentioned above.

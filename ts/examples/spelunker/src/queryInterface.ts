@@ -566,7 +566,11 @@ export async function purgeNormalizedFile(
         const affectedValues: string[] = [];
         // Collect values from which we need to remove the chunk ids about to be deleted.
         for await (const textBlock of index.entries()) {
-            if (textBlock?.sourceIds?.some((id) => chunkIdsToDelete.includes(id))) {
+            if (
+                textBlock?.sourceIds?.some((id) =>
+                    chunkIdsToDelete.includes(id),
+                )
+            ) {
                 if (verbose) {
                     writeNote(io, `[Purging ${name} entry ${textBlock.value}]`);
                 }
