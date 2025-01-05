@@ -50,7 +50,7 @@ export class ChunkyIndex {
             1000,
         );
         this.fileDocumenter = createFileDocumenter(this.chatModel);
-        this.queryMaker = createQueryMaker(this.miniModel);
+        this.queryMaker = createQueryMaker(this.chatModel);
         this.answerMaker = createAnswerMaker(this.chatModel);
     }
 
