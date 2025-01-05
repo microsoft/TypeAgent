@@ -5,12 +5,16 @@ from chaparral.util.datareader import DataReader
 from chaparral.train.hf_model import HFModel
 from chaparral.train.hf_params import HFParams
 import argparse
+
+
 def parse_args():
-    parser = argparse.ArgumentParser(description="Fine-tune a model with given dataset.")
+    parser = argparse.ArgumentParser(
+        description="Fine-tune a model with given dataset.")
     parser.add_argument("--dataset_file", help="Path to the dataset file.")
     parser.add_argument("--model_name", help="Name of the model to fine-tune.")
     parser.add_argument("--params", help="Path to params file")
     return parser.parse_args()
+
 
 if __name__ == "__main__":
     args = parse_args()
@@ -30,13 +34,7 @@ if __name__ == "__main__":
 
     print("Model loaded")
 
-    model.load_training_data(train_set)
-    
-    model.load_model()
-
-    model.train()
-
-    model.save_model("./test_output")
-
     model.load_local_model("./test_output")
     print(model.evaluate(eval_set))
+    print(model.generate(dataset.get_filled_prompt(
+        "The quick brown fox jumps over the lazy dog")))
