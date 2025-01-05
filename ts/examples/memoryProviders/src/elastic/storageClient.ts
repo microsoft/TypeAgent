@@ -1,8 +1,16 @@
 // Copyright (c) Microsoft Corporation and Henry Lucco.
 // Licensed under the MIT License.
 
-import { ObjectFolder, ObjectFolderSettings, createObjectFolder } from "typeagent";
-import { TemporalLogSettings, StorageProvider, createTemporalLog } from "knowledge-processor";
+import {
+    ObjectFolder,
+    ObjectFolderSettings,
+    createObjectFolder,
+} from "typeagent";
+import {
+    TemporalLogSettings,
+    StorageProvider,
+    createTemporalLog,
+} from "knowledge-processor";
 import * as knowLib from "knowledge-processor";
 import { createElasicClient, deleteIndeces } from "./common.js";
 import { createKeyValueIndex } from "./keyValueIndex.js";
@@ -17,18 +25,15 @@ export async function createStorageIndex(
         throw new Error("ELASTIC_URI environment variable not set");
     }
 
-    let elasticClient = await createElasicClient(
-        uri,
-        createNew
-    );
+    let elasticClient = await createElasicClient(uri, createNew);
 
     return {
         createObjectFolder: _createObjectFolder,
         createTemporalLog: _createTemporalLog,
         createTextIndex: _createTextIndex,
         createIndex: _createIndex,
-        clear
-    }
+        clear,
+    };
 
     async function ensureOpen(): Promise<void> {
         if (elasticClient !== undefined) {
@@ -43,10 +48,7 @@ export async function createStorageIndex(
         settings?: ObjectFolderSettings,
     ): Promise<ObjectFolder<T>> {
         ensureOpen();
-        return createObjectFolder<T>(
-            basePath,
-            settings
-        );
+        return createObjectFolder<T>(basePath, settings);
     }
 
     async function _createTemporalLog<T>(
@@ -54,24 +56,21 @@ export async function createStorageIndex(
         basePath: string,
         name: string,
     ) {
-        return createTemporalLog<T>(
-            settings,
-            basePath,
-        );
+        return createTemporalLog<T>(settings, basePath);
     }
 
     async function _createTextIndex<TSourceId extends knowLib.ValueType>(
         settings: knowLib.TextIndexSettings,
         basePath: string,
         name: string,
-        sourceIdType: knowLib.ValueDataType<TSourceId>
+        sourceIdType: knowLib.ValueDataType<TSourceId>,
     ) {
         ensureOpen();
         return createTextIndex<string, TSourceId>(
             settings,
-            basePath+name,
+            basePath + name,
             elasticClient,
-            sourceIdType
+            sourceIdType,
         );
     }
 
@@ -83,7 +82,7 @@ export async function createStorageIndex(
         ensureOpen();
         return createKeyValueIndex<string, TValueId>(
             elasticClient,
-            basePath+name
+            basePath + name,
         );
     }
 

@@ -11,8 +11,7 @@ export async function createKeyValueIndex<
 >(
     elasticClient: Client,
     indexName: string,
-) : Promise<KeyValueIndex<TKeyId, TValueId>> {
-
+): Promise<KeyValueIndex<TKeyId, TValueId>> {
     interface ElasticEntry {
         keyId: TKeyId;
         valueIds: TValueId[];
@@ -20,7 +19,7 @@ export async function createKeyValueIndex<
 
     indexName = toValidIndexName(indexName);
 
-    if (!await elasticClient.indices.exists({ index: indexName })) {
+    if (!(await elasticClient.indices.exists({ index: indexName }))) {
         elasticClient.indices.create({
             index: indexName,
         });
@@ -31,16 +30,16 @@ export async function createKeyValueIndex<
         getMultiple,
         put,
         replace,
-        remove
-    }
+        remove,
+    };
 
     async function get(id: TKeyId): Promise<TValueId[] | undefined> {
         try {
             const response = await elasticClient.get<ElasticEntry>({
                 index: indexName,
-                id: id as string
+                id: id as string,
             });
-    
+
             return response._source?.valueIds;
         } catch (e) {
             // id is not found, return undefined
@@ -52,19 +51,19 @@ export async function createKeyValueIndex<
         const response = await elasticClient.mget<ElasticEntry>({
             index: indexName,
             body: {
-                ids: ids as string[]
-            }
+                ids: ids as string[],
+            },
         });
 
-        const textIds = response.docs.map(doc => doc._id);
+        const textIds = response.docs.map((doc) => doc._id);
         const sourceIdsMaybe = await Promise.all(
             textIds.map(async (textId) => {
                 return await get(textId as TKeyId);
-            })
+            }),
         );
 
         const sourceIds = sourceIdsMaybe.filter(
-            (sourceId) => sourceId !== undefined
+            (sourceId) => sourceId !== undefined,
         ) as TValueId[][];
 
         return sourceIds;
@@ -73,13 +72,13 @@ export async function createKeyValueIndex<
     async function put(postings: TValueId[], id?: TKeyId): Promise<TKeyId> {
         const entry: ElasticEntry = {
             keyId: id as TKeyId,
-            valueIds: postings
+            valueIds: postings,
         };
 
         const putResponse = await elasticClient.index<ElasticEntry>({
             index: indexName,
             id: id as string,
-            body: entry
+            body: entry,
         });
 
         return putResponse._id as TKeyId;
@@ -92,7 +91,7 @@ export async function createKeyValueIndex<
     async function remove(id: TKeyId): Promise<void> {
         await elasticClient.delete({
             index: indexName,
-            id: id as string
+            id: id as string,
         });
     }
 }

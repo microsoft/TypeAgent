@@ -56,11 +56,8 @@ export async function createPodcastMemory(
     await ensureDir(podcastStorePath);
     let storageProvider = undefined;
     if (useElastic) {
-        storageProvider = await elastic.createStorageIndex(
-            createNew,
-        );
-    }
-    else if (useSqlite) {
+        storageProvider = await elastic.createStorageIndex(createNew);
+    } else if (useSqlite) {
         storageProvider = await sqlite.createStorageDb(
             podcastStorePath,
             "podcast.db",
@@ -131,13 +128,15 @@ export function createPodcastCommands(
     }
 
     // Eventually we should unite these functions with their
-    // counterparts in @entities command in chatMemory.ts but 
+    // counterparts in @entities command in chatMemory.ts but
     // need input.
     async function loadMessages(
         ids?: string[],
     ): Promise<(dateTime.Timestamped<knowLib.TextBlock> | undefined)[]> {
         if (ids && ids.length > 0) {
-            return await context.podcastMemory.conversation.messages.getMultiple(ids);
+            return await context.podcastMemory.conversation.messages.getMultiple(
+                ids,
+            );
         }
         return [];
     }
@@ -286,9 +285,7 @@ export function createPodcastCommands(
 
         const index = await context.podcastMemory.conversation.getEntityIndex();
         const entityArray = await asyncArray.toArray(index.entities());
-        const entities = [
-            ...conversation.toCompositeEntities(entityArray),
-        ];
+        const entities = [...conversation.toCompositeEntities(entityArray)];
         entities.sort((x, y) => x.name.localeCompare(y.name));
         let printer = context.printer;
         printer.writeCompositeEntities(entities);
@@ -437,7 +434,10 @@ export function createPodcastCommands(
     }
     // Just supports query for now
     commands.search.metadata = podcastSearchDef();
-    async function podcastSearch(args: string[], io: InteractiveIo): Promise<void> {
+    async function podcastSearch(
+        args: string[],
+        io: InteractiveIo,
+    ): Promise<void> {
         await searchConversation(
             context.podcastMemory.searchProcessor,
             true,

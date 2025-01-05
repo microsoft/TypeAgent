@@ -2,10 +2,20 @@
 // Licensed under the MIT License.
 
 import { Client } from "@elastic/elasticsearch";
-import { TextBlock, TextBlockType, TextIndex, TextIndexSettings, ValueDataType, ValueType } from "knowledge-processor";
+import {
+    TextBlock,
+    TextBlockType,
+    TextIndex,
+    TextIndexSettings,
+    ValueDataType,
+    ValueType,
+} from "knowledge-processor";
 import { generateTextId, toValidIndexName } from "./common.js";
 import { ScoredItem, generateEmbedding } from "typeagent";
-import { ModelType, createEmbeddingModel } from "../../../../packages/aiclient/dist/openai.js";
+import {
+    ModelType,
+    createEmbeddingModel,
+} from "../../../../packages/aiclient/dist/openai.js";
 import { openAIApiSettingsFromEnv } from "../../../../packages/aiclient/dist/openaiSettings.js";
 import { HitTable } from "../../../../packages/knowledgeProcessor/dist/setOperations.js";
 
@@ -18,35 +28,32 @@ export async function createTextIndex<
     elasticClient: Client,
     sourceIdType: ValueDataType<TSourceId>,
 ): Promise<TextIndex<TTexId, TSourceId>> {
-
     indexName = toValidIndexName(indexName);
 
-    const apiSettings = openAIApiSettingsFromEnv(
-        ModelType.Embedding
-    );
+    const apiSettings = openAIApiSettingsFromEnv(ModelType.Embedding);
 
-    const embeddingModel = createEmbeddingModel(
-        apiSettings,
-    );
+    const embeddingModel = createEmbeddingModel(apiSettings);
 
     // Create the textIndex in elastic search
-    if (!await elasticClient.indices.exists({ index: indexName })) {
+    if (!(await elasticClient.indices.exists({ index: indexName }))) {
         await elasticClient.indices.create({
             index: indexName,
             mappings: {
                 properties: {
-                    text: { type: 'keyword' },
-                    textId: { type: 'keyword' },
-                    sourceIds: { type: 'keyword' },
-                    textVector : {
-                        type: 'dense_vector',
-                        dims: parseInt(process.env.OPENAI_MODEL_EMBEDDING_DIM || "1536"),
+                    text: { type: "keyword" },
+                    textId: { type: "keyword" },
+                    sourceIds: { type: "keyword" },
+                    textVector: {
+                        type: "dense_vector",
+                        dims: parseInt(
+                            process.env.OPENAI_MODEL_EMBEDDING_DIM || "1536",
+                        ),
                         index: true,
-                        similarity: 'cosine',
-                    }
+                        similarity: "cosine",
+                    },
                 },
             },
-        })
+        });
     }
 
     interface ElasticEntry {
@@ -56,7 +63,7 @@ export async function createTextIndex<
     }
 
     return {
-        text : () => values(),
+        text: () => values(),
         ids,
         entries,
         get,
@@ -79,14 +86,14 @@ export async function createTextIndex<
         nearestNeighborsText,
         nearestNeighborsPairs,
         remove,
-    }
+    };
 
     // This should be an AsyncIterableIterator in the
     // interface definition.
     function values(): IterableIterator<string> {
         const query = {
-            "_source": false,
-            "query": { "match_all": {} }
+            _source: false,
+            query: { match_all: {} },
         };
 
         // Fetch and prepare the results synchronously
@@ -94,12 +101,12 @@ export async function createTextIndex<
         elasticClient
             .search<ElasticEntry>({
                 index: indexName,
-                body: query
+                body: query,
             })
-            .then(result => {
+            .then((result) => {
                 hits.push(...result.hits.hits);
             })
-            .catch(err => {
+            .catch((err) => {
                 console.error("Error fetching results:", err);
             });
 
@@ -113,13 +120,12 @@ export async function createTextIndex<
         return generateResults();
     }
 
-
-    async function *ids(): AsyncIterableIterator<TTexId> {
+    async function* ids(): AsyncIterableIterator<TTexId> {
         const result = await elasticClient.search<ElasticEntry>({
             index: indexName,
             // scroll: '1m',
             query: { match_all: {} },
-            _source: ['textId'],
+            _source: ["textId"],
         });
         for (const hit of result.hits.hits) {
             if (hit._source !== undefined) {
@@ -128,19 +134,19 @@ export async function createTextIndex<
         }
     }
 
-    async function *entries(): AsyncIterableIterator<TextBlock<TSourceId>> {
+    async function* entries(): AsyncIterableIterator<TextBlock<TSourceId>> {
         const result = await elasticClient.search<ElasticEntry>({
             index: indexName,
             // scroll: '1m',
             query: { match_all: {} },
-            _source: ['text', 'sourceIds']
+            _source: ["text", "sourceIds"],
         });
         for (const hit of result.hits.hits) {
             if (hit._source !== undefined) {
                 yield {
                     type: TextBlockType.Sentence,
                     value: hit._source.text,
-                    sourceIds: hit._source.sourceIds
+                    sourceIds: hit._source.sourceIds,
                 };
             }
         }
@@ -157,7 +163,7 @@ export async function createTextIndex<
                 return hit.sourceIds;
             }
         }
-        return undefined
+        return undefined;
     }
 
     async function getFrequency(text: string): Promise<number> {
@@ -171,14 +177,14 @@ export async function createTextIndex<
                 return hit.sourceIds.length;
             }
         }
-        return 0
+        return 0;
     }
 
     async function getById(id: TTexId): Promise<TSourceId[] | undefined> {
         try {
             const result = await elasticClient.get<ElasticEntry>({
                 index: indexName,
-                id: id.toString()
+                id: id.toString(),
             });
             if (result._source !== undefined) {
                 return result._source.sourceIds;
@@ -188,20 +194,23 @@ export async function createTextIndex<
         }
     }
 
-    async function getByIds(ids: TTexId[]): Promise<(TSourceId[] | undefined)[]> {
+    async function getByIds(
+        ids: TTexId[],
+    ): Promise<(TSourceId[] | undefined)[]> {
         const result = await elasticClient.mget<ElasticEntry>({
-          index: indexName,
-          ids: ids.map(id => id.toString())
+            index: indexName,
+            ids: ids.map((id) => id.toString()),
         });
 
-        const textIds = result.docs.map(doc => doc._id);
+        const textIds = result.docs.map((doc) => doc._id);
 
         const sourceIds = await Promise.all(
-          textIds.map(async (textId) => { return await getById(textId as TTexId);
-          })
+            textIds.map(async (textId) => {
+                return await getById(textId as TTexId);
+            }),
         );
 
-        return sourceIds
+        return sourceIds;
     }
 
     async function getId(text: string): Promise<TTexId | undefined> {
@@ -221,16 +230,18 @@ export async function createTextIndex<
     }
 
     async function getIds(texts: string[]): Promise<(TTexId | undefined)[]> {
-        const textIds = await Promise.all(texts.map(async (text) => {
-          return await getId(text);
-        }));
-        return textIds
+        const textIds = await Promise.all(
+            texts.map(async (text) => {
+                return await getId(text);
+            }),
+        );
+        return textIds;
     }
 
     async function getText(id: TTexId): Promise<string | undefined> {
         const result = await elasticClient.get<ElasticEntry>({
             index: indexName,
-            id: id.toString()
+            id: id.toString(),
         });
         if (result._source !== undefined) {
             return result._source.text;
@@ -252,51 +263,59 @@ export async function createTextIndex<
             index: indexName,
             id: textId,
             document: {
-                text : text,
-                textId : textId,
+                text: text,
+                textId: textId,
                 sourceIds: postings,
-                textVector: convertedEmbedding
+                textVector: convertedEmbedding,
             },
         });
         return putResult._id as TTexId;
     }
 
-    async function putMultiple(values: TextBlock<TSourceId>[]): Promise<TTexId[]> {
-        const valuesWithTextId = values.map(value => ({
-          ...value,
-          textId: generateTextId(value.value)
+    async function putMultiple(
+        values: TextBlock<TSourceId>[],
+    ): Promise<TTexId[]> {
+        const valuesWithTextId = values.map((value) => ({
+            ...value,
+            textId: generateTextId(value.value),
         }));
 
         // We'll build 'bulkOps' in one flat array.
         const bulkOps: any[] = [];
 
         for (const v of valuesWithTextId) {
-          const embedding = await generateEmbedding(embeddingModel, v.value);
+            const embedding = await generateEmbedding(embeddingModel, v.value);
 
-          // First line: action/metadata.
-          bulkOps.push({ index: { _index: indexName, _id: v.textId } });
+            // First line: action/metadata.
+            bulkOps.push({ index: { _index: indexName, _id: v.textId } });
 
-          // Second line: the actual document.
-          bulkOps.push({
-            text: v.value,
-            textId: v.textId,
-            sourceIds: v.sourceIds ?? [],
-            textVector: embedding
-          });
+            // Second line: the actual document.
+            bulkOps.push({
+                text: v.value,
+                textId: v.textId,
+                sourceIds: v.sourceIds ?? [],
+                textVector: embedding,
+            });
         }
 
         // Now 'bulkOps' is a flat array of objects.
         await elasticClient.bulk({ body: bulkOps });
 
-        return values.map(value => value.value as TTexId);
-      }
+        return values.map((value) => value.value as TTexId);
+    }
 
-    async function addSources(id: TTexId, postings: TSourceId[]): Promise<void> {
+    async function addSources(
+        id: TTexId,
+        postings: TSourceId[],
+    ): Promise<void> {
         // Elastic script to add in place to an array
         await elasticClient.update({
             index: indexName,
             id: id as string,
-            script: { source: 'ctx._source.sourceIds.addAll(params.postings)', params: { postings } },
+            script: {
+                source: "ctx._source.sourceIds.addAll(params.postings)",
+                params: { postings },
+            },
         });
     }
 
@@ -307,7 +326,10 @@ export async function createTextIndex<
         score: number;
     }
 
-    async function nearestHelper(value: string, maxMatches: number): Promise<ElasticResponse | undefined> {
+    async function nearestHelper(
+        value: string,
+        maxMatches: number,
+    ): Promise<ElasticResponse | undefined> {
         const queryEmbedding = await generateEmbedding(embeddingModel, value);
         let convertedQuery: number[] = [];
         queryEmbedding.forEach((value) => {
@@ -321,7 +343,7 @@ export async function createTextIndex<
                 query_vector: convertedQuery,
                 num_candidates: 10000,
             },
-            _source: ["text", "textId", "sourceIds"]
+            _source: ["text", "textId", "sourceIds"],
         });
 
         const topHit = response.hits.hits[0];
@@ -337,7 +359,7 @@ export async function createTextIndex<
             text: topHit._source.text,
             textId: topHit._source.textId,
             sourceIds: topHit._source.sourceIds,
-            score: topHit._score || 0
+            score: topHit._score || 0,
         };
     }
 
@@ -349,7 +371,10 @@ export async function createTextIndex<
         return nearest.sourceIds;
     }
 
-    async function getNearestMultiple(texts: string[], k: number): Promise<TSourceId[]> {
+    async function getNearestMultiple(
+        texts: string[],
+        k: number,
+    ): Promise<TSourceId[]> {
         let results: TSourceId[][] = [];
         texts.forEach(async (text) => {
             results.push(await getNearest(text, k));
@@ -405,11 +430,16 @@ export async function createTextIndex<
         if (hit === undefined) {
             return [];
         }
-        return [{ item: {
-            type: TextBlockType.Sentence,
-            value: hit.text,
-            sourceIds: hit.sourceIds
-        }, score: hit.score }];
+        return [
+            {
+                item: {
+                    type: TextBlockType.Sentence,
+                    value: hit.text,
+                    sourceIds: hit.sourceIds,
+                },
+                score: hit.score,
+            },
+        ];
     }
 
     async function getNearestText(
@@ -418,7 +448,9 @@ export async function createTextIndex<
         minScore?: number,
     ): Promise<TTexId[]> {
         const hits = await nearestNeighborsText(value, maxMatches);
-        return hits.filter(hit => hit.score >= (minScore ?? 0)).map(hit => hit.item);
+        return hits
+            .filter((hit) => hit.score >= (minScore ?? 0))
+            .map((hit) => hit.item);
     }
 
     async function getNearestTextMultiple(
@@ -426,19 +458,28 @@ export async function createTextIndex<
         maxMatches?: number,
         minScore?: number,
     ): Promise<TTexId[]> {
-        const hits = await Promise.all(values.map(async (value) => {
-            return await getNearestText(value, maxMatches, minScore);
-        }));
+        const hits = await Promise.all(
+            values.map(async (value) => {
+                return await getNearestText(value, maxMatches, minScore);
+            }),
+        );
         return [...new Set(hits.flat())];
     }
 
     // Remove postings from a text's list of postings (postings are sources)
-    async function remove(textId: TTexId, postings: TSourceId[]): Promise<void> {
+    async function remove(
+        textId: TTexId,
+        postings: TSourceId[],
+    ): Promise<void> {
         await elasticClient.update({
             index: indexName,
             id: textId as string,
-            body: { script: { source: 'ctx._source.sourceIds.removeAll(params.postings)', params: { postings } } },
+            body: {
+                script: {
+                    source: "ctx._source.sourceIds.removeAll(params.postings)",
+                    params: { postings },
+                },
+            },
         });
     }
-
 }

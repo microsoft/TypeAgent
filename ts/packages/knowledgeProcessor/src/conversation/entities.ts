@@ -570,12 +570,11 @@ export function appendCompositeEntity(
 }
 
 export function toCompositeEntity(entity: ConcreteEntity): CompositeEntity {
-    // In case an entity is undefined
     if (entity === undefined) {
         return {
             name: "undefined",
-            type: ["undefined"]
-        }
+            type: ["undefined"],
+        };
     }
     const composite: CompositeEntity = {
         name: entity.name,

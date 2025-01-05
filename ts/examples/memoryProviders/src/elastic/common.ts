@@ -17,8 +17,8 @@ export async function createElasicClient(
         const elasticClient = new Client({
             node: uri,
             auth: {
-              apiKey : elasticApiKey
-            }
+                apiKey: elasticApiKey,
+            },
         });
 
         if (createNew) {
@@ -32,15 +32,15 @@ export async function createElasicClient(
 }
 
 export async function deleteIndeces(elasticClient: Client): Promise<void> {
-    const infoArray = await elasticClient.cat.indices({ format: 'json' });
-    infoArray.forEach(indexInfo => {
-        const indexName = indexInfo.index || undefined
+    const infoArray = await elasticClient.cat.indices({ format: "json" });
+    infoArray.forEach((indexInfo) => {
+        const indexName = indexInfo.index || undefined;
         if (indexName !== undefined) {
             elasticClient.indices.delete({
-                index: indexName
+                index: indexName,
             });
         }
-    })
+    });
 }
 
 export function generateTextId(text: string): string {
@@ -57,8 +57,8 @@ export function generateTextId(text: string): string {
  * @returns {string} A valid index name.
  */
 export function toValidIndexName(name: string): string {
-  // Regex of all invalid characters
-  const invalidChars = /[<>\"\\\/\|\?\*]/g;
-  // Replace invalid chars with underscores
-  return name.replace(invalidChars, '_').toLowerCase();
+    // Regex of all invalid characters
+    const invalidChars = /[<>\"\\\/\|\?\*]/g;
+    // Replace invalid chars with underscores
+    return name.replace(invalidChars, "_").toLowerCase();
 }
