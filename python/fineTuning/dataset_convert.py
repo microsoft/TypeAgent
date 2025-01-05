@@ -1,3 +1,6 @@
+# Copyright (c) Microsoft Corporation and Henry Lucco.
+# Licensed under the MIT License.
+
 import json
 
 from chaparral.models.data import ChapparalDataset
