@@ -61,7 +61,7 @@ describe("KnowledgeExtractor", () => {
         await addTags(store, fruitItems, "Fruit");
         await addTags(store, veggieItems, "Veggies");
 
-        const allIds = await store.getByTag(["Fruit", "Veggies"]);
+        const allIds = await store.getByTag(["Fruit", "Veggies"], true);
         expect(allIds).toHaveLength(fruitItems.length + veggieItems.length);
     });
     test("nameTags", async () => {

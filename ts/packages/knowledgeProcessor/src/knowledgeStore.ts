@@ -8,7 +8,11 @@ import {
 } from "typeagent";
 import { TextIndex, TextIndexSettings } from "./textIndex.js";
 import { TemporalLog } from "./temporal.js";
-import { intersectMultiple, removeUndefined } from "./setOperations.js";
+import {
+    intersectMultiple,
+    removeUndefined,
+    unionMultiple,
+} from "./setOperations.js";
 import {
     createFileSystemStorageProvider,
     StorageProvider,
@@ -32,7 +36,10 @@ export interface KnowledgeStore<T, TId = any> {
      * @param ids
      */
     addTag(tag: string, ids: TId | TId[]): Promise<string>;
-    getByTag(tag: string | string[]): Promise<TId[] | undefined>;
+    getByTag(
+        tag: string | string[],
+        unionMatches?: boolean,
+    ): Promise<TId[] | undefined>;
 }
 
 export async function createKnowledgeStore<T>(
@@ -111,7 +118,9 @@ export async function createKnowledgeStoreOnStorage<T>(
 
     async function getByTag(
         tag: string | string[],
+        unionMatches?: boolean,
     ): Promise<TId[] | undefined> {
+        unionMatches ??= false;
         const tagIndex = await getTagIndex();
         let tagMatches: string[] | undefined;
         if (Array.isArray(tag)) {
@@ -120,7 +129,11 @@ export async function createKnowledgeStoreOnStorage<T>(
                 settings.concurrency,
                 (t) => tagIndex.get(t),
             );
-            tagMatches = [...intersectMultiple(...ids)];
+            tagMatches = [
+                ...(unionMatches
+                    ? unionMultiple(...ids)
+                    : intersectMultiple(...ids)),
+            ];
         } else {
             tagMatches = await tagIndex.get(tag);
         }
