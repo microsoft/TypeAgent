@@ -9,6 +9,7 @@ import path from "path";
 import { readJsonFile } from "typeagent";
 import { createEntitySearchOptions } from "../conversation/entities.js";
 import { Image } from "./imageSchema.js";
+import { KnowledgeResponse } from "../conversation/knowledgeSchema.js";
 
 /**
  * Creates an image memory 
@@ -87,10 +88,10 @@ export async function addImageToConversation(
     const messages: ConversationMessage[] = [];
     if (Array.isArray(images)) {
         for (const image of images) {
-            messages.push(...imageToMessage(image));
+            messages.push(imageToMessage(image));
         }
     } else {
-        messages.push(...imageToMessage(images));
+        messages.push(imageToMessage(images));
     }
     await cm.addMessageBatch(messages);
 }
@@ -114,4 +115,20 @@ export function imageToMessage(image: Image): ConversationMessage {
     // TODO:    get image caption
     //          EXIF data
     //          Create "taken by" knowledge
+
+    return {
+        header: image.fileName,
+        text: image.caption,
+        knowledge: getKnowledgeForImage(image),
+        timestamp: image.dateTaken,
+        sender: ""// TODO: logged in user for now?
+    };
+}
+
+export function getKnowledgeForImage(iamge: Image): KnowledgeResponse {
+    throw new Error("// TODO: implement");
+}
+
+export function loadImage(fileName: string): Image {
+    throw new Error("// TODO: implement");
 }

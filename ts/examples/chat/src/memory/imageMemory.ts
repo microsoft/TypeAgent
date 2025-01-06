@@ -10,7 +10,7 @@ import * as knowLib from "knowledge-processor";
 import { conversation } from "knowledge-processor";
 import path from "node:path";
 import { sqlite } from "memory-providers";
-import { knowledgeResponseLoss } from "../../../../packages/knowledgeProcessor/dist/conversation/knowledgeResponseLoss.js";
+import * as knowlib from "knowledge-processor";
 
 export async function createImageMemory(
     models: Models,
@@ -109,6 +109,8 @@ export function createImageCommands(context: ChatContext, commands: Record<strin
             return;
         }
 
-        knowLib.image.addImageToConversation(context.imageMemory, image, maxCharsPerChunk);
+        const image: knowLib.Image = loadImage(fileName);
+
+        knowLib.image.addImageToConversation(context.imageMemory, image, context.maxCharsPerChunk);
     }
 }
