@@ -210,9 +210,9 @@ export async function createChatMemoryContext(
             models,
             storePath,
             conversationSettings,
-            true, 
-            false
-        )
+            true,
+            false,
+        ),
     };
     context.searchMemory = await createSearchMemory(context);
     return context;
@@ -333,7 +333,7 @@ export async function runChatMemory(): Promise<void> {
     createEmailCommands(context, commands);
     createPodcastCommands(context, commands);
     createImageCommands(context, commands);
-    addStandardHandlers(commands); 
+    addStandardHandlers(commands);
 
     function onStart(io: InteractiveIo): void {
         if (io !== context.printer.io) {

@@ -3,8 +3,15 @@
 
 import { ChatModel } from "aiclient";
 import { StorageProvider } from "../storageProvider.js";
-import { ConversationSettings, createConversation } from "../conversation/conversation.js";
-import { ConversationManager, ConversationMessage, createConversationManager } from "../conversation/conversationManager.js";
+import {
+    ConversationSettings,
+    createConversation,
+} from "../conversation/conversation.js";
+import {
+    ConversationManager,
+    ConversationMessage,
+    createConversationManager,
+} from "../conversation/conversationManager.js";
 import path from "path";
 import { readJsonFile } from "typeagent";
 import { createEntitySearchOptions } from "../conversation/entities.js";
@@ -12,7 +19,7 @@ import { Image } from "./imageSchema.js";
 import { KnowledgeResponse } from "../conversation/knowledgeSchema.js";
 
 /**
- * Creates an image memory 
+ * Creates an image memory
  */
 export async function createImageMemory(
     model: ChatModel,
@@ -20,7 +27,7 @@ export async function createImageMemory(
     name: string,
     rootPath: string,
     settings: ConversationSettings,
-    storageProvider?: StorageProvider
+    storageProvider?: StorageProvider,
 ) {
     const storePath = path.join(rootPath, name);
     //settings.initializer ??= setupEmailConversation;
@@ -121,7 +128,7 @@ export function imageToMessage(image: Image): ConversationMessage {
         text: image.caption,
         knowledge: getKnowledgeForImage(image),
         timestamp: image.dateTaken,
-        sender: ""// TODO: logged in user for now?
+        sender: "", // TODO: logged in user for now?
     };
 }
 

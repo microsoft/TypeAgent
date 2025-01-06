@@ -1,8 +1,19 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ArgDef, CommandHandler, CommandMetadata, InteractiveIo, NamedArgs, parseNamedArguments } from "interactive-app";
-import { ChatContext, Models, ReservedConversationNames } from "./chatMemory.js";
+import {
+    ArgDef,
+    CommandHandler,
+    CommandMetadata,
+    InteractiveIo,
+    NamedArgs,
+    parseNamedArguments,
+} from "interactive-app";
+import {
+    ChatContext,
+    Models,
+    ReservedConversationNames,
+} from "./chatMemory.js";
 import { argSourceFileOrFolder } from "./common.js";
 import { ensureDir, isDirectoryPath } from "typeagent";
 import fs from "node:fs";
@@ -70,16 +81,19 @@ export function importImageDef(): CommandMetadata {
         },
         options: {
             pauseMs: argPause(),
-        }
+        },
     };
 }
 
-export function createImageCommands(context: ChatContext, commands: Record<string, CommandHandler>): void {
+export function createImageCommands(
+    context: ChatContext,
+    commands: Record<string, CommandHandler>,
+): void {
     commands.importImage = importImage;
     commands.importImage.metadata = importImageDef();
 
     async function importImage(args: string[], io: InteractiveIo) {
-        const namedArgs = parseNamedArguments(args, importImageDef())
+        const namedArgs = parseNamedArguments(args, importImageDef());
         let sourcePath: string = namedArgs.sourcePath;
         let isDir = isDirectoryPath(sourcePath);
 
@@ -87,16 +101,21 @@ export function createImageCommands(context: ChatContext, commands: Record<strin
             await indexImages(namedArgs, sourcePath, context);
         } else {
             await indexImage(sourcePath, context);
-        } 
+        }
     }
 
-    async function indexImages(namesArgs: NamedArgs, sourcePath: string, context: ChatContext) {
-
+    async function indexImages(
+        namesArgs: NamedArgs,
+        sourcePath: string,
+        context: ChatContext,
+    ) {
         // load files from directory
-        const fileNames = await fs.promises.readdir(sourcePath, { recursive: true });
-        
+        const fileNames = await fs.promises.readdir(sourcePath, {
+            recursive: true,
+        });
+
         // index each image
-        fileNames.map(async (fileName) => { 
+        fileNames.map(async (fileName) => {
             console.log(fileName);
             await indexImage(fileName, context);
         });
@@ -104,12 +123,18 @@ export function createImageCommands(context: ChatContext, commands: Record<strin
 
     async function indexImage(fileName: string, context: ChatContext) {
         if (!fs.existsSync(fileName)) {
-            context.printer.writeLine(`Could not find part of the file path '${fileName}'`);
+            context.printer.writeLine(
+                `Could not find part of the file path '${fileName}'`,
+            );
             return;
         }
 
         const image: knowLib.image.Image = knowLib.image.loadImage(fileName);
 
-        knowLib.image.addImageToConversation(context.imageMemory, image, context.maxCharsPerChunk);
+        knowLib.image.addImageToConversation(
+            context.imageMemory,
+            image,
+            context.maxCharsPerChunk,
+        );
     }
 }
