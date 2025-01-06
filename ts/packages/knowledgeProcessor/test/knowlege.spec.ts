@@ -55,32 +55,42 @@ describe("KnowledgeExtractor", () => {
         },
         testTimeout,
     );
-    test("tags", async () => {
-        //const context = getContext();
-        const store = await createStore("tags");
-        await addTags(store, fruitItems, "Fruit");
-        await addTags(store, veggieItems, "Veggies");
+    testIf(
+        "tags",
+        () => hasTestKeys(),
+        async () => {
+            //const context = getContext();
+            const store = await createStore("tags");
+            await addTags(store, fruitItems, "Fruit");
+            await addTags(store, veggieItems, "Veggies");
 
-        const allIds = await store.getByTag(["Fruit", "Veggies"], true);
-        expect(allIds).toHaveLength(fruitItems.length + veggieItems.length);
-    });
-    test("nameTags", async () => {
-        const store = await createStore("nameTags");
-        const itemIds = await addItems(store, fruitItems);
+            const allIds = await store.getByTag(["Fruit", "Veggies"], true);
+            expect(allIds).toHaveLength(fruitItems.length + veggieItems.length);
+        },
+        testTimeout,
+    );
+    testIf(
+        "nameTags",
+        () => hasTestKeys(),
+        async () => {
+            const store = await createStore("nameTags");
+            const itemIds = await addItems(store, fruitItems);
 
-        let fullName = " Jane  Austen ";
-        const name = conversation.splitParticipantName(fullName);
-        expect(name).toBeDefined();
-        if (name) {
-            expect(name.firstName).toEqual("Jane");
-            expect(name.lastName).toEqual("Austen");
+            let fullName = " Jane  Austen ";
+            const name = conversation.splitParticipantName(fullName);
+            expect(name).toBeDefined();
+            if (name) {
+                expect(name.firstName).toEqual("Jane");
+                expect(name.lastName).toEqual("Austen");
 
-            await store.addTag(name.firstName, itemIds);
-            await store.addTag(name.lastName!, itemIds);
-            const foundIds = await store.getByTag(name.firstName);
-            expect(foundIds).toEqual(itemIds);
-        }
-    });
+                await store.addTag(name.firstName, itemIds);
+                await store.addTag(name.lastName!, itemIds);
+                const foundIds = await store.getByTag(name.firstName);
+                expect(foundIds).toEqual(itemIds);
+            }
+        },
+        testTimeout,
+    );
 
     async function addTags(
         store: KnowledgeStore<string>,
