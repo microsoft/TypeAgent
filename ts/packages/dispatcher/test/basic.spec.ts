@@ -11,8 +11,6 @@ import {
     nullClientIO,
 } from "../src/context/interactiveIO.js";
 
-const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
-
 const testAppAgentProvider = createNpmAppAgentProvider(
     {
         test: {
@@ -35,10 +33,6 @@ function createTestClientIO(data: IAgentMessage[]): ClientIO {
 
 describe("dispatcher", async () => {
     describe("Built-in Provider", async () => {
-          
-        afterEach(async () => {
-            await sleep(2000);
-        });
 
         it("startup and shutdown", async () => {
             const dispatcher = await createDispatcher("test", {
@@ -51,10 +45,6 @@ describe("dispatcher", async () => {
     });
 
     describe("Custom Provider", async () => {
-
-        afterEach(async () => {
-            await sleep(2000);
-        });
         
         describe("Command", async () => {
             const output: IAgentMessage[] = [];
@@ -65,10 +55,6 @@ describe("dispatcher", async () => {
                     commands: { test: true },
                     clientIO: createTestClientIO(output),
                 });
-            });
-
-            afterEach(async () => {
-                await sleep(2000);
             });
         
             await beforeEach(() => {
