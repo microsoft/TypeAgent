@@ -58,6 +58,11 @@ export class TypeAgentAPIWebServer {
                 ? "index.html"
                 : request.url;
 
+        // special case - dev helper
+        if (requestedFile == "/__/__headers") {
+            return this.printHeaders(request, response);
+        }
+
         // make sure requested file falls under web root
         try {
             requestedFile = realpathSync(
@@ -100,5 +105,37 @@ export class TypeAgentAPIWebServer {
 
     stop() {
         this.server.close();
+    }
+
+    printHeaders(request: any, response: any): boolean {
+        const headers = request.headers;
+
+        // Convert headers object to a JSON string
+        const headersJson = JSON.stringify(headers, null, 2);
+
+        response.writeHead(200, {
+            "Content-Type": "text/html",
+        });
+
+        // Send the HTML page with headers
+        response.end(`  
+          <!DOCTYPE html>  
+          <html lang="en">  
+          <head>  
+            <meta charset="UTF-8">  
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">  
+            <title>HTTP Headers</title>  
+          </head>  
+          <body>  
+            <h3>Client IP: ${request.socket.remoteAddress}</h3>
+            <h2>HTTP Headers</h2>  
+            <pre>${headersJson}</pre>  
+          </body>  
+          </html>  
+        `);
+
+        console.warn(`Served HTTP headers for ${request.url}`);
+
+        return true;
     }
 }

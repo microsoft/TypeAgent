@@ -285,4 +285,8 @@ export class PartialCompletion {
         }
         return this.searchMenu.handleSpecialKeys(event, prefix);
     }
+
+    public handleMouseWheel(event: WheelEvent) {
+        this.searchMenu.handleMouseWheel(event.deltaY!!);
+    }
 }

@@ -51,6 +51,7 @@
     "list-agent": "workspace:*",
     "markdown-agent": "workspace:*",
     "music": "workspace:*",
+    "oracle-agent": "workspace:*",
     "photo-agent": "workspace:*",
     "proper-lockfile": "^4.1.2",
     "string-width": "^7.2.0",

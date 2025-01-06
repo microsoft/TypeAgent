@@ -13,7 +13,6 @@ import {
     createNpmAppAgentProvider,
 } from "../agentProvider/npmAgentProvider.js";
 import { getDispatcherConfig } from "./config.js";
-import { getUserProfileDir } from "./userData.js";
 import path from "node:path";
 import fs from "node:fs";
 import {
@@ -36,16 +35,14 @@ type ExternalConfig = {
     agents: { [key: string]: AgentInfo };
 };
 let externalAppAgentsConfig: ExternalConfig | undefined;
-function getExternalAgentsConfig(): ExternalConfig {
+function getExternalAgentsConfig(instanceDir: string): ExternalConfig {
     if (externalAppAgentsConfig === undefined) {
         if (
-            fs.existsSync(
-                path.join(getUserProfileDir(), "externalAgentsConfig.json"),
-            )
+            fs.existsSync(path.join(instanceDir, "externalAgentsConfig.json"))
         ) {
             externalAppAgentsConfig = JSON.parse(
                 fs.readFileSync(
-                    path.join(getUserProfileDir(), "externalAgentsConfig.json"),
+                    path.join(instanceDir, "externalAgentsConfig.json"),
                     "utf8",
                 ),
             ) as ExternalConfig;
@@ -57,18 +54,24 @@ function getExternalAgentsConfig(): ExternalConfig {
 }
 
 let externalAppAgentProvider: AppAgentProvider | undefined;
-function getExternalAppAgentProvider(): AppAgentProvider {
+function getExternalAppAgentProvider(instanceDir: string): AppAgentProvider {
     if (externalAppAgentProvider === undefined) {
         externalAppAgentProvider = createNpmAppAgentProvider(
-            getExternalAgentsConfig().agents,
-            path.join(getUserProfileDir(), "externalagents/package.json"),
+            getExternalAgentsConfig(instanceDir).agents,
+            path.join(instanceDir, "externalagents/package.json"),
         );
     }
     return externalAppAgentProvider;
 }
 
-export function getDefaultAppAgentProviders(): AppAgentProvider[] {
-    return [getBuiltinAppAgentProvider(), getExternalAppAgentProvider()];
+export function getDefaultAppAgentProviders(
+    instanceDir?: string,
+): AppAgentProvider[] {
+    const providers = [getBuiltinAppAgentProvider()];
+    if (instanceDir) {
+        providers.push(getExternalAppAgentProvider(instanceDir));
+    }
+    return providers;
 }
 
 let appAgentConfigs: Map<string, AppAgentManifest> | undefined;

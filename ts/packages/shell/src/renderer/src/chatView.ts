@@ -136,6 +136,9 @@ export class ChatView {
 
                 return true;
             },
+            (_eta: ExpandableTextarea, miv: WheelEvent) => {
+                this.partialCompletion?.handleMouseWheel(miv);
+            },
         );
         this.inputContainer = this.chatInput.getInputContainer();
         this.topDiv.appendChild(this.messageDiv);
@@ -435,13 +438,19 @@ export class ChatView {
         const dynamicUpdate = options?.dynamicUpdate ?? false;
         const notification = options?.notification ?? false;
         const content: DisplayContent = msg.message;
-        const source: string = msg.source;
+        //const source: string = msg.source;
 
         const agentMessage = this.ensureAgentMessage(msg, notification);
         if (agentMessage === undefined) {
             return;
         }
-        agentMessage.setMessage(content, source, options?.appendMode);
+
+        agentMessage.setMessage(
+            content,
+            msg.source,
+            options?.appendMode,
+            msg.actionName,
+        );
 
         if (!dynamicUpdate) {
             this.updateScroll();

@@ -27,7 +27,6 @@ import {
 } from "@typeagent/agent-sdk/helpers/display";
 import { MatchResult } from "agent-cache";
 import { getStorage } from "./storageImpl.js";
-import { getUserProfileDir } from "../utils/userData.js";
 import { IncrementalJsonValueCallBack } from "common-utils";
 import { ProfileNames } from "../utils/profileNames.js";
 import { conversation } from "knowledge-processor";
@@ -124,7 +123,9 @@ export function createSessionContext<T = unknown>(
     const storage = sessionDirPath
         ? getStorage(name, sessionDirPath)
         : undefined;
-    const profileStorage = getStorage(name, getUserProfileDir());
+    const instanceStorage = context.instanceDir
+        ? getStorage(name, context.instanceDir)
+        : undefined;
     const sessionContext: SessionContext<T> = {
         get agentContext() {
             return agentContext;
@@ -132,8 +133,8 @@ export function createSessionContext<T = unknown>(
         get sessionStorage() {
             return storage;
         },
-        get profileStorage() {
-            return profileStorage;
+        get instanceStorage() {
+            return instanceStorage;
         },
         notify(event: AppAgentEvent, message: string) {
             context.clientIO.notify(event, undefined, message, name);
@@ -189,6 +190,9 @@ async function executeAction(
 
     // Update the last action translator.
     systemContext.lastActionSchemaName = translatorName;
+
+    // Update the last action name.
+    systemContext.lastActionName = action.fullActionName;
 
     if (appAgent.executeAction === undefined) {
         throw new Error(
@@ -379,6 +383,13 @@ export async function executeCommand(
     );
 
     try {
+        // update the last action name
+        if (commands.length > 0) {
+            context.lastActionName = `${appAgentName}.${commands.join(".")}`;
+        } else {
+            context.lastActionName = undefined;
+        }
+
         actionContext.profiler = context.commandProfiler?.measure(
             ProfileNames.executeCommand,
             true,
@@ -393,6 +404,7 @@ export async function executeCommand(
     } finally {
         actionContext.profiler?.stop();
         actionContext.profiler = undefined;
+        context.lastActionName = undefined;
         closeActionContext();
     }
 }

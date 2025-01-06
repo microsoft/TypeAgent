@@ -368,7 +368,7 @@ export class AppAgentManager implements ActionConfigProvider {
                 "schemas",
                 name,
                 useDefault,
-                config.translationDefaultEnabled,
+                config.schemaDefaultEnabled,
                 record.schemas.has(name),
                 failedSchemas,
             );
@@ -488,15 +488,21 @@ export class AppAgentManager implements ActionConfigProvider {
         this.transientAgents[schemaName] = enable;
     }
     public async close() {
+        const closeP: Promise<void>[] = [];
         for (const record of this.agents.values()) {
-            record.actions.clear();
-            record.commands = false;
-            await this.closeSessionContext(record);
-            if (record.appAgent !== undefined) {
-                record.provider.unloadAppAgent(record.name);
-            }
-            record.appAgent = undefined;
+            closeP.push(
+                (async () => {
+                    record.actions.clear();
+                    record.commands = false;
+                    await this.closeSessionContext(record);
+                    if (record.appAgent !== undefined) {
+                        record.provider.unloadAppAgent(record.name);
+                    }
+                    record.appAgent = undefined;
+                })(),
+            );
         }
+        await Promise.all(closeP);
     }
 
     private async updateAction(

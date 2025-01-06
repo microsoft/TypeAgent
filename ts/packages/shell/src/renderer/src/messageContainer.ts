@@ -29,7 +29,7 @@ function createTimestampDiv(timestamp: Date, className: string) {
     dateSpan.className = "timestring";
     timeStampDiv.appendChild(dateSpan); // time string
 
-    dateSpan.innerText = timestamp.toLocaleTimeString();
+    dateSpan.innerText = "- " + timestamp.toLocaleTimeString();
 
     return timeStampDiv;
 }
@@ -117,14 +117,23 @@ export class MessageContainer {
         return this._source;
     }
 
-    private updateSource() {
+    private updateSource(actionName?: string | undefined) {
         if (this.iconDiv !== undefined) {
             const source = this._source;
             const sourceIcon = this.agents.get(source);
 
             // set source and source icon
-            (this.timestampDiv.firstChild as HTMLDivElement).innerText = source; // name
+            (this.timestampDiv.firstChild as HTMLDivElement).innerText =
+                actionName ?? source; // name
             this.iconDiv.innerText = sourceIcon ?? "❔"; // icon
+        }
+    }
+
+    public updateActionName(name: string | undefined) {
+        if (name !== undefined) {
+            (this.timestampDiv.firstChild as HTMLDivElement).innerText = name;
+        } else {
+            (this.timestampDiv.firstChild as HTMLDivElement).innerText = "";
         }
     }
 
@@ -184,6 +193,7 @@ export class MessageContainer {
         content: DisplayContent,
         source: string,
         appendMode?: DisplayAppendMode, // default to not appending.
+        actionName?: string | undefined,
     ) {
         if (
             typeof content !== "string" &&
@@ -206,7 +216,7 @@ export class MessageContainer {
         this.flushLastTemporary();
 
         this._source = source;
-        this.updateSource();
+        this.updateSource(actionName);
 
         const speakText = setContent(
             this.messageDiv,

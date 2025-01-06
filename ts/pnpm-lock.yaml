@@ -478,6 +478,9 @@ importers:
       find-config:
         specifier: ^1.0.0
         version: 1.0.0
+      proper-lockfile:
+        specifier: ^4.1.2
+        version: 4.1.2
       rimraf:
         specifier: ^5.0.5
         version: 5.0.5
@@ -503,6 +506,9 @@ importers:
       '@types/node':
         specifier: ^18.18.7
         version: 18.18.7
+      '@types/proper-lockfile':
+        specifier: ^4.1.4
+        version: 4.1.4
       copyfiles:
         specifier: ^2.4.1
         version: 2.4.1
@@ -631,10 +637,16 @@ importers:
       chalk:
         specifier: ^5.3.0
         version: 5.3.0
+      debug:
+        specifier: ^4.3.4
+        version: 4.3.4(supports-color@8.1.1)
       graph-utils:
         specifier: workspace:*
         version: link:../agentUtils/graphUtils
     devDependencies:
+      '@types/debug':
+        specifier: ^4.1.10
+        version: 4.1.10
       prettier:
         specifier: ^3.2.5
         version: 3.2.5
@@ -800,6 +812,9 @@ importers:
       chalk:
         specifier: ^5.3.0
         version: 5.3.0
+      debug:
+        specifier: ^4.3.4
+        version: 4.3.4(supports-color@8.1.1)
       graph-utils:
         specifier: workspace:*
         version: link:../agentUtils/graphUtils
@@ -807,6 +822,9 @@ importers:
         specifier: workspace:*
         version: link:../../typeagent
     devDependencies:
+      '@types/debug':
+        specifier: ^4.1.10
+        version: 4.1.10
       prettier:
         specifier: ^3.2.5
         version: 3.2.5
@@ -973,6 +991,22 @@ importers:
       webpack-dev-server:
         specifier: ^5.0.4
         version: 5.0.4(debug@4.3.4)(webpack-cli@5.1.4)(webpack@5.94.0)
+
+  packages/agents/oracle:
+    dependencies:
+      '@typeagent/agent-sdk':
+        specifier: workspace:*
+        version: link:../../agentSdk
+    devDependencies:
+      prettier:
+        specifier: ^3.2.5
+        version: 3.2.5
+      rimraf:
+        specifier: ^5.0.5
+        version: 5.0.5
+      typescript:
+        specifier: ^5.4.2
+        version: 5.4.3
 
   packages/agents/photo:
     dependencies:
@@ -1593,6 +1627,9 @@ importers:
       music:
         specifier: workspace:*
         version: link:../agents/player
+      oracle-agent:
+        specifier: workspace:*
+        version: link:../agents/oracle
       photo-agent:
         specifier: workspace:*
         version: link:../agents/photo
@@ -3444,9 +3481,6 @@ packages:
 
   '@types/responselike@1.0.3':
     resolution: {integrity: sha512-H/+L+UkTV33uf49PH5pCAUBVPNj2nDBXTN+qS1dOwyyg24l3CcicicCA7ca+HMvJBZcFgl5r8e+RR6elsb4Lyw==}
-
-  '@types/retry@0.12.0':
-    resolution: {integrity: sha512-wWKOClTTiizcZhXnPY4wikVAwmdYHp8q6DmC+EJUzAMsycb7HB32Kh9RN4+0gExjmPmZSAQjgURXIGATPegAvA==}
 
   '@types/retry@0.12.2':
     resolution: {integrity: sha512-XISRgDJ2Tc5q4TRqvgJtzsRkFYNJzZrhTdtMoGVBttwzzQJkPnS3WWTFc7kuDRoPtPakl+T+OfdEUjYJj7Jbow==}
@@ -10045,7 +10079,7 @@ snapshots:
 
   '@types/proper-lockfile@4.1.4':
     dependencies:
-      '@types/retry': 0.12.0
+      '@types/retry': 0.12.2
 
   '@types/qs@6.9.10': {}
 
@@ -10056,8 +10090,6 @@ snapshots:
   '@types/responselike@1.0.3':
     dependencies:
       '@types/node': 18.18.7
-
-  '@types/retry@0.12.0': {}
 
   '@types/retry@0.12.2': {}
 

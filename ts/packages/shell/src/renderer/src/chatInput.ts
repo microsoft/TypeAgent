@@ -19,6 +19,7 @@ export interface ExpandableTextareaHandlers {
     altHandler?: (eta: ExpandableTextarea, event: KeyboardEvent) => void;
     onChange?: (eta: ExpandableTextarea) => void;
     onKeydown?: (eta: ExpandableTextarea, event: KeyboardEvent) => boolean;
+    onMouseWheel?: (eta: ExpandableTextarea, event: WheelEvent) => void;
 }
 
 export class ExpandableTextarea {
@@ -67,6 +68,11 @@ export class ExpandableTextarea {
                 sendButton.disabled = this.textEntry.innerHTML.length == 0;
             }
         });
+        this.textEntry.onwheel = (event) => {
+            if (this.entryHandlers.onMouseWheel !== undefined) {
+                this.entryHandlers.onMouseWheel(this, event);
+            }
+        };
     }
 
     getEditedText() {
@@ -167,6 +173,7 @@ export class ChatInput {
         messageHandler: (message: string) => void,
         onChange?: (eta: ExpandableTextarea) => void,
         onKeydown?: (eta: ExpandableTextarea, event: KeyboardEvent) => boolean,
+        onMouseWheel?: (eta: ExpandableTextarea, event: WheelEvent) => void,
     ) {
         this.inputContainer = document.createElement("div");
         this.inputContainer.className = "chat-input";
@@ -184,6 +191,7 @@ export class ChatInput {
                 onSend: messageHandler,
                 onChange,
                 onKeydown,
+                onMouseWheel,
             },
             this.sendButton,
         );

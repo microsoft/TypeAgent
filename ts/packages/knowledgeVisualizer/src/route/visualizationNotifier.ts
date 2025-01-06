@@ -1,7 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { getSessionNames, getSessionsDirPath } from "agent-dispatcher/explorer";
+import {
+    getInstanceSessionNames,
+    getInstanceSessionsDirPath,
+} from "agent-dispatcher/explorer";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -101,7 +104,7 @@ export class VisualizationNotifier {
 
         // file watchers
         fs.watch(
-            getSessionsDirPath(),
+            getInstanceSessionsDirPath(),
             { recursive: true },
             async (_, fileName) => {
                 if (fileName?.endsWith("lists.json")) {
@@ -121,7 +124,7 @@ export class VisualizationNotifier {
 
         const kDir: string = path.join("conversation", "knowledge");
         fs.watch(
-            getSessionsDirPath(),
+            getInstanceSessionsDirPath(),
             { recursive: true },
             async (_, fileName) => {
                 if (fileName && fileName?.indexOf(kDir) > -1) {
@@ -197,7 +200,7 @@ export class VisualizationNotifier {
             new Array<TypeAgentList>(),
         );
 
-        const sessions: string[] = await getSessionNames();
+        const sessions: string[] = await getInstanceSessionNames();
 
         // get all the sessions
         sessions.map((n) => {
@@ -211,7 +214,12 @@ export class VisualizationNotifier {
             // get the lists for all sessions
             try {
                 const listsRaw: Buffer = fs.readFileSync(
-                    path.join(getSessionsDirPath(), n, "list", "lists.json"),
+                    path.join(
+                        getInstanceSessionsDirPath(),
+                        n,
+                        "list",
+                        "lists.json",
+                    ),
                 );
                 const lists: TypeAgentList[] = JSON.parse(listsRaw.toString());
 
@@ -234,7 +242,7 @@ export class VisualizationNotifier {
             retValue.push(new Array<KnowledgeGraph>());
         }
 
-        const sessions: string[] = await getSessionNames();
+        const sessions: string[] = await getInstanceSessionNames();
         const lastSession: string = sessions[sessions.length - 1];
 
         // level 0
@@ -246,7 +254,7 @@ export class VisualizationNotifier {
             Knowledge
         >();
         const knowledgeDir: string = path.join(
-            getSessionsDirPath(),
+            getInstanceSessionsDirPath(),
             lastSession,
             "conversation",
             "knowledge",
@@ -374,7 +382,7 @@ export class VisualizationNotifier {
         retValue.push({ name: "knowledge.type", imports: [] });
         retValue.push({ name: "knowledge.param", imports: [] });
 
-        const sessions: string[] = await getSessionNames();
+        const sessions: string[] = await getInstanceSessionNames();
         const lastSession: string = sessions[sessions.length - 1];
 
         // get the knowledge for this session
@@ -383,7 +391,7 @@ export class VisualizationNotifier {
             Knowledge
         >();
         const knowledgeDir: string = path.join(
-            getSessionsDirPath(),
+            getInstanceSessionsDirPath(),
             lastSession,
             "conversation",
             "knowledge",
@@ -516,7 +524,7 @@ export class VisualizationNotifier {
     public async enumerateKnowledgeForWordCloud(): Promise<string[]> {
         let retValue: string[] = new Array<string>();
 
-        const sessions: string[] = await getSessionNames();
+        const sessions: string[] = await getInstanceSessionNames();
         const lastSession: string = sessions[sessions.length - 1];
 
         // get the knowledge for this session
@@ -525,7 +533,7 @@ export class VisualizationNotifier {
             Knowledge
         >();
         const knowledgeDir: string = path.join(
-            getSessionsDirPath(),
+            getInstanceSessionsDirPath(),
             lastSession,
             "conversation",
             "knowledge",

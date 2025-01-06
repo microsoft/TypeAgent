@@ -91,6 +91,7 @@ export class SettingsView {
     public get shellSettings(): Readonly<ShellSettingsType> {
         return this._shellSettings;
     }
+    private devUICheckBox: HTMLInputElement;
 
     public set shellSettings(value: ShellSettingsType) {
         this._shellSettings = value;
@@ -98,6 +99,7 @@ export class SettingsView {
         this.microphoneSources.value = value.microphoneId ?? "";
         this.intellisenseCheckBox.checked = value.partialCompletion;
         this.agentGreetingCheckBox.checked = value.agentGreeting;
+        this.devUICheckBox.checked = !value.devUI;
         this.updateFromSettings();
     }
 
@@ -260,6 +262,11 @@ export class SettingsView {
         this.agentGreetingCheckBox = this.addCheckbox("Agent greeting", () => {
             this._shellSettings.agentGreeting =
                 this.agentGreetingCheckBox.checked;
+        });
+
+        this.devUICheckBox = this.addCheckbox("Auto-hide metrics", () => {
+            this._shellSettings.devUI = !this.agentGreetingCheckBox.checked;
+            chatView.setMetricsVisible(!this.devUICheckBox.checked);
         });
     }
 

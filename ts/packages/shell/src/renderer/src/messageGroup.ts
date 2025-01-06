@@ -163,7 +163,7 @@ export class MessageGroup {
                         this.chatView,
                         this.settingsView,
                         "agent",
-                        msg.source,
+                        msg.actionName ?? msg.source,
                         this.agents,
                         beforeElem.div,
                         this.hideMetrics,

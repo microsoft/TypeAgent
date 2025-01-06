@@ -38,7 +38,7 @@ export function getUniqueFileName(
     return dir;
 }
 
-function createDirectory(dir: string): void {
+export function ensureDirectory(dir: string): void {
     if (!fs.existsSync(dir)) {
         try {
             fs.mkdirSync(dir, { recursive: true });
@@ -60,7 +60,7 @@ export function getUserDataDir() {
 
 function ensureUserDataDir() {
     const dir = getUserDataDir();
-    createDirectory(dir);
+    ensureDirectory(dir);
     return dir;
 }
 
@@ -129,30 +129,18 @@ function lockUserData<T>(fn: () => T) {
     }
 }
 
-export function getUserId() {
-    return lockUserData(() => {
-        return ensureGlobalUserConfig().userid;
-    });
-}
-
-function getInstanceName() {
-    return process.env["INSTANCE_NAME"] ?? `dev:${getPackageFilePath(".")}`;
-}
-
-function getProfilesDir() {
+function getInstancesDir() {
     return path.join(ensureUserDataDir(), "profiles");
 }
 
-function ensureUserProfileName() {
+function ensureInstanceDirName(instanceName: string) {
     const userConfig = ensureGlobalUserConfig();
-
-    const instanceName = getInstanceName();
     const profileName = userConfig.instances?.[instanceName];
     if (profileName) {
         return profileName;
     }
     const newProfileName = getUniqueFileName(
-        getProfilesDir(),
+        getInstancesDir(),
         process.env["INSTANCE_NAME"] ?? "dev",
     );
     if (userConfig.instances === undefined) {
@@ -163,36 +151,68 @@ function ensureUserProfileName() {
     return newProfileName;
 }
 
-function getUserProfileName() {
+function getInstanceDirName(instanceName: string) {
     const currentGlobalUserConfig = readGlobalUserConfig();
     if (currentGlobalUserConfig !== undefined) {
-        const instanceName = getInstanceName();
-        const profileName = currentGlobalUserConfig.instances?.[instanceName];
-        if (profileName !== undefined) {
-            return profileName;
+        const instanceDirName =
+            currentGlobalUserConfig.instances?.[instanceName];
+        if (instanceDirName !== undefined) {
+            return instanceDirName;
         }
     }
     return lockUserData(() => {
-        return ensureUserProfileName();
+        return ensureInstanceDirName(instanceName);
     });
 }
 
-let userProfileDir: string | undefined;
-export function getUserProfileDir() {
-    if (userProfileDir === undefined) {
-        userProfileDir = path.join(getProfilesDir(), getUserProfileName());
+function getInstanceName() {
+    return process.env["INSTANCE_NAME"] ?? `dev:${getPackageFilePath(".")}`;
+}
+
+let instanceDir: string | undefined;
+export function getInstanceDir() {
+    if (instanceDir === undefined) {
+        instanceDir = path.join(
+            getInstancesDir(),
+            getInstanceDirName(getInstanceName()),
+        );
     }
-    return userProfileDir;
+    return instanceDir;
 }
 
-export function ensureUserProfileDir() {
-    const dir = getUserProfileDir();
-    createDirectory(dir);
+export async function lockInstanceDir(instanceDir: string) {
+    ensureDirectory(instanceDir);
+    try {
+        let isExiting = false;
+        process.on("exit", () => {
+            isExiting = true;
+        });
+        return await lockfile.lock(instanceDir, {
+            onCompromised: (err) => {
+                if (isExiting) {
+                    // We are exiting, just ignore the error
+                    return;
+                }
+                console.error(
+                    `\nERROR: User instance directory lock ${instanceDir} compromised. Only one client per instance directory can be active at a time.\n  ${err}`,
+                );
+                process.exit(-1);
+            },
+        });
+    } catch (e) {
+        throw new Error(
+            `Unable to lock instance directory ${instanceDir}. Only one client per instance directory can be active at a time.`,
+        );
+    }
+}
+export function ensureCacheDir(instanceDir: string) {
+    const dir = path.join(instanceDir, "cache");
+    ensureDirectory(dir);
     return dir;
 }
 
-export function ensureCacheDir() {
-    const dir = path.join(getUserProfileDir(), "cache");
-    createDirectory(dir);
-    return dir;
+export function getUserId() {
+    return lockUserData(() => {
+        return ensureGlobalUserConfig().userid;
+    });
 }

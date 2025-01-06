@@ -44,7 +44,7 @@ class RandomOfflineCommandHandler implements CommandHandlerNoParams {
     public async run(context: ActionContext<CommandHandlerContext>) {
         displayStatus(`Selecting random request...`, context);
 
-        if (this.list == undefined) {
+        if (this.list == undefined || this.list.length == 0) {
             this.list = await this.getRequests();
         }
 
@@ -70,7 +70,7 @@ class RandomOfflineCommandHandler implements CommandHandlerNoParams {
     }
 
     public async getRequests(): Promise<string[]> {
-        const requestsPath = getPackageFilePath("./data/request.txt");
+        const requestsPath = getPackageFilePath("./data/requests.txt");
         if (fs.existsSync(requestsPath)) {
             const content = await fs.promises.readFile(requestsPath, "utf-8");
             return content.split("\n");

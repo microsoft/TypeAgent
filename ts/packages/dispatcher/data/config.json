@@ -49,6 +49,9 @@
     },
     "markdown": {
       "name": "markdown-agent"
+    },
+    "oracle": {
+      "name": "oracle-agent"
     }
   },
   "explainers": {
