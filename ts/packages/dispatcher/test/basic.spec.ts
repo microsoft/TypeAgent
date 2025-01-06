@@ -33,6 +33,11 @@ import { getBuiltinAppAgentProvider } from "../src/utils/defaultAppProviders.js"
 
 describe("dispatcher", async () => {
     describe("Built-in Provider", async () => {
+
+        beforeEach(() => {
+            jest.useFakeTimers();
+        });
+
         it("startup and shutdown", async () => {
             const dispatcher = await createDispatcher("test", {
                 appAgentProviders: [getBuiltinAppAgentProvider()],
