@@ -10,7 +10,6 @@ import * as knowLib from "knowledge-processor";
 import { conversation } from "knowledge-processor";
 import path from "node:path";
 import { sqlite } from "memory-providers";
-import * as knowlib from "knowledge-processor";
 
 export async function createImageMemory(
     models: Models,
@@ -109,7 +108,7 @@ export function createImageCommands(context: ChatContext, commands: Record<strin
             return;
         }
 
-        const image: knowLib.Image = loadImage(fileName);
+        const image: knowLib.image.Image = knowLib.image.loadImage(fileName);
 
         knowLib.image.addImageToConversation(context.imageMemory, image, context.maxCharsPerChunk);
     }
