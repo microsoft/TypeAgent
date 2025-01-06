@@ -31,8 +31,8 @@ function createTestClientIO(data: IAgentMessage[]): ClientIO {
     };
 }
 
-describe("dispatcher", async () => {
-    describe("Built-in Provider", async () => {
+describe("dispatcher", () => {
+    describe("Built-in Provider", () => {
 
         it("startup and shutdown", async () => {
             const dispatcher = await createDispatcher("test", {
@@ -44,12 +44,12 @@ describe("dispatcher", async () => {
         });
     });
 
-    describe("Custom Provider", async () => {
+    describe("Custom Provider", () => {
         
-        describe("Command", async () => {
+        describe("Command", () => {
             const output: IAgentMessage[] = [];
             let dispatcher: Dispatcher;
-            await beforeAll(async () => {
+            beforeAll(async () => {
                 dispatcher = await createDispatcher("test", {
                     appAgentProviders: [testAppAgentProvider],
                     commands: { test: true },
@@ -57,10 +57,10 @@ describe("dispatcher", async () => {
                 });
             });
         
-            await beforeEach(() => {
+            beforeEach(() => {
                 output.length = 0;
             });
-            await afterAll(async () => {
+            afterAll(async () => {
                 if (dispatcher) {
                     await dispatcher.close();
                 }
