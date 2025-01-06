@@ -358,7 +358,7 @@ export async function initializeCommandHandlerContext(
             instanceDir,
             conversationManager,
             explanationAsynchronousMode,
-            dblogging: false,
+            dblogging: true,
             clientIO,
 
             // Runtime context
