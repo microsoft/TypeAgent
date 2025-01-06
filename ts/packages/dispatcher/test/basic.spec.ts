@@ -68,11 +68,9 @@ describe("dispatcher", async () => {
         //         await dispatcher.processCommand(
         //             '@action test add --parameters \'{"a": 1, "b": 2}\'',
         //         );
-
         //         expect(output).toHaveLength(2);
         //         expect(output[1].message).toBe("The sum of 1 and 2 is 3");
         //     });
-
         //     const errorCommands = [
         //         {
         //             name: "Empty Command",
@@ -100,7 +98,6 @@ describe("dispatcher", async () => {
         //             match: /^ERROR: Command for 'dispatcher' is disabled./,
         //         },
         //     ];
-
         //     it.each(errorCommands)("$name", async ({ command, match }) => {
         //         await dispatcher.processCommand(command);
         //         expect(output).toHaveLength(1);
@@ -111,7 +108,6 @@ describe("dispatcher", async () => {
         //         expect(content.content).toMatch(match);
         //     });
         // });
-
         // it("Alternate request handler", async () => {
         //     const output: IAgentMessage[] = [];
         //     const dispatcher = await createDispatcher("test", {
@@ -121,7 +117,6 @@ describe("dispatcher", async () => {
         //     await dispatcher.processCommand("@config request test");
         //     await dispatcher.processCommand("test");
         //     await dispatcher.close();
-
         //     expect(output).toHaveLength(2);
         //     expect(output[0].message).toBe(
         //         "Natural langue request handling agent is set to 'test'",
