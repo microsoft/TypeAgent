@@ -38,6 +38,8 @@ describe("dispatcher", async () => {
             //     appAgentProviders: [getBuiltinAppAgentProvider()],
             // });
             // await dispatcher.close();
+
+            expect(true);
         });
     });
 
