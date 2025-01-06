@@ -529,12 +529,14 @@ async function getTabHTML(
     fullSize: boolean,
     downloadAsFile: boolean,
     useDebugAPI?: boolean,
+    useTimestampIds?: boolean,
 ) {
     if (!useDebugAPI) {
         let outerHTML = await chrome.tabs.sendMessage(targetTab.id!, {
             type: "get_reduced_html",
             fullSize: fullSize,
             frameId: 0,
+            useTimestampIds: useTimestampIds,
         });
 
         if (downloadAsFile) {
@@ -590,6 +592,7 @@ async function getTabHTMLFragments(
     fullSize: boolean,
     downloadAsFile: boolean,
     extractText: boolean,
+    useTimestampIds: boolean,
     maxFragmentSize: 16000,
 ) {
     const frames = await chrome.webNavigation.getAllFrames({
@@ -608,6 +611,7 @@ async function getTabHTMLFragments(
                         type: "get_reduced_html",
                         fullSize: fullSize,
                         frameId: frames[i].frameId,
+                        useTimestampIds: useTimestampIds,
                     },
                     { frameId: frames[i].frameId },
                 );
@@ -780,7 +784,6 @@ async function toggleSiteTranslator(targetTab: chrome.tabs.Tab) {
             "www.homedepot.com",
             "www.target.com",
             "www.walmart.com",
-            "www.instacart.com",
         ];
 
         if (commerceHosts.includes(host)) {
@@ -1137,6 +1140,7 @@ async function runBrowserAction(action: any) {
                 action.parameters?.fullHTML,
                 action.parameters?.downloadAsFile,
                 action.parameters?.extractText,
+                action.parameters?.useTimestampIds,
                 16000,
             );
             break;

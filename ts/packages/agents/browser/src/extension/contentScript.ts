@@ -167,9 +167,14 @@ function markInvisibleNodesForCleanup() {
     });
 }
 
-function getPageHTML(fullSize: boolean, documentHtml: string, frameId: number) {
+function getPageHTML(
+    fullSize: boolean,
+    documentHtml: string,
+    frameId: number,
+    useTimestampIds: boolean,
+) {
     if (!documentHtml) {
-        setIdsOnAllElements(frameId);
+        setIdsOnAllElements(frameId, useTimestampIds);
         markInvisibleNodesForCleanup();
         documentHtml = document.children[0].outerHTML;
     }
@@ -186,7 +191,7 @@ function getPageHTML(fullSize: boolean, documentHtml: string, frameId: number) {
 
 function getPageText(documentHtml: string, frameId: number) {
     if (!documentHtml) {
-        setIdsOnAllElements(frameId);
+        setIdsOnAllElements(frameId, false);
         documentHtml = document.body.outerHTML;
     }
 
@@ -225,10 +230,16 @@ function getPageHTMLSubFragments(
 function getPageHTMLFragments(
     documentHtml: string,
     frameId: number,
+    useTimestampIds: boolean,
     maxSize: 16000,
 ) {
     if (!documentHtml) {
-        documentHtml = getPageHTML(false, documentHtml, frameId);
+        documentHtml = getPageHTML(
+            false,
+            documentHtml,
+            frameId,
+            useTimestampIds,
+        );
     }
     const domParser = new DOMParser();
     const doc = domParser.parseFromString(
@@ -449,9 +460,9 @@ function daysIntoYear() {
     );
 }
 
-function setIdsOnAllElements(frameId: number) {
+function setIdsOnAllElements(frameId: number, useTimestampIds?: boolean) {
     const allElements = Array.from(document.getElementsByTagName("*"));
-    const idPrefix = `id_${daysIntoYear()}_${frameId}_`;
+    let idPrefix = `id_${daysIntoYear()}_${frameId}_`;
     const skipIdsFor = [
         "BR",
         "P",
@@ -484,15 +495,25 @@ function setIdsOnAllElements(frameId: number) {
         "OL",
         "LI",
         "LABEL",
+        "PATH",
+        "SVG",
     ];
-    let i = 0;
-    for (let element of allElements) {
+    // let i = 0;
+    for (let i = 0; i < allElements.length; i++) {
+        let element = allElements[i];
+
+        // for (let element of allElements) {
         if (
             !element.hasAttribute("id") &&
-            !skipIdsFor.includes(element.tagName)
+            !skipIdsFor.includes(element.tagName.toUpperCase())
         ) {
-            element.setAttribute("id", idPrefix + i.toString());
-            i++;
+            if (useTimestampIds) {
+                // element.setAttribute("id", idPrefix + performance.now().toString().replace('.', '_'));
+                element.setAttribute("id", idPrefix + i.toString());
+            } else {
+                element.setAttribute("id", idPrefix + i.toString());
+                // i++;
+            }
         }
     }
 }
@@ -581,6 +602,7 @@ async function handleScriptAction(
                 message.fullSize,
                 message.inputHtml,
                 message.frameId,
+                message.useTimestampIds,
             );
             sendResponse(html);
             break;
@@ -607,6 +629,7 @@ async function handleScriptAction(
                 message.inputHtml,
                 message.frameId,
                 message.maxFragmentSize,
+                message.useTimestampIds,
             );
             sendResponse(htmlFragments);
             break;
