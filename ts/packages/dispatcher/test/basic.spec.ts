@@ -45,17 +45,17 @@ describe("dispatcher", async () => {
         describe("Command", async () => {
             const output: IAgentMessage[] = [];
             let dispatcher: Dispatcher;
-            beforeAll(async () => {
+            await beforeAll(async () => {
                 dispatcher = await createDispatcher("test", {
                     appAgentProviders: [testAppAgentProvider],
                     commands: { test: true },
                     clientIO: createTestClientIO(output),
                 });
             });
-            beforeEach(() => {
+            await beforeEach(() => {
                 output.length = 0;
             });
-            afterAll(async () => {
+            await afterAll(async () => {
                 if (dispatcher) {
                     await dispatcher.close();
                 }
