@@ -11,9 +11,6 @@ import {
     nullClientIO,
 } from "../src/context/interactiveIO.js";
 
-// Resolves: 'ReferenceError: You are trying to `import` a file after the Jest environment has been torn down.'
-jest.useFakeTimers();
-
 const testAppAgentProvider = createNpmAppAgentProvider(
     {
         test: {

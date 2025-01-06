@@ -2,3 +2,7 @@
 // Licensed under the MIT License.
 
 module.exports = require("../../jest.config.js");
+
+module.exports = {
+    timers: "fake",
+  };
