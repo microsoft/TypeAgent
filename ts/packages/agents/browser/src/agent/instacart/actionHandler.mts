@@ -140,7 +140,6 @@ export async function handleInstacartAction(
       )) as AllListsInfo;
 
       if (targetList) {
-        // se
         await browser.clickOn(targetList.lists[0].cssSelector);
         await browser.clickOn(targetList.submitButtonCssSelector);
       }
@@ -185,7 +184,7 @@ export async function handleInstacartAction(
     )) as StoreInfo;
 
     await browser.clickOn(targetStore.storeLinkCssSelector);
-    await browser.awaitPageInteraction();
+    await browser.awaitPageInteraction(1000);
     await browser.awaitPageLoad(5000);
   }
 
@@ -252,6 +251,7 @@ export async function handleInstacartAction(
 
     if (navigationLink) {
       await browser.clickOn(navigationLink.linkCssSelector);
+      await browser.awaitPageInteraction();
       await browser.awaitPageLoad();
 
       const request = `List name: ${action.listName}`;
@@ -287,19 +287,24 @@ export async function handleInstacartAction(
       "BuyItAgainNavigationLink",
     )) as BuyItAgainNavigationLink;
 
+    console.log(navigationLink);
+
     if (navigationLink) {
       await browser.clickOn(navigationLink.linkCssSelector);
+      await browser.awaitPageInteraction();
       await browser.awaitPageLoad();
 
       const headerSection = (await getComponentFromPage(
         "BuyItAgainHeaderSection",
       )) as BuyItAgainHeaderSection;
+      console.log(headerSection);
 
       if (headerSection && headerSection.products) {
         if (action.parameters.allItems) {
           for (let product of headerSection.products) {
             if (product.addToCartButton) {
               await browser.clickOn(product.addToCartButton.cssSelector);
+              await browser.awaitPageInteraction();
             }
           }
         } else {
@@ -310,6 +315,7 @@ export async function handleInstacartAction(
           )) as ProductTile;
           if (targetProduct && targetProduct.addToCartButton) {
             await browser.clickOn(targetProduct.addToCartButton.cssSelector);
+            await browser.awaitPageInteraction();
           }
         }
       }
