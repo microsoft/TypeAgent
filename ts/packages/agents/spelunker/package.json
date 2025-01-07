@@ -1,19 +1,19 @@
 {
-  "name": "oracle-agent",
-  "version": "0.0.1",
-  "description": "Oracle dispatcher agent",
+  "name": "spelunker-agent",
+  "version": "0.1.0",
+  "description": "Spelunker dispatcher agent",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {
     "type": "git",
     "url": "https://github.com/microsoft/TypeAgent.git",
-    "directory": "ts/packages/agents/oracle"
+    "directory": "ts/packages/agents/spelunker"
   },
   "license": "MIT",
   "author": "Microsoft",
   "type": "module",
   "exports": {
-    "./agent/manifest": "./src/oracleManifest.json",
-    "./agent/handlers": "./dist/oracleActionHandler.js"
+    "./agent/manifest": "./src/spelunkerManifest.json",
+    "./agent/handlers": "./dist/spelunkerActionHandler.js"
   },
   "scripts": {
     "build": "npm run tsc",
