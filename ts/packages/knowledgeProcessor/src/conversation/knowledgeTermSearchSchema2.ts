@@ -48,7 +48,7 @@ export type TermFilterV2 = {
     // - Phrases like 'email address' or 'first name' are a single term
     // - use empty term array for summaries
     searchTerms?: SearchTerm[];
-    // Use only if request explicitly asks for time range
+    // Use only if request explicitly asks for time range, particular year, month etc.
     timeRange?: DateTimeRange | undefined; // in this time range
 };
 

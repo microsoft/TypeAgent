@@ -84,6 +84,7 @@ export async function createEmailMemory(
         emailSettings,
         storage,
     );
+    memory.searchProcessor.answers.settings.chunking.enable = true;
     memory.searchProcessor.answers.settings.chunking.fastStop = true;
     return memory;
 }

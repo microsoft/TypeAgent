@@ -25,6 +25,8 @@ import {
     ensureDir,
     getFileName,
     readAllText,
+    SearchOptions,
+    mathLib,
 } from "typeagent";
 import chalk, { ChalkInstance } from "chalk";
 import { ChatMemoryPrinter } from "./chatMemoryPrinter.js";
@@ -1147,7 +1149,6 @@ export async function runChatMemory(): Promise<void> {
                 debug: argBool("Show debug info", false),
                 save: argBool("Save the search", false),
                 v2: argBool("Run V2 match", false),
-                chunk: argBool("Use chunking", true),
             },
         };
     }
@@ -1190,6 +1191,7 @@ export async function runChatMemory(): Promise<void> {
         namedArgs.v2 = true;
         namedArgs.skipActions = true;
         namedArgs.skipEntities = true;
+        namedArgs.skipMessages = true;
         const searchResponse = await searchConversation(
             context.searcher,
             true,
@@ -1243,16 +1245,35 @@ export async function runChatMemory(): Promise<void> {
     commands.rag.metadata = ragDef();
     async function rag(args: string[]) {
         const namedArgs = parseNamedArguments(args, ragDef());
-        const response = await context.searcher.searchMessages(
-            namedArgs.query,
-            {
+        let prevStats: knowLib.IndexingStats | undefined;
+        try {
+            prevStats = context.stats;
+            context.stats = knowLib.createIndexingStats();
+            context.stats.startItem();
+
+            const options: SearchOptions = {
                 maxMatches: namedArgs.maxMatches,
                 minScore: namedArgs.minScore,
-            },
-        );
-        const answer = response.answer;
-        if (answer) {
-            printer.writeAnswer(answer);
+            };
+            printer.writeInColor(
+                chalk.cyan,
+                `Searching ${context.conversationName}\nmaxMessages:${options.maxMatches}\nminScore: ${options.minScore} [${Math.round(mathLib.angleDegreesFromCosine(options.minScore!))} degrees]`,
+            );
+            const response = await context.searcher.searchMessages(
+                namedArgs.query,
+                options,
+            );
+            const answer = response.answer;
+            if (answer) {
+                printer.writeLine();
+                printer.writeResultStats(response);
+                printer.writeCompletionStats(
+                    context.stats!.totalStats.tokenStats,
+                );
+                printer.writeAnswer(answer);
+            }
+        } catch {
+            context.stats = prevStats;
         }
     }
 
@@ -1357,6 +1378,10 @@ export async function runChatMemory(): Promise<void> {
         if (!query || query.length === 0) {
             return undefined;
         }
+        printer.writeInColor(
+            chalk.cyan,
+            `Searching ${context.conversationName}`,
+        );
         const searchOptions: conversation.SearchProcessingOptions = {
             maxMatches,
             minScore,
@@ -1388,7 +1413,7 @@ export async function runChatMemory(): Promise<void> {
             return undefined;
         }
 
-        searcher.answers.settings.chunking.enable = true; //namedArgs.chunk === true;
+        //searcher.answers.settings.chunking.enable = true;
 
         const timestampQ = new Date();
         let result:

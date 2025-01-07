@@ -82,6 +82,7 @@ export async function createPodcastMemory(
     cm.searchProcessor.settings.defaultEntitySearchOptions.topK = 10;
     //cm.searchProcessor.settings.defaultEntitySearchOptions.alwaysUseTags = true;
     cm.searchProcessor.answers.settings.chunking.fastStop = true;
+    cm.searchProcessor.answers.settings.chunking.enable = true;
     cm.searchProcessor.answers.settings.hints =
         //"When answering questions about 'conversation' include all entities, topics and messages from [CONVERSATION HISTORY].\n" +
         //"What was talked about/discussed is in conversation history as entities, topics and messages. Be sure to use them, not just messages.\n" +
