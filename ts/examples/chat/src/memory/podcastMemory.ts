@@ -26,6 +26,7 @@ import {
     argPause,
     argSourceFileOrFolder,
     argToDate,
+    manageConversationAlias,
 } from "./common.js";
 import path from "path";
 import {
@@ -36,6 +37,7 @@ import {
     getFileName,
     isDirectoryPath,
     isFilePath,
+    NameValue,
     removeDir,
 } from "typeagent";
 import { runImportQueue } from "./importer.js";
@@ -75,7 +77,17 @@ export async function createPodcastMemory(
         podcastStorePath,
         storageProvider,
     );
+    cm.searchProcessor.settings.defaultEntitySearchOptions =
+        conversation.createEntitySearchOptions(true);
+    cm.searchProcessor.settings.defaultEntitySearchOptions.topK = 10;
+    //cm.searchProcessor.settings.defaultEntitySearchOptions.alwaysUseTags = true;
     cm.searchProcessor.answers.settings.chunking.fastStop = true;
+    cm.searchProcessor.answers.settings.hints =
+        //"When answering questions about 'conversation' include all entities, topics and messages from [CONVERSATION HISTORY].\n" +
+        //"What was talked about/discussed is in conversation history as entities, topics and messages. Be sure to use them, not just messages.\n" +
+        "Always use supplied messages, ENTITIES AND ANSWERS in your answers.\n" +
+        `E.g. include entities in answers to queries like "'they' talked about' \n` +
+        "Queries for lists always mean 'full list'.";
     return cm;
 }
 
@@ -88,6 +100,10 @@ export function createPodcastCommands(
     commands.podcastIndex = podcastIndex;
     commands.podcastAddThread = podcastAddThread;
     commands.podcastListThreads = podcastListThreads;
+    commands.podcastAddThreadTag = podcastAddThreadTag;
+    commands.podcastRemoveThreadTag = podcastRemoveThreadTag;
+    //commands.podcastListThreadEntities = podcastListThreadEntities;
+    commands.podcastAlias = podcastAlias;
     commands.podcastEntities = podcastEntities;
     commands.podcastSearch = podcastSearch;
 
@@ -99,8 +115,8 @@ export function createPodcastCommands(
             description: "Import a podcast transcript.",
             args: {
                 sourcePath: argSourceFileOrFolder(),
-                name: arg("Thread name"),
-                description: arg("Thread description"),
+                name: arg("Podcast name"),
+                description: arg("Podcast description"),
             },
             options: {
                 startAt: arg("Start date and time"),
@@ -121,6 +137,15 @@ export function createPodcastCommands(
         }
 
         await podcastConvert(namedArgs);
+        /*
+        await conversation.importTranscript(
+            sourcePath,
+            namedArgs.name,
+            namedArgs.description,
+            namedArgs.startAt,
+            namedArgs.length,
+        );
+        */
         await podcastAddThread(namedArgs);
         const turnsFilePath = getTurnsFolderPath(sourcePath);
         namedArgs.sourcePath = turnsFilePath;
@@ -548,13 +573,178 @@ export function createPodcastCommands(
     async function podcastListThreads(args: string[]) {
         const threads =
             await context.podcastMemory.conversation.getThreadIndex();
-        const allThreads: conversation.ConversationThread[] =
+        const allThreads: NameValue<conversation.ConversationThread>[] =
             await asyncArray.toArray(threads.entries());
         for (let i = 0; i < allThreads.length; ++i) {
             const t = allThreads[i];
-            context.printer.writeLine(`[${i}]`);
-            writeThread(t);
+            context.printer.writeLine(`[${i + 1}] Id: ${t.name}`);
+            const tags = await threads.tagIndex.getTagsFor(t.name);
+            writeThread(t.value, tags);
         }
+    }
+
+    function podcastAddThreadTagDef(): CommandMetadata {
+        return {
+            description: "Add tags for a sub-thread to the podcast index",
+            args: {
+                threadId: arg("Thread Id"),
+            },
+            options: {
+                name: arg("name"),
+                tag: arg("Tag"),
+            },
+        };
+    }
+    commands.podcastAddThreadTag.metadata = podcastAddThreadTagDef();
+    async function podcastAddThreadTag(args: string[]) {
+        const namedArgs = parseNamedArguments(args, podcastAddThreadTagDef());
+        const threadIndex =
+            await context.podcastMemory.conversation.getThreadIndex();
+        const threadId = namedArgs.threadId;
+        const thread = await threadIndex.getById(threadId);
+        if (thread) {
+            const tags: string[] = [];
+            if (namedArgs.name) {
+                const pName = conversation.splitParticipantName(namedArgs.name);
+                if (pName) {
+                    tags.push(pName.firstName);
+                    tags.push(namedArgs.name);
+                }
+            }
+            if (namedArgs.tag) {
+                tags.push(namedArgs.tag);
+            }
+            if (tags && tags.length > 0) {
+                context.printer.writeLine(
+                    `Adding tags to: ${thread.description}\n---`,
+                );
+                for (const tag of tags) {
+                    context.printer.writeLine(tag);
+                    await threadIndex.tagIndex.addTag(tag, threadId);
+                }
+            }
+        } else {
+            context.printer.writeLine("Thread not found");
+        }
+    }
+
+    function podcastRemoveThreadTagDef(): CommandMetadata {
+        return {
+            description: "Remove tags for a sub-thread to the podcast index",
+            args: {
+                threadId: arg("Thread Id"),
+                tag: arg("Tag"),
+            },
+        };
+    }
+    commands.podcastRemoveThreadTag.metadata = podcastRemoveThreadTagDef();
+    async function podcastRemoveThreadTag(args: string[]) {
+        const namedArgs = parseNamedArguments(
+            args,
+            podcastRemoveThreadTagDef(),
+        );
+        const threadIndex =
+            await context.podcastMemory.conversation.getThreadIndex();
+        const threadId = namedArgs.threadId;
+        const thread = await threadIndex.getById(threadId);
+        if (thread) {
+            context.printer.writeLine(
+                `Remove tag ${namedArgs.tag} from: ${thread.description}\n---`,
+            );
+            await threadIndex.tagIndex.removeTag(namedArgs.tag, threadId);
+        } else {
+            context.printer.writeLine("Thread not found");
+        }
+    }
+    /*
+    function podcastAddThreadTagsDef(): CommandMetadata {
+        return {
+            description: "Add tags for a sub-thread to the podcast index",
+            args: {
+                sourcePath: argSourceFileOrFolder(),
+                startAt: arg("Start date and time"),
+                length: argNum("Length of the podcast in minutes", 60),
+            },
+        };
+    }
+    commands.podcastAddThreadTags.metadata = podcastAddThreadTagsDef();
+    async function podcastAddThreadTags(args: string[]) {
+        const namedArgs = parseNamedArguments(args, podcastAddThreadTagsDef());
+        const timeRange = conversation.parseTranscriptDuration(
+            namedArgs.startAt,
+            namedArgs.length,
+        );
+        const threadTags = conversation.getTranscriptTags(
+            await conversation.loadTurnsFromTranscriptFile(
+                namedArgs.sourcePath,
+            ),
+        );
+        context.printer.writeTitle(`${threadTags.length} tags:`);
+        context.printer.writeList(threadTags);
+        context.printer.writeLine();
+        const entityIndex =
+            await context.podcastMemory.conversation.getEntityIndex();
+
+        const entityIds = await entityIndex.getEntityIdsInTimeRange(
+            conversation.toStartDate(timeRange.startDate),
+            conversation.toStopDate(timeRange.stopDate),
+        );
+        await writeEntities(entityIndex, entityIds);
+        if (entityIds && entityIds.length > 0) {
+            context.printer.writeLine(
+                `Adding tags to ${entityIds.length} entities`,
+            );
+            await asyncArray.forEachAsync(threadTags, 1, async (tag) => {
+                await entityIndex.addTag(tag, entityIds);
+            });
+        }
+    }
+
+    function podcastListThreadEntitiesDef() {
+        return {
+            description: "List tags for a sub-thread to the podcast index",
+            args: {
+                sourcePath: argSourceFileOrFolder(),
+            },
+        };
+    }
+    commands.podcastListThreadEntities.metadata =
+        podcastListThreadEntitiesDef();
+    async function podcastListThreadEntities(args: string[]) {
+        const namedArgs = parseNamedArguments(
+            args,
+            podcastListThreadEntitiesDef(),
+        );
+        const threadTags = conversation.getTranscriptTags(
+            await conversation.loadTurnsFromTranscriptFile(
+                namedArgs.sourcePath,
+            ),
+        );
+        const entityIndex =
+            await context.podcastMemory.conversation.getEntityIndex();
+        const entityIds = await entityIndex.getByTag(threadTags);
+        await writeEntities(entityIndex, entityIds);
+    }
+    */
+
+    function podcastAliasDef(): CommandMetadata {
+        return {
+            description: "Add an alias for a participants's name",
+            options: {
+                name: arg("Person's name"),
+                alias: arg("Alias"),
+            },
+        };
+    }
+    commands.podcastAlias.metadata = podcastAliasDef();
+    async function podcastAlias(args: string[]) {
+        const namedArgs = parseNamedArguments(args, podcastAliasDef());
+        await manageConversationAlias(
+            context.podcastMemory,
+            context.printer,
+            namedArgs.name,
+            namedArgs.alias,
+        );
     }
 
     return;
@@ -624,7 +814,7 @@ export function createPodcastCommands(
         context.printer.writeLine(
             `Saving ${turns.length} turns to ${turnsFolderPath}`,
         );
-        await conversation.saveTranscriptTurns(
+        await conversation.saveTranscriptTurnsToFolder(
             turnsFolderPath,
             transcriptFileName,
             turns,
@@ -648,11 +838,43 @@ export function createPodcastCommands(
         );
     }
 
-    function writeThread(t: conversation.ConversationThread) {
+    function writeThread(
+        t: conversation.ConversationThread,
+        tags: string[] | undefined = undefined,
+    ) {
         context.printer.writeLine(t.description);
         const range = conversation.toDateRange(t.timeRange);
         context.printer.writeLine(range.startDate.toISOString());
         context.printer.writeLine(range.stopDate!.toISOString());
+        if (tags && tags.length > 0) {
+            context.printer.writeInColor(
+                chalk.cyan,
+                "Tags: " + tags.join(", "),
+            );
+        }
         context.printer.writeLine();
     }
+
+    /*
+    async function writeEntities(
+        entityIndex: conversation.EntityIndex,
+        entityIds: string[] | undefined,
+    ) {
+        if (entityIds && entityIds.length > 0) {
+            context.printer.writeInColor(
+                chalk.green,
+                `### ${entityIds.length} entities ###`,
+            );
+            const entities = await entityIndex.getMultiple(entityIds);
+            context.printer.writeCompositeEntities([
+                ...conversation.toCompositeEntities(entities),
+            ]);
+            context.printer.writeInColor(
+                chalk.green,
+                `### ${entityIds.length} entities ###`,
+            );
+        } else {
+            context.printer.writeLine("No entities");
+        }
+    }*/
 }

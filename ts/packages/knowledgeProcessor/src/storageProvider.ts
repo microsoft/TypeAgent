@@ -7,11 +7,7 @@ import {
     ObjectFolder,
     ObjectFolderSettings,
 } from "typeagent";
-import {
-    createTextIndex,
-    TextIndex,
-    TextIndexSettings,
-} from "./knowledgeIndex.js";
+import { createTextIndex, TextIndex, TextIndexSettings } from "./textIndex.js";
 import path from "path";
 import {
     createTemporalLog,

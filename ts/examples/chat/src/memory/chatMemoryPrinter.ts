@@ -141,17 +141,28 @@ export class ChatMemoryPrinter extends ChatPrinter {
     }
 
     public writeExtractedEntities(
-        entities?: (conversation.ExtractedEntity | undefined)[],
+        entities?:
+            | conversation.ExtractedEntity
+            | (conversation.ExtractedEntity | undefined)[]
+            | undefined,
     ): void {
-        if (entities && entities.length > 0) {
-            this.writeTitle("Entities");
-            for (const entity of entities) {
-                if (entity) {
-                    this.writeCompositeEntity(
-                        conversation.toCompositeEntity(entity.value),
-                    );
-                    this.writeLine();
+        if (entities) {
+            if (Array.isArray(entities)) {
+                if (entities.length > 0) {
+                    this.writeTitle("Entities");
+                    for (const entity of entities) {
+                        if (entity) {
+                            this.writeCompositeEntity(
+                                conversation.toCompositeEntity(entity.value),
+                            );
+                            this.writeLine();
+                        }
+                    }
                 }
+            } else {
+                this.writeCompositeEntity(
+                    conversation.toCompositeEntity(entities.value),
+                );
             }
         }
     }
@@ -160,6 +171,8 @@ export class ChatMemoryPrinter extends ChatPrinter {
         entities: (conversation.CompositeEntity | undefined)[],
     ): void {
         if (entities && entities.length > 0) {
+            entities = knowLib.sets.removeUndefined(entities);
+            entities.sort((x, y) => x!.name.localeCompare(y!.name));
             this.writeTitle("Entities");
             for (const entity of entities) {
                 this.writeCompositeEntity(entity);

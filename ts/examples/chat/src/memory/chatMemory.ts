@@ -199,8 +199,8 @@ export async function createChatMemoryContext(
             models,
             storePath,
             conversationSettings,
-            false,
             true,
+            false,
             false,
         ),
     };
@@ -1159,6 +1159,7 @@ export async function runChatMemory(): Promise<void> {
         def.options.skipEntities = argBool("Skip entity matching", false);
         def.options.skipActions = argBool("Skip action matching", false);
         def.options.skipTopics = argBool("Skip topics matching", false);
+        def.options.skipMessages = argBool("Skip loading messages", false);
         def.options.threads = argBool("Use most likely thread", false);
         return def;
     }
@@ -1368,6 +1369,7 @@ export async function runChatMemory(): Promise<void> {
             searchOptions.skipEntitySearch = namedArgs.skipEntities;
             searchOptions.skipActionSearch = namedArgs.skipActions;
             searchOptions.skipTopicSearch = namedArgs.skipTopics;
+            searchOptions.skipMessages = namedArgs.skipMessages;
             result = await searcher.searchTermsV2(
                 query,
                 undefined,

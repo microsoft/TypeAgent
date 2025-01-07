@@ -10,6 +10,7 @@ import {
     SourceTextBlock,
 } from "knowledge-processor";
 import { asyncArray, ChatUserInterface, dateTime } from "typeagent";
+import { ChatMemoryPrinter } from "./chatMemoryPrinter.js";
 
 export async function pause(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
@@ -193,4 +194,26 @@ export function getSearchQuestion(
         return (params as any).question;
     }
     return undefined;
+}
+
+export async function manageConversationAlias(
+    cm: conversation.ConversationManager,
+    printer: ChatMemoryPrinter,
+    name: string | undefined,
+    alias: string | undefined,
+) {
+    const aliases = (await cm.conversation.getEntityIndex()).nameAliases;
+    if (name && alias) {
+        await aliases.addAlias(alias, name);
+    } else if (alias) {
+        const names = await aliases.getByAlias(alias);
+        if (names) {
+            printer.writeLines(names);
+        }
+    } else {
+        for await (const entry of aliases.entries()) {
+            printer.writeLine(entry.name);
+            printer.writeList(entry.value, { type: "ul" });
+        }
+    }
 }
