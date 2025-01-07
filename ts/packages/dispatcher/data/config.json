@@ -1,21 +1,5 @@
 {
   "agents": {
-    "player": {
-      "name": "music",
-      "imports": [
-        "./test/data/player/**/*.json"
-      ]
-    },
-    "calendar": {
-      "name": "calendar",
-      "imports": [
-        "./test/data/calendar/**/*.json"
-      ],
-      "execMode": "dispatcher"
-    },
-    "email": {
-      "name": "email"
-    },
     "list": {
       "name": "list-agent"
     },
@@ -29,28 +13,7 @@
       "name": "chat-agent",
       "execMode": "dispatcher"
     },
-    "photo": {
-      "name": "photo-agent",
-      "execMode": "dispatcher"
-    },
-    "greeting": {
-      "name": "greeting-agent",
-      "execMode": "dispatcher"
-    },
-    "image": {
-      "name": "image-agent",
-      "execMode": "dispatcher"
-    },
-    "androidMobile": {
-      "name": "android-mobile-agent",
-      "execMode": "dispatcher"
-    },
-    "markdown": {
-      "name": "markdown-agent"
-    },
-    "oracle": {
-      "name": "oracle-agent"
-    }
+
   },
   "explainers": {
     "v5": {
