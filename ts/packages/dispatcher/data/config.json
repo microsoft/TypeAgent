@@ -25,9 +25,6 @@
     "desktop": {
       "name": "desktop-automation"
     },
-    "code": {
-      "name": "code-agent"
-    },
     "chat": {
       "name": "chat-agent",
       "execMode": "dispatcher"
