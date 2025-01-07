@@ -65,7 +65,7 @@ async function loadModuleAgent(
     const require = getRequire(info, requirePath);
     // file:// is require so that on windows the drive name doesn't get confused with the protocol name for `import()`
     const handlerPath = `file://${require.resolve(`${info.name}/agent/handlers`)}`;
-    const execMode = info.execMode ?? ExecutionMode.SeparateProcess;
+    const execMode = info.execMode ?? ExecutionMode.DispatcherProcess;
     if (enableExecutionMode() && execMode === ExecutionMode.SeparateProcess) {
         return createAgentProcess(handlerPath);
     }
