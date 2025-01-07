@@ -166,6 +166,7 @@ export interface TagIndex<TTagId = any, TId = any> {
     addTag(tag: string, id: TId): Promise<TTagId>;
     getByTag(tag: string | string[]): Promise<TId[] | undefined>;
     getTagsFor(id: TId): Promise<string[] | undefined>;
+    removeTag(tag: string, id: TId): Promise<void>;
 }
 
 export async function createTagIndexOnStorage(
@@ -195,6 +196,7 @@ export async function createTagIndexOnStorage(
     return {
         tags,
         addTag,
+        removeTag,
         getByTag,
         getTagsFor,
     };
@@ -207,6 +209,13 @@ export async function createTagIndexOnStorage(
         const tagId = await tagIndex.put(tag, [id]);
         await sourceIndex.put([tagId], id);
         return tagId;
+    }
+
+    async function removeTag(tag: string, id: TId): Promise<void> {
+        const tagId = await tagIndex.getId(tag);
+        if (tagId) {
+            await tagIndex.remove(tagId, [id]);
+        }
     }
 
     async function getByTag(

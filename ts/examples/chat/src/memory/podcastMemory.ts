@@ -69,8 +69,15 @@ export async function createPodcastMemory(
     );
     cm.searchProcessor.settings.defaultEntitySearchOptions =
         conversation.createEntitySearchOptions(true);
+    cm.searchProcessor.settings.defaultEntitySearchOptions.topK = 10;
     //cm.searchProcessor.settings.defaultEntitySearchOptions.alwaysUseTags = true;
     cm.searchProcessor.answers.settings.chunking.fastStop = true;
+    cm.searchProcessor.answers.settings.hints =
+        //"When answering questions about 'conversation' include all entities, topics and messages from [CONVERSATION HISTORY].\n" +
+        //"What was talked about/discussed is in conversation history as entities, topics and messages. Be sure to use them, not just messages.\n" +
+        "Always use supplied messages, ENTITIES AND ANSWERS in your answers.\n" +
+        `E.g. include entities in answers to queries like "'they' talked about' \n` +
+        "Queries for lists always mean 'full list'.";
     return cm;
 }
 
@@ -84,6 +91,7 @@ export function createPodcastCommands(
     commands.podcastAddThread = podcastAddThread;
     commands.podcastListThreads = podcastListThreads;
     commands.podcastAddThreadTag = podcastAddThreadTag;
+    commands.podcastRemoveThreadTag = podcastRemoveThreadTag;
     //commands.podcastListThreadEntities = podcastListThreadEntities;
     commands.podcastAlias = podcastAlias;
 
@@ -290,6 +298,34 @@ export function createPodcastCommands(
         }
     }
 
+    function podcastRemoveThreadTagDef(): CommandMetadata {
+        return {
+            description: "Remove tags for a sub-thread to the podcast index",
+            args: {
+                threadId: arg("Thread Id"),
+                tag: arg("Tag"),
+            },
+        };
+    }
+    commands.podcastRemoveThreadTag.metadata = podcastRemoveThreadTagDef();
+    async function podcastRemoveThreadTag(args: string[]) {
+        const namedArgs = parseNamedArguments(
+            args,
+            podcastRemoveThreadTagDef(),
+        );
+        const threadIndex =
+            await context.podcastMemory.conversation.getThreadIndex();
+        const threadId = namedArgs.threadId;
+        const thread = await threadIndex.getById(threadId);
+        if (thread) {
+            context.printer.writeLine(
+                `Remove tag ${namedArgs.tag} from: ${thread.description}\n---`,
+            );
+            await threadIndex.tagIndex.removeTag(namedArgs.tag, threadId);
+        } else {
+            context.printer.writeLine("Thread not found");
+        }
+    }
     /*
     function podcastAddThreadTagsDef(): CommandMetadata {
         return {
