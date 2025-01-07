@@ -34,7 +34,7 @@
     },
     "photo": {
       "name": "photo-agent",
-      "execMode": "separate"
+      "execMode": "dispatcher"
     },
     "greeting": {
       "name": "greeting-agent",
