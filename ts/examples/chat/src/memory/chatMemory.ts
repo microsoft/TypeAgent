@@ -367,6 +367,7 @@ export async function runChatMemory(): Promise<void> {
             printer.write(".");
         }
     }
+
     //--------------------
     //
     // COMMANDS
@@ -1236,7 +1237,7 @@ export async function runChatMemory(): Promise<void> {
                 query: arg("Search query"),
             },
             options: {
-                maxMatches: argNum("Maximum fuzzy matches", 50),
+                maxMessages: argNum("Maximum fuzzy matches", 50),
                 minScore: argNum("Minimum similarity score", 0.8),
                 chunk: argBool("Use chunking", true),
             },
@@ -1245,14 +1246,10 @@ export async function runChatMemory(): Promise<void> {
     commands.rag.metadata = ragDef();
     async function rag(args: string[]) {
         const namedArgs = parseNamedArguments(args, ragDef());
-        let prevStats: knowLib.IndexingStats | undefined;
+        let prevStats = beginCountingTokens();
         try {
-            prevStats = context.stats;
-            context.stats = knowLib.createIndexingStats();
-            context.stats.startItem();
-
             const options: SearchOptions = {
-                maxMatches: namedArgs.maxMatches,
+                maxMatches: namedArgs.maxMessages,
                 minScore: namedArgs.minScore,
             };
             printer.writeInColor(
@@ -1267,13 +1264,11 @@ export async function runChatMemory(): Promise<void> {
             if (answer) {
                 printer.writeLine();
                 printer.writeResultStats(response);
-                printer.writeCompletionStats(
-                    context.stats!.totalStats.tokenStats,
-                );
+                writeTokenStats();
                 printer.writeAnswer(answer);
             }
         } catch {
-            context.stats = prevStats;
+            endCountingTokens(prevStats);
         }
     }
 
@@ -1414,47 +1409,57 @@ export async function runChatMemory(): Promise<void> {
         }
 
         //searcher.answers.settings.chunking.enable = true;
-
-        const timestampQ = new Date();
-        let result:
-            | conversation.SearchTermsActionResponse
-            | conversation.SearchTermsActionResponseV2
-            | undefined;
-        if (namedArgs.v2) {
-            searchOptions.skipEntitySearch = namedArgs.skipEntities;
-            searchOptions.skipActionSearch = namedArgs.skipActions;
-            searchOptions.skipTopicSearch = namedArgs.skipTopics;
-            searchOptions.skipMessages = namedArgs.skipMessages;
-            result = await searcher.searchTermsV2(
-                query,
-                undefined,
-                searchOptions,
-            );
-        } else {
-            result = await searcher.searchTerms(
-                query,
-                undefined,
-                searchOptions,
-            );
-        }
-        if (!result) {
-            printer.writeError("No result");
-            return undefined;
-        }
-        printer.writeLine();
-        printer.writeSearchTermsResult(result, namedArgs.debug);
-        if (result.response && result.response.answer) {
-            if (namedArgs.save && recordAnswer) {
-                let answer = result.response.answer.answer;
-                if (!answer) {
-                    answer = result.response.answer.whyNoAnswer;
-                }
-                if (answer) {
-                    recordQuestionAnswer(query, timestampQ, answer, new Date());
+        let prevStats = beginCountingTokens();
+        try {
+            const timestampQ = new Date();
+            let result:
+                | conversation.SearchTermsActionResponse
+                | conversation.SearchTermsActionResponseV2
+                | undefined;
+            if (namedArgs.v2) {
+                searchOptions.skipEntitySearch = namedArgs.skipEntities;
+                searchOptions.skipActionSearch = namedArgs.skipActions;
+                searchOptions.skipTopicSearch = namedArgs.skipTopics;
+                searchOptions.skipMessages = namedArgs.skipMessages;
+                result = await searcher.searchTermsV2(
+                    query,
+                    undefined,
+                    searchOptions,
+                );
+            } else {
+                result = await searcher.searchTerms(
+                    query,
+                    undefined,
+                    searchOptions,
+                );
+            }
+            if (!result) {
+                printer.writeError("No result");
+                return undefined;
+            }
+            printer.writeLine();
+            writeTokenStats();
+            printer.writeSearchTermsResult(result, namedArgs.debug);
+            if (result.response && result.response.answer) {
+                if (namedArgs.save && recordAnswer) {
+                    let answer = result.response.answer.answer;
+                    if (!answer) {
+                        answer = result.response.answer.whyNoAnswer;
+                    }
+                    if (answer) {
+                        recordQuestionAnswer(
+                            query,
+                            timestampQ,
+                            answer,
+                            new Date(),
+                        );
+                    }
                 }
             }
+            return result.response;
+        } finally {
+            endCountingTokens(prevStats);
         }
-        return result.response;
     }
 
     async function writeSearchResponse(
@@ -1751,6 +1756,23 @@ export async function runChatMemory(): Promise<void> {
 
     function writeProgress(value: string, i: number, total: number) {
         printer.writeLine(`${i + 1}/${total} ${value}`);
+    }
+
+    function beginCountingTokens() {
+        const prevStats = context.stats;
+        context.stats = knowLib.createIndexingStats();
+        context.stats.startItem();
+        return prevStats;
+    }
+
+    function endCountingTokens(prevStats: knowLib.IndexingStats | undefined) {
+        context.stats = prevStats;
+    }
+
+    function writeTokenStats() {
+        if (context.stats) {
+            printer.writeCompletionStats(context.stats.totalStats.tokenStats);
+        }
     }
 
     await runConsole({
