@@ -10,8 +10,7 @@
       "name": "calendar",
       "imports": [
         "./test/data/calendar/**/*.json"
-      ],
-      "execMode": "dispatcher"
+      ]
     },
     "email": {
       "name": "email"
@@ -34,7 +33,7 @@
     },
     "photo": {
       "name": "photo-agent",
-      "execMode": "dispatcher"
+      "execMode": "separate"
     },
     "greeting": {
       "name": "greeting-agent",
