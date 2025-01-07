@@ -23,13 +23,12 @@
     "prettier": "prettier --check . --ignore-path ../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
     "test": "node --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js --testPathPattern=\".*\\.spec\\.js\"",
-    "test:base": "node --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js --testPathPattern=basic.spec.js --detectOpenHandles",
     "test:debug": "node --inspect-brk --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js --testPathPattern=\".*\\.spec\\.js\"",
     "test:full": "node --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js",
     "tsc": "tsc -b"
   },
   "dependencies": {
-    "@azure/msal-node-extensions": "1.0.12",
+    "@azure/msal-node-extensions": "^1.5.0",
     "@typeagent/agent-sdk": "workspace:*",
     "action-schema": "workspace:*",
     "agent-cache": "workspace:*",
