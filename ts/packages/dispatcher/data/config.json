@@ -12,7 +12,7 @@
     "chat": {
       "name": "chat-agent",
       "execMode": "dispatcher"
-    },
+    }
 
   },
   "explainers": {
