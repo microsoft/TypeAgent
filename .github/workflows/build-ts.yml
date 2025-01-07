@@ -39,10 +39,11 @@ jobs:
 
     runs-on: ${{ matrix.os }}
     steps:
-      - name: Install libsecret
+      - if: runner.os == 'Linux'
         run: |
-          if [ "$RUNNER_OS" == "Linux" ]; then
-            apt install libsecret-1-0
+          apt install libsecret-1-0
+#          if [ "$RUNNER_OS" == "Linux" ]; then
+#            -ifapt install libsecret-1-0
       - name: Setup Git LF
         run: |
           git config --global core.autocrlf false
