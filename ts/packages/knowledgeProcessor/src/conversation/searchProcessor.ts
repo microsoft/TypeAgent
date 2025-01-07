@@ -13,7 +13,7 @@ import {
     SearchTermsActionResponse,
     SearchTermsActionResponseV2,
 } from "./conversation.js";
-import { SearchResponse } from "./searchResponse.js";
+import { createSearchResponse, SearchResponse } from "./searchResponse.js";
 import {
     Filter,
     GetAnswerAction,
@@ -108,6 +108,11 @@ export interface ConversationSearchProcessor {
         query: string,
         options: SearchProcessingOptions,
     ): Promise<PromptSection[] | undefined>;
+
+    searchMessages(
+        query: string,
+        options: SearchOptions,
+    ): Promise<SearchResponse>;
 }
 
 export function createSearchProcessor(
@@ -130,6 +135,7 @@ export function createSearchProcessor(
         buildContext,
         generateAnswer,
         generateAnswerV2,
+        searchMessages,
     };
     return thisProcessor;
 
@@ -247,6 +253,15 @@ export function createSearchProcessor(
             );
         }
         return rr;
+    }
+
+    async function searchMessages(
+        query: string,
+        options: SearchOptions,
+    ): Promise<SearchResponse> {
+        const response = createSearchResponse();
+        await fallbackSearch(query, undefined, response, options);
+        return response;
     }
 
     async function buildContext(

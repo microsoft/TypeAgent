@@ -166,7 +166,7 @@ export async function createChatMemoryContext(
             false,
             conversation,
         );
-    const entityTopK = 32;
+    const entityTopK = 64;
     const actionTopK = 16;
     const context: ChatContext = {
         storePath,
@@ -316,6 +316,7 @@ export async function runChatMemory(): Promise<void> {
         search,
         searchV2Debug,
         searchTopics,
+        rag,
         makeTestSet,
         runTestSet,
         tokenLog,
@@ -1223,6 +1224,35 @@ export async function runChatMemory(): Promise<void> {
                 result.data.parameters.filters,
             );
             printer.writeSearchResponse(searchResponse);
+        }
+    }
+
+    function ragDef(): CommandMetadata {
+        return {
+            description: "RAG",
+            args: {
+                query: arg("Search query"),
+            },
+            options: {
+                maxMatches: argNum("Maximum fuzzy matches", 50),
+                minScore: argNum("Minimum similarity score", 0.8),
+                chunk: argBool("Use chunking", true),
+            },
+        };
+    }
+    commands.rag.metadata = ragDef();
+    async function rag(args: string[]) {
+        const namedArgs = parseNamedArguments(args, ragDef());
+        const response = await context.searcher.searchMessages(
+            namedArgs.query,
+            {
+                maxMatches: namedArgs.maxMatches,
+                minScore: namedArgs.minScore,
+            },
+        );
+        const answer = response.answer;
+        if (answer) {
+            printer.writeAnswer(answer);
         }
     }
 
