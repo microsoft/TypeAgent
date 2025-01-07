@@ -28,15 +28,17 @@ if __name__ == "__main__":
 
     model = HFModel(params)
 
-    print("Model loaded")
 
-    model.load_training_data(train_set)
-    
     model.load_model()
 
-    model.train()
+    model.init_data()
+
+    print("Model loaded")
+
+    # model.train()
+    model.sft_train()
 
     model.save_model("./test_output")
 
-    model.load_local_model("./test_output")
-    print(model.evaluate(eval_set))
+    # model.load_local_model("./test_output")
+    # print(model.evaluate(eval_set))
