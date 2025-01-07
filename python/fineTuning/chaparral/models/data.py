@@ -79,7 +79,10 @@ class Dataset:
     def format(self, model_name: str) -> dict:
         format_map = {
             "mistralai/Mixtral-8x7b-v0.1": MixtralDataset,
-            "google/gemma-2-2b": MixtralDataset
+            "google/gemma-2-2b": MixtralDataset,
+            "meta-llama/Llama-3.1-8B": MixtralDataset,
+            "meta-llama/Llama-3.2-3B-Instruct": MixtralDataset,
+            "meta-llama/Llama-3.2-1B-Instruct": MixtralDataset
         }
 
         dataset_type = format_map.get(model_name, None)
