@@ -318,6 +318,7 @@ export async function runChatMemory(): Promise<void> {
         search,
         searchV2Debug,
         searchTopics,
+        searchEntities,
         rag,
         makeTestSet,
         runTestSet,
@@ -1021,7 +1022,7 @@ export async function runChatMemory(): Promise<void> {
             const isMultipart =
                 namedArgs.facet || (namedArgs.name && namedArgs.type);
             if (namedArgs.exact || !isMultipart) {
-                await searchEntities(
+                await searchEntityIndex(
                     query,
                     namedArgs.name !== undefined,
                     namedArgs.exact,
@@ -1031,7 +1032,7 @@ export async function runChatMemory(): Promise<void> {
                 );
             } else {
                 // Multipart query
-                await searchEntities_Multi(
+                await searchEntityIndex_Multi(
                     namedArgs.name,
                     namedArgs.type,
                     namedArgs.facet,
@@ -1183,7 +1184,7 @@ export async function runChatMemory(): Promise<void> {
         def.options.showSources = argBool("Show links to source", false);
         return def;
     }
-    commands.searchTopics.metadata = searchDefBase();
+    commands.searchTopics.metadata = searchTopicsDef();
     async function searchTopics(
         args: string[],
         io: InteractiveIo,
@@ -1192,6 +1193,34 @@ export async function runChatMemory(): Promise<void> {
         namedArgs.v2 = true;
         namedArgs.skipActions = true;
         namedArgs.skipEntities = true;
+        namedArgs.skipMessages = true;
+        const searchResponse = await searchConversation(
+            context.searcher,
+            true,
+            namedArgs,
+        );
+        if (namedArgs.showSources && searchResponse) {
+            writeResultLinks(searchResponse);
+        }
+    }
+
+    function searchEntitiesDef(): CommandMetadata {
+        const def = searchDefBase();
+        if (!def.options) {
+            def.options = {};
+        }
+        def.options.showSources = argBool("Show links to source", false);
+        return def;
+    }
+    commands.searchEntities.metadata = searchDefBase();
+    async function searchEntities(
+        args: string[],
+        io: InteractiveIo,
+    ): Promise<void> {
+        const namedArgs = parseNamedArguments(args, searchEntitiesDef());
+        namedArgs.v2 = true;
+        namedArgs.skipActions = true;
+        namedArgs.skipTopics = true;
         namedArgs.skipMessages = true;
         const searchResponse = await searchConversation(
             context.searcher,
@@ -1238,8 +1267,7 @@ export async function runChatMemory(): Promise<void> {
             },
             options: {
                 maxMessages: argNum("Maximum fuzzy matches", 50),
-                minScore: argNum("Minimum similarity score", 0.8),
-                chunk: argBool("Use chunking", true),
+                minScore: argNum("Minimum similarity score", 0.7),
             },
         };
     }
@@ -1565,7 +1593,7 @@ export async function runChatMemory(): Promise<void> {
         }
     }
 
-    async function searchEntities(
+    async function searchEntityIndex(
         query: string,
         name: boolean,
         exact: boolean,
@@ -1587,7 +1615,7 @@ export async function runChatMemory(): Promise<void> {
         }
     }
 
-    async function searchEntities_Multi(
+    async function searchEntityIndex_Multi(
         name: string | undefined,
         type: string | undefined,
         facet: string | undefined,

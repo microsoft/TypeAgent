@@ -88,7 +88,7 @@ export async function createPodcastMemory(
         //"What was talked about/discussed is in conversation history as entities, topics and messages. Be sure to use them, not just messages.\n" +
         "Always use supplied messages, ENTITIES AND ANSWERS in your answers.\n" +
         `E.g. include entities in answers to queries like "'they' talked about' \n` +
-        "Queries for lists always mean 'full list'.";
+        "Queries for lists always mean 'full list' with item numbers";
     return cm;
 }
 
