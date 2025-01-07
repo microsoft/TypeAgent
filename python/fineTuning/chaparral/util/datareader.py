@@ -3,13 +3,13 @@
 
 import argparse
 import json
-from chaparral.models.data import Dataset
+from chaparral.models.data import ChapparalDataset
 
 class DataReader:
 
-    dataset: Dataset
+    dataset: ChapparalDataset
 
-    def load_text_file(self, filename: str) -> Dataset:
+    def load_text_file(self, filename: str) -> ChapparalDataset:
         with open(filename, "r") as file:
             try:
                raw_data = json.load(file)
@@ -18,10 +18,13 @@ class DataReader:
 
             dataset = None
             if isinstance(raw_data, list):
-                dataset = Dataset.from_list(raw_data)
+                dataset = ChapparalDataset.from_list(raw_data)
 
             if isinstance(raw_data, dict):
-                dataset = Dataset.from_dict(raw_data)
+                dataset = ChapparalDataset.from_dict(raw_data)
+
+            if dataset is None:
+                raise ValueError("Invalid dataset format")
 
             self.dataset = dataset
             return dataset

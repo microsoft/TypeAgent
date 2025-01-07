@@ -27,6 +27,7 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
+    "@elastic/elasticsearch": "^8.17.0",
     "aiclient": "workspace:*",
     "better-sqlite3": "11.5.0",
     "debug": "^4.3.4",

@@ -71,7 +71,7 @@ export class BrowserConnector {
     });
   }
 
-  async getHtmlFragments() {
+  async getHtmlFragments(useTimestampIds?: boolean) {
     const timeoutPromise = new Promise((f) => setTimeout(f, 120000));
     const htmlAction = {
       actionName: "getHTML",
@@ -79,6 +79,7 @@ export class BrowserConnector {
         fullHTML: false,
         downloadAsFile: false,
         extractText: false,
+        useTimestampIds: useTimestampIds,
       },
     };
 
@@ -223,5 +224,14 @@ export class BrowserConnector {
     } else {
       return actionPromise;
     }
+  }
+
+  async awaitPageInteraction(timeout?: number) {
+    if (!timeout) {
+      timeout = 400;
+    }
+
+    const timeoutPromise = new Promise((f) => setTimeout(f, timeout));
+    return timeoutPromise;
   }
 }

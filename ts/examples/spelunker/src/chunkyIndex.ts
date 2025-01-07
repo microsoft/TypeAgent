@@ -12,12 +12,14 @@ import { createJsonTranslator, TypeChatJsonTranslator } from "typechat";
 import { createTypeScriptJsonValidator } from "typechat/ts";
 import { AnswerSpecs } from "./makeAnswerSchema.js";
 
-export type IndexType =
-    | "summaries"
-    | "keywords"
-    | "topics"
-    | "goals"
-    | "dependencies";
+export const IndexNames = [
+    "summaries",
+    "keywords",
+    "tags",
+    "synonyms",
+    "dependencies",
+];
+export type IndexType = (typeof IndexNames)[number];
 export type NamedIndex = [IndexType, knowLib.TextIndex<string, ChunkId>];
 
 // A bundle of object stores and indexes etc.
@@ -33,11 +35,7 @@ export class ChunkyIndex {
     rootDir!: string;
     answerFolder!: ObjectFolder<AnswerSpecs>;
     chunkFolder!: ObjectFolder<Chunk>;
-    summariesIndex!: knowLib.TextIndex<string, ChunkId>;
-    keywordsIndex!: knowLib.TextIndex<string, ChunkId>;
-    topicsIndex!: knowLib.TextIndex<string, ChunkId>;
-    goalsIndex!: knowLib.TextIndex<string, ChunkId>;
-    dependenciesIndex!: knowLib.TextIndex<string, ChunkId>;
+    indexes!: Map<IndexType, knowLib.TextIndex<string, ChunkId>>;
 
     private constructor() {
         this.chatModel = openai.createChatModelDefault("spelunkerChat");
@@ -52,7 +50,7 @@ export class ChunkyIndex {
             1000,
         );
         this.fileDocumenter = createFileDocumenter(this.chatModel);
-        this.queryMaker = createQueryMaker(this.miniModel);
+        this.queryMaker = createQueryMaker(this.chatModel);
         this.answerMaker = createAnswerMaker(this.chatModel);
     }
 
@@ -73,11 +71,10 @@ export class ChunkyIndex {
             instance.rootDir + "/answers",
             { serializer: (obj) => JSON.stringify(obj, null, 2) },
         );
-        instance.summariesIndex = await makeIndex("summaries");
-        instance.keywordsIndex = await makeIndex("keywords");
-        instance.topicsIndex = await makeIndex("topics");
-        instance.goalsIndex = await makeIndex("goals");
-        instance.dependenciesIndex = await makeIndex("dependencies");
+        instance.indexes = new Map();
+        for (const name of IndexNames) {
+            instance.indexes.set(name, await makeIndex(name));
+        }
 
         async function makeIndex(
             name: string,
@@ -104,13 +101,7 @@ export class ChunkyIndex {
     }
 
     allIndexes(): NamedIndex[] {
-        return [
-            ["summaries", this.summariesIndex],
-            ["keywords", this.keywordsIndex],
-            ["topics", this.topicsIndex],
-            ["goals", this.goalsIndex],
-            ["dependencies", this.dependenciesIndex],
-        ];
+        return [...this.indexes.entries()];
     }
 }
 

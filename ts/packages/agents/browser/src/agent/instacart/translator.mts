@@ -11,7 +11,7 @@ export async function createInstacartPageTranslator(
   model: "GPT_35_TURBO" | "GPT_4" | "GPT_v" | "GPT_4_O" | "GPT_4_O_MINI",
 ) {
   const packageRoot = path.join("..", "..", "..");
-  const pageSchema = await fs.promises.readFile(
+  const actionSchema = await fs.promises.readFile(
     fileURLToPath(
       new URL(
         path.join(packageRoot, "./src/agent/instacart/schema/userActions.mts"),
@@ -21,8 +21,22 @@ export async function createInstacartPageTranslator(
     "utf8",
   );
 
+  const pageSchema = await fs.promises.readFile(
+    fileURLToPath(
+      new URL(
+        path.join(
+          packageRoot,
+          "./src/agent/instacart/schema/pageComponents.mts",
+        ),
+        import.meta.url,
+      ),
+    ),
+    "utf8",
+  );
+
   const agent = new ECommerceSiteAgent<InstacartActions>(
     pageSchema,
+    actionSchema,
     "InstacartActions",
     model,
   );
