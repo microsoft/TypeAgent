@@ -54,6 +54,7 @@
     "oracle-agent": "workspace:*",
     "photo-agent": "workspace:*",
     "proper-lockfile": "^4.1.2",
+    "spelunker-agent": "workspace:*",
     "string-width": "^7.2.0",
     "telemetry": "workspace:*",
     "typeagent": "workspace:*",
