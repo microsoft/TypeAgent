@@ -42,8 +42,6 @@ jobs:
       - if: runner.os == 'Linux'
         run: |
           sudo apt install libsecret-1-0
-#          if [ "$RUNNER_OS" == "Linux" ]; then
-#            -ifapt install libsecret-1-0
       - name: Setup Git LF
         run: |
           git config --global core.autocrlf false
