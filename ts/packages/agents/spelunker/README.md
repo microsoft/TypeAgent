@@ -1,7 +1,9 @@
-# oracle
+## Spelunker demo agent
 
-Oracle dispatcher agent.
-An "oracle" produces answers using a secret process.
+This demo agent is used to explore ideas around "code spelunking", i.e.,
+exploring a repo full of unknown source code (in multiple languages) and
+gradually understand how it works. The AI is meant as a helper for the human to
+help them think. See [Design](./design.md) for the current architecture.
 
 ## Trademarks
 
