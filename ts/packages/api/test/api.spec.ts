@@ -1,7 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-/* this is breaking ... need to fix
 import assert from "assert";
 import { TypeAgentServer } from "../src/typeAgentServer.js";
 import findConfig from "find-config";
@@ -32,9 +31,4 @@ describe.skip("api web/ws server", () => {
             );
         }
     });
-});
-*/
-// for now null test
-test("null test", () => {
-    expect(true).toBe(true);
 });
