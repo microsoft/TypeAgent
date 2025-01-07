@@ -11,7 +11,7 @@ import {
     ParsedCommandParams,
 } from "@typeagent/agent-sdk";
 import { createActionResultFromTextDisplay } from "@typeagent/agent-sdk/helpers/action";
-import { OracleAction } from "./oracleSchema.js";
+import { SpelunkerAction } from "./spelunkerSchema.js";
 import {
     CommandHandler,
     CommandHandlerTable,
@@ -19,13 +19,13 @@ import {
 } from "@typeagent/agent-sdk/helpers/command";
 
 class RequestCommandHandler implements CommandHandler {
-    public readonly description = "Send a request to the Oracle";
+    public readonly description = "Send a request to the Spelunker";
     public readonly parameters: ParameterDefinitions = {
         // Must have a single string parameter and implicit quotes
         // in order to support '@config request <agent>'
         args: {
             question: {
-                description: "Request for Oracle",
+                description: "Request for Spelunker",
                 type: "string",
                 optional: false,
                 implicitQuotes: true,
@@ -33,7 +33,7 @@ class RequestCommandHandler implements CommandHandler {
         },
     };
     public async run(
-        context: ActionContext<OracleActionContext>,
+        context: ActionContext<SpelunkerActionContext>,
         params: ParsedCommandParams<ParameterDefinitions>,
     ): Promise<void> {
         if (typeof params.args?.question === "string") {
@@ -44,7 +44,7 @@ class RequestCommandHandler implements CommandHandler {
 }
 
 const handlers: CommandHandlerTable = {
-    description: "Oracle commands",
+    description: "Spelunker commands",
     defaultSubCommand: "request",
     commands: {
         // Command name "request" is special for '@config request <agent>'
@@ -54,24 +54,24 @@ const handlers: CommandHandlerTable = {
 
 export function instantiate(): AppAgent {
     return {
-        initializeAgentContext: initializeOracleContext,
-        executeAction: executeOracleAction,
+        initializeAgentContext: initializeSpelunkerContext,
+        executeAction: executeSpelunkerAction,
         ...getCommandInterface(handlers),
     };
 }
 
-type OracleActionContext = {};
+type SpelunkerActionContext = {};
 
-async function initializeOracleContext(): Promise<OracleActionContext> {
+async function initializeSpelunkerContext(): Promise<SpelunkerActionContext> {
     return {};
 }
 
-async function executeOracleAction(
+async function executeSpelunkerAction(
     action: AppAction,
-    context: ActionContext<OracleActionContext>,
+    context: ActionContext<SpelunkerActionContext>,
 ): Promise<ActionResult> {
-    let result = await handleOracleAction(
-        action as OracleAction,
+    let result = await handleSpelunkerAction(
+        action as SpelunkerAction,
         context.sessionContext.agentContext,
     );
     return result;
@@ -117,12 +117,12 @@ The tree stands silent, rooted in a ground it did not choose, reaching for a sky
     .trim()
     .split("\n"); // Written by GPT-4o. (The last, very long one, is meant as a prank.)
 
-async function handleOracleAction(
-    action: OracleAction,
-    oracleContext: OracleActionContext,
+async function handleSpelunkerAction(
+    action: SpelunkerAction,
+    spelunkerContext: SpelunkerActionContext,
 ): Promise<ActionResult> {
     switch (action.actionName) {
-        case "queryOracle": {
+        case "querySpelunker": {
             return makeRandomResponse(action.parameters.query);
             break;
         }

@@ -1,11 +1,11 @@
 {
-  "emojiChar": "🌀",
-  "description": "Agent to produce oracular answers",
+  "emojiChar": "<>",
+  "description": "Agent to spelunk a code base",
   "schemaDefaultEnabled": false,
   "schema": {
-    "description": "Oracle which gives mysterious answers",
-    "schemaFile": "./oracleSchema.ts",
-    "schemaType": "OracleAction",
+    "description": "Spelunk (research) a code base",
+    "schemaFile": "./spelunkerSchema.ts",
+    "schemaType": "SpelunkerAction",
     "cached": false
   }
 }

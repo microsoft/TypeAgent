@@ -1,13 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-export type OracleAction = QueryAction;
+export type SpelunkerAction = QueryAction;
 
-// Ask the oracle a question; it will give an oracular, pseudo-philosophical answer.
-// Good for questions like "what is the meaning of life" or "does he love me". :-)
+// Ask the spelunker a question about the code base it is focused on.
 export type QueryAction = {
-    actionName: "queryOracle";
+    actionName: "querySpelunker";
     parameters: {
-        query: string; // The question for the oracle
+        query: string; // The question for the spelunker
     };
 };
