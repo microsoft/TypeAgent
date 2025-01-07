@@ -33,7 +33,17 @@ export interface TemporalLog<TId = any, T = any> {
     allObjects(): AsyncIterableIterator<dateTime.Timestamped<T>>;
     get(id: TId): Promise<dateTime.Timestamped<T> | undefined>;
     getMultiple(ids: TId[]): Promise<(dateTime.Timestamped<T> | undefined)[]>;
+    /**
+     * Return the ids of the log entries in the given date range
+     * @param startAt
+     * @param stopAt
+     */
     getIdsInRange(startAt: Date, stopAt?: Date): Promise<TId[]>;
+    /**
+     * Return the log entries in the given date range
+     * @param startAt
+     * @param stopAt
+     */
     getEntriesInRange(
         startAt: Date,
         stopAt?: Date,
@@ -212,6 +222,13 @@ export async function createTemporalLog<T>(
     }
 }
 
+/**
+ * Put an object with an associated timestamp into the given object store
+ * @param store
+ * @param value
+ * @param timestamp
+ * @returns
+ */
 export async function putTimestampedObject(
     store: ObjectFolder<string>,
     value: any,
@@ -227,6 +244,12 @@ export async function putTimestampedObject(
     return store.put(tValue, id);
 }
 
+/**
+ * Get the timestamped object with the given Id from the object folder
+ * @param store
+ * @param id
+ * @returns
+ */
 export async function getTimestampedObject<T>(
     store: ObjectFolder<string>,
     id: string,

@@ -6,6 +6,7 @@ import {
     ObjectFolder,
     ObjectFolderSettings,
     SearchOptions,
+    asyncArray,
     createObjectFolder,
     dateTime,
     removeDir,
@@ -22,10 +23,7 @@ import {
     createTopicMerger,
     createTopicSearchOptions,
 } from "./topics.js";
-import {
-    TextIndexSettings,
-    removeSemanticIndexFolder,
-} from "../knowledgeIndex.js";
+import { TextIndexSettings, removeSemanticIndexFolder } from "../textIndex.js";
 import {
     EntityIndex,
     EntityNameIndex,
@@ -552,10 +550,15 @@ export async function createConversation(
     ): Promise<void> {
         if (knowledge.entities && knowledge.entities.length > 0) {
             const entityIndex = await getEntityIndex();
-            await entityIndex.addMultiple(
+            const entityIds = await entityIndex.addMultiple(
                 knowledge.entities,
                 knowledgeIds.entityIds,
             );
+            if (knowledge.tags && knowledge.tags.length > 0) {
+                await asyncArray.mapAsync(knowledge.tags, 1, (t) =>
+                    entityIndex.addTag(t, entityIds),
+                );
+            }
         }
     }
 

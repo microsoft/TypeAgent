@@ -45,8 +45,9 @@ export type AddToListAction = {
 export type BuyItAgainAction = {
   actionName: "buyItAgainAction";
   parameters: {
-    listName: string;
-    productName: string;
+    storeName: string;
+    allItems?: boolean;
+    productName?: string;
   };
 };
 
@@ -96,7 +97,6 @@ export type SearchForRecipeAction = {
   actionName: "searchForRecipeAction";
   parameters: {
     keyword: string;
-    storeName?: string;
   };
 };
 
