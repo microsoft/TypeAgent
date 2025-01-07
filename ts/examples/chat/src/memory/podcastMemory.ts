@@ -1,18 +1,22 @@
-// Copyright (c) Microsoft Corporation.
+// Copyright (c) Microsoft Corporation and Henry Lucco.
 // Licensed under the MIT License.
 
 import { conversation } from "knowledge-processor";
+import * as knowLib from "knowledge-processor";
 import {
     ChatContext,
     Models,
     ReservedConversationNames,
 } from "./chatMemory.js";
 import { sqlite } from "memory-providers";
+import { elastic } from "memory-providers";
 import {
     arg,
+    argBool,
     argNum,
     CommandHandler,
     CommandMetadata,
+    InteractiveIo,
     NamedArgs,
     parseNamedArguments,
 } from "interactive-app";
@@ -27,6 +31,7 @@ import path from "path";
 import {
     asyncArray,
     createWorkQueueFolder,
+    dateTime,
     ensureDir,
     getFileName,
     isDirectoryPath,
@@ -41,6 +46,7 @@ export async function createPodcastMemory(
     storePath: string,
     settings: conversation.ConversationSettings,
     useSqlite: boolean = false,
+    useElastic: boolean = false,
     createNew: boolean = false,
 ) {
     const podcastStorePath = path.join(
@@ -48,13 +54,17 @@ export async function createPodcastMemory(
         ReservedConversationNames.podcasts,
     );
     await ensureDir(podcastStorePath);
-    const storageProvider = useSqlite
-        ? await sqlite.createStorageDb(
-              podcastStorePath,
-              "podcast.db",
-              createNew,
-          )
-        : undefined;
+    let storageProvider = undefined;
+    if (useElastic) {
+        storageProvider = await elastic.createStorageIndex(createNew);
+    } else if (useSqlite) {
+        storageProvider = await sqlite.createStorageDb(
+            podcastStorePath,
+            "podcast.db",
+            createNew,
+        );
+    }
+
     const cm = await conversation.createConversationManagerEx(
         {
             model: models.chatModel,
@@ -78,6 +88,8 @@ export function createPodcastCommands(
     commands.podcastIndex = podcastIndex;
     commands.podcastAddThread = podcastAddThread;
     commands.podcastListThreads = podcastListThreads;
+    commands.podcastEntities = podcastEntities;
+    commands.podcastSearch = podcastSearch;
 
     //-----------
     // COMMANDS
@@ -113,6 +125,324 @@ export function createPodcastCommands(
         const turnsFilePath = getTurnsFolderPath(sourcePath);
         namedArgs.sourcePath = turnsFilePath;
         await podcastIndex(namedArgs);
+    }
+
+    // Eventually we should unite these functions with their
+    // counterparts in @entities command in chatMemory.ts but
+    // need input.
+    async function loadMessages(
+        ids?: string[],
+    ): Promise<(dateTime.Timestamped<knowLib.TextBlock> | undefined)[]> {
+        if (ids && ids.length > 0) {
+            return await context.podcastMemory.conversation.messages.getMultiple(
+                ids,
+            );
+        }
+        return [];
+    }
+
+    async function writeEntitiesById(
+        index: knowLib.conversation.EntityIndex,
+        entityIds: string[],
+        showMessages?: boolean,
+    ): Promise<void> {
+        if (!entityIds || entityIds.length === 0) {
+            return;
+        }
+        if (showMessages) {
+            const messages = await loadMessages(
+                await index.getSourceIds(entityIds),
+            );
+            context.printer.writeTemporalBlocks(chalk.cyan, messages);
+        } else {
+            const entities = await asyncArray.mapAsync(
+                entityIds,
+                context.searchConcurrency,
+                (id) => index.get(id),
+            );
+            const composite = conversation.mergeEntities(
+                knowLib.sets.removeUndefined(entities.map((e) => e?.value)),
+            );
+            for (const value of composite.values()) {
+                context.printer.writeCompositeEntity(value.value);
+                context.printer.writeLine();
+            }
+        }
+    }
+
+    async function searchEntities(
+        query: string,
+        name: boolean,
+        exact: boolean,
+        count: number,
+        minScore: number,
+        showMessages?: boolean,
+    ) {
+        const index = await context.podcastMemory.conversation.getEntityIndex();
+        const matches = await knowLib.searchIndex(
+            name ? index.nameIndex : index.typeIndex,
+            query,
+            exact,
+            count,
+            minScore,
+        );
+        for (const match of matches) {
+            context.printer.writeInColor(chalk.green, `[${match.score}]`);
+            await writeEntitiesById(index, match.item, showMessages);
+        }
+    }
+
+    async function searchEntities_Multi(
+        name: string | undefined,
+        type: string | undefined,
+        facet: string | undefined,
+        count: number,
+        faceCount: number,
+        minScore: number,
+        showMessages?: boolean,
+    ) {
+        const index = await context.podcastMemory.conversation.getEntityIndex();
+        let nameMatches: string[] | undefined;
+        let typeMatches: string[] | undefined;
+        let facetMatches: string[] | undefined;
+        if (name) {
+            nameMatches = await index.nameIndex.getNearest(
+                name,
+                count,
+                minScore,
+            );
+        }
+        if (type) {
+            typeMatches = await index.typeIndex.getNearest(
+                type,
+                count,
+                minScore,
+            );
+        }
+        if (facet) {
+            facetMatches = await index.facetIndex.getNearest(
+                facet,
+                faceCount,
+                minScore,
+            );
+        }
+        const matches = [
+            ...knowLib.sets.intersectMultiple(
+                nameMatches,
+                typeMatches,
+                facetMatches,
+            ),
+        ];
+        await writeEntitiesById(index, matches, showMessages);
+    }
+
+    function podcastEntitiesDef(): CommandMetadata {
+        return {
+            description: "Search for podcast entities",
+            options: {
+                name: arg("Names to search for"),
+                type: arg("Type to search for"),
+                facet: arg("Facet to search for"),
+                exact: argBool("Exact match?"),
+                count: argNum("Num matches", 1),
+                facetCount: argNum("Num facet matches", 10),
+                minScore: argNum("Min score", 0),
+                showMessages: argBool(),
+            },
+        };
+    }
+    commands.podcastEntities.metadata = podcastEntitiesDef();
+    // Same as @entities but for the podcast index.
+    async function podcastEntities(args: string[]): Promise<void> {
+        const namedArgs = parseNamedArguments(args, podcastEntitiesDef());
+        let query = namedArgs.name ?? namedArgs.type ?? namedArgs.facet;
+        if (query) {
+            const isMultipart =
+                namedArgs.facet || (namedArgs.name && namedArgs.type);
+            if (namedArgs.exact || !isMultipart) {
+                await searchEntities(
+                    query,
+                    namedArgs.name !== undefined,
+                    namedArgs.exact,
+                    namedArgs.count,
+                    namedArgs.minScore,
+                    namedArgs.showMessages,
+                );
+            } else {
+                // Multipart query
+                await searchEntities_Multi(
+                    namedArgs.name,
+                    namedArgs.type,
+                    namedArgs.facet,
+                    namedArgs.count,
+                    namedArgs.facetCount,
+                    namedArgs.minScore,
+                    namedArgs.showMessages,
+                );
+            }
+            return;
+        }
+
+        const index = await context.podcastMemory.conversation.getEntityIndex();
+        const entityArray = await asyncArray.toArray(index.entities());
+        const entities = [...conversation.toCompositeEntities(entityArray)];
+        entities.sort((x, y) => x.name.localeCompare(y.name));
+        let printer = context.printer;
+        printer.writeCompositeEntities(entities);
+    }
+
+    function recordQuestionAnswer(
+        question: string,
+        timestampQ: Date,
+        answer: string,
+        timestampA: Date,
+    ) {
+        // Don't record questions about the search history
+        if (
+            context.searchMemory &&
+            context.searchMemory.conversationName !== context.conversationName
+        ) {
+            try {
+                context.searchMemory.queueAddMessage({
+                    text: `USER:\n${question}`,
+                    timestamp: timestampQ,
+                });
+                context.searchMemory.queueAddMessage({
+                    text: `ASSISTANT:\n${answer}`,
+                    timestamp: timestampA,
+                });
+            } catch (e) {
+                context.printer.writeError(`Error updating history\n${e}`);
+            }
+        }
+    }
+
+    async function searchConversation(
+        searcher: conversation.ConversationSearchProcessor,
+        recordAnswer: boolean,
+        namedArgs: NamedArgs,
+    ): Promise<conversation.SearchResponse | undefined> {
+        const maxMatches = namedArgs.maxMatches;
+        const minScore = namedArgs.minScore;
+        let query = namedArgs.query.trim();
+        if (!query || query.length === 0) {
+            return undefined;
+        }
+        const searchOptions: conversation.SearchProcessingOptions = {
+            maxMatches,
+            minScore,
+            maxMessages: 10,
+            progress: (value) => context.printer.writeJson(value),
+        };
+        if (namedArgs.fallback) {
+            searchOptions.fallbackSearch = { maxMatches: 10 };
+        }
+        if (namedArgs.threads) {
+            searchOptions.threadSearch = { maxMatches: 1, minScore: 0.8 };
+        }
+        if (!namedArgs.eval) {
+            // just translate user query into structured query without eval
+            const translationContext = await context.searcher.buildContext(
+                query,
+                searchOptions,
+            );
+            const searchResult: any = namedArgs.v2
+                ? await searcher.actions.translateSearchTermsV2(
+                      query,
+                      translationContext,
+                  )
+                : await context.searcher.actions.translateSearch(
+                      query,
+                      translationContext,
+                  );
+            context.printer.writeJson(searchResult);
+            return undefined;
+        }
+
+        searcher.answers.settings.chunking.enable = true; //namedArgs.chunk === true;
+
+        const timestampQ = new Date();
+        let result:
+            | conversation.SearchTermsActionResponse
+            | conversation.SearchTermsActionResponseV2
+            | undefined;
+        if (namedArgs.v2) {
+            searchOptions.skipEntitySearch = namedArgs.skipEntities;
+            searchOptions.skipActionSearch = namedArgs.skipActions;
+            searchOptions.skipTopicSearch = namedArgs.skipTopics;
+            result = await searcher.searchTermsV2(
+                query,
+                undefined,
+                searchOptions,
+            );
+        } else {
+            result = await searcher.searchTerms(
+                query,
+                undefined,
+                searchOptions,
+            );
+        }
+        if (!result) {
+            context.printer.writeError("No result");
+            return undefined;
+        }
+        context.printer.writeLine();
+        context.printer.writeSearchTermsResult(result, namedArgs.debug);
+        if (result.response && result.response.answer) {
+            if (namedArgs.save && recordAnswer) {
+                let answer = result.response.answer.answer;
+                if (!answer) {
+                    answer = result.response.answer.whyNoAnswer;
+                }
+                if (answer) {
+                    recordQuestionAnswer(query, timestampQ, answer, new Date());
+                }
+            }
+        }
+        return result.response;
+    }
+
+    function podcastSearchDefBase(): CommandMetadata {
+        return {
+            description: "Natural language search on a podcast",
+            args: {
+                query: arg("Search query"),
+            },
+            options: {
+                maxMatches: argNum("Maximum fuzzy matches", 2),
+                minScore: argNum("Minimum similarity score", 0.8),
+                fallback: argBool("Fallback to message search", true),
+                eval: argBool("Evaluate search query", true),
+                debug: argBool("Show debug info", false),
+                save: argBool("Save the search", false),
+                v2: argBool("Run V2 match", false),
+                chunk: argBool("Use chunking", true),
+            },
+        };
+    }
+
+    function podcastSearchDef(): CommandMetadata {
+        const def = podcastSearchDefBase();
+        if (!def.options) {
+            def.options = {};
+        }
+        def.options.skipEntities = argBool("Skip entity matching", false);
+        def.options.skipActions = argBool("Skip action matching", false);
+        def.options.skipTopics = argBool("Skip topics matching", false);
+        def.options.threads = argBool("Use most likely thread", false);
+        return def;
+    }
+    // Just supports query for now
+    commands.search.metadata = podcastSearchDef();
+    async function podcastSearch(
+        args: string[],
+        io: InteractiveIo,
+    ): Promise<void> {
+        await searchConversation(
+            context.podcastMemory.searchProcessor,
+            true,
+            parseNamedArguments(args, podcastSearchDef()),
+        );
     }
 
     function podcastConvertDef(): CommandMetadata {

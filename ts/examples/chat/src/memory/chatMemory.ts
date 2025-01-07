@@ -1,4 +1,4 @@
-// Copyright (c) Microsoft Corporation.
+// Copyright (c) Microsoft Corporation and Henry Lucco.
 // Licensed under the MIT License.
 
 import * as knowLib from "knowledge-processor";
@@ -199,6 +199,7 @@ export async function createChatMemoryContext(
             models,
             storePath,
             conversationSettings,
+            false,
             true,
             false,
         ),

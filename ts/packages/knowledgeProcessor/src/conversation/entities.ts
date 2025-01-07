@@ -1,4 +1,4 @@
-// Copyright (c) Microsoft Corporation.
+// Copyright (c) Microsoft Corporation and Henry Lucco.
 // Licensed under the MIT License.
 
 import {
@@ -570,6 +570,12 @@ export function appendCompositeEntity(
 }
 
 export function toCompositeEntity(entity: ConcreteEntity): CompositeEntity {
+    if (entity === undefined) {
+        return {
+            name: "undefined",
+            type: ["undefined"],
+        };
+    }
     const composite: CompositeEntity = {
         name: entity.name,
         type: [...entity.type],
