@@ -9,7 +9,7 @@ import * as knowLib from "knowledge-processor";
 import { asyncArray } from "typeagent";
 
 import * as iapp from "interactive-app";
-import { ChunkyIndex } from "./chunkyIndex.js";
+import { ChunkyIndex, IndexNames } from "./chunkyIndex.js";
 import { ChunkDoc, FileDocumentation } from "./fileDocSchema.js";
 import {
     Chunk,
@@ -236,40 +236,22 @@ async function embedChunk(
         summaries.push(chunkDoc.summary);
     }
     const combinedSummaries = summaries.join("\n").trimEnd();
-    if (combinedSummaries) {
-        await exponentialBackoff(
-            io,
-            chunkyIndex.summariesIndex.put,
-            combinedSummaries,
-            [chunk.id],
-        );
-    }
+
     for (const chunkDoc of chunkDocs) {
-        await writeToIndex(
-            io,
-            chunk.id,
-            chunkDoc.topics,
-            chunkyIndex.topicsIndex,
-        );
-        await writeToIndex(
-            io,
-            chunk.id,
-            chunkDoc.keywords,
-            chunkyIndex.keywordsIndex,
-        );
-        await writeToIndex(
-            io,
-            chunk.id,
-            chunkDoc.goals,
-            chunkyIndex.goalsIndex,
-        );
-        await writeToIndex(
-            io,
-            chunk.id,
-            chunkDoc.dependencies,
-            chunkyIndex.dependenciesIndex,
-        );
+        for (const indexName of IndexNames) {
+            let data: string[];
+            if (indexName == "summaries") {
+                data = [combinedSummaries];
+            } else {
+                data = (chunkDoc as any)[indexName];
+            }
+            const index = chunkyIndex.indexes.get(indexName)!;
+            if (data && index) {
+                await writeToIndex(io, chunk.id, data, index);
+            }
+        }
     }
+
     const t1 = Date.now();
     if (verbose) {
         log(
@@ -284,7 +266,7 @@ async function embedChunk(
 async function writeToIndex(
     io: iapp.InteractiveIo | undefined,
     chunkId: ChunkId,
-    phrases: string[] | undefined, // List of keywords, topics, etc. in chunk
+    phrases: string[] | undefined, // List of summaries, keywords, tags, etc. in chunk
     index: knowLib.TextIndex<string, ChunkId>,
 ) {
     for (const phrase of phrases ?? []) {
