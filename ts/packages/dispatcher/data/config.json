@@ -6,13 +6,6 @@
         "./test/data/player/**/*.json"
       ]
     },
-    "calendar": {
-      "name": "calendar",
-      "imports": [
-        "./test/data/calendar/**/*.json"
-      ],
-      "execMode": "dispatcher"
-    },
     "email": {
       "name": "email"
     },
