@@ -41,7 +41,7 @@ jobs:
     steps:
       - if: runner.os == 'Linux'
         run: |
-          apt install libsecret-1-0
+          sudo apt install libsecret-1-0
 #          if [ "$RUNNER_OS" == "Linux" ]; then
 #            -ifapt install libsecret-1-0
       - name: Setup Git LF
