@@ -7,9 +7,16 @@ import { BrowserConnector } from "../browserConnector.mjs";
 import { createInstacartPageTranslator } from "./translator.mjs";
 import {
   AllListsInfo,
+  AllRecipeSearchResults,
+  BuyItAgainHeaderSection,
+  BuyItAgainNavigationLink,
   HomeLink,
+  ListDetailsInfo,
+  ListInfo,
+  ListsNavigationLink,
   ProductDetailsHeroTile,
   ProductTile,
+  RecipeHeroSection,
   SearchInput,
   StoreInfo,
 } from "./schema/pageComponents.mjs";
@@ -42,8 +49,20 @@ export async function handleInstacartAction(
     case "findNearbyStoreAction":
       await handleFindStores(action);
       break;
+    case "searchForRecipeAction":
+      await handleFindRecipe(action);
+      break;
+    case "buyAllInRecipeAction":
+      await handleBuyRecipeIngredients(action);
+      break;
+    case "buyAllInListAction":
+      await handleBuyListContents(action);
+      break;
     case "setPreferredStoreAction":
       await handleSetPreferredStore(action);
+      break;
+    case "buyItAgainAction":
+      await handleBuyItAgain(action);
       break;
   }
 
@@ -51,7 +70,7 @@ export async function handleInstacartAction(
     componentType: string,
     selectionCondition?: string,
   ) {
-    const htmlFragments = await browser.getHtmlFragments();
+    const htmlFragments = await browser.getHtmlFragments(true);
     const timerName = `getting ${componentType} section`;
 
     console.time(timerName);
@@ -79,7 +98,7 @@ export async function handleInstacartAction(
     await browser.clickOn(searchSelector);
     await browser.enterTextIn(productName, searchSelector);
     await browser.clickOn(selector.submitButtonCssSelector);
-    await new Promise((r) => setTimeout(r, 400));
+    await browser.awaitPageInteraction();
     await browser.awaitPageLoad();
   }
 
@@ -91,7 +110,7 @@ export async function handleInstacartAction(
     )) as ProductTile;
 
     await browser.clickOn(targetProduct.detailsLinkSelector);
-    await new Promise((r) => setTimeout(r, 200));
+    await browser.awaitPageInteraction();
     await browser.awaitPageLoad();
   }
 
@@ -130,43 +149,44 @@ export async function handleInstacartAction(
 
   async function goToHomepage() {
     const link = (await getComponentFromPage("HomeLink")) as HomeLink;
+    console.log(link);
 
     if (link.linkCssSelector) {
       await browser.clickOn(link.linkCssSelector);
+      await browser.awaitPageInteraction();
+      await browser.awaitPageLoad(5000);
     }
   }
 
   async function handleFindStores(action: any) {
     await goToHomepage();
-
     const stores = (await getComponentFromPage("StoreInfo")) as StoreInfo[];
-
     console.log(stores);
-
     return stores;
   }
 
   async function searchForStore(storeName: string) {
+    await goToHomepage();
     const selector = (await getComponentFromPage("SearchInput")) as SearchInput;
     const searchSelector = selector.cssSelector;
 
     await browser.clickOn(searchSelector);
     await browser.enterTextIn("store: " + storeName, searchSelector);
     await browser.clickOn(selector.submitButtonCssSelector);
-    await new Promise((r) => setTimeout(r, 400));
+    await browser.awaitPageInteraction();
     await browser.awaitPageLoad();
   }
 
   async function selectStoreSearchResult(storeName: string) {
-    const request = `Search result: ${storeName}`;
+    const request = `${storeName}`;
     const targetStore = (await getComponentFromPage(
       "StoreInfo",
       request,
     )) as StoreInfo;
 
     await browser.clickOn(targetStore.storeLinkCssSelector);
-    await new Promise((r) => setTimeout(r, 200));
-    await browser.awaitPageLoad();
+    await browser.awaitPageInteraction();
+    await browser.awaitPageLoad(5000);
   }
 
   async function handleSetPreferredStore(action: any) {
@@ -174,6 +194,126 @@ export async function handleInstacartAction(
     await selectStoreSearchResult(action.parameters.storeName);
 
     // TODO: persist preferrences
+  }
+
+  async function searchForRecipe(recipeKeywords: string) {
+    // await goToHomepage();
+    const selector = (await getComponentFromPage("SearchInput")) as SearchInput;
+    const searchSelector = selector.cssSelector;
+
+    await browser.clickOn(searchSelector);
+    await browser.enterTextIn("recipe: " + recipeKeywords, searchSelector);
+    await browser.clickOn(selector.submitButtonCssSelector);
+    await browser.awaitPageInteraction();
+    await browser.awaitPageLoad(5000);
+  }
+
+  async function selectRecipeSearchResult(recipeKeywords: string) {
+    const request = `${recipeKeywords}`;
+    const allRecipes = (await getComponentFromPage(
+      "AllRecipeSearchResults",
+      request,
+    )) as AllRecipeSearchResults;
+
+    console.log(allRecipes);
+    if (allRecipes.recipes.length > 0) {
+      await browser.clickOn(allRecipes.recipes[0].recipeLinkCssSelector);
+      await browser.awaitPageInteraction();
+      console.log(
+        "Clicked on search result: " +
+          allRecipes.recipes[0].recipeLinkCssSelector,
+      );
+      await browser.awaitPageLoad();
+    }
+  }
+
+  async function handleFindRecipe(action: any) {
+    await searchForRecipe(action.parameters.keyword);
+    await selectRecipeSearchResult(action.parameters.keyword);
+  }
+
+  async function handleBuyRecipeIngredients(action: any) {
+    await searchForRecipe(action.parameters.keywords);
+    await selectRecipeSearchResult(action.parameters.keywords);
+
+    const targetRecipe = (await getComponentFromPage(
+      "RecipeHeroSection",
+    )) as RecipeHeroSection;
+
+    if (targetRecipe && targetRecipe.addAllIngridientsCssSelector) {
+      await browser.clickOn(targetRecipe.addAllIngridientsCssSelector);
+    }
+  }
+
+  async function handleBuyListContents(action: any) {
+    const navigationLink = (await getComponentFromPage(
+      "ListsNavigationLink",
+    )) as ListsNavigationLink;
+
+    if (navigationLink) {
+      await browser.clickOn(navigationLink.linkCssSelector);
+      await browser.awaitPageLoad();
+
+      const request = `List name: ${action.listName}`;
+      const targetList = (await getComponentFromPage(
+        "ListInfo",
+        request,
+      )) as ListInfo;
+
+      if (targetList && targetList.detailsLinkCssSelector) {
+        await browser.clickOn(targetList.detailsLinkCssSelector);
+        await browser.awaitPageLoad();
+
+        const listDetails = (await getComponentFromPage(
+          "ListDetailsInfo",
+        )) as ListDetailsInfo;
+
+        if (listDetails && listDetails.products) {
+          for (let product of listDetails.products) {
+            if (product.addToCartButton) {
+              await browser.clickOn(product.addToCartButton.cssSelector);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  async function handleBuyItAgain(action: any) {
+    await searchForStore(action.parameters.storeName);
+    await selectStoreSearchResult(action.parameters.storeName);
+
+    const navigationLink = (await getComponentFromPage(
+      "BuyItAgainNavigationLink",
+    )) as BuyItAgainNavigationLink;
+
+    if (navigationLink) {
+      await browser.clickOn(navigationLink.linkCssSelector);
+      await browser.awaitPageLoad();
+
+      const headerSection = (await getComponentFromPage(
+        "BuyItAgainHeaderSection",
+      )) as BuyItAgainHeaderSection;
+
+      if (headerSection && headerSection.products) {
+        if (action.parameters.allItems) {
+          for (let product of headerSection.products) {
+            if (product.addToCartButton) {
+              await browser.clickOn(product.addToCartButton.cssSelector);
+            }
+          }
+        } else {
+          const request = `Product: ${action.productName}`;
+          const targetProduct = (await getComponentFromPage(
+            "ProductTile",
+            request,
+          )) as ProductTile;
+          if (targetProduct && targetProduct.addToCartButton) {
+            await browser.clickOn(targetProduct.addToCartButton.cssSelector);
+          }
+        }
+      }
+    }
   }
 
   return message;

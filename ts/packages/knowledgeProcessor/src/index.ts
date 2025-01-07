@@ -7,7 +7,7 @@ export * from "./textChunker.js";
 export * from "./storageProvider.js";
 export * from "./keyValueIndex.js";
 export * from "./knowledgeStore.js";
-export * from "./knowledgeIndex.js";
+export * from "./textIndex.js";
 export * from "./temporal.js";
 export * from "./modelCache.js";
 export * from "./indexingStats.js";

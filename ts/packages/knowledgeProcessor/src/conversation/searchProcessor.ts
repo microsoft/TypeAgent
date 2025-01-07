@@ -56,10 +56,11 @@ export type SearchProcessingOptions = {
     entitySearch?: EntitySearchOptions | undefined;
     fallbackSearch?: SearchOptions | undefined;
     threadSearch?: SearchOptions | undefined;
-    skipAnswerGeneration?: boolean;
-    skipEntitySearch?: boolean;
-    skipTopicSearch?: boolean;
-    skipActionSearch?: boolean;
+    skipAnswerGeneration?: boolean | undefined;
+    skipEntitySearch?: boolean | undefined;
+    skipTopicSearch?: boolean | undefined;
+    skipActionSearch?: boolean | undefined;
+    skipMessages?: boolean | undefined;
     progress?: ((action: any) => void) | undefined;
 };
 
@@ -374,13 +375,12 @@ export function createSearchProcessor(
             options,
             false,
         );
-        if (options.threadSearch) {
-            await applyThreadFilters(
-                action.parameters.question,
-                action.parameters.filters,
-                options.threadSearch,
-            );
-        }
+
+        await applyThreadFilters(
+            action.parameters.question,
+            action.parameters.filters,
+            options.threadSearch,
+        );
         const response = await conversation.searchTermsV2(
             action.parameters.filters,
             searchOptions,
@@ -626,21 +626,28 @@ export function createSearchProcessor(
     async function applyThreadFilters(
         query: string,
         filters: TermFilterV2[],
-        options: SearchOptions,
+        options?: SearchOptions | undefined,
     ) {
         const threadIndex = await conversation.getThreadIndex();
-        const threads = await threadIndex.getNearest(
-            query,
-            options.maxMatches,
-            options.minScore,
-        );
-        if (threads.length === 0) {
-            return;
+        if (!options) {
+            if (await threadIndex.matchTags(filters)) {
+                options = { maxMatches: 1, minScore: 0.8 };
+            }
         }
-        const thread = threads[0];
-        for (const filter of filters) {
-            if (!filter.timeRange) {
-                filter.timeRange = thread.timeRange;
+        if (options) {
+            const threads = await threadIndex.getNearest(
+                query,
+                options.maxMatches,
+                options.minScore,
+            );
+            if (threads.length === 0) {
+                return;
+            }
+            const thread = threads[0];
+            for (const filter of filters) {
+                if (!filter.timeRange) {
+                    filter.timeRange = thread.timeRange;
+                }
             }
         }
     }
@@ -681,6 +688,9 @@ export function createSearchProcessor(
         }
         if (options.skipActionSearch) {
             searchOptions.action = undefined;
+        }
+        if (options.skipMessages) {
+            searchOptions.loadMessages = false;
         }
         return searchOptions;
     }

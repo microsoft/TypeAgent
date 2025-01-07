@@ -55,6 +55,16 @@ export type HomeLink = {
   linkCssSelector: string;
 };
 
+// the navigation link to the "Your Lists" view on instacart
+export type ListsNavigationLink = {
+  linkCssSelector: string;
+};
+
+// the navigation link to the "Buy it Again" view on instacart
+export type BuyItAgainNavigationLink = {
+  linkCssSelector: string;
+};
+
 // Information the Physical store location
 export type StoreInfo = {
   name: string;
@@ -68,9 +78,31 @@ export type RecipeBuyButton = {
   ingredientCount: number;
 };
 
+export type RecipeHeroSection = {
+  recipeName: string;
+  summary: string;
+  addAllIngridientsCssSelector: string;
+  saveButtonCssSelector: string;
+};
+
+// this gives the details for a specific recipe
 export type RecipeInfo = {
   name: string;
   ingredients: ProductTile[];
+  recipeLinkCssSelector: string;
+};
+
+// this captures the recipes visible on the page
+export type AllRecipeSearchResults = {
+  keyword: string;
+  // The complete list of recipes in the search results page
+  recipes: RecipeSearchResult[];
+};
+
+export type RecipeSearchResult = {
+  name: string;
+  // The CSS selector for a link to an individual recipe
+  recipeLinkCssSelector: string;
 };
 
 export type AllListsInfo = {
@@ -81,4 +113,21 @@ export type AllListsInfo = {
     },
   ];
   submitButtonCssSelector: string;
+};
+
+export type ListInfo = {
+  name: string;
+  detailsLinkCssSelector: string;
+};
+
+export type ListDetailsInfo = {
+  name: string;
+  storeName?: string;
+  products?: ProductTile[];
+};
+
+export type BuyItAgainHeaderSection = {
+  allItemsCssSelector: string;
+  pastOrdersCssSelector: string;
+  products?: ProductTile[];
 };

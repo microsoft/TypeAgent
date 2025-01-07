@@ -1,4 +1,4 @@
-// Copyright (c) Microsoft Corporation.
+// Copyright (c) Microsoft Corporation and Henry Lucco.
 // Licensed under the MIT License.
 
 import {
@@ -14,7 +14,7 @@ import {
     TextIndex,
     TextIndexSettings,
     createTermSet,
-} from "../knowledgeIndex.js";
+} from "../textIndex.js";
 import {
     KnowledgeStore,
     createKnowledgeStoreOnStorage,
@@ -42,7 +42,12 @@ import {
     getRangeOfTemporalSequence,
     itemsFromTemporalSequence,
 } from "../temporal.js";
-import { toStopDate, toStartDate } from "./knowledgeActions.js";
+import {
+    toStopDate,
+    toStartDate,
+    FilterWithTagScope,
+    isFilterWithTagScope,
+} from "./knowledgeActions.js";
 import { ConcreteEntity, Facet } from "./knowledgeSchema.js";
 import { TermFilter } from "./knowledgeTermSearchSchema.js";
 import { TermFilterV2 } from "./knowledgeTermSearchSchema2.js";
@@ -63,6 +68,7 @@ export interface EntitySearchOptions extends SearchOptions {
      * E.g. 3 means that the 3 highest scores are picked and any items with those scores selected
      */
     topK?: number;
+    alwaysUseTags?: boolean | undefined;
 }
 
 export function createEntitySearchOptions(
@@ -79,6 +85,7 @@ export function createEntitySearchOptions(
         },
         combinationSetOp: SetOp.IntersectUnion,
         loadEntities,
+        alwaysUseTags: false,
     };
 }
 
@@ -95,6 +102,10 @@ export interface EntityIndex<TEntityId = any, TSourceId = any, TTextId = any>
     getMultiple(ids: TEntityId[]): Promise<ExtractedEntity<TSourceId>[]>;
     getSourceIds(ids: TEntityId[]): Promise<TSourceId[]>;
     getEntities(ids: TEntityId[]): Promise<ConcreteEntity[]>;
+    getEntityIdsInTimeRange(
+        startAt: Date,
+        stopAt?: Date,
+    ): Promise<TEntityId[] | undefined>;
     add(entity: ExtractedEntity<TSourceId>, id?: TEntityId): Promise<TEntityId>;
     addMultiple(
         entities: ExtractedEntity<TSourceId>[],
@@ -109,7 +120,7 @@ export interface EntityIndex<TEntityId = any, TSourceId = any, TTextId = any>
         options: EntitySearchOptions,
     ): Promise<EntitySearchResult<TEntityId>>;
     searchTermsV2(
-        filter: TermFilterV2,
+        filter: TermFilterV2 | FilterWithTagScope<TermFilterV2>,
         options: EntitySearchOptions,
     ): Promise<EntitySearchResult<TEntityId>>;
     loadSourceIds(
@@ -184,6 +195,7 @@ export async function createEntityIndexOnStorage<TSourceId = string>(
         getMultiple,
         getSourceIds,
         getEntities,
+        getEntityIdsInTimeRange,
         add,
         addMultiple,
         search,
@@ -222,6 +234,18 @@ export async function createEntityIndexOnStorage<TSourceId = string>(
                 return entity.value;
             },
         );
+    }
+
+    async function getEntityIdsInTimeRange(
+        startAt: Date,
+        stopAt?: Date,
+    ): Promise<EntityId[] | undefined> {
+        // Get all entity ids seen in this date range
+        const temporalSequence = await entityStore.sequence.getEntriesInRange(
+            startAt,
+            stopAt,
+        );
+        return itemsFromTemporalSequence(temporalSequence);
     }
 
     async function add(
@@ -355,11 +379,27 @@ export async function createEntityIndexOnStorage<TSourceId = string>(
     }
 
     async function searchTermsV2(
-        filter: TermFilterV2,
+        filterOrScoped: TermFilterV2 | FilterWithTagScope<TermFilterV2>,
         options: EntitySearchOptions,
     ): Promise<EntitySearchResult<EntityId>> {
+        let filter: TermFilterV2;
+        let tags: string[] | undefined;
+        if (isFilterWithTagScope(filterOrScoped)) {
+            filter = filterOrScoped.filter;
+            tags = filterOrScoped.tags;
+        } else {
+            filter = filterOrScoped;
+        }
         if (filter.searchTerms && filter.searchTerms.length > 0) {
-            return matchEntities(filter.searchTerms, filter.timeRange, options);
+            if (options.alwaysUseTags && !tags) {
+                tags = filter.searchTerms;
+            }
+            return matchEntities(
+                filter.searchTerms,
+                filter.timeRange,
+                options,
+                tags,
+            );
         }
         return createSearchResults();
     }
@@ -368,6 +408,7 @@ export async function createEntityIndexOnStorage<TSourceId = string>(
         terms: string[],
         timeRange: DateTimeRange | undefined,
         options: EntitySearchOptions,
+        tags?: string[],
     ): Promise<EntitySearchResult<EntityId>> {
         const results = createSearchResults();
         if (timeRange) {
@@ -377,11 +418,14 @@ export async function createEntityIndexOnStorage<TSourceId = string>(
                     toStopDate(timeRange.stopDate),
                 );
         }
-
+        let tagMatchIds: string[] | undefined;
+        if (tags) {
+            tagMatchIds = await entityStore.getByTag(tags);
+        }
         terms = terms.filter((t) => !noiseTerms.has(t));
         if (terms && terms.length > 0) {
             const entityIdHitTable = createHitTable<EntityId>();
-            const scoreBoost = terms.length;
+            const scoreBoost = 100;
             await Promise.all([
                 nameIndex.getNearestHitsMultiple(
                     terms,
@@ -413,6 +457,7 @@ export async function createEntityIndexOnStorage<TSourceId = string>(
             results.entityIds = [
                 ...intersectMultiple(
                     entityIdHits,
+                    tagMatchIds,
                     itemsFromTemporalSequence(results.temporalSequence),
                 ),
             ];
@@ -570,6 +615,12 @@ export function appendCompositeEntity(
 }
 
 export function toCompositeEntity(entity: ConcreteEntity): CompositeEntity {
+    if (entity === undefined) {
+        return {
+            name: "undefined",
+            type: ["undefined"],
+        };
+    }
     const composite: CompositeEntity = {
         name: entity.name,
         type: [...entity.type],
