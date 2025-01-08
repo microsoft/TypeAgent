@@ -168,7 +168,7 @@ export async function createChatMemoryContext(
             false,
             conversation,
         );
-    const entityTopK = 64;
+    const entityTopK = 100;
     const actionTopK = 16;
     const context: ChatContext = {
         storePath,
@@ -1150,7 +1150,7 @@ export async function runChatMemory(): Promise<void> {
                 eval: argBool("Evaluate search query", true),
                 debug: argBool("Show debug info", false),
                 save: argBool("Save the search", false),
-                v2: argBool("Run V2 match", false),
+                v2: argBool("Run V2 match", true),
             },
         };
     }
@@ -1266,8 +1266,12 @@ export async function runChatMemory(): Promise<void> {
                 query: arg("Search query"),
             },
             options: {
-                maxMessages: argNum("Maximum fuzzy matches", 50),
-                minScore: argNum("Minimum similarity score", 0.7),
+                maxMessages: argNum("Maximum messages to match", 50),
+                minScore: argNum("Minimum similarity score", 0.75),
+                maxMessageTokens: argNum(
+                    "Maximum (approx) # of message tokens to send",
+                    4096,
+                ),
             },
         };
     }
@@ -1280,13 +1284,19 @@ export async function runChatMemory(): Promise<void> {
                 maxMatches: namedArgs.maxMessages,
                 minScore: namedArgs.minScore,
             };
-            printer.writeInColor(
-                chalk.cyan,
-                `Searching ${context.conversationName}\nmaxMessages:${options.maxMatches}\nminScore: ${options.minScore} [${Math.round(mathLib.angleDegreesFromCosine(options.minScore!))} degrees]`,
-            );
+            printer.writeInColor(chalk.cyan, () => {
+                printer.writeLine(
+                    `Max message tokens (approx): ${namedArgs.maxMessageTokens}`,
+                );
+                printer.writeLine(
+                    `Min score:${options.minScore} [${Math.round(mathLib.angleDegreesFromCosine(options.minScore!))} degrees]`,
+                );
+                printer.writeLine(`Max messages:${options.maxMatches}`);
+            });
             const response = await context.searcher.searchMessages(
                 namedArgs.query,
                 options,
+                namedArgs.maxMessageTokens * 4,
             );
             const answer = response.answer;
             if (answer) {
@@ -1743,10 +1753,11 @@ export async function runChatMemory(): Promise<void> {
             const composite = conversation.mergeEntities(
                 knowLib.sets.removeUndefined(entities.map((e) => e?.value)),
             );
-            for (const value of composite.values()) {
-                printer.writeCompositeEntity(value.value);
-                printer.writeLine();
+            const compositeEntities: conversation.CompositeEntity[] = [];
+            for (const ce of composite.values()) {
+                compositeEntities.push(ce.value);
             }
+            printer.writeCompositeEntities(compositeEntities);
         }
     }
 

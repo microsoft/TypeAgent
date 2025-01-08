@@ -112,6 +112,7 @@ export interface ConversationSearchProcessor {
     searchMessages(
         query: string,
         options: SearchOptions,
+        maxMessageChars?: number,
     ): Promise<SearchResponse>;
 }
 
@@ -258,9 +259,50 @@ export function createSearchProcessor(
     async function searchMessages(
         query: string,
         options: SearchOptions,
+        maxMessageChars?: number,
     ): Promise<SearchResponse> {
         const response = createSearchResponse();
-        await fallbackSearch(query, undefined, response, options);
+        //await fallbackSearch(query, undefined, response, options);
+        const messageIndex = await conversation.getMessageIndex();
+        if (messageIndex) {
+            const matches = await messageIndex.nearestNeighbors(
+                query,
+                options.maxMatches,
+                options.minScore,
+            );
+            if (matches.length > 0) {
+                response.messageIds = matches.map((m) => m.item);
+                response.messages = await conversation.loadMessages(
+                    response.messageIds,
+                );
+                if (maxMessageChars && maxMessageChars > 0) {
+                    let charCount = 0;
+                    let i = 0;
+                    for (; i < response.messages.length; ++i) {
+                        const messageLength =
+                            response.messages[i].value.value.length;
+                        if (charCount + messageLength > maxMessageChars) {
+                            break;
+                        }
+                        charCount += messageLength;
+                    }
+                    if (i === 0) {
+                        i = 1;
+                    }
+                    if (i < response.messages.length) {
+                        response.messageIds.splice(i);
+                        response.messages.splice(i);
+                    }
+                }
+                response.answer = await answers.generateAnswer(
+                    query,
+                    undefined,
+                    response,
+                    true,
+                );
+            }
+        }
+
         return response;
     }
 

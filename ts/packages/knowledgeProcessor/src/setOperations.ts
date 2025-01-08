@@ -129,19 +129,21 @@ export function* union<T>(
 ): IterableIterator<T> {
     const x: Iterator<T> = Array.isArray(xArray) ? xArray.values() : xArray;
     const y: Iterator<T> = Array.isArray(yArray) ? yArray.values() : yArray;
-    const unionSet = new Set<T>();
+    let unionSet = new Set<T>();
     let xVal = x.next();
     while (!xVal.done) {
         unionSet.add(xVal.value);
         xVal = x.next();
     }
     let yVal = y.next();
-
     while (!yVal.done) {
         unionSet.add(yVal.value);
         yVal = y.next();
     }
-    return [...unionSet.values()].sort();
+    const unionArray = [...unionSet.values()].sort();
+    for (const item of unionArray) {
+        yield item;
+    }
 }
 
 export function unionMultiple<T>(

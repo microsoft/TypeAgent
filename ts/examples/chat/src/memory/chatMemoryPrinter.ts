@@ -302,11 +302,10 @@ export class ChatMemoryPrinter extends ChatPrinter {
                     `Action to Message Hit Count: ${actionIds.size}`,
                 );
             }
-            if (response.messages) {
-                this.writeLine(
-                    `Message Hit Count: ${response.messages ? response.messages.length : 0}`,
-                );
-            }
+            const messageHitCount = response.messages
+                ? response.messages.length
+                : 0;
+            this.writeLine(`Message Hit Count: ${messageHitCount}`);
         }
     }
 

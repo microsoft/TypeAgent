@@ -88,7 +88,7 @@ export async function createPodcastMemory(
         //"What was talked about/discussed is in conversation history as entities, topics and messages. Be sure to use them, not just messages.\n" +
         "Always use supplied messages, ENTITIES AND ANSWERS in your answers.\n" +
         `E.g. include entities in answers to queries like "'they' talked about' \n` +
-        "Queries for lists always mean 'full list' with item numbers";
+        "Queries for lists always mean 'full list'";
     return cm;
 }
 
@@ -848,10 +848,7 @@ export function createPodcastCommands(
         context.printer.writeLine(range.startDate.toISOString());
         context.printer.writeLine(range.stopDate!.toISOString());
         if (tags && tags.length > 0) {
-            context.printer.writeInColor(
-                chalk.cyan,
-                "Tags: " + tags.join(", "),
-            );
+            context.printer.writeLine("Tags: " + tags.join(", "));
         }
         context.printer.writeLine();
     }
