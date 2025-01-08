@@ -7,19 +7,26 @@ import {
     ActionResultSuccess,
     AppAction,
     AppAgent,
+    Entity,
     ParameterDefinitions,
     ParsedCommandParams,
 } from "@typeagent/agent-sdk";
-import { createActionResultFromTextDisplay } from "@typeagent/agent-sdk/helpers/action";
+import {
+    createActionResult,
+    createActionResultFromTextDisplay,
+} from "@typeagent/agent-sdk/helpers/action";
 import { SpelunkerAction } from "./spelunkerSchema.js";
 import {
     CommandHandler,
     CommandHandlerTable,
     getCommandInterface,
 } from "@typeagent/agent-sdk/helpers/command";
+import path from "path";
+import fs from "fs";
 
 class RequestCommandHandler implements CommandHandler {
-    public readonly description = "Send a request to the Spelunker";
+    public readonly description =
+        "Send a natural language request to the Spelunker";
     public readonly parameters: ParameterDefinitions = {
         // Must have a single string parameter and implicit quotes
         // in order to support '@config request <agent>'
@@ -33,12 +40,15 @@ class RequestCommandHandler implements CommandHandler {
         },
     };
     public async run(
-        context: ActionContext<SpelunkerActionContext>,
+        actionContext: ActionContext<SpelunkerContext>,
         params: ParsedCommandParams<ParameterDefinitions>,
     ): Promise<void> {
         if (typeof params.args?.question === "string") {
-            const result = makeRandomResponse(params.args.question);
-            context.actionIO.appendDisplay(result.displayContent);
+            const result = answerQuestion(
+                actionContext.sessionContext.agentContext,
+                params.args.question,
+            );
+            actionContext.actionIO.appendDisplay(result.displayContent);
         }
     }
 }
@@ -56,25 +66,100 @@ export function instantiate(): AppAgent {
     return {
         initializeAgentContext: initializeSpelunkerContext,
         executeAction: executeSpelunkerAction,
+        // TODO: What other standard functions could be handy here?
         ...getCommandInterface(handlers),
     };
 }
 
-type SpelunkerActionContext = {};
+type SpelunkerContext = {
+    focusFolders: string[];
+    // focusFiles: string[];
+};
 
-async function initializeSpelunkerContext(): Promise<SpelunkerActionContext> {
-    return {};
+async function initializeSpelunkerContext(): Promise<SpelunkerContext> {
+    return {
+        focusFolders: [],
+        // focusFiles: [],
+    };
 }
 
 async function executeSpelunkerAction(
     action: AppAction,
-    context: ActionContext<SpelunkerActionContext>,
+    context: ActionContext<SpelunkerContext>,
 ): Promise<ActionResult> {
     let result = await handleSpelunkerAction(
         action as SpelunkerAction,
         context.sessionContext.agentContext,
     );
     return result;
+}
+
+async function handleSpelunkerAction(
+    action: SpelunkerAction,
+    spelunkerContext: SpelunkerContext,
+): Promise<ActionResult> {
+    switch (action.actionName) {
+        case "setFocusToFolders": {
+            spelunkerContext.focusFolders = [
+                ...action.parameters.folders
+                    .map((folder) => path.resolve(expandHome(folder)))
+                    .filter(
+                        (f) => fs.existsSync(f) && fs.statSync(f).isDirectory(),
+                    ),
+            ];
+            // spelunkerContext.focusFiles = [];
+            const literalText = spelunkerContext.focusFolders.length
+                ? `Successfully set Spelunker focus to ${spelunkerContext.focusFolders}`
+                : "successfully cleared Spelunker focus";
+            const speak = true;
+            const entities = [
+                ...spelunkerContext.focusFolders.map(
+                    (folder): Entity => ({
+                        name: path.basename(folder),
+                        type: ["folder"],
+                        additionalEntityText: path.dirname(folder),
+                        uniqueId: folder,
+                    }),
+                ),
+            ];
+            return createActionResult(literalText, speak, entities);
+        }
+
+        case "getFocus": {
+            const literalText = spelunkerContext.focusFolders.length
+                ? `Spelunker focus set to ${spelunkerContext.focusFolders}`
+                : "Spelunker focus is empty";
+            const speak = true;
+            const entities = [
+                ...spelunkerContext.focusFolders.map(
+                    (folder): Entity => ({
+                        name: path.basename(folder),
+                        type: ["folder"],
+                        additionalEntityText: path.dirname(folder),
+                        uniqueId: folder,
+                    }),
+                ),
+            ];
+            return createActionResult(literalText, speak, entities);
+        }
+
+        default:
+            throw new Error(`Unknown action: ${action.actionName}`);
+    }
+}
+
+function expandHome(pathname: string): string {
+    if (pathname[0] != "~") return pathname;
+    return process.env.HOME + pathname.substring(1);
+}
+
+function answerQuestion(
+    context: SpelunkerContext,
+    input: string,
+): ActionResultSuccess {
+    const randomIndex = Math.floor(Math.random() * oracularResponses.length);
+    const displayText = oracularResponses[randomIndex];
+    return createActionResultFromTextDisplay(displayText, displayText);
 }
 
 const oracularResponses = `
@@ -116,23 +201,3 @@ The tree stands silent, rooted in a ground it did not choose, reaching for a sky
 `
     .trim()
     .split("\n"); // Written by GPT-4o. (The last, very long one, is meant as a prank.)
-
-async function handleSpelunkerAction(
-    action: SpelunkerAction,
-    spelunkerContext: SpelunkerActionContext,
-): Promise<ActionResult> {
-    switch (action.actionName) {
-        case "querySpelunker": {
-            return makeRandomResponse(action.parameters.query);
-            break;
-        }
-        default:
-            throw new Error(`Unknown action: ${action.actionName}`);
-    }
-}
-
-function makeRandomResponse(input: string): ActionResultSuccess {
-    const randomIndex = Math.floor(Math.random() * oracularResponses.length);
-    const displayText = oracularResponses[randomIndex];
-    return createActionResultFromTextDisplay(displayText, displayText);
-}
