@@ -1,6 +1,6 @@
 # WSL2 environment setup
 
-This is a list of step-by-step instructions to set up a WSL2 environment from _scratch_ to build, run, and develop the TypeAgent repo, collated from various READMEs throughout the repo and external source. Links to the original instructions for each part are provided for reference, but mostly not required to visit if you just follow the instructions here. Modified the steps as necessary to suit your needs.
+This is a list of step-by-step instructions to set up a WSL2 environment from _scratch_ to build, run, and develop the TypeAgent repo, collated from various READMEs throughout the repo and external source. The instruction will install and setup the necessary tools and put the repo in `~/src/TypeAgent`. Links to the original instructions for each part are provided for reference, but mostly not required to visit if you just follow the instructions here. Skip or change the steps as necessary to suit your needs.
 
 ## Build
 
@@ -53,4 +53,4 @@ This is a list of step-by-step instructions to set up a WSL2 environment from _s
 - Install VSCode on Windows ([download](https://code.visualstudio.com/download))
 - Install VSCode extension [Remote Development](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.vscode-remote-extensionpack)
 - Start VSCode in WSL (_Continued from above command prompt in WSL_)
-  - `code .`
+  - `code ~/src/TypeAgent/ts`
