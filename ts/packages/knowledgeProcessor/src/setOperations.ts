@@ -196,6 +196,36 @@ export function* unionScored<T>(
     }
 }
 
+export function* unionScoredHash(
+    xArray: Iterator<ScoredItem<number>> | Array<ScoredItem<number>>,
+    yArray: Iterator<ScoredItem<number>> | Array<ScoredItem<number>>,
+): IterableIterator<ScoredItem<number>> {
+    const x: Iterator<ScoredItem<number>> = Array.isArray(xArray)
+        ? xArray.values()
+        : xArray;
+    const y: Iterator<ScoredItem<number>> = Array.isArray(yArray)
+        ? yArray.values()
+        : yArray;
+
+    const unionSet = new Map<number, ScoredItem<number>>();
+    let xVal = x.next();
+    while (!xVal.done) {
+        unionSet.set(xVal.value.item, xVal.value);
+        xVal = x.next();
+    }
+
+    let yVal = y.next();
+    while (!yVal.done) {
+        const existing = unionSet.get(yVal.value.item);
+        if (!existing || existing.score < yVal.value.score) {
+            unionSet.set(yVal.value.item, yVal.value);
+        }
+        yVal = y.next();
+    }
+
+    return [...unionSet.values()].sort();
+}
+
 export function unionMultipleScored<T>(
     ...arrays: (
         | Iterator<ScoredItem<T>>
