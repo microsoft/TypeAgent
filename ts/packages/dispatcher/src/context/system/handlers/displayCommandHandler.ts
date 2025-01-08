@@ -13,6 +13,10 @@ export class DisplayCommandHandler implements CommandHandler {
                 description: "Speak the display for the host that supports TTS",
                 default: false,
             },
+            type: {
+                description: "Display type",
+                default: "text",
+            },
         },
         args: {
             text: {
@@ -27,10 +31,18 @@ export class DisplayCommandHandler implements CommandHandler {
     ) {
         const { flags, args } = params;
 
+        if (
+            flags.type !== "text" &&
+            flags.type !== "html" &&
+            flags.type !== "markdown" &&
+            flags.type !== "iframe"
+        ) {
+            throw new Error(`Invalid display type: ${flags.type}`);
+        }
         for (const content of args.text) {
             context.actionIO.appendDisplay(
                 {
-                    type: "text",
+                    type: flags.type,
                     content,
                     speak: flags.speak,
                 },

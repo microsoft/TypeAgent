@@ -8,7 +8,7 @@
 // - text can supports use ANSI escape code to control additional text color and style
 //   - depending on host support, host is expected to strip ANI escape code if not supported.
 // - html and iframe might not be supported by all hosts.
-export type DisplayType = "html" | "iframe" | "text";
+export type DisplayType = "markdown" | "html" | "iframe" | "text";
 
 export type DynamicDisplay = {
     content: DisplayContent;

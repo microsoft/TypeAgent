@@ -1865,6 +1865,9 @@ importers:
       electron-updater:
         specifier: ^6.3.2
         version: 6.3.2
+      markdown-it:
+        specifier: ^14.1.0
+        version: 14.1.0
       microsoft-cognitiveservices-speech-sdk:
         specifier: ^1.38.0
         version: 1.38.0

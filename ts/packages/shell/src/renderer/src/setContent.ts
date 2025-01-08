@@ -11,6 +11,7 @@ import {
 } from "@typeagent/agent-sdk";
 import DOMPurify from "dompurify";
 import { SettingsView } from "./settingsView";
+import MarkdownIt from "markdown-it";
 
 const ansi_up = new AnsiUp();
 ansi_up.use_classes = true;
@@ -34,15 +35,25 @@ function encodeTextToHtml(text: string): string {
 
 const enableText2Html = true;
 function processContent(content: string, type: string): string {
-    return type === "html"
-        ? DOMPurify.sanitize(content, {
-              ADD_ATTR: ["target", "onclick", "onerror"],
-              ADD_DATA_URI_TAGS: ["img"],
-              ADD_URI_SAFE_ATTR: ["src"],
-          })
-        : enableText2Html
-          ? textToHtml(content)
-          : stripAnsi(encodeTextToHtml(content));
+    switch (type) {
+        case "iframe":
+            return content;
+        case "html":
+            return DOMPurify.sanitize(content, {
+                ADD_ATTR: ["target", "onclick", "onerror"],
+                ADD_DATA_URI_TAGS: ["img"],
+                ADD_URI_SAFE_ATTR: ["src"],
+            });
+        case "markdown":
+            const md = new MarkdownIt();
+            return md.render(content);
+        case "text":
+            return enableText2Html
+                ? textToHtml(content)
+                : stripAnsi(encodeTextToHtml(content));
+        default:
+            throw new Error(`Invalid content type ${type}`);
+    }
 }
 
 function matchKindStyle(elm: HTMLElement, kindStyle?: string) {
