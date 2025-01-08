@@ -47,9 +47,9 @@ type GenericChannel = {
     disconnect: () => void;
 };
 
-function createGenericChannel(
-    sendFunc: (message: any) => void,
-): GenericChannel {
+type GenericSendFunc = (message: any, cb?: (err: Error | null) => void) => void;
+
+function createGenericChannel(sendFunc: GenericSendFunc): GenericChannel {
     const data: ChannelData = {
         handlers: {
             message: [],
@@ -76,7 +76,7 @@ function createGenericChannel(
             ) as any;
         },
         send(message: any, cb?: (err: Error | null) => void) {
-            sendFunc(message);
+            sendFunc(message, cb);
         },
     };
 
@@ -102,7 +102,7 @@ function createGenericChannel(
 }
 
 export function createGenericChannelProvider(
-    sendFunc: (message: any) => void,
+    sendFunc: GenericSendFunc,
 ): GenericChannelProvider {
     const genericSharedChannel = createGenericChannel(sendFunc);
 
@@ -139,11 +139,14 @@ export function createChannelProvider(
         if (channels.has(name)) {
             throw new Error(`Channel ${name} already exists`);
         }
-        const genericChannel = createGenericChannel((message: any) => {
-            sharedChannel.send({
-                name,
-                message,
-            });
+        const genericChannel = createGenericChannel((message, cb) => {
+            sharedChannel.send(
+                {
+                    name,
+                    message,
+                },
+                cb,
+            );
         });
 
         channels.set(name, genericChannel);

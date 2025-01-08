@@ -34,7 +34,7 @@ export function createRpc<
     InvokeHandlers extends { [key: string]: (param: any) => Promise<unknown> },
     CallHandlers extends { [key: string]: (param: any) => void },
 >(
-    transport: RpcChannel,
+    channel: RpcChannel,
     invokeHandlers?: InvokeHandlers,
     callHandlers?: CallHandlers,
 ): RpcReturn<InvokeTargetFunctions, CallTargetFunctions> {
@@ -61,7 +61,7 @@ export function createRpc<
         if (isInvokeMessage(message)) {
             const f = invokeHandlers?.[message.name];
             if (f === undefined) {
-                transport.send({
+                channel.send({
                     type: "invokeError",
                     callId: message.callId,
                     error: "No invoke handler",
@@ -69,14 +69,14 @@ export function createRpc<
             } else {
                 f(message.param).then(
                     (result) => {
-                        transport.send({
+                        channel.send({
                             type: "invokeResult",
                             callId: message.callId,
                             result,
                         });
                     },
                     (error) => {
-                        transport.send({
+                        channel.send({
                             type: "invokeError",
                             callId: message.callId,
                             error: error.message,
@@ -101,10 +101,10 @@ export function createRpc<
             r.reject(new Error(message.error));
         }
     };
-    transport.on("message", cb);
-    transport.once("disconnect", () => {
+    channel.on("message", cb);
+    channel.once("disconnect", () => {
         debugError("disconnect");
-        transport.off("message", cb);
+        channel.off("message", cb);
         const errorFunc = () => {
             throw new Error("Agent process disconnected");
         };
@@ -130,7 +130,7 @@ export function createRpc<
             };
 
             return new Promise<T>((resolve, reject) => {
-                transport.send!(message, (err) => {
+                channel.send(message, (err) => {
                     if (err !== null) {
                         reject(err);
                     }
@@ -145,7 +145,7 @@ export function createRpc<
                 name,
                 param,
             };
-            transport.send!(message);
+            channel.send(message);
         },
     } as RpcReturn<InvokeTargetFunctions, CallTargetFunctions>;
     return rpc;
