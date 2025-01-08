@@ -17,6 +17,10 @@ export class DisplayCommandHandler implements CommandHandler {
                 description: "Display type",
                 default: "text",
             },
+            inline: {
+                description: "Display inline",
+                default: false,
+            },
         },
         args: {
             text: {
@@ -46,7 +50,7 @@ export class DisplayCommandHandler implements CommandHandler {
                     content,
                     speak: flags.speak,
                 },
-                "block",
+                flags.inline ? "inline" : "block",
             );
         }
     }
