@@ -6,16 +6,7 @@ import registerDebug from "debug";
 const debug = registerDebug("typeagent:rpc");
 const debugError = registerDebug("typeagent:rpc:error");
 
-// Compatible with ChildProcess | NodeJS.Process
-export type Transport<T = any> = {
-    on(event: "message", cb: (message: Partial<T>) => void): void;
-    on(event: "disconnect", cb: () => void): void;
-    once(event: "message", cb: (message: Partial<T>) => void): void;
-    once(event: "disconnect", cb: () => void): void;
-    off(event: "message", cb: (message: Partial<T>) => void): void;
-    off(event: "disconnect", cb: () => void): void;
-    send(message: T, cb?: (err: Error | null) => void): void;
-};
+import { RpcChannel } from "./common.js";
 
 type RpcFuncType<
     N extends string,
@@ -43,7 +34,7 @@ export function createRpc<
     InvokeHandlers extends { [key: string]: (param: any) => Promise<unknown> },
     CallHandlers extends { [key: string]: (param: any) => void },
 >(
-    transport: Transport,
+    transport: RpcChannel,
     invokeHandlers?: InvokeHandlers,
     callHandlers?: CallHandlers,
 ): RpcReturn<InvokeTargetFunctions, CallTargetFunctions> {

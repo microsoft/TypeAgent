@@ -1,0 +1,24 @@
+/* 
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT License.
+*/
+
+body {
+  font-family: Arial, sans-serif;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  height: 100vh;
+}
+
+div.main {
+  border: 1px solid black;
+  width: 800px;
+  height: 800px;
+}
+
+div.turtle {
+  margin: 0px;
+  padding: 0px;
+  position: absolute;
+}

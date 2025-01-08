@@ -1,23 +1,19 @@
 {
-  "name": "@typeagent/agent-sdk",
+  "name": "agent-rpc",
   "version": "0.0.1",
-  "description": "Interface and class to be an agent",
+  "description": "Remoting library for the TypeAgent SDK",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {
     "type": "git",
     "url": "https://github.com/microsoft/TypeAgent.git",
-    "directory": "ts/packages/agentSdk"
+    "directory": "ts/packages/agentRpc"
   },
   "license": "MIT",
   "author": "Microsoft",
   "type": "module",
   "exports": {
-    ".": "./dist/index.js",
-    "./helpers/action": "./dist/helpers/actionHelpers.js",
-    "./helpers/command": "./dist/helpers/commandHelpers.js",
-    "./helpers/display": "./dist/helpers/displayHelpers.js",
-    "./helpers/rpc/server": "./dist/helpers/rpc/server.js",
-    "./helpers/rpc/client": "./dist/helpers/rpc/client.js"
+    "./server": "./dist/server.js",
+    "./client": "./dist/client.js"
   },
   "types": "./dist/index.d.ts",
   "scripts": {
@@ -28,8 +24,8 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
-    "debug": "^4.3.4",
-    "type-fest": "^4.26.1"
+    "@typeagent/agent-sdk": "workspace:*",
+    "debug": "^4.3.4"
   },
   "devDependencies": {
     "@types/debug": "^4.1.10",

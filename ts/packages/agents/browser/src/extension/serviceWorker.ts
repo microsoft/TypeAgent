@@ -1547,3 +1547,40 @@ chrome.contextMenus?.onClicked.addListener(
         }
     },
 );
+
+chrome.runtime.onConnect.addListener(async (port) => {
+    if (port.name !== "typeagent") {
+        // This shouldn't happen.
+        return;
+    }
+    if (!webSocket || webSocket.readyState !== WebSocket.OPEN) {
+        port.disconnect();
+        return;
+    }
+
+    port.onMessage.addListener((data) => {
+        if (data.target === "dispatcher" && data.source === "webAgent") {
+            webSocket.send(JSON.stringify(data));
+        }
+    });
+    port.onDisconnect.addListener(() => {
+        webSocket.send(
+            JSON.stringify({
+                source: "webAgent",
+                target: "dispatcher",
+                messageType: "disconnect",
+            }),
+        );
+    });
+    webSocket.addEventListener("message", async (event: any) => {
+        const message = await event.data.text();
+        const data = JSON.parse(message) as WebSocketMessage;
+        if (
+            data.target === "webAgent" &&
+            data.source === "dispatcher" &&
+            data.messageType === "message"
+        ) {
+            port.postMessage(data);
+        }
+    });
+});

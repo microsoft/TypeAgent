@@ -5,6 +5,7 @@ import {
     ActionResult,
     AppAction,
     AppAgentEvent,
+    AppAgentManifest,
     ClientAction,
     CommandDescriptors,
     DisplayAppendMode,
@@ -16,7 +17,12 @@ import {
     StorageListOptions,
     TemplateSchema,
 } from "@typeagent/agent-sdk";
-import { JSONAction } from "agent-cache";
+
+// TODO: Duplicate code from agent-cache
+interface JSONAction {
+    fullActionName: string;
+    parameters?: Record<string, unknown> | undefined;
+}
 
 export type AgentContextCallFunctions = {
     notify(param: {
@@ -83,6 +89,11 @@ export type AgentContextInvokeFunctions = {
         name: string;
         enable: boolean;
     }) => Promise<any>;
+    addDynamicAgent: (param: {
+        contextId: number;
+        name: string;
+        manifest: AppAgentManifest;
+    }) => Promise<void>;
 };
 
 export type AgentCallFunctions = {

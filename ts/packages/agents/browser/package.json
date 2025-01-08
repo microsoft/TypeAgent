@@ -30,6 +30,7 @@
   "dependencies": {
     "@mozilla/readability": "^0.5.0",
     "@typeagent/agent-sdk": "workspace:*",
+    "agent-rpc": "workspace:*",
     "aiclient": "workspace:*",
     "common-utils": "workspace:*",
     "dompurify": "^3.1.6",

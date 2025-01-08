@@ -27,8 +27,6 @@ export * from "./webSockets.js";
 
 export { simpleStarRegex } from "./simpleStartRegex.js";
 
-export { createRpc } from "./rpc.js";
-
 export * from "./image.js";
 
 export {

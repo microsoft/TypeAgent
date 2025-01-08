@@ -16,6 +16,8 @@ import {
     ParsedCommandParams,
     ParameterDefinitions,
     Entity,
+    AppAgentManifest,
+    AppAgent,
 } from "@typeagent/agent-sdk";
 import {
     createActionResult,
@@ -118,6 +120,7 @@ export function createSessionContext<T = unknown>(
     name: string,
     agentContext: T,
     context: CommandHandlerContext,
+    allowDynamicAgent: boolean,
 ): SessionContext<T> {
     const sessionDirPath = context.session.getSessionDirPath();
     const storage = sessionDirPath
@@ -126,6 +129,12 @@ export function createSessionContext<T = unknown>(
     const instanceStorage = context.instanceDir
         ? getStorage(name, context.instanceDir)
         : undefined;
+    const addDynamicAgent = allowDynamicAgent
+        ? (agentName: string, manifest: AppAgentManifest, appAgent: AppAgent) =>
+              context.agents.addDynamicAgent(agentName, manifest, appAgent)
+        : () => {
+              throw new Error("Permission denied: cannot add dynamic agent");
+          };
     const sessionContext: SessionContext<T> = {
         get agentContext() {
             return agentContext;
@@ -168,7 +177,9 @@ export function createSessionContext<T = unknown>(
                 }
             });
         },
+        addDynamicAgent,
     };
+
     (sessionContext as any).conversationManager = context.conversationManager;
     return sessionContext;
 }

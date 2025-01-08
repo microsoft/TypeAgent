@@ -30,6 +30,8 @@ import {
   getCommandInterface,
 } from "@typeagent/agent-sdk/helpers/command";
 import { handleInstacartAction } from "./instacart/actionHandler.mjs";
+import { processWebAgentMessage } from "./webTypeAgent.mjs";
+import { GenericChannelProvider } from "agent-rpc/client";
 
 export function instantiate(): AppAgent {
   return {
@@ -42,6 +44,7 @@ export function instantiate(): AppAgent {
 
 export type BrowserActionContext = {
   webSocket: WebSocket | undefined;
+  channelProvider: GenericChannelProvider | undefined;
   crossWordState: Crossword | undefined;
   browserConnector: BrowserConnector | undefined;
   browserProcess: ChildProcess | undefined;
@@ -51,6 +54,7 @@ export type BrowserActionContext = {
 async function initializeBrowserContext(): Promise<BrowserActionContext> {
   return {
     webSocket: undefined,
+    channelProvider: undefined,
     crossWordState: undefined,
     browserConnector: undefined,
     browserProcess: undefined,
@@ -88,55 +92,65 @@ async function updateBrowserContext(
       webSocket.addEventListener("message", async (event: any) => {
         const text = event.data.toString();
         const data = JSON.parse(text) as WebSocketMessage;
-        if (
-          data.target == "dispatcher" &&
-          data.source == "browser" &&
-          data.body
-        ) {
-          switch (data.messageType) {
-            case "enableSiteTranslator": {
-              if (data.body == "browser.crossword") {
-                // initialize crossword state
-                sendSiteTranslatorStatus(data.body, "initializing", context);
-                context.agentContext.crossWordState =
-                  await getBoardSchema(context);
-                sendSiteTranslatorStatus(data.body, "initialized", context);
+        if (data.target !== "dispatcher") {
+          return;
+        }
+        switch (data.source) {
+          case "browser":
+            if (data.body) {
+              switch (data.messageType) {
+                case "enableSiteTranslator": {
+                  if (data.body == "browser.crossword") {
+                    // initialize crossword state
+                    sendSiteTranslatorStatus(
+                      data.body,
+                      "initializing",
+                      context,
+                    );
+                    context.agentContext.crossWordState =
+                      await getBoardSchema(context);
+                    sendSiteTranslatorStatus(data.body, "initialized", context);
 
-                if (context.agentContext.crossWordState) {
-                  context.notify(
-                    AppAgentEvent.Info,
-                    "Crossword board initialized.",
+                    if (context.agentContext.crossWordState) {
+                      context.notify(
+                        AppAgentEvent.Info,
+                        "Crossword board initialized.",
+                      );
+                    } else {
+                      context.notify(
+                        AppAgentEvent.Error,
+                        "Crossword board initialization failed.",
+                      );
+                    }
+                  }
+                  await context.toggleTransientAgent(data.body, true);
+                  break;
+                }
+                case "disableSiteTranslator": {
+                  await context.toggleTransientAgent(data.body, false);
+                  break;
+                }
+                case "browserActionResponse": {
+                  break;
+                }
+                case "debugBrowserAction": {
+                  await executeBrowserAction(
+                    data.body,
+                    context as unknown as ActionContext<BrowserActionContext>,
                   );
-                } else {
-                  context.notify(
-                    AppAgentEvent.Error,
-                    "Crossword board initialization failed.",
-                  );
+
+                  break;
+                }
+                case "tabIndexRequest": {
+                  await handleTabIndexActions(data.body, context, data.id);
+                  break;
                 }
               }
-              await context.toggleTransientAgent(data.body, true);
-              break;
             }
-            case "disableSiteTranslator": {
-              await context.toggleTransientAgent(data.body, false);
-              break;
-            }
-            case "browserActionResponse": {
-              break;
-            }
-            case "debugBrowserAction": {
-              await executeBrowserAction(
-                data.body,
-                context as unknown as ActionContext<BrowserActionContext>,
-              );
-
-              break;
-            }
-            case "tabIndexRequest": {
-              await handleTabIndexActions(data.body, context, data.id);
-              break;
-            }
-          }
+            break;
+          case "webAgent":
+            processWebAgentMessage(data.messageType, data.body, context);
+            break;
         }
       });
     }
@@ -357,7 +371,7 @@ class CloseBrowserHandler implements CommandHandlerNoParams {
 }
 
 export const handlers: CommandHandlerTable = {
-  description: "Browwser App Agent Commands",
+  description: "Browser App Agent Commands",
   commands: {
     launch: {
       description: "Launch a browser session",
