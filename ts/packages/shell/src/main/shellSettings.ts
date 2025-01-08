@@ -36,7 +36,7 @@ export class ShellSettings
     public multiModalContent: boolean;
     public devUI: boolean;
     public partialCompletion: boolean;
-    public allowedDisplayType: DisplayType[];
+    public disallowedDisplayType: DisplayType[];
     public onSettingsChanged: EmptyFunction | null;
     public onShowSettingsDialog: ((dialogName: string) => void) | null;
     public onRunDemo: ((interactive: boolean) => void) | null;
@@ -81,7 +81,7 @@ export class ShellSettings
         this.multiModalContent = settings.multiModalContent;
         this.devUI = settings.devUI;
         this.partialCompletion = settings.partialCompletion;
-        this.allowedDisplayType = settings.allowedDisplayType;
+        this.disallowedDisplayType = settings.disallowedDisplayType;
 
         this.onSettingsChanged = null;
         this.onShowSettingsDialog = null;
@@ -178,8 +178,8 @@ export class ShellSettings
     }
 
     public isDisplayTypeAllowed(displayType: DisplayType): boolean {
-        for (let i = 0; i < this.allowedDisplayType.length; i++) {
-            if (this.allowedDisplayType[i] === displayType) {
+        for (let i = 0; i < this.disallowedDisplayType.length; i++) {
+            if (this.disallowedDisplayType[i] === displayType) {
                 return true;
             }
         }
