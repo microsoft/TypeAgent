@@ -17,7 +17,7 @@ export function createPostings(ids: number[] | Iterable<number>): Postings {
     return postings;
 }
 
-export function* intersect<T>(
+export function* intersectMerge<T>(
     xArray: Iterator<T> | Array<T>,
     yArray: Iterator<T> | Array<T>,
 ): IterableIterator<T> {
@@ -35,6 +35,27 @@ export function* intersect<T>(
         } else {
             yVal = y.next();
         }
+    }
+}
+
+export function* intersect<T>(
+    xArray: Iterator<T> | Array<T>,
+    yArray: Iterator<T> | Array<T>,
+): IterableIterator<T> {
+    const x: Iterator<T> = Array.isArray(xArray) ? xArray.values() : xArray;
+    const y: Iterator<T> = Array.isArray(yArray) ? yArray.values() : yArray;
+    const xSet = new Set<T>();
+    let xVal = x.next();
+    while (!xVal.done) {
+        xSet.add(xVal.value);
+        xVal = x.next();
+    }
+    let yVal = y.next();
+    while (!yVal.done) {
+        if (xSet.has(yVal.value)) {
+            yield yVal.value;
+        }
+        yVal = y.next();
     }
 }
 
@@ -69,7 +90,7 @@ export function intersectUnionMultiple<T>(
     return topKItems.sort();
 }
 
-export function* union<T>(
+export function* unionMerge<T>(
     xArray: Iterator<T> | Array<T>,
     yArray: Iterator<T> | Array<T>,
 ): IterableIterator<T> {
@@ -100,6 +121,27 @@ export function* union<T>(
         yield yVal.value;
         yVal = y.next();
     }
+}
+
+export function* union<T>(
+    xArray: Iterator<T> | Array<T>,
+    yArray: Iterator<T> | Array<T>,
+): IterableIterator<T> {
+    const x: Iterator<T> = Array.isArray(xArray) ? xArray.values() : xArray;
+    const y: Iterator<T> = Array.isArray(yArray) ? yArray.values() : yArray;
+    const unionSet = new Set<T>();
+    let xVal = x.next();
+    while (!xVal.done) {
+        unionSet.add(xVal.value);
+        xVal = x.next();
+    }
+    let yVal = y.next();
+
+    while (!yVal.done) {
+        unionSet.add(yVal.value);
+        yVal = y.next();
+    }
+    return [...unionSet.values()].sort();
 }
 
 export function unionMultiple<T>(
