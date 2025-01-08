@@ -70,7 +70,10 @@ function readFileSafely(filePath: string): string | undefined {
     }
 }
 
-async function createFileSafely(filePath: string, content: string = ""): Promise<void> {
+async function createFileSafely(
+    filePath: string,
+    content: string = "",
+): Promise<void> {
     if (!existsSync(filePath)) {
         const dir = path.dirname(filePath);
         const lockFilePath = path.join(dir, ".create-lock");
@@ -196,7 +199,7 @@ export class GraphClient extends EventEmitter {
                     cb(deviceCodeInfo.message);
             }
             const fileContent = readFileSafely(this.AUTH_RECORD_PATH);
-            if (fileContent !== undefined && fileContent != '') {
+            if (fileContent !== undefined && fileContent != "") {
                 const authRecord: AuthenticationRecord =
                     deserializeAuthenticationRecord(fileContent);
                 if (authRecord.authority !== undefined) {
