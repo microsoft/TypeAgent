@@ -69,7 +69,7 @@ Follow these quick starts for step-by-step instructions to quickly setup tools a
 
 - [Windows](./docs/setup/setup-Windows.md)
 - [WSL2](./docs/setup/setup-WSL2.md)
-- [Linux (Ubuntu)](./docs/setup/setup-Linux.md)
+- [Linux (Ubuntu/Debian)](./docs/setup/setup-Linux.md)
 - MacOS (coming soon)
 
 See the [instructions](./ts/README.md) in the TypeScript code [directory](./ts) for more detailed setup instructions.
