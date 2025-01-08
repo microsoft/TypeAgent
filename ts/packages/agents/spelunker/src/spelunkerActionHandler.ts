@@ -108,39 +108,15 @@ async function handleSpelunkerAction(
                     ),
             ];
             // spelunkerContext.focusFiles = [];
-            const literalText = spelunkerContext.focusFolders.length
-                ? `Successfully set Spelunker focus to ${spelunkerContext.focusFolders}`
-                : "successfully cleared Spelunker focus";
-            const speak = true;
-            const entities = [
-                ...spelunkerContext.focusFolders.map(
-                    (folder): Entity => ({
-                        name: path.basename(folder),
-                        type: ["folder"],
-                        additionalEntityText: path.dirname(folder),
-                        uniqueId: folder,
-                    }),
-                ),
-            ];
-            return createActionResult(literalText, speak, entities);
+            return focusReport(
+                spelunkerContext,
+                "Focus cleared",
+                "Focus set to",
+            );
         }
 
         case "getFocus": {
-            const literalText = spelunkerContext.focusFolders.length
-                ? `Spelunker focus set to ${spelunkerContext.focusFolders}`
-                : "Spelunker focus is empty";
-            const speak = true;
-            const entities = [
-                ...spelunkerContext.focusFolders.map(
-                    (folder): Entity => ({
-                        name: path.basename(folder),
-                        type: ["folder"],
-                        additionalEntityText: path.dirname(folder),
-                        uniqueId: folder,
-                    }),
-                ),
-            ];
-            return createActionResult(literalText, speak, entities);
+            return focusReport(spelunkerContext, "Focus is empty", "Focus is");
         }
 
         default:
@@ -151,6 +127,28 @@ async function handleSpelunkerAction(
 function expandHome(pathname: string): string {
     if (pathname[0] != "~") return pathname;
     return process.env.HOME + pathname.substring(1);
+}
+
+function focusReport(
+    spelunkerContext: SpelunkerContext,
+    ifEmpty: string,
+    ifSet: string,
+    speak = true,
+): ActionResultSuccess {
+    const literalText = spelunkerContext.focusFolders.length
+        ? `${ifSet} ${spelunkerContext.focusFolders.join(", ")}`
+        : ifEmpty;
+    const entities = [
+        ...spelunkerContext.focusFolders.map(
+            (folder): Entity => ({
+                name: path.basename(folder),
+                type: ["folder"],
+                additionalEntityText: path.dirname(folder),
+                uniqueId: folder,
+            }),
+        ),
+    ];
+    return createActionResult(literalText, speak, entities);
 }
 
 function answerQuestion(
