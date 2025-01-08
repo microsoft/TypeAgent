@@ -3,6 +3,7 @@
 
 import { Readability, isProbablyReaderable } from "@mozilla/readability";
 import { HTMLReducer } from "./htmlReducer";
+import { SkeletonLoadingDetector } from "./loadingDetector";
 import { convert } from "html-to-text";
 import DOMPurify from "dompurify";
 
@@ -518,6 +519,27 @@ function setIdsOnAllElements(frameId: number, useTimestampIds?: boolean) {
     }
 }
 
+async function awaitPageIncrementalUpdates() {
+    return new Promise<string | undefined>((resolve, reject) => {
+        const detector = new SkeletonLoadingDetector({
+            stabilityThresholdMs: 500,
+            // Consider elements visible when they're at least 10% in view
+            intersectionThreshold: 0.1,
+        });
+
+        detector
+            .detect()
+            .then(() => {
+                console.log("Page incremental load completed.");
+                resolve("true");
+            })
+            .catch((error: Error) => {
+                console.error("Failed to detect page load completion:", error);
+                resolve("false");
+            });
+    });
+}
+
 function sendPaleoDbRequest(data: any) {
     document.dispatchEvent(
         new CustomEvent("toPaleoDbAutomation", { detail: data }),
@@ -641,6 +663,12 @@ async function handleScriptAction(
             break;
         }
 
+        case "await_page_incremental_load": {
+            const updated = await awaitPageIncrementalUpdates();
+            sendResponse(updated);
+            break;
+        }
+
         case "run_ui_event": {
             sendUIEventsRequest(message.action);
             sendResponse({});
@@ -688,12 +716,13 @@ async function handleScriptAction(
 }
 
 chrome.runtime?.onMessage.addListener(
-    async (
-        message: any,
-        sender: chrome.runtime.MessageSender,
-        sendResponse,
-    ) => {
-        await handleScriptAction(message, sendResponse);
+    (message: any, sender: chrome.runtime.MessageSender, sendResponse) => {
+        const handleMessage = async () => {
+            await handleScriptAction(message, sendResponse);
+        };
+
+        handleMessage();
+        return true; // Important: indicates we'll send response asynchronously
     },
 );
 

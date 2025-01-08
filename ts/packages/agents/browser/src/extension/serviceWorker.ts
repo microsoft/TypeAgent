@@ -230,6 +230,20 @@ async function awaitPageLoad(targetTab: chrome.tabs.Tab) {
     });
 }
 
+async function awaitPageIncrementalUpdates(targetTab: chrome.tabs.Tab) {
+    const loadingCompleted = await chrome.tabs.sendMessage(
+        targetTab.id!,
+        {
+            type: "await_page_incremental_load",
+        },
+        { frameId: 0 },
+    );
+
+    if (!loadingCompleted) {
+        console.error("Incremental loading did not complete for this page.");
+    }
+}
+
 async function getLatLongForLocation(locationName: string) {
     const vals = await getConfigValues();
     const mapsApiKey = vals["BING_MAPS_API_KEY"];
@@ -1162,6 +1176,7 @@ async function runBrowserAction(action: any) {
         case "awaitPageLoad": {
             const targetTab = await getActiveTab();
             await awaitPageLoad(targetTab);
+            await awaitPageIncrementalUpdates(targetTab);
             responseObject = targetTab.url;
             break;
         }
