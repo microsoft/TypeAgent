@@ -19,7 +19,7 @@ import { User } from "@microsoft/microsoft-graph-types";
 import { TokenCredentialAuthenticationProvider } from "@microsoft/microsoft-graph-client/authProviders/azureTokenCredentials/index.js";
 import { useIdentityPlugin } from "@azure/identity";
 import { cachePersistencePlugin } from "@azure/identity-cache-persistence";
-import { readFileSync, existsSync, writeFileSync } from "fs";
+import { readFileSync, existsSync, writeFileSync, unlinkSync } from "fs";
 import path from "path";
 import lockfile from "proper-lockfile";
 import registerDebug from "debug";
@@ -67,6 +67,34 @@ function readFileSafely(filePath: string): string | undefined {
     } catch (error) {
         debugGraphError("Error reading file:", error);
         return undefined;
+    }
+}
+
+async function createFileSafely(filePath: string, content: string = ""): Promise<void> {
+    if (!existsSync(filePath)) {
+        const dir = path.dirname(filePath);
+        const lockFilePath = path.join(dir, ".create-lock");
+
+        if (!existsSync(dir)) {
+            return;
+        }
+
+        if (!existsSync(lockFilePath)) {
+            writeFileSync(lockFilePath, "");
+        }
+
+        const release = await lockfile.lock(lockFilePath);
+        try {
+            if (!existsSync(filePath)) {
+                writeFileSync(filePath, content);
+            }
+        } finally {
+            await release();
+        }
+
+        if (existsSync(lockFilePath)) {
+            unlinkSync(lockFilePath);
+        }
     }
 }
 
@@ -151,6 +179,7 @@ export class GraphClient extends EventEmitter {
     private async initializeGraphFromDeviceCode(
         cb?: DevicePromptCallback,
     ): Promise<Client> {
+        await createFileSafely(this.AUTH_RECORD_PATH);
         return withLockFile(this.AUTH_RECORD_PATH, async () => {
             const options: DeviceCodeCredentialOptions = {
                 clientId: this._settings.clientId,
@@ -167,7 +196,7 @@ export class GraphClient extends EventEmitter {
                     cb(deviceCodeInfo.message);
             }
             const fileContent = readFileSafely(this.AUTH_RECORD_PATH);
-            if (fileContent !== undefined) {
+            if (fileContent !== undefined && fileContent != '') {
                 const authRecord: AuthenticationRecord =
                     deserializeAuthenticationRecord(fileContent);
                 if (authRecord.authority !== undefined) {
