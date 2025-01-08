@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 export interface DetectorConfig {
     // CSS selectors that identify skeleton elements
     skeletonSelectors: string[];
