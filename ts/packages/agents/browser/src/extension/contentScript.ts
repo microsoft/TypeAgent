@@ -519,24 +519,26 @@ function setIdsOnAllElements(frameId: number, useTimestampIds?: boolean) {
     }
 }
 
-async function awaitPageIncrementalUpdates(){
+async function awaitPageIncrementalUpdates() {
     return new Promise<string | undefined>((resolve, reject) => {
         const detector = new SkeletonLoadingDetector({
-            stabilityThresholdMs: 500
-          });
-          
-        detector.detect()
-        .then(() => {
-            console.log("Page incremental load completed.")
-            resolve("true");
-        })
-        .catch((error: Error) => {
-            console.error('Failed to detect page load completion:', error);
-            resolve("false");
+            stabilityThresholdMs: 500,
+            // Consider elements visible when they're at least 10% in view
+            intersectionThreshold: 0.1,
         });
+
+        detector
+            .detect()
+            .then(() => {
+                console.log("Page incremental load completed.");
+                resolve("true");
+            })
+            .catch((error: Error) => {
+                console.error("Failed to detect page load completion:", error);
+                resolve("false");
+            });
     });
 }
-
 
 function sendPaleoDbRequest(data: any) {
     document.dispatchEvent(
@@ -714,14 +716,10 @@ async function handleScriptAction(
 }
 
 chrome.runtime?.onMessage.addListener(
-    (
-        message: any,
-        sender: chrome.runtime.MessageSender,
-        sendResponse,
-    ) => {
+    (message: any, sender: chrome.runtime.MessageSender, sendResponse) => {
         const handleMessage = async () => {
             await handleScriptAction(message, sendResponse);
-        }
+        };
 
         handleMessage();
         return true; // Important: indicates we'll send response asynchronously

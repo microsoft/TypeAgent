@@ -10,10 +10,8 @@ export type ProductTile = {
   // Construct the selector based on the element's Id attribute if the id is present.
   detailsLinkSelector: string;
 
-  addToCartButton?: {
-    // css selector for the add to cart button
-    cssSelector: string;
-  };
+  // css selector for the add to cart button
+  addToCartButtonCssSelector: string;
 };
 
 // This is only present on the Product Details Page
