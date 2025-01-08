@@ -151,55 +151,63 @@ export class GraphClient extends EventEmitter {
     private async initializeGraphFromDeviceCode(
         cb?: DevicePromptCallback,
     ): Promise<Client> {
-        return withLockFile(existsSync(this.AUTH_RECORD_PATH) ? this.AUTH_RECORD_PATH : path.dirname(this.AUTH_RECORD_PATH), async () => {
-            const options: DeviceCodeCredentialOptions = {
-                clientId: this._settings.clientId,
-                tenantId: this._settings.tenantId,
-                disableAutomaticAuthentication: true,
+        return withLockFile(
+            existsSync(this.AUTH_RECORD_PATH)
+                ? this.AUTH_RECORD_PATH
+                : path.dirname(this.AUTH_RECORD_PATH),
+            async () => {
+                const options: DeviceCodeCredentialOptions = {
+                    clientId: this._settings.clientId,
+                    tenantId: this._settings.tenantId,
+                    disableAutomaticAuthentication: true,
 
-                tokenCachePersistenceOptions: {
-                    enabled: true,
-                    name: "typeagent-tokencache",
-                },
-            };
-            if (cb) {
-                options.userPromptCallback = (deviceCodeInfo) =>
-                    cb(deviceCodeInfo.message);
-            }
+                    tokenCachePersistenceOptions: {
+                        enabled: true,
+                        name: "typeagent-tokencache",
+                    },
+                };
+                if (cb) {
+                    options.userPromptCallback = (deviceCodeInfo) =>
+                        cb(deviceCodeInfo.message);
+                }
 
-            if(existsSync(this.AUTH_RECORD_PATH)) {
-                const fileContent = readFileSafely(this.AUTH_RECORD_PATH);
-                if (fileContent !== undefined && fileContent != "") {
-                    const authRecord: AuthenticationRecord =
-                        deserializeAuthenticationRecord(fileContent);
-                    if (authRecord.authority !== undefined) {
-                        options.authenticationRecord = authRecord;
+                if (existsSync(this.AUTH_RECORD_PATH)) {
+                    const fileContent = readFileSafely(this.AUTH_RECORD_PATH);
+                    if (fileContent !== undefined && fileContent != "") {
+                        const authRecord: AuthenticationRecord =
+                            deserializeAuthenticationRecord(fileContent);
+                        if (authRecord.authority !== undefined) {
+                            options.authenticationRecord = authRecord;
+                        }
                     }
                 }
-            }
 
-            const credential = new DeviceCodeCredential(options);
-            if (cb === undefined) {
-                // getToken to make sure we can authenticate silently
-                await credential.getToken(this.MSGRAPH_AUTH_URL);
-                if (options.authenticationRecord !== undefined) {
-                    return this.createClient(credential);
+                const credential = new DeviceCodeCredential(options);
+                if (cb === undefined) {
+                    // getToken to make sure we can authenticate silently
+                    await credential.getToken(this.MSGRAPH_AUTH_URL);
+                    if (options.authenticationRecord !== undefined) {
+                        return this.createClient(credential);
+                    }
                 }
-            }
 
-            // This will ask for user interaction
-            const authRecord = await credential.authenticate(
-                this.MSGRAPH_AUTH_URL,
-            );
+                // This will ask for user interaction
+                const authRecord = await credential.authenticate(
+                    this.MSGRAPH_AUTH_URL,
+                );
 
-            if (authRecord) {
-                const serializedAuthRecord =
-                    serializeAuthenticationRecord(authRecord);
-                writeFileSafety(this.AUTH_RECORD_PATH, serializedAuthRecord);
-                debugGraph("Authenticated");
-            }
-            return this.createClient(credential);
-        });
+                if (authRecord) {
+                    const serializedAuthRecord =
+                        serializeAuthenticationRecord(authRecord);
+                    writeFileSafety(
+                        this.AUTH_RECORD_PATH,
+                        serializedAuthRecord,
+                    );
+                    debugGraph("Authenticated");
+                }
+                return this.createClient(credential);
+            },
+        );
     }
 
     private async initializeGraphFromUserCred(): Promise<Client> {
