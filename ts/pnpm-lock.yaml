@@ -1081,7 +1081,19 @@ importers:
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../../agentSdk
+      aiclient:
+        specifier: workspace:*
+        version: link:../../aiclient
+      typeagent:
+        specifier: workspace:*
+        version: link:../../typeagent
+      typechat:
+        specifier: ^0.1.1
+        version: 0.1.1(typescript@5.4.3)(zod@3.23.8)
     devDependencies:
+      copyfiles:
+        specifier: ^2.4.1
+        version: 2.4.1
       prettier:
         specifier: ^3.2.5
         version: 3.2.5

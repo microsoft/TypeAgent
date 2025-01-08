@@ -4,6 +4,8 @@
 import path from "path";
 import fs from "fs";
 
+import { openai, ChatModel } from "aiclient";
+import { TypeChatJsonTranslator } from "typechat";
 import {
     ActionContext,
     ActionResult,
@@ -14,19 +16,20 @@ import {
     ParameterDefinitions,
     ParsedCommandParams,
     SessionContext,
-} from "@typeagent/agent-sdk";    
+} from "@typeagent/agent-sdk";
 import {
     createActionResult,
     createActionResultFromError,
-} from "@typeagent/agent-sdk/helpers/action";    
+} from "@typeagent/agent-sdk/helpers/action";
 import {
     CommandHandler,
     CommandHandlerTable,
     getCommandInterface,
-} from "@typeagent/agent-sdk/helpers/command";    
+} from "@typeagent/agent-sdk/helpers/command";
 
+import { answerQuestion, createAnswerMaker } from "./answerQuestions.js";
+import { AnswerSpecs } from "./makeAnswerSchema.js";
 import { SpelunkerAction } from "./spelunkerSchema.js";
-import { answerQuestion } from "./answerQuestions.js";
 
 class RequestCommandHandler implements CommandHandler {
     public readonly description =
@@ -48,11 +51,19 @@ class RequestCommandHandler implements CommandHandler {
         params: ParsedCommandParams<ParameterDefinitions>,
     ): Promise<void> {
         if (typeof params.args?.question === "string") {
-            const result = answerQuestion(
+            const result: ActionResult = await answerQuestion(
                 actionContext.sessionContext.agentContext,
                 params.args.question,
             );
-            actionContext.actionIO.appendDisplay(result.displayContent);
+            if (typeof result.error == "string") {
+                actionContext.actionIO.appendDisplay({
+                    type: "text",
+                    content: result.error,
+                    kind: "error",
+                });
+            } else if (result.displayContent) {
+                actionContext.actionIO.appendDisplay(result.displayContent);
+            }
         }
     }
 }
@@ -78,12 +89,18 @@ export function instantiate(): AppAgent {
 
 export type SpelunkerContext = {
     focusFolders: string[];
-    // focusFiles: string[];
+    chatModel: ChatModel;
+    answerMaker: TypeChatJsonTranslator<AnswerSpecs>;
 };
 
 async function initializeSpelunkerContext(): Promise<SpelunkerContext> {
+    const focusFolders: string[] = [];
+    const chatModel = openai.createChatModelDefault("spelunkerChat");
+    const answerMaker = createAnswerMaker(chatModel);
     return {
-        focusFolders: [],
+        focusFolders,
+        chatModel,
+        answerMaker,
     };
 }
 
@@ -139,13 +156,11 @@ async function handleSpelunkerAction(
 ): Promise<ActionResult> {
     switch (action.actionName) {
         case "answerQuestion": {
-            if (!context.agentContext.focusFolders.length) {
-                return createActionResultFromError(
-                    "Please set the focus to a folder",
-                );
-            }
-            if (typeof action.parameters.question == "string") {
-                return answerQuestion(
+            if (
+                typeof action.parameters.question == "string" &&
+                action.parameters.question.trim()
+            ) {
+                return await answerQuestion(
                     context.agentContext,
                     action.parameters.question,
                 );
@@ -192,7 +207,6 @@ function focusReport(
     spelunkerContext: SpelunkerContext,
     ifEmpty: string,
     ifSet: string,
-    speak = true,
 ): ActionResultSuccess {
     const literalText = spelunkerContext.focusFolders.length
         ? `${ifSet} ${spelunkerContext.focusFolders.join(", ")}`
@@ -207,5 +221,5 @@ function focusReport(
             }),
         ),
     ];
-    return createActionResult(literalText, speak, entities);
+    return createActionResult(literalText, undefined, entities);
 }
