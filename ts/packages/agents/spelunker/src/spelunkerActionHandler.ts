@@ -10,6 +10,7 @@ import {
     Entity,
     ParameterDefinitions,
     ParsedCommandParams,
+    SessionContext,
 } from "@typeagent/agent-sdk";
 import {
     createActionResult,
@@ -65,6 +66,7 @@ const handlers: CommandHandlerTable = {
 export function instantiate(): AppAgent {
     return {
         initializeAgentContext: initializeSpelunkerContext,
+        updateAgentContext: updateSpelunkerContext,
         executeAction: executeSpelunkerAction,
         // TODO: What other standard functions could be handy here?
         ...getCommandInterface(handlers),
@@ -83,24 +85,59 @@ async function initializeSpelunkerContext(): Promise<SpelunkerContext> {
     };
 }
 
+async function updateSpelunkerContext(
+    enable: boolean,
+    context: SessionContext<SpelunkerContext>,
+    schemaName: string,
+): Promise<void> {
+    if (enable) {
+        await loadContext(context);
+    }
+}
+
+const spelunkerStorageName = "spelunker.json";
+
+async function loadContext(
+    context: SessionContext<SpelunkerContext>,
+): Promise<void> {
+    const storage = context.sessionStorage;
+    if (storage && (await storage.exists(spelunkerStorageName))) {
+        const raw = await storage.read(spelunkerStorageName, "utf8");
+        const data = JSON.parse(raw);
+        context.agentContext.focusFolders = data.focusFolders ?? [];
+    }
+}
+
+async function saveContext(
+    context: SessionContext<SpelunkerContext>,
+): Promise<void> {
+    const storage = context.sessionStorage;
+    if (storage) {
+        await storage.write(
+            spelunkerStorageName,
+            JSON.stringify({ focusFolders: context.agentContext.focusFolders }),
+        );
+    }
+}
+
 async function executeSpelunkerAction(
     action: AppAction,
     context: ActionContext<SpelunkerContext>,
 ): Promise<ActionResult> {
     let result = await handleSpelunkerAction(
         action as SpelunkerAction,
-        context.sessionContext.agentContext,
+        context.sessionContext,
     );
     return result;
 }
 
 async function handleSpelunkerAction(
     action: SpelunkerAction,
-    spelunkerContext: SpelunkerContext,
+    context: SessionContext<SpelunkerContext>,
 ): Promise<ActionResult> {
     switch (action.actionName) {
         case "setFocusToFolders": {
-            spelunkerContext.focusFolders = [
+            context.agentContext.focusFolders = [
                 ...action.parameters.folders
                     .map((folder) => path.resolve(expandHome(folder)))
                     .filter(
@@ -108,15 +145,20 @@ async function handleSpelunkerAction(
                     ),
             ];
             // spelunkerContext.focusFiles = [];
+            saveContext(context);
             return focusReport(
-                spelunkerContext,
+                context.agentContext,
                 "Focus cleared",
                 "Focus set to",
             );
         }
 
         case "getFocus": {
-            return focusReport(spelunkerContext, "Focus is empty", "Focus is");
+            return focusReport(
+                context.agentContext,
+                "Focus is empty",
+                "Focus is",
+            );
         }
 
         default:
