@@ -19,7 +19,7 @@ import {
 } from "@typeagent/agent-sdk";
 
 // TODO: Duplicate code from agent-cache
-interface JSONAction {
+export interface JSONAction {
     fullActionName: string;
     parameters?: Record<string, unknown> | undefined;
 }

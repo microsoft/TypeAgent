@@ -25,6 +25,7 @@ import {
     AgentContextInvokeFunctions,
     AgentInvokeFunctions,
     ContextParams,
+    JSONAction,
 } from "./types.js";
 import { createRpc } from "./rpc.js";
 import { ChannelProvider } from "./common.js";
@@ -35,11 +36,6 @@ export {
 } from "./common.js";
 
 // TODO: Duplicate code from agent-cache
-interface JSONAction {
-    fullActionName: string;
-    parameters?: Record<string, unknown> | undefined;
-}
-
 function parseActionNameParts(fullActionName: string) {
     const parts = fullActionName.split(".");
     const translatorName = parts.slice(0, -1).join(".");
