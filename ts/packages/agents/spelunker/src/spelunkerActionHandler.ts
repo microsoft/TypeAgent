@@ -14,6 +14,7 @@ import {
 } from "@typeagent/agent-sdk";
 import {
     createActionResult,
+    createActionResultFromError,
     createActionResultFromTextDisplay,
 } from "@typeagent/agent-sdk/helpers/action";
 import { SpelunkerAction } from "./spelunkerSchema.js";
@@ -81,7 +82,6 @@ type SpelunkerContext = {
 async function initializeSpelunkerContext(): Promise<SpelunkerContext> {
     return {
         focusFolders: [],
-        // focusFiles: [],
     };
 }
 
@@ -136,7 +136,22 @@ async function handleSpelunkerAction(
     context: SessionContext<SpelunkerContext>,
 ): Promise<ActionResult> {
     switch (action.actionName) {
-        case "setFocusToFolders": {
+        case "answerQuestion": {
+            if (!context.agentContext.focusFolders.length) {
+                return createActionResultFromError(
+                    "Please set the focus to a folder",
+                );
+            }
+            if (typeof action.parameters.question == "string") {
+                return answerQuestion(
+                    context.agentContext,
+                    action.parameters.question,
+                );
+            }
+            return createActionResultFromError("I see no question to answer");
+        }
+
+        case "setFocus": {
             context.agentContext.focusFolders = [
                 ...action.parameters.folders
                     .map((folder) => path.resolve(expandHome(folder)))
@@ -144,7 +159,6 @@ async function handleSpelunkerAction(
                         (f) => fs.existsSync(f) && fs.statSync(f).isDirectory(),
                     ),
             ];
-            // spelunkerContext.focusFiles = [];
             saveContext(context);
             return focusReport(
                 context.agentContext,
@@ -162,7 +176,8 @@ async function handleSpelunkerAction(
         }
 
         default:
-            throw new Error(`Unknown action: ${action.actionName}`);
+            // Unreachable
+            throw new Error("Unsupported action name");
     }
 }
 
