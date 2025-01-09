@@ -69,6 +69,7 @@ export class AzureStorageProvider implements TypeAgentStorageProvider {
             .byPage({ maxPageSize })) {
             if (response.segment.blobItems) {
                 for (const blob of response.segment.blobItems) {
+                    /*
                     const blobClient = containerClient.getBlobClient(blob.name);
                     const filePath = path.join(getUserDataDir(), blob.name);
                     let dir = path.dirname(filePath);
@@ -80,8 +81,10 @@ export class AzureStorageProvider implements TypeAgentStorageProvider {
                     // only download the file if it doesn't already exist
                     if (!fs.existsSync(filePath)) {
                         await blobClient.downloadToFile(filePath, 0);
-                    }
+                    }*/
 
+                    // may require some tweaking with specifics of
+                    // how blob storage handles paths
                     results.push(blob.name);
                 }
             }
