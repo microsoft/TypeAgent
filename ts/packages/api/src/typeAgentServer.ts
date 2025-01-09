@@ -1,4 +1,4 @@
-// Copyright (c) Microsoft Corporation.
+// Copyright (c) Microsoft Corporation and Henry Lucco.
 // Licensed under the MIT License.
 
 import dotenv from "dotenv";
@@ -11,58 +11,61 @@ import {
 import { WebAPIClientIO } from "./webClientIO.js";
 import { TypeAgentAPIWebSocketServer } from "./webSocketServer.js";
 import { getDefaultAppAgentProviders } from "agent-dispatcher/internal";
-import { env } from "node:process";
 import {
-    BlobServiceClient,
-    BlockBlobClient,
+    // BlobServiceClient,
+    // BlockBlobClient,
     ContainerClient,
     ContainerListBlobsOptions,
 } from "@azure/storage-blob";
-import { DefaultAzureCredential } from "@azure/identity";
-import { getEnvSetting, openai } from "aiclient";
+// import { DefaultAzureCredential } from "@azure/identity";
 import { StopWatch } from "telemetry";
 import path from "node:path";
 import fs from "node:fs";
 import { isDirectoryPath } from "typeagent";
+import { TypeAgentStorageProvider } from "./storageProvider.js";
+import { AzureStorageProvider } from "./storageProviders/azureStorageProvider.js";
+import { AWSStorageProvider } from "./storageProviders/awsStorageProvider.js";
 
 export class TypeAgentServer {
     private dispatcher: Dispatcher | undefined;
     private webClientIO: WebAPIClientIO | undefined;
     private webSocketServer: TypeAgentAPIWebSocketServer | undefined;
     private webServer: TypeAgentAPIWebServer | undefined;
-    private storageAccount: string | undefined;
-    private containerName: string | undefined;
-    private accountURL: string;
     private fileWriteDebouncer: Map<string, number> = new Map<string, number>();
+    private storageProvider: TypeAgentStorageProvider | undefined;
+    private config: TypeAgentAPIServerConfig;
 
-    constructor(private envPath: string) {
+    constructor(
+        private envPath: string,
+    ) {
         // typeAgent config
         dotenv.config({ path: this.envPath });
 
-        // blob storage config
-        this.storageAccount = getEnvSetting(
-            env,
-            openai.EnvVars.AZURE_STORAGE_ACCOUNT,
-            undefined,
-            undefined,
-        );
-        this.containerName = getEnvSetting(
-            env,
-            openai.EnvVars.AZURE_STORAGE_CONTAINER,
-            undefined,
-            "",
-        );
-        this.accountURL = `https://${this.storageAccount}.blob.core.windows.net`;
-    }
-
-    async start() {
         // web server config
-        const config: TypeAgentAPIServerConfig = JSON.parse(
+        this.config = JSON.parse(
             readFileSync("data/config.json").toString(),
         );
 
+        const storageProviderMap = {
+            "azure": AzureStorageProvider,
+            "aws": AWSStorageProvider,
+        }
+
+        // setting storage provider if "provided" haha
+        if (this.config.blobBackupEnabled) {
+            this.storageProvider = new storageProviderMap[this.config.storageProvider]();
+        }
+
+    }
+
+    async start() {
         // restore & enable session backup?
-        if (config.blobBackupEnabled) {
+        if (this.config.blobBackupEnabled && this.storageProvider) {
+            const sw = new StopWatch();
+            await this.syncFromProvider();
+            this.startLocalStorageBackup();
+            sw.stop("Downloaded Session Backup");
+            /*
             if (
                 this.storageAccount !== undefined &&
                 this.storageAccount.length > 0 &&
@@ -82,6 +85,7 @@ export class TypeAgentServer {
                     `Blob backup enabled but NOT configured.  Missing env var ${openai.EnvVars.AZURE_STORAGE_ACCOUNT}.`,
                 );
             }
+            */
         }
 
         // dispatcher
@@ -96,7 +100,7 @@ export class TypeAgentServer {
         });
 
         // web server
-        this.webServer = new TypeAgentAPIWebServer(config);
+        this.webServer = new TypeAgentAPIWebServer(this.config);
         this.webServer.start();
 
         // websocket server
@@ -116,6 +120,7 @@ export class TypeAgentServer {
     /**
      * Downloads from session data blob storage to the local session store
      */
+    /*
     async syncBlobStorage() {
         const blobServiceClient = new BlobServiceClient(
             this.accountURL,
@@ -126,6 +131,25 @@ export class TypeAgentServer {
             blobServiceClient.getContainerClient(this.containerName!!);
 
         await this.findBlobs(containerClient);
+    }*/
+
+    async syncFromProvider() {
+        try {
+            if (!this.storageProvider) {
+                console.log("No storage provider found");
+                return;
+            }
+            const remoteFiles = await this.storageProvider.listRemoteFiles();
+            for (const remoteFile of remoteFiles) {
+                const localPath = path.join(getUserDataDir(), remoteFile);
+                if (!fs.existsSync(localPath)) {
+                    await this.storageProvider.downloadFile(remoteFile, localPath);
+                    console.log(`Downloaded ${remoteFile} to ${localPath}`);
+                }
+            }
+        } catch (error) {
+            console.log(`Error syncing from provider: ${error}`);
+        }
     }
 
     /**
@@ -220,6 +244,8 @@ export class TypeAgentServer {
             const debounceCount: number =
                 this.fileWriteDebouncer.get(fileName)!!;
             if (debounceCount == 0) {
+                // blob storage specific starts here
+                /*
                 const blobServiceClient = new BlobServiceClient(
                     this.accountURL,
                     new DefaultAzureCredential(),
@@ -233,14 +259,20 @@ export class TypeAgentServer {
                 // Create blob client from container client
                 const blockBlobClient: BlockBlobClient =
                     containerClient.getBlockBlobClient(blobName!!);
+                */
 
                 try {
                     const localPath: string = path.join(
                         getUserDataDir(),
                         fileName,
                     );
-                    await blockBlobClient.uploadFile(localPath);
-                    console.log(`Done uploading ${fileName} to ${blobName}`);
+                    // await blockBlobClient.uploadFile(localPath);
+                    if (!this.storageProvider) {
+                        console.log(`Failed to upload ${fileName} to provider, no storage provider found`);
+                        return;
+                    }
+                    await this.storageProvider.uploadFile(localPath, fileName);
+                    // console.log(`Done uploading ${fileName} to ${blobName}`);
                 } catch (e) {
                     console.log(e);
                 }
