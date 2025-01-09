@@ -100,14 +100,6 @@ export type SearchForRecipeAction = {
   };
 };
 
-export type SelectSearchResult = {
-  actionName: "selectSearchResult";
-  parameters: {
-    position?: number;
-    productName?: string;
-  };
-};
-
 export type InstacartActions =
   | AddToCartAction
   | AddToListAction
@@ -122,5 +114,4 @@ export type InstacartActions =
   | SaveRecipeAction
   | DeleteRecipeAction
   | SearchForProductAction
-  | SearchForRecipeAction
-  | SelectSearchResult;
+  | SearchForRecipeAction;
