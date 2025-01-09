@@ -24,6 +24,7 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.723.0",
     "@azure/identity": "^4.2.1",
     "@azure/storage-blob": "^12.26.0",
     "@typeagent/agent-sdk": "workspace:*",
