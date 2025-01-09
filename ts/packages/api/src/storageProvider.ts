@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation and Henry Lucco.
+// Licensed under the MIT License.
+
 export interface TypeAgentStorageProvider {
     /**
      * Lists remote files (possibly under a prefix or "folder path" if the

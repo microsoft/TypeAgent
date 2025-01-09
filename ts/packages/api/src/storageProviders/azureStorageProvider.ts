@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation and Henry Lucco.
+// Licensed under the MIT License.
+
 import { DefaultAzureCredential } from "@azure/identity";
 import { TypeAgentStorageProvider } from "../storageProvider.js";
 import { getEnvSetting, openai } from "aiclient";

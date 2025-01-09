@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation and Henry Lucco.
+// Licensed under the MIT License.
+
 import { GetObjectCommand, ListObjectsV2Command, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { TypeAgentStorageProvider } from "../storageProvider.js";
 import fs from "node:fs";
@@ -11,8 +14,6 @@ export class AWSStorageProvider implements TypeAgentStorageProvider {
 
     constructor() {
 
-        // TODO maybe a cleaner way to handle
-        // these checks?
         if (!process.env.AWS_S3_BUCKET_NAME) {
             throw new Error("AWS_S3_BUCKET_NAME not set");
         }

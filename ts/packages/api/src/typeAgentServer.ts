@@ -51,7 +51,7 @@ export class TypeAgentServer {
             "aws": AWSStorageProvider,
         }
 
-        // setting storage provider if "provided" haha
+        // setting storage provider if "provided" lol
         if (this.config.blobBackupEnabled) {
             this.storageProvider = new storageProviderMap[this.config.storageProvider]();
         }
