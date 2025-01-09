@@ -4,9 +4,9 @@
 import {
     GetObjectCommand,
     ListObjectsV2Command,
-    PutObjectCommand,
     S3Client,
 } from "@aws-sdk/client-s3";
+import { Upload } from "@aws-sdk/lib-storage";
 import { TypeAgentStorageProvider } from "../storageProvider.js";
 import fs from "node:fs";
 import path from "node:path";
@@ -36,11 +36,9 @@ export class AWSStorageProvider implements TypeAgentStorageProvider {
         this.bucketName = process.env.AWS_S3_BUCKET_NAME;
         this.s3Client = new S3Client({
             region: process.env.AWS_S3_REGION,
-            credentials: {
-                accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-                secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-            },
         });
+
+        console.log("AWSStorageProvider initialized");
     }
 
     async listRemoteFiles(prefix?: string): Promise<string[]> {
@@ -93,14 +91,27 @@ export class AWSStorageProvider implements TypeAgentStorageProvider {
     }
 
     async uploadFile(localPath: string, remotePath: string): Promise<void> {
+        const resolvedPath = path.resolve(localPath);
+        if (!fs.existsSync(resolvedPath)) {
+          throw new Error(`File does not actually exist at ${resolvedPath}`);
+        }
+
         const fileStream = fs.createReadStream(localPath);
 
-        const command = new PutObjectCommand({
-            Bucket: this.bucketName,
-            Key: remotePath,
-            Body: fileStream,
+        const upload = new Upload({
+            client: this.s3Client,
+            params: {
+                Bucket: this.bucketName,
+                Key: remotePath,
+                Body: fileStream,
+            },
         });
 
-        await this.s3Client.send(command);
+        try {
+            const result = await upload.done();
+            console.log("upload complete: ", result);
+        } catch (e) {
+            console.log("error", e);
+        }
     }
 }

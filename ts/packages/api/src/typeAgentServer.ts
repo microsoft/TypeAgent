@@ -138,6 +138,7 @@ export class TypeAgentServer {
             }
             const remoteFiles = await this.storageProvider.listRemoteFiles();
             for (const remoteFile of remoteFiles) {
+                console.log("Syncing file: ", remoteFile);
                 const localPath = path.join(getUserDataDir(), remoteFile);
                 if (!fs.existsSync(localPath)) {
                     await this.storageProvider.downloadFile(
