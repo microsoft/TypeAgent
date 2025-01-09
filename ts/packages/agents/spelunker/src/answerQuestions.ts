@@ -8,25 +8,35 @@ import { ChatModel, openai } from "aiclient";
 import { loadSchema } from "typeagent";
 import { createJsonTranslator, TypeChatJsonTranslator } from "typechat";
 import { createTypeScriptJsonValidator } from "typechat/ts";
-import { ActionResult, ActionResultSuccess, Entity } from "@typeagent/agent-sdk";
 import {
-    createActionResultFromError,
-} from "@typeagent/agent-sdk/helpers/action";
+    ActionResult,
+    ActionResultSuccess,
+    Entity,
+} from "@typeagent/agent-sdk";
+import { createActionResultFromError } from "@typeagent/agent-sdk/helpers/action";
 
 import { AnswerSpecs } from "./makeAnswerSchema.js";
+import { ChunkDescription, SelectorSpecs } from "./makeSelectorSchema.js";
 import { SpelunkerContext } from "./spelunkerActionHandler.js";
 
 export interface ModelContext {
     chatModel: ChatModel;
     answerMaker: TypeChatJsonTranslator<AnswerSpecs>;
-    // miniModel: ChatModel;
-    // chunkSelector: TypeChatJsonTranslator<SelectorSpecs>;
+    miniModel: ChatModel;
+    chunkSelector: TypeChatJsonTranslator<SelectorSpecs>;
 }
 
 export function createModelContext(): ModelContext {
     const chatModel = openai.createChatModelDefault("spelunkerChat");
     const answerMaker = createAnswerMaker(chatModel);
-    return { chatModel, answerMaker };
+    const miniModel = openai.createChatModel(
+        "GPT_35_TURBO",
+        undefined,
+        undefined,
+        ["spelunkerMini"],
+    );
+    const chunkSelector = createChunkSelector(miniModel);
+    return { chatModel, answerMaker, miniModel, chunkSelector };
 }
 
 // Answer a question; called from request and from answerQuestion action
@@ -43,20 +53,34 @@ export async function answerQuestion(
         files.push(...getAllPyFilesSync(context.focusFolders[i]));
     }
 
-    // 2. Construct a prompt from those files
-    const preppedFiles = files.map((file) => prepareFile(file)).join("\n\n");
+    // 2. In parallel, find relevant chunks from each file.
+    const chunks: ChunkDescription[] = await selectChunks(
+        context,
+        files,
+        input,
+    );
+    if (chunks.length == 0) {
+        throw new Error("No chunks selected");
+    }
+    if (chunks.length > 30) {
+        chunks.splice(30);
+    }
+
+    // 3. Construct a prompt from those chunks.
+    const preppedChunks = chunks.map(prepChunk);
     const prompt = `\
 Please answer the user question using the given context (both given below).
 
-User question: "${input.trim()}"
+User question: "${input}"
 
-Context (use the filename as ChunkId):
+Context:
 
-${preppedFiles}
+${preppedChunks.join("\n\n")}
 `;
 
-    // 3. Send prompt to LLM
-    const wrappedResult = await context.modelContext.answerMaker.translate(prompt);
+    // 4. Send prompt to LLM.
+    const wrappedResult =
+        await context.modelContext.answerMaker.translate(prompt);
     if (!wrappedResult.success) {
         return createActionResultFromError(
             `Failed to get an answer: ${wrappedResult.message}`,
@@ -64,12 +88,74 @@ ${preppedFiles}
     }
     const result = wrappedResult.data;
 
-    // 4. Extract answer and references from result
+    // 5. Extract answer and references from result.
     const answer = result.answer;
+    // TODO: References
 
-    // 5. Produce an action result from that
-    const entities: Entity[] = []; // TODO
+    // 6. Produce an action result from that.
+    const entities: Entity[] = []; // TODO: Construct from references
     return createActionResultFromMarkdownDisplay(answer, entities);
+}
+
+function prepChunk(chunk: ChunkDescription): string {
+    return `\
+#### ${chunk.chunkid} ####
+${chunk.lines.join("\n")}
+###### end ######
+`;
+}
+
+async function selectChunks(
+    context: SpelunkerContext,
+    files: string[],
+    input: string,
+): Promise<ChunkDescription[]> {
+    const promises: Promise<ChunkDescription[]>[] = [];
+    // TODO: Throttle if too many files (e.g. > 100)
+    for (const file of files) {
+        const p = selectChunksFromFile(
+            context.modelContext.chunkSelector,
+            file,
+            input,
+        );
+        promises.push(p);
+    }
+    const allChunks: ChunkDescription[] = [];
+    for (const p of promises) {
+        const chunks = await p;
+        // console.log("Pushing", chunks.length, "chunks");
+        allChunks.push(...chunks);
+    }
+    // console.log("Total", allChunks.length, "chunks");
+    allChunks.sort((a, b) => b.relevance - a.relevance);
+    allChunks.splice(30);
+    // console.log("Keeping", allChunks.length, "chunks");
+    return allChunks;
+}
+
+async function selectChunksFromFile(
+    selector: TypeChatJsonTranslator<SelectorSpecs>,
+    file: string,
+    input: string,
+): Promise<ChunkDescription[]> {
+    const contents = prepareFile(file);
+    const prompt = `\
+Please select chunks from the given file that are relevant to the user question.
+
+User question: "{input}"
+
+File:
+
+${contents}
+`;
+    // console.log(prompt);
+    const wrappedResult = await selector.translate(prompt);
+    // console.log(wrappedResult);
+    if (!wrappedResult.success) {
+        return [];
+    }
+    const result = wrappedResult.data;
+    return result.chunks;
 }
 
 // Given a file name, return the contents of the file,
@@ -86,8 +172,7 @@ function prepareFile(file: string): string {
     return lines.join("\n");
 }
 
-// For SpelunkerContext
-export function createAnswerMaker(
+function createAnswerMaker(
     model: ChatModel,
 ): TypeChatJsonTranslator<AnswerSpecs> {
     const typeName = "AnswerSpecs";
@@ -97,6 +182,19 @@ export function createAnswerMaker(
         typeName,
     );
     const translator = createJsonTranslator<AnswerSpecs>(model, validator);
+    return translator;
+}
+
+function createChunkSelector(
+    model: ChatModel,
+): TypeChatJsonTranslator<SelectorSpecs> {
+    const typeName = "SelectorSpecs";
+    const schema = loadSchema(["makeSelectorSchema.ts"], import.meta.url);
+    const validator = createTypeScriptJsonValidator<SelectorSpecs>(
+        schema,
+        typeName,
+    );
+    const translator = createJsonTranslator<SelectorSpecs>(model, validator);
     return translator;
 }
 
