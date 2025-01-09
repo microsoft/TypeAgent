@@ -4,7 +4,7 @@
 import * as fs from "fs";
 import * as path from "path";
 
-import { ChatModel } from "aiclient";
+import { ChatModel, openai } from "aiclient";
 import { loadSchema } from "typeagent";
 import { createJsonTranslator, TypeChatJsonTranslator } from "typechat";
 import { createTypeScriptJsonValidator } from "typechat/ts";
@@ -15,6 +15,19 @@ import {
 
 import { AnswerSpecs } from "./makeAnswerSchema.js";
 import { SpelunkerContext } from "./spelunkerActionHandler.js";
+
+export interface ModelContext {
+    chatModel: ChatModel;
+    answerMaker: TypeChatJsonTranslator<AnswerSpecs>;
+    // miniModel: ChatModel;
+    // chunkSelector: TypeChatJsonTranslator<SelectorSpecs>;
+}
+
+export function createModelContext(): ModelContext {
+    const chatModel = openai.createChatModelDefault("spelunkerChat");
+    const answerMaker = createAnswerMaker(chatModel);
+    return { chatModel, answerMaker };
+}
 
 // Answer a question; called from request and from answerQuestion action
 export async function answerQuestion(
@@ -43,7 +56,7 @@ ${preppedFiles}
 `;
 
     // 3. Send prompt to LLM
-    const wrappedResult = await context.answerMaker.translate(prompt);
+    const wrappedResult = await context.modelContext.answerMaker.translate(prompt);
     if (!wrappedResult.success) {
         return createActionResultFromError(
             `Failed to get an answer: ${wrappedResult.message}`,

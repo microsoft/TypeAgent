@@ -4,8 +4,6 @@
 import path from "path";
 import fs from "fs";
 
-import { openai, ChatModel } from "aiclient";
-import { TypeChatJsonTranslator } from "typechat";
 import {
     ActionContext,
     ActionResult,
@@ -27,8 +25,7 @@ import {
     getCommandInterface,
 } from "@typeagent/agent-sdk/helpers/command";
 
-import { answerQuestion, createAnswerMaker } from "./answerQuestions.js";
-import { AnswerSpecs } from "./makeAnswerSchema.js";
+import { answerQuestion, createModelContext, ModelContext } from "./answerQuestions.js";
 import { SpelunkerAction } from "./spelunkerSchema.js";
 
 class RequestCommandHandler implements CommandHandler {
@@ -89,18 +86,13 @@ export function instantiate(): AppAgent {
 
 export type SpelunkerContext = {
     focusFolders: string[];
-    chatModel: ChatModel;
-    answerMaker: TypeChatJsonTranslator<AnswerSpecs>;
+    modelContext: ModelContext;
 };
 
 async function initializeSpelunkerContext(): Promise<SpelunkerContext> {
-    const focusFolders: string[] = [];
-    const chatModel = openai.createChatModelDefault("spelunkerChat");
-    const answerMaker = createAnswerMaker(chatModel);
     return {
-        focusFolders,
-        chatModel,
-        answerMaker,
+        focusFolders: [],
+        modelContext: createModelContext(),
     };
 }
 
