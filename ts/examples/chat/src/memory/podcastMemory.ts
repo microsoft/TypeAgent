@@ -100,7 +100,7 @@ export function createPodcastCommands(
     commands.podcastConvert = podcastConvert;
     commands.podcastIndex = podcastIndex;
     commands.podcastAddThread = podcastAddThread;
-    commands.podcastListThreads = podcastListThreads;
+    commands.podcastList = podcastListThreads;
     commands.podcastAddThreadTag = podcastAddThreadTag;
     commands.podcastRemoveThreadTag = podcastRemoveThreadTag;
     //commands.podcastListThreadEntities = podcastListThreadEntities;
@@ -570,7 +570,7 @@ export function createPodcastCommands(
         await threads.add(threadDef);
         writeThread(threadDef);
     }
-    commands.podcastListThreads.metadata = "List all registered threads";
+    commands.podcastList.metadata = "List all registered threads";
     async function podcastListThreads(args: string[]) {
         const threads =
             await context.podcastMemory.conversation.getThreadIndex();
