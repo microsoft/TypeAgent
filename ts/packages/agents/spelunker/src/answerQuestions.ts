@@ -8,9 +8,8 @@ import { ChatModel } from "aiclient";
 import { loadSchema } from "typeagent";
 import { createJsonTranslator, TypeChatJsonTranslator } from "typechat";
 import { createTypeScriptJsonValidator } from "typechat/ts";
-import { ActionResult, Entity } from "@typeagent/agent-sdk";
+import { ActionResult, ActionResultSuccess, Entity } from "@typeagent/agent-sdk";
 import {
-    createActionResult,
     createActionResultFromError,
 } from "@typeagent/agent-sdk/helpers/action";
 
@@ -57,7 +56,7 @@ ${preppedFiles}
 
     // 5. Produce an action result from that
     const entities: Entity[] = []; // TODO
-    return createActionResult(answer, undefined, entities);
+    return createActionResultFromMarkdownDisplay(answer, entities);
 }
 
 // Given a file name, return the contents of the file,
@@ -93,6 +92,8 @@ export function createAnswerMaker(
  *
  * @param dir - The directory to search within.
  * @returns An array of absolute paths to .py files.
+ *
+ * (Written by ChatGPT)
  */
 function getAllPyFilesSync(dir: string): string[] {
     let results: string[] = [];
@@ -117,4 +118,16 @@ function getAllPyFilesSync(dir: string): string[] {
     });
 
     return results;
+}
+
+// Should be in actionHelpers.ts
+function createActionResultFromMarkdownDisplay(
+    markdownText: string,
+    entities?: Entity[],
+): ActionResultSuccess {
+    return {
+        literalText: markdownText,
+        entities: entities ?? [],
+        displayContent: { type: "markdown", content: markdownText },
+    };
 }
