@@ -4,7 +4,6 @@
 import { TypeAgentServer } from "./typeAgentServer.js";
 import findConfig from "find-config";
 import assert from "assert";
-import { AWSStorageProvider } from "./storageProviders/awsStorageProvider.js";
 
 const envPath = findConfig(".env");
 assert(envPath, ".env file not found!");
