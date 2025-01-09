@@ -57,22 +57,3 @@ const manifest: AppAgentManifest = {
 document.addEventListener("DOMContentLoaded", () =>
     (window as any).registerTypeAgent("turtle", manifest, agent),
 );
-
-/*
-turtle.penDown();
-turtle.forward(100);
-
-turtle.left(90);
-turtle.forward(100);
-
-turtle.left(90);
-turtle.forward(100);
-
-turtle.left(45);
-turtle.forward(130);
-/*
-turtle.right(90);
-turtle.forward(100);
-turtle.penUp();
-turtle.forward(100);
-*/

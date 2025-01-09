@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+// Proxy message between the page content and the extension.
+
 const port = chrome.runtime?.connect({ name: "typeagent" });
 // page => extension
 window.addEventListener("message", (event) => {
