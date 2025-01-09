@@ -11,6 +11,7 @@ import {
 } from "@typeagent/agent-sdk";
 import DOMPurify from "dompurify";
 import { SettingsView } from "./settingsView";
+import MarkdownIt from "markdown-it";
 
 const ansi_up = new AnsiUp();
 ansi_up.use_classes = true;
@@ -33,16 +34,30 @@ function encodeTextToHtml(text: string): string {
 }
 
 const enableText2Html = true;
-function processContent(content: string, type: string): string {
-    return type === "html"
-        ? DOMPurify.sanitize(content, {
-              ADD_ATTR: ["target", "onclick", "onerror"],
-              ADD_DATA_URI_TAGS: ["img"],
-              ADD_URI_SAFE_ATTR: ["src"],
-          })
-        : enableText2Html
-          ? textToHtml(content)
-          : stripAnsi(encodeTextToHtml(content));
+function processContent(
+    content: string,
+    type: string,
+    inline: boolean = false,
+): string {
+    switch (type) {
+        case "iframe":
+            return content;
+        case "html":
+            return DOMPurify.sanitize(content, {
+                ADD_ATTR: ["target", "onclick", "onerror"],
+                ADD_DATA_URI_TAGS: ["img"],
+                ADD_URI_SAFE_ATTR: ["src"],
+            });
+        case "markdown":
+            const md = new MarkdownIt();
+            return inline ? md.renderInline(content) : md.render(content);
+        case "text":
+            return enableText2Html
+                ? textToHtml(content)
+                : stripAnsi(encodeTextToHtml(content));
+        default:
+            throw new Error(`Invalid content type ${type}`);
+    }
 }
 
 function matchKindStyle(elm: HTMLElement, kindStyle?: string) {
@@ -60,9 +75,10 @@ function matchKindStyle(elm: HTMLElement, kindStyle?: string) {
 function messageContentToHTML(
     message: MessageContent,
     type: DisplayType,
+    inline: boolean,
 ): string {
     if (typeof message === "string") {
-        return processContent(message, type);
+        return processContent(message, type, inline);
     }
 
     if (message.length === 0) {
@@ -71,7 +87,7 @@ function messageContentToHTML(
 
     if (typeof message[0] === "string") {
         return (message as string[])
-            .map((s) => processContent(s, type))
+            .map((s) => processContent(s, type, inline))
             .join("<br>");
     }
 
@@ -149,7 +165,11 @@ export function setContent(
     }
 
     // Process content according to type
-    const contentHtml = messageContentToHTML(message, type);
+    const contentHtml = messageContentToHTML(
+        message,
+        type,
+        appendMode === "inline",
+    );
 
     // if the agent wants to show script we need to do that in isolation so create an iframe
     // and put both the script and supplied HTML into it
