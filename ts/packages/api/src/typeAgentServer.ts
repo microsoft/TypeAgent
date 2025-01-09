@@ -35,27 +35,24 @@ export class TypeAgentServer {
     private storageProvider: TypeAgentStorageProvider | undefined;
     private config: TypeAgentAPIServerConfig;
 
-    constructor(
-        private envPath: string,
-    ) {
+    constructor(private envPath: string) {
         // typeAgent config
         dotenv.config({ path: this.envPath });
 
         // web server config
-        this.config = JSON.parse(
-            readFileSync("data/config.json").toString(),
-        );
+        this.config = JSON.parse(readFileSync("data/config.json").toString());
 
         const storageProviderMap = {
-            "azure": AzureStorageProvider,
-            "aws": AWSStorageProvider,
-        }
+            azure: AzureStorageProvider,
+            aws: AWSStorageProvider,
+        };
 
         // setting storage provider if "provided" lol
-        if (this.config.blobBackupEnabled) {
-            this.storageProvider = new storageProviderMap[this.config.storageProvider]();
+        if (this.config.blobBackupEnabled && this.config.storageProvider) {
+            this.storageProvider = new storageProviderMap[
+                this.config.storageProvider
+            ]();
         }
-
     }
 
     async start() {
@@ -143,7 +140,10 @@ export class TypeAgentServer {
             for (const remoteFile of remoteFiles) {
                 const localPath = path.join(getUserDataDir(), remoteFile);
                 if (!fs.existsSync(localPath)) {
-                    await this.storageProvider.downloadFile(remoteFile, localPath);
+                    await this.storageProvider.downloadFile(
+                        remoteFile,
+                        localPath,
+                    );
                     console.log(`Downloaded ${remoteFile} to ${localPath}`);
                 }
             }
@@ -268,7 +268,9 @@ export class TypeAgentServer {
                     );
                     // await blockBlobClient.uploadFile(localPath);
                     if (!this.storageProvider) {
-                        console.log(`Failed to upload ${fileName} to provider, no storage provider found`);
+                        console.log(
+                            `Failed to upload ${fileName} to provider, no storage provider found`,
+                        );
                         return;
                     }
                     await this.storageProvider.uploadFile(localPath, fileName);

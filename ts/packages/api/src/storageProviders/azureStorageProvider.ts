@@ -5,13 +5,17 @@ import { DefaultAzureCredential } from "@azure/identity";
 import { TypeAgentStorageProvider } from "../storageProvider.js";
 import { getEnvSetting, openai } from "aiclient";
 import { env } from "node:process";
-import { BlobServiceClient, BlockBlobClient, ContainerClient, ContainerListBlobsOptions } from "@azure/storage-blob";
+import {
+    BlobServiceClient,
+    BlockBlobClient,
+    ContainerClient,
+    ContainerListBlobsOptions,
+} from "@azure/storage-blob";
 import path from "node:path";
 import fs from "node:fs";
 import { getUserDataDir } from "agent-dispatcher";
 
-export class AzureStorageProvider implements TypeAgentStorageProvider{
-
+export class AzureStorageProvider implements TypeAgentStorageProvider {
     private containerName: string | undefined;
     private storageAccount: string | undefined;
     private accountURL: string;
@@ -94,8 +98,7 @@ export class AzureStorageProvider implements TypeAgentStorageProvider{
         const containerClient: ContainerClient =
             this.blobServiceClient.getContainerClient(this.containerName!!);
 
-        const blockBlobClient =
-            containerClient.getBlockBlobClient(remotePath);
+        const blockBlobClient = containerClient.getBlockBlobClient(remotePath);
 
         // Ensure local directory structure exists
         const dirName = path.dirname(localPath);
@@ -112,7 +115,8 @@ export class AzureStorageProvider implements TypeAgentStorageProvider{
             return;
         }
 
-        const containerClient: ContainerClient = this.blobServiceClient.getContainerClient(this.containerName!!);
+        const containerClient: ContainerClient =
+            this.blobServiceClient.getContainerClient(this.containerName!!);
 
         let blobName = fileName.replace(getUserDataDir(), "");
         const blockBlobClient: BlockBlobClient =

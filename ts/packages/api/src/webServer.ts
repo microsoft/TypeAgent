@@ -15,7 +15,7 @@ export type TypeAgentAPIServerConfig = {
     port: number;
     broadcast: boolean;
     blobBackupEnabled: boolean;
-    storageProvider: "azure" | "aws";
+    storageProvider?: "azure" | "aws";
 };
 
 export class TypeAgentAPIWebServer {

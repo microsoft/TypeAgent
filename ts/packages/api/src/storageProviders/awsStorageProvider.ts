@@ -1,19 +1,22 @@
 // Copyright (c) Microsoft Corporation and Henry Lucco.
 // Licensed under the MIT License.
 
-import { GetObjectCommand, ListObjectsV2Command, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import {
+    GetObjectCommand,
+    ListObjectsV2Command,
+    PutObjectCommand,
+    S3Client,
+} from "@aws-sdk/client-s3";
 import { TypeAgentStorageProvider } from "../storageProvider.js";
 import fs from "node:fs";
 import path from "node:path";
 import { Readable } from "node:stream";
 
 export class AWSStorageProvider implements TypeAgentStorageProvider {
-
     private s3Client: S3Client;
     private bucketName: string;
 
     constructor() {
-
         if (!process.env.AWS_S3_BUCKET_NAME) {
             throw new Error("AWS_S3_BUCKET_NAME not set");
         }
@@ -81,9 +84,10 @@ export class AWSStorageProvider implements TypeAgentStorageProvider {
 
             const writeStream = fs.createWriteStream(localPath);
             await new Promise<void>((resolve, reject) => {
-                (bodyStream as Readable).pipe(writeStream)
-                .on("finish", () => resolve())
-                .on("error", (err: Error) => reject(err));
+                (bodyStream as Readable)
+                    .pipe(writeStream)
+                    .on("finish", () => resolve())
+                    .on("error", (err: Error) => reject(err));
             });
         }
     }
@@ -99,5 +103,4 @@ export class AWSStorageProvider implements TypeAgentStorageProvider {
 
         await this.s3Client.send(command);
     }
-
 }

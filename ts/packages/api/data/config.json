@@ -3,5 +3,5 @@
   "port": 3000,
   "broadcast": true,
   "blobBackupEnabled": true,
-  "storageProvider" : "aws"
+  "storageProvider": "aws"
 }
