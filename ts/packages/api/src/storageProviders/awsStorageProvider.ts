@@ -93,7 +93,7 @@ export class AWSStorageProvider implements TypeAgentStorageProvider {
     async uploadFile(localPath: string, remotePath: string): Promise<void> {
         const resolvedPath = path.resolve(localPath);
         if (!fs.existsSync(resolvedPath)) {
-          throw new Error(`File does not actually exist at ${resolvedPath}`);
+            throw new Error(`File does not actually exist at ${resolvedPath}`);
         }
 
         const fileStream = fs.createReadStream(localPath);
