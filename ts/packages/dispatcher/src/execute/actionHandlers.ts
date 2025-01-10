@@ -135,6 +135,13 @@ export function createSessionContext<T = unknown>(
         : () => {
               throw new Error("Permission denied: cannot add dynamic agent");
           };
+
+    // TODO: only allow remove agent added by this agent.
+    const removeDynamicAgent = allowDynamicAgent
+        ? (agentName: string) => context.agents.removeDynamicAgent(agentName)
+        : () => {
+              throw new Error("Permission denied: cannot remove dynamic agent");
+          };
     const sessionContext: SessionContext<T> = {
         get agentContext() {
             return agentContext;
@@ -178,6 +185,7 @@ export function createSessionContext<T = unknown>(
             });
         },
         addDynamicAgent,
+        removeDynamicAgent,
     };
 
     (sessionContext as any).conversationManager = context.conversationManager;

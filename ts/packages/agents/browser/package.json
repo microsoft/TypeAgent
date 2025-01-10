@@ -18,11 +18,12 @@
   },
   "main": "index.js",
   "scripts": {
-    "build": "concurrently npm:tsc:agent npm:tsc:puppeteer npm:webpack",
+    "build": "npm run tsc:common && concurrently npm:tsc:agent npm:tsc:puppeteer npm:webpack",
     "clean": "rimraf dist",
     "dev": "webpack --config webpack.dev.js",
     "prettier": "prettier --check . --ignore-path ../../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../../.prettierignore",
+    "tsc:common": "tsc -p src/common/tsconfig.json",
     "tsc:agent": "tsc -p src/agent/tsconfig.json",
     "tsc:puppeteer": "tsc -p src/puppeteer/tsconfig.json",
     "webpack": "webpack --config webpack.prod.js"

@@ -32,6 +32,7 @@ import {
 import { handleInstacartAction } from "./instacart/actionHandler.mjs";
 import { processWebAgentMessage } from "./webTypeAgent.mjs";
 import { GenericChannelProvider } from "agent-rpc/client";
+import { isWebAgentMessage } from "../common/webAgentMessageTypes.mjs";
 
 export function instantiate(): AppAgent {
   return {
@@ -92,65 +93,60 @@ async function updateBrowserContext(
       webSocket.addEventListener("message", async (event: any) => {
         const text = event.data.toString();
         const data = JSON.parse(text) as WebSocketMessage;
-        if (data.target !== "dispatcher") {
+        if (isWebAgentMessage(data)) {
+          await processWebAgentMessage(data, context);
           return;
         }
-        switch (data.source) {
-          case "browser":
-            if (data.body) {
-              switch (data.messageType) {
-                case "enableSiteTranslator": {
-                  if (data.body == "browser.crossword") {
-                    // initialize crossword state
-                    sendSiteTranslatorStatus(
-                      data.body,
-                      "initializing",
-                      context,
-                    );
-                    context.agentContext.crossWordState =
-                      await getBoardSchema(context);
-                    sendSiteTranslatorStatus(data.body, "initialized", context);
 
-                    if (context.agentContext.crossWordState) {
-                      context.notify(
-                        AppAgentEvent.Info,
-                        "Crossword board initialized.",
-                      );
-                    } else {
-                      context.notify(
-                        AppAgentEvent.Error,
-                        "Crossword board initialization failed.",
-                      );
-                    }
-                  }
-                  await context.toggleTransientAgent(data.body, true);
-                  break;
-                }
-                case "disableSiteTranslator": {
-                  await context.toggleTransientAgent(data.body, false);
-                  break;
-                }
-                case "browserActionResponse": {
-                  break;
-                }
-                case "debugBrowserAction": {
-                  await executeBrowserAction(
-                    data.body,
-                    context as unknown as ActionContext<BrowserActionContext>,
+        if (data.target !== "dispatcher" || data.source !== "browser") {
+          return;
+        }
+
+        if (data.body) {
+          switch (data.messageType) {
+            case "enableSiteTranslator": {
+              if (data.body == "browser.crossword") {
+                // initialize crossword state
+                sendSiteTranslatorStatus(data.body, "initializing", context);
+                context.agentContext.crossWordState =
+                  await getBoardSchema(context);
+                sendSiteTranslatorStatus(data.body, "initialized", context);
+
+                if (context.agentContext.crossWordState) {
+                  context.notify(
+                    AppAgentEvent.Info,
+                    "Crossword board initialized.",
                   );
-
-                  break;
-                }
-                case "tabIndexRequest": {
-                  await handleTabIndexActions(data.body, context, data.id);
-                  break;
+                } else {
+                  context.notify(
+                    AppAgentEvent.Error,
+                    "Crossword board initialization failed.",
+                  );
                 }
               }
+              await context.toggleTransientAgent(data.body, true);
+              break;
             }
-            break;
-          case "webAgent":
-            processWebAgentMessage(data.messageType, data.body, context);
-            break;
+            case "disableSiteTranslator": {
+              await context.toggleTransientAgent(data.body, false);
+              break;
+            }
+            case "browserActionResponse": {
+              break;
+            }
+            case "debugBrowserAction": {
+              await executeBrowserAction(
+                data.body,
+                context as unknown as ActionContext<BrowserActionContext>,
+              );
+
+              break;
+            }
+            case "tabIndexRequest": {
+              await handleTabIndexActions(data.body, context, data.id);
+              break;
+            }
+          }
         }
       });
     }

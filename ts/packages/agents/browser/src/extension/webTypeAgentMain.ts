@@ -4,6 +4,7 @@
 import { AppAgent, AppAgentManifest } from "@typeagent/agent-sdk";
 import { createGenericChannelProvider } from "agent-rpc/client";
 import { createAgentRpcServer } from "agent-rpc/server";
+import { isWebAgentMessageFromDispatcher } from "../../dist/common/webAgentMessageTypes.mjs";
 
 declare global {
     function registerTypeAgent(
@@ -36,10 +37,9 @@ global.registerTypeAgent = (
             manifest,
         },
     });
-
     window.addEventListener("message", (event) => {
         const data = event.data;
-        if (data.target === "webAgent" && data.source === "dispatcher") {
+        if (isWebAgentMessageFromDispatcher(data)) {
             if (data.messageType === "message") {
                 channelProvider.message(data.body);
             } else if (data.messageType === "disconnect") {

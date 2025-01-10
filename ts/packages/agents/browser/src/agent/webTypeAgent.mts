@@ -7,6 +7,7 @@ import {
   createGenericChannelProvider,
 } from "agent-rpc/client";
 import { BrowserActionContext } from "./actionHandler.mjs";
+import { WebAgentMessage } from "../common/webAgentMessageTypes.mjs";
 
 function ensureSharedChannelProvider(
   context: SessionContext<BrowserActionContext>,
@@ -36,27 +37,27 @@ function ensureSharedChannelProvider(
 }
 
 export async function processWebAgentMessage(
-  type: string,
-  data: any,
+  message: WebAgentMessage,
   context: SessionContext<BrowserActionContext>,
 ) {
   const channelProvider = ensureSharedChannelProvider(context);
   if (channelProvider === undefined) {
     return;
   }
-  switch (type) {
+  switch (message.messageType) {
     case "add":
       context.addDynamicAgent(
-        data.name,
-        data.manifest,
-        await createAgentRpcClient(data.name, channelProvider),
+        message.body.name,
+        message.body.manifest,
+        await createAgentRpcClient(message.body.name, channelProvider),
       );
       break;
     case "message":
-      channelProvider.message(data);
+      channelProvider.message(message.body);
       break;
     case "disconnect":
-      channelProvider.deleteChannel(data);
+      channelProvider.deleteChannel(message.body);
+      context.removeDynamicAgent(message.body);
       break;
   }
 }

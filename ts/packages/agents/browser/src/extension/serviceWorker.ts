@@ -2,6 +2,11 @@
 // Licensed under the MIT License.
 
 import { WebSocketMessage } from "../../../../commonUtils/dist/indexBrowser";
+import {
+    isWebAgentMessage,
+    isWebAgentMessageFromDispatcher,
+    WebAgentDisconnectMessage,
+} from "../../dist/common/webAgentMessageTypes.mjs";
 
 async function getConfigValues(): Promise<Record<string, string>> {
     const envLocation = chrome.runtime.getURL(".env");
@@ -1558,29 +1563,34 @@ chrome.runtime.onConnect.addListener(async (port) => {
         return;
     }
 
+    const handler = async (event: any) => {
+        const message = await event.data.text();
+        const data = JSON.parse(message) as WebSocketMessage;
+        if (isWebAgentMessageFromDispatcher(data)) {
+            port.postMessage(data);
+        }
+    };
+    webSocket.addEventListener("message", handler);
+
+    const agentNames: string[] = [];
     port.onMessage.addListener((data) => {
-        if (data.target === "dispatcher" && data.source === "webAgent") {
+        if (isWebAgentMessage(data)) {
+            if (data.messageType === "add") {
+                agentNames.push(data.body.name);
+            }
             webSocket.send(JSON.stringify(data));
         }
     });
     port.onDisconnect.addListener(() => {
-        webSocket.send(
-            JSON.stringify({
+        for (const name of agentNames) {
+            const message: WebAgentDisconnectMessage = {
                 source: "webAgent",
                 target: "dispatcher",
                 messageType: "disconnect",
-            }),
-        );
-    });
-    webSocket.addEventListener("message", async (event: any) => {
-        const message = await event.data.text();
-        const data = JSON.parse(message) as WebSocketMessage;
-        if (
-            data.target === "webAgent" &&
-            data.source === "dispatcher" &&
-            data.messageType === "message"
-        ) {
-            port.postMessage(data);
+                body: name,
+            };
+            webSocket.send(JSON.stringify(message));
         }
+        webSocket.removeEventListener("message", handler);
     });
 });

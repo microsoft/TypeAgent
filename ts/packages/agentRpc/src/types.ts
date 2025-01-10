@@ -94,6 +94,10 @@ export type AgentContextInvokeFunctions = {
         name: string;
         manifest: AppAgentManifest;
     }) => Promise<void>;
+    removeDynamicAgent: (param: {
+        contextId: number;
+        name: string;
+    }) => Promise<void>;
 };
 
 export type AgentCallFunctions = {

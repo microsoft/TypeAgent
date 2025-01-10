@@ -285,6 +285,7 @@ export function createAgentRpcServer(
         hasSessionStorage: boolean,
         context: any,
     ): SessionContext<any> {
+        const dynamicAgentRpcServer = new Map<string, () => void>();
         return {
             agentContext: context,
             sessionStorage: hasSessionStorage
@@ -315,6 +316,9 @@ export function createAgentRpcServer(
                 manifest: AppAgentManifest,
                 agent: AppAgent,
             ) => {
+                if (dynamicAgentRpcServer.has(name)) {
+                    throw new Error(`Duplicate agent name: ${name}`);
+                }
                 // Trigger the addDynamicAgent on the client side
                 const p = rpc.invoke("addDynamicAgent", {
                     contextId,
@@ -323,10 +327,34 @@ export function createAgentRpcServer(
                 });
 
                 // Create the agent RPC server to send the "initialized" message
-                createAgentRpcServer(name, agent, channelProvider);
+                const closeFn = createAgentRpcServer(
+                    name,
+                    agent,
+                    channelProvider,
+                );
 
-                // Wait for dispatcher to finish adding the agent
-                return p;
+                try {
+                    // Wait for dispatcher to finish adding the agent
+                    await p;
+                    dynamicAgentRpcServer.set(name, closeFn);
+                } catch (e) {
+                    closeFn();
+                    throw e;
+                }
+            },
+            removeDynamicAgent: async (name: string) => {
+                const closeFn = dynamicAgentRpcServer.get(name);
+                if (closeFn === undefined) {
+                    throw new Error(`Invalid agent name: ${name}`);
+                }
+                dynamicAgentRpcServer.delete(name);
+
+                await rpc.invoke("removeDynamicAgent", {
+                    contextId,
+                    name,
+                });
+
+                closeFn();
             },
         };
     }
@@ -445,4 +473,8 @@ export function createAgentRpcServer(
                     agent.initializeAgentContext !== undefined),
         ),
     });
+
+    return () => {
+        channelProvider.deleteChannel(name);
+    };
 }

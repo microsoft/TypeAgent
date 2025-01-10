@@ -120,6 +120,8 @@ export interface SessionContext<T = unknown> {
         manifest: AppAgentManifest,
         appAgent: AppAgent,
     ): Promise<void>;
+
+    removeDynamicAgent(agentName: string): Promise<void>;
 }
 
 // TODO: only utf8 & base64 is supported for now.

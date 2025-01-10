@@ -1,6 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import {
+    isWebAgentMessage,
+    isWebAgentMessageFromDispatcher,
+    WebAgentDisconnectMessageFromDispatcher,
+} from "../../dist/common/webAgentMessageTypes.mjs";
+
 // Proxy message between the page content and the extension.
 
 const port = chrome.runtime?.connect({ name: "typeagent" });
@@ -11,26 +17,24 @@ window.addEventListener("message", (event) => {
     }
 
     const data = event.data;
-    if (data.target === "dispatcher" && data.source === "webAgent") {
+    if (isWebAgentMessage(data)) {
         port.postMessage(data);
     }
 });
 
 // extension => page
 port.onMessage.addListener((data) => {
-    if (
-        data.target === "webAgent" &&
-        data.source === "dispatcher" &&
-        data.messageType == "message"
-    ) {
+    if (isWebAgentMessageFromDispatcher(data)) {
         window.postMessage(data);
     }
 });
 
 port.onDisconnect.addListener(() => {
-    window.postMessage({
+    const message: WebAgentDisconnectMessageFromDispatcher = {
         source: "dispatcher",
         target: "webAgent",
         messageType: "disconnect",
-    });
+    };
+
+    window.postMessage(message);
 });

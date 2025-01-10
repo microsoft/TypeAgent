@@ -3,6 +3,7 @@
 
 import registerDebug from "debug";
 
+const debug = registerDebug("typeagent:rpc");
 const debugError = registerDebug("typeagent:rpc:error");
 
 type MessageHandler<T> = (message: Partial<T>) => void;
@@ -136,6 +137,7 @@ export function createChannelProvider(
         }
     });
     function createChannel(name: string): RpcChannel {
+        debug(`createChannel ${name}`);
         if (channels.has(name)) {
             throw new Error(`Channel ${name} already exists`);
         }
@@ -154,6 +156,7 @@ export function createChannelProvider(
     }
 
     function deleteChannel(name: string) {
+        debug(`deleteChannel ${name}`);
         if (!channels.delete(name)) {
             throw new Error(`Channel ${name} does not exists`);
         }
