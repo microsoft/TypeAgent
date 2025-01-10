@@ -286,10 +286,7 @@ export function createSearchProcessor(
                         }
                         charCount += messageLength;
                     }
-                    if (i === 0) {
-                        i = 1;
-                    }
-                    if (i < response.messages.length) {
+                    if (i > 0 && i < response.messages.length) {
                         response.messageIds.splice(i);
                         response.messages.splice(i);
                     }
@@ -299,6 +296,7 @@ export function createSearchProcessor(
                     undefined,
                     response,
                     true,
+                    false,
                 );
             }
         }

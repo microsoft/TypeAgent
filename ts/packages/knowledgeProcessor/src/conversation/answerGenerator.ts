@@ -69,6 +69,7 @@ export interface AnswerGenerator {
         style: AnswerStyle | undefined,
         response: SearchResponse,
         higherPrecision: boolean,
+        enforceContextLength?: boolean,
     ): Promise<AnswerResponse | undefined>;
     generateAnswerInChunks(
         question: string,
@@ -118,10 +119,15 @@ export function createAnswerGenerator(
         answerStyle: AnswerStyle | undefined,
         response: SearchResponse,
         higherPrecision: boolean,
+        enforceContextLength?: boolean,
     ): Promise<AnswerResponse | undefined> {
         const context: AnswerContext = createContext(response);
-
-        if (isContextTooBig(context, response) && settings.chunking?.enable) {
+        enforceContextLength ??= true;
+        if (
+            enforceContextLength &&
+            isContextTooBig(context, response) &&
+            settings.chunking?.enable
+        ) {
             // Run answer generation in chunks
             return await getAnswerInChunks(question, context, {
                 maxCharsPerChunk: settings.maxCharsInContext!,
@@ -130,7 +136,13 @@ export function createAnswerGenerator(
             });
         }
         // Context is small enough
-        return getAnswer(question, answerStyle, higherPrecision, context);
+        return getAnswer(
+            question,
+            answerStyle,
+            higherPrecision,
+            context,
+            enforceContextLength,
+        );
     }
 
     async function getAnswerInChunks(

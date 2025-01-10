@@ -1272,6 +1272,7 @@ export async function runChatMemory(): Promise<void> {
                     "Maximum (approx) # of message tokens to send",
                     4096,
                 ),
+                debug: argBool("dump matches", false),
             },
         };
     }
@@ -1296,7 +1297,7 @@ export async function runChatMemory(): Promise<void> {
             const response = await context.searcher.searchMessages(
                 namedArgs.query,
                 options,
-                namedArgs.maxMessageTokens * 4,
+                namedArgs.maxMessageTokens * 3.5,
             );
             const answer = response.answer;
             if (answer) {
@@ -1304,6 +1305,9 @@ export async function runChatMemory(): Promise<void> {
                 printer.writeResultStats(response);
                 writeTokenStats();
                 printer.writeAnswer(answer);
+            }
+            if (namedArgs.debug) {
+                printer.writeSearchResponse(response);
             }
         } catch {
             endCountingTokens(prevStats);
