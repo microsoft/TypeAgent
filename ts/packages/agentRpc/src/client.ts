@@ -174,8 +174,8 @@ export async function createAgentRpcClient(
             name: string;
         }) => {
             const context = contextMap.get(param.contextId);
+            await context.removeDynamicAgent(param.name);
             channelProvider.deleteChannel(param.name);
-            return context.removeDynamicAgent(param.name);
         },
         storageRead: async (param: {
             contextId: number;

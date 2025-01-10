@@ -25,6 +25,7 @@
   },
   "dependencies": {
     "@typeagent/agent-sdk": "workspace:*",
+    "common-utils": "workspace:*",
     "debug": "^4.3.4"
   },
   "devDependencies": {

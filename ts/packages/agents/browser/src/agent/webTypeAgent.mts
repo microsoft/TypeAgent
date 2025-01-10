@@ -46,7 +46,7 @@ export async function processWebAgentMessage(
   }
   switch (message.messageType) {
     case "add":
-      context.addDynamicAgent(
+      await context.addDynamicAgent(
         message.body.name,
         message.body.manifest,
         await createAgentRpcClient(message.body.name, channelProvider),
@@ -56,8 +56,8 @@ export async function processWebAgentMessage(
       channelProvider.message(message.body);
       break;
     case "disconnect":
+      await context.removeDynamicAgent(message.body);
       channelProvider.deleteChannel(message.body);
-      context.removeDynamicAgent(message.body);
       break;
   }
 }

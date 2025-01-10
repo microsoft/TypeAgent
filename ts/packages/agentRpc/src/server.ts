@@ -29,6 +29,7 @@ import {
 } from "./types.js";
 import { createRpc } from "./rpc.js";
 import { ChannelProvider } from "./common.js";
+import { createLimiter } from "common-utils";
 export {
     GenericChannelProvider,
     createGenericChannelProvider,
@@ -286,6 +287,7 @@ export function createAgentRpcServer(
         context: any,
     ): SessionContext<any> {
         const dynamicAgentRpcServer = new Map<string, () => void>();
+        const dynamicAgentLock = createLimiter(1);
         return {
             agentContext: context,
             sessionStorage: hasSessionStorage
@@ -315,47 +317,54 @@ export function createAgentRpcServer(
                 name: string,
                 manifest: AppAgentManifest,
                 agent: AppAgent,
-            ) => {
-                if (dynamicAgentRpcServer.has(name)) {
-                    throw new Error(`Duplicate agent name: ${name}`);
-                }
-                // Trigger the addDynamicAgent on the client side
-                const p = rpc.invoke("addDynamicAgent", {
-                    contextId,
-                    name,
-                    manifest,
-                });
+            ) =>
+                // State for dynamic agent needs to be serialized.
+                dynamicAgentLock(async () => {
+                    if (dynamicAgentRpcServer.has(name)) {
+                        throw new Error(`Duplicate agent name: ${name}`);
+                    }
 
-                // Create the agent RPC server to send the "initialized" message
-                const closeFn = createAgentRpcServer(
-                    name,
-                    agent,
-                    channelProvider,
-                );
+                    // Trigger the addDynamicAgent on the client side
+                    const p = rpc.invoke("addDynamicAgent", {
+                        contextId,
+                        name,
+                        manifest,
+                    });
 
-                try {
-                    // Wait for dispatcher to finish adding the agent
-                    await p;
-                    dynamicAgentRpcServer.set(name, closeFn);
-                } catch (e) {
-                    closeFn();
-                    throw e;
-                }
-            },
-            removeDynamicAgent: async (name: string) => {
-                const closeFn = dynamicAgentRpcServer.get(name);
-                if (closeFn === undefined) {
-                    throw new Error(`Invalid agent name: ${name}`);
-                }
-                dynamicAgentRpcServer.delete(name);
+                    // Create the agent RPC server to send the "initialized" message
+                    const closeFn = createAgentRpcServer(
+                        name,
+                        agent,
+                        channelProvider,
+                    );
 
-                await rpc.invoke("removeDynamicAgent", {
-                    contextId,
-                    name,
-                });
+                    try {
+                        // Wait for dispatcher to finish adding the agent
+                        await p;
+                        dynamicAgentRpcServer.set(name, closeFn);
+                    } catch (e) {
+                        closeFn();
+                        throw e;
+                    }
+                }),
+            removeDynamicAgent: async (name: string) =>
+                dynamicAgentLock(async () => {
+                    const closeFn = dynamicAgentRpcServer.get(name);
+                    if (closeFn === undefined) {
+                        throw new Error(`Invalid agent name: ${name}`);
+                    }
 
-                closeFn();
-            },
+                    try {
+                        dynamicAgentRpcServer.delete(name);
+
+                        await rpc.invoke("removeDynamicAgent", {
+                            contextId,
+                            name,
+                        });
+                    } finally {
+                        closeFn();
+                    }
+                }),
         };
     }
 

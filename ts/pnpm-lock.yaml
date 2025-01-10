@@ -429,6 +429,9 @@ importers:
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../agentSdk
+      common-utils:
+        specifier: workspace:*
+        version: link:../commonUtils
       debug:
         specifier: ^4.3.4
         version: 4.3.4(supports-color@8.1.1)

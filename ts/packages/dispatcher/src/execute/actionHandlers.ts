@@ -131,14 +131,28 @@ export function createSessionContext<T = unknown>(
         : undefined;
     const addDynamicAgent = allowDynamicAgent
         ? (agentName: string, manifest: AppAgentManifest, appAgent: AppAgent) =>
-              context.agents.addDynamicAgent(agentName, manifest, appAgent)
+              // acquire the lock to prevent change the state while we are processing a command or removing dynamic agent.
+              // WARNING: deadlock if this is call because we are processing a request
+              context.commandLock(async () => {
+                  await context.agents.addDynamicAgent(
+                      agentName,
+                      manifest,
+                      appAgent,
+                  );
+                  context.agents.setState(context, context.session.getConfig());
+              })
         : () => {
               throw new Error("Permission denied: cannot add dynamic agent");
           };
 
     // TODO: only allow remove agent added by this agent.
     const removeDynamicAgent = allowDynamicAgent
-        ? (agentName: string) => context.agents.removeDynamicAgent(agentName)
+        ? (agentName: string) =>
+              // acquire the lock to prevent change the state while we are processing a command or adding dynamic agent.
+              // WARNING: deadlock if this is call because we are processing a request
+              context.commandLock(async () =>
+                  context.agents.removeDynamicAgent(agentName),
+              )
         : () => {
               throw new Error("Permission denied: cannot remove dynamic agent");
           };

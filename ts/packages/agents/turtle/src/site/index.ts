@@ -54,6 +54,11 @@ const manifest: AppAgentManifest = {
         schemaFile: { content: schemaTs, type: "ts" },
     },
 };
-document.addEventListener("DOMContentLoaded", () =>
-    (window as any).registerTypeAgent("turtle", manifest, agent),
-);
+
+let registered = false;
+document.addEventListener("DOMContentLoaded", () => {
+    if (!registered) {
+        (window as any).registerTypeAgent("turtle", manifest, agent);
+        registered = true;
+    }
+});
