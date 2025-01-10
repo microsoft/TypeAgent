@@ -37,7 +37,7 @@ export interface ClientSettingsProvider {
     set: SetSettingFunction | null;
 }
 
-export type DisplayType = "html" | "iframe" | "text";
+export type DisplayType = "html" | "iframe" | "text" | "markdown";
 
 export type ClientActions =
     | "show-camera"

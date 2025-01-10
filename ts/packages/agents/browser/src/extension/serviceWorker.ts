@@ -2,6 +2,11 @@
 // Licensed under the MIT License.
 
 import { WebSocketMessage } from "../../../../commonUtils/dist/indexBrowser";
+import {
+    isWebAgentMessage,
+    isWebAgentMessageFromDispatcher,
+    WebAgentDisconnectMessage,
+} from "../../dist/common/webAgentMessageTypes.mjs";
 
 async function getConfigValues(): Promise<Record<string, string>> {
     const envLocation = chrome.runtime.getURL(".env");
@@ -228,6 +233,20 @@ async function awaitPageLoad(targetTab: chrome.tabs.Tab) {
 
         chrome.tabs.onUpdated.addListener(handler);
     });
+}
+
+async function awaitPageIncrementalUpdates(targetTab: chrome.tabs.Tab) {
+    const loadingCompleted = await chrome.tabs.sendMessage(
+        targetTab.id!,
+        {
+            type: "await_page_incremental_load",
+        },
+        { frameId: 0 },
+    );
+
+    if (!loadingCompleted) {
+        console.error("Incremental loading did not complete for this page.");
+    }
 }
 
 async function getLatLongForLocation(locationName: string) {
@@ -529,12 +548,14 @@ async function getTabHTML(
     fullSize: boolean,
     downloadAsFile: boolean,
     useDebugAPI?: boolean,
+    useTimestampIds?: boolean,
 ) {
     if (!useDebugAPI) {
         let outerHTML = await chrome.tabs.sendMessage(targetTab.id!, {
             type: "get_reduced_html",
             fullSize: fullSize,
             frameId: 0,
+            useTimestampIds: useTimestampIds,
         });
 
         if (downloadAsFile) {
@@ -590,6 +611,7 @@ async function getTabHTMLFragments(
     fullSize: boolean,
     downloadAsFile: boolean,
     extractText: boolean,
+    useTimestampIds: boolean,
     maxFragmentSize: 16000,
 ) {
     const frames = await chrome.webNavigation.getAllFrames({
@@ -608,6 +630,7 @@ async function getTabHTMLFragments(
                         type: "get_reduced_html",
                         fullSize: fullSize,
                         frameId: frames[i].frameId,
+                        useTimestampIds: useTimestampIds,
                     },
                     { frameId: frames[i].frameId },
                 );
@@ -780,7 +803,6 @@ async function toggleSiteTranslator(targetTab: chrome.tabs.Tab) {
             "www.homedepot.com",
             "www.target.com",
             "www.walmart.com",
-            "www.instacart.com",
         ];
 
         if (commerceHosts.includes(host)) {
@@ -1137,6 +1159,7 @@ async function runBrowserAction(action: any) {
                 action.parameters?.fullHTML,
                 action.parameters?.downloadAsFile,
                 action.parameters?.extractText,
+                action.parameters?.useTimestampIds,
                 16000,
             );
             break;
@@ -1158,6 +1181,7 @@ async function runBrowserAction(action: any) {
         case "awaitPageLoad": {
             const targetTab = await getActiveTab();
             await awaitPageLoad(targetTab);
+            await awaitPageIncrementalUpdates(targetTab);
             responseObject = targetTab.url;
             break;
         }
@@ -1528,3 +1552,45 @@ chrome.contextMenus?.onClicked.addListener(
         }
     },
 );
+
+chrome.runtime.onConnect.addListener(async (port) => {
+    if (port.name !== "typeagent") {
+        // This shouldn't happen.
+        return;
+    }
+    if (!webSocket || webSocket.readyState !== WebSocket.OPEN) {
+        port.disconnect();
+        return;
+    }
+
+    const handler = async (event: any) => {
+        const message = await event.data.text();
+        const data = JSON.parse(message) as WebSocketMessage;
+        if (isWebAgentMessageFromDispatcher(data)) {
+            port.postMessage(data);
+        }
+    };
+    webSocket.addEventListener("message", handler);
+
+    const agentNames: string[] = [];
+    port.onMessage.addListener((data) => {
+        if (isWebAgentMessage(data)) {
+            if (data.messageType === "add") {
+                agentNames.push(data.body.name);
+            }
+            webSocket.send(JSON.stringify(data));
+        }
+    });
+    port.onDisconnect.addListener(() => {
+        for (const name of agentNames) {
+            const message: WebAgentDisconnectMessage = {
+                source: "webAgent",
+                target: "dispatcher",
+                messageType: "disconnect",
+                body: name,
+            };
+            webSocket.send(JSON.stringify(message));
+        }
+        webSocket.removeEventListener("message", handler);
+    });
+});

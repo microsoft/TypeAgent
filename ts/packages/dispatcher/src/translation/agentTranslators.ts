@@ -220,11 +220,25 @@ function getChangeAssistantSchemaDef(
 function getTranslatorSchemaDef(
     actionConfig: ActionConfig,
 ): TranslatorSchemaDef {
-    return {
-        kind: "file",
-        typeName: actionConfig.schemaType,
-        fileName: getPackageFilePath(actionConfig.schemaFile),
-    };
+    if (typeof actionConfig.schemaFile === "string") {
+        return {
+            kind: "file",
+            typeName: actionConfig.schemaType,
+            fileName: getPackageFilePath(actionConfig.schemaFile),
+        };
+    }
+
+    if (actionConfig.schemaFile.type !== "ts") {
+        return {
+            kind: "inline",
+            typeName: actionConfig.schemaType,
+            schema: actionConfig.schemaFile.content,
+        };
+    }
+
+    throw new Error(
+        `Unsupported schema source type: ${actionConfig.schemaFile.type}"`,
+    );
 }
 
 export function getInjectedActionConfigs(

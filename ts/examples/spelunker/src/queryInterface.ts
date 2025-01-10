@@ -74,8 +74,8 @@ export async function interactiveQueryLoop(
         search,
         summaries,
         keywords,
-        topics,
-        goals,
+        tags,
+        synonyms,
         dependencies,
         files,
         purgeFile,
@@ -168,8 +168,9 @@ export async function interactiveQueryLoop(
                                 writeNote(io, "SUMMARY: None");
                             }
                         } else {
-                            const docItem: string[] | undefined =
-                                chunkDoc[name];
+                            const docItem: string[] | undefined = (
+                                chunkDoc as any
+                            )[name];
                             if (docItem?.length) {
                                 writeNote(
                                     io,
@@ -291,32 +292,32 @@ export async function interactiveQueryLoop(
         await _reportIndex(args, io, "keywords");
     }
 
-    function topicsDef(): iapp.CommandMetadata {
+    function tagsDef(): iapp.CommandMetadata {
         return {
-            description: "Show all recorded topics and their postings.",
+            description: "Show all recorded tags and their postings.",
             options: commonOptions(),
         };
     }
-    handlers.topics.metadata = topicsDef();
-    async function topics(
+    handlers.tags.metadata = tagsDef();
+    async function tags(
         args: string[] | iapp.NamedArgs,
         io: iapp.InteractiveIo,
     ): Promise<void> {
-        await _reportIndex(args, io, "topics");
+        await _reportIndex(args, io, "tags");
     }
 
-    function goalsDef(): iapp.CommandMetadata {
+    function synonymsDef(): iapp.CommandMetadata {
         return {
-            description: "Show all recorded goals and their postings.",
+            description: "Show all recorded synonyms and their postings.",
             options: commonOptions(),
         };
     }
-    handlers.goals.metadata = goalsDef();
-    async function goals(
+    handlers.synonyms.metadata = synonymsDef();
+    async function synonyms(
         args: string[] | iapp.NamedArgs,
         io: iapp.InteractiveIo,
     ): Promise<void> {
-        await _reportIndex(args, io, "goals");
+        await _reportIndex(args, io, "synonyms");
     }
 
     function dependenciesDef(): iapp.CommandMetadata {
@@ -560,19 +561,32 @@ export async function purgeNormalizedFile(
     );
 
     // Step 2: Remove chunk ids from indexes.
-    const deletions: ChunkId[] = Array.from(toDelete);
+    const chunkIdsToDelete: ChunkId[] = Array.from(toDelete);
     for (const [name, index] of chunkyIndex.allIndexes()) {
-        let updates = 0;
+        const affectedValues: string[] = [];
+        // Collect values from which we need to remove the chunk ids about to be deleted.
         for await (const textBlock of index.entries()) {
-            if (textBlock?.sourceIds?.some((id) => deletions.includes(id))) {
+            if (
+                textBlock?.sourceIds?.some((id) =>
+                    chunkIdsToDelete.includes(id),
+                )
+            ) {
                 if (verbose) {
                     writeNote(io, `[Purging ${name} entry ${textBlock.value}]`);
                 }
-                await index.remove(textBlock.value, deletions);
-                updates++;
+                affectedValues.push(textBlock.value);
             }
         }
-        writeNote(io, `[Purged ${updates} ${name}]`); // name is plural, e.g. "keywords".
+        // Actually update the index (can't modify it while it's being iterated over).
+        for (const value of affectedValues) {
+            const id = await index.getId(value);
+            if (!id) {
+                writeWarning(io, `[No id for value {value}]`);
+            } else {
+                await index.remove(id, chunkIdsToDelete);
+            }
+        }
+        writeNote(io, `[Purged ${affectedValues.length} ${name}]`); // name is plural, e.g. "keywords".
     }
 
     // Step 3: Remove chunks (do this last so if step 2 fails we can try again).
@@ -741,15 +755,15 @@ async function runIndexQueries(
 
         // Update chunk id scores.
         for (const hit of hits) {
-            // IDF only depends on the term.
+            // Literature suggests setting TF = 1 in this case,
+            // but the term's relevance score intuitively makes sense.
+            const tf = hit.score;
+            // IDF calculation ("inverse document frequency smooth").
             const fraction =
                 totalNumChunks / (1 + (hit.item.sourceIds?.length ?? 0));
             const idf = 1 + Math.log(fraction);
+            const newScore = tf * idf;
             for (const chunkId of hit.item.sourceIds ?? []) {
-                // Binary TF is 1 for all chunks in the list.
-                // As a tweak, we multiply by the term's relevance score.
-                const tf = hit.score;
-                const newScore = tf * idf;
                 const oldScoredItem = chunkIdScores.get(chunkId);
                 const oldScore = oldScoredItem?.score ?? 0;
                 // Combine scores by addition. (Alternatives: max, possibly others.)

@@ -140,6 +140,7 @@ export type ExtractedKnowledge<TSourceId = any> = {
     topics?: TextBlock<TSourceId>[] | undefined;
     actions?: ExtractedAction<TSourceId>[] | undefined;
     sourceEntityName?: string | undefined;
+    tags?: string[] | undefined;
 };
 
 /**
@@ -310,6 +311,7 @@ function prepareEntityForMerge(entity: ConcreteEntity) {
     collections.lowerAndSort(entity.type);
     return entity;
 }
+
 export function isValidEntityName(name: string | undefined): boolean {
     return name !== undefined && name.length > 0 && name !== NoEntityName;
 }

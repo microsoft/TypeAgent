@@ -6,6 +6,10 @@ export {};
 function escapeCssSelector(selector: string) {
     let prefix = "";
     let suffix = "";
+    if (selector.startsWith("#id_")) {
+        return selector;
+    }
+
     if (selector.charAt(0) == "#") {
         prefix = "#";
         suffix = selector.substring(1);
@@ -34,7 +38,7 @@ function simulateMouseClick(targetNode: HTMLElement) {
 }
 
 function clickOnElement(selector: string) {
-    const targetElement = document.querySelector(selector) as HTMLDivElement;
+    const targetElement = document.querySelector(selector) as HTMLElement;
     if (targetElement) {
         simulateMouseClick(targetElement);
     }

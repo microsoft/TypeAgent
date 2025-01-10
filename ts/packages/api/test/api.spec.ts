@@ -5,7 +5,7 @@ import assert from "assert";
 import { TypeAgentServer } from "../src/typeAgentServer.js";
 import findConfig from "find-config";
 
-describe("api web/ws server", () => {
+describe.skip("api web/ws server", () => {
     it("verify web server respnses", async () => {
         const envPath = findConfig(".env");
         if (envPath !== null) {

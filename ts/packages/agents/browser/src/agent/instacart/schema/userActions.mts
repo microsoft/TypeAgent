@@ -45,8 +45,9 @@ export type AddToListAction = {
 export type BuyItAgainAction = {
   actionName: "buyItAgainAction";
   parameters: {
-    listName: string;
-    productName: string;
+    storeName: string;
+    allItems?: boolean;
+    productName?: string;
   };
 };
 
@@ -74,6 +75,9 @@ export type DeleteRecipeAction = {
 
 export type SetPreferredStoreAction = {
   actionName: "setPreferredStoreAction";
+  parameters: {
+    storeName: string;
+  };
 };
 
 export type FindNearbyStoreAction = {
@@ -93,15 +97,6 @@ export type SearchForRecipeAction = {
   actionName: "searchForRecipeAction";
   parameters: {
     keyword: string;
-    storeName?: string;
-  };
-};
-
-export type SelectSearchResult = {
-  actionName: "selectSearchResult";
-  parameters: {
-    position?: number;
-    productName?: string;
   };
 };
 
@@ -119,5 +114,4 @@ export type InstacartActions =
   | SaveRecipeAction
   | DeleteRecipeAction
   | SearchForProductAction
-  | SearchForRecipeAction
-  | SelectSearchResult;
+  | SearchForRecipeAction;

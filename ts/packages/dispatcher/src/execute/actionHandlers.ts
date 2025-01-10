@@ -16,6 +16,8 @@ import {
     ParsedCommandParams,
     ParameterDefinitions,
     Entity,
+    AppAgentManifest,
+    AppAgent,
 } from "@typeagent/agent-sdk";
 import {
     createActionResult,
@@ -118,6 +120,7 @@ export function createSessionContext<T = unknown>(
     name: string,
     agentContext: T,
     context: CommandHandlerContext,
+    allowDynamicAgent: boolean,
 ): SessionContext<T> {
     const sessionDirPath = context.session.getSessionDirPath();
     const storage = sessionDirPath
@@ -126,6 +129,34 @@ export function createSessionContext<T = unknown>(
     const instanceStorage = context.instanceDir
         ? getStorage(name, context.instanceDir)
         : undefined;
+    const addDynamicAgent = allowDynamicAgent
+        ? (agentName: string, manifest: AppAgentManifest, appAgent: AppAgent) =>
+              // acquire the lock to prevent change the state while we are processing a command or removing dynamic agent.
+              // WARNING: deadlock if this is call because we are processing a request
+              context.commandLock(async () => {
+                  await context.agents.addDynamicAgent(
+                      agentName,
+                      manifest,
+                      appAgent,
+                  );
+                  // Update the enable state to reflect the new agent
+                  context.agents.setState(context, context.session.getConfig());
+              })
+        : () => {
+              throw new Error("Permission denied: cannot add dynamic agent");
+          };
+
+    // TODO: only allow remove agent added by this agent.
+    const removeDynamicAgent = allowDynamicAgent
+        ? (agentName: string) =>
+              // acquire the lock to prevent change the state while we are processing a command or adding dynamic agent.
+              // WARNING: deadlock if this is call because we are processing a request
+              context.commandLock(async () =>
+                  context.agents.removeDynamicAgent(agentName),
+              )
+        : () => {
+              throw new Error("Permission denied: cannot remove dynamic agent");
+          };
     const sessionContext: SessionContext<T> = {
         get agentContext() {
             return agentContext;
@@ -168,7 +199,10 @@ export function createSessionContext<T = unknown>(
                 }
             });
         },
+        addDynamicAgent,
+        removeDynamicAgent,
     };
+
     (sessionContext as any).conversationManager = context.conversationManager;
     return sessionContext;
 }

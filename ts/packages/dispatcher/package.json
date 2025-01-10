@@ -28,10 +28,11 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
-    "@azure/msal-node-extensions": "^1.0.12",
+    "@azure/msal-node-extensions": "^1.5.0",
     "@typeagent/agent-sdk": "workspace:*",
     "action-schema": "workspace:*",
     "agent-cache": "workspace:*",
+    "agent-rpc": "workspace:*",
     "aiclient": "workspace:*",
     "android-mobile-agent": "workspace:*",
     "browser-typeagent": "workspace:*",
