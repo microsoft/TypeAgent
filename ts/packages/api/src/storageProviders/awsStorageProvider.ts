@@ -76,7 +76,7 @@ export class AWSStorageProvider implements TypeAgentStorageProvider {
 
         if (bodyStream) {
             const dirName = path.dirname(localPath);
-            if (fs.existsSync(dirName)) {
+            if (!fs.existsSync(dirName)) {
                 fs.mkdirSync(dirName, { recursive: true });
             }
 
