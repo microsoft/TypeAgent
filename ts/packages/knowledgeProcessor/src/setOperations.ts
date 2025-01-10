@@ -100,7 +100,6 @@ export function* unionMerge<T>(
     let yVal = y.next();
 
     while (!xVal.done && !yVal.done) {
-        // TODO: replace with a comparer: currently for strings, this is 2 comparisons
         if (xVal.value === yVal.value) {
             yield xVal.value;
             xVal = x.next();
@@ -172,7 +171,6 @@ export function* unionScored<T>(
     let yVal = y.next();
 
     while (!xVal.done && !yVal.done) {
-        // TODO: replace with a comparer: currently for strings, this is 2 comparisons
         if (xVal.value.item === yVal.value.item) {
             // If both are equal, yield the one with a higher score
             yield xVal.value.score >= yVal.value.score
