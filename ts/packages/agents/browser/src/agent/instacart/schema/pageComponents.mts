@@ -70,6 +70,10 @@ export type StoreInfo = {
   storeLinkCssSelector: string;
 };
 
+export type NearbyStoresList = {
+  stores: StoreInfo[];
+};
+
 export type RecipeBuyButton = {
   cssSelector: string;
   label: string;

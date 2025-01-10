@@ -57,8 +57,7 @@ jobs:
         if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts == 'true' }}
         name: Install pnpm
         with:
-          version: 9
-          run_install: false
+          package_json_file: ts/package.json
       - uses: actions/setup-node@v4
         if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts == 'true' }}
         with:
