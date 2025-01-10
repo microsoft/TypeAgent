@@ -61,5 +61,13 @@
     "webpack": "^5.94.0",
     "webpack-cli": "^5.1.4",
     "webpack-merge": "^5.10.0"
+  },
+  "fluidBuild": {
+    "tasks": {
+      "webpack": [
+        "...",
+        "tsc:common"
+      ]
+    }
   }
 }
