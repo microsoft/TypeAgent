@@ -72,7 +72,7 @@ export class AWSStorageProvider implements TypeAgentStorageProvider {
         });
 
         const commandResponse = await this.s3Client.send(command);
-        const bodyStream = commandResponse.Body?.transformToWebStream();
+        const bodyStream = commandResponse.Body;
 
         if (bodyStream) {
             const dirName = path.dirname(localPath);
@@ -81,11 +81,15 @@ export class AWSStorageProvider implements TypeAgentStorageProvider {
             }
 
             const writeStream = fs.createWriteStream(localPath);
+
             await new Promise<void>((resolve, reject) => {
                 (bodyStream as Readable)
                     .pipe(writeStream)
                     .on("finish", () => resolve())
-                    .on("error", (err: Error) => reject(err));
+                    .on("error", (err: Error) => {
+                        console.log("Error downloading file: ", err);
+                        reject(err);
+                    });
             });
         }
     }
@@ -108,8 +112,8 @@ export class AWSStorageProvider implements TypeAgentStorageProvider {
         });
 
         try {
-            const result = await upload.done();
-            console.log("upload complete: ", result);
+            await upload.done();
+            // console.log("upload complete: ", result);
         } catch (e) {
             console.log("error", e);
         }
