@@ -139,6 +139,7 @@ export function createSessionContext<T = unknown>(
                       manifest,
                       appAgent,
                   );
+                  // Update the enable state to reflect the new agent
                   context.agents.setState(context, context.session.getConfig());
               })
         : () => {
