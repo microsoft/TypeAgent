@@ -131,13 +131,13 @@ export class TypeAgentServer {
     }*/
 
     async syncFromProvider() {
-        try {
-            if (!this.storageProvider) {
-                console.log("No storage provider found");
-                return;
-            }
-            const remoteFiles = await this.storageProvider.listRemoteFiles();
-            for (const remoteFile of remoteFiles) {
+        if (!this.storageProvider) {
+            console.log("No storage provider found");
+            return;
+        }
+        const remoteFiles = await this.storageProvider.listRemoteFiles();
+        for (const remoteFile of remoteFiles) {
+            try {
                 console.log("Syncing file: ", remoteFile);
                 const localPath = path.join(getUserDataDir(), remoteFile);
                 if (!fs.existsSync(localPath)) {
@@ -147,9 +147,9 @@ export class TypeAgentServer {
                     );
                     console.log(`Downloaded ${remoteFile} to ${localPath}`);
                 }
+            } catch (e) {
+                console.log("Error syncing file: ", remoteFile, e);
             }
-        } catch (error) {
-            console.log(`Error syncing from provider: ${error}`);
         }
     }
 
