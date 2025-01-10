@@ -52,10 +52,12 @@ COPY --from=build /prod/tools/ /prod/tools/
 COPY --from=build /usr/src/app/packages/shell/out/ /prod/shell/out/
 WORKDIR /prod/api
 
+COPY .env /prod/api
+
 # dependencies
 RUN apt-get update
 RUN apt install -y gnome-keyring
-RUN curl -sL https://aka.ms/InstallAzureCLIDeb | bash
+# RUN curl -sL https://aka.ms/InstallAzureCLIDeb | bash
 
 ######################################### BLOB STORAGE MOUNT ######################################### 
 ## blobfuse - https://github.com/Azure/azure-storage-fuse/tree/main
@@ -77,11 +79,11 @@ EXPOSE 80:3000
 
 # start actions
 # az login
-RUN echo az login --identity >> start.sh
+# RUN echo az login --identity >> start.sh
 ## mount blob storage locally
 #RUN echo blobfuse2 mount /mnt/blob --config-file=mount-blobfuse.yaml >> start.sh
 # run getKeys
-RUN echo node ../tools/scripts/getKeys.mjs >> start.sh
+# RUN echo node ../tools/scripts/getKeys.mjs >> start.sh
 # start API server
 RUN echo pnpm start >> start.sh
 

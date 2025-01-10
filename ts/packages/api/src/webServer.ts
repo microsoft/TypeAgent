@@ -15,6 +15,7 @@ export type TypeAgentAPIServerConfig = {
     port: number;
     broadcast: boolean;
     blobBackupEnabled: boolean;
+    storageProvider?: "azure" | "aws";
 };
 
 export class TypeAgentAPIWebServer {
@@ -118,20 +119,20 @@ export class TypeAgentAPIWebServer {
         });
 
         // Send the HTML page with headers
-        response.end(`  
-          <!DOCTYPE html>  
-          <html lang="en">  
-          <head>  
-            <meta charset="UTF-8">  
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">  
-            <title>HTTP Headers</title>  
-          </head>  
-          <body>  
+        response.end(`
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>HTTP Headers</title>
+          </head>
+          <body>
             <h3>Client IP: ${request.socket.remoteAddress}</h3>
-            <h2>HTTP Headers</h2>  
-            <pre>${headersJson}</pre>  
-          </body>  
-          </html>  
+            <h2>HTTP Headers</h2>
+            <pre>${headersJson}</pre>
+          </body>
+          </html>
         `);
 
         console.warn(`Served HTTP headers for ${request.url}`);
