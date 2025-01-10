@@ -23,8 +23,8 @@
     "dev": "webpack --config webpack.dev.js",
     "prettier": "prettier --check . --ignore-path ../../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../../.prettierignore",
-    "tsc:common": "tsc -p src/common/tsconfig.json",
     "tsc:agent": "tsc -p src/agent/tsconfig.json",
+    "tsc:common": "tsc -p src/common/tsconfig.json",
     "tsc:puppeteer": "tsc -p src/puppeteer/tsconfig.json",
     "webpack": "webpack --config webpack.prod.js"
   },
