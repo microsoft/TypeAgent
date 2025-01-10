@@ -32,6 +32,7 @@
     "@typeagent/agent-sdk": "workspace:*",
     "action-schema": "workspace:*",
     "agent-cache": "workspace:*",
+    "agent-rpc": "workspace:*",
     "aiclient": "workspace:*",
     "android-mobile-agent": "workspace:*",
     "browser-typeagent": "workspace:*",

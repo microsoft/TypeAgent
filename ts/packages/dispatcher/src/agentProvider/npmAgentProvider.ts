@@ -26,7 +26,7 @@ export type AgentInfo = ModuleAppAgentInfo & {
 };
 
 function patchPaths(manifest: ActionManifest, dir: string) {
-    if (manifest.schema) {
+    if (manifest.schema && typeof manifest.schema.schemaFile === "string") {
         manifest.schema.schemaFile = path.resolve(
             dir,
             manifest.schema.schemaFile,
@@ -60,6 +60,7 @@ function enableExecutionMode() {
 
 async function loadModuleAgent(
     info: ModuleAppAgentInfo,
+    appAgentName: string,
     requirePath: string,
 ): Promise<AgentProcess> {
     const require = getRequire(info, requirePath);
@@ -67,13 +68,13 @@ async function loadModuleAgent(
     const handlerPath = `file://${require.resolve(`${info.name}/agent/handlers`)}`;
     const execMode = info.execMode ?? ExecutionMode.SeparateProcess;
     if (enableExecutionMode() && execMode === ExecutionMode.SeparateProcess) {
-        return createAgentProcess(handlerPath);
+        return createAgentProcess(appAgentName, handlerPath);
     }
 
     const module = await import(handlerPath);
     if (typeof module.instantiate !== "function") {
         throw new Error(
-            `Failed to load module agent ${info.name}: missing 'instantiate' function.`,
+            `Failed to load agent ${appAgentName} package ${info.name}: missing 'instantiate' function.`,
         );
     }
     return {
@@ -125,7 +126,11 @@ export function createNpmAppAgentProvider(
                 throw new Error(`Invalid app agent: ${appAgentName}`);
             }
             // Load on demand
-            const agent = await loadModuleAgent(config, requirePath);
+            const agent = await loadModuleAgent(
+                config,
+                appAgentName,
+                requirePath,
+            );
             moduleAgents.set(appAgentName, agent);
             return agent.appAgent;
         },
