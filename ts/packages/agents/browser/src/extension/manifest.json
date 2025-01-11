@@ -18,10 +18,17 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://*/*"],
-      "js": ["contentScript.js"],
-      "runAt": "document_start",
+      "matches": ["https://*/*", "http://localhost:9000/"],
+      "js": ["contentScript.js", "webTypeAgentContentScript.js"],
+      "run_at": "document_start",
       "all_frames": true
+    },
+    {
+      "matches": ["https://*/*", "http://localhost:9000/"],
+      "js": ["webTypeAgentMain.js"],
+      "run_at": "document_start",
+      "all_frames": true,
+      "world": "MAIN"
     },
     {
       "matches": ["https://*/*"],

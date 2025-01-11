@@ -19,7 +19,7 @@ export type DynamicDisplay = {
 export type MessageContent = string | string[] | string[][];
 
 export type DisplayContent =
-    | MessageContent // each string in the MessageContext is treated as DisplayType "text"
+    | MessageContent // each string in the MessageContent is treated as DisplayType "text"
     | {
           type: DisplayType; // Type of the content
           content: MessageContent; // each string in the MessageContext is treated as what `type` specifies
