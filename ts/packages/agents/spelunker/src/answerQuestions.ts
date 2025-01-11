@@ -131,7 +131,9 @@ ${JSON.stringify(preppedChunks)}
     console_log(`[Step 5: Ask the smart LLM]`);
     const wrappedResult =
         await context.modelContext.answerMaker.translate(prompt);
-    console_log(`[Got an answer and it's a ${wrappedResult.success ? "success!" : "failure. :-("}]`)
+    console_log(
+        `[Got an answer and it's a ${wrappedResult.success ? "success!" : "failure. :-("}]`,
+    );
     if (!wrappedResult.success) {
         return createActionResultFromError(
             `Failed to get an answer: ${wrappedResult.message}`,
@@ -166,9 +168,12 @@ async function selectChunks(
     console_log("  [Starting chunk selection ...]");
     const promises: Promise<ChunkDescription[]>[] = [];
     // TODO: Throttle if too many concurrent calls (e.g. > AZURE_OPENAI_MAX_CONCURRENCY)
-    const maxConcurrency = parseInt(process.env.AZURE_OPENAI_MAX_CONCURRENCY ?? "0") ?? 40;
+    const maxConcurrency =
+        parseInt(process.env.AZURE_OPENAI_MAX_CONCURRENCY ?? "0") ?? 40;
     const chunksPerJob =
-        chunks.length / maxConcurrency < 10 ? 10 : Math.ceil(chunks.length / maxConcurrency);
+        chunks.length / maxConcurrency < 10
+            ? 10
+            : Math.ceil(chunks.length / maxConcurrency);
     console_log(`  [max = ${maxConcurrency}, chunksPerJob = ${chunksPerJob}]`);
     for (let i = 0; i < chunks.length; i += chunksPerJob) {
         const slice = chunks.slice(i, i + chunksPerJob);

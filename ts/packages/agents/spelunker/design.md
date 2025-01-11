@@ -18,9 +18,9 @@ Questions about the focused code base are answered roughly as follows:
 3. Send chunks for each file separately, in parallel, to a cheap, fast LLM
    with a prompt asking it to find chunks relevant to the user question.
 4. Sort by relevance, keep top `N`. (E.g. `N = 30`)
-6. Send the selected chunks as context to a smart model
+5. Send the selected chunks as context to a smart model
    with the request to answer the user question using those chunks as context.
-7. Construct a result from the answer and the chunks used to come up with it.
+6. Construct a result from the answer and the chunks used to come up with it.
 
 ## TO DO
 
