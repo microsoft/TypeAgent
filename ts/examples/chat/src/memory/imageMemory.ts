@@ -97,6 +97,11 @@ export function createImageCommands(
         let sourcePath: string = namedArgs.sourcePath;
         let isDir = isDirectoryPath(sourcePath);
 
+        if (!fs.existsSync(sourcePath)) {
+            console.log(`The supplied file or folder '${sourcePath}' does not exist.`);
+            return;
+        }
+
         if (isDir) {
             await indexImages(namedArgs, sourcePath, context);
         } else {
