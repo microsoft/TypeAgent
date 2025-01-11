@@ -96,7 +96,7 @@ export async function answerQuestion(
         }
     }
     console_log(
-        `[Chunked ${allChunkedFiles.length} files into ${allChunks.length} chunks`,
+        `[Chunked ${allChunkedFiles.length} files into ${allChunks.length} chunks]`,
     );
 
     // 3. Ask a fast LLM for the most relevant chunks, rank them, and keep tthe best 30.
@@ -163,13 +163,13 @@ async function selectChunks(
     chunks: Chunk[],
     input: string,
 ): Promise<ChunkDescription[]> {
-    console_log("Starting chunk selection ...");
+    console_log("  [Starting chunk selection ...]");
     const promises: Promise<ChunkDescription[]>[] = [];
     // TODO: Throttle if too many concurrent calls (e.g. > AZURE_OPENAI_MAX_CONCURRENCY)
-    console_log(`max = ${process.env.AZURE_OPENAI_MAX_CONCURRENCY}`);
-    const max = parseInt(process.env.AZURE_OPENAI_MAX_CONCURRENCY ?? "0") ?? 40;
+    const maxConcurrency = parseInt(process.env.AZURE_OPENAI_MAX_CONCURRENCY ?? "0") ?? 40;
     const chunksPerJob =
-        chunks.length / max < 10 ? 10 : Math.ceil(chunks.length / max);
+        chunks.length / maxConcurrency < 10 ? 10 : Math.ceil(chunks.length / maxConcurrency);
+    console_log(`  [max = ${maxConcurrency}, chunksPerJob = ${chunksPerJob}]`);
     for (let i = 0; i < chunks.length; i += chunksPerJob) {
         const slice = chunks.slice(i, i + chunksPerJob);
         const p = selectRelevantChunks(
@@ -194,11 +194,12 @@ async function selectChunks(
             allChunks.push(...chunks);
         }
     }
-    console_log("Total", allChunks.length, "chunks");
+    console_log("  [Total", allChunks.length, "chunks]");
     allChunks.sort((a, b) => b.relevance - a.relevance);
+    // console_log(`  [${allChunks.map((c) => (c.relevance)).join(", ")}]`);
     allChunks.splice(30);
-    console_log("Keeping", allChunks.length, "chunks");
-    // console_log(allChunks.map((c) => [c.chunkid, c.relevance]));
+    console_log("  [Keeping", allChunks.length, "chunks]");
+    // console_log(`  [${allChunks.map((c) => [c.chunkid, c.relevance])}]`);
     return allChunks;
 }
 
