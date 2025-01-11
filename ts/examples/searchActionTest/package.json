@@ -26,6 +26,7 @@
     "dotenv": "^16.3.1",
     "interactive-app": "workspace:*",
     "typeagent": "workspace:*",
+    "common-utils": "workspace:*",
     "typechat": "^0.1.1",
     "typescript": "^5.4.2"
   },

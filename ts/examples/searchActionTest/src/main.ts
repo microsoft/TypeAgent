@@ -10,15 +10,14 @@ import {
     createJsonTranslator,
 } from "typechat";
 import { createTypeScriptJsonValidator } from "typechat/ts";
+import { readSchemaFile } from "common-utils";
+
 import * as fs from "fs";
 
 const envPath = new URL("../../../.env", import.meta.url);
 dotenv.config({ path: envPath });
 
-const schemaText = fs.readFileSync(
-    new URL("./calSearchSchema.ts", import.meta.url),
-    "utf8",
-);
+const schemaText = readSchemaFile("./calSearchSchema.ts");
 const preamble = "You are a service that translates user calendar queries.\n";
 /**
  * Create a JSON translator designed to work for Chat

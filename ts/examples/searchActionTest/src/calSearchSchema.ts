@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 type NamedTime = "Noon" | "Midnight";
 type SpecialDay = "StartOfWeek" | "EndOfWeek" | "StartOfMonth" | "EndOfMonth";
 type SpecialDateTime = "Now" | "InThePast" | "InTheFuture";

@@ -223,6 +223,9 @@ importers:
       aiclient:
         specifier: workspace:*
         version: link:../../packages/aiclient
+      common-utils:
+        specifier: workspace:*
+        version: link:../../packages/commonUtils
       copyfiles:
         specifier: ^2.4.1
         version: 2.4.1
