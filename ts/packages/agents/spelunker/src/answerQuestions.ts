@@ -25,6 +25,16 @@ import {
     ErrorItem,
 } from "./pythonChunker.js";
 
+let epoch: number = 0;
+
+function console_log(...rest: any[]): void {
+    if (!epoch) {
+        epoch = Date.now();
+    }
+    const t = Date.now();
+    console.log(((t - epoch) / 1000).toFixed(3).padStart(6), ...rest);
+}
+
 export interface ModelContext {
     chatModel: ChatModel;
     answerMaker: TypeChatJsonTranslator<AnswerSpecs>;
@@ -50,12 +60,13 @@ export async function answerQuestion(
     context: SpelunkerContext,
     input: string,
 ): Promise<ActionResult> {
+    epoch = 0; // Reset logging clock
     if (!context.focusFolders.length) {
         return createActionResultFromError("Please set the focus to a folder");
     }
 
     // 1. Find all .py files in the focus directories (locally, using a subprocess).
-    console.log("[Step 1: Find .py files]");
+    console_log("[Step 1: Find .py files]");
     const files: string[] = [];
     for (let i = 0; i < context.focusFolders.length; i++) {
         files.push(...getAllPyFilesSync(context.focusFolders[i]));
@@ -63,14 +74,14 @@ export async function answerQuestion(
 
     // 2. Chunkify all files found (locally).
     // TODO: Make this into its own function.
-    console.log(`[Step 2: Chunking ${files.length} files]`);
+    console_log(`[Step 2: Chunking ${files.length} files]`);
     const allItems = await chunkifyPythonFiles(files); //ChunkedFiles and ErrorItems
     const allErrorItems = allItems.filter(
         (item): item is ErrorItem => "error" in item,
     );
     for (const errorItem of allErrorItems) {
         // TODO: Use appendDisplay (requires passing actionContext)
-        console.log(
+        console_log(
             `[Error: ${errorItem.error}; Output: ${errorItem.output ?? ""}]`,
         );
     }
@@ -84,13 +95,13 @@ export async function answerQuestion(
             allChunks.push(chunk);
         }
     }
-    console.log(
+    console_log(
         `[Chunked ${allChunkedFiles.length} files into ${allChunks.length} chunks`,
     );
 
     // 3. Ask a fast LLM for the most relevant chunks, rank them, and keep tthe best 30.
     // This is done concurrently for real-time speed.
-    console.log("[Step 3: Select 30 most relevant chunks]");
+    console_log("[Step 3: Select 30 most relevant chunks]");
     const chunkDescs: ChunkDescription[] = await selectChunks(
         context,
         allChunks,
@@ -101,7 +112,7 @@ export async function answerQuestion(
     }
 
     // 4. Construct a prompt from those chunks.
-    console.log("[Step 4: Construct prompt]");
+    console_log("[Step 4: Construct prompt]");
     const preppedChunks = chunkDescs.map((chunkDesc) =>
         prepChunk(chunkDesc, allChunks),
     );
@@ -114,19 +125,20 @@ Context:
 
 ${JSON.stringify(preppedChunks)}
 `;
-    // console.log(`[${prompt.slice(0, 1000)}]`);
+    // console_log(`[${prompt.slice(0, 1000)}]`);
 
     // 5. Send prompt to smart, code-savvy LLM.
-    console.log(`[Step 5: Ask the smart LLM]`);
+    console_log(`[Step 5: Ask the smart LLM]`);
     const wrappedResult =
         await context.modelContext.answerMaker.translate(prompt);
-    // console.log(`[${JSON.stringify(wrappedResult, undefined, 2).slice(0, 1000)}]`);
+    console_log(`[Got an answer and it's a ${wrappedResult.success ? "success!" : "failure. :-("}]`)
     if (!wrappedResult.success) {
         return createActionResultFromError(
             `Failed to get an answer: ${wrappedResult.message}`,
         );
     }
     const result = wrappedResult.data;
+    // console_log(`[${JSON.stringify(result, undefined, 2).slice(0, 1000)}]`);
 
     // 6. Extract answer and references from result.
     const answer = result.answer;
@@ -151,10 +163,10 @@ async function selectChunks(
     chunks: Chunk[],
     input: string,
 ): Promise<ChunkDescription[]> {
-    console.log("Starting chunk selection ...");
+    console_log("Starting chunk selection ...");
     const promises: Promise<ChunkDescription[]>[] = [];
     // TODO: Throttle if too many concurrent calls (e.g. > AZURE_OPENAI_MAX_CONCURRENCY)
-    console.log(`max = ${process.env.AZURE_OPENAI_MAX_CONCURRENCY}`);
+    console_log(`max = ${process.env.AZURE_OPENAI_MAX_CONCURRENCY}`);
     const max = parseInt(process.env.AZURE_OPENAI_MAX_CONCURRENCY ?? "0") ?? 40;
     const chunksPerJob =
         chunks.length / max < 10 ? 10 : Math.ceil(chunks.length / max);
@@ -171,22 +183,22 @@ async function selectChunks(
     for (const p of promises) {
         const chunks = await p;
         if (chunks.length) {
-            console.log(
-                "Pushing",
-                chunks.length,
-                "for",
-                chunks[0].chunkid,
-                "--",
-                chunks[chunks.length - 1].chunkid,
-            );
+            // console_log(
+            //     "Pushing",
+            //     chunks.length,
+            //     "for",
+            //     chunks[0].chunkid,
+            //     "--",
+            //     chunks[chunks.length - 1].chunkid,
+            // );
             allChunks.push(...chunks);
         }
     }
-    console.log("Total", allChunks.length, "chunks");
+    console_log("Total", allChunks.length, "chunks");
     allChunks.sort((a, b) => b.relevance - a.relevance);
     allChunks.splice(30);
-    console.log("Keeping", allChunks.length, "chunks");
-    // console.log(allChunks.map((c) => [c.chunkid, c.relevance]));
+    console_log("Keeping", allChunks.length, "chunks");
+    // console_log(allChunks.map((c) => [c.chunkid, c.relevance]));
     return allChunks;
 }
 
@@ -206,11 +218,11 @@ User question: "{input}"
 
 Chunks: ${prepareChunks(chunks)}
 `;
-    // console.log(prompt);
+    // console_log(prompt);
     const wrappedResult = await selector.translate(prompt);
-    // console.log(wrappedResult);
+    // console_log(wrappedResult);
     if (!wrappedResult.success) {
-        console.log(`[Error selecting chunks: ${wrappedResult.message}]`);
+        console_log(`[Error selecting chunks: ${wrappedResult.message}]`);
         return [];
     }
     const result = wrappedResult.data;
