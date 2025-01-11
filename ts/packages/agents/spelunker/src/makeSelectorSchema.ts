@@ -2,7 +2,6 @@
 // Licensed under the MIT License.
 
 // Identifier for a chunk of code.
-// Form unique chunk IDs from the filename, a `#`, and the initial line number.
 export type ChunkId = string;
 
 // A chunk is a function/method, class or module.
@@ -10,12 +9,11 @@ export type ChunkId = string;
 export type ChunkDescription = {
     chunkid: ChunkId;
     filename: string; // File from which the chunk is taken
-    relevance: number; // Float between 0.0 and 1.0, inclusive
-    lines: string[]; // Includes line number markup
+    relevance: number; // Float between 0.0 and 1.0
 };
 
 // Only produce at most 30 chunks that are most relevant to the question.
 export type SelectorSpecs = {
     chunks: ChunkDescription[]; // Empty is fine too, if nothing looks relevant.
-    error?: string; // In case there is no decent answer.
+    error?: string; // In case nothing appears relevant.
 };
