@@ -179,6 +179,7 @@ async function selectChunks(
                 "--",
                 chunks[chunks.length - 1].chunkid,
             );
+            allChunks.push(...chunks);
         }
     }
     console.log("Total", allChunks.length, "chunks");
