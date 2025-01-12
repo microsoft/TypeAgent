@@ -8,7 +8,7 @@ import {
     getEnvSetting,
 } from "aiclient";
 import { StringArrayTag, TypedTag, XmpTag } from "exifreader";
-import { ApiSettings, EnvVars } from "../../aiclient/dist/openai.js";
+import { openai } from "aiclient";
 import { env } from "process";
 import {
     GeoJsonFeature,
@@ -100,7 +100,7 @@ export function exifGPSTagToLatLong(
  */
 export async function findNearbyPointsOfInterest(
     position: LatLong | undefined,
-    settings: ApiSettings,
+    settings: openai.ApiSettings,
     radius: Number = 10,
 ): Promise<PointOfInterest[]> {
     if (position === undefined) {
@@ -116,12 +116,12 @@ export async function findNearbyPointsOfInterest(
 
         //let fuzzySearch = `${getEnvSetting(env, EnvVars.AZURE_MAPS_ENDPOINT)}search/fuzzy/json?api-version=1.0&query={lat,long}`
         //let poi = `${getEnvSetting(env, EnvVars.AZURE_MAPS_ENDPOINT)}search/poi/{format}?api-version=1.0&lat={LAT}&lon={LON}`
-        const nearby = `${getEnvSetting(env, EnvVars.AZURE_MAPS_ENDPOINT)}search/nearby/json?api-version=1.0&lat=${position.latitude}&lon=${position.longitude}&radius=${radius}`;
+        const nearby = `${getEnvSetting(env, openai.EnvVars.AZURE_MAPS_ENDPOINT)}search/nearby/json?api-version=1.0&lat=${position.latitude}&lon=${position.longitude}&radius=${radius}`;
         const options: RequestInit = {
             method: "GET",
             headers: new Headers({
                 Authorization: `Bearer ${tokenResult.data}`,
-                "x-ms-client-id": `${getEnvSetting(env, EnvVars.AZURE_MAPS_CLIENTID)}`,
+                "x-ms-client-id": `${getEnvSetting(env, openai.EnvVars.AZURE_MAPS_CLIENTID)}`,
             }),
         };
 
@@ -161,7 +161,7 @@ export async function findNearbyPointsOfInterest(
 
 export async function reverseGeocode(
     position: LatLong | undefined,
-    settings: ApiSettings,
+    settings: openai.ApiSettings,
 ): Promise<ReverseGeocodeAddressLookup[]> {
     if (position === undefined) {
         return [];
@@ -180,7 +180,7 @@ export async function reverseGeocode(
             method: "GET",
             headers: new Headers({
                 Authorization: `Bearer ${tokenResult.data}`,
-                "x-ms-client-id": `${getEnvSetting(env, EnvVars.AZURE_MAPS_CLIENTID)}`,
+                "x-ms-client-id": `${getEnvSetting(env, openai.EnvVars.AZURE_MAPS_CLIENTID)}`,
             }),
         };
 
