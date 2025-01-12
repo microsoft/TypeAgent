@@ -28,7 +28,7 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
-    "@azure/identity": "^4.2.1",
+    "@azure/identity": "^4.5.0",
     "async": "^3.2.5",
     "debug": "^4.3.4",
     "telemetry": "workspace:*",
