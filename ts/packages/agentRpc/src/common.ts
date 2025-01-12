@@ -42,7 +42,7 @@ export type GenericChannelProvider = ChannelProvider & {
     disconnect(): void;
 };
 
-type GenericChannel = {
+export type GenericChannel = {
     channel: RpcChannel;
     message: (message: any) => void;
     disconnect: () => void;
@@ -50,7 +50,11 @@ type GenericChannel = {
 
 type GenericSendFunc = (message: any, cb?: (err: Error | null) => void) => void;
 
-function createGenericChannel(sendFunc: GenericSendFunc): GenericChannel {
+// A generic channel to wrap any transport by providing a send function.
+// Returns RpcChannel and functions to trigger `message` and `disconnect` events.
+export function createGenericChannel(
+    sendFunc: GenericSendFunc,
+): GenericChannel {
     const data: ChannelData = {
         handlers: {
             message: [],

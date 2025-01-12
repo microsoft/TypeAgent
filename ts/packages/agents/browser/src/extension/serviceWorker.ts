@@ -1575,8 +1575,8 @@ chrome.runtime.onConnect.addListener(async (port) => {
     const agentNames: string[] = [];
     port.onMessage.addListener((data) => {
         if (isWebAgentMessage(data)) {
-            if (data.messageType === "add") {
-                agentNames.push(data.body.name);
+            if (data.messageType === "register") {
+                agentNames.push(data.body.param.name);
             }
             webSocket.send(JSON.stringify(data));
         }

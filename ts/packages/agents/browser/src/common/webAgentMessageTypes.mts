@@ -1,25 +1,21 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { AppAgentManifest } from "@typeagent/agent-sdk";
-
 export type WebAgentMessage =
-  | WebAgentAddMessage
+  | WebAgentRegisterMessage
   | WebAgentRpcMessage
   | WebAgentDisconnectMessage;
 
 export type WebAgentMessageFromDispatcher =
+  | WebAgentRegisterMessageFromDispatcher
   | WebAgentRpcMessageFromDispatcher
   | WebAgentDisconnectMessageFromDispatcher;
 
-export type WebAgentAddMessage = {
+export type WebAgentRegisterMessage = {
   target: "dispatcher";
   source: "webAgent";
-  messageType: "add";
-  body: {
-    name: string;
-    manifest: AppAgentManifest;
-  };
+  messageType: "register";
+  body: any;
 };
 
 export type WebAgentRpcMessage = {
@@ -34,6 +30,13 @@ export type WebAgentDisconnectMessage = {
   source: "webAgent";
   messageType: "disconnect";
   body: string;
+};
+
+export type WebAgentRegisterMessageFromDispatcher = {
+  target: "webAgent";
+  source: "dispatcher";
+  messageType: "register";
+  body: any;
 };
 
 export type WebAgentRpcMessageFromDispatcher = {
@@ -53,7 +56,7 @@ export function isWebAgentMessage(message: any): message is WebAgentMessage {
   return (
     message.target === "dispatcher" &&
     message.source === "webAgent" &&
-    (message.messageType === "add" ||
+    (message.messageType === "register" ||
       message.messageType === "message" ||
       message.messageType === "disconnect")
   );
@@ -65,6 +68,8 @@ export function isWebAgentMessageFromDispatcher(
   return (
     message.target === "webAgent" &&
     message.source === "dispatcher" &&
-    (message.messageType === "message" || message.messageType === "disconnect")
+    (message.messageType === "register" ||
+      message.messageType === "message" ||
+      message.messageType === "disconnect")
   );
 }

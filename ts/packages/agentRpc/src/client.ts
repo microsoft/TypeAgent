@@ -24,11 +24,6 @@ import {
 } from "./types.js";
 import { createRpc } from "./rpc.js";
 import { ChannelProvider } from "./common.js";
-export {
-    GenericChannelProvider,
-    createGenericChannelProvider,
-    createChannelProvider,
-} from "./common.js";
 
 type ShimContext =
     | {
