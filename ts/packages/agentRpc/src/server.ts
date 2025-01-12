@@ -30,11 +30,6 @@ import {
 import { createRpc } from "./rpc.js";
 import { ChannelProvider } from "./common.js";
 import { createLimiter } from "common-utils";
-export {
-    GenericChannelProvider,
-    createGenericChannelProvider,
-    createChannelProvider,
-} from "./common.js";
 
 // TODO: Duplicate code from agent-cache
 function parseActionNameParts(fullActionName: string) {
