@@ -209,6 +209,15 @@ async function getErrorMessage(response: Response): Promise<string> {
     let bodyMessage = "";
     try {
         bodyMessage = ((await response.json()) as any).error;
+
+        if (typeof bodyMessage === "object") {
+            if ((bodyMessage as any).message) {
+                bodyMessage = (bodyMessage as any).message;
+            } else {
+                bodyMessage = JSON.stringify(bodyMessage);
+            }
+        }
+
     } catch (e) {}
     return `${response.status}: ${response.statusText}${bodyMessage ? `: ${bodyMessage}` : ""}`;
 }
