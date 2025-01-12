@@ -4,6 +4,9 @@
 import { Storage } from "@typeagent/agent-sdk";
 import { getBlob } from "aiclient";
 import ExifReader from "exifreader";
+import { MultimodalPromptContent, PromptSection, TextPromptContent } from "typechat";
+import { exifGPSTagToLatLong, findNearbyPointsOfInterest, reverseGeocode } from "./location.js";
+import { openai } from "aiclient";
 
 export class CachedImageWithDetails {
     constructor(
@@ -30,8 +33,21 @@ export function extractRelevantExifTags(exifTags: ExifReader.Tags) {
     ${exifTags.GPSLongitudeRef ? "GPS Longitude Reference: " + exifTags.GPSLongitudeRef?.value : ""}
     ${exifTags.GPSAltitudeRef ? "GPS Altitude Reference: " + exifTags.GPSAltitudeRef.value : ""}
     ${exifTags.GPSAltitude ? "GPS Altitude: " + exifTags.GPSAltitude.description : ""}
+    ${exifTags.Orientation ? "Orientation: " + exifTags.Orientation.description : ""}
     `;
     console.log(tags.replace("\n\n", "\n"));
+    return tags;
+}
+
+export function extractAllExifTags(exifTags: ExifReader.Tags) {
+    let tags: string = "";
+
+    for (const key of Object.keys(exifTags)) {
+        if (exifTags[key].description) {
+            tags += `${key}: ${exifTags[key].description}\n`;
+        }
+    }
+
     return tags;
 }
 
@@ -58,4 +74,103 @@ export async function downloadImage(
 
         resolve(false);
     });
+}
+
+/**
+ * Adds the supplied image to the suppled prompt section.
+ * @param role - The role of this prompt section.
+ * @param image - The image to adding to the prompt section.
+ * @param includeFileName - Flag indicating if the file name should be included in the prompt.
+ * @param includeExifTags - Flag indicating if EXIF tags should be included.
+ * @param includePOI  - Flag indicating if POI should be located and appended to the prompt.
+ * @param includeGeocodedAddress - Flag indicating if the image location should be geocoded if it's available.
+ * @returns - A prompt section representing the supplied image and related details as requested.
+ */
+export async function addImagePromptContent(role: "system" | "user" | "assistant", 
+    image: CachedImageWithDetails, 
+    includeFileName?: boolean, 
+    includeExifTags?: boolean, 
+    includePOI?: boolean, 
+    includeGeocodedAddress?: boolean,
+    includeAllExifTags?: boolean): Promise<PromptSection> {
+
+    const promptSection: PromptSection = {
+        role: role,
+        content: []
+    };
+
+    const content: MultimodalPromptContent[] = promptSection.content as unknown as MultimodalPromptContent[];
+
+    // add the image to the prompt
+    content.concat({
+        type: "image_url",
+        image_url: {
+            url: image.image,
+            detail: "high",
+        },
+    });
+
+    // include the file name in the prompt?
+    if (includeFileName !== false) {
+        content.concat({
+            type: "text",
+            text: `File Name: ${image.storageLocation}`
+        } as TextPromptContent);
+    }
+
+    // include exif tags?
+    if (includeExifTags !== false) {
+        if (includeAllExifTags === true) {
+            content.concat({
+                type: "text",
+                text: `Image EXIF tags: \n${extractAllExifTags(image.exifTags)}`,
+                }
+            );
+        } else  {
+            content.concat({
+                type: "text",
+                text: `Image EXIF tags: \n${extractRelevantExifTags(image.exifTags)}`,
+                }
+            );
+        }
+    }
+
+    // include POI
+    if (includePOI !== false) {
+        content.push(                    {
+            type: "text",
+            text: `Nearby Points of Interest: \n${JSON.stringify(
+                await findNearbyPointsOfInterest(
+                    exifGPSTagToLatLong(
+                        image.exifTags.GPSLatitude,
+                        image.exifTags.GPSLatitudeRef,
+                        image.exifTags.GPSLongitude,
+                        image.exifTags.GPSLongitudeRef,
+                    ),
+                    openai.apiSettingsFromEnv(),
+                ),
+            )}`,
+        });
+    }
+
+    // include address
+    if (includeGeocodedAddress !== false) {
+        content.push({
+                type: "text",
+                text: `Reverse Geocode Results: \n${JSON.stringify(
+                    await reverseGeocode(
+                        exifGPSTagToLatLong(
+                            image.exifTags.GPSLatitude,
+                            image.exifTags.GPSLatitudeRef,
+                            image.exifTags.GPSLongitude,
+                            image.exifTags.GPSLongitudeRef,
+                        ),
+                        openai.apiSettingsFromEnv(),
+                    ),
+                )}`,
+            },
+        );
+    }
+
+    return promptSection;
 }

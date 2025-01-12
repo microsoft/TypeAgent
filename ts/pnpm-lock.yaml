@@ -35,9 +35,15 @@ importers:
       code-processor:
         specifier: workspace:*
         version: link:../../packages/codeProcessor
+      common-utils:
+        specifier: workspace:*
+        version: link:../../packages/commonUtils
       dotenv:
         specifier: ^16.3.1
         version: 16.3.1
+      exifreader:
+        specifier: 4.23.5
+        version: 4.23.5
       interactive-app:
         specifier: workspace:*
         version: link:../../packages/interactiveApp
@@ -1804,9 +1810,15 @@ importers:
       aiclient:
         specifier: workspace:*
         version: link:../aiclient
+      common-utils:
+        specifier: workspace:*
+        version: link:../commonUtils
       debug:
         specifier: ^4.3.4
         version: 4.3.4(supports-color@8.1.1)
+      exifreader:
+        specifier: 4.23.5
+        version: 4.23.5
       typeagent:
         specifier: workspace:*
         version: link:../typeagent

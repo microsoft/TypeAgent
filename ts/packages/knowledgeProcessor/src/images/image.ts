@@ -13,10 +13,15 @@ import {
     createConversationManager,
 } from "../conversation/conversationManager.js";
 import path from "path";
-import { readJsonFile } from "typeagent";
+import { createTypeChat, promptLib, readJsonFile } from "typeagent";
 import { createEntitySearchOptions } from "../conversation/entities.js";
 import { Image } from "./imageSchema.js";
 import { KnowledgeResponse } from "../conversation/knowledgeSchema.js";
+import fs from "node:fs";
+import ExifReader from "exifreader";
+import { PromptSection } from "typechat";
+import { addImagePromptContent, CachedImageWithDetails } from "common-utils";
+import { getMimeTypeFromFileExtension } from "../../../commonUtils/dist/mimeTypes.js";
 
 /**
  * Creates an image memory
@@ -132,10 +137,80 @@ export function imageToMessage(image: Image): ConversationMessage {
     };
 }
 
-export function getKnowledgeForImage(iamge: Image): KnowledgeResponse {
-    throw new Error("// TODO: implement");
+export function getKnowledgeForImage(image: Image): KnowledgeResponse {
+    //throw new Error("// TODO: implement");
+    return {
+       entities: [],
+       actions: [],
+       inverseActions: [],
+       topics: [] 
+    };
 }
 
-export function loadImage(fileName: string): Image {
-    throw new Error("// TODO: implement");
+const imageCaptionGeneratingSchema = 
+`// An interface that describes an image in detail
+export interface generateCaption {
+    // A detailed image description
+    caption: string;    
+}`;
+
+// An interface that describes an image in detail
+export interface generateCaption {
+    // A detailed image description
+    caption: string;    
+}
+
+export async function loadImage(fileName: string, model: ChatModel): Promise<Image> {
+
+    const buffer: Buffer = fs.readFileSync(fileName);
+
+    // load EXIF properties
+    const tags: ExifReader.Tags = ExifReader.load(buffer);
+    const properties: string[][] = [];
+    for (const tag of Object.keys(tags)) {
+        if (tags[tag]) {
+            properties.push([tag, tags[tag].value]);
+        }
+    }
+    const mimeType = getMimeTypeFromFileExtension(path.extname(fileName));
+    const loadedImage: CachedImageWithDetails = new CachedImageWithDetails(tags, fileName, `data:image/${mimeType};base64,`);
+
+    // create a caption for the image
+    const caption = createTypeChat<generateCaption>(
+        model,
+        imageCaptionGeneratingSchema,
+        "PersonalizedGreetingAction",
+        `You are photography expert.`,
+        [],
+        4096,
+        30,
+    );
+
+    try { 
+        const prompt: PromptSection[] = [];
+        prompt.push(promptLib.dateTimePromptSection()); // Always include the current date and time. Makes the bot much smarter
+        prompt.push(await addImagePromptContent("user", loadedImage))
+
+        const chatResponse = await caption.translate(
+            "Caption supplied images in no less than 150 words without making any assumptions, remain factual.",
+            prompt, 
+        );
+
+
+        if (chatResponse.success) {
+            return {
+                caption: "",
+                width: 0,
+                height: 0,
+                fileName,
+                dateTaken: new Date(),
+                metaData: properties
+            };    
+        } else {
+            throw new Error(`Unable to load ${fileName}`);
+        }
+    }
+    catch {
+        throw new Error(`Unable to load ${fileName}`);
+    }
 }

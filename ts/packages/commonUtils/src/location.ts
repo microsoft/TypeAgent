@@ -18,6 +18,11 @@ import {
 } from "@azure/maps-search";
 import { AddressOutput } from "@azure-rest/maps-search";
 
+// Maps token provider
+const tokenProvider: AuthTokenProvider = createAzureTokenProvider(
+    AzureTokenScopes.AzureMaps,
+);
+
 /**
  * Point of interest
  */
@@ -102,15 +107,13 @@ export async function findNearbyPointsOfInterest(
         return [];
     }
 
-    const tokenProvider: AuthTokenProvider = createAzureTokenProvider(
-        AzureTokenScopes.AzureMaps,
-    );
-    const tokenResult = await tokenProvider.getAccessToken();
-    if (!tokenResult.success) {
-        return [];
-    }
-
     try {
+        const tokenResult = await tokenProvider.getAccessToken();
+        if (!tokenResult.success) {
+            console.warn("Unable to acquire AzureMaps token");
+            return [];
+        }
+
         //let fuzzySearch = `${getEnvSetting(env, EnvVars.AZURE_MAPS_ENDPOINT)}search/fuzzy/json?api-version=1.0&query={lat,long}`
         //let poi = `${getEnvSetting(env, EnvVars.AZURE_MAPS_ENDPOINT)}search/poi/{format}?api-version=1.0&lat={LAT}&lon={LON}`
         const nearby = `${getEnvSetting(env, EnvVars.AZURE_MAPS_ENDPOINT)}search/nearby/json?api-version=1.0&lat=${position.latitude}&lon=${position.longitude}&radius=${radius}`;
@@ -164,15 +167,13 @@ export async function reverseGeocode(
         return [];
     }
 
-    const tokenProvider: AuthTokenProvider = createAzureTokenProvider(
-        AzureTokenScopes.AzureMaps,
-    );
-    const tokenResult = await tokenProvider.getAccessToken();
-    if (!tokenResult.success) {
-        return [];
-    }
-
     try {
+        const tokenResult = await tokenProvider.getAccessToken();
+        if (!tokenResult.success) {
+            console.warn("Unable to acquire AzureMaps token");
+            return [];
+        }
+        
         let reverseGeocode = `${getEnvSetting(env, EnvVars.AZURE_MAPS_ENDPOINT)}reverseGeocode?api-version=2023-06-01&coordinates=${position.longitude},${position.latitude}`;
 
         const options: RequestInit = {

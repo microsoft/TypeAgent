@@ -21,6 +21,8 @@ import * as knowLib from "knowledge-processor";
 import { conversation } from "knowledge-processor";
 import path from "node:path";
 import { sqlite } from "memory-providers";
+import { isImageFileType } from "common-utils";
+import { getKnowledgeForImage } from "../../../../packages/knowledgeProcessor/dist/images/image.js";
 
 export async function createImageMemory(
     models: Models,
@@ -121,20 +123,30 @@ export function createImageCommands(
 
         // index each image
         fileNames.map(async (fileName) => {
-            console.log(fileName);
-            await indexImage(fileName, context);
+            const fullFilePath: string = path.join(sourcePath, fileName);
+            console.log(fullFilePath);
+            await indexImage(fullFilePath, context);
         });
     }
 
     async function indexImage(fileName: string, context: ChatContext) {
         if (!fs.existsSync(fileName)) {
-            context.printer.writeLine(
+            console.log(
                 `Could not find part of the file path '${fileName}'`,
             );
             return;
+        } else if (!isImageFileType(path.extname(fileName))) {
+            console.log(`Skipping '${fileName}', not a known image file.`)
+            return;
         }
 
-        const image: knowLib.image.Image = knowLib.image.loadImage(fileName);
+        // load the image
+        const image: knowLib.image.Image = await knowLib.image.loadImage(fileName, context.models.chatModel);
+
+
+
+
+        getKnowledgeForImage(image);
 
         knowLib.image.addImageToConversation(
             context.imageMemory,

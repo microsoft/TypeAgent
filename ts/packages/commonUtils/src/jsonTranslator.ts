@@ -21,13 +21,7 @@ import {
     IncrementalJsonParser,
     IncrementalJsonValueCallBack,
 } from "./incrementalJsonParser.js";
-import { CachedImageWithDetails, extractRelevantExifTags } from "./image.js";
-import { apiSettingsFromEnv } from "../../aiclient/dist/openai.js";
-import {
-    exifGPSTagToLatLong,
-    findNearbyPointsOfInterest,
-    reverseGeocode,
-} from "./location.js";
+import { addImagePromptContent, CachedImageWithDetails } from "./image.js";
 
 export type InlineTranslatorSchemaDef = {
     kind: "inline";
@@ -176,54 +170,7 @@ async function attachAttachments(
 
     if (attachments && attachments.length > 0 && pp) {
         for (let i = 0; i < attachments.length; i++) {
-            pp.unshift({
-                role: "user",
-                content: [
-                    {
-                        type: "text",
-                        text: `File Name: ${attachments![i].storageLocation}`,
-                    },
-                    {
-                        type: "image_url",
-                        image_url: {
-                            url: attachments[i].image,
-                            detail: "high",
-                        },
-                    },
-                    {
-                        type: "text",
-                        text: `Image EXIF tags: \n${extractRelevantExifTags(attachments![i].exifTags)}`,
-                    },
-                    {
-                        type: "text",
-                        text: `Nearby Points of Interest: \n${JSON.stringify(
-                            await findNearbyPointsOfInterest(
-                                exifGPSTagToLatLong(
-                                    attachments![i].exifTags.GPSLatitude,
-                                    attachments![i].exifTags.GPSLatitudeRef,
-                                    attachments![i].exifTags.GPSLongitude,
-                                    attachments![i].exifTags.GPSLongitudeRef,
-                                ),
-                                apiSettingsFromEnv(),
-                            ),
-                        )}`,
-                    },
-                    {
-                        type: "text",
-                        text: `Reverse Geocode Results: \n${JSON.stringify(
-                            await reverseGeocode(
-                                exifGPSTagToLatLong(
-                                    attachments![i].exifTags.GPSLatitude,
-                                    attachments![i].exifTags.GPSLatitudeRef,
-                                    attachments![i].exifTags.GPSLongitude,
-                                    attachments![i].exifTags.GPSLongitudeRef,
-                                ),
-                                apiSettingsFromEnv(),
-                            ),
-                        )}`,
-                    },
-                ],
-            });
+            pp.unshift(await addImagePromptContent("user", attachments[i]));
         }
     }
 }
