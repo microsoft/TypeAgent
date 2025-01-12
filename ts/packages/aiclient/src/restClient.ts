@@ -217,7 +217,6 @@ async function getErrorMessage(response: Response): Promise<string> {
                 bodyMessage = JSON.stringify(bodyMessage);
             }
         }
-
     } catch (e) {}
     return `${response.status}: ${response.statusText}${bodyMessage ? `: ${bodyMessage}` : ""}`;
 }
