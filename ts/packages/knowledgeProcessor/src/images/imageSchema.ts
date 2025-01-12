@@ -6,7 +6,7 @@ export type Image = {
     width: number;
     height: number;
     fileName: string;
-    dateTaken: Date;
+    dateTaken: string;
 
     locationName?: string;
     locationAddress?: string;

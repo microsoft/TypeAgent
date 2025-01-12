@@ -174,7 +174,7 @@ export async function reverseGeocode(
             return [];
         }
         
-        let reverseGeocode = `${getEnvSetting(env, EnvVars.AZURE_MAPS_ENDPOINT)}reverseGeocode?api-version=2023-06-01&coordinates=${position.longitude},${position.latitude}`;
+        let reverseGeocode = `${getEnvSetting(env, openai.EnvVars.AZURE_MAPS_ENDPOINT)}reverseGeocode?api-version=2023-06-01&coordinates=${position.longitude},${position.latitude}`;
 
         const options: RequestInit = {
             method: "GET",

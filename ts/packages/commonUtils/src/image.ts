@@ -94,15 +94,10 @@ export async function addImagePromptContent(role: "system" | "user" | "assistant
     includeGeocodedAddress?: boolean,
     includeAllExifTags?: boolean): Promise<PromptSection> {
 
-    const promptSection: PromptSection = {
-        role: role,
-        content: []
-    };
-
-    const content: MultimodalPromptContent[] = promptSection.content as unknown as MultimodalPromptContent[];
+    const content: MultimodalPromptContent[] = [];
 
     // add the image to the prompt
-    content.concat({
+    content.push({
         type: "image_url",
         image_url: {
             url: image.image,
@@ -112,7 +107,7 @@ export async function addImagePromptContent(role: "system" | "user" | "assistant
 
     // include the file name in the prompt?
     if (includeFileName !== false) {
-        content.concat({
+        content.push({
             type: "text",
             text: `File Name: ${image.storageLocation}`
         } as TextPromptContent);
@@ -121,13 +116,13 @@ export async function addImagePromptContent(role: "system" | "user" | "assistant
     // include exif tags?
     if (includeExifTags !== false) {
         if (includeAllExifTags === true) {
-            content.concat({
+            content.push({
                 type: "text",
                 text: `Image EXIF tags: \n${extractAllExifTags(image.exifTags)}`,
                 }
             );
         } else  {
-            content.concat({
+            content.push({
                 type: "text",
                 text: `Image EXIF tags: \n${extractRelevantExifTags(image.exifTags)}`,
                 }
@@ -172,5 +167,8 @@ export async function addImagePromptContent(role: "system" | "user" | "assistant
         );
     }
 
-    return promptSection;
+    return {
+        role: role,
+        content: content
+    };
 }

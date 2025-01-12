@@ -20,8 +20,7 @@ import { KnowledgeResponse } from "../conversation/knowledgeSchema.js";
 import fs from "node:fs";
 import ExifReader from "exifreader";
 import { PromptSection } from "typechat";
-import { addImagePromptContent, CachedImageWithDetails } from "common-utils";
-import { getMimeTypeFromFileExtension } from "../../../commonUtils/dist/mimeTypes.js";
+import { addImagePromptContent, CachedImageWithDetails, getMimeType, parseDateString } from "common-utils";
 
 /**
  * Creates an image memory
@@ -132,7 +131,7 @@ export function imageToMessage(image: Image): ConversationMessage {
         header: image.fileName,
         text: image.caption,
         knowledge: getKnowledgeForImage(image),
-        timestamp: image.dateTaken,
+        timestamp: parseDateString(image.dateTaken),
         sender: "", // TODO: logged in user for now?
     };
 }
@@ -151,13 +150,29 @@ const imageCaptionGeneratingSchema =
 `// An interface that describes an image in detail
 export interface generateCaption {
     // A detailed image description
-    caption: string;    
+    caption: string;
+    // The image file name
+    fileName: string;
+    // The image width in pixels
+    width: number;
+    // The image height in pixels
+    height: number;
+    // The date the image was taken
+    dateTaken: string
 }`;
 
 // An interface that describes an image in detail
 export interface generateCaption {
     // A detailed image description
-    caption: string;    
+    caption: string;
+    // The image file name
+    fileName: string;
+    // The image width in pixels
+    width: number;
+    // The image height in pixels
+    height: number;
+    // The date the image was taken
+    dateTaken: string
 }
 
 export async function loadImage(fileName: string, model: ChatModel): Promise<Image> {
@@ -172,14 +187,14 @@ export async function loadImage(fileName: string, model: ChatModel): Promise<Ima
             properties.push([tag, tags[tag].value]);
         }
     }
-    const mimeType = getMimeTypeFromFileExtension(path.extname(fileName));
-    const loadedImage: CachedImageWithDetails = new CachedImageWithDetails(tags, fileName, `data:image/${mimeType};base64,`);
+    const mimeType = getMimeType(path.extname(fileName));
+    const loadedImage: CachedImageWithDetails = new CachedImageWithDetails(tags, fileName, `data:image/${mimeType};base64,${buffer.toString("base64")}`);
 
     // create a caption for the image
     const caption = createTypeChat<generateCaption>(
         model,
         imageCaptionGeneratingSchema,
-        "PersonalizedGreetingAction",
+        "generateCaption",
         `You are photography expert.`,
         [],
         4096,
@@ -188,8 +203,9 @@ export async function loadImage(fileName: string, model: ChatModel): Promise<Ima
 
     try { 
         const prompt: PromptSection[] = [];
+        const content: PromptSection = await addImagePromptContent("user", loadedImage, true, true, true, true, true);
         prompt.push(promptLib.dateTimePromptSection()); // Always include the current date and time. Makes the bot much smarter
-        prompt.push(await addImagePromptContent("user", loadedImage))
+        prompt.push(content);
 
         const chatResponse = await caption.translate(
             "Caption supplied images in no less than 150 words without making any assumptions, remain factual.",
@@ -199,11 +215,11 @@ export async function loadImage(fileName: string, model: ChatModel): Promise<Ima
 
         if (chatResponse.success) {
             return {
-                caption: "",
-                width: 0,
-                height: 0,
-                fileName,
-                dateTaken: new Date(),
+                caption: chatResponse.data.caption,
+                width: chatResponse.data.width,
+                height: chatResponse.data.height,
+                fileName: chatResponse.data.fileName,
+                dateTaken: chatResponse.data.dateTaken,
                 metaData: properties
             };    
         } else {

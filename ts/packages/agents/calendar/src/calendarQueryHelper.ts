@@ -7,7 +7,7 @@ import {
     getISODayStartTime,
     getISODayEndTime,
     parseFuzzyDateString,
-} from "graph-utils";
+} from "common-utils";
 
 export function generateEventReferenceCriteria(
     eventReference: EventReference,

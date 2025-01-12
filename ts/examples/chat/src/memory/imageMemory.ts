@@ -18,20 +18,18 @@ import { argSourceFileOrFolder } from "./common.js";
 import { ensureDir, isDirectoryPath } from "typeagent";
 import fs from "node:fs";
 import * as knowLib from "knowledge-processor";
-import { conversation } from "knowledge-processor";
 import path from "node:path";
 import { sqlite } from "memory-providers";
 import { isImageFileType } from "common-utils";
-import { getKnowledgeForImage } from "../../../../packages/knowledgeProcessor/dist/images/image.js";
 
 export async function createImageMemory(
     models: Models,
     storePath: string,
-    settings: conversation.ConversationSettings,
+    settings: knowLib.conversation.ConversationSettings,
     useSqlite: boolean = false,
     createNew: boolean = false,
 ) {
-    const imageSettings: conversation.ConversationSettings = {
+    const imageSettings: knowLib.conversation.ConversationSettings = {
         ...settings,
     };
     if (models.embeddingModelSmall) {
@@ -122,11 +120,12 @@ export function createImageCommands(
         });
 
         // index each image
-        fileNames.map(async (fileName) => {
-            const fullFilePath: string = path.join(sourcePath, fileName);
+        for(let i = 0; i < fileNames.length; i++)
+        {
+            const fullFilePath: string = path.join(sourcePath, fileNames[i]);
             console.log(fullFilePath);
             await indexImage(fullFilePath, context);
-        });
+        };
     }
 
     async function indexImage(fileName: string, context: ChatContext) {
@@ -143,10 +142,7 @@ export function createImageCommands(
         // load the image
         const image: knowLib.image.Image = await knowLib.image.loadImage(fileName, context.models.chatModel);
 
-
-
-
-        getKnowledgeForImage(image);
+        knowLib.image.getKnowledgeForImage(image);
 
         knowLib.image.addImageToConversation(
             context.imageMemory,

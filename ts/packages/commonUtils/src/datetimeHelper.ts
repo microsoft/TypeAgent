@@ -1,14 +1,17 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { parse, format, parseISO, addMilliseconds, isValid } from "date-fns";
-
 import {
+    addMilliseconds,
     addMonths,
+    format,
     startOfMonth,
     startOfWeek,
     addDays,
     isSameMonth,
+    isValid,
+    parse,
+    parseISO
 } from "date-fns";
 
 export function parseDateString(dateString: string): Date | undefined {
