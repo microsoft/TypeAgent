@@ -304,7 +304,7 @@ class ActionParser {
         const parser = new ActionParser();
         const definition = parser.parseSchema(sourceFile, typeName);
         if (definition === undefined) {
-            throw new Error(`Type ${typeName} not found`);
+            throw new Error(`Type '${typeName}' not found`);
         }
         const result = createActionSchemaFile(
             schemaName,
@@ -330,7 +330,7 @@ class ActionParser {
         for (const pending of this.pendingReferences) {
             const resolvedType = this.typeMap.get(pending.name);
             if (resolvedType === undefined) {
-                throw new Error(`Type ${pending.name} not found`);
+                throw new Error(`Type '${pending.name}' not found`);
             }
             pending.definition = resolvedType;
         }

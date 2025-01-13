@@ -57,6 +57,28 @@ export class ActionSchemaFileCache {
         }
     }
 
+    private getSchemaSource(actionConfig: ActionConfig): {
+        source: string;
+        config: string | undefined;
+        fullPath: string | undefined;
+    } {
+        if (typeof actionConfig.schemaFile === "string") {
+            const fullPath = getPackageFilePath(actionConfig.schemaFile);
+            const source = fs.readFileSync(fullPath, "utf-8");
+            const config = readSchemaConfig(fullPath);
+            return { fullPath, source, config };
+        }
+        if (actionConfig.schemaFile.type === "ts") {
+            return {
+                source: actionConfig.schemaFile.content,
+                config: undefined,
+                fullPath: undefined,
+            };
+        }
+        throw new Error(
+            `Unsupported schema source type ${actionConfig.schemaFile.type}`,
+        );
+    }
     public getActionSchemaFile(actionConfig: ActionConfig): ActionSchemaFile {
         const actionSchemaFile = this.actionSchemaFiles.get(
             actionConfig.schemaName,
@@ -65,12 +87,9 @@ export class ActionSchemaFileCache {
             return actionSchemaFile;
         }
 
-        const schemaFileFullPath = getPackageFilePath(actionConfig.schemaFile);
-        const source = fs.readFileSync(schemaFileFullPath, "utf-8");
-        const config = readSchemaConfig(schemaFileFullPath);
-
+        const { source, config, fullPath } = this.getSchemaSource(actionConfig);
         const hash = config ? hashStrings(source, config) : hashStrings(source);
-        const cacheKey = `${actionConfig.schemaName}|${actionConfig.schemaType}|${schemaFileFullPath}`;
+        const cacheKey = `${actionConfig.schemaName}|${actionConfig.schemaType}|${fullPath ?? ""}`;
 
         const lastCached = this.prevSaved.get(cacheKey);
         if (lastCached !== undefined) {
@@ -96,7 +115,7 @@ export class ActionSchemaFileCache {
             actionConfig.schemaName,
             hash,
             actionConfig.schemaType,
-            schemaFileFullPath,
+            fullPath,
             schemaConfig,
         );
         this.actionSchemaFiles.set(actionConfig.schemaName, parsed);
@@ -105,6 +124,10 @@ export class ActionSchemaFileCache {
             this.addToCache(cacheKey, toJSONActionSchemaFile(parsed));
         }
         return parsed;
+    }
+
+    public unloadActionSchemaFile(schemaName: string) {
+        this.actionSchemaFiles.delete(schemaName);
     }
 
     private addToCache(key: string, actionSchemaFile: ActionSchemaFileJSON) {

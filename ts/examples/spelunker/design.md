@@ -10,7 +10,7 @@ The database records a number of categories of information:
 - **chunks** of program text (typically a function or class).
   The database holds the source text, some metadata,and a copy of the docs extracted from the chunk.
   Chunks have a tree-shaped hierarchy based on containment; the entire file is the root.
-- **summaries**, **keywords**, **topics**, **goals**, **dependencies**:
+- **summaries**, **keywords**, **tags**, **synonyms**, **dependencies**:
   Various types of docs extracted from all chunks, indexed and with "nearest neighbors" search enabled.
 - **answers**: conversation history, recording for each user interaction the question, the final AI answer, and a list of references (chunks that contributed to the answer).
   Indexed only by timestamp.
@@ -21,7 +21,7 @@ The chunks and related indexes are written by an import pipeline that does the f
 
 1. Break each file into a hierarchy of chunks using a local script.
 2. Split large files into several shorter files, guided by the chunk hierarchy (repeating part of the hierarchy).
-3. Feed each file to an LLM to produce for each chunk a summary and lists of keywords, topics, goals and dependencies.
+3. Feed each file to an LLM to produce for each chunk a summary and lists of keywords, tags, synonyms, and dependencies. (The exact set of categories is still evolving.)
 4. Store those in their respective indexes.
 
 ## Query process
@@ -53,9 +53,9 @@ A user query is handled using the following steps:
 
 ### Import process open questions
 
-- Should we give the LLM more guidance as to how to generate the best keywords, topics etc.?
-- Do we need all five indexes? Or could we do with fewer, e.g. just **summaries** and **topics**? Or **summaries** and **relationships**?
-- Can we get it to produce better summaries and topics (etc.) through different prompting?
+- Should we give the LLM more guidance as to how to generate the best keywords, tags etc.?
+- Do we need all five indexes? Or could we do with fewer, e.g. just **summaries** and **keywords**? Or **summaries** and **relationships**?
+- Can we get it to produce better summaries and keywords (etc.) through different prompting?
 - What are the optimal parameters for splitting long files?
 - Can we tweak the splitting of large files to make the split files more cohesive?
 - Would it help if we tweaked the chunking algorithm?

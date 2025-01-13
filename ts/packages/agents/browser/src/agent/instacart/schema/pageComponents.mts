@@ -5,15 +5,16 @@ export type ProductTile = {
   name: string;
   brand: string;
   price: string;
+  quantity: string;
+  // This indicates the number of units in stock, or "Out of stock" if item is not available
+  availability: string;
 
   // CSS Selector for the link to the product details page
   // Construct the selector based on the element's Id attribute if the id is present.
   detailsLinkSelector: string;
 
-  addToCartButton?: {
-    // css selector for the add to cart button
-    cssSelector: string;
-  };
+  // css selector for the add to cart button
+  addToCartButtonCssSelector: string;
 };
 
 // This is only present on the Product Details Page
@@ -70,6 +71,10 @@ export type StoreInfo = {
   name: string;
   subtitle: string;
   storeLinkCssSelector: string;
+};
+
+export type NearbyStoresList = {
+  stores: StoreInfo[];
 };
 
 export type RecipeBuyButton = {

@@ -9,13 +9,13 @@
       "matches": ["https://*/*"],
       "js": ["contentScript.js"],
       "all_frames": true,
-      "runAt": "document_start"
+      "run_at": "document_start"
     },
     {
       "matches": ["https://*/*"],
       "js": ["agentActivation.js"],
       "world": "MAIN",
-      "runAt": "document_start"
+      "run_at": "document_start"
     },
     {
       "matches": ["https://*/*"],

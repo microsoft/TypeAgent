@@ -28,10 +28,11 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
-    "@azure/msal-node-extensions": "^1.0.12",
+    "@azure/msal-node-extensions": "^1.5.0",
     "@typeagent/agent-sdk": "workspace:*",
     "action-schema": "workspace:*",
     "agent-cache": "workspace:*",
+    "agent-rpc": "workspace:*",
     "aiclient": "workspace:*",
     "android-mobile-agent": "workspace:*",
     "browser-typeagent": "workspace:*",
@@ -54,6 +55,7 @@
     "oracle-agent": "workspace:*",
     "photo-agent": "workspace:*",
     "proper-lockfile": "^4.1.2",
+    "spelunker-agent": "workspace:*",
     "string-width": "^7.2.0",
     "telemetry": "workspace:*",
     "typeagent": "workspace:*",
