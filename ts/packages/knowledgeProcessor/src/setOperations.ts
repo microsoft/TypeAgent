@@ -139,9 +139,14 @@ export function* union<T>(
         unionSet.add(yVal.value);
         yVal = y.next();
     }
+    /*
     const unionArray = [...unionSet.values()].sort();
     for (const item of unionArray) {
         yield item;
+    }
+        */
+    for (const value of unionSet.values()) {
+        yield value;
     }
 }
 
