@@ -122,7 +122,10 @@ export async function handleInstacartUserAction(
     componentType: T,
     keywords: string,
   ): Promise<UIElementSchemas[T] | undefined> {
-    if (componentType == "StoreInfo") {
+    if (
+      componentType == "StoreInfo" ||
+      componentType == "AllRecipeSearchResults"
+    ) {
       await goToHomepage();
     }
 
@@ -227,6 +230,13 @@ export async function handleInstacartUserAction(
   }
 
   async function handleBuyRecipeIngredients(action: any) {
+    let results: PurchaseResults = {
+      addedToCart: [],
+      unavailable: [],
+      storeName: action.parameters.storeName,
+      deliveryInformation: "",
+    };
+
     const allRecipes = await searchOnWebsite(
       "AllRecipeSearchResults",
       action.parameters.recipeName,
@@ -239,14 +249,32 @@ export async function handleInstacartUserAction(
 
       if (targetRecipe?.addAllIngridientsCssSelector) {
         await browser.clickOn(targetRecipe.addAllIngridientsCssSelector);
+
+        for (let product of targetRecipe.ingredients) {
+          results.addedToCart.push(product);
+        }
+
+        const friendlyMessage = await agent.getFriendlyPurchaseSummary(results);
+
+        if (friendlyMessage.success) {
+          message = (friendlyMessage.data as PurchaseSummary).formattedMessage;
+        }
       }
     }
   }
 
   async function handleBuyListContents(action: any) {
+    let results: PurchaseResults = {
+      addedToCart: [],
+      unavailable: [],
+      storeName: action.parameters.storeName,
+      deliveryInformation: "",
+    };
+
     await selectStore(action.parameters.storeName);
 
     const navigationLink = await getPageComponent("ListsNavigationLink");
+    console.log(navigationLink);
 
     if (navigationLink?.linkCssSelector) {
       await followLink(navigationLink?.linkCssSelector);
@@ -263,8 +291,18 @@ export async function handleInstacartUserAction(
           for (let product of listDetails.products) {
             if (product.addToCartButtonCssSelector) {
               await browser.clickOn(product.addToCartButtonCssSelector);
+              await browser.awaitPageInteraction();
+              results.addedToCart.push(product);
+            } else {
+              results.unavailable.push(product);
             }
           }
+        }
+
+        const friendlyMessage = await agent.getFriendlyPurchaseSummary(results);
+
+        if (friendlyMessage.success) {
+          message = (friendlyMessage.data as PurchaseSummary).formattedMessage;
         }
       }
     }

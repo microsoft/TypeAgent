@@ -56,7 +56,7 @@ export type HomeLink = {
   linkCssSelector: string;
 };
 
-// the navigation link to the "Your Lists" view on instacart
+// the navigation link to the "Lists" page on instacart
 export type ListsNavigationLink = {
   linkCssSelector: string;
 };
@@ -88,6 +88,9 @@ export type RecipeHeroSection = {
   summary: string;
   addAllIngridientsCssSelector: string;
   saveButtonCssSelector: string;
+
+  // the ingredients for the recipe
+  ingredients: ProductTile[];
 };
 
 // this gives the details for a specific recipe
