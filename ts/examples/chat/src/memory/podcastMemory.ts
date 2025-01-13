@@ -138,15 +138,6 @@ export function createPodcastCommands(
         }
 
         await podcastConvert(namedArgs);
-        /*
-        await conversation.importTranscript(
-            sourcePath,
-            namedArgs.name,
-            namedArgs.description,
-            namedArgs.startAt,
-            namedArgs.length,
-        );
-        */
         await podcastAddThread(namedArgs);
         const turnsFilePath = getTurnsFolderPath(sourcePath);
         namedArgs.sourcePath = turnsFilePath;
