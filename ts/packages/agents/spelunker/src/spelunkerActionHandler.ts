@@ -27,7 +27,6 @@ import {
 
 import {
     answerQuestion,
-    createModelContext,
     ModelContext,
 } from "./answerQuestions.js";
 import { SpelunkerAction } from "./spelunkerSchema.js";
@@ -90,13 +89,13 @@ export function instantiate(): AppAgent {
 
 export type SpelunkerContext = {
     focusFolders: string[];
-    modelContext: ModelContext;
+    modelContext: ModelContext | undefined;
 };
 
 async function initializeSpelunkerContext(): Promise<SpelunkerContext> {
     return {
         focusFolders: [],
-        modelContext: createModelContext(),
+        modelContext: undefined,
     };
 }
 

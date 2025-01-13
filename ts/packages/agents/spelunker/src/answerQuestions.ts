@@ -42,7 +42,7 @@ export interface ModelContext {
     chunkSelector: TypeChatJsonTranslator<SelectorSpecs>;
 }
 
-export function createModelContext(): ModelContext {
+function createModelContext(): ModelContext {
     const chatModel = openai.createChatModelDefault("spelunkerChat");
     const answerMaker = createAnswerMaker(chatModel);
     const miniModel = openai.createChatModel(
@@ -63,6 +63,9 @@ export async function answerQuestion(
     epoch = 0; // Reset logging clock
     if (!context.focusFolders.length) {
         return createActionResultFromError("Please set the focus to a folder");
+    }
+    if (!context.modelContext) {
+        context.modelContext = createModelContext();
     }
 
     // 1. Find all .py files in the focus directories (locally, using a subprocess).
@@ -178,7 +181,7 @@ async function selectChunks(
     for (let i = 0; i < chunks.length; i += chunksPerJob) {
         const slice = chunks.slice(i, i + chunksPerJob);
         const p = selectRelevantChunks(
-            context.modelContext.chunkSelector,
+            context.modelContext!.chunkSelector,
             slice,
             input,
         );
