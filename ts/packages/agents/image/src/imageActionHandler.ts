@@ -80,7 +80,7 @@ async function handlePhotoAction(
                 const urls: string[] = [];
                 const captions: string[] = [];
                 searchResults.map((i: bing.Image) => {
-                    urls.push(i.thumbnailUrl);
+                    urls.push(i.contentUrl);
                     captions.push(findImageAction.parameters.searchTerm);
                 });
                 result = createCarouselForImages(urls, captions);
@@ -88,9 +88,9 @@ async function handlePhotoAction(
                 // add the found images to the entities
                 for (let i = 0; i < searchResults.length; i++) {
                     result.entities.push({
-                        name: path.basename(searchResults[i].thumbnailUrl),
+                        name: path.basename(searchResults[i].contentUrl),
                         type: ["image", "url", "search"],
-                        additionalEntityText: searchResults[i].thumbnailUrl,
+                        additionalEntityText: searchResults[i].contentUrl,
                     });
                 }
             }
@@ -117,6 +117,7 @@ async function handlePhotoAction(
                     ? 5
                     : createImageAction.parameters.numImages;
 
+            let lastError: string = "";
             for (let i = 0; i < imageCount; i++) {
                 const r = await imageModel.generateImage(
                     createImageAction.parameters.caption,
@@ -130,13 +131,14 @@ async function handlePhotoAction(
                         images.push(image);
                     });
                 } else {
+                    lastError = r.message;
                     console.log(r.message);
                 }
             }
 
             if (images.length == 0) {
                 result = createActionResult(
-                    "Failed to generate the requested image.",
+                    `Failed to generate the requested image. ${lastError}`,
                 );
             } else {
                 const urls: string[] = [];
