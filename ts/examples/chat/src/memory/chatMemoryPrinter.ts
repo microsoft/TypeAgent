@@ -302,11 +302,10 @@ export class ChatMemoryPrinter extends ChatPrinter {
                     `Action to Message Hit Count: ${actionIds.size}`,
                 );
             }
-            if (response.messages) {
-                this.writeLine(
-                    `Message Hit Count: ${response.messages ? response.messages.length : 0}`,
-                );
-            }
+            const messageHitCount = response.messages
+                ? response.messages.length
+                : 0;
+            this.writeLine(`Message Hit Count: ${messageHitCount}`);
         }
     }
 
@@ -335,20 +334,28 @@ export class ChatMemoryPrinter extends ChatPrinter {
         this.writeSearchQuestion(result);
         if (result.response && result.response.answer) {
             this.writeResultStats(result.response);
-            if (result.response.answer.answer) {
-                const answer = result.response.answer.answer;
-                this.writeInColor(
-                    result.response.fallbackUsed ? chalk.gray : chalk.green,
-                    answer,
-                );
-            } else if (result.response.answer.whyNoAnswer) {
-                const answer = result.response.answer.whyNoAnswer;
-                this.writeInColor(chalk.red, answer);
-            }
+            this.writeAnswer(
+                result.response.answer,
+                result.response.fallbackUsed,
+            );
             this.writeLine();
             if (debug) {
                 this.writeSearchResponse(result.response);
             }
+        }
+    }
+
+    public writeAnswer(
+        response: conversation.AnswerResponse,
+        fallback: boolean = false,
+    ) {
+        if (response.answer) {
+            const answer = response.answer;
+            //this.writeInColor(fallback ? chalk.gray : chalk.green, answer);
+            this.writeInColor(chalk.green, answer);
+        } else if (response.whyNoAnswer) {
+            const answer = response.whyNoAnswer;
+            this.writeInColor(chalk.red, answer);
         }
     }
 

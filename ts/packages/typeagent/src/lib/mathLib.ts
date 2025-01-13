@@ -23,3 +23,8 @@ export function max<T = any>(items: IterableIterator<T>, getter: (value: T) => n
     }
     return maxItem;
 }
+
+export function angleDegreesFromCosine(cos: number) {
+    const radians = Math.acos(cos);
+    return radians * (180 / Math.PI);
+}
