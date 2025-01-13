@@ -80,7 +80,7 @@ async function handlePhotoAction(
                 const urls: string[] = [];
                 const captions: string[] = [];
                 searchResults.map((i: bing.Image) => {
-                    urls.push(i.thumbnailUrl);
+                    urls.push(i.contentUrl);
                     captions.push(findImageAction.parameters.searchTerm);
                 });
                 result = createCarouselForImages(urls, captions);
@@ -88,9 +88,9 @@ async function handlePhotoAction(
                 // add the found images to the entities
                 for (let i = 0; i < searchResults.length; i++) {
                     result.entities.push({
-                        name: path.basename(searchResults[i].thumbnailUrl),
+                        name: path.basename(searchResults[i].contentUrl),
                         type: ["image", "url", "search"],
-                        additionalEntityText: searchResults[i].thumbnailUrl,
+                        additionalEntityText: searchResults[i].contentUrl,
                     });
                 }
             }
