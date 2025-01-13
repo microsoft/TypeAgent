@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 export type Image = {
+    title: string;
     caption: string;
     width: number;
     height: number;

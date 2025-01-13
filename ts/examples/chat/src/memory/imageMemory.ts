@@ -142,12 +142,11 @@ export function createImageCommands(
         // load the image
         const image: knowLib.image.Image = await knowLib.image.loadImage(fileName, context.models.chatModel);
 
-        knowLib.image.getKnowledgeForImage(image);
-
         knowLib.image.addImageToConversation(
             context.imageMemory,
             image,
             context.maxCharsPerChunk,
+            context.conversationManager.knowledgeExtractor
         );
     }
 }

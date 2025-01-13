@@ -90,7 +90,8 @@ function isReservedConversation(context: ChatContext): boolean {
         context.conversationName === ReservedConversationNames.play ||
         context.conversationName === ReservedConversationNames.search ||
         context.conversationName === ReservedConversationNames.outlook ||
-        context.conversationName === ReservedConversationNames.podcasts
+        context.conversationName === ReservedConversationNames.podcasts ||
+        context.conversationName === ReservedConversationNames.images
     );
 }
 
@@ -105,6 +106,8 @@ function getReservedConversation(
             return context.emailMemory;
         case ReservedConversationNames.podcasts:
             return context.podcastMemory;
+        case ReservedConversationNames.images:
+            return context.imageMemory;
     }
     return undefined;
 }

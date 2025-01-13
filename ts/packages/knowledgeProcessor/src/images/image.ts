@@ -13,7 +13,7 @@ import {
     createConversationManager,
 } from "../conversation/conversationManager.js";
 import path from "path";
-import { createTypeChat, promptLib, readJsonFile } from "typeagent";
+import { createTypeChat, promptLib } from "typeagent";
 import { createEntitySearchOptions } from "../conversation/entities.js";
 import { Image } from "./imageSchema.js";
 import { KnowledgeResponse } from "../conversation/knowledgeSchema.js";
@@ -21,6 +21,7 @@ import fs from "node:fs";
 import ExifReader from "exifreader";
 import { PromptSection } from "typechat";
 import { addImagePromptContent, CachedImageWithDetails, getMimeType, parseDateString } from "common-utils";
+import { KnowledgeExtractor } from "../conversation/knowledge.js";
 
 /**
  * Creates an image memory
@@ -35,26 +36,26 @@ export async function createImageMemory(
 ) {
     const storePath = path.join(rootPath, name);
     //settings.initializer ??= setupEmailConversation;
-    const emailConversation = await createConversation(
+    const imageConversation = await createConversation(
         settings,
         storePath,
         undefined,
         undefined,
         storageProvider,
     );
-    const userProfile = await readJsonFile<any>(
-        path.join(rootPath, "emailUserProfile.json"),
-    );
+    // const userProfile = await readJsonFile<any>(
+    //     path.join(rootPath, "emailUserProfile.json"),
+    // );
     const cm = await createConversationManager(
         {
             model,
             answerModel,
-            initializer: (c) => setupImageConversationManager(c, userProfile),
+            initializer: (c) => setupImageConversationManager(c, undefined),
         },
         name,
         rootPath,
         false,
-        emailConversation,
+        imageConversation,
     );
     return cm;
 }
@@ -71,15 +72,13 @@ async function setupImageConversationManager(
     entityIndex.noiseTerms.put("image");
 
     cm.searchProcessor.actions.requestInstructions =
-        "The following is a user request about the messages in their email inbox. The email inbox belongs to:\n" +
-        JSON.stringify(userProfile, undefined, 2) +
+        "The following is a user request about images in their picture library.\n" +
         "\n" +
-        "When generating the filter, ignore 'email', 'inbox' and 'message' as noise words\n";
-    //"User specific first person pronouns are rewritten to use user's name, but general ones are not.";
+        "When generating the filter, ignore 'photo', 'image' and 'screenshot' as noise words\n";
 
     cm.searchProcessor.answers.settings.hints =
-        "messages are *emails* with email headers such as To, From, Cc, Subject. etc. " +
-        "To answer questions correctly, use the headers to determine who the email is from and who it was sent to. " +
+        "messages are *images* with infomration such as title, caption, EXIF tags. " +
+        "To answer questions correctly, use the image information to correctly answer the user's question." +
         "If you are not sure, return NoAnswer.";
     cm.searchProcessor.settings.defaultEntitySearchOptions =
         createEntitySearchOptions(true);
@@ -95,14 +94,15 @@ export async function addImageToConversation(
     cm: ConversationManager,
     images: Image | Image[],
     maxCharsPerChunk: number,
+    extractor: KnowledgeExtractor
 ): Promise<void> {
     const messages: ConversationMessage[] = [];
     if (Array.isArray(images)) {
         for (const image of images) {
-            messages.push(imageToMessage(image));
+            messages.push(await imageToMessage(image, extractor));
         }
     } else {
-        messages.push(imageToMessage(images));
+        messages.push(await imageToMessage(images, extractor));
     }
     await cm.addMessageBatch(messages);
 }
@@ -113,30 +113,21 @@ export async function addImageToConversation(
  * @param image
  * @returns
  */
-export function imageToMessage(image: Image): ConversationMessage {
-    // const sender = email.from.displayName;
-    // return {
-    //     header: emailHeadersToString(email),
-    //     text: emailToTextBlock(email, false),
-    //     knowledge: emailToKnowledge(email),
-    //     timestamp: dateTime.stringToDate(email.sentOn),
-    //     sender,
-    // };
+export async function imageToMessage(image: Image, extractor: KnowledgeExtractor): Promise<ConversationMessage> {
 
-    // TODO:    get image caption
-    //          EXIF data
-    //          Create "taken by" knowledge
+    const kr: KnowledgeResponse | undefined = await extractor.extract(JSON.stringify(image));
 
     return {
-        header: image.fileName,
+        header: `${image.fileName} - ${image.title}` ,
         text: image.caption,
-        knowledge: getKnowledgeForImage(image),
+        knowledge: kr,
         timestamp: parseDateString(image.dateTaken),
         sender: "", // TODO: logged in user for now?
     };
 }
 
-export function getKnowledgeForImage(image: Image): KnowledgeResponse {
+export function getKnowledgeForImage(image: Image, extractor: KnowledgeExtractor): KnowledgeResponse {
+
     //throw new Error("// TODO: implement");
     return {
        entities: [],
@@ -149,6 +140,8 @@ export function getKnowledgeForImage(image: Image): KnowledgeResponse {
 const imageCaptionGeneratingSchema = 
 `// An interface that describes an image in detail
 export interface generateCaption {
+    // A short, descriptive title for this image
+    title: string;
     // A detailed image description
     caption: string;
     // The image file name
@@ -163,6 +156,8 @@ export interface generateCaption {
 
 // An interface that describes an image in detail
 export interface generateCaption {
+    // A short, descriptive title for this image
+    title: string;
     // A detailed image description
     caption: string;
     // The image file name
@@ -215,6 +210,7 @@ export async function loadImage(fileName: string, model: ChatModel): Promise<Ima
 
         if (chatResponse.success) {
             return {
+                title: chatResponse.data.title,
                 caption: chatResponse.data.caption,
                 width: chatResponse.data.width,
                 height: chatResponse.data.height,

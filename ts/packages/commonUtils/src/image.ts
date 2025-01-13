@@ -81,7 +81,8 @@ export async function downloadImage(
  * @param role - The role of this prompt section.
  * @param image - The image to adding to the prompt section.
  * @param includeFileName - Flag indicating if the file name should be included in the prompt.
- * @param includeExifTags - Flag indicating if EXIF tags should be included.
+ * @param includePartialExifTags - Flag indicating if EXIF tags should be included.
+ * @param includeAllExifTags - Flag to indicate of all EXIF tags should be included.  Supercedes previous parameter.
  * @param includePOI  - Flag indicating if POI should be located and appended to the prompt.
  * @param includeGeocodedAddress - Flag indicating if the image location should be geocoded if it's available.
  * @returns - A prompt section representing the supplied image and related details as requested.
@@ -89,10 +90,11 @@ export async function downloadImage(
 export async function addImagePromptContent(role: "system" | "user" | "assistant", 
     image: CachedImageWithDetails, 
     includeFileName?: boolean, 
-    includeExifTags?: boolean, 
+    includePartialExifTags?: boolean,
+    includeAllExifTags?: boolean, 
     includePOI?: boolean, 
     includeGeocodedAddress?: boolean,
-    includeAllExifTags?: boolean): Promise<PromptSection> {
+    ): Promise<PromptSection> {
 
     const content: MultimodalPromptContent[] = [];
 
@@ -114,20 +116,18 @@ export async function addImagePromptContent(role: "system" | "user" | "assistant
     }
 
     // include exif tags?
-    if (includeExifTags !== false) {
-        if (includeAllExifTags === true) {
-            content.push({
-                type: "text",
-                text: `Image EXIF tags: \n${extractAllExifTags(image.exifTags)}`,
-                }
-            );
-        } else  {
-            content.push({
-                type: "text",
-                text: `Image EXIF tags: \n${extractRelevantExifTags(image.exifTags)}`,
-                }
-            );
-        }
+    if (includeAllExifTags === true) {
+        content.push({
+            type: "text",
+            text: `Image EXIF tags: \n${extractAllExifTags(image.exifTags)}`,
+            }
+        );
+    } else if (includePartialExifTags === true)  {
+        content.push({
+            type: "text",
+            text: `Image EXIF tags: \n${extractRelevantExifTags(image.exifTags)}`,
+            }
+        );
     }
 
     // include POI
