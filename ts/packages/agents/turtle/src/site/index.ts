@@ -58,7 +58,14 @@ const manifest: AppAgentManifest = {
 let registered = false;
 document.addEventListener("DOMContentLoaded", () => {
     if (!registered) {
-        (window as any).registerTypeAgent("turtle", manifest, agent);
+        (window as any)
+            .registerTypeAgent("turtle", manifest, agent)
+            .then(() => {
+                console.log("Turtle agent registered");
+            })
+            .catch((e: any) => {
+                console.error("Failed to register turtle agent", e);
+            });
         registered = true;
     }
 });

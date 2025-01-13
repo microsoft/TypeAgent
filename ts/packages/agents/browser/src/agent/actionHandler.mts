@@ -30,8 +30,7 @@ import {
   getCommandInterface,
 } from "@typeagent/agent-sdk/helpers/command";
 import { handleInstacartAction } from "./instacart/actionHandler.mjs";
-import { processWebAgentMessage } from "./webTypeAgent.mjs";
-import { GenericChannelProvider } from "agent-rpc/client";
+import { processWebAgentMessage, WebAgentChannels } from "./webTypeAgent.mjs";
 import { isWebAgentMessage } from "../common/webAgentMessageTypes.mjs";
 
 export function instantiate(): AppAgent {
@@ -45,7 +44,7 @@ export function instantiate(): AppAgent {
 
 export type BrowserActionContext = {
   webSocket: WebSocket | undefined;
-  channelProvider: GenericChannelProvider | undefined;
+  webAgentChannels: WebAgentChannels | undefined;
   crossWordState: Crossword | undefined;
   browserConnector: BrowserConnector | undefined;
   browserProcess: ChildProcess | undefined;
@@ -55,7 +54,7 @@ export type BrowserActionContext = {
 async function initializeBrowserContext(): Promise<BrowserActionContext> {
   return {
     webSocket: undefined,
-    channelProvider: undefined,
+    webAgentChannels: undefined,
     crossWordState: undefined,
     browserConnector: undefined,
     browserProcess: undefined,

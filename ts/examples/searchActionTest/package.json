@@ -1,41 +1,41 @@
 {
-  "name": "agent-rpc",
+  "name": "search-action-test",
   "version": "0.0.1",
-  "description": "Remoting library for the TypeAgent SDK",
+  "private": true,
+  "description": "Test of user requests for search actions",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {
     "type": "git",
     "url": "https://github.com/microsoft/TypeAgent.git",
-    "directory": "ts/packages/agentRpc"
+    "directory": "ts/examples/searchActionTest"
   },
   "license": "MIT",
   "author": "Microsoft",
   "type": "module",
-  "exports": {
-    "./client": "./dist/client.js",
-    "./channel": "./dist/common.js",
-    "./rpc": "./dist/rpc.js",
-    "./server": "./dist/server.js"
-  },
-  "types": "./dist/index.d.ts",
   "scripts": {
     "build": "npm run tsc",
+    "postbuild": "copyfiles -u 1 \"src/**/*Schema.ts\" \"src/**/*.txt\" dist",
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
     "prettier": "prettier --check . --ignore-path ../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
-    "tsc": "tsc -b"
+    "tsc": "tsc -p src"
   },
   "dependencies": {
-    "@typeagent/agent-sdk": "workspace:*",
+    "aiclient": "workspace:*",
     "common-utils": "workspace:*",
-    "debug": "^4.3.4"
+    "copyfiles": "^2.4.1",
+    "dotenv": "^16.3.1",
+    "interactive-app": "workspace:*",
+    "typeagent": "workspace:*",
+    "typechat": "^0.1.1",
+    "typescript": "^5.4.2"
   },
   "devDependencies": {
-    "@types/debug": "^4.1.10",
-    "@types/jest": "^29.5.7",
-    "jest": "^29.7.0",
-    "prettier": "^3.2.5",
-    "rimraf": "^5.0.5",
-    "typescript": "^5.4.2"
+    "@types/node": "^18.18.7",
+    "rimraf": "^5.0.5"
+  },
+  "engines": {
+    "node": ">=18",
+    "pnpm": ">=8"
   }
 }

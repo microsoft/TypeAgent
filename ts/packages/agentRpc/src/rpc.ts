@@ -29,10 +29,12 @@ type RpcReturn<
 export function createRpc<
     InvokeTargetFunctions extends {
         [key: string]: (param: any) => Promise<unknown>;
-    },
-    CallTargetFunctions extends { [key: string]: (param: any) => void },
-    InvokeHandlers extends { [key: string]: (param: any) => Promise<unknown> },
-    CallHandlers extends { [key: string]: (param: any) => void },
+    } = {},
+    CallTargetFunctions extends { [key: string]: (param: any) => void } = {},
+    InvokeHandlers extends {
+        [key: string]: (param: any) => Promise<unknown>;
+    } = {},
+    CallHandlers extends { [key: string]: (param: any) => void } = {},
 >(
     channel: RpcChannel,
     invokeHandlers?: InvokeHandlers,
@@ -106,10 +108,10 @@ export function createRpc<
         debugError("disconnect");
         channel.off("message", cb);
         const errorFunc = () => {
-            throw new Error("Agent process disconnected");
+            throw new Error("Agent channel disconnected");
         };
         for (const r of pending.values()) {
-            r.reject(new Error("Agent process disconnected"));
+            r.reject(new Error("Agent channel disconnected"));
         }
         pending.clear();
         rpc.invoke = errorFunc;

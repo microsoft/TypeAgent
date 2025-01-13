@@ -382,7 +382,7 @@ export function createJsonTranslatorFromFile<T extends object>(
 const header = `// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.`;
 
-function readSchemaFile(schemaFile: string): string {
+export function readSchemaFile(schemaFile: string): string {
     let content = fs.readFileSync(schemaFile, "utf8");
     if (content.startsWith(header)) {
         // strip copyright header for the prompt
