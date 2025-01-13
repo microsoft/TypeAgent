@@ -8,7 +8,6 @@ export type ChunkId = string;
 // Nested chunks are elided from the chunk text (they are their own chunk).
 export type ChunkDescription = {
     chunkid: ChunkId;
-    filename: string; // File from which the chunk is taken
     relevance: number; // Float between 0.0 and 1.0
 };
 
