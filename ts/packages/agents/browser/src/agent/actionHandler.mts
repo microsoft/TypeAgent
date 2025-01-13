@@ -35,7 +35,6 @@ import { handleInstacartUserAction } from "./instacart/planHandler.mjs";
 import { processWebAgentMessage, WebAgentChannels } from "./webTypeAgent.mjs";
 import { isWebAgentMessage } from "../common/webAgentMessageTypes.mjs";
 
-
 export function instantiate(): AppAgent {
   return {
     initializeAgentContext: initializeBrowserContext,
