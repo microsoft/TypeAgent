@@ -16,7 +16,6 @@ import { getSpeechToken } from "./speechToken";
 
 export interface ExpandableTextareaHandlers {
     onSend: (text: string) => void;
-    altHandler?: (eta: ExpandableTextarea, event: KeyboardEvent) => void;
     onChange?: (eta: ExpandableTextarea) => void;
     onKeydown?: (eta: ExpandableTextarea, event: KeyboardEvent) => boolean;
     onMouseWheel?: (eta: ExpandableTextarea, event: WheelEvent) => void;
@@ -48,11 +47,6 @@ export class ExpandableTextarea {
             if (event.key === "Enter") {
                 event.preventDefault();
                 this.send(sendButton);
-            } else if (
-                event.altKey &&
-                this.entryHandlers.altHandler !== undefined
-            ) {
-                this.entryHandlers.altHandler(this, event);
             } else if (event.key == "Escape") {
                 this.textEntry.textContent = "";
                 event.preventDefault();
@@ -73,10 +67,6 @@ export class ExpandableTextarea {
                 this.entryHandlers.onMouseWheel(this, event);
             }
         };
-    }
-
-    getEditedText() {
-        return this.getTextEntry().innerText.trim();
     }
 
     getTextEntry() {
