@@ -15,7 +15,9 @@
     ".": "./dist/index.js",
     "./helpers/action": "./dist/helpers/actionHelpers.js",
     "./helpers/command": "./dist/helpers/commandHelpers.js",
-    "./helpers/display": "./dist/helpers/displayHelpers.js"
+    "./helpers/display": "./dist/helpers/displayHelpers.js",
+    "./helpers/rpc/server": "./dist/helpers/rpc/server.js",
+    "./helpers/rpc/client": "./dist/helpers/rpc/client.js"
   },
   "types": "./dist/index.d.ts",
   "scripts": {
@@ -26,9 +28,11 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
+    "debug": "^4.3.4",
     "type-fest": "^4.26.1"
   },
   "devDependencies": {
+    "@types/debug": "^4.1.10",
     "@types/jest": "^29.5.7",
     "jest": "^29.7.0",
     "prettier": "^3.2.5",

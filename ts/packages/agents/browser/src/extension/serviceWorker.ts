@@ -2,6 +2,11 @@
 // Licensed under the MIT License.
 
 import { WebSocketMessage } from "../../../../commonUtils/dist/indexBrowser";
+import {
+    isWebAgentMessage,
+    isWebAgentMessageFromDispatcher,
+    WebAgentDisconnectMessage,
+} from "../../dist/common/webAgentMessageTypes.mjs";
 
 async function getConfigValues(): Promise<Record<string, string>> {
     const envLocation = chrome.runtime.getURL(".env");
@@ -1547,3 +1552,45 @@ chrome.contextMenus?.onClicked.addListener(
         }
     },
 );
+
+chrome.runtime.onConnect.addListener(async (port) => {
+    if (port.name !== "typeagent") {
+        // This shouldn't happen.
+        return;
+    }
+    if (!webSocket || webSocket.readyState !== WebSocket.OPEN) {
+        port.disconnect();
+        return;
+    }
+
+    const handler = async (event: any) => {
+        const message = await event.data.text();
+        const data = JSON.parse(message) as WebSocketMessage;
+        if (isWebAgentMessageFromDispatcher(data)) {
+            port.postMessage(data);
+        }
+    };
+    webSocket.addEventListener("message", handler);
+
+    const agentNames: string[] = [];
+    port.onMessage.addListener((data) => {
+        if (isWebAgentMessage(data)) {
+            if (data.messageType === "register") {
+                agentNames.push(data.body.param.name);
+            }
+            webSocket.send(JSON.stringify(data));
+        }
+    });
+    port.onDisconnect.addListener(() => {
+        for (const name of agentNames) {
+            const message: WebAgentDisconnectMessage = {
+                source: "webAgent",
+                target: "dispatcher",
+                messageType: "disconnect",
+                body: name,
+            };
+            webSocket.send(JSON.stringify(message));
+        }
+        webSocket.removeEventListener("message", handler);
+    });
+});

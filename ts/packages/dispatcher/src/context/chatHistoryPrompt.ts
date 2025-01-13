@@ -18,26 +18,17 @@ export function createTypeAgentRequestPrompt(
 ) {
     let promptSections: PromptSection[] = [];
     let entities: Entity[] = [];
-    let entityStr = "";
-    let latestEntity = "";
+    let entityStr: string[] = [];
 
     if (history) {
         promptSections = history.promptSections;
         entities = history.entities;
 
         if (entities.length > 0) {
-            entityStr =
-                "Most recent entities found in chat history, in order, newest first:\n";
-
             for (let i = 0; i < entities.length; ++i) {
                 const entity = entities[i];
 
-                let curEntityStr = entityToText(entity) + "\n";
-                if (i > 0) {
-                    entityStr += curEntityStr;
-                } else {
-                    latestEntity = curEntityStr;
-                }
+                entityStr.push(entityToText(entity));
             }
         }
     }
@@ -58,12 +49,10 @@ export function createTypeAgentRequestPrompt(
         prompts.push("The following is a summary of the chat history:");
         if (entityStr.length > 0) {
             prompts.push("###");
-            prompts.push(entityStr);
-            prompts.push("###");
-        }
-        if (latestEntity.length > 0) {
-            prompts.push("The latest entity discussed:");
-            prompts.push(latestEntity);
+            prompts.push(
+                "Recent entities found in chat history, in order, oldest first:",
+            );
+            prompts.push(...entityStr.reverse());
         }
 
         const additionalInstructions = history?.additionalInstructions;
@@ -71,22 +60,35 @@ export function createTypeAgentRequestPrompt(
             additionalInstructions !== undefined &&
             additionalInstructions.length > 0
         ) {
+            prompts.push("###");
             prompts.push("Information about the latest assistant action:");
             prompts.push(...additionalInstructions);
         }
 
+        prompts.push("###");
         prompts.push("The latest assistant response:");
         prompts.push(
             promptSections[promptSections.length - 1].content as string,
         );
     }
+
+    prompts.push("###");
     prompts.push(
         `Current Date is ${new Date().toLocaleDateString("en-US")}. The time is ${new Date().toLocaleTimeString()}.`,
     );
-    prompts.push(`The following is the latest user request:`);
+    prompts.push("###");
+    prompts.push(`The following is the current user request:`);
     prompts.push(`"""\n${request}\n"""`);
+
+    prompts.push("###");
     prompts.push(
-        `Based primarily on the request but considering all available information in our chat history, the following is the latest user request translated into a JSON object with 2 spaces of indentation and no properties with the value undefined:`,
+        "Resolve all references and pronouns in the current user request with the recent entities in the chat history.  If there are multiple possible resolution, choose the most likely resolution based on conversation context, bias toward the newest.",
+    );
+    prompts.push(
+        "Avoid clarifying unless absolutely necessary. Infer the user's intent based on conversation context.",
+    );
+    prompts.push(
+        `Based primarily on the current user request with references and pronouns resolved with recent entities in the chat history, but considering the context of the whole chat history, the following is the current user request translated into a JSON object with 2 spaces of indentation and no properties with the value undefined:`,
     );
     //console.log(prompt);
     return prompts.join("\n");

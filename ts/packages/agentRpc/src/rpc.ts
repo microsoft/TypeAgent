@@ -6,16 +6,7 @@ import registerDebug from "debug";
 const debug = registerDebug("typeagent:rpc");
 const debugError = registerDebug("typeagent:rpc:error");
 
-// Compatible with ChildProcess | NodeJS.Process
-export type Transport<T = any> = {
-    on(event: "message", cb: (message: Partial<T>) => void): void;
-    on(event: "disconnect", cb: () => void): void;
-    once(event: "message", cb: (message: Partial<T>) => void): void;
-    once(event: "disconnect", cb: () => void): void;
-    off(event: "message", cb: (message: Partial<T>) => void): void;
-    off(event: "disconnect", cb: () => void): void;
-    send(message: T, cb?: (err: Error | null) => void): void;
-};
+import { RpcChannel } from "./common.js";
 
 type RpcFuncType<
     N extends string,
@@ -38,12 +29,14 @@ type RpcReturn<
 export function createRpc<
     InvokeTargetFunctions extends {
         [key: string]: (param: any) => Promise<unknown>;
-    },
-    CallTargetFunctions extends { [key: string]: (param: any) => void },
-    InvokeHandlers extends { [key: string]: (param: any) => Promise<unknown> },
-    CallHandlers extends { [key: string]: (param: any) => void },
+    } = {},
+    CallTargetFunctions extends { [key: string]: (param: any) => void } = {},
+    InvokeHandlers extends {
+        [key: string]: (param: any) => Promise<unknown>;
+    } = {},
+    CallHandlers extends { [key: string]: (param: any) => void } = {},
 >(
-    transport: Transport,
+    channel: RpcChannel,
     invokeHandlers?: InvokeHandlers,
     callHandlers?: CallHandlers,
 ): RpcReturn<InvokeTargetFunctions, CallTargetFunctions> {
@@ -70,7 +63,7 @@ export function createRpc<
         if (isInvokeMessage(message)) {
             const f = invokeHandlers?.[message.name];
             if (f === undefined) {
-                transport.send({
+                channel.send({
                     type: "invokeError",
                     callId: message.callId,
                     error: "No invoke handler",
@@ -78,14 +71,14 @@ export function createRpc<
             } else {
                 f(message.param).then(
                     (result) => {
-                        transport.send({
+                        channel.send({
                             type: "invokeResult",
                             callId: message.callId,
                             result,
                         });
                     },
                     (error) => {
-                        transport.send({
+                        channel.send({
                             type: "invokeError",
                             callId: message.callId,
                             error: error.message,
@@ -110,15 +103,15 @@ export function createRpc<
             r.reject(new Error(message.error));
         }
     };
-    transport.on("message", cb);
-    transport.once("disconnect", () => {
+    channel.on("message", cb);
+    channel.once("disconnect", () => {
         debugError("disconnect");
-        transport.off("message", cb);
+        channel.off("message", cb);
         const errorFunc = () => {
-            throw new Error("Agent process disconnected");
+            throw new Error("Agent channel disconnected");
         };
         for (const r of pending.values()) {
-            r.reject(new Error("Agent process disconnected"));
+            r.reject(new Error("Agent channel disconnected"));
         }
         pending.clear();
         rpc.invoke = errorFunc;
@@ -139,7 +132,7 @@ export function createRpc<
             };
 
             return new Promise<T>((resolve, reject) => {
-                transport.send!(message, (err) => {
+                channel.send(message, (err) => {
                     if (err !== null) {
                         reject(err);
                     }
@@ -154,7 +147,7 @@ export function createRpc<
                 name,
                 param,
             };
-            transport.send!(message);
+            channel.send(message);
         },
     } as RpcReturn<InvokeTargetFunctions, CallTargetFunctions>;
     return rpc;

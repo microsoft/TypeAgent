@@ -32,6 +32,10 @@ import {
 // import { handleInstacartAction } from "./instacart/actionHandler.mjs";
 import { handleInstacartUserAction } from "./instacart/planHandler.mjs";
 
+import { processWebAgentMessage, WebAgentChannels } from "./webTypeAgent.mjs";
+import { isWebAgentMessage } from "../common/webAgentMessageTypes.mjs";
+
+
 export function instantiate(): AppAgent {
   return {
     initializeAgentContext: initializeBrowserContext,
@@ -43,6 +47,7 @@ export function instantiate(): AppAgent {
 
 export type BrowserActionContext = {
   webSocket: WebSocket | undefined;
+  webAgentChannels: WebAgentChannels | undefined;
   crossWordState: Crossword | undefined;
   browserConnector: BrowserConnector | undefined;
   browserProcess: ChildProcess | undefined;
@@ -52,6 +57,7 @@ export type BrowserActionContext = {
 async function initializeBrowserContext(): Promise<BrowserActionContext> {
   return {
     webSocket: undefined,
+    webAgentChannels: undefined,
     crossWordState: undefined,
     browserConnector: undefined,
     browserProcess: undefined,
@@ -89,11 +95,16 @@ async function updateBrowserContext(
       webSocket.addEventListener("message", async (event: any) => {
         const text = event.data.toString();
         const data = JSON.parse(text) as WebSocketMessage;
-        if (
-          data.target == "dispatcher" &&
-          data.source == "browser" &&
-          data.body
-        ) {
+        if (isWebAgentMessage(data)) {
+          await processWebAgentMessage(data, context);
+          return;
+        }
+
+        if (data.target !== "dispatcher" || data.source !== "browser") {
+          return;
+        }
+
+        if (data.body) {
           switch (data.messageType) {
             case "enableSiteTranslator": {
               if (data.body == "browser.crossword") {
@@ -363,7 +374,7 @@ class CloseBrowserHandler implements CommandHandlerNoParams {
 }
 
 export const handlers: CommandHandlerTable = {
-  description: "Browwser App Agent Commands",
+  description: "Browser App Agent Commands",
   commands: {
     launch: {
       description: "Launch a browser session",
