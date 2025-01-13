@@ -117,6 +117,7 @@ async function handlePhotoAction(
                     ? 5
                     : createImageAction.parameters.numImages;
 
+            let lastError: string = "";
             for (let i = 0; i < imageCount; i++) {
                 const r = await imageModel.generateImage(
                     createImageAction.parameters.caption,
@@ -130,13 +131,14 @@ async function handlePhotoAction(
                         images.push(image);
                     });
                 } else {
+                    lastError = r.message;
                     console.log(r.message);
                 }
             }
 
             if (images.length == 0) {
                 result = createActionResult(
-                    "Failed to generate the requested image.",
+                    `Failed to generate the requested image. ${lastError}`,
                 );
             } else {
                 const urls: string[] = [];
