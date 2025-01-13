@@ -52,6 +52,9 @@
     },
     "oracle": {
       "name": "oracle-agent"
+    },
+    "spelunker": {
+      "name": "spelunker-agent"
     }
   },
   "explainers": {
