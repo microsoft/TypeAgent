@@ -45,6 +45,7 @@
     "desktop-automation": "workspace:*",
     "email": "workspace:*",
     "exifreader": "4.23.5",
+    "file-size": "^1.0.0",
     "glob": "^10.3.12",
     "greeting-agent": "workspace:*",
     "image-agent": "workspace:*",
@@ -64,6 +65,7 @@
   },
   "devDependencies": {
     "@types/debug": "^4.1.10",
+    "@types/file-size": "^1.0.3",
     "@types/glob": "^8.1.0",
     "@types/jest": "^29.5.7",
     "@types/node": "^18.18.7",
