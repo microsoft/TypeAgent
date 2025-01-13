@@ -29,7 +29,9 @@ import {
   CommandHandlerTable,
   getCommandInterface,
 } from "@typeagent/agent-sdk/helpers/command";
-import { handleInstacartAction } from "./instacart/actionHandler.mjs";
+// import { handleInstacartAction } from "./instacart/actionHandler.mjs";
+import { handleInstacartUserAction } from "./instacart/planHandler.mjs";
+
 import { processWebAgentMessage, WebAgentChannels } from "./webTypeAgent.mjs";
 import { isWebAgentMessage } from "../common/webAgentMessageTypes.mjs";
 
@@ -185,7 +187,12 @@ async function executeBrowserAction(
         const commerceResult = await handleCommerceAction(action, context);
         return createActionResult(commerceResult);
       } else if (action.translatorName === "browser.instacart") {
-        const instacartResult = await handleInstacartAction(action, context);
+        // const instacartResult = await handleInstacartAction(action, context);
+        const instacartResult = await handleInstacartUserAction(
+          action,
+          context,
+        );
+
         return createActionResult(instacartResult);
       }
 

@@ -13,6 +13,7 @@ import fs from "fs";
 import { openai as ai } from "aiclient";
 import { fileURLToPath } from "node:url";
 import { ShoppingActions } from "./schema/userActions.mjs";
+import { PurchaseResults } from "./schema/shoppingResults.mjs";
 
 export type HtmlFragments = {
   frameId: string;
@@ -207,8 +208,8 @@ export class ECommerceSiteAgent<T extends object> {
     return promptSections;
   }
 
-  private getBootstrapTranslator(targetType: string) {
-    const pageSchema = this.pageComponentsSchema;
+  private getBootstrapTranslator(targetType: string, targetSchema?: string) {
+    const pageSchema = targetSchema ?? this.pageComponentsSchema;
 
     const validator = createTypeScriptJsonValidator(pageSchema, targetType);
     const bootstrapTranslator = createJsonTranslator(this.model, validator);
@@ -235,6 +236,62 @@ export class ECommerceSiteAgent<T extends object> {
       fragments,
       screenshot,
     ) as ContentSection[];
+
+    const response = await bootstrapTranslator.translate("", [
+      { role: "user", content: JSON.stringify(promptSections) },
+    ]);
+    return response;
+  }
+
+  async getFriendlyPurchaseSummary(rawResults: PurchaseResults) {
+    const packageRoot = path.join("..", "..", "..");
+    const resultsSchema = await fs.promises.readFile(
+      fileURLToPath(
+        new URL(
+          path.join(
+            packageRoot,
+            "./src/agent/commerce/schema/shoppingResults.mts",
+          ),
+          import.meta.url,
+        ),
+      ),
+      "utf8",
+    );
+
+    const bootstrapTranslator = this.getBootstrapTranslator(
+      "PurchaseSummary",
+      resultsSchema,
+    );
+
+    const prefixSection = getBootstrapPrefixPromptSection();
+    const promptSections = [
+      ...prefixSection,
+      {
+        type: "text",
+        text: `
+        Use the user request below to generate a SINGLE "${bootstrapTranslator.validator.getTypeName()}" response using the typescript schema below.
+        '''
+        ${bootstrapTranslator.validator.getSchemaText()}
+        '''
+        `,
+      },
+      {
+        type: "text",
+        text: `
+               
+            Here is  user request
+            '''
+            ${JSON.stringify(rawResults, undefined, 2)}
+            '''
+            `,
+      },
+      {
+        type: "text",
+        text: `
+        The following is the COMPLETE JSON response object with 2 spaces of indentation and no properties with the value undefined:            
+        `,
+      },
+    ];
 
     const response = await bootstrapTranslator.translate("", [
       { role: "user", content: JSON.stringify(promptSections) },

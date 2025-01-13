@@ -5,6 +5,9 @@ export type ProductTile = {
   name: string;
   brand: string;
   price: string;
+  quantity: string;
+  // This indicates the number of units in stock, or "Out of stock" if item is not available
+  availability: string;
 
   // CSS Selector for the link to the product details page
   // Construct the selector based on the element's Id attribute if the id is present.
