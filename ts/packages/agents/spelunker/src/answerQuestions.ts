@@ -30,6 +30,7 @@ let epoch: number = 0;
 function console_log(...rest: any[]): void {
     if (!epoch) {
         epoch = Date.now();
+        console.log(""); // Start new epoch with a blank line
     }
     const t = Date.now();
     console.log(((t - epoch) / 1000).toFixed(3).padStart(6), ...rest);
@@ -69,7 +70,7 @@ export async function answerQuestion(
     }
 
     // 1. Find all .py files in the focus directories (locally, using a subprocess).
-    console_log("[Step 1: Find .py files]");
+    console_log(`[Step 1: Find .py files]`);
     const files: string[] = [];
     for (let i = 0; i < context.focusFolders.length; i++) {
         files.push(...getAllPyFilesSync(context.focusFolders[i]));
@@ -99,12 +100,12 @@ export async function answerQuestion(
         }
     }
     console_log(
-        `[Chunked ${allChunkedFiles.length} files into ${allChunks.length} chunks]`,
+        `  [Chunked ${allChunkedFiles.length} files into ${allChunks.length} chunks]`,
     );
 
     // 3. Ask a fast LLM for the most relevant chunks, rank them, and keep tthe best 30.
     // This is done concurrently for real-time speed.
-    console_log("[Step 3: Select 30 most relevant chunks]");
+    console_log(`[Step 3: Select 30 most relevant chunks]`);
     const chunkDescs: ChunkDescription[] = await selectChunks(
         context,
         allChunks,
@@ -115,7 +116,7 @@ export async function answerQuestion(
     }
 
     // 4. Construct a prompt from those chunks.
-    console_log("[Step 4: Construct prompt]");
+    console_log(`[Step 4: Construct prompt]`);
     const preppedChunks = chunkDescs.map((chunkDesc) =>
         prepChunk(chunkDesc, allChunks),
     );
@@ -134,14 +135,13 @@ ${JSON.stringify(preppedChunks)}
     console_log(`[Step 5: Ask the smart LLM]`);
     const wrappedResult =
         await context.modelContext.answerMaker.translate(prompt);
-    console_log(
-        `[Got an answer and it's a ${wrappedResult.success ? "success!" : "failure. :-("}]`,
-    );
     if (!wrappedResult.success) {
+        console_log(`  [It's a failure: ${wrappedResult.message}]`);
         return createActionResultFromError(
             `Failed to get an answer: ${wrappedResult.message}`,
         );
     }
+    console_log(`  [It's a success]`);
     const result = wrappedResult.data;
     // console_log(`[${JSON.stringify(result, undefined, 2).slice(0, 1000)}]`);
 
@@ -168,16 +168,19 @@ async function selectChunks(
     chunks: Chunk[],
     input: string,
 ): Promise<ChunkDescription[]> {
-    console_log("  [Starting chunk selection ...]");
+    console_log(`  [Starting chunk selection ...]`);
     const promises: Promise<ChunkDescription[]>[] = [];
     // TODO: Throttle if too many concurrent calls (e.g. > AZURE_OPENAI_MAX_CONCURRENCY)
     const maxConcurrency =
         parseInt(process.env.AZURE_OPENAI_MAX_CONCURRENCY ?? "0") ?? 40;
     const chunksPerJob =
-        chunks.length / maxConcurrency < 10
-            ? 10
+        chunks.length / maxConcurrency < 5
+            ? 5
             : Math.ceil(chunks.length / maxConcurrency);
-    console_log(`  [max = ${maxConcurrency}, chunksPerJob = ${chunksPerJob}]`);
+    const numJobs = Math.ceil(chunks.length / chunksPerJob);
+    console_log(
+        `  [maxConcurrency = ${maxConcurrency}, chunksPerJob = ${chunksPerJob}, numJobs = ${numJobs}]`,
+    );
     for (let i = 0; i < chunks.length; i += chunksPerJob) {
         const slice = chunks.slice(i, i + chunksPerJob);
         const p = selectRelevantChunks(
@@ -202,11 +205,11 @@ async function selectChunks(
             allChunks.push(...chunks);
         }
     }
-    console_log("  [Total", allChunks.length, "chunks]");
+    console_log(`  [Total ${allChunks.length} chunks]`);
     allChunks.sort((a, b) => b.relevance - a.relevance);
     // console_log(`  [${allChunks.map((c) => (c.relevance)).join(", ")}]`);
     allChunks.splice(30);
-    console_log("  [Keeping", allChunks.length, "chunks]");
+    console_log(`  [Keeping ${allChunks.length} chunks]`);
     // console_log(`  [${allChunks.map((c) => [c.chunkid, c.relevance])}]`);
     return allChunks;
 }
