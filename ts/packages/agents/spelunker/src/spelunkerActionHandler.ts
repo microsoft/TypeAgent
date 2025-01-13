@@ -25,10 +25,7 @@ import {
     getCommandInterface,
 } from "@typeagent/agent-sdk/helpers/command";
 
-import {
-    answerQuestion,
-    ModelContext,
-} from "./answerQuestions.js";
+import { answerQuestion, ModelContext } from "./answerQuestions.js";
 import { SpelunkerAction } from "./spelunkerSchema.js";
 
 class RequestCommandHandler implements CommandHandler {
