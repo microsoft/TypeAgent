@@ -1,18 +1,25 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { SessionContext } from "@typeagent/agent-sdk";
+import { AppAgentManifest, SessionContext } from "@typeagent/agent-sdk";
+import { createAgentRpcClient } from "agent-rpc/client";
 import {
-  createAgentRpcClient,
+  createGenericChannel,
   createGenericChannelProvider,
-} from "agent-rpc/client";
+  GenericChannel,
+  GenericChannelProvider,
+} from "agent-rpc/channel";
+import { createRpc } from "agent-rpc/rpc";
 import { BrowserActionContext } from "./actionHandler.mjs";
 import { WebAgentMessage } from "../common/webAgentMessageTypes.mjs";
 
-function ensureSharedChannelProvider(
-  context: SessionContext<BrowserActionContext>,
-) {
-  const existing = context.agentContext.channelProvider;
+export type WebAgentChannels = {
+  channelProvider: GenericChannelProvider;
+  registerChannel: GenericChannel;
+};
+
+function ensureWebAgentChannels(context: SessionContext<BrowserActionContext>) {
+  const existing = context.agentContext.webAgentChannels;
   if (existing) {
     return existing;
   }
@@ -22,7 +29,7 @@ function ensureSharedChannelProvider(
     return undefined;
   }
 
-  const provider = createGenericChannelProvider((message) => {
+  const channelProvider = createGenericChannelProvider((message) => {
     webSocket.send(
       JSON.stringify({
         target: "webAgent",
@@ -32,32 +39,56 @@ function ensureSharedChannelProvider(
       }),
     );
   });
-  context.agentContext.channelProvider = provider;
-  return provider;
+
+  const registerChannel = createGenericChannel((message) => {
+    webSocket.send(
+      JSON.stringify({
+        target: "webAgent",
+        source: "dispatcher",
+        messageType: "register",
+        body: message,
+      }),
+    );
+  });
+
+  createRpc(registerChannel.channel, {
+    addTypeAgent: async (param: {
+      name: string;
+      manifest: AppAgentManifest;
+    }): Promise<void> =>
+      context.addDynamicAgent(
+        param.name,
+        param.manifest,
+        await createAgentRpcClient(param.name, channelProvider),
+      ),
+  });
+
+  const webAgentChannels = {
+    channelProvider,
+    registerChannel,
+  };
+  context.agentContext.webAgentChannels = webAgentChannels;
+  return webAgentChannels;
 }
 
 export async function processWebAgentMessage(
   message: WebAgentMessage,
   context: SessionContext<BrowserActionContext>,
 ) {
-  const channelProvider = ensureSharedChannelProvider(context);
-  if (channelProvider === undefined) {
+  const webAgentChannels = ensureWebAgentChannels(context);
+  if (webAgentChannels === undefined) {
     return;
   }
   switch (message.messageType) {
-    case "add":
-      await context.addDynamicAgent(
-        message.body.name,
-        message.body.manifest,
-        await createAgentRpcClient(message.body.name, channelProvider),
-      );
+    case "register":
+      webAgentChannels.registerChannel.message(message.body);
       break;
     case "message":
-      channelProvider.message(message.body);
+      webAgentChannels.channelProvider.message(message.body);
       break;
     case "disconnect":
       await context.removeDynamicAgent(message.body);
-      channelProvider.deleteChannel(message.body);
+      webAgentChannels.channelProvider.deleteChannel(message.body);
       break;
   }
 }

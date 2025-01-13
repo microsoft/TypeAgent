@@ -8,8 +8,35 @@ import {
 } from "../../dist/common/webAgentMessageTypes.mjs";
 
 // Proxy message between the page content and the extension.
+let port: chrome.runtime.Port | undefined;
+function sendDisconnect() {
+    const message: WebAgentDisconnectMessageFromDispatcher = {
+        source: "dispatcher",
+        target: "webAgent",
+        messageType: "disconnect",
+    };
 
-const port = chrome.runtime?.connect({ name: "typeagent" });
+    window.postMessage(message);
+    port?.disconnect();
+    port = undefined;
+}
+
+function ensurePort() {
+    if (port !== undefined) {
+        return port;
+    }
+    port = chrome.runtime?.connect({ name: "typeagent" });
+    // extension => page
+    port.onMessage.addListener((data) => {
+        if (isWebAgentMessageFromDispatcher(data)) {
+            window.postMessage(data);
+        }
+    });
+
+    port.onDisconnect.addListener(sendDisconnect);
+    return port;
+}
+
 // page => extension
 window.addEventListener("message", (event) => {
     if (event.source !== window) {
@@ -18,23 +45,10 @@ window.addEventListener("message", (event) => {
 
     const data = event.data;
     if (isWebAgentMessage(data)) {
-        port.postMessage(data);
+        try {
+            ensurePort().postMessage(data);
+        } catch (e) {
+            sendDisconnect();
+        }
     }
-});
-
-// extension => page
-port.onMessage.addListener((data) => {
-    if (isWebAgentMessageFromDispatcher(data)) {
-        window.postMessage(data);
-    }
-});
-
-port.onDisconnect.addListener(() => {
-    const message: WebAgentDisconnectMessageFromDispatcher = {
-        source: "dispatcher",
-        target: "webAgent",
-        messageType: "disconnect",
-    };
-
-    window.postMessage(message);
 });

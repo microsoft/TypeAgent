@@ -29,9 +29,10 @@ import {
   CommandHandlerTable,
   getCommandInterface,
 } from "@typeagent/agent-sdk/helpers/command";
-import { handleInstacartAction } from "./instacart/actionHandler.mjs";
-import { processWebAgentMessage } from "./webTypeAgent.mjs";
-import { GenericChannelProvider } from "agent-rpc/client";
+// import { handleInstacartAction } from "./instacart/actionHandler.mjs";
+import { handleInstacartUserAction } from "./instacart/planHandler.mjs";
+
+import { processWebAgentMessage, WebAgentChannels } from "./webTypeAgent.mjs";
 import { isWebAgentMessage } from "../common/webAgentMessageTypes.mjs";
 
 export function instantiate(): AppAgent {
@@ -45,7 +46,7 @@ export function instantiate(): AppAgent {
 
 export type BrowserActionContext = {
   webSocket: WebSocket | undefined;
-  channelProvider: GenericChannelProvider | undefined;
+  webAgentChannels: WebAgentChannels | undefined;
   crossWordState: Crossword | undefined;
   browserConnector: BrowserConnector | undefined;
   browserProcess: ChildProcess | undefined;
@@ -55,7 +56,7 @@ export type BrowserActionContext = {
 async function initializeBrowserContext(): Promise<BrowserActionContext> {
   return {
     webSocket: undefined,
-    channelProvider: undefined,
+    webAgentChannels: undefined,
     crossWordState: undefined,
     browserConnector: undefined,
     browserProcess: undefined,
@@ -186,7 +187,12 @@ async function executeBrowserAction(
         const commerceResult = await handleCommerceAction(action, context);
         return createActionResult(commerceResult);
       } else if (action.translatorName === "browser.instacart") {
-        const instacartResult = await handleInstacartAction(action, context);
+        // const instacartResult = await handleInstacartAction(action, context);
+        const instacartResult = await handleInstacartUserAction(
+          action,
+          context,
+        );
+
         return createActionResult(instacartResult);
       }
 

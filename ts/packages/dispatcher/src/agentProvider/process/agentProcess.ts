@@ -4,7 +4,8 @@
 import { AppAgent } from "@typeagent/agent-sdk";
 
 import registerDebug from "debug";
-import { createAgentRpcServer, createChannelProvider } from "agent-rpc/server";
+import { createAgentRpcServer } from "agent-rpc/server";
+import { createChannelProvider } from "agent-rpc/channel";
 
 const debug = registerDebug("typeagent:dispatcher:agentProcess");
 

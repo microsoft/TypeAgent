@@ -12,8 +12,10 @@
   "author": "Microsoft",
   "type": "module",
   "exports": {
-    "./server": "./dist/server.js",
-    "./client": "./dist/client.js"
+    "./client": "./dist/client.js",
+    "./channel": "./dist/common.js",
+    "./rpc": "./dist/rpc.js",
+    "./server": "./dist/server.js"
   },
   "types": "./dist/index.d.ts",
   "scripts": {

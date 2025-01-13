@@ -69,7 +69,8 @@ export class ChatView {
     chatInput: ChatInput;
     private partialCompletion: PartialCompletion | undefined;
 
-    commandBackStackIndex = -1;
+    private commandBackStack: (string | null)[] = [];
+    private commandBackStackIndex = 0;
 
     private hideMetrics = true;
     constructor(
@@ -104,33 +105,43 @@ export class ChatView {
                 // history
                 if (!ev.altKey && !ev.ctrlKey) {
                     if (ev.key == "ArrowUp" || ev.key == "ArrowDown") {
-                        const messages = this.messageDiv.querySelectorAll(
-                            ".chat-message-user:not(.chat-message-hidden) .chat-message-content",
-                        );
+                        const currentContent =
+                            this.chatInput.textarea.getTextEntry().textContent;
 
-                        if (messages.length !== 0) {
-                            if (
-                                ev.key == "ArrowUp" &&
-                                this.commandBackStackIndex < messages.length - 1
-                            ) {
-                                this.commandBackStackIndex++;
-                            } else if (
-                                ev.key == "ArrowDown" &&
-                                this.commandBackStackIndex > -1
-                            ) {
-                                this.commandBackStackIndex--;
-                            }
+                        if (
+                            this.commandBackStack.length === 0 ||
+                            this.commandBackStack[
+                                this.commandBackStackIndex
+                            ] !== currentContent
+                        ) {
+                            const messages = this.messageDiv.querySelectorAll(
+                                ".chat-message-user:not(.chat-message-hidden) .chat-message-content",
+                            );
+                            this.commandBackStack = Array.from(messages).map(
+                                (m) => m.textContent,
+                            );
 
-                            if (this.commandBackStackIndex == -1) {
-                                this.chatInput.clear();
-                            } else {
-                                const content =
-                                    messages[this.commandBackStackIndex]
-                                        .textContent;
-                                this.chatInput.textarea.setContent(content);
-                            }
-                            return false;
+                            this.commandBackStack.unshift(currentContent);
+                            this.commandBackStackIndex = 0;
                         }
+                        if (
+                            ev.key == "ArrowUp" &&
+                            this.commandBackStackIndex <
+                                this.commandBackStack.length - 1
+                        ) {
+                            this.commandBackStackIndex++;
+                        } else if (
+                            ev.key == "ArrowDown" &&
+                            this.commandBackStackIndex > 0
+                        ) {
+                            this.commandBackStackIndex--;
+                        }
+
+                        const content =
+                            this.commandBackStack[this.commandBackStackIndex];
+                        this.chatInput.textarea.setContent(content);
+
+                        return false;
                     }
                 }
 
@@ -349,6 +360,7 @@ export class ChatView {
         this.messageDiv.replaceChildren();
         this.idToMessageGroup.clear();
         this.commandBackStackIndex = -1;
+        this.commandBackStack = [];
     }
 
     async addUserMessage(
@@ -387,7 +399,8 @@ export class ChatView {
 
         this.idToMessageGroup.set(id, mg);
         this.updateScroll();
-        this.commandBackStackIndex = -1;
+        this.commandBackStackIndex = 0;
+        this.commandBackStack = [];
     }
 
     async extractMultiModalContent(tempDiv: HTMLDivElement): Promise<string[]> {
