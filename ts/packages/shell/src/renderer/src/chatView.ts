@@ -73,6 +73,8 @@ export class ChatView {
     private commandBackStackIndex = 0;
 
     private hideMetrics = true;
+    public userGivenName: string = "";
+
     constructor(
         private idGenerator: IdGenerator,
         public agents: Map<string, string>,
@@ -393,6 +395,8 @@ export class ChatView {
             this.hideMetrics,
         );
 
+        mg.updateUserName(this.userGivenName);
+
         if (hidden) {
             mg.hideUserMessage();
         }
@@ -456,7 +460,7 @@ export class ChatView {
         const agentMessage = this.ensureAgentMessage(msg, notification);
         if (agentMessage === undefined) {
             return;
-        }
+        }        
 
         agentMessage.setMessage(
             content,
