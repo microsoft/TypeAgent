@@ -573,8 +573,10 @@ async function pickInitialSchema(
     if (embedding && request.length > 0) {
         debugSemanticSearch(`Using embedding for schema selection`);
         // Use embedding to determine the most likely action schema and use the schema name for that.
-        const result =
-            await systemContext.agents.semanticSearchActionSchema(request);
+        const result = await systemContext.agents.semanticSearchActionSchema(
+            request,
+            debugSemanticSearch.enabled ? 5 : 1,
+        );
         if (result) {
             debugSemanticSearch(
                 `Semantic search result: ${result
@@ -585,7 +587,11 @@ async function pickInitialSchema(
                     .join("\n")}`,
             );
             if (result.length > 0) {
-                schemaName = result[0].item.actionSchemaFile.schemaName;
+                const found = result[0].item.actionSchemaFile.schemaName;
+                // If it is close to dispatcher actions (unknown and clarify), just use the last used action schema
+                if (found !== DispatcherName) {
+                    schemaName = result[0].item.actionSchemaFile.schemaName;
+                }
             }
         }
     }
