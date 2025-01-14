@@ -629,6 +629,9 @@ importers:
       common-utils:
         specifier: workspace:*
         version: link:../../commonUtils
+      debug:
+        specifier: ^4.3.4
+        version: 4.3.4(supports-color@8.1.1)
       dompurify:
         specifier: ^3.1.6
         version: 3.1.6
@@ -669,6 +672,9 @@ importers:
       '@types/chrome':
         specifier: ^0.0.256
         version: 0.0.256
+      '@types/debug':
+        specifier: ^4.1.10
+        version: 4.1.10
       '@types/dompurify':
         specifier: ^3.0.5
         version: 3.0.5
