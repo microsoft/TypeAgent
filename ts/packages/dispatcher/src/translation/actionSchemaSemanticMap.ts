@@ -74,9 +74,6 @@ export class ActionSchemaSemanticMap {
     }
 
     public removeActionSchemaFile(schemaName: string) {
-        if (!this.actionSemanticMaps.has(schemaName)) {
-            throw new Error(`Internal Error: Invalid schemaName ${schemaName}`);
-        }
         this.actionSemanticMaps.delete(schemaName);
     }
 
