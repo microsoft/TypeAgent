@@ -22,6 +22,7 @@ export type ShellSettingsType = {
     devUI: boolean;
     partialCompletion: boolean;
     disallowedDisplayType: DisplayType[];
+    darkMode: boolean;
 };
 
 export const defaultSettings: ShellSettingsType = {
@@ -36,4 +37,5 @@ export const defaultSettings: ShellSettingsType = {
     devUI: false,
     partialCompletion: true,
     disallowedDisplayType: [],
+    darkMode: false,
 };

@@ -9,8 +9,6 @@ import {
     iconCamera,
     iconAttach,
     iconSend,
-    iconMoon,
-    iconSun,
 } from "./icon";
 import { getClientAPI } from "./main";
 import { recognizeOnce } from "./speech";
@@ -151,8 +149,6 @@ export class ChatInput {
     private inputContainer: HTMLDivElement;
     textarea: ExpandableTextarea;
     private micButton: HTMLButtonElement;
-    private darkModeButton: HTMLButtonElement;
-    private isDarkMode: boolean;
     attachButton: HTMLLabelElement;
     camButton: HTMLButtonElement;
     private dragTemp: string | undefined = undefined;
@@ -284,23 +280,6 @@ export class ChatInput {
             }
         });
 
-        this.isDarkMode = false;
-        this.darkModeButton = document.createElement("button");
-        this.darkModeButton.appendChild(iconMoon("white"));
-        this.darkModeButton.id = buttonId;
-        this.darkModeButton.className = "chat-input-button";
-        this.darkModeButton.addEventListener("click", () => {
-            document.body.classList.toggle("dark-mode");
-            this.isDarkMode = !this.isDarkMode;
-            if (this.isDarkMode) {
-                this.darkModeButton.innerHTML = "";
-                this.darkModeButton.appendChild(iconSun("#444"));
-            } else {
-                this.darkModeButton.innerHTML = "";
-                this.darkModeButton.appendChild(iconMoon("white"));
-            }
-        });
-
         const listeningMic = iconMicrophoneListening();
         listeningMic.className = "chat-message-hidden";
         this.micButton.appendChild(listeningMic);
@@ -344,7 +323,6 @@ export class ChatInput {
         this.inputContainer.appendChild(this.attachButton);
         this.inputContainer.appendChild(this.camButton);
         this.inputContainer.appendChild(this.micButton);
-        this.inputContainer.appendChild(this.darkModeButton);
         this.inputContainer.appendChild(this.separatorContainer);
         this.inputContainer.appendChild(this.sendButton);
     }
