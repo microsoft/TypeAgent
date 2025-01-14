@@ -29,8 +29,9 @@ import {
   CommandHandlerTable,
   getCommandInterface,
 } from "@typeagent/agent-sdk/helpers/command";
+
 // import { handleInstacartAction } from "./instacart/actionHandler.mjs";
-import { handleInstacartUserAction } from "./instacart/planHandler.mjs";
+import { handleInstacartAction } from "./instacart/planHandler.mjs";
 
 import { processWebAgentMessage, WebAgentChannels } from "./webTypeAgent.mjs";
 import { isWebAgentMessage } from "../common/webAgentMessageTypes.mjs";
@@ -187,18 +188,17 @@ async function executeBrowserAction(
         const commerceResult = await handleCommerceAction(action, context);
         return createActionResult(commerceResult);
       } else if (action.translatorName === "browser.instacart") {
-        // const instacartResult = await handleInstacartAction(action, context);
-        const instacartResult = await handleInstacartUserAction(
-          action,
-          context,
-        );
-
+        const instacartResult = await handleInstacartAction(action, context);
         return createActionResult(instacartResult);
       }
 
       await connector?.sendActionToBrowser(action, messageType);
     } catch (ex: any) {
-      console.log(JSON.stringify(ex));
+      if (ex instanceof Error) {
+        console.error(ex);
+      } else {
+        console.error(JSON.stringify(ex));
+      }
 
       throw new Error("Unable to contact browser backend.");
     }
@@ -289,7 +289,11 @@ async function handleTabIndexActions(
         }),
       );
     } catch (ex: any) {
-      console.log(JSON.stringify(ex));
+      if (ex instanceof Error) {
+        console.error(ex);
+      } else {
+        console.error(JSON.stringify(ex));
+      }
 
       throw new Error("Unable to contact browser backend.");
     }
