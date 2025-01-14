@@ -41,6 +41,7 @@
     "dompurify": "^3.1.6",
     "dotenv": "^16.3.1",
     "electron-updater": "^6.3.2",
+    "jose": "^5.9.6",
     "markdown-it": "^14.1.0",
     "microsoft-cognitiveservices-speech-sdk": "^1.38.0",
     "typechat": "^0.1.1",

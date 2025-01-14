@@ -265,48 +265,58 @@ export class AppAgentManager implements ActionConfigProvider {
     }
 
     private addAgentManifest(
-        name: string,
+        appAgentName: string,
         manifest: AppAgentManifest,
         semanticMapP: Promise<void>[],
         provider?: AppAgentProvider,
         actionEmbeddingCache?: EmbeddingCache,
     ) {
-        this.emojis[name] = manifest.emojiChar;
-
         // TODO: detect duplicate names
-        const actionConfigs = convertToActionConfig(name, manifest);
+        const actionConfigs = convertToActionConfig(appAgentName, manifest);
 
         const entries = Object.entries(actionConfigs);
-        for (const [name, config] of entries) {
-            debug(`Adding action config: ${name}`);
-            this.actionConfigs.set(name, config);
-            this.emojis[name] = config.emojiChar;
 
-            const actionSchemaFile =
-                this.actionSchemaFileCache.getActionSchemaFile(config);
+        try {
+            for (const [schemaName, config] of entries) {
+                debug(`Adding action config: ${schemaName}`);
+                this.actionConfigs.set(schemaName, config);
+                this.emojis[schemaName] = config.emojiChar;
 
-            if (this.actionSemanticMap) {
-                semanticMapP.push(
-                    this.actionSemanticMap.addActionSchemaFile(
-                        config,
-                        actionSchemaFile,
-                        actionEmbeddingCache,
-                    ),
-                );
-            }
+                const actionSchemaFile =
+                    this.actionSchemaFileCache.getActionSchemaFile(config);
 
-            if (config.transient) {
-                this.transientAgents[name] = false;
-            }
-            if (config.injected) {
-                for (const actionName of actionSchemaFile.actionSchemas.keys()) {
-                    this.injectedSchemaForActionName.set(actionName, name);
+                if (this.actionSemanticMap) {
+                    semanticMapP.push(
+                        this.actionSemanticMap.addActionSchemaFile(
+                            config,
+                            actionSchemaFile,
+                            actionEmbeddingCache,
+                        ),
+                    );
+                }
+
+                if (config.transient) {
+                    this.transientAgents[schemaName] = false;
+                }
+                if (config.injected) {
+                    for (const actionName of actionSchemaFile.actionSchemas.keys()) {
+                        this.injectedSchemaForActionName.set(
+                            actionName,
+                            schemaName,
+                        );
+                    }
                 }
             }
+
+            this.emojis[appAgentName] = manifest.emojiChar;
+        } catch (e: any) {
+            // Clean up what we did.
+            this.cleanupDynamicAgent(appAgentName);
+            throw e;
         }
 
         const record: AppAgentRecord = {
-            name,
+            name: appAgentName,
             provider,
             actions: new Set(),
             schemas: new Set(),
@@ -315,7 +325,7 @@ export class AppAgentManager implements ActionConfigProvider {
             manifest,
         };
 
-        this.agents.set(name, record);
+        this.agents.set(appAgentName, record);
         return record;
     }
 
@@ -342,17 +352,35 @@ export class AppAgentManager implements ActionConfigProvider {
         debug("Finish action embeddings");
     }
 
+    private cleanupDynamicAgent(appAgentName: string) {
+        delete this.emojis[appAgentName];
+        for (const [schemaName, config] of this.actionConfigs) {
+            if (getAppAgentName(schemaName) !== appAgentName) {
+                continue;
+            }
+            delete this.emojis[schemaName];
+            this.actionConfigs.delete(schemaName);
+            this.actionSchemaFileCache.unloadActionSchemaFile(schemaName);
+            this.actionSemanticMap?.removeActionSchemaFile(schemaName);
+            if (config.transient) {
+                delete this.transientAgents[schemaName];
+            }
+            if (config.injected) {
+                const injectedMap = this.injectedSchemaForActionName;
+                for (const [actionName, name] of injectedMap) {
+                    if (name === schemaName) {
+                        injectedMap.delete(actionName);
+                    }
+                }
+            }
+        }
+    }
+
     public async removeDynamicAgent(appAgentName: string) {
         const record = this.getRecord(appAgentName);
         this.agents.delete(appAgentName);
+        this.cleanupDynamicAgent(appAgentName);
 
-        for (const name of this.actionConfigs.keys()) {
-            if (getAppAgentName(name) === appAgentName) {
-                this.actionConfigs.delete(name);
-                this.actionSchemaFileCache.unloadActionSchemaFile(name);
-                this.actionSemanticMap?.removeActionSchemaFile(name);
-            }
-        }
         await this.closeSessionContext(record);
         if (record.appAgent !== undefined) {
             record.provider?.unloadAppAgent(record.name);

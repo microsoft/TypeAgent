@@ -158,11 +158,17 @@ export async function createAgentRpcClient(
             manifest: AppAgentManifest;
         }) => {
             const context = contextMap.get(param.contextId);
-            return context.addDynamicAgent(
-                param.name,
-                param.manifest,
-                await createAgentRpcClient(param.name, channelProvider),
-            );
+            try {
+                await context.addDynamicAgent(
+                    param.name,
+                    param.manifest,
+                    await createAgentRpcClient(param.name, channelProvider),
+                );
+            } catch (e: any) {
+                // Clean up the channel if adding the agent fails
+                channelProvider.deleteChannel(param.name);
+                throw e;
+            }
         },
         removeDynamicAgent: async (param: {
             contextId: number;

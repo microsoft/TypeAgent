@@ -73,6 +73,8 @@ export class ChatView {
     private commandBackStackIndex = 0;
 
     private hideMetrics = true;
+    public userGivenName: string = "";
+
     constructor(
         private idGenerator: IdGenerator,
         public agents: Map<string, string>,

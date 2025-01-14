@@ -34,6 +34,7 @@
     "agent-rpc": "workspace:*",
     "aiclient": "workspace:*",
     "common-utils": "workspace:*",
+    "debug": "^4.3.4",
     "dompurify": "^3.1.6",
     "html-to-text": "^9.0.5",
     "jsonpath": "^1.1.1",
@@ -49,6 +50,7 @@
   },
   "devDependencies": {
     "@types/chrome": "^0.0.256",
+    "@types/debug": "^4.1.10",
     "@types/dompurify": "^3.0.5",
     "@types/html-to-text": "^9.0.4",
     "@types/jquery": "^3.5.14",

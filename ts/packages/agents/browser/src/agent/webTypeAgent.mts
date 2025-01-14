@@ -13,6 +13,10 @@ import { createRpc } from "agent-rpc/rpc";
 import { BrowserActionContext } from "./actionHandler.mjs";
 import { WebAgentMessage } from "../common/webAgentMessageTypes.mjs";
 
+import registerDebug from "debug";
+
+const debugError = registerDebug("typeagent:webAgent:error");
+
 export type WebAgentChannels = {
   channelProvider: GenericChannelProvider;
   registerChannel: GenericChannel;
@@ -55,12 +59,19 @@ function ensureWebAgentChannels(context: SessionContext<BrowserActionContext>) {
     addTypeAgent: async (param: {
       name: string;
       manifest: AppAgentManifest;
-    }): Promise<void> =>
-      context.addDynamicAgent(
-        param.name,
-        param.manifest,
-        await createAgentRpcClient(param.name, channelProvider),
-      ),
+    }): Promise<void> => {
+      try {
+        await context.addDynamicAgent(
+          param.name,
+          param.manifest,
+          await createAgentRpcClient(param.name, channelProvider),
+        );
+      } catch (e: any) {
+        // Clean up the channel if adding the agent fails
+        channelProvider.deleteChannel(param.name);
+        throw e;
+      }
+    },
   });
 
   const webAgentChannels = {
@@ -79,16 +90,20 @@ export async function processWebAgentMessage(
   if (webAgentChannels === undefined) {
     return;
   }
-  switch (message.messageType) {
-    case "register":
-      webAgentChannels.registerChannel.message(message.body);
-      break;
-    case "message":
-      webAgentChannels.channelProvider.message(message.body);
-      break;
-    case "disconnect":
-      await context.removeDynamicAgent(message.body);
-      webAgentChannels.channelProvider.deleteChannel(message.body);
-      break;
+  try {
+    switch (message.messageType) {
+      case "register":
+        webAgentChannels.registerChannel.message(message.body);
+        break;
+      case "message":
+        webAgentChannels.channelProvider.message(message.body);
+        break;
+      case "disconnect":
+        await context.removeDynamicAgent(message.body);
+        webAgentChannels.channelProvider.deleteChannel(message.body);
+        break;
+    }
+  } catch (e: any) {
+    debugError("Error processing web agent message", e);
   }
 }
