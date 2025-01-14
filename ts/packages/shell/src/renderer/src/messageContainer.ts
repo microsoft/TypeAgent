@@ -124,12 +124,14 @@ export class MessageContainer {
 
             // set source and source icon
             this.updateActionName(actionName ?? source);
-            
-            // use agent icon for agents, user Initial for users    
+
+            // use agent icon for agents, user Initial for users
             if (this.iconDiv.className.indexOf("agent-") > -1) {
                 this.iconDiv.innerText = sourceIcon ?? "❔"; // icon
             } else if (actionName && actionName.length > 0) {
-                this.iconDiv.innerText = actionName?.charAt(0).toLocaleUpperCase();
+                this.iconDiv.innerText = actionName
+                    ?.charAt(0)
+                    .toLocaleUpperCase();
             }
         }
     }
@@ -163,7 +165,7 @@ export class MessageContainer {
 
         const agentIconDiv = document.createElement("div");
         agentIconDiv.className = `${classNameSuffix}-icon`;
-        this.iconDiv = agentIconDiv
+        this.iconDiv = agentIconDiv;
         div.append(agentIconDiv);
 
         const messageBodyDiv = document.createElement("div");

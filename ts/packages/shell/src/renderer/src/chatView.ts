@@ -458,7 +458,7 @@ export class ChatView {
         const agentMessage = this.ensureAgentMessage(msg, notification);
         if (agentMessage === undefined) {
             return;
-        }        
+        }
 
         agentMessage.setMessage(
             content,

@@ -3,7 +3,11 @@
 
 /// <reference path="../../lib/lib.android.d.ts" />
 
-import { ClientAPI, NotifyCommands, SpeechToken } from "../../preload/electronTypes";
+import {
+    ClientAPI,
+    NotifyCommands,
+    SpeechToken,
+} from "../../preload/electronTypes";
 import { ChatView } from "./chatView";
 import { TabView } from "./tabView";
 import { recognizeOnce } from "./speech";
@@ -380,7 +384,9 @@ document.addEventListener("DOMContentLoaded", async function () {
         console.log(decoded);
 
         if (decoded.given_name) {
-            chatView.userGivenName = decoded.given_name.toString().toLocaleLowerCase();
+            chatView.userGivenName = decoded.given_name
+                .toString()
+                .toLocaleLowerCase();
         }
     }
 
