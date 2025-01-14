@@ -151,7 +151,7 @@ function getThemeCommandHandlers(): CommandHandlerTable {
                 run: async (context: ActionContext<ShellContext>) => {
                     context.sessionContext.agentContext.settings.set(
                         "darkMode",
-                        false
+                        false,
                     );
                 },
             },
@@ -160,7 +160,7 @@ function getThemeCommandHandlers(): CommandHandlerTable {
                 run: async (context: ActionContext<ShellContext>) => {
                     context.sessionContext.agentContext.settings.set(
                         "darkMode",
-                        true
+                        true,
                     );
                 },
             },

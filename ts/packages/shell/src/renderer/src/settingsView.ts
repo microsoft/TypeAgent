@@ -176,7 +176,9 @@ export class SettingsView {
 
         const updateTheme = () => {
             const labelElement = document.createElement("span");
-            labelElement.innerText = this._shellSettings.darkMode ? "Light mode" : "Dark mode";
+            labelElement.innerText = this._shellSettings.darkMode
+                ? "Light mode"
+                : "Dark mode";
             if (this._shellSettings.darkMode) {
                 this.darkModeToggle.innerHTML = "";
                 this.darkModeToggle.appendChild(iconSun());
@@ -188,7 +190,7 @@ export class SettingsView {
                 this.darkModeToggle.appendChild(labelElement);
                 document.body.classList.remove("dark-mode");
             }
-        }
+        };
 
         const updateInputs = () => {
             if (this.shellSettings.multiModalContent) {
@@ -289,18 +291,25 @@ export class SettingsView {
         });
 
         this.darkModeToggle = this.addButton(
-            this._shellSettings.darkMode ? iconSun() : iconMoon(), () => {
-            this._shellSettings.darkMode = !this._shellSettings.darkMode;
-            this.saveSettings();
-            this.updateFromSettings();
-        }, this._shellSettings.darkMode ? "Light mode" : "Dark mode");
+            this._shellSettings.darkMode ? iconSun() : iconMoon(),
+            () => {
+                this._shellSettings.darkMode = !this._shellSettings.darkMode;
+                this.saveSettings();
+                this.updateFromSettings();
+            },
+            this._shellSettings.darkMode ? "Light mode" : "Dark mode",
+        );
     }
 
     getContainer() {
         return this.mainContainer;
     }
 
-    private addButton(innerContent: HTMLElement, onclick: () => void, label?: string) {
+    private addButton(
+        innerContent: HTMLElement,
+        onclick: () => void,
+        label?: string,
+    ) {
         const button = document.createElement("button");
         button.innerHTML = innerContent.innerHTML;
         button.onclick = onclick;
