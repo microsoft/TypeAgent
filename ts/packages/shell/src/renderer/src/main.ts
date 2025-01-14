@@ -380,7 +380,7 @@ document.addEventListener("DOMContentLoaded", async function () {
         console.log(decoded);
 
         if (decoded.given_name) {
-            chatView.userGivenName = decoded.given_name.toString();
+            chatView.userGivenName = decoded.given_name.toString().toLocaleLowerCase();
         }
     }
 

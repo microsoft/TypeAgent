@@ -395,8 +395,6 @@ export class ChatView {
             this.hideMetrics,
         );
 
-        mg.updateUserName(this.userGivenName);
-
         if (hidden) {
             mg.hideUserMessage();
         }

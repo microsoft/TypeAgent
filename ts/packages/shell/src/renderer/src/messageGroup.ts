@@ -195,8 +195,4 @@ export class MessageGroup {
     public hideUserMessage() {
         this.userMessage.hide();
     }
-
-    public updateUserName(name: string) {
-        this.userMessage.updateActionName(name.toLocaleLowerCase())
-    }
 }
