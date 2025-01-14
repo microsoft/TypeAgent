@@ -11,7 +11,7 @@ import {
 } from "../commerce/schema/shoppingResults.mjs";
 import {
   AllListsInfo,
-  AllRecipeSearchResults,
+  RecipeInfo,
   BuyItAgainHeaderSection,
   BuyItAgainNavigationLink,
   HomeLink,
@@ -98,7 +98,7 @@ export async function handleInstacartAction(
       });
     }
 
-    summarize(callback: (context: Record<string, any>) => Promise<void>): this {
+    thenRun(callback: (context: Record<string, any>) => Promise<void>): this {
       return this.addAction(async () => {
         await callback(this.context);
       });
@@ -135,7 +135,7 @@ export async function handleInstacartAction(
 
   type UIElementSchemas = {
     AllListsInfo: AllListsInfo;
-    AllRecipeSearchResults: AllRecipeSearchResults;
+    RecipeInfo: RecipeInfo;
     BuyItAgainHeaderSection: BuyItAgainHeaderSection;
     BuyItAgainNavigationLink: BuyItAgainNavigationLink;
     HomeLink: HomeLink;
@@ -193,10 +193,7 @@ export async function handleInstacartAction(
     componentType: T,
     keywords: string,
   ): Promise<UIElementSchemas[T] | undefined> {
-    if (
-      componentType == "StoreInfo" ||
-      componentType == "AllRecipeSearchResults"
-    ) {
+    if (componentType == "StoreInfo" || componentType == "RecipeInfo") {
       await goToHomepage();
     }
 
@@ -212,11 +209,11 @@ export async function handleInstacartAction(
     let queryPrefix = "";
     switch (componentType) {
       case "StoreInfo": {
-        queryPrefix = "store: ";
+        queryPrefix = "stores: ";
         break;
       }
-      case "AllRecipeSearchResults": {
-        queryPrefix = "recipe: ";
+      case "RecipeInfo": {
+        queryPrefix = "recipes: ";
         break;
       }
     }
@@ -288,7 +285,7 @@ export async function handleInstacartAction(
           context["ProductDetailsHeroTile"]?.addToListButton.cssSelector,
       )
       .findPageComponent("AllListsInfo", `ListName: ${action.listName}`)
-      .summarize(async (context) => {
+      .thenRun(async (context) => {
         const targetList = context["AllListsInfo"];
         if (targetList?.lists) {
           await browser.clickOn(targetList.lists[0].cssSelector);
@@ -310,18 +307,16 @@ export async function handleInstacartAction(
       "StoreInfo",
       action.parameters.storeName,
     );
-    await followLink(targetStore?.storeLinkCssSelector);
+    await followLink(targetStore?.detailsLinkCssSelector);
 
     // TODO: persist preferrences
   }
 
   async function handleFindRecipe(action: any) {
     await pageActions()
-      .searchFor("AllRecipeSearchResults", action.parameters.keyword)
+      .searchFor("RecipeInfo", action.parameters.keyword)
       .followLink(
-        (context) =>
-          context["search:AllRecipeSearchResults"]?.recipes[0]
-            .recipeLinkCssSelector,
+        (context) => context["search:RecipeInfo"]?.detailsLinkCssSelector,
       )
       .execute();
   }
@@ -335,24 +330,19 @@ export async function handleInstacartAction(
     };
 
     await pageActions()
-      .searchFor("AllRecipeSearchResults", action.parameters.recipeName)
+      .searchFor("RecipeInfo", action.parameters.recipeName)
       .followLink(
-        (context) =>
-          context["search:AllRecipeSearchResults"]?.recipes[0]
-            .recipeLinkCssSelector,
+        (context) => context["search:RecipeInfo"]?.detailsLinkCssSelector,
       )
       .findPageComponent("RecipeHeroSection")
-      .followLink(
-        (context) => context["RecipeHeroSection"]?.addAllIngridientsCssSelector,
-      )
-      .summarize(async (context) => {
+      .thenRun(async (context) => {
         const targetRecipe = context["RecipeHeroSection"];
+        await browser.clickOn(targetRecipe.addAllIngridientsCssSelector);
         for (let product of targetRecipe.ingredients) {
           results.addedToCart.push(product);
         }
 
         const friendlyMessage = await agent.getFriendlyPurchaseSummary(results);
-
         if (friendlyMessage.success) {
           message = (friendlyMessage.data as PurchaseSummary).formattedMessage;
         }
@@ -369,7 +359,7 @@ export async function handleInstacartAction(
       .findPageComponent("ListInfo", `List name: ${action.parameters.listName}`)
       .followLink((context) => context["ListInfo"]?.detailsLinkCssSelector)
       .findPageComponent("ListDetailsInfo")
-      .summarize(async (context) => {
+      .thenRun(async (context) => {
         const listDetails = context["ListDetailsInfo"];
         const results = await addAllProductsToCart(listDetails?.products);
         const friendlyMessage = await agent.getFriendlyPurchaseSummary(results);
@@ -386,7 +376,7 @@ export async function handleInstacartAction(
 
     await pageActions()
       .findPageComponent("StoreInfo", `Store name: ${storeName}`)
-      .followLink((context) => context["StoreInfo"]?.storeLinkCssSelector)
+      .followLink((context) => context["StoreInfo"]?.detailsLinkCssSelector)
       .execute();
   }
 
@@ -399,7 +389,7 @@ export async function handleInstacartAction(
         (context) => context["BuyItAgainNavigationLink"]?.linkCssSelector,
       )
       .findPageComponent("BuyItAgainHeaderSection")
-      .summarize(async (context) => {
+      .thenRun(async (context) => {
         const headerSection = context["BuyItAgainHeaderSection"];
         const results = await addAllProductsToCart(headerSection?.products);
         const friendlyMessage = await agent.getFriendlyPurchaseSummary(results);

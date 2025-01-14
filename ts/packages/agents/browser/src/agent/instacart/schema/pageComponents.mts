@@ -70,7 +70,7 @@ export type BuyItAgainNavigationLink = {
 export type StoreInfo = {
   name: string;
   subtitle: string;
-  storeLinkCssSelector: string;
+  detailsLinkCssSelector: string;
 };
 
 export type NearbyStoresList = {
@@ -86,6 +86,8 @@ export type RecipeBuyButton = {
 export type RecipeHeroSection = {
   recipeName: string;
   summary: string;
+
+  // this is the CSS selector for the link to add recipe ingredients to the cart
   addAllIngridientsCssSelector: string;
   saveButtonCssSelector: string;
 
@@ -96,21 +98,8 @@ export type RecipeHeroSection = {
 // this gives the details for a specific recipe
 export type RecipeInfo = {
   name: string;
-  ingredients: ProductTile[];
-  recipeLinkCssSelector: string;
-};
-
-// this captures the recipes visible on the page
-export type AllRecipeSearchResults = {
-  keyword: string;
-  // The complete list of recipes in the search results page
-  recipes: RecipeSearchResult[];
-};
-
-export type RecipeSearchResult = {
-  name: string;
-  // The CSS selector for a link to an individual recipe
-  recipeLinkCssSelector: string;
+  subtitle: string;
+  detailsLinkCssSelector: string;
 };
 
 export type AllListsInfo = {

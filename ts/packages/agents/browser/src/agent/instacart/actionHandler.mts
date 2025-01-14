@@ -7,7 +7,7 @@ import { BrowserConnector } from "../browserConnector.mjs";
 import { createInstacartPageTranslator } from "./translator.mjs";
 import {
   AllListsInfo,
-  AllRecipeSearchResults,
+  RecipeInfo,
   BuyItAgainHeaderSection,
   BuyItAgainNavigationLink,
   HomeLink,
@@ -70,7 +70,7 @@ export async function handleInstacartAction(
 
   type UIElementSchemas = {
     AllListsInfo: AllListsInfo;
-    AllRecipeSearchResults: AllRecipeSearchResults;
+    RecipeInfo: RecipeInfo;
     BuyItAgainHeaderSection: BuyItAgainHeaderSection;
     BuyItAgainNavigationLink: BuyItAgainNavigationLink;
     HomeLink: HomeLink;
@@ -122,10 +122,7 @@ export async function handleInstacartAction(
     componentType: T,
     keywords: string,
   ): Promise<UIElementSchemas[T] | undefined> {
-    if (
-      componentType == "StoreInfo" ||
-      componentType == "AllRecipeSearchResults"
-    ) {
+    if (componentType == "StoreInfo" || componentType == "RecipeInfo") {
       await goToHomepage();
     }
 
@@ -141,11 +138,11 @@ export async function handleInstacartAction(
     let queryPrefix = "";
     switch (componentType) {
       case "StoreInfo": {
-        queryPrefix = "store: ";
+        queryPrefix = "stores: ";
         break;
       }
-      case "AllRecipeSearchResults": {
-        queryPrefix = "recipe: ";
+      case "RecipeInfo": {
+        queryPrefix = "recipes: ";
         break;
       }
     }
@@ -213,19 +210,19 @@ export async function handleInstacartAction(
       "StoreInfo",
       action.parameters.storeName,
     );
-    await followLink(targetStore?.storeLinkCssSelector);
+    await followLink(targetStore?.detailsLinkCssSelector);
 
     // TODO: persist preferrences
   }
 
   async function handleFindRecipe(action: any) {
-    const allRecipes = await searchOnWebsite(
-      "AllRecipeSearchResults",
+    const recipe = await searchOnWebsite(
+      "RecipeInfo",
       action.parameters.keyword,
     );
 
-    if (allRecipes && allRecipes.recipes.length > 0) {
-      await followLink(allRecipes.recipes[0].recipeLinkCssSelector);
+    if (recipe && recipe.detailsLinkCssSelector) {
+      await followLink(recipe.detailsLinkCssSelector);
     }
   }
 
@@ -237,13 +234,13 @@ export async function handleInstacartAction(
       deliveryInformation: "",
     };
 
-    const allRecipes = await searchOnWebsite(
-      "AllRecipeSearchResults",
+    const recipe = await searchOnWebsite(
+      "RecipeInfo",
       action.parameters.recipeName,
     );
 
-    if (allRecipes && allRecipes.recipes.length > 0) {
-      await followLink(allRecipes.recipes[0].recipeLinkCssSelector);
+    if (recipe && recipe.detailsLinkCssSelector) {
+      await followLink(recipe.detailsLinkCssSelector);
 
       const targetRecipe = await getPageComponent("RecipeHeroSection");
 
@@ -314,7 +311,7 @@ export async function handleInstacartAction(
     const targetStore = await getPageComponent("StoreInfo", request);
 
     console.log(targetStore);
-    await followLink(targetStore?.storeLinkCssSelector);
+    await followLink(targetStore?.detailsLinkCssSelector);
   }
 
   async function handleBuyItAgain(action: any) {
