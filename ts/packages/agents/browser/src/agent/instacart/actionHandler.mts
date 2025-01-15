@@ -20,6 +20,9 @@ import {
   RecipeHeroSection,
   SearchInput,
   StoreInfo,
+  ShoppingCartButton,
+  ShoppingCartDetails,
+  ShoppingCartStoreSection,
 } from "./schema/pageComponents.mjs";
 import {
   PurchaseResults,
@@ -46,8 +49,13 @@ export async function handleInstacartAction(
       break;
     case "addToCartAction":
       await handleAddToCart(action);
+      break;
+    case "getShoppingCartAction":
+      await handleGetCart(action);
+      break;
     case "addToListAction":
       await handleAddToList(action);
+      break;
     case "findNearbyStoreAction":
       await handleFindStores(action);
       break;
@@ -83,6 +91,9 @@ export async function handleInstacartAction(
     RecipeHeroSection: RecipeHeroSection;
     SearchInput: SearchInput;
     StoreInfo: StoreInfo;
+    ShoppingCartButton: ShoppingCartButton;
+    ShoppingCartStoreSection: ShoppingCartStoreSection;
+    ShoppingCartDetails: ShoppingCartDetails;
   };
 
   async function getPageComponent<T extends keyof UIElementSchemas>(
@@ -172,6 +183,21 @@ export async function handleInstacartAction(
     if (targetProduct?.addToCartButton) {
       await browser.clickOn(targetProduct.addToCartButton.cssSelector);
     }
+  }
+
+  async function selectStoreCart(action: any) {
+    const cartButton = await getPageComponent("ShoppingCartButton");
+    console.log(cartButton);
+
+    await followLink(cartButton?.detailsLinkCssSelector);
+
+    const cartDetails = await getPageComponent("ShoppingCartDetails");
+    console.log(cartDetails);
+  }
+
+  async function handleGetCart(action: any) {
+    await selectStore(action.parameters.storeName);
+    await selectStoreCart(action);
   }
 
   async function handleAddToList(action: any) {

@@ -24,6 +24,9 @@ import {
   RecipeHeroSection,
   SearchInput,
   StoreInfo,
+  ShoppingCartButton,
+  ShoppingCartStoreSection,
+  ShoppingCartDetails,
 } from "./schema/pageComponents.mjs";
 
 export async function handleInstacartAction(
@@ -31,6 +34,7 @@ export async function handleInstacartAction(
   context: ActionContext<BrowserActionContext>,
 ) {
   let message = "OK";
+  let entities: { name: any; type: string[] }[] = [];
 
   if (!context.sessionContext.agentContext.browserConnector) {
     throw new Error("No connection to browser session.");
@@ -111,8 +115,13 @@ export async function handleInstacartAction(
       break;
     case "addToCartAction":
       await handleAddToCart(action);
+      break;
+    case "getShoppingCartAction":
+      await handleGetCart(action);
+      break;
     case "addToListAction":
       await handleAddToList(action);
+      break;
     case "findNearbyStoreAction":
       await handleFindStores(action);
       break;
@@ -148,6 +157,9 @@ export async function handleInstacartAction(
     RecipeHeroSection: RecipeHeroSection;
     SearchInput: SearchInput;
     StoreInfo: StoreInfo;
+    ShoppingCartButton: ShoppingCartButton;
+    ShoppingCartStoreSection: ShoppingCartStoreSection;
+    ShoppingCartDetails: ShoppingCartDetails;
   };
 
   async function getPageComponent<T extends keyof UIElementSchemas>(
@@ -264,6 +276,15 @@ export async function handleInstacartAction(
       .followLink(
         (context) => context["search:ProductTile"]?.detailsLinkSelector,
       )
+      .thenRun(async (context) => {
+        const product = context["search:ProductTile"];
+        if (product.name) {
+          entities.push({
+            name: product.name,
+            type: ["product"],
+          });
+        }
+      })
       .execute();
   }
 
@@ -277,14 +298,82 @@ export async function handleInstacartAction(
       .execute();
   }
 
+  async function selectDefaultStoreCart(action: any) {
+    await pageActions()
+      .findPageComponent("ShoppingCartButton")
+      .followLink(
+        (context) => context["ShoppingCartButton"]?.detailsLinkCssSelector,
+      )
+      .findPageComponent("ShoppingCartStoreSection")
+      .followLink(
+        (context) => context["ShoppingCartButton"]?.detailsButtonCssSelector,
+      )
+      .execute();
+  }
+
+  async function selectStoreCart(action: any) {
+    let results: PurchaseResults = {
+      addedToCart: [],
+      unavailable: [],
+      storeName: action.parameters.storeName,
+      deliveryInformation: "",
+    };
+
+    await pageActions()
+      .findPageComponent("ShoppingCartButton")
+      .followLink(
+        (context) => context["ShoppingCartButton"]?.detailsLinkCssSelector,
+      )
+      .findPageComponent("ShoppingCartDetails")
+      .thenRun(async (context) => {
+        const cartDetails = context["ShoppingCartDetails"];
+        console.log(cartDetails);
+
+        entities.push({
+          name: cartDetails.storeName,
+          type: ["store", "shoppingCart"],
+        });
+
+        for (let product of cartDetails.productsInCart) {
+          results.addedToCart.push(product);
+
+          if (product.name) {
+            entities.push({
+              name: product.name,
+              type: ["product"],
+            });
+          }
+        }
+
+        const friendlyMessage = await agent.getFriendlyPurchaseSummary(results);
+        if (friendlyMessage.success) {
+          message = (friendlyMessage.data as PurchaseSummary).formattedMessage;
+        }
+      })
+      .execute();
+  }
+
+  async function handleGetCart(action: any) {
+    if (action.parameters.storeName) {
+      await selectStore(action.parameters.storeName);
+    } else {
+      await selectDefaultStoreCart(action);
+    }
+
+    await selectStoreCart(action);
+  }
+
   async function handleAddToList(action: any) {
     await pageActions()
       .findPageComponent("ProductDetailsHeroTile")
       .followLink(
         (context) =>
-          context["ProductDetailsHeroTile"]?.addToListButton.cssSelector,
+          context["ProductDetailsHeroTile"]?.addToListButton?.cssSelector,
       )
-      .findPageComponent("AllListsInfo", `ListName: ${action.listName}`)
+      .findPageComponent(
+        "AllListsInfo",
+        `ListName: ${action.parameters.listName}`,
+      )
       .thenRun(async (context) => {
         const targetList = context["AllListsInfo"];
         if (targetList?.lists) {
@@ -308,6 +397,11 @@ export async function handleInstacartAction(
       action.parameters.storeName,
     );
     await followLink(targetStore?.detailsLinkCssSelector);
+
+    entities.push({
+      name: targetStore?.name,
+      type: ["store"],
+    });
 
     // TODO: persist preferrences
   }
@@ -337,9 +431,20 @@ export async function handleInstacartAction(
       .findPageComponent("RecipeHeroSection")
       .thenRun(async (context) => {
         const targetRecipe = context["RecipeHeroSection"];
+
+        entities.push({
+          name: targetRecipe?.name,
+          type: ["recipe"],
+        });
+
         await browser.clickOn(targetRecipe.addAllIngridientsCssSelector);
         for (let product of targetRecipe.ingredients) {
           results.addedToCart.push(product);
+
+          entities.push({
+            name: product.name,
+            type: ["product"],
+          });
         }
 
         const friendlyMessage = await agent.getFriendlyPurchaseSummary(results);
@@ -401,5 +506,8 @@ export async function handleInstacartAction(
       .execute();
   }
 
-  return message;
+  return {
+    displayText: message,
+    entities: entities,
+  };
 }
