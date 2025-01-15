@@ -1,12 +1,21 @@
 # External Agents
 
-Developers can now use [agent-sdk's](./README.md) and [dispatchers's](../dispatcher/README.md) extensible architecture to build their own application agents. The agents can then surface themselves in the [TypeAgent Shell](../shell) and [TypeAgent CLI](../cli) just like other [agents](../agents) defined in [config.json](../dispatcher/data/config.json).
+You use the [agent-sdk](./README.md) and the [TypeAgent Dispatchers's](../dispatcher/README.md) extensible architecture to build your own application agents. You can surface these agents in the [TypeAgent Shell](../shell) and [TypeAgent CLI](../cli) just like other [agents](../agents) defined in [config.json](../dispatcher/data/config.json).
 
-This document describes the process of building an sample external agent and making it work in the TypeAgent ecosystem.
+This document describes the process of building a sample external Dispatcher Agent and integrating it with the [TypeAgent Dispatcher](../dispatcher/README.md).
+
+## Prerequisites
+
+Begin by exploring the following:
+
+- **Agent-Sdk Architecture**: Read about the architecture of the [**agent-sdk**](./README.md).
+- **Example Agents**: Review agents under the [agents](../agents) directory to understand the structure of the application agents.
+  - The [Echo](../../examples/agentExamples/echo/) agent is a trivial example used below to illustrate the methodology of building your own application agents.
+  - The [List](../agents/list/) agent provides a good example and template for building an agent.
 
 ## Steps to build an `Echo` agent:
 
-For the rest of the documentation, we will assume that the external agent is named `echo`.
+For the rest of the documentation, we will assume that the external agent is named **echo**. The echo agent performs a single action: echos any input back to the user.
 
 ### Step 1: Create a new package for the agent
 
@@ -14,11 +23,13 @@ Add `agent-sdk` as a dependency in the package.json file.
 
 **package.json** : Run `npm init -y` to create a new package.
 
+The example [package.json](../../examples//agentExamples//echo/package.json) contains references to **handler**, **schema** and **manifest** files. **Step 2** explains what they are.
+
 ```json
 {
   "name": "echo",
   "version": "0.0.1",
-  "description": "Echo dispatcher for Type Agent",
+  "description": "Echo example for TypeAgent",
   "main": "index.ts",
   "license": "MIT",
   "author": "Microsoft",
@@ -49,24 +60,49 @@ Add `agent-sdk` as a dependency in the package.json file.
 }
 ```
 
-Please look at the [README](./README.md) to understand the basic architecture of the agent-sdk. Also look at the other application agents under the [agents](../agents) directory to understand the structure of the application agents.
+#### Agent SDK Dependency
 
-Every application agent requires the following files to be present in the agent's source directory. The manifest file is used to register the agent with the TypeAgent ecosystem. The action schema file is used to define the actions that the agent can perform.
-
-**Agent Manifest File** : `echoManifest.json`
+- If your agent is in the TypeAgent repo or workspace, reference the SDK in the workspace
 
 ```
-{
-    "emojiChar": "🦜",
-    "schema": {
-      "description": "A basic echo agent.",
-      "schemaFile": "./echoActionsSchema.ts",
-      "schemaType": "EchoAction"
-    }
+  "dependencies": {
+    "@typeagent/agent-sdk": "workspace:*"
   }
 ```
 
-**Agent Action Schema File** : `echoActionsSchema.ts`
+- If your agent uses an external NPM registry for agent-sdk, create a `.npmrc` file in the [externalagents](#scaffolding) (see section on [Scaffolding](#scaffolding)) directory with the following contents:
+
+```
+
+@typeagent:registry=https://<path_npm_registry_for_agentsdk>
+always-auth=true
+
+```
+
+### Step 2: Author your agent
+
+Every application agent requires the following files to be present in the agent's [**source**](../../examples/agentExamples/echo/src/) directory.
+
+- Agent Manifest File: The manifest file is used to register the agent with the TypeAgent ecosystem.
+- Action Schema File: The action schema file is used to define the actions that the agent can perform.
+- Agent Action Handler: Your code that perform's the agent's actions.
+
+**Agent Manifest File** : [`echoManifest.json`](../../examples/agentExamples/echo/src/echoManifest.json)
+
+```
+
+{
+"emojiChar": "🦜",
+"schema": {
+"description": "A basic echo agent.",
+"schemaFile": "./echoActionsSchema.ts",
+"schemaType": "EchoAction"
+}
+}
+
+```
+
+**Agent Action Schema File** : [`echoActionsSchema.ts`](../../examples//agentExamples/echo/src/echoActionsSchema.ts)
 
 ```ts
 // The following types define the structure of an object of type EchoAction that represents the requested request from the user.
@@ -155,7 +191,6 @@ async function handleEchoAction(
       displayText = `>> Echo: ${action.parameters.text}`;
       result = createActionResultFromTextDisplay(displayText, displayText);
       break;
-    case "unknown":
     default:
       result = createActionResultFromError("Unable to process the action");
       break;
@@ -164,15 +199,43 @@ async function handleEchoAction(
 }
 ```
 
-Folder structure for **Echo** agent:
+#### Folder structure for **Echo** agent:
 
-![alt text](.\imgs\image-files.png)
+![alt text](./imgs/image-files.png)
 
-### Step 2: `Echo` agent package
+### Step 3: Install your Agent
+
+<a id="profiles"></a>
+
+- Go to the **TypeAgent Profiles** directory:
+
+  - bash: `~.typeagent\profiles\dev_0.`
+  - Windows: `cd %USERPROFILE%\.typeagent\profiles\dev_0`
+
+- Create an **externalAgentsConfig.json** file in the profiles directory. This file contains references to all external agents.
+
+  ```json
+  {
+    "agents": {
+      "echo": {
+        "type": "module",
+        "name": "echo",
+        "path": <Optional path to agent 'dist' folder>
+      }
+    }
+  }
+  ```
+
+- If you are working in the TypeAgent repo or workspace, **add a path to your agent** in externalAgentsConfig.json.
+  - The path should point to the folder where your build places output files. E.g. the path to the example **Echo** agent is `<srcRoot>\ts\examples\agentExamples\echo\dist`
+  - Ensure that schema and manifest files are placed in the same folder using a post-build step, as shown in the sample [package.json](../../examples//agentExamples//echo/package.json).
+- **Else** follow the **_steps below_** to **build a package** for your agent and register it.
+
+#### Step 3.1: Build `Echo` agent package
 
 Run `npm pack` from the echo agent's directory to create a tarball of the agent package. This tarball(echo-0.0.1.tgz) can be used to install the agent in the TypeAgent ecosystem.
 
-### Step 3: Install the `Echo` agent
+#### Step 3.2: Install the `Echo` agent
 
 Copy the tar file to the TypeAgent profiles directory. Please verify the path to the TypeAgent profiles directory on your machine.
 
@@ -180,22 +243,13 @@ Copy the tar file to the TypeAgent profiles directory. Please verify the path to
 cp echo-0.0.1.tgz ~\.typeagent\profiles\dev_0\.
 ```
 
-Create the `externalAgentsConfig.json` file in the profiles directory with reference to the echo agent:
+<a id="scaffolding"></a>
 
-```json
-{
-  "agents": {
-    "echo": {
-      "type": "module",
-      "name": "echo"
-    }
-  }
-}
-```
+#### Step 3.3: Scaffolding for external agents
 
-### Step 4: Scaffolding for external agents
+TypeAgent links external agents using a **scaffold**. Run the following command to scaffold the external agent:
 
-The TypeAgent ecosystem provides a way to scaffold the external agent. Run the following command to scaffold the external agent:
+- Go to the [TypeAgent Profiles](#profiles) directory
 
 ```bash
 mkdir externalagents && cd externalagents
@@ -234,7 +288,7 @@ The above command will install the echo agent in the externalagents node package
 }
 ```
 
-### Step 5: Run the TypeAgent cli or shell to see the `Echo` agent in action.
+### Step 4: Run the TypeAgent cli or shell to see the `Echo` agent in action.
 
 ```bash
 # you can run these commands from the `ts` folder
@@ -262,3 +316,7 @@ trademarks or logos is subject to and must follow
 [Microsoft's Trademark & Brand Guidelines](https://www.microsoft.com/en-us/legal/intellectualproperty/trademarks/usage/general).
 Use of Microsoft trademarks or logos in modified versions of this project must not cause confusion or imply Microsoft sponsorship.
 Any use of third-party trademarks or logos are subject to those third-party's policies.
+
+```
+
+```
