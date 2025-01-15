@@ -90,7 +90,7 @@ class ActionSchemaBuilder {
         }
     }
 
-    addTypeDefinition(definition: ActionSchemaTypeDefinition) {
+    addTypeDefinition(definition: ActionSchemaEntryTypeDefinition) {
         this.definitions.push(definition);
     }
 
@@ -193,9 +193,12 @@ export function composeSelectedActionSchema(
     multipleActions: boolean,
 ) {
     const builder = new ActionSchemaBuilder(provider);
-    for (const definition of definitions) {
-        builder.addTypeDefinition(definition);
-    }
+    const union = sc.union(definitions.map((definition) => sc.ref(definition)));
+    const config = provider.getActionConfig(schemaName);
+    const comment = `${config.schemaType} includes a partial list of actions available in schema group '${schemaName}' - ${config.description}`;
+    const entry = sc.type(config.schemaType, union, comment);
+    builder.addTypeDefinition(entry);
+
     return finalizeActionSchemaBuilder(
         builder,
         schemaName,

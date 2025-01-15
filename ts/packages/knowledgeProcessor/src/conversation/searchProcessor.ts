@@ -13,7 +13,7 @@ import {
     SearchTermsActionResponse,
     SearchTermsActionResponseV2,
 } from "./conversation.js";
-import { SearchResponse } from "./searchResponse.js";
+import { createSearchResponse, SearchResponse } from "./searchResponse.js";
 import {
     Filter,
     GetAnswerAction,
@@ -108,6 +108,12 @@ export interface ConversationSearchProcessor {
         query: string,
         options: SearchProcessingOptions,
     ): Promise<PromptSection[] | undefined>;
+
+    searchMessages(
+        query: string,
+        options: SearchOptions,
+        maxMessageChars?: number,
+    ): Promise<SearchResponse>;
 }
 
 export function createSearchProcessor(
@@ -130,6 +136,7 @@ export function createSearchProcessor(
         buildContext,
         generateAnswer,
         generateAnswerV2,
+        searchMessages,
     };
     return thisProcessor;
 
@@ -247,6 +254,54 @@ export function createSearchProcessor(
             );
         }
         return rr;
+    }
+
+    async function searchMessages(
+        query: string,
+        options: SearchOptions,
+        maxMessageChars?: number,
+    ): Promise<SearchResponse> {
+        const response = createSearchResponse();
+        //await fallbackSearch(query, undefined, response, options);
+        const messageIndex = await conversation.getMessageIndex();
+        if (messageIndex) {
+            const matches = await messageIndex.nearestNeighbors(
+                query,
+                options.maxMatches,
+                options.minScore,
+            );
+            if (matches.length > 0) {
+                response.messageIds = matches.map((m) => m.item);
+                response.messages = await conversation.loadMessages(
+                    response.messageIds,
+                );
+                if (maxMessageChars && maxMessageChars > 0) {
+                    let charCount = 0;
+                    let i = 0;
+                    for (; i < response.messages.length; ++i) {
+                        const messageLength =
+                            response.messages[i].value.value.length;
+                        if (charCount + messageLength > maxMessageChars) {
+                            break;
+                        }
+                        charCount += messageLength;
+                    }
+                    if (i > 0 && i < response.messages.length) {
+                        response.messageIds.splice(i);
+                        response.messages.splice(i);
+                    }
+                }
+                response.answer = await answers.generateAnswer(
+                    query,
+                    undefined,
+                    response,
+                    true,
+                    false,
+                );
+            }
+        }
+
+        return response;
     }
 
     async function buildContext(

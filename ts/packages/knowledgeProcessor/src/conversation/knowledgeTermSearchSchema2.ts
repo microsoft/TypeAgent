@@ -44,11 +44,11 @@ export type TermFilterV2 = {
     action?: ActionTerm;
     // searchTerms:
     // - do not repeat search terms already specified as an ActionTerm
-    // - no generic terms like "topic" and "subject"
+    // - Remove generic terms like "topic/s", "subject", "discussion" etc
     // - Phrases like 'email address' or 'first name' are a single term
-    // - use empty term array for summaries
+    // - use empty searchTerms array when use asks for summaries
     searchTerms?: SearchTerm[];
-    // Use only if request explicitly asks for time range
+    // Use only if request explicitly asks for time range, particular year, month etc.
     timeRange?: DateTimeRange | undefined; // in this time range
 };
 
@@ -59,6 +59,7 @@ export type GetAnswerWithTermsActionV2 = {
         question: string;
         // the question above is translated into filters. All words must be exactly as in the question
         filters: TermFilterV2[];
+        summarize?: boolean | undefined;
     };
 };
 

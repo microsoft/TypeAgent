@@ -56,7 +56,7 @@ export type HomeLink = {
   linkCssSelector: string;
 };
 
-// the navigation link to the "Your Lists" view on instacart
+// the navigation link to the "Lists" page on instacart
 export type ListsNavigationLink = {
   linkCssSelector: string;
 };
@@ -70,7 +70,7 @@ export type BuyItAgainNavigationLink = {
 export type StoreInfo = {
   name: string;
   subtitle: string;
-  storeLinkCssSelector: string;
+  detailsLinkCssSelector: string;
 };
 
 export type NearbyStoresList = {
@@ -86,28 +86,23 @@ export type RecipeBuyButton = {
 export type RecipeHeroSection = {
   recipeName: string;
   summary: string;
+
+  // this is the CSS selector for the link to add recipe ingredients to the cart
   addAllIngridientsCssSelector: string;
   saveButtonCssSelector: string;
+
+  // the ingredients for the recipe
+  ingredients: ProductTile[];
+
+  // the related ingedrients, usually shown in "You may already have" section
+  relatedIngredients: ProductTile[];
 };
 
 // this gives the details for a specific recipe
 export type RecipeInfo = {
   name: string;
-  ingredients: ProductTile[];
-  recipeLinkCssSelector: string;
-};
-
-// this captures the recipes visible on the page
-export type AllRecipeSearchResults = {
-  keyword: string;
-  // The complete list of recipes in the search results page
-  recipes: RecipeSearchResult[];
-};
-
-export type RecipeSearchResult = {
-  name: string;
-  // The CSS selector for a link to an individual recipe
-  recipeLinkCssSelector: string;
+  subtitle: string;
+  detailsLinkCssSelector: string;
 };
 
 export type AllListsInfo = {
@@ -135,4 +130,24 @@ export type BuyItAgainHeaderSection = {
   allItemsCssSelector: string;
   pastOrdersCssSelector: string;
   products?: ProductTile[];
+};
+
+export type ShoppingCartButton = {
+  label: string;
+  detailsLinkCssSelector: string;
+};
+
+export type ShoppingCartStoreSection = {
+  storeName: string;
+  detailsButtonCssSelector: string;
+};
+
+export type ShoppingCartDetails = {
+  storeName: string;
+  deliveryInformation: string;
+  totalAmount: string;
+
+  productsInCart?: ProductTile[];
+
+  relatedProducts?: ProductTile[];
 };

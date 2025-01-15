@@ -13,6 +13,48 @@ body {
   font-size: 14px;
 }
 
+.dark-mode {
+  background-color: #333;
+
+  .action-container {
+    background-color: #222;
+  }
+
+  .chat-container {
+    background-color: #222;
+
+    .scroll_enabled {
+      background-color: #222;
+    }
+  }
+
+  .replacement-container {
+    background-color: #222;
+  }
+
+  .chat-input {
+    background-color: #444;
+    border: 1px solid #444;
+
+    .user-textarea {
+      color: white;
+    }
+
+    .chat-input-button {
+      color: white;
+    }
+
+    label {
+      color: white;
+    }
+
+    .autocomplete-container {
+      background-color: #444;
+      color: white;
+    }
+  }
+}
+
 .wrapper {
   height: 100%;
   width: 100%;
@@ -217,6 +259,7 @@ body {
   .chat-message-body;
   position: relative;
   background-color: lavender;
+  margin-right: 30px;
 }
 
 .chat-message-agent {
@@ -355,6 +398,7 @@ table.table-message td {
 .chat-timestamp-user {
   .chat-timestamp;
   text-align: end;
+  margin-right: 35px;
 }
 
 .agent-icon {
@@ -366,6 +410,22 @@ table.table-message td {
   font-size: 20px;
   font-style: normal;
   text-align: center;
+}
+
+.user-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 15px;
+  position: absolute;
+  right: 0px;
+  font-size: 20px;
+  font-style: normal;
+  text-align: center;
+  background: plum;
+  color: purple;
+  margin-top: 2px;
+  font-family: sans-serif;
+  font-weight: 300;
 }
 
 .agent-name {

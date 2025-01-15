@@ -43,6 +43,7 @@ export class ShellSettings
     public onToggleTopMost: EmptyFunction | null;
     public onOpenInlineBrowser: ((targetUrl: URL) => void) | null;
     public onCloseInlineBrowser: EmptyFunction | null;
+    public darkMode: boolean;
 
     public get width(): number {
         return this.size[0] ?? defaultSettings.size[0];
@@ -89,6 +90,7 @@ export class ShellSettings
         this.onToggleTopMost = null;
         this.onOpenInlineBrowser = null;
         this.onCloseInlineBrowser = null;
+        this.darkMode = settings.darkMode;
     }
 
     public static get filePath(): string {

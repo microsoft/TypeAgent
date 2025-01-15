@@ -123,17 +123,22 @@ export class MessageContainer {
             const sourceIcon = this.agents.get(source);
 
             // set source and source icon
-            (this.timestampDiv.firstChild as HTMLDivElement).innerText =
-                actionName ?? source; // name
-            this.iconDiv.innerText = sourceIcon ?? "❔"; // icon
+            this.updateActionName(actionName ?? source);
+
+            // use agent icon for agents, user Initial for users
+            if (this.iconDiv.className.indexOf("agent-") > -1) {
+                this.iconDiv.innerText = sourceIcon ?? "❔"; // icon
+            } else if (actionName && actionName.length > 0) {
+                this.iconDiv.innerText = actionName
+                    ?.charAt(0)
+                    .toLocaleUpperCase();
+            }
         }
     }
 
     public updateActionName(name: string | undefined) {
-        if (name !== undefined) {
+        if (name !== undefined && name.length > 0) {
             (this.timestampDiv.firstChild as HTMLDivElement).innerText = name;
-        } else {
-            (this.timestampDiv.firstChild as HTMLDivElement).innerText = "";
         }
     }
 
@@ -158,12 +163,10 @@ export class MessageContainer {
         div.append(timestampDiv);
         this.timestampDiv = timestampDiv;
 
-        if (classNameSuffix === "agent") {
-            const agentIconDiv = document.createElement("div");
-            agentIconDiv.className = "agent-icon";
-            div.append(agentIconDiv);
-            this.iconDiv = agentIconDiv;
-        }
+        const agentIconDiv = document.createElement("div");
+        agentIconDiv.className = `${classNameSuffix}-icon`;
+        this.iconDiv = agentIconDiv;
+        div.append(agentIconDiv);
 
         const messageBodyDiv = document.createElement("div");
         const bodyClass = this.hideMetrics
@@ -182,7 +185,12 @@ export class MessageContainer {
         beforeElem.before(div);
 
         this.div = div;
-        this.updateSource();
+
+        if (classNameSuffix == "agent") {
+            this.updateSource();
+        } else {
+            this.updateSource(chatView.userGivenName);
+        }
     }
 
     public getMessage() {

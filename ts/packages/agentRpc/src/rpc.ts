@@ -3,7 +3,8 @@
 
 import registerDebug from "debug";
 
-const debug = registerDebug("typeagent:rpc");
+const debugIn = registerDebug("typeagent:rpc:in");
+const debugOut = registerDebug("typeagent:rpc:out");
 const debugError = registerDebug("typeagent:rpc:error");
 
 import { RpcChannel } from "./common.js";
@@ -48,8 +49,12 @@ export function createRpc<
         }
     >();
 
+    const out = (message: any, cbErr?: (err: Error | null) => void) => {
+        debugOut(message);
+        channel.send(message, cbErr);
+    };
     const cb = (message: any) => {
-        debug("message", message);
+        debugIn(message);
         if (isCallMessage(message)) {
             const f = callHandlers?.[message.name];
 
@@ -63,7 +68,7 @@ export function createRpc<
         if (isInvokeMessage(message)) {
             const f = invokeHandlers?.[message.name];
             if (f === undefined) {
-                channel.send({
+                out({
                     type: "invokeError",
                     callId: message.callId,
                     error: "No invoke handler",
@@ -71,14 +76,14 @@ export function createRpc<
             } else {
                 f(message.param).then(
                     (result) => {
-                        channel.send({
+                        out({
                             type: "invokeResult",
                             callId: message.callId,
                             result,
                         });
                     },
                     (error) => {
-                        channel.send({
+                        out({
                             type: "invokeError",
                             callId: message.callId,
                             error: error.message,
@@ -132,7 +137,7 @@ export function createRpc<
             };
 
             return new Promise<T>((resolve, reject) => {
-                channel.send(message, (err) => {
+                out(message, (err) => {
                     if (err !== null) {
                         reject(err);
                     }
@@ -141,13 +146,12 @@ export function createRpc<
             });
         },
         send: <P>(name: keyof CallTargetFunctions, param?: P) => {
-            const message = {
+            out({
                 type: "call",
                 callId: nextCallId++,
                 name,
                 param,
-            };
-            channel.send(message);
+            });
         },
     } as RpcReturn<InvokeTargetFunctions, CallTargetFunctions>;
     return rpc;

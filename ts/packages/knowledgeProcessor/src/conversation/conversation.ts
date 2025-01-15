@@ -227,6 +227,10 @@ export interface Conversation<
     findMessage(
         messageText: string,
     ): Promise<dateTime.Timestamped<TextBlock<MessageId>> | undefined>;
+
+    loadMessages(
+        ids: MessageId[],
+    ): Promise<dateTime.Timestamped<TextBlock<MessageId>>[]>;
 }
 
 /**
@@ -300,6 +304,7 @@ export async function createConversation(
         searchTermsV2,
         searchMessages,
         findMessage,
+        loadMessages,
     };
     await load();
     return thisConversation;

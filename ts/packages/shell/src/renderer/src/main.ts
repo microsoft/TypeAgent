@@ -3,7 +3,11 @@
 
 /// <reference path="../../lib/lib.android.d.ts" />
 
-import { ClientAPI, NotifyCommands } from "../../preload/electronTypes";
+import {
+    ClientAPI,
+    NotifyCommands,
+    SpeechToken,
+} from "../../preload/electronTypes";
 import { ChatView } from "./chatView";
 import { TabView } from "./tabView";
 import { recognizeOnce } from "./speech";
@@ -16,6 +20,7 @@ import { ShellSettings } from "../../main/shellSettings";
 import { AppAgentEvent } from "@typeagent/agent-sdk";
 import { CameraView } from "./cameraView";
 import { createWebSocket, webapi } from "./webSocketAPI";
+import * as jose from "jose";
 
 export function getClientAPI(): ClientAPI {
     if (globalThis.api !== undefined) {
@@ -358,13 +363,34 @@ document.addEventListener("DOMContentLoaded", async function () {
 
     chatView.chatInputFocus();
 
-    if ((window as any).electron) {
-        (window as any).electron.ipcRenderer.send("dom ready");
+    try {
+        if (Android !== undefined) {
+            Bridge.interfaces.Android.domReady((userMessage: string) => {
+                chatView.addUserMessage(userMessage);
+            });
+        }
+    } catch (e) {
+        console.log(e);
     }
 
-    if (Android !== undefined) {
-        Bridge.interfaces.Android.domReady((userMessage: string) => {
-            chatView.addUserMessage(userMessage);
-        });
+    // get the users's name to show in the chat view
+    let token: SpeechToken | undefined = await getClientAPI().getSpeechToken();
+    const actualToken = token?.token.substring(token?.token.indexOf("#"));
+    if (actualToken) {
+        const dToken = jose.decodeProtectedHeader(actualToken);
+        console.log(dToken);
+
+        const decoded = jose.decodeJwt(actualToken);
+        console.log(decoded);
+
+        if (decoded.given_name) {
+            chatView.userGivenName = decoded.given_name
+                .toString()
+                .toLocaleLowerCase();
+        }
+    }
+
+    if ((window as any).electron) {
+        (window as any).electron.ipcRenderer.send("dom ready");
     }
 });

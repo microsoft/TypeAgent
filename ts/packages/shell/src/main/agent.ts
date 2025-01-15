@@ -142,6 +142,32 @@ class ShellSetTopMostCommandHandler implements CommandHandlerNoParams {
     }
 }
 
+function getThemeCommandHandlers(): CommandHandlerTable {
+    return {
+        description: "Set the theme",
+        commands: {
+            light: {
+                description: "Set the theme to light",
+                run: async (context: ActionContext<ShellContext>) => {
+                    context.sessionContext.agentContext.settings.set(
+                        "darkMode",
+                        false,
+                    );
+                },
+            },
+            dark: {
+                description: "Set the theme to dark",
+                run: async (context: ActionContext<ShellContext>) => {
+                    context.sessionContext.agentContext.settings.set(
+                        "darkMode",
+                        true,
+                    );
+                },
+            },
+        },
+    };
+}
+
 class ShellOpenWebContentView implements CommandHandler {
     public readonly description = "Show a new Web Content view";
     public readonly parameters = {
@@ -216,6 +242,7 @@ const handlers: CommandHandlerTable = {
         open: new ShellOpenWebContentView(),
         close: new ShellCloseWebContentView(),
         localWhisper: getLocalWhisperCommandHandlers(),
+        theme: getThemeCommandHandlers(),
     },
 };
 

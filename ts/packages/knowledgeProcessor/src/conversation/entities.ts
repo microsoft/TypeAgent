@@ -521,7 +521,7 @@ export async function createEntityIndexOnStorage<TSourceId = string>(
 
     function determineTopK(options: EntitySearchOptions): number {
         const topK = options.topK;
-        return topK === undefined || topK < 3 ? 3 : topK;
+        return topK === undefined || topK < 10 ? 10 : topK;
     }
 }
 

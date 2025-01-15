@@ -82,12 +82,13 @@ export async function createPodcastMemory(
     cm.searchProcessor.settings.defaultEntitySearchOptions.topK = 10;
     //cm.searchProcessor.settings.defaultEntitySearchOptions.alwaysUseTags = true;
     cm.searchProcessor.answers.settings.chunking.fastStop = true;
+    cm.searchProcessor.answers.settings.chunking.enable = true;
     cm.searchProcessor.answers.settings.hints =
         //"When answering questions about 'conversation' include all entities, topics and messages from [CONVERSATION HISTORY].\n" +
         //"What was talked about/discussed is in conversation history as entities, topics and messages. Be sure to use them, not just messages.\n" +
         "Always use supplied messages, ENTITIES AND ANSWERS in your answers.\n" +
         `E.g. include entities in answers to queries like "'they' talked about' \n` +
-        "Queries for lists always mean 'full list'.";
+        "Queries for lists always mean 'full list'";
     return cm;
 }
 
@@ -99,7 +100,7 @@ export function createPodcastCommands(
     commands.podcastConvert = podcastConvert;
     commands.podcastIndex = podcastIndex;
     commands.podcastAddThread = podcastAddThread;
-    commands.podcastListThreads = podcastListThreads;
+    commands.podcastList = podcastListThreads;
     commands.podcastAddThreadTag = podcastAddThreadTag;
     commands.podcastRemoveThreadTag = podcastRemoveThreadTag;
     //commands.podcastListThreadEntities = podcastListThreadEntities;
@@ -137,15 +138,6 @@ export function createPodcastCommands(
         }
 
         await podcastConvert(namedArgs);
-        /*
-        await conversation.importTranscript(
-            sourcePath,
-            namedArgs.name,
-            namedArgs.description,
-            namedArgs.startAt,
-            namedArgs.length,
-        );
-        */
         await podcastAddThread(namedArgs);
         const turnsFilePath = getTurnsFolderPath(sourcePath);
         namedArgs.sourcePath = turnsFilePath;
@@ -569,7 +561,7 @@ export function createPodcastCommands(
         await threads.add(threadDef);
         writeThread(threadDef);
     }
-    commands.podcastListThreads.metadata = "List all registered threads";
+    commands.podcastList.metadata = "List all registered threads";
     async function podcastListThreads(args: string[]) {
         const threads =
             await context.podcastMemory.conversation.getThreadIndex();
@@ -847,10 +839,7 @@ export function createPodcastCommands(
         context.printer.writeLine(range.startDate.toISOString());
         context.printer.writeLine(range.stopDate!.toISOString());
         if (tags && tags.length > 0) {
-            context.printer.writeInColor(
-                chalk.cyan,
-                "Tags: " + tags.join(", "),
-            );
+            context.printer.writeLine("Tags: " + tags.join(", "));
         }
         context.printer.writeLine();
     }

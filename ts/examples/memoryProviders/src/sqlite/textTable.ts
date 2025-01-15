@@ -67,7 +67,9 @@ export function createStringTable(
     }
 
     const sql_entries = db.prepare(`SELECT * from ${tableName}`);
-    const sql_ids = db.prepare(`SELECT stringId from ${tableName}`);
+    const sql_ids = db.prepare(
+        `SELECT stringId from ${tableName} ORDER BY stringId ASC`,
+    );
     const sql_values = db.prepare(`SELECT value from ${tableName}`);
     const sql_exists = db.prepare(`SELECT 1 from ${tableName} WHERE value = ?`);
     const sql_getId = db.prepare(
