@@ -189,11 +189,13 @@ async function executeBrowserAction(
         return createActionResult(commerceResult);
       } else if (action.translatorName === "browser.instacart") {
         const instacartResult = await handleInstacartAction(action, context);
+
         return createActionResult(
           instacartResult.displayText,
           undefined,
           instacartResult.entities,
         );
+
         // return createActionResult(instacartResult);
       }
 
