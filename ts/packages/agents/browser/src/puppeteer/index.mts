@@ -43,10 +43,11 @@ export class HeadlessExtensionRunner implements ExtensionRunner {
   }
 
   private async initializeBrowser(): Promise<void> {
-    const userDir = path.join(os.homedir(), "puppeteer_user_data");
+    const userDataDir = path.join(os.homedir(), "puppeteer_user_data");
+
     this.browser = await puppeteer.launch({
       headless: !this.options.isVisible,
-      userDataDir: userDir,
+      userDataDir: userDataDir,
       args: [
         `--disable-extensions-except=${this.options.extensionPath}`,
         `--load-extension=${this.options.extensionPath}`,

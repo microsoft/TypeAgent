@@ -93,6 +93,9 @@ export type RecipeHeroSection = {
 
   // the ingredients for the recipe
   ingredients: ProductTile[];
+
+  // the related ingedrients, usually shown in "You may already have" section
+  relatedIngredients: ProductTile[];
 };
 
 // this gives the details for a specific recipe
@@ -127,4 +130,24 @@ export type BuyItAgainHeaderSection = {
   allItemsCssSelector: string;
   pastOrdersCssSelector: string;
   products?: ProductTile[];
+};
+
+export type ShoppingCartButton = {
+  label: string;
+  detailsLinkCssSelector: string;
+};
+
+export type ShoppingCartStoreSection = {
+  storeName: string;
+  detailsButtonCssSelector: string;
+};
+
+export type ShoppingCartDetails = {
+  storeName: string;
+  deliveryInformation: string;
+  totalAmount: string;
+
+  productsInCart?: ProductTile[];
+
+  relatedProducts?: ProductTile[];
 };

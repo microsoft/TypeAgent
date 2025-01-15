@@ -15,8 +15,11 @@ export type RemoveFromCartAction = {
   };
 };
 
-export type ViewCartAction = {
-  actionName: "viewCartAction";
+export type GetShoppingCartAction = {
+  actionName: "getShoppingCartAction";
+  parameters: {
+    storeName?: string;
+  };
 };
 
 export type BuyAllInListAction = {
@@ -110,7 +113,7 @@ export type InstacartActions =
   | RemoveFromCartAction
   | SaveListForLaterAction
   | SetPreferredStoreAction
-  | ViewCartAction
+  | GetShoppingCartAction
   | SaveRecipeAction
   | DeleteRecipeAction
   | SearchForProductAction
