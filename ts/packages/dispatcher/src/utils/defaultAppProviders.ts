@@ -19,6 +19,7 @@ import {
     ActionSchemaFileCache,
     createSchemaInfoProvider,
 } from "../translation/actionSchemaFileCache.js";
+import { getInstanceDir } from "./userData.js";
 
 let builtinAppAgentProvider: AppAgentProvider | undefined;
 export function getBuiltinAppAgentProvider(): AppAgentProvider {
@@ -64,14 +65,11 @@ function getExternalAppAgentProvider(instanceDir: string): AppAgentProvider {
     return externalAppAgentProvider;
 }
 
-export function getDefaultAppAgentProviders(
-    instanceDir?: string,
-): AppAgentProvider[] {
-    const providers = [getBuiltinAppAgentProvider()];
-    if (instanceDir) {
-        providers.push(getExternalAppAgentProvider(instanceDir));
-    }
-    return providers;
+export function getDefaultAppAgentProviders(): AppAgentProvider[] {
+    return [
+        getBuiltinAppAgentProvider(),
+        getExternalAppAgentProvider(getInstanceDir()),
+    ];
 }
 
 let appAgentConfigs: Map<string, AppAgentManifest> | undefined;
