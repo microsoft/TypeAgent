@@ -9,6 +9,7 @@ export type CalendarAction =
     | ChangeDescriptionAction
     | FindEventsAction;
 
+// Add an event to the calendar
 export type AddEventAction = {
     actionName: "addEvent";
     parameters: {
@@ -16,43 +17,49 @@ export type AddEventAction = {
     };
 };
 
+// Remove the event from the calendar
 export type RemoveEventAction = {
     actionName: "removeEvent";
     parameters: {
+        // calendar event to remove
         eventReference: EventReference;
     };
 };
 
+// Add participants to an event on the calendar
 export type AddParticipantsAction = {
     actionName: "addParticipants";
     parameters: {
-        // event to be augmented; if not specified assume last event discussed
+        // calendar event to be augmented; if not specified assume last event discussed
         eventReference?: EventReference;
         // new participants (one or more)
         participants: string[];
     };
 };
 
+// Change the time of an event on the calendar
 export type ChangeTimeAction = {
     actionName: "changeTime";
     parameters: {
-        // event to be changed
+        // calendar event to be changed
         eventReference?: EventReference;
         // new time range for the event
         timeRange: EventTimeRange;
     };
 };
 
+// Change the description of an event on the calendar
 export type ChangeDescriptionAction = {
     actionName: "changeDescription";
     parameters: {
-        // event to be changed
+        // calendar event to be changed
         eventReference?: EventReference;
         // new description for the event
         description: string;
     };
 };
 
+// Find an event on the calendar
 export type FindEventsAction = {
     actionName: "findEvents";
     parameters: {
