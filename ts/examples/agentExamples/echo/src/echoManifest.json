@@ -2,7 +2,7 @@
   "emojiChar": "🦜",
   "schema": {
     "description": "A basic echo agent.",
-    "schemaFile": "./echoActionsSchema.ts",
+    "schemaFile": "echoActionsSchema.ts",
     "schemaType": "EchoAction"
   }
 }

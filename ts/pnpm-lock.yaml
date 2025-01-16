@@ -33,6 +33,9 @@ importers:
       copyfiles:
         specifier: ^2.4.1
         version: 2.4.1
+      mkdirp:
+        specifier: ^3.0.1
+        version: 3.0.1
       prettier:
         specifier: ^3.2.5
         version: 3.2.5

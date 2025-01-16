@@ -7,8 +7,8 @@
   "author": "Microsoft",
   "type": "module",
   "exports": {
-    "./agent/manifest": "./dist/agent/echoManifest.json",
-    "./agent/handlers": "./dist/agent/echoActionHandler.js"
+    "./agent/manifest": "./dist/echoManifest.json",
+    "./agent/handlers": "./dist/echoActionHandler.js"
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",

@@ -41,7 +41,7 @@ The example [package.json](../../examples//agentExamples//echo/package.json) con
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "npm run tsc  && npm run copy:manifest",
-    "copy:manifest": "mkdirp dist/agent && cp src/echoManifest.json dist/agent/echoManifest.json && cp dist/echoActionHandler.js dist/agent/echoActionHandler.js && cp ./src/echoActionsSchema.ts dist/agent/echoActionsSchema.ts",
+    "postbuild": "mkdirp dist/agent && copyfiles -u 1 \"dist/*.js\" dist/agent && copyfiles -u 1 \"src/**/*Schema*.ts\" \"src/**/*Manifest*.json\" dist/agent",
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
     "prettier": "prettier --check . --ignore-path ../../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../../.prettierignore",
@@ -53,6 +53,7 @@ The example [package.json](../../examples//agentExamples//echo/package.json) con
   },
   "devDependencies": {
     "mkdirp": "^3.0.1",
+    "copyfiles": "^2.4.1",
     "prettier": "^3.2.5",
     "rimraf": "^5.0.5",
     "typescript": "^5.4.2"
