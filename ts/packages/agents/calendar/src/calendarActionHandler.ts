@@ -16,7 +16,7 @@ import {
     CalendarAction,
     Event,
     EventReference,
-} from "./calendarActionsSchema.js";
+} from "./calendarActionsSchemaV1.js";
 import {
     getTimeRangeBasedQuery,
     getNWeeksDateRangeISO,
