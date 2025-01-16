@@ -5,8 +5,14 @@ import {
     AppAgentEvent,
     DynamicDisplay,
     TemplateSchema,
+    DisplayType,
 } from "@typeagent/agent-sdk";
-import { CommandCompletionResult, RequestMetrics } from "agent-dispatcher";
+import {
+    CommandCompletionResult,
+    Dispatcher,
+    RequestId,
+    RequestMetrics,
+} from "agent-dispatcher";
 import { ClientAPI, SpeechToken } from "../../preload/electronTypes";
 
 export const webapi: ClientAPI = {
@@ -20,92 +26,6 @@ export const webapi: ClientAPI = {
         ) => void,
     ) => placeHolder("listen-event", callback),
 
-    processShellRequest: (request: string, id: string, images: string[]) => {
-        return new Promise<RequestMetrics | undefined>((resolve, reject) => {
-            let currentMessageId: number = ++maxWebAPIMessageId;
-            // call server websocket and send request
-            globalThis.ws.send(
-                JSON.stringify({
-                    message: "process-shell-request",
-                    data: {
-                        messageId: currentMessageId,
-                        request,
-                        id,
-                        images,
-                    },
-                }),
-            );
-            // callbacks saved for later resolution
-            msgPromiseMap.set(currentMessageId, { resolve, reject });
-        });
-    },
-    getCommandCompletion: (prefix: string) => {
-        // TODO: implement
-        return new Promise<CommandCompletionResult | undefined>(
-            (resolve, reject) => {
-                placeHolder1({ resolve, reject });
-                placeHolder("getCommandCompletion", prefix);
-            },
-        );
-    },
-
-    getTemplateCompletion: (
-        templateAgentName,
-        templateName,
-        data,
-        propertyName,
-    ) => {
-        // TODO: implement
-        return new Promise<string[]>((resolve, reject) => {
-            placeHolder1({ resolve, reject });
-            placeHolder("getActionCompletion", {
-                templateAgentName,
-                templateName,
-                data,
-                propertyName,
-            });
-        });
-    },
-    getDynamicDisplay(source: string, id: string) {
-        globalThis.ws.send(
-            JSON.stringify({
-                message: "get-dynamic-display",
-                data: {
-                    appAgentName: source,
-                    displayType: "html",
-                    requestId: id,
-                },
-            }),
-        );
-
-        return new Promise<DynamicDisplay>(() => {
-            // currently this promise isn't listened so no need to resolve/reject
-            // resolution/rejection comes through as a separate web socket message
-        });
-    },
-    getTemplateSchema(
-        templateAgentName: string,
-        templateName: string,
-        data: unknown,
-    ) {
-        return new Promise<TemplateSchema>((resolve, reject) => {
-            let currentMessageId: number = ++maxWebAPIMessageId;
-            globalThis.ws.send(
-                JSON.stringify({
-                    message: "get-template-schema",
-                    data: {
-                        messageId: currentMessageId,
-                        templateAgentName,
-                        templateName,
-                        data,
-                    },
-                }),
-            );
-
-            // callbacks saved for later resolution
-            msgPromiseMap.set(currentMessageId, { resolve, reject });
-        });
-    },
     onUpdateDisplay(callback) {
         fnMap.set("update-display", callback);
     },
@@ -423,3 +343,110 @@ export function keepWebSocketAlive(webSocket: WebSocket, source: string) {
         }
     }, 20 * 1000);
 }
+const remoteCallNotSupported = () => {
+    throw new Error("Remote call not supported");
+};
+export const webdispatcher: Dispatcher = {
+    processCommand(
+        command: string,
+        requestId?: RequestId,
+        attachments?: string[],
+    ): Promise<RequestMetrics | undefined> {
+        return new Promise<RequestMetrics | undefined>((resolve, reject) => {
+            let currentMessageId: number = ++maxWebAPIMessageId;
+            // call server websocket and send request
+            globalThis.ws.send(
+                JSON.stringify({
+                    message: "process-shell-request",
+                    data: {
+                        messageId: currentMessageId,
+                        request: command,
+                        id: requestId,
+                        images: attachments,
+                    },
+                }),
+            );
+            // callbacks saved for later resolution
+            msgPromiseMap.set(currentMessageId, { resolve, reject });
+        });
+    },
+
+    getDynamicDisplay(
+        appAgentName: string,
+        type: DisplayType,
+        id: string,
+    ): Promise<DynamicDisplay> {
+        globalThis.ws.send(
+            JSON.stringify({
+                message: "get-dynamic-display",
+                data: {
+                    appAgentName,
+                    displayType: type,
+                    requestId: id,
+                },
+            }),
+        );
+
+        return new Promise<DynamicDisplay>(() => {
+            // currently this promise isn't listened so no need to resolve/reject
+            // resolution/rejection comes through as a separate web socket message
+        });
+    },
+    getTemplateSchema(
+        templateAgentName: string,
+        templateName: string,
+        data: unknown,
+    ): Promise<TemplateSchema> {
+        return new Promise<TemplateSchema>((resolve, reject) => {
+            let currentMessageId: number = ++maxWebAPIMessageId;
+            globalThis.ws.send(
+                JSON.stringify({
+                    message: "get-template-schema",
+                    data: {
+                        messageId: currentMessageId,
+                        templateAgentName,
+                        templateName,
+                        data,
+                    },
+                }),
+            );
+
+            // callbacks saved for later resolution
+            msgPromiseMap.set(currentMessageId, { resolve, reject });
+        });
+    },
+
+    getTemplateCompletion(
+        templateAgentName: string,
+        templateName: string,
+        data: unknown,
+        propertyName: string,
+    ): Promise<string[] | undefined> {
+        // TODO: implement
+        return new Promise<string[]>((resolve, reject) => {
+            placeHolder1({ resolve, reject });
+            placeHolder("getActionCompletion", {
+                templateAgentName,
+                templateName,
+                data,
+                propertyName,
+            });
+        });
+    },
+
+    getCommandCompletion(
+        prefix: string,
+    ): Promise<CommandCompletionResult | undefined> {
+        // TODO: implement
+        return new Promise<CommandCompletionResult | undefined>(
+            (resolve, reject) => {
+                placeHolder1({ resolve, reject });
+                placeHolder("getCommandCompletion", prefix);
+            },
+        );
+    },
+    close: remoteCallNotSupported,
+    getPrompt: remoteCallNotSupported,
+    getSettingSummary: remoteCallNotSupported,
+    getTranslatorNameToEmojiMap: remoteCallNotSupported,
+};
