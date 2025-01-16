@@ -13,7 +13,7 @@ import {
     createConversationManager,
 } from "../conversation/conversationManager.js";
 import path from "path";
-import { createTypeChat, promptLib } from "typeagent";
+import { createTypeChat } from "typeagent";
 import { createEntitySearchOptions } from "../conversation/entities.js";
 import { Image } from "./imageSchema.js";
 import { KnowledgeResponse } from "../conversation/knowledgeSchema.js";
@@ -117,6 +117,12 @@ export async function imageToMessage(image: Image, extractor: KnowledgeExtractor
 
     const kr: KnowledgeResponse | undefined = await extractor.extract(JSON.stringify(image));
 
+    // const knowledge = getKnowledgeForImage(image, extractor);
+    // kr?.actions.push(...knowledge.actions);
+    // kr?.entities.push(...knowledge.entities);
+    // kr?.inverseActions.push(...knowledge.inverseActions);
+    // kr?.topics.push(...knowledge.topics);
+
     return {
         header: `${image.fileName} - ${image.title}` ,
         text: image.caption,
@@ -128,9 +134,9 @@ export async function imageToMessage(image: Image, extractor: KnowledgeExtractor
 
 export function getKnowledgeForImage(image: Image, extractor: KnowledgeExtractor): KnowledgeResponse {
 
-    //throw new Error("// TODO: implement");
+    // TODO: optimize
     return {
-       entities: [],
+       entities: [ { name: image.fileName, type: ["file", "image"]} ],
        actions: [],
        inverseActions: [],
        topics: [] 
@@ -170,7 +176,7 @@ export interface generateCaption {
     dateTaken: string
 }
 
-export async function loadImage(fileName: string, model: ChatModel): Promise<Image> {
+export async function loadImage(fileName: string, model: ChatModel): Promise<Image | undefined> {
 
     const buffer: Buffer = fs.readFileSync(fileName);
 
@@ -199,11 +205,12 @@ export async function loadImage(fileName: string, model: ChatModel): Promise<Ima
     try { 
         const prompt: PromptSection[] = [];
         const content: PromptSection = await addImagePromptContent("user", loadedImage, true, true, true, true, true);
-        prompt.push(promptLib.dateTimePromptSection()); // Always include the current date and time. Makes the bot much smarter
+        //prompt.push(promptLib.dateTimePromptSection()); // Always include the current date and time. Makes the bot much smarter
         prompt.push(content);
 
         const chatResponse = await caption.translate(
-            "Caption supplied images in no less than 150 words without making any assumptions, remain factual.",
+        //    "Caption supplied images in no less than 250 words without making any assumptions, remain factual. Incorporate supplied EXIF and location data to make a better description and to give context to when and where the image was taken.",
+        "Caption supplied images in no less than 150 words without making any assumptions, remain factual.",
             prompt, 
         );
 
@@ -219,10 +226,12 @@ export async function loadImage(fileName: string, model: ChatModel): Promise<Ima
                 metaData: properties
             };    
         } else {
-            throw new Error(`Unable to load ${fileName}`);
+            const err = `Unable to load ${fileName}. '${chatResponse.message}'`;
+            console.error("\t" + err)
+            throw new Error(err);
         }
     }
     catch {
-        throw new Error(`Unable to load ${fileName}`);
+        return undefined;
     }
 }
