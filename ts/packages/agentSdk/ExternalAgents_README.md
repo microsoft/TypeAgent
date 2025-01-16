@@ -1,17 +1,17 @@
 # External Agents
 
-You use the [agent-sdk](./README.md) and the [TypeAgent Dispatchers's](../dispatcher/README.md) extensible architecture to build your own application agents. You can surface these agents in the [TypeAgent Shell](../shell) and [TypeAgent CLI](../cli) just like other [agents](../agents) defined in [config.json](../dispatcher/data/config.json).
+The TypeAgent repo includes several example [agents](../../packages/agents/).
 
-This document describes the process of building a sample external Dispatcher Agent and integrating it with the [TypeAgent Dispatcher](../dispatcher/README.md).
+You can also build **your own application agents** **_outside_** the TypeAgent repo by using the [agent-sdk](./README.md) and the [TypeAgent Dispatchers's](../dispatcher/README.md) extensible architecture. You can package these agents as npm packages and surface them in the [TypeAgent Shell](../shell) and [TypeAgent CLI](../cli). This document describes how you can do so.
 
 ## Prerequisites
 
 Begin by exploring the following:
 
 - **Agent-Sdk Architecture**: Read about the architecture of the [**agent-sdk**](./README.md).
-- **Example Agents**: Review agents under the [agents](../agents) directory to understand the structure of the application agents.
-  - The [Echo](../../examples/agentExamples/echo/) agent is a trivial example used below to illustrate the methodology of building your own application agents.
-  - The [List](../agents/list/) agent provides a good example and template for building an agent.
+- **Example Agents**:
+  - The [Echo](../../examples/agentExamples/echo/) agent illustrates the basics of building your own application agents.
+  - Review agents under the [agents](../agents) directory to understand the structure of the application agents. The [List](../agents/list/) agent provides a good example and template for building an agent.
 
 ## Steps to build an `Echo` agent:
 
@@ -62,7 +62,7 @@ The example [package.json](../../examples//agentExamples//echo/package.json) con
 
 #### Agent SDK Dependency
 
-- If your agent is in the TypeAgent repo or workspace, reference the SDK in the workspace
+- If you are developing your agent in the TypeAgent repo or workspace, reference the SDK directly from the workspace
 
 ```
   "dependencies": {
@@ -105,7 +105,6 @@ Every application agent requires the following files to be present in the agent'
 **Agent Action Schema File** : [`echoActionsSchema.ts`](../../examples//agentExamples/echo/src/echoActionsSchema.ts)
 
 ```ts
-// The following types define the structure of an object of type EchoAction that represents the requested request from the user.
 export type EchoAction = GenEchoAction;
 
 // If the user asks to echo a message back, the system will return a GenEchoAction. The text parameter is the message to be echoed back.
@@ -210,9 +209,9 @@ async function handleEchoAction(
 - Go to the **TypeAgent Profiles** directory:
 
   - Use the **@session info** command in either the TypeAgent CLI or Shell to get the **path to the current profile directory**.
-  - Alternatively:
+  - The profile directory is typically located here:
 
-    - bash: `~.typeagent\profiles\dev`
+    - bash: `cd ~.typeagent\profiles\dev`
     - Windows: `cd %USERPROFILE%\.typeagent\profiles\dev`
 
 - Create an **externalAgentsConfig.json** file in this directory. This file contains references to all external agents.
@@ -240,11 +239,7 @@ Run `npm pack` from the echo agent's directory to create a tarball of the agent 
 
 #### Step 3.2: Install the `Echo` agent
 
-Copy the tar file to the TypeAgent profiles directory. Please verify the path to the TypeAgent profiles directory on your machine.
-
-```bash
-cp echo-0.0.1.tgz ~\.typeagent\profiles\dev_0\.
-```
+Copy the tar file to the [TypeAgent profiles directory](#profiles).
 
 <a id="scaffolding"></a>
 
@@ -253,11 +248,17 @@ cp echo-0.0.1.tgz ~\.typeagent\profiles\dev_0\.
 TypeAgent links external agents using a **scaffold**. Run the following command to scaffold the external agent:
 
 - Go to the [TypeAgent Profiles](#profiles) directory
-
-```bash
-mkdir externalagents && cd externalagents
-npm init -y
-```
+- Create an **externalagents** directory
+  - bash:
+  ```bash
+  mkdir externalagents && cd externalagents
+  npm init -y
+  ```
+  - Windows:
+  ```
+  md externalagents && cd externalagents
+  npm init -y
+  ```
 
 If your external agent depends on the an external artifact registry for agent-sdk, create a `.npmrc` file in the externalagents directory with the following contents:
 

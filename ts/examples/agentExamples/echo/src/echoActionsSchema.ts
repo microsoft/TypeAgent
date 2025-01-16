@@ -1,4 +1,6 @@
-// The following types define the structure of an object of type EchoAction that represents the requested request from the user.
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 export type EchoAction = GenEchoAction;
 
 // If the user asks to echo a message back, the system will return a GenEchoAction. The text parameter is the message to be echoed back.
