@@ -209,10 +209,13 @@ async function handleEchoAction(
 
 - Go to the **TypeAgent Profiles** directory:
 
-  - bash: `~.typeagent\profiles\dev.`
-  - Windows: `cd %USERPROFILE%\.typeagent\profiles\dev`
+  - Use the **@session info** command in either the TypeAgent CLI or Shell to get the **path to the current profile directory**.
+  - Alternatively:
 
-- Create an **externalAgentsConfig.json** file in the profiles directory. This file contains references to all external agents.
+    - bash: `~.typeagent\profiles\dev`
+    - Windows: `cd %USERPROFILE%\.typeagent\profiles\dev`
+
+- Create an **externalAgentsConfig.json** file in this directory. This file contains references to all external agents.
 
   ```json
   {
