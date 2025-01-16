@@ -1,6 +1,3 @@
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-
 // The following types define the structure of an object of type EchoAction that represents the requested request from the user.
 export type EchoAction = GenEchoAction;
 

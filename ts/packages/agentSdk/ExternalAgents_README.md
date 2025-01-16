@@ -35,13 +35,13 @@ The example [package.json](../../examples//agentExamples//echo/package.json) con
   "author": "Microsoft",
   "type": "module",
   "exports": {
-    "./agent/manifest": "./dist/agent/echoManifest.json",
-    "./agent/handlers": "./dist/agent/echoActionHandler.js"
+    "./agent/manifest": "./dist/echoManifest.json",
+    "./agent/handlers": "./dist/echoActionHandler.js"
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "npm run tsc  && npm run copy:manifest",
-    "postbuild": "mkdirp dist/agent && copyfiles -u 1 \"dist/*.js\" dist/agent && copyfiles -u 1 \"src/**/*Schema*.ts\" \"src/**/*Manifest*.json\" dist/agent",
+    "postbuild": "copyfiles -u 1 \"src/**/*Schema*.ts\" \"src/**/*Manifest*.json\" dist",
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
     "prettier": "prettier --check . --ignore-path ../../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../../.prettierignore",
@@ -52,7 +52,6 @@ The example [package.json](../../examples//agentExamples//echo/package.json) con
     "@typeagent/agent-sdk": "0.0.1"
   },
   "devDependencies": {
-    "mkdirp": "^3.0.1",
     "copyfiles": "^2.4.1",
     "prettier": "^3.2.5",
     "rimraf": "^5.0.5",
@@ -96,7 +95,7 @@ Every application agent requires the following files to be present in the agent'
 "emojiChar": "🦜",
 "schema": {
 "description": "A basic echo agent.",
-"schemaFile": "./echoActionsSchema.ts",
+"schemaFile": "echoActionsSchema.ts",
 "schemaType": "EchoAction"
 }
 }
@@ -121,7 +120,7 @@ export type GenEchoAction = {
 };
 ```
 
-**Agent action handler** : `echoActionHandler.ts`
+**Agent action handler** : [`echoActionHandler.ts`](../../examples//agentExamples/echo/src/echoActionHandler.ts)
 
 ```ts
 // Below is sample code for a simple echo agent.
@@ -210,8 +209,8 @@ async function handleEchoAction(
 
 - Go to the **TypeAgent Profiles** directory:
 
-  - bash: `~.typeagent\profiles\dev_0.`
-  - Windows: `cd %USERPROFILE%\.typeagent\profiles\dev_0`
+  - bash: `~.typeagent\profiles\dev.`
+  - Windows: `cd %USERPROFILE%\.typeagent\profiles\dev`
 
 - Create an **externalAgentsConfig.json** file in the profiles directory. This file contains references to all external agents.
 
