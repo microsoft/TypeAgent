@@ -9,28 +9,15 @@ import {
   PurchaseResults,
   PurchaseSummary,
 } from "../commerce/schema/shoppingResults.mjs";
-import {
-  AllListsInfo,
-  RecipeInfo,
-  BuyItAgainHeaderSection,
-  BuyItAgainNavigationLink,
-  HomeLink,
-  ListDetailsInfo,
-  ListInfo,
-  ListsNavigationLink,
-  NearbyStoresList,
-  ProductDetailsHeroTile,
-  ProductTile,
-  RecipeHeroSection,
-  SearchInput,
-  StoreInfo,
-} from "./schema/pageComponents.mjs";
+
+import { setupPageActions, UIElementSchemas } from "./pageActions.mjs";
 
 export async function handleInstacartAction(
   action: any,
   context: ActionContext<BrowserActionContext>,
 ) {
   let message = "OK";
+  let entities: { name: any; type: string[] }[] = [];
 
   if (!context.sessionContext.agentContext.browserConnector) {
     throw new Error("No connection to browser session.");
@@ -40,6 +27,8 @@ export async function handleInstacartAction(
     context.sessionContext.agentContext.browserConnector;
 
   const agent = await createInstacartPageTranslator("GPT_4_O_MINI");
+
+  const uiActions = setupPageActions(browser, agent);
 
   class PlanBuilder {
     private actions: (() => Promise<void>)[] = [];
@@ -62,7 +51,7 @@ export async function handleInstacartAction(
       callback?: (result: any) => Promise<void>,
     ): this {
       return this.addAction(async () => {
-        const result = await getPageComponent(
+        const result = await uiActions.getPageComponent(
           componentName,
           selectionCondition,
         );
@@ -82,7 +71,7 @@ export async function handleInstacartAction(
             ? linkSelectorOrCallback(this.context)
             : linkSelectorOrCallback;
 
-        await followLink(linkSelector);
+        await uiActions.followLink(linkSelector);
       });
     }
 
@@ -92,7 +81,7 @@ export async function handleInstacartAction(
       callback?: (result: any) => Promise<void>,
     ): this {
       return this.addAction(async () => {
-        const result = await searchOnWebsite(componentName, keywords);
+        const result = await uiActions.searchOnWebsite(componentName, keywords);
         this.context[`search:${componentName}`] = result; // Store the result in the context.
         if (callback) await callback(result);
       });
@@ -111,8 +100,13 @@ export async function handleInstacartAction(
       break;
     case "addToCartAction":
       await handleAddToCart(action);
+      break;
+    case "getShoppingCartAction":
+      await handleGetCart(action);
+      break;
     case "addToListAction":
       await handleAddToList(action);
+      break;
     case "findNearbyStoreAction":
       await handleFindStores(action);
       break;
@@ -133,127 +127,6 @@ export async function handleInstacartAction(
       break;
   }
 
-  type UIElementSchemas = {
-    AllListsInfo: AllListsInfo;
-    RecipeInfo: RecipeInfo;
-    BuyItAgainHeaderSection: BuyItAgainHeaderSection;
-    BuyItAgainNavigationLink: BuyItAgainNavigationLink;
-    HomeLink: HomeLink;
-    ListDetailsInfo: ListDetailsInfo;
-    ListInfo: ListInfo;
-    ListsNavigationLink: ListsNavigationLink;
-    NearbyStoresList: NearbyStoresList;
-    ProductDetailsHeroTile: ProductDetailsHeroTile;
-    ProductTile: ProductTile;
-    RecipeHeroSection: RecipeHeroSection;
-    SearchInput: SearchInput;
-    StoreInfo: StoreInfo;
-  };
-
-  async function getPageComponent<T extends keyof UIElementSchemas>(
-    componentType: T,
-    selectionCondition?: string,
-  ): Promise<UIElementSchemas[T] | undefined> {
-    const htmlFragments = await browser.getHtmlFragments(true);
-
-    const timerName = `getting ${componentType} section`;
-
-    console.time(timerName);
-    const response = await agent.getPageComponentSchema(
-      componentType,
-      selectionCondition,
-      htmlFragments,
-      undefined,
-    );
-
-    if (!response.success) {
-      console.error("Attempt to get page component failed");
-      console.error(response.message);
-      return undefined;
-    }
-
-    console.timeEnd(timerName);
-    return response.data as UIElementSchemas[T];
-  }
-
-  async function followLink(linkSelector: string | undefined) {
-    if (!linkSelector) return;
-
-    await browser.clickOn(linkSelector);
-    await browser.awaitPageInteraction();
-    await browser.awaitPageLoad();
-  }
-
-  async function goToHomepage() {
-    const link = await getPageComponent("HomeLink");
-    await followLink(link?.linkCssSelector);
-  }
-
-  async function searchOnWebsite<T extends keyof UIElementSchemas>(
-    componentType: T,
-    keywords: string,
-  ): Promise<UIElementSchemas[T] | undefined> {
-    if (componentType == "StoreInfo" || componentType == "RecipeInfo") {
-      await goToHomepage();
-    }
-
-    const selector = await getPageComponent("SearchInput");
-    if (!selector) {
-      return;
-    }
-
-    const searchSelector = selector.cssSelector;
-
-    await browser.clickOn(searchSelector);
-
-    let queryPrefix = "";
-    switch (componentType) {
-      case "StoreInfo": {
-        queryPrefix = "stores: ";
-        break;
-      }
-      case "RecipeInfo": {
-        queryPrefix = "recipes: ";
-        break;
-      }
-    }
-
-    await browser.enterTextIn(queryPrefix + keywords, searchSelector);
-    await browser.clickOn(selector.submitButtonCssSelector);
-    await browser.awaitPageInteraction();
-    await browser.awaitPageLoad();
-
-    const request = `Search result: ${keywords}`;
-    const result = await getPageComponent(componentType, request);
-
-    return result as UIElementSchemas[T];
-  }
-
-  async function addAllProductsToCart(products: ProductTile[]) {
-    let results: PurchaseResults = {
-      addedToCart: [],
-      unavailable: [],
-      storeName: action.parameters.storeName,
-      deliveryInformation: "",
-    };
-
-    for (let product of products) {
-      if (product.availability == "Out of stock") {
-        results.unavailable.push(product);
-      } else {
-        if (product.addToCartButtonCssSelector) {
-          await browser.clickOn(product.addToCartButtonCssSelector);
-          await browser.awaitPageInteraction();
-          results.addedToCart.push(product);
-        } else {
-          results.unavailable.push(product);
-        }
-      }
-    }
-
-    return results;
-  }
-
   function pageActions() {
     return new PlanBuilder();
   }
@@ -264,6 +137,15 @@ export async function handleInstacartAction(
       .followLink(
         (context) => context["search:ProductTile"]?.detailsLinkSelector,
       )
+      .thenRun(async (context) => {
+        const product = context["search:ProductTile"];
+        if (product.name) {
+          entities.push({
+            name: product.name,
+            type: ["product"],
+          });
+        }
+      })
       .execute();
   }
 
@@ -277,14 +159,82 @@ export async function handleInstacartAction(
       .execute();
   }
 
+  async function selectDefaultStoreCart(action: any) {
+    await pageActions()
+      .findPageComponent("ShoppingCartButton")
+      .followLink(
+        (context) => context["ShoppingCartButton"]?.detailsLinkCssSelector,
+      )
+      .findPageComponent("ShoppingCartStoreSection")
+      .followLink(
+        (context) => context["ShoppingCartButton"]?.detailsButtonCssSelector,
+      )
+      .execute();
+  }
+
+  async function selectStoreCart(action: any) {
+    let results: PurchaseResults = {
+      addedToCart: [],
+      unavailable: [],
+      storeName: action.parameters.storeName,
+      deliveryInformation: "",
+    };
+
+    await pageActions()
+      .findPageComponent("ShoppingCartButton")
+      .followLink(
+        (context) => context["ShoppingCartButton"]?.detailsLinkCssSelector,
+      )
+      .findPageComponent("ShoppingCartDetails")
+      .thenRun(async (context) => {
+        const cartDetails = context["ShoppingCartDetails"];
+        console.log(cartDetails);
+
+        entities.push({
+          name: cartDetails.storeName,
+          type: ["store", "shoppingCart"],
+        });
+
+        for (let product of cartDetails.productsInCart) {
+          results.addedToCart.push(product);
+
+          if (product.name) {
+            entities.push({
+              name: product.name,
+              type: ["product"],
+            });
+          }
+        }
+
+        const friendlyMessage = await agent.getFriendlyPurchaseSummary(results);
+        if (friendlyMessage.success) {
+          message = (friendlyMessage.data as PurchaseSummary).formattedMessage;
+        }
+      })
+      .execute();
+  }
+
+  async function handleGetCart(action: any) {
+    if (action.parameters.storeName) {
+      await selectStore(action.parameters.storeName);
+    } else {
+      await selectDefaultStoreCart(action);
+    }
+
+    await selectStoreCart(action);
+  }
+
   async function handleAddToList(action: any) {
     await pageActions()
       .findPageComponent("ProductDetailsHeroTile")
       .followLink(
         (context) =>
-          context["ProductDetailsHeroTile"]?.addToListButton.cssSelector,
+          context["ProductDetailsHeroTile"]?.addToListButton?.cssSelector,
       )
-      .findPageComponent("AllListsInfo", `ListName: ${action.listName}`)
+      .findPageComponent(
+        "AllListsInfo",
+        `ListName: ${action.parameters.listName}`,
+      )
       .thenRun(async (context) => {
         const targetList = context["AllListsInfo"];
         if (targetList?.lists) {
@@ -296,20 +246,41 @@ export async function handleInstacartAction(
   }
 
   async function handleFindStores(action: any) {
-    await goToHomepage();
-    const storesList = await getPageComponent("NearbyStoresList");
-    console.log(storesList);
-    return storesList;
+    await uiActions.goToHomepage();
+
+    await pageActions()
+      .findPageComponent("NearbyStoresList")
+      .thenRun(async (context) => {
+        const storesList = context["NearbyStoresList"];
+        console.log(storesList);
+
+        for (let store of storesList.stores) {
+          entities.push({
+            name: store.name,
+            type: ["store"],
+          });
+        }
+
+        // TODO: build friendly message
+      })
+      .execute();
   }
 
   async function handleSetPreferredStore(action: any) {
-    const targetStore = await searchOnWebsite(
-      "StoreInfo",
-      action.parameters.storeName,
-    );
-    await followLink(targetStore?.detailsLinkCssSelector);
-
-    // TODO: persist preferrences
+    await pageActions()
+      .searchFor("StoreInfo", action.parameters.storeName)
+      .followLink(
+        (context) => context["search:StoreInfo"]?.detailsLinkCssSelector,
+      )
+      .thenRun(async (context) => {
+        const targetStore = context["search:StoreInfo"];
+        entities.push({
+          name: targetStore?.name,
+          type: ["store"],
+        });
+        // TODO: persist preferrences
+      })
+      .execute();
   }
 
   async function handleFindRecipe(action: any) {
@@ -337,9 +308,20 @@ export async function handleInstacartAction(
       .findPageComponent("RecipeHeroSection")
       .thenRun(async (context) => {
         const targetRecipe = context["RecipeHeroSection"];
+
+        entities.push({
+          name: targetRecipe?.name,
+          type: ["recipe"],
+        });
+
         await browser.clickOn(targetRecipe.addAllIngridientsCssSelector);
         for (let product of targetRecipe.ingredients) {
           results.addedToCart.push(product);
+
+          entities.push({
+            name: product.name,
+            type: ["product"],
+          });
         }
 
         const friendlyMessage = await agent.getFriendlyPurchaseSummary(results);
@@ -361,7 +343,10 @@ export async function handleInstacartAction(
       .findPageComponent("ListDetailsInfo")
       .thenRun(async (context) => {
         const listDetails = context["ListDetailsInfo"];
-        const results = await addAllProductsToCart(listDetails?.products);
+        const results = await uiActions.addAllProductsToCart(
+          listDetails?.products,
+          action.parameters.storeName,
+        );
         const friendlyMessage = await agent.getFriendlyPurchaseSummary(results);
 
         if (friendlyMessage.success) {
@@ -372,7 +357,7 @@ export async function handleInstacartAction(
   }
 
   async function selectStore(storeName: string) {
-    await goToHomepage();
+    await uiActions.goToHomepage();
 
     await pageActions()
       .findPageComponent("StoreInfo", `Store name: ${storeName}`)
@@ -391,9 +376,12 @@ export async function handleInstacartAction(
       .findPageComponent("BuyItAgainHeaderSection")
       .thenRun(async (context) => {
         const headerSection = context["BuyItAgainHeaderSection"];
-        const results = await addAllProductsToCart(headerSection?.products);
-        const friendlyMessage = await agent.getFriendlyPurchaseSummary(results);
+        const results = await uiActions.addAllProductsToCart(
+          headerSection?.products,
+          action.parameters.storeName,
+        );
 
+        const friendlyMessage = await agent.getFriendlyPurchaseSummary(results);
         if (friendlyMessage.success) {
           message = (friendlyMessage.data as PurchaseSummary).formattedMessage;
         }
@@ -401,5 +389,8 @@ export async function handleInstacartAction(
       .execute();
   }
 
-  return message;
+  return {
+    displayText: message,
+    entities: entities,
+  };
 }

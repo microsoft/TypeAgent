@@ -9,6 +9,7 @@ import StealthPlugin from "puppeteer-extra-plugin-stealth";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import readline from "readline/promises";
+import os from "node:os";
 
 export interface ExtensionInfo {
   id: string;
@@ -42,8 +43,11 @@ export class HeadlessExtensionRunner implements ExtensionRunner {
   }
 
   private async initializeBrowser(): Promise<void> {
+    const userDataDir = path.join(os.homedir(), "puppeteer_user_data");
+
     this.browser = await puppeteer.launch({
       headless: !this.options.isVisible,
+      userDataDir: userDataDir,
       args: [
         `--disable-extensions-except=${this.options.extensionPath}`,
         `--load-extension=${this.options.extensionPath}`,

@@ -47,7 +47,7 @@ export class ActionSchemaSemanticMap {
         this.actionSemanticMaps.set(config.schemaName, actionSemanticMap);
 
         for (const [name, definition] of actionSchemaFile.actionSchemas) {
-            const key = `${config.schemaName} ${config.description} ${name} ${definition.comments?.[0] ?? ""}`;
+            const key = `${config.schemaName} ${name} ${definition.comments?.[0] ?? ""}`;
             const embedding = cache?.get(key);
             if (embedding) {
                 actionSemanticMap.set(key, {
