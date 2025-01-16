@@ -10,12 +10,12 @@ import {
 import { StringArrayTag, TypedTag, XmpTag } from "exifreader";
 import { openai } from "aiclient";
 import { env } from "process";
-import {
-    GeoJsonFeature,
-    GeoJsonFeatureCollection,
-    SearchAddressResult,
-    SearchAddressResultItem,
-} from "@azure/maps-search";
+// import {
+//     GeoJsonFeature,
+//     GeoJsonFeatureCollection,
+//     SearchAddressResult,
+//     SearchAddressResultItem,
+// } from "@azure/maps-search";
 import { AddressOutput } from "@azure-rest/maps-search";
 
 // Maps token provider
@@ -31,6 +31,7 @@ export type PointOfInterest = {
     categories?: String[] | undefined;
     freeFormAddress?: String | undefined;
     position?: LatLong | undefined;
+    distance?: number | undefined;
 };
 
 /**
@@ -92,16 +93,21 @@ export function exifGPSTagToLatLong(
 }
 
 /**
- * Gets the nearby POIs for the supplied coordinate and search radius
+ * Gets the nearby POIs for the supplied coordinate and search radius. Will do a
+ * progressive search of increasing radius until maxSearchRadius is reached or 
+ * a singular result is found.  Whichever occurs first.
  * @param position - the position at which to do a nearby search
  * @param settings - the API settings containing the endpoint to call
- * @param radius - the search radius
+ * @param maxSearchRadius - the search radius
+ * @param minResultCount - the minimum # of results to find before returning 
+ * or the search radius is reached.  Whichever occurs first
  * @returns A list of summarized nearby POIs
  */
 export async function findNearbyPointsOfInterest(
     position: LatLong | undefined,
     settings: openai.ApiSettings,
-    radius: Number = 10,
+    maxSearchRadius: number = 10000,
+    minResultCount: number = 1,
 ): Promise<PointOfInterest[]> {
     if (position === undefined) {
         return [];
@@ -114,49 +120,60 @@ export async function findNearbyPointsOfInterest(
             return [];
         }
 
-        //let fuzzySearch = `${getEnvSetting(env, EnvVars.AZURE_MAPS_ENDPOINT)}search/fuzzy/json?api-version=1.0&query={lat,long}`
-        //let poi = `${getEnvSetting(env, EnvVars.AZURE_MAPS_ENDPOINT)}search/poi/{format}?api-version=1.0&lat={LAT}&lon={LON}`
-        const nearby = `${getEnvSetting(env, openai.EnvVars.AZURE_MAPS_ENDPOINT)}search/nearby/json?api-version=1.0&lat=${position.latitude}&lon=${position.longitude}&radius=${radius}`;
-        const options: RequestInit = {
-            method: "GET",
-            headers: new Headers({
-                Authorization: `Bearer ${tokenResult.data}`,
-                "x-ms-client-id": `${getEnvSetting(env, openai.EnvVars.AZURE_MAPS_CLIENTID)}`,
-            }),
-        };
+        // increasing radius to search
+        const radii: Array<number> = [5, 10, 25, 50, 100, 1000, 10000];
+        let index: number = 0;
+        
+        do {
+            //let fuzzySearch = `${getEnvSetting(env, EnvVars.AZURE_MAPS_ENDPOINT)}search/fuzzy/json?api-version=1.0&query={lat,long}`
+            //let poi = `${getEnvSetting(env, EnvVars.AZURE_MAPS_ENDPOINT)}search/poi/{format}?api-version=1.0&lat={LAT}&lon={LON}`
+            const nearby = `${getEnvSetting(env, openai.EnvVars.AZURE_MAPS_ENDPOINT)}search/nearby/json?api-version=1.0&lat=${position.latitude}&lon=${position.longitude}&radius=${radii[index]}`;
+            const options: RequestInit = {
+                method: "GET",
+                headers: new Headers({
+                    Authorization: `Bearer ${tokenResult.data}`,
+                    "x-ms-client-id": `${getEnvSetting(env, openai.EnvVars.AZURE_MAPS_CLIENTID)}`,
+                }),
+            };
 
-        // get the result
-        const response = await fetch(nearby, options);
-        let responseBody = await response.json();
+            // get the result
+            const response = await fetch(nearby, options);
+            let responseBody = await response.json();
 
-        // summarize results
-        const results: SearchAddressResult =
-            responseBody as SearchAddressResult;
-        const retVal: PointOfInterest[] = [];
-        results.results.map((result: SearchAddressResultItem) => {
-            if (result.type == "POI") {
-                retVal.push({
-                    name: result.pointOfInterest?.name,
-                    categories: result.pointOfInterest?.categories,
-                    freeFormAddress: result.address.freeformAddress,
-                    position: {
-                        latitude: result.position[0],
-                        longitude: result.position[1],
-                    },
-                });
-            } else {
-                // TODO: handle more result types
-                throw new Error("Unknown nearby search result!");
+            // summarize results
+            // TODO: update any once @azure-rest/maps-search incorporates V1 return types
+            const results = responseBody as any;
+            const retVal: PointOfInterest[] = [];
+            results.results?.map((result: any) => {
+                if (result.type == "POI") {
+                    retVal.push({
+                        name: result.poi?.name,
+                        categories: result.poi?.categories,
+                        freeFormAddress: result.address.freeformAddress,
+                        position: {
+                            latitude: result.position[0],
+                            longitude: result.position[1],
+                        },
+                        distance: result.poi?.dist,
+                    });
+                } else {
+                    // TODO: handle more result types
+                    throw new Error("Unknown nearby search result!");
+                }
+            });
+
+            // TODO: if there are no POI, can we just send back the address?
+            if (retVal.length >= minResultCount) {
+                return retVal;
             }
-        });
 
-        // TODO: if there are no POI, can we just send back the address?
-        // Do we increase POI search radius until we find something in some predefined maximum area?
-        return retVal;
+        } while (index < radii.length && radii[index++] <= maxSearchRadius);
+
     } catch (e) {
         console.warn(`Error performing nearby POI lookup: ${e}`);
-        return [];
     }
+
+    return [];
 }
 
 export async function reverseGeocode(
@@ -189,10 +206,10 @@ export async function reverseGeocode(
         let responseBody = await response.json();
 
         // summarize results
-        const results: GeoJsonFeatureCollection =
-            responseBody as GeoJsonFeatureCollection;
+        // TODO: update any once @azure-rest/maps-search incorporates V1 return types
+        const results = responseBody as any;
         const retVal: ReverseGeocodeAddressLookup[] = [];
-        results.features?.map((result: GeoJsonFeature) => {
+        results.features?.map((result: any) => {
             if (result.properties !== undefined) {
                 retVal.push({
                     address: result.properties.address,
