@@ -229,19 +229,19 @@ export function createActionSchemaFile(
                 // Definition that references another type is the same as a union type with a single type.
                 if (strict && current.comments) {
                     throw new Error(
-                        `Schema Error: ${schemaName}:  entry type comments for '${current.name} are not supported`,
+                        `Schema Error: ${schemaName}: entry type comments for '${current.name}' are not supported`,
                     );
                 }
                 if (current.type.definition === undefined) {
                     throw new Error(
-                        `Schema Error: ${schemaName}:  unresolved type reference '${current.type.name}' in the entry type union`,
+                        `Schema Error: ${schemaName}: unresolved type reference '${current.type.name}' in the entry type union`,
                     );
                 }
                 pending.push(current.type.definition);
                 break;
             default:
                 throw new Error(
-                    `Schema Error: ${schemaName}:  invalid type ${current.type.type} in action schema type ${current.name}`,
+                    `Schema Error: ${schemaName}: invalid type ${current.type.type} in action schema type ${current.name}`,
                 );
         }
     }

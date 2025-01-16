@@ -6,7 +6,7 @@ import {
     AppAgent,
     ParsedCommandParams,
 } from "@typeagent/agent-sdk";
-import { AddAction } from "./schema.js";
+import { TestActions } from "./schema.js";
 import { createActionResult } from "@typeagent/agent-sdk/helpers/action";
 import {
     CommandHandler,
@@ -44,7 +44,10 @@ export function instantiate(): AppAgent {
     };
 }
 
-async function executeAction(action: AddAction, context: ActionContext<void>) {
+async function executeAction(
+    action: TestActions,
+    context: ActionContext<void>,
+) {
     switch (action.actionName) {
         case "add":
             const { a, b } = action.parameters;
