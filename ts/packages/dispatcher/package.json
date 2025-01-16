@@ -13,6 +13,8 @@
   "type": "module",
   "exports": {
     ".": "./dist/index.js",
+    "./rpc/client": "./dist/rpc/client.js",
+    "./rpc/server": "./dist/rpc/server.js",
     "./helpers/console": "./dist/helpers/console.js",
     "./internal": "./dist/internal.js",
     "./explorer": "./dist/explorer.js"

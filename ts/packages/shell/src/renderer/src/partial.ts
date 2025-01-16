@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { CommandCompletionResult } from "agent-dispatcher";
-import { getClientAPI } from "./main";
+import { getDispatcher } from "./main";
 import { SearchMenu, SearchMenuItem } from "./search";
 
 import registerDebug from "debug";
@@ -158,7 +158,7 @@ export class PartialCompletion {
         this.noCompletion = false;
         // Clear the choices
         this.searchMenu.setChoices([]);
-        const completionP = getClientAPI().getCommandCompletion(input);
+        const completionP = getDispatcher().getCommandCompletion(input);
         this.completionP = completionP;
         completionP.then((result) => {
             if (this.completionP !== completionP) {

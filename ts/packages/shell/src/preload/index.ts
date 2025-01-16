@@ -4,51 +4,9 @@
 import { contextBridge, ipcRenderer } from "electron";
 import { electronAPI } from "@electron-toolkit/preload";
 import { ClientAPI, SpeechToken } from "./electronTypes.js"; // Custom APIs for renderer
-import { RequestMetrics } from "agent-dispatcher";
-
-function getProcessShellRequest() {
-    const pendingRequests = new Map<
-        string,
-        {
-            resolve: (metrics?: RequestMetrics) => void;
-            reject: (reason?: any) => void;
-        }
-    >();
-
-    ipcRenderer.on(
-        "process-shell-request-done",
-        (_, id: string, metrics?: RequestMetrics) => {
-            const pendingRequest = pendingRequests.get(id);
-            if (pendingRequest !== undefined) {
-                pendingRequest.resolve(metrics);
-                pendingRequests.delete(id);
-            } else {
-                console.warn(`Pending request ${id} not found`);
-            }
-        },
-    );
-    ipcRenderer.on(
-        "process-shell-request-error",
-        (_, id: string, message: string) => {
-            const pendingRequest = pendingRequests.get(id);
-            if (pendingRequest !== undefined) {
-                pendingRequest.reject(new Error(message));
-                pendingRequests.delete(id);
-            } else {
-                console.warn(
-                    `Pending request ${id} not found for error: ${message}`,
-                );
-            }
-        },
-    );
-
-    return (request: string, id: string, images: string[]) => {
-        return new Promise<RequestMetrics | undefined>((resolve, reject) => {
-            pendingRequests.set(id, { resolve, reject });
-            ipcRenderer.send("process-shell-request", request, id, images);
-        });
-    };
-}
+import { Dispatcher } from "agent-dispatcher";
+import { createGenericChannel } from "agent-rpc/channel";
+import { createDispatcherRpcClient } from "agent-dispatcher/rpc/client";
 
 const api: ClientAPI = {
     onListenEvent: (
@@ -59,40 +17,6 @@ const api: ClientAPI = {
             useLocalWhisper?: boolean,
         ) => void,
     ) => ipcRenderer.on("listen-event", callback),
-
-    processShellRequest: getProcessShellRequest(),
-    getCommandCompletion: (prefix: string) => {
-        return ipcRenderer.invoke("getCommandCompletion", prefix);
-    },
-    getTemplateCompletion: (
-        templateAgentName: string,
-        templateName: string,
-        data: unknown,
-        propertyName: string,
-    ) => {
-        return ipcRenderer.invoke(
-            "getTemplateCompletion",
-            templateAgentName,
-            templateName,
-            data,
-            propertyName,
-        );
-    },
-    getDynamicDisplay(source: string, id: string) {
-        return ipcRenderer.invoke("get-dynamic-display", source, id);
-    },
-    getTemplateSchema: (
-        templateAgentName: string,
-        templateName: string,
-        data: unknown,
-    ) => {
-        return ipcRenderer.invoke(
-            "get-template-schema",
-            templateAgentName,
-            templateName,
-            data,
-        );
-    },
     onUpdateDisplay(callback) {
         ipcRenderer.on("updateDisplay", callback);
     },
@@ -158,6 +82,18 @@ const api: ClientAPI = {
     },
 };
 
+const dispatcherChannel = createGenericChannel((message: any) =>
+    ipcRenderer.send("dispatcher-rpc-call", message),
+);
+
+ipcRenderer.on("dispatcher-rpc-reply", (_event, message) => {
+    dispatcherChannel.message(message);
+});
+
+const dispatcher: Dispatcher = createDispatcherRpcClient(
+    dispatcherChannel.channel,
+);
+
 // Use `contextBridge` APIs to expose Electron APIs to
 // renderer only if context isolation is enabled, otherwise
 // just add to the DOM global.
@@ -165,6 +101,7 @@ if (process.contextIsolated) {
     try {
         contextBridge.exposeInMainWorld("electron", electronAPI);
         contextBridge.exposeInMainWorld("api", api);
+        contextBridge.exposeInMainWorld("dispatcher", dispatcher);
     } catch (error) {
         console.error(error);
     }
@@ -173,4 +110,6 @@ if (process.contextIsolated) {
     window.electron = electronAPI;
     // @ts-ignore (define in dts)
     window.api = api;
+    // @ts-ignore (define in dts)
+    window.dispatcher = dispatcher;
 }
