@@ -14,7 +14,7 @@ import {
     Models,
     ReservedConversationNames,
 } from "./chatMemory.js";
-import { argSourceFileOrFolder } from "./common.js";
+import { argDestFile, argSourceFileOrFolder, argSourceFolder } from "./common.js";
 import { ensureDir, isDirectoryPath } from "typeagent";
 import fs from "node:fs";
 import * as knowLib from "knowledge-processor";
@@ -85,12 +85,26 @@ export function importImageDef(): CommandMetadata {
     };
 }
 
+export function buildImageCountHistogramDef(): CommandMetadata {
+    return {  
+        description: "Builds a time series histogram from images in the supplied folder",
+        args: {
+            sourcePath: argSourceFolder(),            
+        },
+        options: {
+            destPath: argDestFile(),
+        }
+    } 
+}
+
 export function createImageCommands(
     context: ChatContext,
     commands: Record<string, CommandHandler>,
 ): void {
     commands.importImage = importImage;
     commands.importImage.metadata = importImageDef();
+    commands.buildImageCountHistogram = buildImageCountHistogram;
+    commands.buildImageCountHistogram.metadata = buildImageCountHistogramDef();
 
     async function importImage(args: string[], io: InteractiveIo) {
         const namedArgs = parseNamedArguments(args, importImageDef());
@@ -107,6 +121,13 @@ export function createImageCommands(
         } else {
             await indexImage(sourcePath, context);
         }
+    }
+
+    async function buildImageCountHistogram(args: string[], io: InteractiveIo) {
+        const namedArgs = parseNamedArguments(args, importImageDef());
+        let sourcePath: string = namedArgs.sourcePath;
+
+        knowLib.image.buildImageCountHistogram(sourcePath);
     }
 
     async function indexImages(

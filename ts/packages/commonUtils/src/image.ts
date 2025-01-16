@@ -7,6 +7,9 @@ import ExifReader from "exifreader";
 import { MultimodalPromptContent, PromptSection, TextPromptContent } from "typechat";
 import { exifGPSTagToLatLong, findNearbyPointsOfInterest, reverseGeocode } from "./location.js";
 import { openai } from "aiclient";
+import fs from "node:fs";
+import path from "node:path";
+import { parse } from "date-fns";
 
 export class CachedImageWithDetails {
     constructor(
@@ -171,4 +174,44 @@ export async function addImagePromptContent(role: "system" | "user" | "assistant
         role: role,
         content: content
     };
+}
+
+/**
+ * Tries to get the date the image was taken.
+ * It attempts to use the filename and falls back to Exif tags.
+ * 
+ * @param path The path to the image file whose taken date is to be ascertained
+ * @returns either the date.  If the date is undeterimined returns 1/1/1900 00:00:00
+ */
+export function getDateTakenFuzzy(filePath: string, ): Date {
+
+    const fileName: string = path.basename(filePath).toLowerCase();
+    let datePart: string = fileName.substring(0, fileName.indexOf("."));
+    if (fileName.startsWith("img_")) {
+        datePart = fileName.substring(5);
+    }
+
+    let retValue: Date = new Date("1/1/1900 00:00:00");
+    if (datePart.length != 15) {
+        const buffer: Buffer = fs.readFileSync(filePath);
+        const tags: ExifReader.Tags = ExifReader.load(buffer);
+
+        // Try to get the date time from the exif tags
+        if (tags.DateTime?.description) {
+            retValue = parse(tags.DateTime.description, "yyyy:MM:dd hh:mm:ss", new Date());
+        }
+    } else {
+        retValue.setFullYear(
+            parseInt(datePart.substring(0, 4)), 
+            parseInt(datePart.substring(5, 6)),
+            parseInt(datePart.substring(7,8)));
+    
+        retValue.setHours(
+            parseInt(datePart.substring(10,11)),
+            parseInt(datePart.substring(11,12)),
+            parseInt(datePart.substring(13,14))
+        );        
+    }
+    
+    return retValue;
 }

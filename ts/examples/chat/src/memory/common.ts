@@ -78,6 +78,16 @@ export function argSourceFile(defaultValue?: string | undefined): ArgDef {
     };
 }
 
+export function argSourceFolder(
+    defaultValue?: string | undefined,
+): ArgDef {
+    return {
+        description: "Path to source folder",
+        type: "path",
+        defaultValue,
+    };
+}
+
 export function argSourceFileOrFolder(
     defaultValue?: string | undefined,
 ): ArgDef {

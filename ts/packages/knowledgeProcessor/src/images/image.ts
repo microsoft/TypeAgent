@@ -13,14 +13,14 @@ import {
     createConversationManager,
 } from "../conversation/conversationManager.js";
 import path from "path";
-import { createTypeChat } from "typeagent";
+import { createTypeChat, isDirectoryPath } from "typeagent";
 import { createEntitySearchOptions } from "../conversation/entities.js";
 import { Image } from "./imageSchema.js";
 import { KnowledgeResponse } from "../conversation/knowledgeSchema.js";
 import fs from "node:fs";
 import ExifReader from "exifreader";
 import { PromptSection } from "typechat";
-import { addImagePromptContent, CachedImageWithDetails, getMimeType, parseDateString } from "common-utils";
+import { addImagePromptContent, CachedImageWithDetails, getDateTakenFuzzy, getMimeType, isImageFileType, parseDateString } from "common-utils";
 import { KnowledgeExtractor } from "../conversation/knowledge.js";
 
 /**
@@ -234,4 +234,78 @@ export async function loadImage(fileName: string, model: ChatModel): Promise<Ima
     catch {
         return undefined;
     }
+}
+
+interface imageFileAndDate {
+    fileName: string,
+    dateTaken: Date
+}
+
+/**
+ * Builds a histogram of image counts per bucket of time
+ * @param filePath The path of the folder to build a histogram for
+ */
+export function buildImageCountHistogram(filePath: string, recursive: boolean = true, bucketSizeInSeconds: number = 300) {
+
+    // paramter checking
+    if (!fs.existsSync(filePath)) {
+        throw new Error(`The supplied path '${filePath}' does not exist`);
+    } else if (!isDirectoryPath(filePath)) {
+        throw new Error(`The supplied path must be a directory.`);
+    }
+
+    // get all of the images files and the dates they were taken
+    const allImageFiles: imageFileAndDate[] = [];
+    const files: fs.Dirent[] = fs.readdirSync(filePath, { recursive, encoding: null, withFileTypes: true });
+    files.map((file) => {
+
+        if (file.isFile()) {
+            if (isImageFileType(path.extname(file.name))) {
+                allImageFiles.push({
+                    fileName: path.join(file.path, file.name),
+                    dateTaken: getDateTakenFuzzy(path.join(file.path, file.name)),
+                })
+            }
+        }
+    });
+
+    // now sort the images by date/time
+    allImageFiles.sort((a: imageFileAndDate, b: imageFileAndDate) => {
+
+        if (a.dateTaken === undefined && b.dateTaken === undefined) {
+            return 0;
+        } else if (a.dateTaken === undefined && b.dateTaken !== undefined) {
+            return -1
+        } else if (a.dateTaken !== undefined && b.dateTaken === undefined) {
+            return 1;
+        } else {
+            return a.dateTaken!.getTime() - b.dateTaken!.getTime();
+        }        
+    });
+
+    // now bucketize
+    const histogram: number[] = [];
+    const startDate: number = allImageFiles[0].dateTaken.getTime() / 1000;
+    const endDate: number = allImageFiles[allImageFiles.length - 1].dateTaken.getTime() / 1000;
+
+    // how many buckets do we need?
+    const buckets: number = Math.ceil((endDate - startDate) / bucketSizeInSeconds);
+    
+    // now count how many images are in each bucket
+    for(let i = 0; i < allImageFiles.length; i++) {
+        const currentBucketLimit = (histogram.length + 1) * bucketSizeInSeconds + startDate;
+
+        if (allImageFiles[i].dateTaken.getTime() <= currentBucketLimit) {
+            histogram[histogram.length]++;
+        } else {
+            // we've gotten to a new bucket
+            histogram.push(0);
+        }
+    }
+
+    if (histogram.length != buckets) {
+        throw Error("Bucket calculation mismatch!");
+    }
+
+    fs.writeFileSync("histogram.json", JSON.stringify({ startDate, endDate, bucketSizeInSeconds, histogram }))
 }
