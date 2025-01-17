@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation and Henry Lucco.
+// Licensed under the MIT License.
+
 import { conversation } from "knowledge-processor";
 // an object that can provide a KnowledgeResponse structure
 export interface IKnowledgeSource {
