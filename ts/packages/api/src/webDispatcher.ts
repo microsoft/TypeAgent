@@ -87,6 +87,7 @@ export async function createWebDispatcher(): Promise<WebDispatcher> {
     // messages from web clients arrive here
     return {
         connect: (newWebSocket: WebSocket) => {
+            // Close existing connection.  Only support one client at a time.
             ws?.close();
             ws = newWebSocket;
             ws.on("message", async (message: string) => {
