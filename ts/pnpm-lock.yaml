@@ -1362,6 +1362,9 @@ importers:
       agent-dispatcher:
         specifier: workspace:*
         version: link:../dispatcher
+      agent-rpc:
+        specifier: workspace:*
+        version: link:../agentRpc
       aiclient:
         specifier: workspace:*
         version: link:../aiclient
