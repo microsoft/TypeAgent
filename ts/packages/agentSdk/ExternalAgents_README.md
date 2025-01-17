@@ -1,17 +1,17 @@
 # External Agents
 
-The TypeAgent repo includes several example [agents](../../packages/agents/).
+The TypeAgent repo includes several example [agents](../../packages/agents/). You can also build **your own application agents** **_outside_** the TypeAgent repo by using the [agent-sdk](./README.md). You can package these agents as npm packages and surface them in the [TypeAgent Shell](../shell) and [TypeAgent CLI](../cli).
 
-You can also build **your own application agents** **_outside_** the TypeAgent repo by using the [agent-sdk](./README.md) and the [TypeAgent Dispatchers's](../dispatcher/README.md) extensible architecture. You can package these agents as npm packages and surface them in the [TypeAgent Shell](../shell) and [TypeAgent CLI](../cli). This document describes how you can do so.
+This document describes how you can build your own application agents.
 
 ## Prerequisites
 
 Begin by exploring the following:
 
-- **Agent-Sdk Architecture**: Read about the architecture of the [**agent-sdk**](./README.md).
+- **Agent-Sdk**: Read about the architecture of the [**agent-sdk**](./README.md).
 - **Example Agents**:
-  - The [Echo](../../examples/agentExamples/echo/) agent illustrates the basics of building your own application agents.
   - Review agents under the [agents](../agents) directory to understand the structure of the application agents. The [List](../agents/list/) agent provides a good example and template for building an agent.
+  - The [Echo](../../examples/agentExamples/echo/) agent illustrates the basics of building your own application agents.
 
 ## Steps to build an `Echo` agent:
 
@@ -60,9 +60,9 @@ The example [package.json](../../examples//agentExamples//echo/package.json) con
 }
 ```
 
-#### Agent SDK Dependency
+#### Agent SDK dependency
 
-- If you are developing your agent in the TypeAgent repo or workspace, reference the SDK directly from the workspace
+- If you are developing your agent in the TypeAgent repo or workspace, reference the SDK directly
 
 ```
   "dependencies": {
@@ -70,7 +70,7 @@ The example [package.json](../../examples//agentExamples//echo/package.json) con
   }
 ```
 
-- If your agent uses an external NPM registry for agent-sdk, create a `.npmrc` file in the [externalagents](#scaffolding) (see section on [Scaffolding](#scaffolding)) directory with the following contents:
+- If your agent uses an external **npm** registry for agent-sdk, create a `.npmrc` file in the [externalagents](#scaffolding) (see section on [Scaffolding](#scaffolding)) directory with the following contents:
 
 ```
 
@@ -83,23 +83,21 @@ always-auth=true
 
 Every application agent requires the following files to be present in the agent's [**source**](../../examples/agentExamples/echo/src/) directory.
 
-- Agent Manifest File: The manifest file is used to register the agent with the TypeAgent ecosystem.
-- Action Schema File: The action schema file is used to define the actions that the agent can perform.
-- Agent Action Handler: Your code that perform's the agent's actions.
+- **Agent Manifest File**: The manifest file is used to register the agent with the TypeAgent ecosystem.
+- **Action Schema File**: The action schema file is used to define the actions that the agent can perform.
+- **Agent Action Handler**: Your code that perform's the agent's actions.
 
 **Agent Manifest File** : [`echoManifest.json`](../../examples/agentExamples/echo/src/echoManifest.json)
 
-```
-
+```json
 {
-"emojiChar": "🦜",
-"schema": {
-"description": "A basic echo agent.",
-"schemaFile": "echoActionsSchema.ts",
-"schemaType": "EchoAction"
+  "emojiChar": "🦜",
+  "schema": {
+    "description": "A basic echo agent.",
+    "schemaFile": "echoActionsSchema.ts",
+    "schemaType": "EchoAction"
+  }
 }
-}
-
 ```
 
 **Agent Action Schema File** : [`echoActionsSchema.ts`](../../examples//agentExamples/echo/src/echoActionsSchema.ts)
