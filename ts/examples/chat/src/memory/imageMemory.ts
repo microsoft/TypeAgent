@@ -8,6 +8,7 @@ import {
     InteractiveIo,
     NamedArgs,
     parseNamedArguments,
+    StopWatch,
 } from "interactive-app";
 import {
     ChatContext,
@@ -21,6 +22,8 @@ import * as knowLib from "knowledge-processor";
 import path from "node:path";
 import { sqlite } from "memory-providers";
 import { isImageFileType } from "common-utils";
+import { TokenCounter } from "aiclient";
+import { CompletionUsageStats } from "../../../../packages/aiclient/dist/openai.js";
 
 export async function createImageMemory(
     models: Models,
@@ -116,11 +119,23 @@ export function createImageCommands(
             return;
         }
 
+        const clock: StopWatch = new StopWatch();
+        const tokenCountStart: CompletionUsageStats = TokenCounter.getInstance().total;
+
         if (isDir) {
             await indexImages(namedArgs, sourcePath, context);
         } else {
             await indexImage(sourcePath, context);
         }
+        
+        const tokenCountFinish: CompletionUsageStats = TokenCounter.getInstance().total;
+
+        clock.stop();
+        console.log(`Total Duration: ${clock.elapsedSeconds} seconds`);
+        console.log(`Prompt Token Consupmtion: ${tokenCountFinish.prompt_tokens - tokenCountStart.prompt_tokens}`);
+        console.log(`Completion Token Consupmtion: ${tokenCountFinish.completion_tokens - tokenCountStart.completion_tokens}`);
+        console.log(`Total Tokens: ${tokenCountFinish.total_tokens - tokenCountStart.total_tokens}`);
+
     }
 
     async function buildImageCountHistogram(args: string[], io: InteractiveIo) {
