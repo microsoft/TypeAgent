@@ -40,7 +40,11 @@ export class BrowserAgentIpc {
                 } catch {}
             }
 
-            this.webSocket = await createWebSocket();
+            this.webSocket = await createWebSocket(
+                "browser",
+                "client",
+                "inlineBrowser",
+            );
             if (!this.webSocket) {
                 resolve(undefined);
                 return;
