@@ -147,7 +147,7 @@ const defaultSessionConfig: SessionConfig = {
         schema: {
             generation: true,
             optimize: {
-                enabled: true,
+                enabled: false,
                 numInitialActions: 5,
             },
         },

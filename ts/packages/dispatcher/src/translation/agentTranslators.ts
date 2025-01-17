@@ -138,25 +138,25 @@ export function getAppAgentName(schemaName: string) {
     return schemaName.split(".")[0];
 }
 
-const changeAssistantActionTypeName = "ChangeAssistantAction";
-const changeAssistantActionName = "changeAssistantAction";
-export type ChangeAssistantAction = {
-    actionName: "changeAssistantAction";
+const additionalActionLookupTypeName = "AdditionalActionLookupAction";
+export const additionalActionLookup = "additionalActionLookup";
+export type AdditionalActionLookupAction = {
+    actionName: "additionalActionLookup";
     parameters: {
-        assistant: string;
+        schemaName: string;
         request: string; // this is constrained to active translators in the LLM schema
     };
 };
 
-export function isChangeAssistantAction(
+export function isAdditionalActionLookupAction(
     action: AppAction,
-): action is ChangeAssistantAction {
-    return action.actionName === changeAssistantActionName;
+): action is AdditionalActionLookupAction {
+    return action.actionName === additionalActionLookup;
 }
 
-const changeAssistantTypeComments = [
-    ` Use this ${changeAssistantActionTypeName} if the request is for an action that should be handled by a different assistant.`,
-    " The assistant will be chosen based on the assistant parameter",
+const additionalActionLookupTypeComments = [
+    ` Use this ${additionalActionLookupTypeName} to look up additional actions in schema groups`,
+    " The schema group will be chosen based on the schemaName parameter",
 ];
 export function createChangeAssistantActionSchema(
     provider: ActionConfigProvider,
@@ -176,23 +176,23 @@ export function createChangeAssistantActionSchema(
         return undefined;
     }
 
-    const assistantParameterComments = translators.map(
+    const schemaNameParameterComments = translators.map(
         ([name, translator]) => ` ${name} - ${translator.description}`,
     );
     const obj: ActionSchemaObject = sc.obj({
-        actionName: sc.string(changeAssistantActionName),
+        actionName: sc.string(additionalActionLookup),
         parameters: sc.obj({
-            assistant: sc.field(
+            schemaName: sc.field(
                 sc.string(translators.map(([name]) => name)),
-                assistantParameterComments,
+                schemaNameParameterComments,
             ),
             request: sc.string(),
         }),
     } as const);
     return sc.intf(
-        changeAssistantActionTypeName,
+        additionalActionLookupTypeName,
         obj,
-        changeAssistantTypeComments,
+        additionalActionLookupTypeComments,
         true,
     );
 }
@@ -212,7 +212,7 @@ function getChangeAssistantSchemaDef(
     }
     return {
         kind: "inline",
-        typeName: changeAssistantActionTypeName,
+        typeName: additionalActionLookupTypeName,
         schema: generateSchemaTypeDefinition(definition, { exact: true }),
     };
 }
