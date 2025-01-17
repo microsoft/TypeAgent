@@ -1,8 +1,8 @@
 # External Agents
 
-The TypeAgent repo includes several example [agents](../../packages/agents/). You can also build **your own application agents** **_outside_** the TypeAgent repo by using the [agent-sdk](./README.md). You can package these agents as npm packages and surface them in the [TypeAgent Shell](../shell) and [TypeAgent CLI](../cli).
+The TypeAgent repo includes several example [agents](../../packages/agents/). You can also build **your own application agents** **_outside_** the TypeAgent repo by using the [agent-sdk](./README.md). You can package these **_external_** agents as npm packages and surface them in the [TypeAgent Shell](../shell) and [TypeAgent CLI](../cli).
 
-This document describes how you can build your own application agents.
+This document describes how you can build your own external application agents.
 
 ## Prerequisites
 
@@ -10,8 +10,8 @@ Begin by exploring the following:
 
 - **Agent-Sdk**: Read about the architecture of the [**agent-sdk**](./README.md).
 - **Example Agents**:
-  - Review agents under the [agents](../agents) directory to understand the structure of the application agents. The [List](../agents/list/) agent provides a good example and template for building an agent.
-  - The [Echo](../../examples/agentExamples/echo/) agent illustrates the basics of building your own application agents.
+  - Review agents under the [agents](../agents) directory. The [List](../agents/list/) agent provides a good example and template for building an agent.
+  - The [Echo](../../examples/agentExamples/echo/) agent illustrates the basics of building your own external application agents.
 
 ## Steps to build an `Echo` agent:
 
