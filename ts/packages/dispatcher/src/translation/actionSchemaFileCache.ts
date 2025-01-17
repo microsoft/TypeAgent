@@ -117,6 +117,7 @@ export class ActionSchemaFileCache {
             actionConfig.schemaType,
             fullPath,
             schemaConfig,
+            true,
         );
         this.actionSchemaFiles.set(actionConfig.schemaName, parsed);
 

@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { IdGenerator, getClientAPI } from "./main";
+import { IdGenerator, getClientAPI, getDispatcher } from "./main";
 import { ChatInput, ExpandableTextarea } from "./chatInput";
 import { iconCheckMarkCircle, iconX } from "./icon";
 import {
@@ -274,8 +274,9 @@ export class ChatView {
                 // Only call getDynamicDisplay once if there are multiple
                 let result = currentDisplay.get(`${source}:${displayId}`);
                 if (result === undefined) {
-                    result = await getClientAPI().getDynamicDisplay(
+                    result = await getDispatcher().getDynamicDisplay(
                         source,
+                        "html",
                         displayId,
                     );
                     currentDisplay.set(`${source}:${displayId}`, result);
@@ -390,7 +391,7 @@ export class ChatView {
             this.settingsView!,
             request,
             this.messageDiv,
-            getClientAPI().processShellRequest(requestText, id, images),
+            getDispatcher().processCommand(requestText, id, images),
             this.agents,
             this.hideMetrics,
         );

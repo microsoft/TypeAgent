@@ -17,10 +17,11 @@ import { SettingsView } from "./settingsView";
 import { HelpView } from "./helpView";
 import { MetricsView } from "./metricsView";
 import { ShellSettings } from "../../main/shellSettings";
-import { AppAgentEvent } from "@typeagent/agent-sdk";
 import { CameraView } from "./cameraView";
-import { createWebSocket, webapi } from "./webSocketAPI";
+import { createWebSocket, webapi, webdispatcher } from "./webSocketAPI";
 import * as jose from "jose";
+import { AppAgentEvent } from "@typeagent/agent-sdk";
+import { Dispatcher } from "agent-dispatcher";
 
 export function getClientAPI(): ClientAPI {
     if (globalThis.api !== undefined) {
@@ -28,6 +29,13 @@ export function getClientAPI(): ClientAPI {
     } else {
         return getWebSocketAPI();
     }
+}
+
+export function getDispatcher(): Dispatcher {
+    if (globalThis.dispatcher !== undefined) {
+        return globalThis.dispatcher;
+    }
+    return getWebDispatcher();
 }
 
 export function getWebSocketAPI(): ClientAPI {
@@ -38,6 +46,14 @@ export function getWebSocketAPI(): ClientAPI {
     }
 
     return globalThis.webApi;
+}
+
+export function getWebDispatcher(): Dispatcher {
+    if (globalThis.webDispatcher === undefined) {
+        globalThis.webDispatcher = webdispatcher;
+    }
+
+    return globalThis.webDispatcher;
 }
 
 function addEvents(

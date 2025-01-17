@@ -40,6 +40,8 @@ import {
     closeLocalWhisper,
     isLocalWhisperEnabled,
 } from "./localWhisperCommandHandler.js";
+import { createDispatcherRpcServer } from "agent-dispatcher/rpc/server";
+import { createGenericChannel } from "agent-rpc/channel";
 
 console.log(auth.AzureTokenScopes.CogServices);
 
@@ -632,7 +634,8 @@ async function initialize() {
     // Set app user model id for windows
     electronApp.setAppUserModelId("com.electron");
 
-    const dispatcher = await createDispatcher("shell", {
+    // Set up dispatcher
+    const newDispatcher = await createDispatcher("shell", {
         appAgentProviders: [
             shellAgentProvider,
             ...getDefaultAppAgentProviders(),
@@ -653,17 +656,17 @@ async function initialize() {
         if (typeof text !== "string" || typeof id !== "string") {
             throw new Error("Invalid request");
         }
-        debugShell(dispatcher.getPrompt(), text);
+        debugShell(newDispatcher.getPrompt(), text);
 
-        const metrics = await dispatcher.processCommand(text, id, images);
+        const metrics = await newDispatcher.processCommand(text, id, images);
         chatView?.webContents.send("send-demo-event", "CommandProcessed");
-        const newSettingSummary = dispatcher.getSettingSummary();
+        const newSettingSummary = newDispatcher.getSettingSummary();
         if (newSettingSummary !== settingSummary) {
             settingSummary = newSettingSummary;
             chatView?.webContents.send(
                 "setting-summary-changed",
                 newSettingSummary,
-                dispatcher.getTranslatorNameToEmojiMap(),
+                newDispatcher.getTranslatorNameToEmojiMap(),
             );
 
             mainWindow?.setTitle(
@@ -674,63 +677,23 @@ async function initialize() {
         return metrics;
     }
 
+    const dispatcher = {
+        ...newDispatcher,
+        processCommand: processShellRequest,
+    };
+
+    // Set up the RPC
+    const dispatcherChannel = createGenericChannel((message: any) => {
+        chatView?.webContents.send("dispatcher-rpc-reply", message);
+    });
+    ipcMain.on("dispatcher-rpc-call", (_event, message) => {
+        dispatcherChannel.message(message);
+    });
+    createDispatcherRpcServer(dispatcher, dispatcherChannel.channel);
+
     if (ShellSettings.getinstance().agentGreeting) {
         processShellRequest("@greeting", "agent-0", []);
     }
-
-    ipcMain.on(
-        "process-shell-request",
-        (_event, text: string, id: string, images: string[]) => {
-            processShellRequest(text, id, images)
-                .then((metrics) =>
-                    chatView?.webContents.send(
-                        "process-shell-request-done",
-                        id,
-                        metrics,
-                    ),
-                )
-                .catch((error) => {
-                    chatView?.webContents.send(
-                        "process-shell-request-error",
-                        id,
-                        error.message,
-                    );
-                });
-        },
-    );
-    ipcMain.handle("getCommandCompletion", async (_event, prefix: string) => {
-        return dispatcher.getCommandCompletion(prefix);
-    });
-    ipcMain.handle(
-        "getTemplateCompletion",
-        async (
-            _event,
-            templateAgentName: string,
-            templateName: string,
-            data: unknown,
-            propertyName: string,
-        ) => {
-            return dispatcher.getTemplateCompletion(
-                templateAgentName,
-                templateName,
-                data,
-                propertyName,
-            );
-        },
-    );
-    ipcMain.handle("get-dynamic-display", async (_event, appAgentName, id) =>
-        dispatcher.getDynamicDisplay(appAgentName, "html", id),
-    );
-    ipcMain.handle(
-        "get-template-schema",
-        async (_event, templateAgentName, templateName, data) => {
-            return dispatcher.getTemplateSchema(
-                templateAgentName,
-                templateName,
-                data,
-            );
-        },
-    );
     ipcMain.on("dom ready", async () => {
         settingSummary = dispatcher.getSettingSummary();
         chatView?.webContents.send(

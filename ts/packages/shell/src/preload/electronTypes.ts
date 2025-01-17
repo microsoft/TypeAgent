@@ -2,20 +2,14 @@
 // Licensed under the MIT License.
 
 import { ElectronAPI } from "@electron-toolkit/preload";
-import {
-    AppAgentEvent,
-    DisplayAppendMode,
-    DynamicDisplay,
-    TemplateSchema,
-} from "@typeagent/agent-sdk";
+import { AppAgentEvent, DisplayAppendMode } from "@typeagent/agent-sdk";
 import { ShellSettings } from "../main/shellSettings.js";
 import {
     TemplateEditConfig,
     IAgentMessage,
-    CommandCompletionResult,
     NotifyExplainedData,
+    Dispatcher,
 } from "agent-dispatcher";
-import { RequestMetrics } from "agent-dispatcher";
 
 export type SpeechToken = {
     token: string;
@@ -56,26 +50,6 @@ export interface ClientAPI {
             useLocalWhisper?: boolean,
         ) => void,
     ) => void;
-    processShellRequest: (
-        request: string,
-        id: string,
-        images: string[],
-    ) => Promise<RequestMetrics | undefined>;
-    getCommandCompletion: (
-        input: string,
-    ) => Promise<CommandCompletionResult | undefined>;
-    getTemplateCompletion: (
-        templateAgentName: string,
-        templateName: string,
-        data: unknown,
-        propertyName: string,
-    ) => Promise<string[]>;
-    getDynamicDisplay: (source: string, id: string) => Promise<DynamicDisplay>;
-    getTemplateSchema: (
-        templateAgentName: string,
-        templateName: string,
-        data: unknown,
-    ) => Promise<TemplateSchema>;
     onUpdateDisplay(
         callback: (
             e: Electron.IpcRendererEvent,
@@ -191,6 +165,7 @@ export interface ClientAPI {
 
 export interface ElectronWindowFields {
     api: ClientAPI;
+    dispatcher: Dispatcher;
     electron: ElectronAPI;
 }
 
