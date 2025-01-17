@@ -1,6 +1,8 @@
-# Vault
+# Measure
 
-Vault is an example agent that maintains an object database of strongly typed objects.
+Measure is an example agent that implements actions to add and search a database of measurements. Examples: steps, pushups. cups of coffee, etc. Data is stored in a sqlite database.
+
+Work in progress.
 
 ## Installation
 
