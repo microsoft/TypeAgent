@@ -28,7 +28,6 @@ The example [package.json](../../examples//agentExamples//echo/package.json) con
   "name": "echo",
   "version": "0.0.1",
   "description": "Echo example for TypeAgent",
-  "main": "index.ts",
   "license": "MIT",
   "author": "Microsoft",
   "type": "module",

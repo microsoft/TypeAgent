@@ -1,17 +1,17 @@
 {
   "name": "echo",
   "version": "0.0.1",
+  "private": true,
   "description": "Echo example for TypeAgent",
-  "main": "index.ts",
+  "homepage": "https://github.com/microsoft/TypeAgent#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/microsoft/TypeAgent.git",
+    "directory": "ts/examples/agentExamples/echo"
+  },
   "license": "MIT",
   "author": "Microsoft",
   "type": "module",
-  "homepage": "https://github.com/microsoft/TypeAgent#readme",
-  "repository": {
-    "directory": "ts/examples/agentExamples/echo",
-    "type": "git",
-    "url": "https://github.com/microsoft/TypeAgent.git"
-  },
   "exports": {
     "./agent/handlers": "./dist/echoActionHandler.js",
     "./agent/manifest": "./dist/echoManifest.json"
