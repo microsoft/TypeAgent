@@ -203,13 +203,13 @@ export function getDateTakenFuzzy(filePath: string, ): Date {
     } else {
         retValue.setFullYear(
             parseInt(datePart.substring(0, 4)), 
-            parseInt(datePart.substring(5, 6)),
-            parseInt(datePart.substring(7,8)));
+            parseInt(datePart.substring(4, 6)) - 1,
+            parseInt(datePart.substring(6, 8)));
     
         retValue.setHours(
-            parseInt(datePart.substring(10,11)),
-            parseInt(datePart.substring(11,12)),
-            parseInt(datePart.substring(13,14))
+            parseInt(datePart.substring(9, 11)),
+            parseInt(datePart.substring(11, 13)),
+            parseInt(datePart.substring(13, 15))
         );        
     }
     
