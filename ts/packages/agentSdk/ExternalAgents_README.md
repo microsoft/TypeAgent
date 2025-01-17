@@ -19,8 +19,6 @@ For the rest of the documentation, we will assume that the external agent is nam
 
 ### Step 1: Create a new package for the agent
 
-Add `agent-sdk` as a dependency in the package.json file.
-
 **package.json** : Run `npm init -y` to create a new package.
 
 The example [package.json](../../examples//agentExamples//echo/package.json) contains references to **handler**, **schema** and **manifest** files. **Step 2** explains what they are.
@@ -61,6 +59,8 @@ The example [package.json](../../examples//agentExamples//echo/package.json) con
 ```
 
 #### Agent SDK dependency
+
+Add `agent-sdk` as a dependency in the package.json file.
 
 - If you are developing your agent in the TypeAgent repo or workspace, reference the SDK directly
 
