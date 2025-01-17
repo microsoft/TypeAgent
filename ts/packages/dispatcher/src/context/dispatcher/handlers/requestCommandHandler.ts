@@ -284,7 +284,7 @@ async function translateRequestWithSchema(
                         if (!needAllAction(subaction.action, schemaName)) {
                             continue;
                         }
-                        // REVIEW: the subaction may not be 
+                        // REVIEW: the subaction may not be
                         const translator = getTranslatorForSchema(
                             systemContext,
                             schemaName,
