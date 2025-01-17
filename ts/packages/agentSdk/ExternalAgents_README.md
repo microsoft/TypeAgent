@@ -36,7 +36,6 @@ The example [package.json](../../examples//agentExamples//echo/package.json) con
     "./agent/handlers": "./dist/echoActionHandler.js"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
     "build": "npm run tsc  && npm run copy:manifest",
     "postbuild": "copyfiles -u 1 \"src/**/*Schema*.ts\" \"src/**/*Manifest*.json\" dist",
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
