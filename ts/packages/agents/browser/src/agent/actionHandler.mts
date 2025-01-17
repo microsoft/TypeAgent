@@ -83,7 +83,7 @@ async function updateBrowserContext(
       return;
     }
 
-    const webSocket = await createWebSocket();
+    const webSocket = await createWebSocket("browser", "dispatcher");
     if (webSocket) {
       context.agentContext.webSocket = webSocket;
       context.agentContext.browserConnector = new BrowserConnector(context);

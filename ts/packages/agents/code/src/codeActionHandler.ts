@@ -52,7 +52,7 @@ async function updateCodeContext(
             return;
         }
 
-        const webSocket = await createWebSocket();
+        const webSocket = await createWebSocket("code", "dispatcher");
         if (webSocket) {
             agentContext.webSocket = webSocket;
             agentContext.pendingCall = new Map();

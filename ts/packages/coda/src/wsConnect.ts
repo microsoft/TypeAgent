@@ -20,7 +20,7 @@ async function ensureWebsocketConnected() {
         return;
     }
 
-    webSocket = await createWebSocket();
+    webSocket = await createWebSocket("code", "client");
     if (!webSocket) {
         return;
     }
