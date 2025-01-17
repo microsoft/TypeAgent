@@ -35,7 +35,7 @@ export type RemoveMeasurementAction = {
 export type MeasurementDateTime = string;
 
 export type MeasurementFilter = {
-    types: string[]; // Measurements types to return
+    types?: string[] | undefined; // Measurements types to return
     // in this value range
     valueRange?: MeasurementRange;
     // in this time range
@@ -48,8 +48,9 @@ export type MeasurementTimeRange = {
 };
 
 export type MeasurementRange = {
-    start?: MeasurementQuantity;
-    end?: MeasurementQuantity;
+    start?: number;
+    end?: number;
+    units: MeasurementUnits;
 };
 
 export type MeasurementUnits =
@@ -81,7 +82,7 @@ export type MeasurementQuantity = {
 export type Measurement = {
     // Use "new" for new Items
     // Otherwise MUST use an EXISTING id to update an existing item
-    id?: string | "new" | undefined;
+    id?: number | "new" | undefined;
     // steps, weight, length, calories etc
     type: string;
     when?: MeasurementDateTime;

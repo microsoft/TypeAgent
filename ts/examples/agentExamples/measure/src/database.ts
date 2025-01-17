@@ -21,3 +21,27 @@ async function deleteDatabase(filePath: string): Promise<void> {
     await removeFile(filePath + "-shm");
     await removeFile(filePath + "-wal");
 }
+
+export function sql_makeInClause(values: any[]): string {
+    let sql = "";
+    for (let i = 0; i < values.length; ++i) {
+        if (i > 0) {
+            sql += ", ";
+        }
+        sql += `'${values[i]}'`;
+    }
+    return sql;
+}
+
+export function sql_appendCondition(
+    sql: string,
+    condition: string,
+    and: boolean = true,
+) {
+    if (sql) {
+        sql += and ? " AND " : " OR ";
+    }
+    sql += condition;
+    sql += "\n";
+    return sql;
+}

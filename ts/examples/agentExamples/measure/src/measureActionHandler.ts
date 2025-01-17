@@ -11,16 +11,25 @@ import {
 } from "@typeagent/agent-sdk";
 import {
     createActionResultFromError,
+    createActionResultFromHtmlDisplay,
     createActionResultFromTextDisplay,
 } from "@typeagent/agent-sdk/helpers/action";
 import {
     PutMeasurementAction,
     MeasurementAction,
     Measurement,
+    MeasurementFilter,
+    MeasurementRange,
+    MeasurementTimeRange,
+    GetMeasurementAction,
 } from "./measureActionsSchema.js";
 import path from "path";
 import os from "node:os";
-import { createDatabase } from "./database.js";
+import {
+    createDatabase,
+    sql_appendCondition,
+    sql_makeInClause,
+} from "./database.js";
 import { dateTime, ensureDir } from "typeagent";
 
 export function instantiate(): AppAgent {
@@ -67,8 +76,13 @@ export function createMeasurementAgent(): AppAgent {
         //let displayText: string | undefined = undefined;
         switch (measureAction.actionName) {
             case "getMeasurement":
+                result = await handleGetMeasurements(
+                    context,
+                    measureAction as GetMeasurementAction,
+                );
+                break;
             case "putMeasurement":
-                result = await handlePutVaultItems(
+                result = await handlePutMeasurements(
                     context,
                     measureAction as PutMeasurementAction,
                 );
@@ -83,14 +97,28 @@ export function createMeasurementAgent(): AppAgent {
         return result;
     }
 
-    async function handlePutVaultItems(
+    async function handleGetMeasurements(
+        context: MeasureContext,
+        action: GetMeasurementAction,
+    ) {
+        const filter = action.parameters.filter;
+        const matches = context.store!.get(filter);
+        if (!matches || matches.length === 0) {
+            return createActionResultFromTextDisplay("No measurements found");
+        }
+        const html = measurementsToHtml(matches);
+        const csv = measurementsToCsv(matches);
+        return createActionResultFromHtmlDisplay(html, csv);
+    }
+
+    async function handlePutMeasurements(
         context: MeasureContext,
         action: PutMeasurementAction,
     ) {
         const items = action.parameters.items;
         items.forEach((m) => context.store!.put(m));
         return createActionResultFromTextDisplay(
-            `Added ${items.length} items to measurements`,
+            `Added ${items.length} measurements`,
         );
     }
 
@@ -104,16 +132,56 @@ export function createMeasurementAgent(): AppAgent {
         const basePath = path.join(os.homedir(), ".typeagent");
         return path.join(basePath, "measures");
     }
+
+    function measurementsToHtml(measures: Measurement[]) {
+        let html = "<table>";
+        html +=
+            "<th><td>Type</td><td>When</td><td>Value</td><td>Units</td></th>";
+        for (const m of measures) {
+            html += measurementToHtml(m);
+        }
+        html += "</table>";
+        return html;
+    }
+
+    function measurementToHtml(measure: Measurement) {
+        let html = "";
+        html += `<td>${measure.type}</td>`;
+        html += `<td>${measure.when}</td>`;
+        html += `<td>${measure.value.value}</td>`;
+        html += `<td>${measure.value.units}</td>`;
+        return html;
+    }
+
+    function measurementsToCsv(measures: Measurement[]) {
+        let csvHeader = "Type, When, Value, Units\n";
+        let rows = measures.map((m) => measurementToCsv(m)).join("\n");
+        return csvHeader + rows;
+    }
+
+    function measurementToCsv(measure: Measurement) {
+        return `${measure.type}, ${measure.when}, ${measure.value.value}, ${measure.value.units}`;
+    }
 }
 
 interface MeasurementTable {
-    put(measurement: Measurement): Promise<void>;
+    get(filter: MeasurementFilter): Measurement[];
+    put(measurement: Measurement): void;
 }
 
 async function createMeasurementTable(
     filePath: string,
     ensureExists: boolean,
 ): Promise<MeasurementTable> {
+    type MeasurementRow = {
+        id: number;
+        type: string;
+        timestamp: string;
+        whenDate: string;
+        value: number;
+        units: string;
+    };
+
     const db = await createDatabase(filePath, false);
     const schemaSql = `
     CREATE TABLE IF NOT EXISTS measurements (
@@ -136,10 +204,31 @@ async function createMeasurementTable(
     );
 
     return {
+        get,
         put,
     };
 
-    async function put(measurement: Measurement): Promise<void> {
+    function get(filter: MeasurementFilter): Measurement[] {
+        const sql = filterToSql(filter);
+        const stmt = db.prepare(sql);
+        let rows = stmt.all();
+        let measurements: Measurement[] = [];
+        for (const row of rows) {
+            const mRow: MeasurementRow = row as MeasurementRow;
+            measurements.push({
+                id: mRow.id,
+                type: mRow.type,
+                when: mRow.whenDate,
+                value: {
+                    value: mRow.value,
+                    units: mRow.units,
+                },
+            });
+        }
+        return measurements;
+    }
+
+    function put(measurement: Measurement): void {
         const when = measurement.when ? new Date(measurement.when) : new Date();
         const timestamp = dateTime.timestampString(when);
         if (!measurement.id || measurement.id === "new") {
@@ -151,5 +240,70 @@ async function createMeasurementTable(
                 measurement.value.units,
             );
         }
+    }
+
+    function filterToSql(filter: MeasurementFilter): string {
+        let sql = "SELECT * FROM measurements\n";
+        let sqlWhere = "";
+        if (filter.types && filter.types.length > 0) {
+            sqlWhere = sql_appendCondition(
+                sqlWhere,
+                `type IN (${sql_makeInClause(filter.types)})`,
+            );
+        }
+        if (filter.valueRange) {
+            sqlWhere = sql_appendCondition(
+                sqlWhere,
+                measurementRangeToSql(filter.valueRange),
+            );
+        }
+        if (filter.timeRange) {
+            sqlWhere = sql_appendCondition(
+                sqlWhere,
+                timeRangeToSql(filter.timeRange),
+            );
+        }
+        if (sqlWhere) {
+            sql += `WHERE ${sqlWhere}`;
+        }
+        sql += "ORDER BY type ASC, timestamp ASC";
+        return sql;
+    }
+
+    function measurementRangeToSql(range: MeasurementRange) {
+        let sql = "";
+        if (range.start) {
+            sql += `value >= ${range.start}`;
+        }
+        if (range.end) {
+            if (sql) {
+                sql += " AND ";
+            }
+            sql += `value <= ${range.end}`;
+        }
+        if (sql) {
+            sql += ` AND units = ${range.units}`;
+        }
+        return sql;
+    }
+
+    function timeRangeToSql(range: MeasurementTimeRange) {
+        const startAt = range.start
+            ? dateTime.timestampString(new Date(range.start))
+            : undefined;
+        const endAt = range.end
+            ? dateTime.timestampString(new Date(range.end))
+            : undefined;
+        let sql = "";
+        if (startAt) {
+            sql += `timestamp >= ${startAt}`;
+        }
+        if (endAt) {
+            if (sql) {
+                sql += " AND ";
+            }
+            sql += `timestamp <= ${endAt}`;
+        }
+        return sql;
     }
 }
