@@ -56,8 +56,8 @@ function createModelContext(): ModelContext {
     return { chatModel, answerMaker, miniModel, chunkSelector };
 }
 
-// Answer a question; called from request and from answerQuestion action
-export async function answerQuestion(
+// Answer a question; called from request and from searchCode action
+export async function searchCode(
     context: SpelunkerContext,
     input: string,
 ): Promise<ActionResult> {
