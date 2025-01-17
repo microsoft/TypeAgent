@@ -1,28 +1,31 @@
 {
-  "name": "vault",
+  "name": "measure",
   "version": "0.0.1",
-  "description": "Vault is an agent that maintains a simple database of entities.",
+  "description": "Measure is an agent that maintains a simple database of measurements.",
   "main": "index.ts",
   "license": "MIT",
   "author": "Microsoft",
   "type": "module",
   "exports": {
-    "./agent/manifest": "./dist/agent/vaultManifest.json",
-    "./agent/handlers": "./dist/agent/vaultActionHandler.js"
+    "./agent/manifest": "./dist/measureManifest.json",
+    "./agent/handlers": "./dist/measureActionHandler.js"
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "npm run tsc",
-    "postbuild": "copyfiles -u 1 \"src/**/*Schema*.ts\" \"src/**/*.manifest\" dist",
+    "postbuild": "copyfiles -u 1 \"src/**/*Schema*.ts\" \"src/**/*Manifest*.json\" dist",
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
     "prettier": "prettier --check . --ignore-path ../../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../../.prettierignore",
     "tsc": "tsc -b"
   },
   "dependencies": {
-    "@typeagent/agent-sdk": "workspace:*"
+    "@typeagent/agent-sdk": "workspace:*",
+    "better-sqlite3": "11.5.0",
+    "typeagent": "workspace:*"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "7.6.11",
     "copyfiles": "^2.4.1",
     "prettier": "^3.2.5",
     "rimraf": "^5.0.5",

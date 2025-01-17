@@ -202,6 +202,8 @@ async function handleEchoAction(
 
 ![alt text](./imgs/image-files.png)
 
+<a id="install_agent"></a>
+
 ### Step 3: Install your Agent
 
 <a id="profiles"></a>

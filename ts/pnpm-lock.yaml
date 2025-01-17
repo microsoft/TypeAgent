@@ -33,9 +33,6 @@ importers:
       copyfiles:
         specifier: ^2.4.1
         version: 2.4.1
-      mkdirp:
-        specifier: ^3.0.1
-        version: 3.0.1
       prettier:
         specifier: ^3.2.5
         version: 3.2.5
@@ -46,12 +43,21 @@ importers:
         specifier: ^5.4.2
         version: 5.4.3
 
-  examples/agentExamples/vault:
+  examples/agentExamples/measure:
     dependencies:
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../../../packages/agentSdk
+      better-sqlite3:
+        specifier: 11.5.0
+        version: 11.5.0
+      typeagent:
+        specifier: workspace:*
+        version: link:../../../packages/typeagent
     devDependencies:
+      '@types/better-sqlite3':
+        specifier: 7.6.11
+        version: 7.6.11
       copyfiles:
         specifier: ^2.4.1
         version: 2.4.1
