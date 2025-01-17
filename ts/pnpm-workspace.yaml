@@ -3,4 +3,5 @@ packages:
   - "packages/agents/*"
   - "packages/agents/agentUtils/*"
   - "examples/*"
+  - "examples/agentExamples/*"
   - "tools"

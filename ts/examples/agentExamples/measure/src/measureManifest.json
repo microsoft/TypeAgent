@@ -1,0 +1,9 @@
+{
+  "emojiChar": "📏",
+  "description": "Agent to record and manage a database of your measurements",
+  "schema": {
+    "description": "Actions to add, remove, list and search a database of measurements",
+    "schemaFile": "measureActionsSchema.ts",
+    "schemaType": "MeasurementAction"
+  }
+}
