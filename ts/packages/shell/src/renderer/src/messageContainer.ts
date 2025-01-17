@@ -14,7 +14,6 @@ import { setContent } from "./setContent";
 import { ChatView } from "./chatView";
 import { iconCheckMarkCircle, iconRoadrunner, iconX } from "./icon";
 import { TemplateEditor } from "./templateEditor";
-import { getClientAPI } from "./main";
 import { SettingsView } from "./settingsView";
 
 function createTimestampDiv(timestamp: Date, className: string) {
@@ -257,10 +256,7 @@ export class MessageContainer {
         );
     }
 
-    public proposeAction(
-        proposeActionId: number,
-        actionTemplates: TemplateEditConfig,
-    ) {
+    public async proposeAction(actionTemplates: TemplateEditConfig) {
         // use this div to show the proposed action
         const actionContainer = document.createElement("div");
         actionContainer.className = "action-container";
@@ -276,73 +272,72 @@ export class MessageContainer {
             span.innerText = text;
             return span;
         };
-        const confirm = () => {
-            const choices: InputChoice[] = [
-                {
-                    text: "Accept",
-                    element: createTextSpan("✓"),
-                    selectKey: ["y", "Y", "Enter"],
-                    value: true,
-                },
-                {
-                    text: "Edit",
-                    element: createTextSpan("✎"),
-                    selectKey: ["n", "N", "Delete"],
-                    value: undefined,
-                },
-                {
-                    text: "Cancel",
-                    element: createTextSpan("✕"),
-                    selectKey: ["Escape"],
-                    value: false,
-                },
-            ];
-            this.addChoicePanel(choices, (choice: InputChoice) => {
-                if (choice.value === undefined) {
-                    edit();
-                    return;
-                }
-                actionContainer.remove();
-                const replacement = choice.value ? undefined : null;
-                getClientAPI().sendProposedAction(proposeActionId, replacement);
-            });
-            this.scrollIntoView();
-        };
-        const edit = () => {
-            actionCascade.setEditMode(true);
-            const choices: InputChoice[] = [
-                {
-                    text: "Replace",
-                    element: iconCheckMarkCircle(),
-                    value: true,
-                },
-                {
-                    text: "Cancel",
-                    element: iconX(),
-                    value: false,
-                },
-            ];
-            this.addChoicePanel(choices, (choice: InputChoice) => {
-                if (choice.value === true) {
-                    if (actionCascade.hasErrors) {
-                        return false;
+        return new Promise((resolve) => {
+            const confirm = () => {
+                const choices: InputChoice[] = [
+                    {
+                        text: "Accept",
+                        element: createTextSpan("✓"),
+                        selectKey: ["y", "Y", "Enter"],
+                        value: true,
+                    },
+                    {
+                        text: "Edit",
+                        element: createTextSpan("✎"),
+                        selectKey: ["n", "N", "Delete"],
+                        value: undefined,
+                    },
+                    {
+                        text: "Cancel",
+                        element: createTextSpan("✕"),
+                        selectKey: ["Escape"],
+                        value: false,
+                    },
+                ];
+                this.addChoicePanel(choices, (choice: InputChoice) => {
+                    if (choice.value === undefined) {
+                        edit();
+                        return;
                     }
                     actionContainer.remove();
-                    getClientAPI().sendProposedAction(
-                        proposeActionId,
-                        actionCascade.value,
-                    );
-                } else {
-                    actionCascade.reset();
-                    actionCascade.setEditMode(false);
-                    confirm();
-                }
-                return true;
-            });
-            this.scrollIntoView();
-        };
+                    const replacement = choice.value ? undefined : null;
+                    resolve(replacement);
+                });
+                this.scrollIntoView();
+            };
+            const edit = () => {
+                actionCascade.setEditMode(true);
+                const choices: InputChoice[] = [
+                    {
+                        text: "Replace",
+                        element: iconCheckMarkCircle(),
+                        value: true,
+                    },
+                    {
+                        text: "Cancel",
+                        element: iconX(),
+                        value: false,
+                    },
+                ];
+                this.addChoicePanel(choices, (choice: InputChoice) => {
+                    if (choice.value === true) {
+                        if (actionCascade.hasErrors) {
+                            return false;
+                        }
+                        actionContainer.remove();
+                        resolve(actionCascade.value);
+                    } else {
+                        actionCascade.reset();
+                        actionCascade.setEditMode(false);
+                        confirm();
+                    }
+                    return true;
+                });
+                this.scrollIntoView();
+            };
 
-        confirm();
+            confirm();
+        });
     }
 
     private speakText(tts: TTS, speakText: string) {
