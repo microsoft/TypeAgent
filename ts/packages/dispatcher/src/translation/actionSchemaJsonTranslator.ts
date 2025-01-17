@@ -23,7 +23,6 @@ import {
     ActionConfig,
     createChangeAssistantActionSchema,
     TranslatedAction,
-    additionalActionLookup,
 } from "./agentTranslators.js";
 import { createMultipleActionSchema } from "./multipleActionSchema.js";
 
@@ -197,10 +196,7 @@ export function composeSelectedActionSchema(
     const union = sc.union(definitions.map((definition) => sc.ref(definition)));
     const config = provider.getActionConfig(schemaName);
     const typeName = `Partial${config.schemaType}`;
-    const comments = [
-        `${typeName} is a partial list of actions available in schema group '${schemaName}'.`,
-        `Use '${additionalActionLookup}' action to get the full list of actions for '${schemaName}'.`,
-    ];
+    const comments = `${typeName} is a partial list of actions available in schema group '${schemaName}'.`;
 
     const entry = sc.type(typeName, union, comments);
     builder.addTypeDefinition(entry);

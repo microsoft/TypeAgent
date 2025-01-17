@@ -139,7 +139,7 @@ export function getAppAgentName(schemaName: string) {
 }
 
 const additionalActionLookupTypeName = "AdditionalActionLookupAction";
-export const additionalActionLookup = "additionalActionLookup";
+const additionalActionLookup = "additionalActionLookup";
 export type AdditionalActionLookupAction = {
     actionName: "additionalActionLookup";
     parameters: {
