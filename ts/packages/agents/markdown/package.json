@@ -29,7 +29,7 @@
     "aiclient": "workspace:*",
     "common-utils": "workspace:*",
     "express": "^4.21.1",
-    "katex": "^0.16.11",
+    "katex": "^0.16.21",
     "markdown-it": "^14.1.0",
     "markdown-it-texmath": "^1.0.0",
     "typeagent": "workspace:*",
