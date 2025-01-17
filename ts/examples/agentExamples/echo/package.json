@@ -6,6 +6,12 @@
   "license": "MIT",
   "author": "Microsoft",
   "type": "module",
+  "homepage": "https://github.com/microsoft/TypeAgent#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/microsoft/TypeAgent.git",
+    "directory": "ts/examples/agentExamples/echo"
+  },
   "exports": {
     "./agent/manifest": "./dist/echoManifest.json",
     "./agent/handlers": "./dist/echoActionHandler.js"
