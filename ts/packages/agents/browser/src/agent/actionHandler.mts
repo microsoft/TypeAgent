@@ -105,7 +105,7 @@ async function updateBrowserContext(
           // TODO: Handle the case where no clients were found. Prompt the user
           //       to launch inline browser or run automation in the headless browser.
           return;
-      }
+        }
 
         if (data.method) {
           switch (data.method) {
