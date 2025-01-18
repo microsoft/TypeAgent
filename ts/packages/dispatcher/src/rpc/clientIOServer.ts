@@ -33,6 +33,13 @@ export function createClientIORpcServer(
     const clientIOCallFunctions: ClientIOCallFunctions = {
         clear: () => clientIO.clear(),
         exit: () => clientIO.exit(),
+        setDisplayInfo: (params) =>
+            clientIO.setDisplayInfo(
+                params.source,
+                params.requestId,
+                params.actionIndex,
+                params.action,
+            ),
         setDisplay: (params) => clientIO.setDisplay(params.message),
         appendDisplay: (params) =>
             clientIO.appendDisplay(params.message, params.mode),
