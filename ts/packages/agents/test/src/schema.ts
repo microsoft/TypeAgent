@@ -1,7 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-export type AddAction = {
+export type TestActions = AddAction;
+type AddAction = {
     actionName: "add";
     parameters: {
         a: number;

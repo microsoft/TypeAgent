@@ -4,52 +4,12 @@
 import { contextBridge, ipcRenderer } from "electron";
 import { electronAPI } from "@electron-toolkit/preload";
 import { ClientAPI, SpeechToken } from "./electronTypes.js"; // Custom APIs for renderer
-import { RequestMetrics } from "agent-dispatcher";
+import { ClientIO, Dispatcher } from "agent-dispatcher";
+import { createGenericChannel } from "agent-rpc/channel";
+import { createDispatcherRpcClient } from "agent-dispatcher/rpc/dispatcher/client";
+import { createClientIORpcServer } from "agent-dispatcher/rpc/clientio/server";
 
-function getProcessShellRequest() {
-    const pendingRequests = new Map<
-        string,
-        {
-            resolve: (metrics?: RequestMetrics) => void;
-            reject: (reason?: any) => void;
-        }
-    >();
-
-    ipcRenderer.on(
-        "process-shell-request-done",
-        (_, id: string, metrics?: RequestMetrics) => {
-            const pendingRequest = pendingRequests.get(id);
-            if (pendingRequest !== undefined) {
-                pendingRequest.resolve(metrics);
-                pendingRequests.delete(id);
-            } else {
-                console.warn(`Pending request ${id} not found`);
-            }
-        },
-    );
-    ipcRenderer.on(
-        "process-shell-request-error",
-        (_, id: string, message: string) => {
-            const pendingRequest = pendingRequests.get(id);
-            if (pendingRequest !== undefined) {
-                pendingRequest.reject(new Error(message));
-                pendingRequests.delete(id);
-            } else {
-                console.warn(
-                    `Pending request ${id} not found for error: ${message}`,
-                );
-            }
-        },
-    );
-
-    return (request: string, id: string, images: string[]) => {
-        return new Promise<RequestMetrics | undefined>((resolve, reject) => {
-            pendingRequests.set(id, { resolve, reject });
-            ipcRenderer.send("process-shell-request", request, id, images);
-        });
-    };
-}
-
+let clientIORegistered = false;
 const api: ClientAPI = {
     onListenEvent: (
         callback: (
@@ -59,69 +19,8 @@ const api: ClientAPI = {
             useLocalWhisper?: boolean,
         ) => void,
     ) => ipcRenderer.on("listen-event", callback),
-
-    processShellRequest: getProcessShellRequest(),
-    getCommandCompletion: (prefix: string) => {
-        return ipcRenderer.invoke("getCommandCompletion", prefix);
-    },
-    getTemplateCompletion: (
-        templateAgentName: string,
-        templateName: string,
-        data: unknown,
-        propertyName: string,
-    ) => {
-        return ipcRenderer.invoke(
-            "getTemplateCompletion",
-            templateAgentName,
-            templateName,
-            data,
-            propertyName,
-        );
-    },
-    getDynamicDisplay(source: string, id: string) {
-        return ipcRenderer.invoke("get-dynamic-display", source, id);
-    },
-    getTemplateSchema: (
-        templateAgentName: string,
-        templateName: string,
-        data: unknown,
-    ) => {
-        return ipcRenderer.invoke(
-            "get-template-schema",
-            templateAgentName,
-            templateName,
-            data,
-        );
-    },
-    onUpdateDisplay(callback) {
-        ipcRenderer.on("updateDisplay", callback);
-    },
-    onSetDynamicActionDisplay(callback) {
-        ipcRenderer.on("set-dynamic-action-display", callback);
-    },
-    onClear(callback) {
-        ipcRenderer.on("clear", callback);
-    },
     onSettingSummaryChanged(callback) {
         ipcRenderer.on("setting-summary-changed", callback);
-    },
-    onNotifyExplained(callback) {
-        ipcRenderer.on("notifyExplained", callback);
-    },
-    onRandomCommandSelected(callback) {
-        ipcRenderer.on("update-random-command", callback);
-    },
-    onAskYesNo(callback) {
-        ipcRenderer.on("askYesNo", callback);
-    },
-    sendYesNo: (askYesNoId: number, accept: boolean) => {
-        ipcRenderer.send("askYesNoResponse", askYesNoId, accept);
-    },
-    onProposeAction(callback) {
-        ipcRenderer.on("proposeAction", callback);
-    },
-    sendProposedAction: (proposeActionId: number, replacement?: unknown) => {
-        ipcRenderer.send("proposeActionResponse", proposeActionId, replacement);
     },
     getSpeechToken: () => {
         return ipcRenderer.invoke("get-speech-token");
@@ -138,25 +37,38 @@ const api: ClientAPI = {
     onHelpRequested(callback) {
         ipcRenderer.on("help-requested", callback);
     },
-    onRandomMessageRequested(callback) {
-        ipcRenderer.on("random-message-requested", callback);
-    },
     onShowDialog(callback) {
         ipcRenderer.on("show-dialog", callback);
     },
     onSettingsChanged(callback) {
         ipcRenderer.on("settings-changed", callback);
     },
-    onNotificationCommand(callback) {
-        ipcRenderer.on("notification-command", callback);
-    },
-    onNotify(callback) {
-        ipcRenderer.on("notification-arrived", callback);
-    },
-    onTakeAction(callback) {
-        ipcRenderer.on("take-action", callback);
+    registerClientIO: (clientIO: ClientIO) => {
+        if (clientIORegistered) {
+            throw new Error("ClientIO already registered");
+        }
+        clientIORegistered = true;
+        const clientIOChannel = createGenericChannel((message: any) =>
+            ipcRenderer.send("clientio-rpc-reply", message),
+        );
+        ipcRenderer.on("clientio-rpc-call", (_event, message) => {
+            clientIOChannel.message(message);
+        });
+        createClientIORpcServer(clientIO, clientIOChannel.channel);
     },
 };
+
+const dispatcherChannel = createGenericChannel((message: any) =>
+    ipcRenderer.send("dispatcher-rpc-call", message),
+);
+
+ipcRenderer.on("dispatcher-rpc-reply", (_event, message) => {
+    dispatcherChannel.message(message);
+});
+
+const dispatcher: Dispatcher = createDispatcherRpcClient(
+    dispatcherChannel.channel,
+);
 
 // Use `contextBridge` APIs to expose Electron APIs to
 // renderer only if context isolation is enabled, otherwise
@@ -165,6 +77,7 @@ if (process.contextIsolated) {
     try {
         contextBridge.exposeInMainWorld("electron", electronAPI);
         contextBridge.exposeInMainWorld("api", api);
+        contextBridge.exposeInMainWorld("dispatcher", dispatcher);
     } catch (error) {
         console.error(error);
     }
@@ -173,4 +86,6 @@ if (process.contextIsolated) {
     window.electron = electronAPI;
     // @ts-ignore (define in dts)
     window.api = api;
+    // @ts-ignore (define in dts)
+    window.dispatcher = dispatcher;
 }

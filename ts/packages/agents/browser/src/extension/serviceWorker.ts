@@ -39,7 +39,7 @@ export async function createWebSocket() {
     let socketEndpoint =
         configValues["WEBSOCKET_HOST"] ?? "ws://localhost:8080/";
 
-    socketEndpoint += "?clientId=" + chrome.runtime.id;
+    socketEndpoint += `?channel=browser&role=client&clientId=${chrome.runtime.id}`;
     return new Promise<WebSocket | undefined>((resolve, reject) => {
         const webSocket = new WebSocket(socketEndpoint);
         console.log("Connected to: " + socketEndpoint);
@@ -133,11 +133,13 @@ async function ensureWebsocketConnected() {
             }
         };
 
-        webSocket.onclose = (event: object) => {
+        webSocket.onclose = (event: any) => {
             console.log("websocket connection closed");
             webSocket = undefined;
             showBadgeError();
-            reconnectWebSocket();
+            if (event.reason !== "duplicate") {
+                reconnectWebSocket();
+            }
         };
 
         resolve(webSocket);

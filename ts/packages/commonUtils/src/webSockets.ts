@@ -17,7 +17,11 @@ export type WebSocketMessage = {
     body: any;
 };
 
-export async function createWebSocket() {
+export async function createWebSocket(
+    channel: string,
+    role: string,
+    clientId?: string,
+) {
     return new Promise<WebSocket | undefined>((resolve, reject) => {
         let endpoint = "ws://localhost:8080";
         if (process.env["WEBSOCKET_HOST"]) {
@@ -30,6 +34,11 @@ export async function createWebSocket() {
                     endpoint = vals["WEBSOCKET_HOST"];
                 }
             }
+        }
+
+        endpoint += `?channel=${channel}&role=${role}`;
+        if (clientId) {
+            endpoint += `clientId=${clientId}`;
         }
 
         const webSocket = new WebSocket(endpoint);

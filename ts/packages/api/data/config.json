@@ -1,7 +1,5 @@
 {
   "wwwroot": "../shell/out/renderer",
   "port": 3000,
-  "broadcast": true,
-  "blobBackupEnabled": true,
-  "storageProvider": "aws"
+  "broadcast": true
 }

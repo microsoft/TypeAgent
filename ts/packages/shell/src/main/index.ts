@@ -17,20 +17,11 @@ import { join } from "node:path";
 import { electronApp, optimizer, is } from "@electron-toolkit/utils";
 import { runDemo } from "./demo.js";
 import registerDebug from "debug";
-import {
-    ClientIO,
-    createDispatcher,
-    RequestId,
-    Dispatcher,
-    NotifyExplainedData,
-    IAgentMessage,
-    TemplateEditConfig,
-} from "agent-dispatcher";
+import { createDispatcher, Dispatcher } from "agent-dispatcher";
 import { getDefaultAppAgentProviders } from "agent-dispatcher/internal";
 import { ShellSettings } from "./shellSettings.js";
 import { unlinkSync } from "fs";
 import { existsSync } from "node:fs";
-import { AppAgentEvent, DisplayAppendMode } from "@typeagent/agent-sdk";
 import { shellAgentProvider } from "./agent.js";
 import { BrowserAgentIpc } from "./browserIpc.js";
 import { WebSocketMessage } from "common-utils";
@@ -40,6 +31,9 @@ import {
     closeLocalWhisper,
     isLocalWhisperEnabled,
 } from "./localWhisperCommandHandler.js";
+import { createDispatcherRpcServer } from "agent-dispatcher/rpc/dispatcher/server";
+import { createGenericChannel } from "agent-rpc/channel";
+import { createClientIORpcClient } from "agent-dispatcher/rpc/clientio/client";
 
 console.log(auth.AzureTokenScopes.CogServices);
 
@@ -430,162 +424,20 @@ async function triggerRecognitionOnce() {
     );
 }
 
-function updateDisplay(message: IAgentMessage, mode?: DisplayAppendMode) {
-    // Ignore message without requestId
-    if (message.requestId === undefined) {
-        console.warn("updateDisplay: requestId is undefined");
-        return;
-    }
-    chatView?.webContents.send("updateDisplay", message, mode);
-}
+const clientIOChannel = createGenericChannel((message: any) => {
+    chatView?.webContents.send("clientio-rpc-call", message);
+});
+ipcMain.on("clientio-rpc-reply", (_event, message) => {
+    clientIOChannel.message(message);
+});
 
-function notifyExplained(requestId: RequestId, data: NotifyExplainedData) {
-    // Ignore message without requestId
-    if (requestId === undefined) {
-        console.warn("notifyExplained: requestId is undefined");
-        return;
-    }
-    chatView?.webContents.send("notifyExplained", requestId, data);
-}
-
-function updateRandomCommandSelected(requestId: RequestId, message: string) {
-    // Ignore message without requestId
-    if (requestId === undefined) {
-        console.warn("updateRandomCommandSelected: requestId is undefined");
-        return;
-    }
-
-    chatView?.webContents.send("update-random-command", requestId, message);
-}
-
-let maxAskYesNoId = 0;
-async function askYesNo(
-    message: string,
-    requestId: RequestId,
-    defaultValue: boolean = false,
-) {
-    // Ignore message without requestId
-    if (requestId === undefined) {
-        console.warn("askYesNo: requestId is undefined");
-        return defaultValue;
-    }
-    const currentAskYesNoId = maxAskYesNoId++;
-    return new Promise<boolean>((resolve) => {
-        const callback = (
-            _event: Electron.IpcMainEvent,
-            questionId: number,
-            response: boolean,
-        ) => {
-            if (currentAskYesNoId !== questionId) {
-                return;
-            }
-            ipcMain.removeListener("askYesNoResponse", callback);
-            resolve(response);
-        };
-        ipcMain.on("askYesNoResponse", callback);
-        chatView?.webContents.send(
-            "askYesNo",
-            currentAskYesNoId,
-            message,
-            requestId,
-        );
-    });
-}
-
-let maxProposeActionId = 0;
-async function proposeAction(
-    actionTemplates: TemplateEditConfig,
-    requestId: RequestId,
-    source: string,
-) {
-    const currentProposeActionId = maxProposeActionId++;
-    return new Promise<unknown>((resolve) => {
-        const callback = (
-            _event: Electron.IpcMainEvent,
-            proposeActionId: number,
-            replacement?: unknown,
-        ) => {
-            if (currentProposeActionId !== proposeActionId) {
-                return;
-            }
-            ipcMain.removeListener("proposeActionResponse", callback);
-            resolve(replacement);
-        };
-        ipcMain.on("proposeActionResponse", callback);
-        chatView?.webContents.send(
-            "proposeAction",
-            currentProposeActionId,
-            actionTemplates,
-            requestId,
-            source,
-        );
-    });
-}
-
-const clientIO: ClientIO = {
-    clear: () => {
-        chatView?.webContents.send("clear");
-    },
-    setDisplay: updateDisplay,
-    appendDisplay: (message, mode) => updateDisplay(message, mode ?? "inline"),
-    setDynamicDisplay,
-    askYesNo,
-    proposeAction,
-    notify(event: string, requestId: RequestId, data: any, source: string) {
-        switch (event) {
-            case "explained":
-                notifyExplained(requestId, data);
-                break;
-            case "randomCommandSelected":
-                updateRandomCommandSelected(requestId, data.message);
-                break;
-            case "showNotifications":
-                chatView?.webContents.send(
-                    "notification-command",
-                    requestId,
-                    data,
-                );
-                break;
-            case AppAgentEvent.Error:
-            case AppAgentEvent.Warning:
-            case AppAgentEvent.Info:
-                console.log(`[${event}] ${source}: ${data}`);
-                chatView?.webContents.send(
-                    "notification-arrived",
-                    event,
-                    requestId,
-                    source,
-                    data,
-                );
-                break;
-            default:
-            // ignore
-        }
-    },
+const newClientIO = createClientIORpcClient(clientIOChannel.channel);
+const clientIO = {
+    ...newClientIO,
     exit: () => {
         app.quit();
     },
-    takeAction: (action: string, data: unknown) => {
-        chatView?.webContents.send("take-action", action, data);
-    },
 };
-
-async function setDynamicDisplay(
-    source: string,
-    requestId: RequestId,
-    actionIndex: number,
-    displayId: string,
-    nextRefreshMs: number,
-) {
-    chatView?.webContents.send(
-        "set-dynamic-action-display",
-        source,
-        requestId,
-        actionIndex,
-        displayId,
-        nextRefreshMs,
-    );
-}
 
 async function initializeSpeech() {
     const key = process.env["SPEECH_SDK_KEY"];
@@ -632,7 +484,8 @@ async function initialize() {
     // Set app user model id for windows
     electronApp.setAppUserModelId("com.electron");
 
-    const dispatcher = await createDispatcher("shell", {
+    // Set up dispatcher
+    const newDispatcher = await createDispatcher("shell", {
         appAgentProviders: [
             shellAgentProvider,
             ...getDefaultAppAgentProviders(),
@@ -653,17 +506,17 @@ async function initialize() {
         if (typeof text !== "string" || typeof id !== "string") {
             throw new Error("Invalid request");
         }
-        debugShell(dispatcher.getPrompt(), text);
+        debugShell(newDispatcher.getPrompt(), text);
 
-        const metrics = await dispatcher.processCommand(text, id, images);
+        const metrics = await newDispatcher.processCommand(text, id, images);
         chatView?.webContents.send("send-demo-event", "CommandProcessed");
-        const newSettingSummary = dispatcher.getSettingSummary();
+        const newSettingSummary = newDispatcher.getSettingSummary();
         if (newSettingSummary !== settingSummary) {
             settingSummary = newSettingSummary;
             chatView?.webContents.send(
                 "setting-summary-changed",
                 newSettingSummary,
-                dispatcher.getTranslatorNameToEmojiMap(),
+                newDispatcher.getTranslatorNameToEmojiMap(),
             );
 
             mainWindow?.setTitle(
@@ -674,63 +527,23 @@ async function initialize() {
         return metrics;
     }
 
+    const dispatcher = {
+        ...newDispatcher,
+        processCommand: processShellRequest,
+    };
+
+    // Set up the RPC
+    const dispatcherChannel = createGenericChannel((message: any) => {
+        chatView?.webContents.send("dispatcher-rpc-reply", message);
+    });
+    ipcMain.on("dispatcher-rpc-call", (_event, message) => {
+        dispatcherChannel.message(message);
+    });
+    createDispatcherRpcServer(dispatcher, dispatcherChannel.channel);
+
     if (ShellSettings.getinstance().agentGreeting) {
         processShellRequest("@greeting", "agent-0", []);
     }
-
-    ipcMain.on(
-        "process-shell-request",
-        (_event, text: string, id: string, images: string[]) => {
-            processShellRequest(text, id, images)
-                .then((metrics) =>
-                    chatView?.webContents.send(
-                        "process-shell-request-done",
-                        id,
-                        metrics,
-                    ),
-                )
-                .catch((error) => {
-                    chatView?.webContents.send(
-                        "process-shell-request-error",
-                        id,
-                        error.message,
-                    );
-                });
-        },
-    );
-    ipcMain.handle("getCommandCompletion", async (_event, prefix: string) => {
-        return dispatcher.getCommandCompletion(prefix);
-    });
-    ipcMain.handle(
-        "getTemplateCompletion",
-        async (
-            _event,
-            templateAgentName: string,
-            templateName: string,
-            data: unknown,
-            propertyName: string,
-        ) => {
-            return dispatcher.getTemplateCompletion(
-                templateAgentName,
-                templateName,
-                data,
-                propertyName,
-            );
-        },
-    );
-    ipcMain.handle("get-dynamic-display", async (_event, appAgentName, id) =>
-        dispatcher.getDynamicDisplay(appAgentName, "html", id),
-    );
-    ipcMain.handle(
-        "get-template-schema",
-        async (_event, templateAgentName, templateName, data) => {
-            return dispatcher.getTemplateSchema(
-                templateAgentName,
-                templateName,
-                data,
-            );
-        },
-    );
     ipcMain.on("dom ready", async () => {
         settingSummary = dispatcher.getSettingSummary();
         chatView?.webContents.send(

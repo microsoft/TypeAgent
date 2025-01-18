@@ -79,15 +79,18 @@ function createModel(
     return [apiSettings, chatModel];
 }
 
-const testfile = "./calendar_sample_parsed_seed17.json";
-
-interface CalResult {
+const testfile = "./calendar_sample_parsed_seed25.json";
+//const testfile = "./singleTest.json";
+interface CalResult extends TestItem {
+    original: CalendarSearchAction;
     attendees?: string;
     state?: string;
     meetingtype?: string;
     start?: string;
     end?: string;
     keyword?: string;
+    syntheticLabel?: string;
+    timeDelta?: boolean;
 }
 interface TestItem {
     label: string;
@@ -105,8 +108,16 @@ function isStartOrEndDay(day: string): boolean {
         day === "StartOfWeek" ||
         day === "EndOfWeek" ||
         day === "StartOfMonth" ||
-        day === "EndOfMonth"
+        day === "EndOfMonth" ||
+        day === "StartOfDay" ||
+        day === "EndOfDay" ||
+        day === "StartOfYear" ||
+        day === "EndOfYear"
     );
+}
+
+function isNumberString(str: string): boolean {
+    return /^\d+$/.test(str);
 }
 
 function convertCalDateTime(
@@ -119,9 +130,40 @@ function convertCalDateTime(
         case "InThePast":
             return "error: past";
         case "InTheFuture":
-            return "error: future";
+            if (
+                calDateTime.month === undefined &&
+                calDateTime.week === undefined &&
+                calDateTime.hms === undefined &&
+                calDateTime.year === undefined &&
+                (calDateTime.day === undefined ||
+                    calDateTime.day === "0" ||
+                    calDateTime.day?.toLocaleLowerCase() === "today")
+            ) {
+                return "now.endofday";
+            } else {
+                return "error: future";
+            }
     }
     let accum = "now";
+    if (
+        calDateTime.year !== undefined &&
+        calDateTime.year !== "0" &&
+        (isNumberString(calDateTime.year) ||
+            isStartOrEndDay(calDateTime.year) ||
+            calDateTime.year.startsWith("+") ||
+            calDateTime.year.startsWith("-"))
+    ) {
+        accum += ".";
+        accum += calDateTime.year.toLocaleLowerCase();
+    }
+    if (calDateTime.year === "0") {
+        if (isStart) {
+            accum += ".startofyear";
+        } else {
+            accum += ".endofyear";
+        }
+    }
+
     if (calDateTime.month !== undefined) {
         accum += ".";
         accum += calDateTime.month;
@@ -194,8 +236,18 @@ function convertCalDateTime(
         } else {
             accum += calDateTime.day;
         }
+    } else if (
+        (calDateTime.day === "0" ||
+            calDateTime.day?.toLocaleLowerCase() === "today") &&
+        calDateTime.hms === undefined
+    ) {
+        if (isStart) {
+            accum += ".startofday";
+        } else {
+            accum += ".endofday";
+        }
     }
-    if (calDateTime.hms !== undefined) {
+    if (calDateTime.hms !== undefined && calDateTime.hms !== "Now") {
         accum += ".";
         switch (calDateTime.hms) {
             case "Noon":
@@ -222,6 +274,9 @@ function convertCalDateTime(
     } else if (
         calDateTime.day !== undefined &&
         !isStartOrEndDay(calDateTime.day) &&
+        calDateTime.day !== "0" &&
+        calDateTime.day !== "Now" &&
+        calDateTime.day.toLocaleLowerCase() !== "today" &&
         calDateTime.month === undefined
     ) {
         if (isStart) {
@@ -263,7 +318,9 @@ function getState(start?: CalendarDateTime, end?: CalendarDateTime) {
     } else if (
         start &&
         start.specialDateTime === "InThePast" &&
-        (end === undefined || end.specialDateTime === "Now")
+        (end === undefined ||
+            end.specialDateTime === "Now" ||
+            end.specialDateTime === "InThePast")
     ) {
         return "completed";
     } else if (start == undefined && end && end.specialDateTime === "Now") {
@@ -273,7 +330,128 @@ function getState(start?: CalendarDateTime, end?: CalendarDateTime) {
     }
 }
 
-async function runTest(): Promise<void> {
+export function refineTest(testoutfile: string) {
+    const testJSON = fs.readFileSync(
+        new URL(testoutfile, import.meta.url),
+        "utf8",
+    );
+    const testData = JSON.parse(testJSON) as CalResult[];
+    const outfilename = `./${testoutfile}.refined.json`;
+    const outFile = fs.createWriteStream(outfilename, {
+        flags: "w",
+    });
+    outFile.write(`[\n`);
+    // loop through the test data, and reprocess
+    for (let i = 0; i < testData.length; ++i) {
+        const testItem = testData[i];
+        const chatAction = testItem.original;
+        const syntheticResult: CalResult = {
+            label: testItem.label,
+            utterance: testItem.utterance,
+            parsed_label: testItem.parsed_label,
+            original: chatAction,
+        };
+        const state = getState(
+            chatAction.parameters.start,
+            chatAction.parameters.end,
+        );
+        if (state !== undefined) {
+            syntheticResult.state = state;
+            // console.log(state);
+        } else if (chatAction.parameters.start) {
+            const outdtr = getDateTimeRange(
+                chatAction.parameters.start,
+                chatAction.parameters.end,
+            );
+            syntheticResult.start = outdtr.start;
+            if (outdtr.end !== undefined) {
+                syntheticResult.end = outdtr.end;
+            }
+            const compareStart = "{" + outdtr.start + "}";
+            if (compareStart !== testItem.parsed_label.start) {
+                syntheticResult.timeDelta = true;
+            }
+            if (outdtr.end !== undefined) {
+                const compareEnd = "{" + outdtr.end + "}";
+                if (compareEnd !== testItem.parsed_label.end) {
+                    syntheticResult.timeDelta = true;
+                }
+            }
+            // console.log(outdtr);
+        }
+        if (chatAction.parameters.attendees !== undefined) {
+            syntheticResult.attendees =
+                chatAction.parameters.attendees.join(", ");
+        }
+        if (chatAction.parameters.singleEvent !== undefined) {
+            syntheticResult.meetingtype = "single";
+        } else {
+            syntheticResult.meetingtype = "multiple";
+        }
+        if (chatAction.parameters.meetingDescriptionKeyphrases !== undefined) {
+            syntheticResult.keyword =
+                chatAction.parameters.meetingDescriptionKeyphrases.join(" ");
+        }
+        syntheticResult.syntheticLabel = createSyntheticLabel(syntheticResult);
+        outFile.write(`${JSON.stringify(syntheticResult, undefined, 2)}`);
+        if (i < testData.length - 1) {
+            outFile.write(`,\n`);
+        } else {
+            outFile.write(`\n`);
+        }
+    }
+    outFile.write(`]\n`);
+    outFile.close();
+}
+
+export function createTabSeparatedOuput(testoutfile: string) {
+    const testJSON = fs.readFileSync(
+        new URL(testoutfile, import.meta.url),
+        "utf8",
+    );
+    const testData = JSON.parse(testJSON) as CalResult[];
+    const outfilename = `./${testoutfile}.tsv`;
+    const outFile = fs.createWriteStream(outfilename, {
+        flags: "w",
+    });
+    outFile.write(`label\tutterance\tsyntheticLabel\n`);
+    // loop through the test data, and reprocess
+    for (let i = 0; i < testData.length; ++i) {
+        const testItem = testData[i];
+        outFile.write(`${testItem.label}\t${testItem.utterance}\t`);
+        outFile.write(`${testItem.syntheticLabel}\n`);
+    }
+    outFile.close();
+}
+
+function createSyntheticLabel(syntheticResult: CalResult): string {
+    let out = "search_calendar(";
+    let comma = "";
+    if (syntheticResult.state !== undefined) {
+        out += `state=[${syntheticResult.state}]`;
+    } else if (syntheticResult.start !== undefined) {
+        out += `start=[{${syntheticResult.start}}]`;
+        if (syntheticResult.end !== undefined) {
+            out += `,end=[{${syntheticResult.end}}]`;
+        }
+        comma = ", ";
+    }
+    if (syntheticResult.attendees !== undefined) {
+        out += `${comma}attendees=[${syntheticResult.attendees}]`;
+        comma = ", ";
+    }
+    if (syntheticResult.meetingtype !== undefined) {
+        out += `${comma}meetingtype=[${syntheticResult.meetingtype}]`;
+        comma = ", ";
+    }
+    if (syntheticResult.keyword !== undefined) {
+        out += `${comma}keyword=[${syntheticResult.keyword}]`;
+    }
+    out += `)`;
+    return out;
+}
+
+export async function runTest(): Promise<void> {
     // Create Model
     //
     let [_apiSettings, chatModel] = createModel(false);
@@ -290,31 +468,79 @@ async function runTest(): Promise<void> {
         new URL(testfile, import.meta.url),
         "utf8",
     );
+    const outfilename = `./${testfile}.out.json`;
+    // open output file for writing
+    const outFile = fs.createWriteStream(outfilename, {
+        flags: "w",
+    });
+    outFile.write(`[\n`);
     const testData = JSON.parse(testJSON) as TestItem[];
     for (let i = 0; i < testData.length; ++i) {
         const testItem = testData[i];
-        console.log(`\n\n${testItem.label}\n${testItem.utterance}`);
+        console.log(`test: ${i}: ${testItem.utterance}\n${testItem.label}`);
         const chatResponse = await chatTranslator.translate(testItem.utterance);
         console.log(JSON.stringify(chatResponse, undefined, 2));
         if (chatResponse.success) {
             const chatAction = chatResponse.data;
-            const syntheticResult: CalResult = {};
+            const syntheticResult: CalResult = {
+                label: testItem.label,
+                utterance: testItem.utterance,
+                parsed_label: testItem.parsed_label,
+                original: chatAction,
+            };
             const state = getState(
                 chatAction.parameters.start,
                 chatAction.parameters.end,
             );
             if (state !== undefined) {
                 syntheticResult.state = state;
-                console.log(state);
+                // console.log(state);
             } else if (chatAction.parameters.start) {
                 const outdtr = getDateTimeRange(
                     chatAction.parameters.start,
                     chatAction.parameters.end,
                 );
-                console.log(outdtr);
+                syntheticResult.start = outdtr.start;
+                if (outdtr.end !== undefined) {
+                    syntheticResult.end = outdtr.end;
+                }
+                // console.log(outdtr);
             }
+            if (chatAction.parameters.attendees !== undefined) {
+                syntheticResult.attendees =
+                    chatAction.parameters.attendees.join(", ");
+            }
+            if (chatAction.parameters.singleEvent !== undefined) {
+                syntheticResult.meetingtype = "single";
+            } else {
+                syntheticResult.meetingtype = "multiple";
+            }
+            if (
+                chatAction.parameters.meetingDescriptionKeyphrases !== undefined
+            ) {
+                syntheticResult.keyword =
+                    chatAction.parameters.meetingDescriptionKeyphrases.join(
+                        " ",
+                    );
+            }
+            outFile.write(`${JSON.stringify(syntheticResult, undefined, 2)}`);
+            if (i < testData.length - 1) {
+                outFile.write(`,\n`);
+            } else {
+                outFile.write(`\n`);
+            }
+        } else {
+            console.log(
+                `\n\n${testItem.label}\n${testItem.utterance} ERROR ${chatResponse.message}`,
+            );
         }
     }
+    outFile.write(`]\n`);
+    outFile.close();
 }
 
 await runTest();
+//refineTest("./calendar_sample_parsed_seed25.json.out.json");
+// createTabSeparatedOuput(
+//     "./calendar_sample_parsed_seed17.json.out.json.refined.json",
+// );

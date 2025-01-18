@@ -83,7 +83,7 @@ async function updateBrowserContext(
       return;
     }
 
-    const webSocket = await createWebSocket();
+    const webSocket = await createWebSocket("browser", "dispatcher");
     if (webSocket) {
       context.agentContext.webSocket = webSocket;
       context.agentContext.browserConnector = new BrowserConnector(context);
@@ -189,11 +189,13 @@ async function executeBrowserAction(
         return createActionResult(commerceResult);
       } else if (action.translatorName === "browser.instacart") {
         const instacartResult = await handleInstacartAction(action, context);
+
         return createActionResult(
           instacartResult.displayText,
           undefined,
           instacartResult.entities,
         );
+
         // return createActionResult(instacartResult);
       }
 
