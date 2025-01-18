@@ -4,6 +4,8 @@
 import * as fs from "fs";
 import * as path from "path";
 
+import Database, * as sqlite from "better-sqlite3";
+
 import { ChatModel, openai } from "aiclient";
 import { loadSchema } from "typeagent";
 import { createJsonTranslator, TypeChatJsonTranslator } from "typechat";
@@ -41,6 +43,8 @@ export interface ModelContext {
     answerMaker: TypeChatJsonTranslator<AnswerSpecs>;
     miniModel: ChatModel;
     chunkSelector: TypeChatJsonTranslator<SelectorSpecs>;
+    databaseLocation: string;
+    database: sqlite.Database | undefined;
 }
 
 function createModelContext(): ModelContext {
@@ -53,7 +57,27 @@ function createModelContext(): ModelContext {
         ["spelunkerMini"],
     );
     const chunkSelector = createChunkSelector(miniModel);
-    return { chatModel, answerMaker, miniModel, chunkSelector };
+    const databaseFolder = path.join(
+        process.env.HOME ?? "/",
+        ".typeagent",
+        "agents",
+        "spelunker",
+    );
+    const mkdirOptions: fs.MakeDirectoryOptions = {
+        recursive: true,
+        mode: 0o700,
+    };
+    fs.mkdirSync(databaseFolder, mkdirOptions);
+    const databaseLocation = path.join(databaseFolder, "database.json");
+    const database = undefined;
+    return {
+        chatModel,
+        answerMaker,
+        miniModel,
+        chunkSelector,
+        databaseLocation,
+        database,
+    };
 }
 
 // Answer a question; called from request and from searchCode action
@@ -68,12 +92,55 @@ export async function searchCode(
     if (!context.modelContext) {
         context.modelContext = createModelContext();
     }
+    let db = context.modelContext.database;
+    if (db) {
+        console_log(
+            `[Existing database at ${context.modelContext.databaseLocation}]`,
+        );
+    } else {
+        console_log(
+            `[Creating database at ${context.modelContext.databaseLocation}]`,
+        );
+        db = new Database(context.modelContext.databaseLocation);
+        fs.chmodSync(context.modelContext.databaseLocation, 0o600);
+        // Write-Ahead Logging, improving concurrency and performance
+        db.pragma("journal_mode = WAL");
+        // Create all the tables we'll use
+        const schema = `
+        CREATE TABLE IF NOT EXISTS files (
+            fileName TEXT PRIMARY KEY,
+            mtime FLOAT NOT NULL,
+            size INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS chunks (
+            id TEXT PRIMARY KEY,
+            treeName TEXT NOT NULL,
+            parentId TEXT KEY REFERENCES chunks(id), -- May be null
+            fileName TEXT KEY REFERENCES files(fileName) NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS blobs (
+            chunkId TEXT KEY REFERENCES chunks(id) NOT NULL,
+            start INTEGER NOT NULL, -- 0-based
+            lines TEXT NOT NULL,
+            breadcrumb BOOLEAN NOT NULL -- Values: 0 or 1
+        );
+        `;
+        db.exec(schema);
+        context.modelContext.database = db;
+    }
 
     // 1. Find all .py files in the focus directories (locally, using a subprocess).
     console_log(`[Step 1: Find .py files]`);
     const files: string[] = [];
     for (let i = 0; i < context.focusFolders.length; i++) {
         files.push(...getAllPyFilesSync(context.focusFolders[i]));
+    }
+    const prepInsertFiles = db.prepare(
+        `INSERT OR REPLACE INTO FILES (fileName, mtime, size) VALUES (?, ?, ?)`,
+    );
+    for (const file of files) {
+        const stat = fs.statSync(file);
+        prepInsertFiles.run(file, stat.mtimeMs * 0.001, stat.size);
     }
 
     // 2. Chunkify all files found (locally).
@@ -93,10 +160,43 @@ export async function searchCode(
         (item): item is ChunkedFile => "chunks" in item,
     );
     const allChunks: Chunk[] = [];
+    const prepDeleteBlobs = db.prepare(`
+        DELETE FROM blobs WHERE chunkId IN (
+            SELECT id
+            FROM chunks
+            WHERE filename = ?
+        )
+    `);
+    const prepDeleteChunks = db.prepare(
+        `DELETE FROM chunks WHERE fileName = ?`,
+    );
+    const prepInsertChunks = db.prepare(
+        `INSERT OR REPLACE INTO chunks (id, treeName, parentId, fileName) VALUES (?, ?, ?, ?)`,
+    );
+    const prepInsertBlobs = db.prepare(
+        `INSERT INTO blobs (chunkId, start, lines, breadcrumb) VALUES (?, ?, ?, ?)`,
+    );
+    // TODO: Wrap this loop in a transaction
     for (const chunkedFile of allChunkedFiles) {
+        prepDeleteBlobs.run(chunkedFile.fileName);
+        prepDeleteChunks.run(chunkedFile.fileName);
         for (const chunk of chunkedFile.chunks) {
             chunk.fileName = chunkedFile.fileName;
             allChunks.push(chunk);
+            prepInsertChunks.run(
+                chunk.id,
+                chunk.treeName,
+                chunk.parentId || null,
+                chunk.fileName,
+            );
+            for (const blob of chunk.blobs) {
+                prepInsertBlobs.run(
+                    chunk.id,
+                    blob.start,
+                    blob.lines.map((line) => line.trimEnd()).join("\n"),
+                    blob.breadcrumb ? 1 : 0,
+                );
+            }
         }
     }
     console_log(

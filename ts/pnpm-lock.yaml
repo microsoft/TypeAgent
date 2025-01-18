@@ -1164,6 +1164,9 @@ importers:
       aiclient:
         specifier: workspace:*
         version: link:../../aiclient
+      better-sqlite3:
+        specifier: 11.5.0
+        version: 11.5.0
       typeagent:
         specifier: workspace:*
         version: link:../../typeagent
@@ -1171,6 +1174,9 @@ importers:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.3)(zod@3.23.8)
     devDependencies:
+      '@types/better-sqlite3':
+        specifier: 7.6.11
+        version: 7.6.11
       copyfiles:
         specifier: ^2.4.1
         version: 2.4.1
