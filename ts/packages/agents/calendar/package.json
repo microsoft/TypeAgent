@@ -13,7 +13,7 @@
   "type": "module",
   "exports": {
     "./agent/manifest": "./src/calendarManifest.json",
-    "./agent/handlers": "./dist/calendarActionHandler.js"
+    "./agent/handlers": "./dist/calendarActionHandlerV1.js"
   },
   "scripts": {
     "build": "npm run tsc",
