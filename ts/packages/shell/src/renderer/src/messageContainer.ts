@@ -1,7 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { DisplayAppendMode, DisplayContent } from "@typeagent/agent-sdk";
+import {
+    AppAction,
+    DisplayAppendMode,
+    DisplayContent,
+} from "@typeagent/agent-sdk";
 import { TTS, TTSMetrics } from "./tts/tts";
 import {
     TemplateEditConfig,
@@ -111,33 +115,46 @@ export class MessageContainer {
     private lastAppendMode?: DisplayAppendMode;
     private completed = false;
     private pendingSpeakText: string = "";
+    private defaultSource?: string;
+    private action?: AppAction | string[];
 
-    public get source() {
-        return this._source;
+    public setDisplayInfo(source: string, action?: AppAction | string[]) {
+        this.defaultSource = source;
+        this.action = action;
+        this.updateSource();
     }
 
-    private updateSource(actionName?: string | undefined) {
-        if (this.iconDiv !== undefined) {
-            const source = this._source;
-            const sourceIcon = this.agents.get(source);
-
-            // set source and source icon
-            this.updateActionName(actionName ?? source);
-
-            // use agent icon for agents, user Initial for users
-            if (this.iconDiv.className.indexOf("agent-") > -1) {
-                this.iconDiv.innerText = sourceIcon ?? "❔"; // icon
-            } else if (actionName && actionName.length > 0) {
-                this.iconDiv.innerText = actionName
-                    ?.charAt(0)
-                    .toLocaleUpperCase();
-            }
+    private get sourceLabel() {
+        if (this.source !== this.defaultSource) {
+            return this.source;
         }
+        if (this.action !== undefined) {
+            if (Array.isArray(this.action)) {
+                return `${this.source} ${this.action.join(" ")}`;
+            }
+            return `${this.action.translatorName}.${this.action.actionName}`;
+        }
+        return this.source;
     }
 
-    public updateActionName(name: string | undefined) {
-        if (name !== undefined && name.length > 0) {
-            (this.timestampDiv.firstChild as HTMLDivElement).innerText = name;
+    private get sourceIcon() {
+        // use agent icon for agents, user Initial for users
+        if (this.classNameSuffix === "agent") {
+            return this.agents.get(this.source) ?? "❔";
+        }
+        return this.source?.charAt(0).toLocaleUpperCase();
+    }
+
+    private updateSource() {
+        if (this.iconDiv !== undefined) {
+            // set source and source icon
+            const sourceLabel = this.sourceLabel;
+            if (sourceLabel !== undefined && sourceLabel.length > 0) {
+                (this.timestampDiv.firstChild as HTMLDivElement).innerText =
+                    sourceLabel;
+            }
+
+            this.iconDiv.innerText = this.sourceIcon;
         }
     }
 
@@ -145,7 +162,7 @@ export class MessageContainer {
         private chatView: ChatView,
         private settingsView: SettingsView,
         private classNameSuffix: "agent" | "user",
-        private _source: string,
+        private source: string,
         private readonly agents: Map<string, string>,
         beforeElem: Element,
         private hideMetrics: boolean,
@@ -185,11 +202,7 @@ export class MessageContainer {
 
         this.div = div;
 
-        if (classNameSuffix == "agent") {
-            this.updateSource();
-        } else {
-            this.updateSource(chatView.userGivenName);
-        }
+        this.updateSource();
     }
 
     public getMessage() {
@@ -200,7 +213,6 @@ export class MessageContainer {
         content: DisplayContent,
         source: string,
         appendMode?: DisplayAppendMode, // default to not appending.
-        actionName?: string | undefined,
     ) {
         if (
             typeof content !== "string" &&
@@ -222,8 +234,8 @@ export class MessageContainer {
         // Flush last temporary reset the lastAppendMode.
         this.flushLastTemporary();
 
-        this._source = source;
-        this.updateSource(actionName);
+        this.source = source;
+        this.updateSource();
 
         const speakText = setContent(
             this.messageDiv,

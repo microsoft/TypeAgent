@@ -70,6 +70,9 @@ function addEvents(
         exit: () => {
             window.close();
         },
+        setDisplayInfo: (source, requestId, actionIndex, action) => {
+            chatView.setDisplayInfo(source, requestId, actionIndex, action);
+        },
         setDisplay: (message) => {
             chatView.addAgentMessage(message);
         },
@@ -283,9 +286,8 @@ function showNotifications(
     chatView.addAgentMessage(
         {
             message: { type: "html", content: html },
-            source: "shell",
+            source: "shell.showNotifications",
             requestId: requestId,
-            actionName: "shell.showNotifications",
         },
         { notification: true },
     );
@@ -325,8 +327,7 @@ function summarizeNotifications(
             content: summary,
         },
         requestId: requestId,
-        source: "shell",
-        actionName: "shell.notificationSummary",
+        source: "shell.notificationSummary",
     });
 }
 

@@ -26,7 +26,6 @@ export interface IAgentMessage {
     source: string;
     actionIndex?: number | undefined;
     metrics?: RequestMetrics | undefined;
-    actionName?: string | undefined;
 }
 
 export type NotifyExplainedData = {
@@ -46,7 +45,7 @@ export interface ClientIO {
         source: string,
         requestId: RequestId,
         actionIndex?: number,
-        action?: AppAction,
+        action?: AppAction | string[],
     ): void;
     setDisplay(message: IAgentMessage): void;
     appendDisplay(message: IAgentMessage, mode: DisplayAppendMode): void;
@@ -94,7 +93,6 @@ export function makeClientIOMessage(
     requestId: RequestId,
     source: string,
     actionIndex?: number,
-    actionName?: string,
 ): IAgentMessage {
     return {
         message,
@@ -105,7 +103,6 @@ export function makeClientIOMessage(
             requestId !== undefined
                 ? context?.metricsManager?.getMetrics(requestId)
                 : undefined,
-        actionName,
     };
 }
 
