@@ -100,6 +100,13 @@ async function updateBrowserContext(
           return;
         }
 
+        if (data.error) {
+          console.error(data.error);
+          // TODO: Handle the case where no clients were found. Prompt the user
+          //       to launch inline browser or run automation in the headless browser.
+          return;
+      }
+
         if (data.method) {
           switch (data.method) {
             case "enableSiteTranslator": {
