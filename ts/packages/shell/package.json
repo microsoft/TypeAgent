@@ -34,6 +34,7 @@
     "@electron-toolkit/utils": "^2.0.0",
     "@typeagent/agent-sdk": "workspace:*",
     "agent-dispatcher": "workspace:*",
+    "agent-rpc": "workspace:*",
     "aiclient": "workspace:*",
     "ansi_up": "^6.0.2",
     "common-utils": "workspace:*",
@@ -41,6 +42,8 @@
     "dompurify": "^3.1.6",
     "dotenv": "^16.3.1",
     "electron-updater": "^6.3.2",
+    "jose": "^5.9.6",
+    "markdown-it": "^14.1.0",
     "microsoft-cognitiveservices-speech-sdk": "^1.38.0",
     "typechat": "^0.1.1",
     "ws": "^8.17.1"

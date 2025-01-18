@@ -13,7 +13,7 @@ import {
     SearchTermsActionResponse,
     SearchTermsActionResponseV2,
 } from "./conversation.js";
-import { SearchResponse } from "./searchResponse.js";
+import { createSearchResponse, SearchResponse } from "./searchResponse.js";
 import {
     Filter,
     GetAnswerAction,
@@ -56,10 +56,11 @@ export type SearchProcessingOptions = {
     entitySearch?: EntitySearchOptions | undefined;
     fallbackSearch?: SearchOptions | undefined;
     threadSearch?: SearchOptions | undefined;
-    skipAnswerGeneration?: boolean;
-    skipEntitySearch?: boolean;
-    skipTopicSearch?: boolean;
-    skipActionSearch?: boolean;
+    skipAnswerGeneration?: boolean | undefined;
+    skipEntitySearch?: boolean | undefined;
+    skipTopicSearch?: boolean | undefined;
+    skipActionSearch?: boolean | undefined;
+    skipMessages?: boolean | undefined;
     progress?: ((action: any) => void) | undefined;
 };
 
@@ -107,6 +108,12 @@ export interface ConversationSearchProcessor {
         query: string,
         options: SearchProcessingOptions,
     ): Promise<PromptSection[] | undefined>;
+
+    searchMessages(
+        query: string,
+        options: SearchOptions,
+        maxMessageChars?: number,
+    ): Promise<SearchResponse>;
 }
 
 export function createSearchProcessor(
@@ -129,6 +136,7 @@ export function createSearchProcessor(
         buildContext,
         generateAnswer,
         generateAnswerV2,
+        searchMessages,
     };
     return thisProcessor;
 
@@ -246,6 +254,54 @@ export function createSearchProcessor(
             );
         }
         return rr;
+    }
+
+    async function searchMessages(
+        query: string,
+        options: SearchOptions,
+        maxMessageChars?: number,
+    ): Promise<SearchResponse> {
+        const response = createSearchResponse();
+        //await fallbackSearch(query, undefined, response, options);
+        const messageIndex = await conversation.getMessageIndex();
+        if (messageIndex) {
+            const matches = await messageIndex.nearestNeighbors(
+                query,
+                options.maxMatches,
+                options.minScore,
+            );
+            if (matches.length > 0) {
+                response.messageIds = matches.map((m) => m.item);
+                response.messages = await conversation.loadMessages(
+                    response.messageIds,
+                );
+                if (maxMessageChars && maxMessageChars > 0) {
+                    let charCount = 0;
+                    let i = 0;
+                    for (; i < response.messages.length; ++i) {
+                        const messageLength =
+                            response.messages[i].value.value.length;
+                        if (charCount + messageLength > maxMessageChars) {
+                            break;
+                        }
+                        charCount += messageLength;
+                    }
+                    if (i > 0 && i < response.messages.length) {
+                        response.messageIds.splice(i);
+                        response.messages.splice(i);
+                    }
+                }
+                response.answer = await answers.generateAnswer(
+                    query,
+                    undefined,
+                    response,
+                    true,
+                    false,
+                );
+            }
+        }
+
+        return response;
     }
 
     async function buildContext(
@@ -374,13 +430,12 @@ export function createSearchProcessor(
             options,
             false,
         );
-        if (options.threadSearch) {
-            await applyThreadFilters(
-                action.parameters.question,
-                action.parameters.filters,
-                options.threadSearch,
-            );
-        }
+
+        await applyThreadFilters(
+            action.parameters.question,
+            action.parameters.filters,
+            options.threadSearch,
+        );
         const response = await conversation.searchTermsV2(
             action.parameters.filters,
             searchOptions,
@@ -626,21 +681,28 @@ export function createSearchProcessor(
     async function applyThreadFilters(
         query: string,
         filters: TermFilterV2[],
-        options: SearchOptions,
+        options?: SearchOptions | undefined,
     ) {
         const threadIndex = await conversation.getThreadIndex();
-        const threads = await threadIndex.getNearest(
-            query,
-            options.maxMatches,
-            options.minScore,
-        );
-        if (threads.length === 0) {
-            return;
+        if (!options) {
+            if (await threadIndex.matchTags(filters)) {
+                options = { maxMatches: 1, minScore: 0.8 };
+            }
         }
-        const thread = threads[0];
-        for (const filter of filters) {
-            if (!filter.timeRange) {
-                filter.timeRange = thread.timeRange;
+        if (options) {
+            const threads = await threadIndex.getNearest(
+                query,
+                options.maxMatches,
+                options.minScore,
+            );
+            if (threads.length === 0) {
+                return;
+            }
+            const thread = threads[0];
+            for (const filter of filters) {
+                if (!filter.timeRange) {
+                    filter.timeRange = thread.timeRange;
+                }
             }
         }
     }
@@ -681,6 +743,9 @@ export function createSearchProcessor(
         }
         if (options.skipActionSearch) {
             searchOptions.action = undefined;
+        }
+        if (options.skipMessages) {
+            searchOptions.loadMessages = false;
         }
         return searchOptions;
     }

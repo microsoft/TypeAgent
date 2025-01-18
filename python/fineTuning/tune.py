@@ -5,7 +5,6 @@ from chaparral.util.datareader import DataReader
 from chaparral.train.hf_model import HFModel
 from chaparral.train.hf_params import HFParams
 import argparse
-
 def parse_args():
     parser = argparse.ArgumentParser(description="Fine-tune a model with given dataset.")
     parser.add_argument("--dataset_file", help="Path to the dataset file.")
@@ -29,10 +28,17 @@ if __name__ == "__main__":
 
     model = HFModel(params)
 
-    print("Model loaded")
-
-    model.load_training_data(train_set)
 
     model.load_model()
 
-    model.train()
+    model.init_data()
+
+    print("Model loaded")
+
+    # model.train()
+    model.sft_train()
+
+    model.save_model("./test_output")
+
+    # model.load_local_model("./test_output")
+    # print(model.evaluate(eval_set))

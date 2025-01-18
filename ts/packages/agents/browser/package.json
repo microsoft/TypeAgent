@@ -18,20 +18,23 @@
   },
   "main": "index.js",
   "scripts": {
-    "build": "concurrently npm:tsc:agent npm:tsc:puppeteer npm:webpack",
+    "build": "npm run tsc:common && concurrently npm:tsc:agent npm:tsc:puppeteer npm:webpack",
     "clean": "rimraf dist",
     "dev": "webpack --config webpack.dev.js",
     "prettier": "prettier --check . --ignore-path ../../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../../.prettierignore",
     "tsc:agent": "tsc -p src/agent/tsconfig.json",
+    "tsc:common": "tsc -p src/common/tsconfig.json",
     "tsc:puppeteer": "tsc -p src/puppeteer/tsconfig.json",
     "webpack": "webpack --config webpack.prod.js"
   },
   "dependencies": {
     "@mozilla/readability": "^0.5.0",
     "@typeagent/agent-sdk": "workspace:*",
+    "agent-rpc": "workspace:*",
     "aiclient": "workspace:*",
     "common-utils": "workspace:*",
+    "debug": "^4.3.4",
     "dompurify": "^3.1.6",
     "html-to-text": "^9.0.5",
     "jsonpath": "^1.1.1",
@@ -47,6 +50,7 @@
   },
   "devDependencies": {
     "@types/chrome": "^0.0.256",
+    "@types/debug": "^4.1.10",
     "@types/dompurify": "^3.0.5",
     "@types/html-to-text": "^9.0.4",
     "@types/jquery": "^3.5.14",
@@ -59,5 +63,13 @@
     "webpack": "^5.94.0",
     "webpack-cli": "^5.1.4",
     "webpack-merge": "^5.10.0"
+  },
+  "fluidBuild": {
+    "tasks": {
+      "webpack": [
+        "...",
+        "tsc:common"
+      ]
+    }
   }
 }

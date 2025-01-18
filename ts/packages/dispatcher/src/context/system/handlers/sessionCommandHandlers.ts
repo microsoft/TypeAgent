@@ -261,8 +261,9 @@ class SessionInfoCommandHandler implements CommandHandlerNoParams {
               )
             : [];
         displayResult((log: (message?: string) => void) => {
+            log(`${chalk.bold("Instance Dir:")} ${systemContext.instanceDir}`);
             log(
-                `Session settings (${
+                `${chalk.bold("Session settings")} (${
                     systemContext.session.sessionDirPath
                         ? chalk.green(
                               getSessionName(
@@ -288,7 +289,7 @@ class SessionInfoCommandHandler implements CommandHandlerNoParams {
             printConfig(systemContext.session.getConfig());
 
             if (constructionFiles.length) {
-                log("\nConstruction Files:");
+                log(`\n${chalk.bold("Construction Files:")}`);
                 for (const file of constructionFiles) {
                     log(
                         `  ${

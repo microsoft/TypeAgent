@@ -32,6 +32,7 @@ import {
     CommandHandlerTable,
 } from "@typeagent/agent-sdk/helpers/command";
 import { ActionContext, ParsedCommandParams } from "@typeagent/agent-sdk";
+import fileSize from "file-size";
 
 async function checkRecreateStore(
     constructionStore: ConstructionStore,
@@ -209,7 +210,9 @@ class ConstructionInfoCommandHandler implements CommandHandlerNoParams {
         displayResult((log) => {
             log(`User constructions:`);
             if (info.filePath) {
-                log(`  File: ${info.filePath}${info.modified ? "*" : ""}`);
+                log(
+                    `  File: ${info.filePath}${info.modified ? "*" : ""} (${fileSize(fs.statSync(info.filePath as string).size).human("si")})`,
+                );
             }
             const diff =
                 info.constructionCount - info.filteredConstructionCount;
@@ -219,7 +222,9 @@ class ConstructionInfoCommandHandler implements CommandHandlerNoParams {
             log();
             if (info.builtInConstructionCount !== undefined) {
                 log(`Built-in constructions:`);
-                log(`  File: ${info.builtInCacheFilePath}`);
+                log(
+                    `  File: ${info.builtInCacheFilePath} (${fileSize(fs.statSync(info.builtInCacheFilePath as string).size).human("si")})`,
+                );
                 const diff =
                     info.builtInConstructionCount -
                     info.filteredBuiltInConstructionCount!;

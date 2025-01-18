@@ -68,7 +68,7 @@ async function newSessionDir(instanceDir: string) {
         JSON.stringify(sessions, undefined, 2),
     );
     debugSession(`New session: ${dir}`);
-    return dir;
+    return fullDir;
 }
 
 type DispatcherConfig = {
@@ -147,7 +147,7 @@ const defaultSessionConfig: SessionConfig = {
         schema: {
             generation: true,
             optimize: {
-                enabled: true,
+                enabled: false,
                 numInitialActions: 5,
             },
         },

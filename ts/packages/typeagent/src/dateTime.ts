@@ -93,3 +93,9 @@ export function stringToDate(value: string | undefined): Date | undefined {
     }
     return undefined;
 }
+
+export function addMinutesToDate(date: Date, minutes: number): Date {
+    const time = date.getTime();
+    const offsetMs = minutes * 60 * 1000;
+    return new Date(time + offsetMs);
+}

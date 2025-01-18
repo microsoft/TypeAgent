@@ -29,14 +29,15 @@ class HFParams:
 
     hf_trainer_params: HFTrainerParams
     cutoff_length: int = 256
-    model_name: str= "google/gemma-2-2b"
+    # model_name: str= "google/gemma-2-2b"
+    model_name: str= "meta-llama/Llama-3.2-1B-Instruct"
     cache_dir: str = "./hf_cache"
     pad_token: str = "!"
     use_peft: bool = False
 
     @classmethod
     def from_dict(cls, data: dict) -> "HFParams":
-        hf_trainer_params = HFTrainerParams.from_dict(data["hf_trainer_params"])
+        hf_trainer_params = HFTrainerParams.from_dict(data.get("hf_trainer_params", {}))
         data["hf_trainer_params"] = hf_trainer_params
         return cls(**data)
     

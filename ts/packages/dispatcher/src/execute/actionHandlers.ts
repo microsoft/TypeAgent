@@ -16,6 +16,8 @@ import {
     ParsedCommandParams,
     ParameterDefinitions,
     Entity,
+    AppAgentManifest,
+    AppAgent,
 } from "@typeagent/agent-sdk";
 import {
     createActionResult,
@@ -47,6 +49,7 @@ function getActionContext(
     systemContext: CommandHandlerContext,
     requestId: string,
     actionIndex?: number,
+    actionName?: string,
 ) {
     let context = systemContext;
     const sessionContext = context.agents.getSessionContext(appAgentName);
@@ -59,6 +62,7 @@ function getActionContext(
                     requestId,
                     appAgentName,
                     actionIndex,
+                    actionName,
                 ),
             );
         },
@@ -73,6 +77,7 @@ function getActionContext(
                     requestId,
                     appAgentName,
                     actionIndex,
+                    actionName,
                 ),
                 mode,
             );
@@ -118,6 +123,7 @@ export function createSessionContext<T = unknown>(
     name: string,
     agentContext: T,
     context: CommandHandlerContext,
+    allowDynamicAgent: boolean,
 ): SessionContext<T> {
     const sessionDirPath = context.session.getSessionDirPath();
     const storage = sessionDirPath
@@ -126,6 +132,34 @@ export function createSessionContext<T = unknown>(
     const instanceStorage = context.instanceDir
         ? getStorage(name, context.instanceDir)
         : undefined;
+    const addDynamicAgent = allowDynamicAgent
+        ? (agentName: string, manifest: AppAgentManifest, appAgent: AppAgent) =>
+              // acquire the lock to prevent change the state while we are processing a command or removing dynamic agent.
+              // WARNING: deadlock if this is call because we are processing a request
+              context.commandLock(async () => {
+                  await context.agents.addDynamicAgent(
+                      agentName,
+                      manifest,
+                      appAgent,
+                  );
+                  // Update the enable state to reflect the new agent
+                  context.agents.setState(context, context.session.getConfig());
+              })
+        : () => {
+              throw new Error("Permission denied: cannot add dynamic agent");
+          };
+
+    // TODO: only allow remove agent added by this agent.
+    const removeDynamicAgent = allowDynamicAgent
+        ? (agentName: string) =>
+              // acquire the lock to prevent change the state while we are processing a command or adding dynamic agent.
+              // WARNING: deadlock if this is call because we are processing a request
+              context.commandLock(async () =>
+                  context.agents.removeDynamicAgent(agentName),
+              )
+        : () => {
+              throw new Error("Permission denied: cannot remove dynamic agent");
+          };
     const sessionContext: SessionContext<T> = {
         get agentContext() {
             return agentContext;
@@ -168,7 +202,10 @@ export function createSessionContext<T = unknown>(
                 }
             });
         },
+        addDynamicAgent,
+        removeDynamicAgent,
     };
+
     (sessionContext as any).conversationManager = context.conversationManager;
     return sessionContext;
 }
@@ -191,9 +228,6 @@ async function executeAction(
     // Update the last action translator.
     systemContext.lastActionSchemaName = translatorName;
 
-    // Update the last action name.
-    systemContext.lastActionName = action.fullActionName;
-
     if (appAgent.executeAction === undefined) {
         throw new Error(
             `Agent ${appAgentName} does not support executeAction.`,
@@ -209,6 +243,7 @@ async function executeAction(
                   systemContext,
                   systemContext.requestId!,
                   actionIndex,
+                  action.fullActionName,
               );
 
     systemContext.streamingActionContext = undefined;
@@ -347,6 +382,7 @@ export function startStreamPartialAction(
         context,
         context.requestId!,
         0,
+        `${translatorName}.${actionName}`,
     );
 
     context.streamingActionContext = actionContextWithClose;
@@ -376,20 +412,21 @@ export async function executeCommand(
         );
     }
 
+    // update the last action name
+    const messageActionName =
+        commands.length > 0
+            ? `${appAgentName}.${commands.join(".")}`
+            : undefined;
+
     const { actionContext, closeActionContext } = getActionContext(
         appAgentName,
         context,
         context.requestId!,
+        undefined,
+        messageActionName,
     );
 
     try {
-        // update the last action name
-        if (commands.length > 0) {
-            context.lastActionName = `${appAgentName}.${commands.join(".")}`;
-        } else {
-            context.lastActionName = undefined;
-        }
-
         actionContext.profiler = context.commandProfiler?.measure(
             ProfileNames.executeCommand,
             true,
@@ -404,7 +441,6 @@ export async function executeCommand(
     } finally {
         actionContext.profiler?.stop();
         actionContext.profiler = undefined;
-        context.lastActionName = undefined;
         closeActionContext();
     }
 }

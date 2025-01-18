@@ -19,7 +19,7 @@ export type AppAgentManifest = {
 export type SchemaManifest = {
     description: string;
     schemaType: string;
-    schemaFile: string;
+    schemaFile: string | { type: "ts"; content: string };
     injected?: boolean; // whether the translator is injected into other domains, default is false
     cached?: boolean; // whether the translator's action should be cached, default is true
     streamingActions?: string[];
@@ -27,7 +27,7 @@ export type SchemaManifest = {
 
 export type ActionManifest = {
     defaultEnabled?: boolean;
-    translationDefaultEnabled?: boolean;
+    schemaDefaultEnabled?: boolean;
     actionDefaultEnabled?: boolean;
     transient?: boolean; // whether the translator is transient, default is false
 
@@ -113,6 +113,15 @@ export interface SessionContext<T = unknown> {
 
     // can only toggle the sub agent of the current agent
     toggleTransientAgent(agentName: string, active: boolean): Promise<void>;
+
+    // Only for selected agents (browser) can dynamically add agent. Throw if not permitted.
+    addDynamicAgent(
+        agentName: string,
+        manifest: AppAgentManifest,
+        appAgent: AppAgent,
+    ): Promise<void>;
+
+    removeDynamicAgent(agentName: string): Promise<void>;
 }
 
 // TODO: only utf8 & base64 is supported for now.

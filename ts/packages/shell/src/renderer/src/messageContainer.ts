@@ -14,7 +14,6 @@ import { setContent } from "./setContent";
 import { ChatView } from "./chatView";
 import { iconCheckMarkCircle, iconRoadrunner, iconX } from "./icon";
 import { TemplateEditor } from "./templateEditor";
-import { getClientAPI } from "./main";
 import { SettingsView } from "./settingsView";
 
 function createTimestampDiv(timestamp: Date, className: string) {
@@ -123,17 +122,22 @@ export class MessageContainer {
             const sourceIcon = this.agents.get(source);
 
             // set source and source icon
-            (this.timestampDiv.firstChild as HTMLDivElement).innerText =
-                actionName ?? source; // name
-            this.iconDiv.innerText = sourceIcon ?? "❔"; // icon
+            this.updateActionName(actionName ?? source);
+
+            // use agent icon for agents, user Initial for users
+            if (this.iconDiv.className.indexOf("agent-") > -1) {
+                this.iconDiv.innerText = sourceIcon ?? "❔"; // icon
+            } else if (actionName && actionName.length > 0) {
+                this.iconDiv.innerText = actionName
+                    ?.charAt(0)
+                    .toLocaleUpperCase();
+            }
         }
     }
 
     public updateActionName(name: string | undefined) {
-        if (name !== undefined) {
+        if (name !== undefined && name.length > 0) {
             (this.timestampDiv.firstChild as HTMLDivElement).innerText = name;
-        } else {
-            (this.timestampDiv.firstChild as HTMLDivElement).innerText = "";
         }
     }
 
@@ -158,12 +162,10 @@ export class MessageContainer {
         div.append(timestampDiv);
         this.timestampDiv = timestampDiv;
 
-        if (classNameSuffix === "agent") {
-            const agentIconDiv = document.createElement("div");
-            agentIconDiv.className = "agent-icon";
-            div.append(agentIconDiv);
-            this.iconDiv = agentIconDiv;
-        }
+        const agentIconDiv = document.createElement("div");
+        agentIconDiv.className = `${classNameSuffix}-icon`;
+        this.iconDiv = agentIconDiv;
+        div.append(agentIconDiv);
 
         const messageBodyDiv = document.createElement("div");
         const bodyClass = this.hideMetrics
@@ -182,7 +184,12 @@ export class MessageContainer {
         beforeElem.before(div);
 
         this.div = div;
-        this.updateSource();
+
+        if (classNameSuffix == "agent") {
+            this.updateSource();
+        } else {
+            this.updateSource(chatView.userGivenName);
+        }
     }
 
     public getMessage() {
@@ -249,10 +256,7 @@ export class MessageContainer {
         );
     }
 
-    public proposeAction(
-        proposeActionId: number,
-        actionTemplates: TemplateEditConfig,
-    ) {
+    public async proposeAction(actionTemplates: TemplateEditConfig) {
         // use this div to show the proposed action
         const actionContainer = document.createElement("div");
         actionContainer.className = "action-container";
@@ -268,73 +272,72 @@ export class MessageContainer {
             span.innerText = text;
             return span;
         };
-        const confirm = () => {
-            const choices: InputChoice[] = [
-                {
-                    text: "Accept",
-                    element: createTextSpan("✓"),
-                    selectKey: ["y", "Y", "Enter"],
-                    value: true,
-                },
-                {
-                    text: "Edit",
-                    element: createTextSpan("✎"),
-                    selectKey: ["n", "N", "Delete"],
-                    value: undefined,
-                },
-                {
-                    text: "Cancel",
-                    element: createTextSpan("✕"),
-                    selectKey: ["Escape"],
-                    value: false,
-                },
-            ];
-            this.addChoicePanel(choices, (choice: InputChoice) => {
-                if (choice.value === undefined) {
-                    edit();
-                    return;
-                }
-                actionContainer.remove();
-                const replacement = choice.value ? undefined : null;
-                getClientAPI().sendProposedAction(proposeActionId, replacement);
-            });
-            this.scrollIntoView();
-        };
-        const edit = () => {
-            actionCascade.setEditMode(true);
-            const choices: InputChoice[] = [
-                {
-                    text: "Replace",
-                    element: iconCheckMarkCircle(),
-                    value: true,
-                },
-                {
-                    text: "Cancel",
-                    element: iconX(),
-                    value: false,
-                },
-            ];
-            this.addChoicePanel(choices, (choice: InputChoice) => {
-                if (choice.value === true) {
-                    if (actionCascade.hasErrors) {
-                        return false;
+        return new Promise((resolve) => {
+            const confirm = () => {
+                const choices: InputChoice[] = [
+                    {
+                        text: "Accept",
+                        element: createTextSpan("✓"),
+                        selectKey: ["y", "Y", "Enter"],
+                        value: true,
+                    },
+                    {
+                        text: "Edit",
+                        element: createTextSpan("✎"),
+                        selectKey: ["n", "N", "Delete"],
+                        value: undefined,
+                    },
+                    {
+                        text: "Cancel",
+                        element: createTextSpan("✕"),
+                        selectKey: ["Escape"],
+                        value: false,
+                    },
+                ];
+                this.addChoicePanel(choices, (choice: InputChoice) => {
+                    if (choice.value === undefined) {
+                        edit();
+                        return;
                     }
                     actionContainer.remove();
-                    getClientAPI().sendProposedAction(
-                        proposeActionId,
-                        actionCascade.value,
-                    );
-                } else {
-                    actionCascade.reset();
-                    actionCascade.setEditMode(false);
-                    confirm();
-                }
-                return true;
-            });
-            this.scrollIntoView();
-        };
+                    const replacement = choice.value ? undefined : null;
+                    resolve(replacement);
+                });
+                this.scrollIntoView();
+            };
+            const edit = () => {
+                actionCascade.setEditMode(true);
+                const choices: InputChoice[] = [
+                    {
+                        text: "Replace",
+                        element: iconCheckMarkCircle(),
+                        value: true,
+                    },
+                    {
+                        text: "Cancel",
+                        element: iconX(),
+                        value: false,
+                    },
+                ];
+                this.addChoicePanel(choices, (choice: InputChoice) => {
+                    if (choice.value === true) {
+                        if (actionCascade.hasErrors) {
+                            return false;
+                        }
+                        actionContainer.remove();
+                        resolve(actionCascade.value);
+                    } else {
+                        actionCascade.reset();
+                        actionCascade.setEditMode(false);
+                        confirm();
+                    }
+                    return true;
+                });
+                this.scrollIntoView();
+            };
 
-        confirm();
+            confirm();
+        });
     }
 
     private speakText(tts: TTS, speakText: string) {

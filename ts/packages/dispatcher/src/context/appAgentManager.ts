@@ -32,7 +32,7 @@ const debugError = registerDebug("typeagent:dispatcher:agents:error");
 
 type AppAgentRecord = {
     name: string;
-    provider: AppAgentProvider;
+    provider?: AppAgentProvider | undefined;
     schemas: Set<string>;
     actions: Set<string>;
     commands: boolean;
@@ -142,7 +142,7 @@ export class AppAgentManager implements ActionConfigProvider {
     private readonly emojis: Record<string, string> = {};
     private readonly transientAgents: Record<string, boolean | undefined> = {};
     private readonly actionSemanticMap?: ActionSchemaSemanticMap;
-    private readonly actionSchemaFileCache;
+    private readonly actionSchemaFileCache: ActionSchemaFileCache;
 
     public constructor(cacheDirPath: string | undefined) {
         this.actionSchemaFileCache = new ActionSchemaFileCache(
@@ -251,16 +251,36 @@ export class AppAgentManager implements ActionConfigProvider {
         for (const name of provider.getAppAgentNames()) {
             // TODO: detect duplicate names
             const manifest = await provider.getAppAgentManifest(name);
-            this.emojis[name] = manifest.emojiChar;
+            this.addAgentManifest(
+                name,
+                manifest,
+                semanticMapP,
+                provider,
+                actionEmbeddingCache,
+            );
+        }
+        debug("Waiting for action embeddings");
+        await Promise.all(semanticMapP);
+        debug("Finish action embeddings");
+    }
 
-            // TODO: detect duplicate names
-            const actionConfigs = convertToActionConfig(name, manifest);
+    private addAgentManifest(
+        appAgentName: string,
+        manifest: AppAgentManifest,
+        semanticMapP: Promise<void>[],
+        provider?: AppAgentProvider,
+        actionEmbeddingCache?: EmbeddingCache,
+    ) {
+        // TODO: detect duplicate names
+        const actionConfigs = convertToActionConfig(appAgentName, manifest);
 
-            const entries = Object.entries(actionConfigs);
-            for (const [name, config] of entries) {
-                debug(`Adding action config: ${name}`);
-                this.actionConfigs.set(name, config);
-                this.emojis[name] = config.emojiChar;
+        const entries = Object.entries(actionConfigs);
+
+        try {
+            for (const [schemaName, config] of entries) {
+                debug(`Adding action config: ${schemaName}`);
+                this.actionConfigs.set(schemaName, config);
+                this.emojis[schemaName] = config.emojiChar;
 
                 const actionSchemaFile =
                     this.actionSchemaFileCache.getActionSchemaFile(config);
@@ -276,30 +296,95 @@ export class AppAgentManager implements ActionConfigProvider {
                 }
 
                 if (config.transient) {
-                    this.transientAgents[name] = false;
+                    this.transientAgents[schemaName] = false;
                 }
                 if (config.injected) {
                     for (const actionName of actionSchemaFile.actionSchemas.keys()) {
-                        this.injectedSchemaForActionName.set(actionName, name);
+                        this.injectedSchemaForActionName.set(
+                            actionName,
+                            schemaName,
+                        );
                     }
                 }
             }
 
-            const record: AppAgentRecord = {
-                name,
-                provider,
-                actions: new Set(),
-                schemas: new Set(),
-                commands: false,
-                hasSchemas: entries.length > 0,
-                manifest,
-            };
-
-            this.agents.set(name, record);
+            this.emojis[appAgentName] = manifest.emojiChar;
+        } catch (e: any) {
+            // Clean up what we did.
+            this.cleanupDynamicAgent(appAgentName);
+            throw e;
         }
+
+        const record: AppAgentRecord = {
+            name: appAgentName,
+            provider,
+            actions: new Set(),
+            schemas: new Set(),
+            commands: false,
+            hasSchemas: entries.length > 0,
+            manifest,
+        };
+
+        this.agents.set(appAgentName, record);
+        return record;
+    }
+
+    public async addDynamicAgent(
+        appAgentName: string,
+        manifest: AppAgentManifest,
+        appAgent: AppAgent,
+    ) {
+        if (this.agents.has(appAgentName)) {
+            throw new Error(`App agent ${appAgentName} already exists`);
+        }
+
+        // REVIEW: action embedding is not cached.
+        const semanticMapP: Promise<void>[] = [];
+        const record = this.addAgentManifest(
+            appAgentName,
+            manifest,
+            semanticMapP,
+        );
+        record.appAgent = appAgent;
+
         debug("Waiting for action embeddings");
         await Promise.all(semanticMapP);
         debug("Finish action embeddings");
+    }
+
+    private cleanupDynamicAgent(appAgentName: string) {
+        delete this.emojis[appAgentName];
+        for (const [schemaName, config] of this.actionConfigs) {
+            if (getAppAgentName(schemaName) !== appAgentName) {
+                continue;
+            }
+            delete this.emojis[schemaName];
+            this.actionConfigs.delete(schemaName);
+            this.actionSchemaFileCache.unloadActionSchemaFile(schemaName);
+            this.actionSemanticMap?.removeActionSchemaFile(schemaName);
+            if (config.transient) {
+                delete this.transientAgents[schemaName];
+            }
+            if (config.injected) {
+                const injectedMap = this.injectedSchemaForActionName;
+                for (const [actionName, name] of injectedMap) {
+                    if (name === schemaName) {
+                        injectedMap.delete(actionName);
+                    }
+                }
+            }
+        }
+    }
+
+    public async removeDynamicAgent(appAgentName: string) {
+        const record = this.getRecord(appAgentName);
+        this.agents.delete(appAgentName);
+        this.cleanupDynamicAgent(appAgentName);
+
+        await this.closeSessionContext(record);
+        if (record.appAgent !== undefined) {
+            record.provider?.unloadAppAgent(record.name);
+        }
     }
 
     public getActionEmbeddings() {
@@ -368,7 +453,7 @@ export class AppAgentManager implements ActionConfigProvider {
                 "schemas",
                 name,
                 useDefault,
-                config.translationDefaultEnabled,
+                config.schemaDefaultEnabled,
                 record.schemas.has(name),
                 failedSchemas,
             );
@@ -496,7 +581,7 @@ export class AppAgentManager implements ActionConfigProvider {
                     record.commands = false;
                     await this.closeSessionContext(record);
                     if (record.appAgent !== undefined) {
-                        record.provider.unloadAppAgent(record.name);
+                        record.provider?.unloadAppAgent(record.name);
                     }
                     record.appAgent = undefined;
                 })(),
@@ -582,6 +667,7 @@ export class AppAgentManager implements ActionConfigProvider {
             record.name,
             agentContext,
             context,
+            record.name === "browser", // TODO: Make this not hard coded
         );
 
         debug(`Session context created for ${record.name}`);
@@ -614,6 +700,11 @@ export class AppAgentManager implements ActionConfigProvider {
 
     private async ensureAppAgent(record: AppAgentRecord) {
         if (record.appAgent === undefined) {
+            if (record.provider === undefined) {
+                throw new Error(
+                    `Internal error: no provider to load the app agent: ${record.name}`,
+                );
+            }
             record.appAgent = await record.provider.loadAppAgent(record.name);
         }
         return record.appAgent;

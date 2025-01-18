@@ -22,6 +22,9 @@ permissions:
   pull-requests: read
   contents: read
 
+env:
+  NODE_OPTIONS: --max_old_space_size=8192
+
 jobs:
   build_ts:
     strategy:
@@ -36,6 +39,9 @@ jobs:
 
     runs-on: ${{ matrix.os }}
     steps:
+      - if: runner.os == 'Linux'
+        run: |
+          sudo apt install libsecret-1-0
       - name: Setup Git LF
         run: |
           git config --global core.autocrlf false
@@ -51,8 +57,7 @@ jobs:
         if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts == 'true' }}
         name: Install pnpm
         with:
-          version: 9
-          run_install: false
+          package_json_file: ts/package.json
       - uses: actions/setup-node@v4
         if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts == 'true' }}
         with:

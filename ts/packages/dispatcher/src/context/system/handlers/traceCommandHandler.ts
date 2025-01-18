@@ -59,6 +59,14 @@ export class TraceCommandHandler implements CommandHandler {
             );
         }
 
+        if (registerDebug.inspectOpts === undefined) {
+            registerDebug.inspectOpts = {};
+        }
+
+        (registerDebug.inspectOpts as any).maxStringLength = null;
+        (registerDebug.inspectOpts as any).maxArrayLength = null;
+        (registerDebug.inspectOpts as any).depth = null;
+
         displaySuccess(
             `Current trace settings: ${getCurrentTraceSettings().join(",")}`,
             context,

@@ -29,7 +29,12 @@ import {
   CommandHandlerTable,
   getCommandInterface,
 } from "@typeagent/agent-sdk/helpers/command";
-import { handleInstacartAction } from "./instacart/actionHandler.mjs";
+
+// import { handleInstacartAction } from "./instacart/actionHandler.mjs";
+import { handleInstacartAction } from "./instacart/planHandler.mjs";
+
+import { processWebAgentMessage, WebAgentChannels } from "./webTypeAgent.mjs";
+import { isWebAgentMessage } from "../common/webAgentMessageTypes.mjs";
 
 export function instantiate(): AppAgent {
   return {
@@ -42,6 +47,7 @@ export function instantiate(): AppAgent {
 
 export type BrowserActionContext = {
   webSocket: WebSocket | undefined;
+  webAgentChannels: WebAgentChannels | undefined;
   crossWordState: Crossword | undefined;
   browserConnector: BrowserConnector | undefined;
   browserProcess: ChildProcess | undefined;
@@ -51,6 +57,7 @@ export type BrowserActionContext = {
 async function initializeBrowserContext(): Promise<BrowserActionContext> {
   return {
     webSocket: undefined,
+    webAgentChannels: undefined,
     crossWordState: undefined,
     browserConnector: undefined,
     browserProcess: undefined,
@@ -76,7 +83,7 @@ async function updateBrowserContext(
       return;
     }
 
-    const webSocket = await createWebSocket();
+    const webSocket = await createWebSocket("browser", "dispatcher");
     if (webSocket) {
       context.agentContext.webSocket = webSocket;
       context.agentContext.browserConnector = new BrowserConnector(context);
@@ -88,11 +95,16 @@ async function updateBrowserContext(
       webSocket.addEventListener("message", async (event: any) => {
         const text = event.data.toString();
         const data = JSON.parse(text) as WebSocketMessage;
-        if (
-          data.target == "dispatcher" &&
-          data.source == "browser" &&
-          data.body
-        ) {
+        if (isWebAgentMessage(data)) {
+          await processWebAgentMessage(data, context);
+          return;
+        }
+
+        if (data.target !== "dispatcher" || data.source !== "browser") {
+          return;
+        }
+
+        if (data.body) {
           switch (data.messageType) {
             case "enableSiteTranslator": {
               if (data.body == "browser.crossword") {
@@ -177,12 +189,23 @@ async function executeBrowserAction(
         return createActionResult(commerceResult);
       } else if (action.translatorName === "browser.instacart") {
         const instacartResult = await handleInstacartAction(action, context);
-        return createActionResult(instacartResult);
+
+        return createActionResult(
+          instacartResult.displayText,
+          undefined,
+          instacartResult.entities,
+        );
+
+        // return createActionResult(instacartResult);
       }
 
       await connector?.sendActionToBrowser(action, messageType);
     } catch (ex: any) {
-      console.log(JSON.stringify(ex));
+      if (ex instanceof Error) {
+        console.error(ex);
+      } else {
+        console.error(JSON.stringify(ex));
+      }
 
       throw new Error("Unable to contact browser backend.");
     }
@@ -273,7 +296,11 @@ async function handleTabIndexActions(
         }),
       );
     } catch (ex: any) {
-      console.log(JSON.stringify(ex));
+      if (ex instanceof Error) {
+        console.error(ex);
+      } else {
+        console.error(JSON.stringify(ex));
+      }
 
       throw new Error("Unable to contact browser backend.");
     }
@@ -357,7 +384,7 @@ class CloseBrowserHandler implements CommandHandlerNoParams {
 }
 
 export const handlers: CommandHandlerTable = {
-  description: "Browwser App Agent Commands",
+  description: "Browser App Agent Commands",
   commands: {
     launch: {
       description: "Launch a browser session",

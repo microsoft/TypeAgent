@@ -21,7 +21,8 @@ export type ShellSettingsType = {
     multiModalContent: boolean;
     devUI: boolean;
     partialCompletion: boolean;
-    allowedDisplayType: DisplayType[];
+    disallowedDisplayType: DisplayType[];
+    darkMode: boolean;
 };
 
 export const defaultSettings: ShellSettingsType = {
@@ -35,5 +36,6 @@ export const defaultSettings: ShellSettingsType = {
     multiModalContent: true,
     devUI: false,
     partialCompletion: true,
-    allowedDisplayType: ["html", "iframe", "text"],
+    disallowedDisplayType: [],
+    darkMode: false,
 };

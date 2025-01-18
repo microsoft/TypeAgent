@@ -25,11 +25,11 @@ class MixtralChat:
         }
 
 @dataclass
-class MixtralDataset:
+class MixtralFormat:
     items: List[MixtralChat]
 
     @classmethod
-    def from_dataset(cls, dataset: "Type[Dataset]") -> "MixtralDataset":
+    def from_dataset(cls, dataset: "Type[ChapparalDataset]") -> "MixtralFormat":
         items = []
         for pair in dataset.info_pairs:
             populated_message = dataset.get_filled_prompt(pair.message)

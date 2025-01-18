@@ -122,7 +122,7 @@ export function createKnowledgeActionTranslator(
         return (
             `You are a service who translates user requests into a JSON object of type "${translator.validator.getTypeName()}" according to the following TypeScript definitions:\n` +
             `\`\`\`\n${translator.validator.getSchemaText()}\`\`\`\n` +
-            "When translating user requests, ensure that all pronouns are contextualized and replaced with the person or entity they refer to.\n" +
+            "When translating user requests, ensure that all pronouns are contextualized (using history as needed) and replaced with the person or entity they refer to.\n" +
             translators.requestInstructions +
             `"""\n${request}\n"""\n\n` +
             `The following is a JSON object with 2 spaces of indentation and no properties with the value undefined:\n`
@@ -212,4 +212,14 @@ export function dateToDateTime(dt: Date): DateTime {
         date,
         time,
     };
+}
+
+export type FilterWithTagScope<TFilter = any> = {
+    filter: TFilter;
+    scopeType: "tags";
+    tags: string[];
+};
+
+export function isFilterWithTagScope(obj: any): obj is FilterWithTagScope {
+    return obj.hasOwnProperty("scopeType") && obj.scopeType === "tags";
 }

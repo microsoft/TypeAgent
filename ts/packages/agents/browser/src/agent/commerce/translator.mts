@@ -13,6 +13,7 @@ import fs from "fs";
 import { openai as ai } from "aiclient";
 import { fileURLToPath } from "node:url";
 import { ShoppingActions } from "./schema/userActions.mjs";
+import { PurchaseResults } from "./schema/shoppingResults.mjs";
 
 export type HtmlFragments = {
   frameId: string;
@@ -98,7 +99,7 @@ export async function createCommercePageTranslator(
   model: "GPT_35_TURBO" | "GPT_4" | "GPT_v" | "GPT_4_O" | "GPT_4_O_MINI",
 ) {
   const packageRoot = path.join("..", "..", "..");
-  const pageSchema = await fs.promises.readFile(
+  const actionSchema = await fs.promises.readFile(
     fileURLToPath(
       new URL(
         path.join(packageRoot, "./src/agent/commerce/schema/userActions.mts"),
@@ -108,8 +109,22 @@ export async function createCommercePageTranslator(
     "utf8",
   );
 
+  const pageSchema = await fs.promises.readFile(
+    fileURLToPath(
+      new URL(
+        path.join(
+          packageRoot,
+          "./src/agent/commerce/schema/pageComponents.mts",
+        ),
+        import.meta.url,
+      ),
+    ),
+    "utf8",
+  );
+
   const agent = new ECommerceSiteAgent<ShoppingActions>(
     pageSchema,
+    actionSchema,
     "ShoppingActions",
     model,
   );
@@ -118,12 +133,19 @@ export async function createCommercePageTranslator(
 
 export class ECommerceSiteAgent<T extends object> {
   schema: string;
+  pageComponentsSchema: string;
 
   model: TypeChatLanguageModel;
   translator: TypeChatJsonTranslator<T>;
 
-  constructor(schema: string, schemaName: string, fastModelName: string) {
-    this.schema = schema;
+  constructor(
+    pageComponentsSchema: string,
+    actionSchema: string,
+    schemaName: string,
+    fastModelName: string,
+  ) {
+    this.pageComponentsSchema = pageComponentsSchema;
+    this.schema = actionSchema;
 
     const apiSettings = ai.azureApiSettingsFromEnv(
       ai.ModelType.Chat,
@@ -167,6 +189,7 @@ export class ECommerceSiteAgent<T extends object> {
         type: "text",
         text: `
         Use the layout information provided and the user request below to generate a SINGLE "${translator.validator.getTypeName()}" response using the typescript schema below.
+        For schemas that include CSS selectors, construct the selector based on the element's Id attribute if the id is present.
         You should stop searching and return current result as soon as you find a result that matches the user's criteria:
         
         '''
@@ -185,16 +208,8 @@ export class ECommerceSiteAgent<T extends object> {
     return promptSections;
   }
 
-  private getBootstrapTranslator(fileName: string, targetType: string) {
-    const packageRoot = path.join("..", "..", "..");
-    const schemaPath = fileURLToPath(
-      new URL(
-        path.join(packageRoot, `./src/agent/commerce/schema/${fileName}`),
-        import.meta.url,
-      ),
-    );
-
-    const pageSchema = fs.readFileSync(schemaPath, "utf8");
+  private getBootstrapTranslator(targetType: string, targetSchema?: string) {
+    const pageSchema = targetSchema ?? this.pageComponentsSchema;
 
     const validator = createTypeScriptJsonValidator(pageSchema, targetType);
     const bootstrapTranslator = createJsonTranslator(this.model, validator);
@@ -213,10 +228,7 @@ export class ECommerceSiteAgent<T extends object> {
     fragments?: HtmlFragments[],
     screenshot?: string,
   ) {
-    const bootstrapTranslator = this.getBootstrapTranslator(
-      "pageComponents.mts",
-      componentTypeName,
-    );
+    const bootstrapTranslator = this.getBootstrapTranslator(componentTypeName);
 
     const promptSections = this.getCssSelectorForElementPrompt(
       bootstrapTranslator,
@@ -224,6 +236,62 @@ export class ECommerceSiteAgent<T extends object> {
       fragments,
       screenshot,
     ) as ContentSection[];
+
+    const response = await bootstrapTranslator.translate("", [
+      { role: "user", content: JSON.stringify(promptSections) },
+    ]);
+    return response;
+  }
+
+  async getFriendlyPurchaseSummary(rawResults: PurchaseResults) {
+    const packageRoot = path.join("..", "..", "..");
+    const resultsSchema = await fs.promises.readFile(
+      fileURLToPath(
+        new URL(
+          path.join(
+            packageRoot,
+            "./src/agent/commerce/schema/shoppingResults.mts",
+          ),
+          import.meta.url,
+        ),
+      ),
+      "utf8",
+    );
+
+    const bootstrapTranslator = this.getBootstrapTranslator(
+      "PurchaseSummary",
+      resultsSchema,
+    );
+
+    const prefixSection = getBootstrapPrefixPromptSection();
+    const promptSections = [
+      ...prefixSection,
+      {
+        type: "text",
+        text: `
+        Use the user request below to generate a SINGLE "${bootstrapTranslator.validator.getTypeName()}" response using the typescript schema below.
+        '''
+        ${bootstrapTranslator.validator.getSchemaText()}
+        '''
+        `,
+      },
+      {
+        type: "text",
+        text: `
+               
+            Here is  user request
+            '''
+            ${JSON.stringify(rawResults, undefined, 2)}
+            '''
+            `,
+      },
+      {
+        type: "text",
+        text: `
+        The following is the COMPLETE JSON response object with 2 spaces of indentation and no properties with the value undefined:            
+        `,
+      },
+    ];
 
     const response = await bootstrapTranslator.translate("", [
       { role: "user", content: JSON.stringify(promptSections) },

@@ -84,6 +84,7 @@ export function makeClientIOMessage(
     requestId: RequestId,
     source: string,
     actionIndex?: number,
+    actionName?: string,
 ): IAgentMessage {
     return {
         message,
@@ -94,7 +95,7 @@ export function makeClientIOMessage(
             requestId !== undefined
                 ? context?.metricsManager?.getMetrics(requestId)
                 : undefined,
-        actionName: context?.lastActionName,
+        actionName,
     };
 }
 

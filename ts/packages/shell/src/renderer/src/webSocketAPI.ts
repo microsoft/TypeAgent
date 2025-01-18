@@ -1,14 +1,19 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import {
-    AppAgentEvent,
-    DynamicDisplay,
-    TemplateSchema,
-} from "@typeagent/agent-sdk";
-import { CommandCompletionResult, RequestMetrics } from "agent-dispatcher";
+import { ClientIO } from "agent-dispatcher";
 import { ClientAPI, SpeechToken } from "../../preload/electronTypes";
+import { createClientIORpcServer } from "agent-dispatcher/rpc/clientio/server";
+import { createGenericChannel } from "agent-rpc/channel";
+import { createDispatcherRpcClient } from "agent-dispatcher/rpc/dispatcher/client";
 
+const fnMap: Map<string, any> = new Map<string, any>();
+
+function placeHolder(category: string, callback: any) {
+    console.log(category + "\n" + JSON.stringify(callback));
+}
+
+let clientIORegistered = false;
 export const webapi: ClientAPI = {
     // TODO: implement
     onListenEvent: (
@@ -19,139 +24,10 @@ export const webapi: ClientAPI = {
             useLocalWhisper?: boolean,
         ) => void,
     ) => placeHolder("listen-event", callback),
-
-    processShellRequest: (request: string, id: string, images: string[]) => {
-        return new Promise<RequestMetrics | undefined>((resolve, reject) => {
-            let currentMessageId: number = ++maxWebAPIMessageId;
-            // call server websocket and send request
-            globalThis.ws.send(
-                JSON.stringify({
-                    message: "process-shell-request",
-                    data: {
-                        messageId: currentMessageId,
-                        request,
-                        id,
-                        images,
-                    },
-                }),
-            );
-            // callbacks saved for later resolution
-            msgPromiseMap.set(currentMessageId, { resolve, reject });
-        });
-    },
-    getCommandCompletion: (prefix: string) => {
-        // TODO: implement
-        return new Promise<CommandCompletionResult | undefined>(
-            (resolve, reject) => {
-                placeHolder1({ resolve, reject });
-                placeHolder("getCommandCompletion", prefix);
-            },
-        );
-    },
-
-    getTemplateCompletion: (
-        templateAgentName,
-        templateName,
-        data,
-        propertyName,
-    ) => {
-        // TODO: implement
-        return new Promise<string[]>((resolve, reject) => {
-            placeHolder1({ resolve, reject });
-            placeHolder("getActionCompletion", {
-                templateAgentName,
-                templateName,
-                data,
-                propertyName,
-            });
-        });
-    },
-    getDynamicDisplay(source: string, id: string) {
-        globalThis.ws.send(
-            JSON.stringify({
-                message: "get-dynamic-display",
-                data: {
-                    appAgentName: source,
-                    displayType: "html",
-                    requestId: id,
-                },
-            }),
-        );
-
-        return new Promise<DynamicDisplay>(() => {
-            // currently this promise isn't listened so no need to resolve/reject
-            // resolution/rejection comes through as a separate web socket message
-        });
-    },
-    getTemplateSchema(
-        templateAgentName: string,
-        templateName: string,
-        data: unknown,
-    ) {
-        return new Promise<TemplateSchema>((resolve, reject) => {
-            let currentMessageId: number = ++maxWebAPIMessageId;
-            globalThis.ws.send(
-                JSON.stringify({
-                    message: "get-template-schema",
-                    data: {
-                        messageId: currentMessageId,
-                        templateAgentName,
-                        templateName,
-                        data,
-                    },
-                }),
-            );
-
-            // callbacks saved for later resolution
-            msgPromiseMap.set(currentMessageId, { resolve, reject });
-        });
-    },
-    onUpdateDisplay(callback) {
-        fnMap.set("update-display", callback);
-    },
-    onSetDynamicActionDisplay(callback) {
-        fnMap.set("set-dynamic-action-display", callback);
-    },
-    onClear(callback) {
-        fnMap.set("clear", callback);
-    },
     onSettingSummaryChanged(callback) {
         fnMap.set("setting-summary-changed", callback);
     },
-    onNotifyExplained(callback) {
-        fnMap.set("notifyExplained", callback);
-    },
-    onRandomCommandSelected(callback) {
-        fnMap.set("update-random-command", callback);
-    },
-    onAskYesNo(callback) {
-        fnMap.set("askYesNo", callback);
-    },
-    sendYesNo: (askYesNoId: number, accept: boolean) => {
-        globalThis.ws?.send(
-            JSON.stringify({
-                message: "askYesNoResponse",
-                data: {
-                    askYesNoId,
-                    accept,
-                },
-            }),
-        );
-    },
-    onProposeAction(callback) {
-        fnMap.set("proposeAction", callback);
-    },
-    sendProposedAction: (proposeActionId: number, replacement?: unknown) => {
-        globalThis.ws?.send(
-            JSON.stringify({
-                message: "proposeActionResponse",
-                data: {
-                    proposeActionId,
-                    replacement,
-                },
-            }),
-        );
-    },
+
     getSpeechToken: () => {
         return new Promise<SpeechToken | undefined>(async (resolve) => {
             // We are not auth in this case and instead will rely on the device to provide speech reco
@@ -176,9 +52,6 @@ export const webapi: ClientAPI = {
         // no longer supported (i.e. F1 key)
         fnMap.set("help-requested", callback);
     },
-    onRandomMessageRequested(callback) {
-        fnMap.set("random-message-requested", callback);
-    },
     onShowDialog(callback) {
         // not supported without @shell command
         // TODO: inject replacement on mobile?
@@ -189,31 +62,35 @@ export const webapi: ClientAPI = {
         // TODO: figure out solution for mobile
         fnMap.set("settings-changed", callback);
     },
-    onNotificationCommand(callback) {
-        fnMap.set("notification-command", callback);
-    },
-    onNotify(callback) {
-        fnMap.set("notification-arrived", callback);
-    },
-    onTakeAction(callback) {
-        fnMap.set("take-action", callback);
+    registerClientIO(clientIO: ClientIO) {
+        if (clientIORegistered) {
+            throw new Error("ClientIO already registered");
+        }
+        clientIORegistered = true;
+        createClientIORpcServer(clientIO, clientIOChannel.channel);
     },
 };
 
-let fnMap: Map<string, any> = new Map<string, any>();
-let maxWebAPIMessageId: number = 0;
-let msgPromiseMap = new Map<
-    number,
-    { resolve: (result?: any) => void; reject: (reason?: any) => void }
->();
+const clientIOChannel = createGenericChannel((message: any) =>
+    globalThis.ws.send(
+        JSON.stringify({
+            message: "clientio-rpc-reply",
+            data: message,
+        }),
+    ),
+);
+const dispatcherChannel = createGenericChannel((message: any) =>
+    globalThis.ws.send(
+        JSON.stringify({
+            message: "dispatcher-rpc-call",
+            data: message,
+        }),
+    ),
+);
 
-function placeHolder1(category: any) {
-    console.log(category);
-}
-
-function placeHolder(category: string, callback: any) {
-    console.log(category + "\n" + JSON.stringify(callback));
-}
+export const webdispatcher = createDispatcherRpcClient(
+    dispatcherChannel.channel,
+);
 
 export async function createWebSocket(autoReconnect: boolean = true) {
     let url = window.location;
@@ -238,40 +115,14 @@ export async function createWebSocket(autoReconnect: boolean = true) {
             const msgObj = JSON.parse(event.data);
             console.log(msgObj);
             switch (msgObj.message) {
-                case "update-display":
-                    fnMap.get("update-display")(
-                        undefined,
-                        msgObj.data.message,
-                        msgObj.data.mode,
-                    );
+                case "clientio-rpc-call":
+                    clientIOChannel.message(msgObj.data);
                     break;
-                case "exit":
-                    window.close();
+
+                case "dispatcher-rpc-reply":
+                    dispatcherChannel.message(msgObj.data);
                     break;
-                case "clear":
-                    fnMap.get("clear")(undefined, msgObj.data);
-                    break;
-                case "take-action":
-                    fnMap.get("take-action")(
-                        undefined,
-                        msgObj.data.action,
-                        msgObj.data.data,
-                    );
-                    break;
-                case "notify":
-                    notify(msgObj);
-                    break;
-                case "set-dynamic-action-display":
-                    // TODO: verify
-                    fnMap.get("set-dynamic-action-display")(
-                        undefined,
-                        msgObj.data.source,
-                        msgObj.data.requestId,
-                        msgObj.data.actionIndex,
-                        msgObj.data.displayId,
-                        msgObj.data.nextRefreshMs,
-                    );
-                    break;
+
                 case "setting-summary-changed":
                     let agentsMap: Map<string, string> = new Map<
                         string,
@@ -283,42 +134,10 @@ export async function createWebSocket(autoReconnect: boolean = true) {
                         agentsMap,
                     );
                     break;
-                case "askYesNo":
-                    fnMap.get("askYesNo")(
-                        msgObj.data.askYesNoId,
-                        msgObj.data.message,
-                        msgObj.data.requestId,
-                        msgObj.data.source,
-                    );
-                    break;
-                case "proposeAction":
-                    fnMap.get("proposeAction")(
-                        undefined,
-                        msgObj.data.currentProposeActionId,
-                        msgObj.data.actionTemplates,
-                        msgObj.data.requestId,
-                        msgObj.data.source,
-                    );
-                    break;
-                case "process-shell-request-done":
-                    completeMessagePromise(
-                        msgObj.data.messageId,
-                        true,
-                        msgObj.data.metrics,
-                    );
-                    break;
-                case "process-shell-request-error":
-                    completeMessagePromise(
-                        msgObj.data.messageId,
-                        false,
-                        msgObj.data.error,
-                    );
-                    break;
-                case "set-template-schema":
-                    completeMessagePromise(
-                        msgObj.data.messageId,
-                        true,
-                        msgObj.data.data.schema,
+
+                default:
+                    console.warn(
+                        `websocket message not handled: ${msgObj.message}`,
                     );
                     break;
             }
@@ -330,79 +149,15 @@ export async function createWebSocket(autoReconnect: boolean = true) {
             // reconnect?
             if (autoReconnect) {
                 createWebSocket().then((ws) => (globalThis.ws = ws));
+            } else {
+                clientIOChannel.disconnect();
+                dispatcherChannel.disconnect();
             }
         };
         webSocket.onerror = (event: object) => {
             console.log("websocket error" + event);
             resolve(undefined);
         };
-
-        function completeMessagePromise(
-            messageId: number,
-            success: boolean,
-            result: any,
-        ) {
-            if (messageId && msgPromiseMap.has(messageId)) {
-                const promise = msgPromiseMap.get(messageId);
-                if (success) {
-                    promise?.resolve(result);
-                } else {
-                    promise?.reject(result);
-                }
-                msgPromiseMap.delete(messageId);
-            } else {
-                console.log(`Unknown message ID: ${messageId}`);
-            }
-        }
-
-        function notify(msg: any) {
-            switch (msg.data.event) {
-                case "explained":
-                    if (msg.data.requestId === undefined) {
-                        console.warn("notifyExplained: requestId is undefined");
-                        return;
-                    } else {
-                        fnMap.get("mark-explained")(
-                            undefined,
-                            msg.data.requestId,
-                            msg.data.data.time,
-                            msg.data.data.fromCache,
-                            msg.data.data.fromUser,
-                        );
-                    }
-                    break;
-                case "randomCommandSelected":
-                    fnMap.get("update-random-command")(
-                        undefined,
-                        msg.data.requestId,
-                        msg.data.data.message,
-                    );
-                    break;
-                case "showNotifications":
-                    fnMap.get("notification-command")(
-                        undefined,
-                        msg.data.requestId,
-                        msg.data.data,
-                    );
-                    break;
-                case AppAgentEvent.Error:
-                case AppAgentEvent.Warning:
-                case AppAgentEvent.Info:
-                    console.log(
-                        `[${msg.data.event}] ${msg.data.source}: ${msg.data.data}`,
-                    );
-                    fnMap.get("notification-arrived")(
-                        undefined,
-                        msg.data.event,
-                        msg.data.requestId,
-                        msg.data.source,
-                        msg.data.data,
-                    );
-                    break;
-                default:
-                // ignore
-            }
-        }
     });
 }
 

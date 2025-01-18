@@ -69,6 +69,7 @@ export interface AnswerGenerator {
         style: AnswerStyle | undefined,
         response: SearchResponse,
         higherPrecision: boolean,
+        enforceContextLength?: boolean,
     ): Promise<AnswerResponse | undefined>;
     generateAnswerInChunks(
         question: string,
@@ -118,10 +119,15 @@ export function createAnswerGenerator(
         answerStyle: AnswerStyle | undefined,
         response: SearchResponse,
         higherPrecision: boolean,
+        enforceContextLength?: boolean,
     ): Promise<AnswerResponse | undefined> {
         const context: AnswerContext = createContext(response);
-
-        if (isContextTooBig(context, response) && settings.chunking?.enable) {
+        enforceContextLength ??= true;
+        if (
+            enforceContextLength &&
+            isContextTooBig(context, response) &&
+            settings.chunking?.enable
+        ) {
             // Run answer generation in chunks
             return await getAnswerInChunks(question, context, {
                 maxCharsPerChunk: settings.maxCharsInContext!,
@@ -130,7 +136,13 @@ export function createAnswerGenerator(
             });
         }
         // Context is small enough
-        return getAnswer(question, answerStyle, higherPrecision, context);
+        return getAnswer(
+            question,
+            answerStyle,
+            higherPrecision,
+            context,
+            enforceContextLength,
+        );
     }
 
     async function getAnswerInChunks(
@@ -280,7 +292,7 @@ export function createAnswerGenerator(
             "Answer the question using only relevant topics, entities, actions, messages and time ranges/timestamps found in CONVERSATION HISTORY.\n";
         prompt +=
             "Use the name and type of the provided entities to select those highly relevant to answering the question.\n";
-        prompt += "Entities and topics are case-insensitive\n.";
+        prompt += "Entities and topics are case-insensitive.\n";
         if (settings.hints) {
             prompt += "\n" + settings.hints;
         }
