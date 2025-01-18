@@ -5,6 +5,7 @@ import { IdGenerator, getDispatcher } from "./main";
 import { ChatInput, ExpandableTextarea } from "./chatInput";
 import { iconCheckMarkCircle, iconX } from "./icon";
 import {
+    AppAction,
     DisplayAppendMode,
     DisplayContent,
     DynamicDisplay,
@@ -441,6 +442,19 @@ export class ChatView {
         }
     }
 
+    setDisplayInfo(
+        source: string,
+        requestId: RequestId,
+        actionIndex?: number,
+        action?: AppAction | string[],
+    ) {
+        this.getMessageGroup(requestId)?.setDisplayInfo(
+            source,
+            actionIndex,
+            action,
+        );
+    }
+
     addAgentMessage(
         msg: IAgentMessage,
         options?: {
@@ -459,12 +473,7 @@ export class ChatView {
             return;
         }
 
-        agentMessage.setMessage(
-            content,
-            msg.source,
-            options?.appendMode,
-            msg.actionName,
-        );
+        agentMessage.setMessage(content, msg.source, options?.appendMode);
 
         if (!dynamicUpdate) {
             this.updateScroll();
