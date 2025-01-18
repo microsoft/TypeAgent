@@ -32,7 +32,7 @@ export async function executeConfigAction(
 
         case "toggleExplanation":
             await processCommandNoLock(
-                `@config explanation ${configAction.parameters.enable ? "on" : "off"}`,
+                `@config explainer ${configAction.parameters.enable ? "on" : "off"}`,
                 context.sessionContext.agentContext,
             );
             break;
