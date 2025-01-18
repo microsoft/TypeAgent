@@ -17,9 +17,20 @@ export type WebSocketMessage = {
     body: any;
 };
 
+export type WebSocketMessageV2 = {
+    id?: string;
+    method: string;
+    params?: any;
+    result?: any;
+    error?: {
+        code?: number | undefined;
+        message: string;
+    };
+};
+
 export async function createWebSocket(
     channel: string,
-    role: string,
+    role: "dispatcher" | "client",
     clientId?: string,
 ) {
     return new Promise<WebSocket | undefined>((resolve, reject) => {

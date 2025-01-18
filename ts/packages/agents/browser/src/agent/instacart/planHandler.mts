@@ -188,7 +188,7 @@ export async function handleInstacartAction(
       .findPageComponent("ShoppingCartDetails")
       .thenRun(async (context) => {
         const cartDetails = context["ShoppingCartDetails"];
-        console.log(cartDetails);
+        // console.log(cartDetails);
 
         entities.push({
           name: cartDetails.storeName,
