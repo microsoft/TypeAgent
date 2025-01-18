@@ -149,9 +149,16 @@ export class MessageContainer {
         if (this.iconDiv !== undefined) {
             // set source and source icon
             const sourceLabel = this.sourceLabel;
+            const label = this.timestampDiv.firstChild as HTMLSpanElement;
             if (sourceLabel !== undefined && sourceLabel.length > 0) {
-                (this.timestampDiv.firstChild as HTMLDivElement).innerText =
-                    sourceLabel;
+                label.innerText = sourceLabel;
+            }
+
+            if (this.action !== undefined && !Array.isArray(this.action)) {
+                label.setAttribute(
+                    "action-data",
+                    JSON.stringify(this.action, undefined, 2),
+                );
             }
 
             this.iconDiv.innerText = this.sourceIcon;
