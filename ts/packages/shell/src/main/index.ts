@@ -24,7 +24,7 @@ import { unlinkSync } from "fs";
 import { existsSync } from "node:fs";
 import { shellAgentProvider } from "./agent.js";
 import { BrowserAgentIpc } from "./browserIpc.js";
-import { WebSocketMessage } from "common-utils";
+import { WebSocketMessageV2 } from "common-utils";
 import { AzureSpeech } from "./azureSpeech.js";
 import { auth } from "aiclient";
 import {
@@ -301,7 +301,7 @@ function createWindow(): void {
         await BrowserAgentIpc.getinstance().ensureWebsocketConnected();
 
         BrowserAgentIpc.getinstance().onMessageReceived = (
-            message: WebSocketMessage,
+            message: WebSocketMessageV2,
         ) => {
             inlineBrowserView?.webContents.send(
                 "received-from-browser-ipc",
@@ -586,7 +586,7 @@ async function initialize() {
 
     ipcMain.on(
         "send-to-browser-ipc",
-        async (_event, data: WebSocketMessage) => {
+        async (_event, data: WebSocketMessageV2) => {
             await BrowserAgentIpc.getinstance().send(data);
         },
     );
