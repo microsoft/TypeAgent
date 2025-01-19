@@ -25,7 +25,7 @@ import {
     getCommandInterface,
 } from "@typeagent/agent-sdk/helpers/command";
 
-import { searchCode, ModelContext } from "./searchCode.js";
+import { searchCode, QueryContext } from "./searchCode.js";
 import { SpelunkerAction } from "./spelunkerSchema.js";
 
 class RequestCommandHandler implements CommandHandler {
@@ -86,13 +86,13 @@ export function instantiate(): AppAgent {
 
 export type SpelunkerContext = {
     focusFolders: string[];
-    modelContext: ModelContext | undefined;
+    queryContext: QueryContext | undefined;
 };
 
 async function initializeSpelunkerContext(): Promise<SpelunkerContext> {
     return {
         focusFolders: [],
-        modelContext: undefined,
+        queryContext: undefined,
     };
 }
 

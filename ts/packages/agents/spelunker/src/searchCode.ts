@@ -38,7 +38,7 @@ function console_log(...rest: any[]): void {
     console.log(((t - epoch) / 1000).toFixed(3).padStart(6), ...rest);
 }
 
-export interface ModelContext {
+export interface QueryContext {
     chatModel: ChatModel;
     answerMaker: TypeChatJsonTranslator<AnswerSpecs>;
     miniModel: ChatModel;
@@ -47,7 +47,7 @@ export interface ModelContext {
     database: sqlite.Database | undefined;
 }
 
-function createModelContext(): ModelContext {
+function createQueryContext(): QueryContext {
     const chatModel = openai.createChatModelDefault("spelunkerChat");
     const answerMaker = createAnswerMaker(chatModel);
     const miniModel = openai.createChatModel(
@@ -86,122 +86,39 @@ export async function searchCode(
     input: string,
 ): Promise<ActionResult> {
     epoch = 0; // Reset logging clock
+
+    // 0. Check if the focus is set.
     if (!context.focusFolders.length) {
         return createActionResultFromError("Please set the focus to a folder");
     }
-    if (!context.modelContext) {
-        context.modelContext = createModelContext();
-    }
-    let db = context.modelContext.database;
-    if (db) {
-        console_log(
-            `[Existing database at ${context.modelContext.databaseLocation}]`,
-        );
-    } else {
-        console_log(
-            `[Creating database at ${context.modelContext.databaseLocation}]`,
-        );
-        db = new Database(context.modelContext.databaseLocation);
-        fs.chmodSync(context.modelContext.databaseLocation, 0o600);
-        // Write-Ahead Logging, improving concurrency and performance
-        db.pragma("journal_mode = WAL");
-        // Create all the tables we'll use
-        const schema = `
-        CREATE TABLE IF NOT EXISTS files (
-            fileName TEXT PRIMARY KEY,
-            mtime FLOAT NOT NULL,
-            size INTEGER NOT NULL
-        );
-        CREATE TABLE IF NOT EXISTS chunks (
-            id TEXT PRIMARY KEY,
-            treeName TEXT NOT NULL,
-            parentId TEXT KEY REFERENCES chunks(id), -- May be null
-            fileName TEXT KEY REFERENCES files(fileName) NOT NULL
-        );
-        CREATE TABLE IF NOT EXISTS blobs (
-            chunkId TEXT KEY REFERENCES chunks(id) NOT NULL,
-            start INTEGER NOT NULL, -- 0-based
-            lines TEXT NOT NULL,
-            breadcrumb BOOLEAN NOT NULL -- Values: 0 or 1
-        );
-        `;
-        db.exec(schema);
-        context.modelContext.database = db;
-    }
 
-    // 1. Find all .py files in the focus directories (locally, using a subprocess).
-    console_log(`[Step 1: Find .py files]`);
-    const files: string[] = [];
-    for (let i = 0; i < context.focusFolders.length; i++) {
-        files.push(...getAllPyFilesSync(context.focusFolders[i]));
-    }
-    const prepInsertFiles = db.prepare(
-        `INSERT OR REPLACE INTO FILES (fileName, mtime, size) VALUES (?, ?, ?)`,
-    );
-    for (const file of files) {
-        const stat = fs.statSync(file);
-        prepInsertFiles.run(file, stat.mtimeMs * 0.001, stat.size);
-    }
+    // 1. Create the database, chunkify all files in the focus folders, and store the chunks.
+    //    Or use what's in the database if it looks up-to-date.
+    console_log(`[Step 1: Load database]`);
+    const db = await loadDatabase(context);
 
-    // 2. Chunkify all files found (locally).
-    // TODO: Make this into its own function.
-    console_log(`[Step 2: Chunking ${files.length} files]`);
-    const allItems = await chunkifyPythonFiles(files); //ChunkedFiles and ErrorItems
-    const allErrorItems = allItems.filter(
-        (item): item is ErrorItem => "error" in item,
-    );
-    for (const errorItem of allErrorItems) {
-        // TODO: Use appendDisplay (requires passing actionContext)
-        console_log(
-            `[Error: ${errorItem.error}; Output: ${errorItem.output ?? ""}]`,
-        );
-    }
-    const allChunkedFiles = allItems.filter(
-        (item): item is ChunkedFile => "chunks" in item,
-    );
+    // 2. Load all chunks from the database.
+    console_log(`[Step 2: Load chunks from database]`);
     const allChunks: Chunk[] = [];
-    const prepDeleteBlobs = db.prepare(`
-        DELETE FROM blobs WHERE chunkId IN (
-            SELECT id
-            FROM chunks
-            WHERE filename = ?
-        )
-    `);
-    const prepDeleteChunks = db.prepare(
-        `DELETE FROM chunks WHERE fileName = ?`,
-    );
-    const prepInsertChunks = db.prepare(
-        `INSERT OR REPLACE INTO chunks (id, treeName, parentId, fileName) VALUES (?, ?, ?, ?)`,
-    );
-    const prepInsertBlobs = db.prepare(
-        `INSERT INTO blobs (chunkId, start, lines, breadcrumb) VALUES (?, ?, ?, ?)`,
-    );
-    // TODO: Wrap this loop in a transaction
-    for (const chunkedFile of allChunkedFiles) {
-        prepDeleteBlobs.run(chunkedFile.fileName);
-        prepDeleteChunks.run(chunkedFile.fileName);
-        for (const chunk of chunkedFile.chunks) {
-            chunk.fileName = chunkedFile.fileName;
-            allChunks.push(chunk);
-            prepInsertChunks.run(
-                chunk.id,
-                chunk.treeName,
-                chunk.parentId || null,
-                chunk.fileName,
-            );
-            for (const blob of chunk.blobs) {
-                prepInsertBlobs.run(
-                    chunk.id,
-                    blob.start,
-                    blob.lines.map((line) => line.trimEnd()).join("\n"),
-                    blob.breadcrumb ? 1 : 0,
-                );
-            }
-        }
+    const selectAllChunks = db.prepare(`SELECT * FROM chunks`);
+    const chunkRows: any[] = selectAllChunks.all();
+    for (const chunkRow of chunkRows) {
+        const blobRows: any[] = db
+            .prepare(`SELECT * FROM blobs WHERE chunkId = ?`)
+            .all(chunkRow.id);
+        const childRows: any[] = db
+            .prepare(`SELECT * FROM chunks WHERE parentId = ?`)
+            .all(chunkRow.id);
+        const chunk: Chunk = {
+            id: chunkRow.id,
+            treeName: chunkRow.treeName,
+            blobs: blobRows, // Ignoring chunkId
+            parentId: chunkRow.parentId,
+            children: childRows.map((row) => row.id),
+            fileName: chunkRow.fileName,
+        };
+        allChunks.push(chunk);
     }
-    console_log(
-        `  [Chunked ${allChunkedFiles.length} files into ${allChunks.length} chunks]`,
-    );
 
     // 3. Ask a fast LLM for the most relevant chunks, rank them, and keep tthe best 30.
     // This is done concurrently for real-time speed.
@@ -234,7 +151,7 @@ ${JSON.stringify(preppedChunks)}
     // 5. Send prompt to smart, code-savvy LLM.
     console_log(`[Step 5: Ask the smart LLM]`);
     const wrappedResult =
-        await context.modelContext.answerMaker.translate(prompt);
+        await context.queryContext!.answerMaker.translate(prompt);
     if (!wrappedResult.success) {
         console_log(`  [It's a failure: ${wrappedResult.message}]`);
         return createActionResultFromError(
@@ -284,7 +201,7 @@ async function selectChunks(
     for (let i = 0; i < chunks.length; i += chunksPerJob) {
         const slice = chunks.slice(i, i + chunksPerJob);
         const p = selectRelevantChunks(
-            context.modelContext!.chunkSelector,
+            context.queryContext!.chunkSelector,
             slice,
             input,
         );
@@ -414,4 +331,187 @@ function createActionResultFromMarkdownDisplay(
         entities: entities ?? [],
         displayContent: { type: "markdown", content: markdownText },
     };
+}
+
+async function loadDatabase(
+    context: SpelunkerContext,
+): Promise<sqlite.Database> {
+    if (!context.queryContext) {
+        context.queryContext = createQueryContext();
+    }
+    let loc = context.queryContext.databaseLocation;
+    let db = context.queryContext.database;
+    if (db) {
+        console_log(`  [Using database at ${loc}]`);
+    } else {
+        if (fs.existsSync(loc)) {
+            console_log(`  [Opening database at ${loc}]`);
+        } else {
+            console_log(`  [Creating database at ${loc}]`);
+        }
+        db = new Database(loc);
+        // Write-Ahead Logging, improving concurrency and performance
+        db.pragma("journal_mode = WAL");
+        // Fix permissions to be read/write only by the owner
+        fs.chmodSync(context.queryContext.databaseLocation, 0o600);
+        // Create all the tables we'll use
+        const schema = `
+        CREATE TABLE IF NOT EXISTS files (
+            fileName TEXT PRIMARY KEY,
+            mtime FLOAT NOT NULL,
+            size INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS chunks (
+            id TEXT PRIMARY KEY,
+            treeName TEXT NOT NULL,
+            parentId TEXT KEY REFERENCES chunks(id), -- May be null
+            fileName TEXT KEY REFERENCES files(fileName) NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS blobs (
+            chunkId TEXT KEY REFERENCES chunks(id) NOT NULL,
+            start INTEGER NOT NULL, -- 0-based
+            lines TEXT NOT NULL,
+            breadcrumb BOOLEAN NOT NULL -- Values: 0 or 1
+        );
+        `;
+        db.exec(schema);
+        context.queryContext.database = db;
+    }
+
+    const prepDeleteBlobs = db.prepare(`
+        DELETE FROM blobs WHERE chunkId IN (
+            SELECT id
+            FROM chunks
+            WHERE filename = ?
+        )
+    `);
+    const prepDeleteChunks = db.prepare(
+        `DELETE FROM chunks WHERE fileName = ?`,
+    );
+    const prepDeleteFiles = db.prepare(`DELETE FROM files WHERE fileName = ?`);
+    const prepInsertFiles = db.prepare(
+        `INSERT OR REPLACE INTO FILES (fileName, mtime, size) VALUES (?, ?, ?)`,
+    );
+    const prepSelectAllFiles = db.prepare(
+        `SELECT fileName, mtime, size FROM files`,
+    );
+    const prepCountChunks = db.prepare(
+        `SELECT COUNT(*) FROM chunks WHERE fileName = ?`,
+    );
+    const prepInsertChunks = db.prepare(
+        `INSERT OR REPLACE INTO chunks (id, treeName, parentId, fileName) VALUES (?, ?, ?, ?)`,
+    );
+    const prepInsertBlobs = db.prepare(
+        `INSERT INTO blobs (chunkId, start, lines, breadcrumb) VALUES (?, ?, ?, ?)`,
+    );
+
+    // 1a. Find all .py files in the focus directories (locally, using a subprocess).
+    console_log(`[Step 1a: Find .py files]`);
+    const files: string[] = []; // TODO: Include mtime and size, since we do a stat anyways
+    for (let i = 0; i < context.focusFolders.length; i++) {
+        files.push(...getAllPyFilesSync(context.focusFolders[i]));
+    }
+
+    // Compare files found with files in the database.
+    const filesToDo: string[] = [];
+    const filesInDb: Map<string, { mtime: number; size: number }> = new Map();
+    const fileRows: any[] = prepSelectAllFiles.all();
+    for (const fileRow of fileRows) {
+        filesInDb.set(fileRow.fileName, {
+            mtime: fileRow.mtime,
+            size: fileRow.size,
+        });
+    }
+    for (const file of files) {
+        // TODO: Error handling
+        const stat = fs.statSync(file);
+        const dbStat = filesInDb.get(file);
+        if (
+            !dbStat ||
+            dbStat.mtime !== stat.mtimeMs * 0.001 ||
+            dbStat.size !== stat.size
+        ) {
+            // console_log(`  [Need to update ${file} (mtime/size mismatch)]`);
+            filesToDo.push(file);
+            prepInsertFiles.run(file, stat.mtimeMs * 0.001, stat.size);
+            filesInDb.set(file, {
+                mtime: stat.mtimeMs * 0.001,
+                size: stat.size,
+            });
+        }
+        // If there are no chunks, also add to filesToDo
+        const count: number = (prepCountChunks.get(file) as any)["COUNT(*)"];
+        if (!count) {
+            // console_log(`  [Need to update ${file} (no chunks)]`);
+            filesToDo.push(file);
+        }
+    }
+    const filesToDelete: string[] = [...filesInDb.keys()].filter(
+        (file) => !files.includes(file),
+    );
+    if (filesToDelete.length) {
+        // TODO: Make it one statement?
+        for (const file of filesToDelete) {
+            console_log(`  [Deleting ${file} from database]`);
+            db.exec(`BEGIN TRANSACTION`);
+            prepDeleteBlobs.run(file);
+            prepDeleteChunks.run(file);
+            prepDeleteFiles.run(file);
+            db.exec(`COMMIT`);
+        }
+    }
+
+    if (!filesToDo.length) {
+        console_log(
+            `  [No files to update out of ${files.length}, yay cache!]`,
+        );
+        return db;
+    }
+
+    // 1b. Chunkify all new files (without LLM help).
+    // TODO: Make this into its own function.
+    console_log(
+        `[Step 1b: Chunking ${filesToDo.length} out of ${files.length} files]`,
+    );
+    const allItems: (ChunkedFile | ErrorItem)[] =
+        await chunkifyPythonFiles(filesToDo);
+    const allErrorItems = allItems.filter(
+        (item): item is ErrorItem => "error" in item,
+    );
+    for (const errorItem of allErrorItems) {
+        // TODO: Use appendDisplay (requires passing actionContext)
+        console_log(`[Error: ${errorItem.error}; Output: ${errorItem.output}]`);
+    }
+    const allChunkedFiles = allItems.filter(
+        (item): item is ChunkedFile => "chunks" in item,
+    );
+    const allChunks: Chunk[] = [];
+    for (const chunkedFile of allChunkedFiles) {
+        db.exec(`BEGIN TRANSACTION`);
+        prepDeleteBlobs.run(chunkedFile.fileName);
+        prepDeleteChunks.run(chunkedFile.fileName);
+        for (const chunk of chunkedFile.chunks) {
+            chunk.fileName = chunkedFile.fileName;
+            allChunks.push(chunk);
+            prepInsertChunks.run(
+                chunk.id,
+                chunk.treeName,
+                chunk.parentId || null,
+                chunk.fileName,
+            );
+            for (const blob of chunk.blobs) {
+                prepInsertBlobs.run(
+                    chunk.id,
+                    blob.start,
+                    blob.lines.map((line) => line.trimEnd()).join("\n"),
+                    blob.breadcrumb ? 1 : 0,
+                );
+            }
+        }
+        db.exec(`COMMIT`);
+    }
+    console_log(
+        `  [Chunked ${allChunkedFiles.length} files into ${allChunks.length} chunks]`,
+    );
+    return db;
 }
