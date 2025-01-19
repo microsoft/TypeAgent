@@ -133,19 +133,20 @@ export async function searchCode(
     }
 
     // 4. Construct a prompt from those chunks.
-    console_log(`[Step 4: Construct prompt]`);
-    const preppedChunks = chunkDescs.map((chunkDesc) =>
-        prepChunk(chunkDesc, allChunks),
-    );
+    console_log(`[Step 4: Construct a prompt for the smart LLM]`);
+    const preppedChunks: Chunk[] = chunkDescs
+        .map((chunkDesc) => prepChunk(chunkDesc, allChunks))
+        .filter(Boolean) as Chunk[];
+    // TODO: Prompt engineering
     const prompt = `\
-Please answer the user question using the given context (both given below).
+        Please answer the user question using the given context (both given below).
 
-User question: "${input}"
+        User question: "${input}"
 
-Context:
+        Context:
 
-${JSON.stringify(preppedChunks)}
-`;
+        ${prepareChunks(preppedChunks)}
+        `;
     // console_log(`[${prompt.slice(0, 1000)}]`);
 
     // 5. Send prompt to smart, code-savvy LLM.
@@ -160,6 +161,7 @@ ${JSON.stringify(preppedChunks)}
     }
     console_log(`  [It's a success]`);
     const result = wrappedResult.data;
+    console_log(`  [References: ${result.references.join(", ")}]`);
     // console_log(`[${JSON.stringify(result, undefined, 2).slice(0, 1000)}]`);
 
     // 6. Extract answer and references from result.
@@ -236,17 +238,18 @@ async function selectRelevantChunks(
     chunks: Chunk[],
     input: string,
 ): Promise<ChunkDescription[]> {
+    // TODO: Prompt engineering
     const prompt = `\
-Please select up to 30 chunks that are relevant to the user question.
-Consider carefully how relevant each chunk is to the user question.
-Provide a relevance scsore between 0 and 1 (float).
-Report only the chunk ID and relevance for each selected chunk.
-Omit irrelevant chunks. It's fine to select fewer than 30.
+    Please select up to 30 chunks that are relevant to the user question.
+    Consider carefully how relevant each chunk is to the user question.
+    Provide a relevance scsore between 0 and 1 (float).
+    Report only the chunk ID and relevance for each selected chunk.
+    Omit irrelevant chunks. It's fine to select fewer than 30.
 
-User question: "{input}"
+    User question: "{input}"
 
-Chunks: ${prepareChunks(chunks)}
-`;
+    Chunks: ${prepareChunks(chunks)}
+    `;
     // console_log(prompt);
     const wrappedResult = await selector.translate(prompt);
     // console_log(wrappedResult);
@@ -259,6 +262,7 @@ Chunks: ${prepareChunks(chunks)}
 }
 
 function prepareChunks(chunks: Chunk[]): string {
+    // TODO: Format the chunks more efficiently
     return JSON.stringify(chunks, undefined, 2);
 }
 
@@ -433,6 +437,7 @@ async function loadDatabase(
         ) {
             // console_log(`  [Need to update ${file} (mtime/size mismatch)]`);
             filesToDo.push(file);
+            // TODO: Make this insert part of the transaction for this file
             prepInsertFiles.run(file, stat.mtimeMs * 0.001, stat.size);
             filesInDb.set(file, {
                 mtime: stat.mtimeMs * 0.001,
@@ -440,6 +445,7 @@ async function loadDatabase(
             });
         }
         // If there are no chunks, also add to filesToDo
+        // TODO: Zero chunks is not reliable, empty files may have zero chunks
         const count: number = (prepCountChunks.get(file) as any)["COUNT(*)"];
         if (!count) {
             // console_log(`  [Need to update ${file} (no chunks)]`);
@@ -450,9 +456,9 @@ async function loadDatabase(
         (file) => !files.includes(file),
     );
     if (filesToDelete.length) {
-        // TODO: Make it one statement?
+        console_log(`  [Deleting ${filesToDelete.length} files from database]`);
         for (const file of filesToDelete) {
-            console_log(`  [Deleting ${file} from database]`);
+            // console_log(`  [Deleting ${file} from database]`);
             db.exec(`BEGIN TRANSACTION`);
             prepDeleteBlobs.run(file);
             prepDeleteChunks.run(file);
@@ -470,6 +476,7 @@ async function loadDatabase(
 
     // 1b. Chunkify all new files (without LLM help).
     // TODO: Make this into its own function.
+    // TODO: Numbers may look weird when long files are split by pythonChunker.
     console_log(
         `[Step 1b: Chunking ${filesToDo.length} out of ${files.length} files]`,
     );
@@ -491,7 +498,10 @@ async function loadDatabase(
         prepDeleteBlobs.run(chunkedFile.fileName);
         prepDeleteChunks.run(chunkedFile.fileName);
         for (const chunk of chunkedFile.chunks) {
-            chunk.fileName = chunkedFile.fileName;
+            // TODO: Assuming this never throws, just remove this
+            if (!chunk.fileName) {
+                throw new Error(`Chunk ${chunk.id} has no fileName`);
+            }
             allChunks.push(chunk);
             prepInsertChunks.run(
                 chunk.id,
