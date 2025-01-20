@@ -394,10 +394,7 @@ document.addEventListener("DOMContentLoaded", async function () {
     const actualToken = token?.token.substring(token?.token.indexOf("#"));
     if (actualToken) {
         const dToken = jose.decodeProtectedHeader(actualToken);
-        console.log(dToken);
-
         const decoded = jose.decodeJwt(actualToken);
-        console.log(decoded);
 
         if (decoded.given_name) {
             chatView.userGivenName = decoded.given_name
