@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using System.Diagnostics;
+using System.IO.Pipes;
 using System.Net;
 using System.Net.Http;
 using System.Reflection;
@@ -30,7 +31,7 @@ internal class Program
 
         if (args.Length == 1)
         {
-            switch(args[0])
+            switch (args[0])
             {
                 case "--register":
 
@@ -56,30 +57,20 @@ internal class Program
         }
         else if (args.Length == 0)
         {
+
             try
             {
-                HttpClient client = new HttpClient();
-                HttpRequestMessage msg = new HttpRequestMessage(HttpMethod.Get, "http://localhost:5282/?listen=true");
+                using NamedPipeClientStream pipeClient = new NamedPipeClientStream(".", "TypeAgent\\speech", PipeDirection.Out);
+                pipeClient.Connect();
 
-                using HttpResponseMessage response = client.Send(msg);
-
-                response.EnsureSuccessStatusCode();
-
-                var request = response.RequestMessage;
-                Console.Write($"{request?.Method} ");
-                Console.Write($"{request?.RequestUri} ");
-                Console.WriteLine($"HTTP/{request?.Version}");
-
-                using (StreamReader sr = new StreamReader(response.Content.ReadAsStream()))
-                {
-                    var content = sr.ReadToEnd();
-                    Console.WriteLine($"{content}\n");
-                    ;
-                }
+                using StreamWriter writer = new StreamWriter(pipeClient) { AutoFlush = true };
+                string message = "triggerRecognitionOnce";
+                writer.Write(message);
+                Console.WriteLine($"Sent to server: {message}");
             }
             catch (Exception ex)
             {
-                Console.WriteLine("Unable to contact the server.");
+                Console.WriteLine("Unable to connect to the pipe.");
             }
         }
         else

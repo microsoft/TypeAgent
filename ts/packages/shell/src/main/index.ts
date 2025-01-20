@@ -13,7 +13,7 @@ import {
     WebContents,
     BrowserView,
 } from "electron";
-import { join } from "node:path";
+import path, { join } from "node:path";
 import { electronApp, optimizer, is } from "@electron-toolkit/utils";
 import { runDemo } from "./demo.js";
 import registerDebug from "debug";
@@ -42,8 +42,7 @@ import {
 } from "./localWhisperCommandHandler.js";
 import { createDispatcherRpcServer } from "agent-dispatcher/rpc/server";
 import { createGenericChannel } from "agent-rpc/channel";
-import { ClickNoteListener } from "./clickNoteListener.js";
-
+import net from 'node:net';
 console.log(auth.AzureTokenScopes.CogServices);
 
 const debugShell = registerDebug("typeagent:shell");
@@ -65,7 +64,6 @@ process.argv.forEach((arg) => {
 let mainWindow: BrowserWindow | null = null;
 let inlineBrowserView: BrowserView | null = null;
 let chatView: BrowserView | null = null;
-let localServer: ClickNoteListener | null = null;
 
 const inlineBrowserSize = 1000;
 const userAgent =
@@ -773,8 +771,20 @@ async function initialize() {
     // On windows, we will spin up a local end point that listens
     // for pen events which will trigger speech reco
     if (process.platform == "win32") {
-        localServer = new ClickNoteListener({port: 5282, triggerRecognitionOnce: triggerRecognitionOnce});
-        localServer.start();
+        const pipePath = path.join('\\\\.\\pipe\\TypeAgent', 'speech');
+        const server = net.createServer((stream) => {
+          stream.on('data', (c) => {
+            if (c.toString() == "triggerRecognitionOnce") {
+                console.log("Pen click note button click received!");
+                triggerRecognitionOnce();
+            }
+          });
+          stream.on('error', (e) => {
+            console.log(e);
+          });
+        });
+        
+        server.listen(pipePath);
     }
 }
 
@@ -802,11 +812,6 @@ function setupQuit(dispatcher: Dispatcher) {
             await dispatcher.close();
         } catch (e) {
             debugShellError("Error closing dispatcher", e);
-        }
-
-        // stop the local server
-        if (localServer != null) {
-            localServer.stop();
         }
 
         debugShell("Quitting");
