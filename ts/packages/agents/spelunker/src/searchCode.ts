@@ -389,6 +389,13 @@ async function loadDatabase(
         context.queryContext.database = db;
     }
 
+    const prepDeleteSummaries = db.prepare(`
+        DELETE FROM Summaries WHERE chunkId IN (
+            SELECT id
+            FROM chunks
+            WHERE fileName = ?
+        )
+    `);
     const prepDeleteBlobs = db.prepare(`
         DELETE FROM Blobs WHERE chunkId IN (
             SELECT id
@@ -471,6 +478,7 @@ async function loadDatabase(
         for (const file of filesToDelete) {
             // console_log(`  [Deleting ${file} from database]`);
             db.exec(`BEGIN TRANSACTION`);
+            prepDeleteSummaries.run(file);
             prepDeleteBlobs.run(file);
             prepDeleteChunks.run(file);
             prepDeleteFiles.run(file);
@@ -506,6 +514,7 @@ async function loadDatabase(
     const allChunks: Chunk[] = [];
     for (const chunkedFile of allChunkedFiles) {
         db.exec(`BEGIN TRANSACTION`);
+        prepDeleteSummaries.run(chunkedFile.fileName);
         prepDeleteBlobs.run(chunkedFile.fileName);
         prepDeleteChunks.run(chunkedFile.fileName);
         for (const chunk of chunkedFile.chunks) {
