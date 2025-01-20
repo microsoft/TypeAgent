@@ -393,7 +393,6 @@ document.addEventListener("DOMContentLoaded", async function () {
     let token: SpeechToken | undefined = await getClientAPI().getSpeechToken();
     const actualToken = token?.token.substring(token?.token.indexOf("#"));
     if (actualToken) {
-        const dToken = jose.decodeProtectedHeader(actualToken);
         const decoded = jose.decodeJwt(actualToken);
 
         if (decoded.given_name) {
