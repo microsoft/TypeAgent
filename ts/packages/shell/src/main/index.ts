@@ -42,6 +42,7 @@ import {
 } from "./localWhisperCommandHandler.js";
 import { createDispatcherRpcServer } from "agent-dispatcher/rpc/server";
 import { createGenericChannel } from "agent-rpc/channel";
+import { ClickNoteListener } from "./clickNoteListener.js";
 
 console.log(auth.AzureTokenScopes.CogServices);
 
@@ -64,6 +65,7 @@ process.argv.forEach((arg) => {
 let mainWindow: BrowserWindow | null = null;
 let inlineBrowserView: BrowserView | null = null;
 let chatView: BrowserView | null = null;
+let localServer: ClickNoteListener | null = null;
 
 const inlineBrowserSize = 1000;
 const userAgent =
@@ -767,6 +769,13 @@ async function initialize() {
         // dock icon is clicked and there are no other windows open.
         if (BrowserWindow.getAllWindows().length === 0) createWindow();
     });
+
+    // On windows, we will spin up a local end point that listens
+    // for pen events which will trigger speech reco
+    if (process.platform == "win32") {
+        localServer = new ClickNoteListener({port: 5282, triggerRecognitionOnce: triggerRecognitionOnce});
+        localServer.start();
+    }
 }
 
 app.whenReady()
@@ -794,6 +803,12 @@ function setupQuit(dispatcher: Dispatcher) {
         } catch (e) {
             debugShellError("Error closing dispatcher", e);
         }
+
+        // stop the local server
+        if (localServer != null) {
+            localServer.stop();
+        }
+
         debugShell("Quitting");
         canQuit = true;
         app.quit();
