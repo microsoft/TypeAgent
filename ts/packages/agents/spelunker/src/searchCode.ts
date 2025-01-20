@@ -153,15 +153,19 @@ export async function searchCode(
     const preppedChunks: Chunk[] = chunkDescs
         .map((chunkDesc) => prepChunk(chunkDesc, allChunks))
         .filter(Boolean) as Chunk[];
-    // TODO: Prompt engineering
+    // TODO: Prompt engineering; more efficient preparation of summaries and chunks
     const prompt = `\
-        Please answer the user question using the given context (both given below).
+        Please answer the user question using the given context and summaries.
 
-        User question: "${input}"
+        Summaries of all chunks in the code base:
+
+        ${prepareSummaries(db)}
 
         Context:
 
         ${prepareChunks(preppedChunks)}
+
+        User question: "${input}"
         `;
     // console_log(`[${prompt.slice(0, 1000)}]`);
 
@@ -281,6 +285,13 @@ async function selectRelevantChunks(
 function prepareChunks(chunks: Chunk[]): string {
     // TODO: Format the chunks more efficiently
     return JSON.stringify(chunks, undefined, 2);
+}
+
+function prepareSummaries(db: sqlite.Database): string {
+    const selectAllSummaries = db.prepare(`SELECT * FROM Summaries`);
+    const summaryRows: any[] = selectAllSummaries.all();
+    // TODO: format as code: # <summary> / <signature>
+    return JSON.stringify(summaryRows, undefined, 2);
 }
 
 function createTranslator<T extends object>(
