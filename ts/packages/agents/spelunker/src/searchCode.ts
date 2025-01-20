@@ -356,49 +356,7 @@ async function loadDatabase(
     if (!context.queryContext) {
         context.queryContext = createQueryContext();
     }
-    let loc = context.queryContext.databaseLocation;
-    let db = context.queryContext.database;
-    if (db) {
-        console_log(`  [Using database at ${loc}]`);
-    } else {
-        if (fs.existsSync(loc)) {
-            console_log(`  [Opening database at ${loc}]`);
-        } else {
-            console_log(`  [Creating database at ${loc}]`);
-        }
-        db = new Database(loc);
-        // Write-Ahead Logging, improving concurrency and performance
-        db.pragma("journal_mode = WAL");
-        // Fix permissions to be read/write only by the owner
-        fs.chmodSync(context.queryContext.databaseLocation, 0o600);
-        // Create all the tables we'll use
-        const schema = `
-        CREATE TABLE IF NOT EXISTS Files (
-            fileName TEXT PRIMARY KEY,
-            mtime FLOAT NOT NULL,
-            size INTEGER NOT NULL
-        );
-        CREATE TABLE IF NOT EXISTS Chunks (
-            id TEXT PRIMARY KEY,
-            treeName TEXT NOT NULL,
-            parentId TEXT KEY REFERENCES chunks(id), -- May be null
-            fileName TEXT KEY REFERENCES files(fileName) NOT NULL
-        );
-        CREATE TABLE IF NOT EXISTS Blobs (
-            chunkId TEXT KEY REFERENCES chunks(id) NOT NULL,
-            start INTEGER NOT NULL, -- 0-based
-            lines TEXT NOT NULL,
-            breadcrumb BOOLEAN NOT NULL -- Values: 0 or 1
-        );
-        CREATE TABLE IF NOT EXISTS Summaries (
-            chunkId TEXT PRIMARY KEY REFERENCES chunks(id),
-            summary TEXT,
-            signature TEXT
-        )
-        `;
-        db.exec(schema);
-        context.queryContext.database = db;
-    }
+    const db = createDatabase(context);
 
     const prepDeleteSummaries = db.prepare(`
         DELETE FROM Summaries WHERE chunkId IN (
@@ -435,13 +393,14 @@ async function loadDatabase(
     );
 
     // 1a. Find all .py files in the focus directories (locally, using a subprocess).
+    // TODO: Factor into simpler functions
     console_log(`[Step 1a: Find .py files]`);
     const files: string[] = []; // TODO: Include mtime and size, since we do a stat anyways
     for (let i = 0; i < context.focusFolders.length; i++) {
         files.push(...getAllPyFilesSync(context.focusFolders[i]));
     }
 
-    // Compare files found with files in the database.
+    // Compare files found and files in the database.
     const filesToDo: string[] = [];
     const filesInDb: Map<string, { mtime: number; size: number }> = new Map();
     const fileRows: any[] = prepSelectAllFiles.all();
@@ -471,7 +430,7 @@ async function loadDatabase(
         }
         if (!filesToDo.includes(file)) {
             // If there are no chunks, also add to filesToDo
-            // TODO: Zero chunks is not reliable, empty files may have zero chunks
+            // TODO: Zero chunks is not reliable, empty files haalso ve zero chunks
             const count: number = (prepCountChunks.get(file) as any)[
                 "COUNT(*)"
             ];
@@ -560,6 +519,57 @@ async function loadDatabase(
         await summarizeChunks(context, allChunks);
     }
 
+    return db;
+}
+
+const databaseSchema = `
+CREATE TABLE IF NOT EXISTS Files (
+    fileName TEXT PRIMARY KEY,
+    mtime FLOAT NOT NULL,
+    size INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS Chunks (
+    id TEXT PRIMARY KEY,
+    treeName TEXT NOT NULL,
+    parentId TEXT KEY REFERENCES chunks(id), -- May be null
+    fileName TEXT KEY REFERENCES files(fileName) NOT NULL
+);
+CREATE TABLE IF NOT EXISTS Blobs (
+    chunkId TEXT KEY REFERENCES chunks(id) NOT NULL,
+    start INTEGER NOT NULL, -- 0-based
+    lines TEXT NOT NULL,
+    breadcrumb BOOLEAN NOT NULL -- Values: 0 or 1
+);
+CREATE TABLE IF NOT EXISTS Summaries (
+    chunkId TEXT PRIMARY KEY REFERENCES chunks(id),
+    summary TEXT,
+    signature TEXT
+)
+`;
+
+function createDatabase(context: SpelunkerContext): sqlite.Database {
+    if (!context.queryContext) {
+        context.queryContext = createQueryContext();
+    }
+    const loc = context.queryContext.databaseLocation;
+    const db0 = context.queryContext.database;
+    if (db0) {
+        console_log(`  [Using database at ${loc}]`);
+        return db0;
+    }
+    if (fs.existsSync(loc)) {
+        console_log(`  [Opening database at ${loc}]`);
+    } else {
+        console_log(`  [Creating database at ${loc}]`);
+    }
+    const db = new Database(loc);
+    // Write-Ahead Logging, improving concurrency and performance
+    db.pragma("journal_mode = WAL");
+    // Fix permissions to be read/write only by the owner
+    fs.chmodSync(context.queryContext.databaseLocation, 0o600);
+    // Create all the tables we'll use
+    db.exec(databaseSchema);
+    context.queryContext.database = db;
     return db;
 }
 
