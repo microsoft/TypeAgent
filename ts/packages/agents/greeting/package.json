@@ -13,7 +13,7 @@
   "type": "module",
   "exports": {
     "./agent/manifest": "./src/greetingManifest.json",
-    "./agent/handlers": "./dist/greetingActionHandler.js"
+    "./agent/handlers": "./dist/greetingCommandHandler.js"
   },
   "scripts": {
     "build": "npm run tsc",
