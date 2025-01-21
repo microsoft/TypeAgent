@@ -1,4 +1,4 @@
-// Copyright (c) Microsoft Corporation and Henry Lucco.
+// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
 import { conversation } from "knowledge-processor";

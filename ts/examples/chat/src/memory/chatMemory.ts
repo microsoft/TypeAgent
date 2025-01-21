@@ -327,7 +327,7 @@ export async function runChatMemory(): Promise<void> {
     };
     createEmailCommands(context, commands);
     createPodcastCommands(context, commands);
-    createKnowproCommands(commands);
+    await createKnowproCommands(context, commands);
     addStandardHandlers(commands);
 
     function onStart(io: InteractiveIo): void {
