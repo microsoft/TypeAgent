@@ -42,7 +42,7 @@ import {
 } from "./localWhisperCommandHandler.js";
 import { createDispatcherRpcServer } from "agent-dispatcher/rpc/server";
 import { createGenericChannel } from "agent-rpc/channel";
-import net from 'node:net';
+import net from "node:net";
 console.log(auth.AzureTokenScopes.CogServices);
 
 const debugShell = registerDebug("typeagent:shell");
@@ -771,19 +771,19 @@ async function initialize() {
     // On windows, we will spin up a local end point that listens
     // for pen events which will trigger speech reco
     if (process.platform == "win32") {
-        const pipePath = path.join('\\\\.\\pipe\\TypeAgent', 'speech');
+        const pipePath = path.join("\\\\.\\pipe\\TypeAgent", "speech");
         const server = net.createServer((stream) => {
-          stream.on('data', (c) => {
-            if (c.toString() == "triggerRecognitionOnce") {
-                console.log("Pen click note button click received!");
-                triggerRecognitionOnce();
-            }
-          });
-          stream.on('error', (e) => {
-            console.log(e);
-          });
+            stream.on("data", (c) => {
+                if (c.toString() == "triggerRecognitionOnce") {
+                    console.log("Pen click note button click received!");
+                    triggerRecognitionOnce();
+                }
+            });
+            stream.on("error", (e) => {
+                console.log(e);
+            });
         });
-        
+
         server.listen(pipePath);
     }
 }
