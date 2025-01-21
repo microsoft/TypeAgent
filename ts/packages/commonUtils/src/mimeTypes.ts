@@ -15,7 +15,6 @@ export function getFileExtensionForMimeType(mime: string): string {
 }
 
 export function getMimeTypeFromFileExtension(fileExtension: string): string {
-    
     switch (fileExtension.toLowerCase()) {
         case ".css":
             return "text/css";
