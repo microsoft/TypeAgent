@@ -4,9 +4,9 @@
 export type SpelunkerAction =
     | SetFocusAction
     | GetFocusAction
-    | AnswerQuestionAction;
+    | SearchCodeAction;
 
-// Set the spelunker's focus to a set of folders; or clear focus
+// Set the spelunker's focus to a list of folders; or clear focus
 export type SetFocusAction = {
     actionName: "setFocus";
     parameters: {
@@ -14,14 +14,14 @@ export type SetFocusAction = {
     };
 };
 
-// Report the spelunker's folder
+// Report the spelunker's current focus folder(s)
 export type GetFocusAction = {
     actionName: "getFocus";
 };
 
-// Answer a question about the files/folders currently in focus
-export type AnswerQuestionAction = {
-    actionName: "answerQuestion";
+// Search the spelunker's focus folder(s) for an answer to a question
+export type SearchCodeAction = {
+    actionName: "searchCode";
     parameters: {
         question: string; // Question to answer
     };

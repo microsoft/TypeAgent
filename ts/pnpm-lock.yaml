@@ -1211,6 +1211,9 @@ importers:
       aiclient:
         specifier: workspace:*
         version: link:../../aiclient
+      better-sqlite3:
+        specifier: 11.8.1
+        version: 11.8.1
       typeagent:
         specifier: workspace:*
         version: link:../../typeagent
@@ -1218,6 +1221,9 @@ importers:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.3)(zod@3.23.8)
     devDependencies:
+      '@types/better-sqlite3':
+        specifier: 7.6.11
+        version: 7.6.11
       copyfiles:
         specifier: ^2.4.1
         version: 2.4.1
@@ -4634,6 +4640,9 @@ packages:
 
   better-sqlite3@11.5.0:
     resolution: {integrity: sha512-e/6eggfOutzoK0JWiU36jsisdWoHOfN9iWiW/SieKvb7SAa6aGNmBM/UKyp+/wWSXpLlWNN8tCPwoDNPhzUvuQ==}
+
+  better-sqlite3@11.8.1:
+    resolution: {integrity: sha512-9BxNaBkblMjhJW8sMRZxnxVTRgbRmssZW0Oxc1MPBTfiR+WW21e2Mk4qu8CzrcZb1LwPCnFsfDEzq+SNcBU8eg==}
 
   binary-extensions@2.2.0:
     resolution: {integrity: sha512-jDctJ/IVQbZoJykoeHbhXpOlNBqGNcwXJKJog42E5HDPUwQTSdjCHdihjj0DlnheQ7blbT6dHOafNAiS8ooQKA==}
@@ -12421,6 +12430,11 @@ snapshots:
       is-stream: 2.0.1
 
   better-sqlite3@11.5.0:
+    dependencies:
+      bindings: 1.5.0
+      prebuild-install: 7.1.2
+
+  better-sqlite3@11.8.1:
     dependencies:
       bindings: 1.5.0
       prebuild-install: 7.1.2

@@ -55,7 +55,7 @@ IdType = str
 class Chunk:
     """A chunk at any level of nesting (root, inner, leaf)."""
 
-    id: IdType
+    chunkId: IdType
     treeName: str  # AST node name
     blobs: list[Blob]  # Blobs around the placeholders
 
@@ -68,7 +68,7 @@ class Chunk:
     # Used by custom_json() below.
     def to_dict(self) -> dict[str, object]:
         return {
-            "id": self.id,
+            "chunkId": self.chunkId,
             "treeName": self.treeName,
             "blobs": self.blobs,
             "parentId": self.parentId,
@@ -221,7 +221,7 @@ def create_chunks_recursively(
             node_id = generate_id()
             node_blob = extract_blob(lines, node)
             node_blobs = [node_blob]
-            chunk = Chunk(node_id, node_name, node_blobs, parent.id, [])
+            chunk = Chunk(node_id, node_name, node_blobs, parent.chunkId, [])
             chunks.append(chunk)
             chunks.extend(create_chunks_recursively(lines, node, chunk))
             parent.children.append(node_id)

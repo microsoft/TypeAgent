@@ -26,10 +26,12 @@
   "dependencies": {
     "@typeagent/agent-sdk": "workspace:*",
     "aiclient": "workspace:*",
+    "better-sqlite3": "11.8.1",
     "typeagent": "workspace:*",
     "typechat": "^0.1.1"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "7.6.11",
     "copyfiles": "^2.4.1",
     "prettier": "^3.2.5",
     "rimraf": "^5.0.5",
