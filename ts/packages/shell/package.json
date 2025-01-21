@@ -24,6 +24,7 @@
     "prettier": "prettier --check . --ignore-path ../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
     "start": "electron-vite preview",
+    "test": "npx playwright test",
     "typecheck": "concurrently npm:typecheck:node npm:typecheck:web",
     "typecheck:node": "tsc -p tsconfig.node.json",
     "typecheck:web": "tsc -p tsconfig.web.json"
@@ -50,6 +51,7 @@
   },
   "devDependencies": {
     "@electron-toolkit/tsconfig": "^1.0.1",
+    "@playwright/test": "^1.49.1",
     "@types/debug": "^4.1.10",
     "@types/dompurify": "^3.0.5",
     "@types/node": "^18.17.5",
