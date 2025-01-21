@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { DisplayContent } from "@typeagent/agent-sdk";
+import { AppAction, DisplayContent } from "@typeagent/agent-sdk";
 import { IAgentMessage, NotifyExplainedData } from "agent-dispatcher";
 import { RequestMetrics } from "agent-dispatcher";
 
@@ -31,14 +31,14 @@ export class MessageGroup {
             chatView,
             settingsView,
             "user",
-            "",
+            chatView.userGivenName,
             agents,
             container,
             hideMetrics,
             this.start,
         );
 
-        this.userMessage.setMessage(request, "");
+        this.userMessage.setMessage(request, chatView.userGivenName);
 
         if (container.firstChild) {
             container.firstChild.before(this.userMessage.div);
@@ -65,6 +65,20 @@ export class MessageGroup {
             agentMessage.setMetricsVisible(visible);
         }
     }
+
+    public setDisplayInfo(
+        source: string,
+        actionIndex?: number,
+        action?: AppAction | string[],
+    ) {
+        const agentMessage = this.ensureAgentMessage({
+            message: "",
+            source,
+            actionIndex,
+        });
+        agentMessage.setDisplayInfo(source, action);
+    }
+
     private requestCompleted(metrics: RequestMetrics | undefined) {
         this.updateMetrics(metrics);
         if (this.statusMessage === undefined) {
@@ -163,7 +177,7 @@ export class MessageGroup {
                         this.chatView,
                         this.settingsView,
                         "agent",
-                        msg.actionName ?? msg.source,
+                        msg.source,
                         this.agents,
                         beforeElem.div,
                         this.hideMetrics,
@@ -185,7 +199,7 @@ export class MessageGroup {
     }
 
     public updateUserMessage(message: string) {
-        this.userMessage.setMessage(message, "");
+        this.userMessage.setMessage(message, this.chatView.userGivenName);
     }
 
     public notifyExplained(data: NotifyExplainedData) {

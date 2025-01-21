@@ -300,6 +300,7 @@ export class ChatInput {
         getSpeechToken().then((result) => {
             if (
                 result == undefined &&
+                typeof Android !== "undefined" &&
                 !Android?.isSpeechRecognitionSupported()
             ) {
                 const button = document.querySelector<HTMLButtonElement>(

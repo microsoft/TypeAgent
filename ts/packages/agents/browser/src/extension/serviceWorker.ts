@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { WebSocketMessageV2 } from "common-utils/ws";
 import { WebSocketMessage } from "../../../../commonUtils/dist/indexBrowser";
 import {
     isWebAgentMessage,
@@ -39,7 +40,7 @@ export async function createWebSocket() {
     let socketEndpoint =
         configValues["WEBSOCKET_HOST"] ?? "ws://localhost:8080/";
 
-    socketEndpoint += "?clientId=" + chrome.runtime.id;
+    socketEndpoint += `?channel=browser&role=client&clientId=${chrome.runtime.id}`;
     return new Promise<WebSocket | undefined>((resolve, reject) => {
         const webSocket = new WebSocket(socketEndpoint);
         console.log("Connected to: " + socketEndpoint);
@@ -85,59 +86,66 @@ async function ensureWebsocketConnected() {
 
         webSocket.onmessage = async (event: any, isBinary: boolean) => {
             const text = await event.data.text();
-            const data = JSON.parse(text) as WebSocketMessage;
-            if (data.target == "browser") {
-                if (data.messageType == "browserActionRequest") {
-                    const response = await runBrowserAction(data.body);
-                    webSocket.send(
-                        JSON.stringify({
-                            source: data.target,
-                            target: data.source,
-                            messageType: "browserActionResponse",
-                            id: data.id,
-                            body: response,
-                        }),
-                    );
-                } else if (data.messageType == "siteTranslatorStatus") {
-                    if (data.body.status == "initializing") {
-                        showBadgeBusy();
-                        console.log(`Initializing ${data.body.translator}`);
-                    } else if (data.body.status == "initialized") {
-                        showBadgeHealthy();
-                        console.log(
-                            `Finished initializing ${data.body.translator}`,
+            const data = JSON.parse(text) as WebSocketMessageV2;
+
+            if (data.error) {
+                console.error(data.error);
+                return;
+            }
+
+            if (data.method && data.method.indexOf("/") > 0) {
+                const [schema, actionName] = data.method?.split("/");
+
+                if (schema == "browser") {
+                    if (actionName == "siteTranslatorStatus") {
+                        if (data.params.status == "initializing") {
+                            showBadgeBusy();
+                            console.log(
+                                `Initializing ${data.params.translator}`,
+                            );
+                        } else if (data.params.status == "initialized") {
+                            showBadgeHealthy();
+                            console.log(
+                                `Finished initializing ${data.params.translator}`,
+                            );
+                        }
+                    } else {
+                        const response = await runBrowserAction({
+                            actionName: actionName,
+                            parameters: data.params,
+                        });
+
+                        webSocket.send(
+                            JSON.stringify({
+                                id: data.id,
+                                result: response,
+                            }),
                         );
                     }
-                } else if (
-                    data.messageType.startsWith("browserActionRequest.")
-                ) {
-                    const message = await runSiteAction(
-                        data.messageType,
-                        data.body,
-                    );
+                } else if (schema.startsWith("browser.")) {
+                    const message = await runSiteAction(schema, {
+                        actionName: actionName,
+                        parameters: data.params,
+                    });
 
                     webSocket.send(
                         JSON.stringify({
-                            source: data.target,
-                            target: data.source,
-                            messageType: "browserActionResponse",
                             id: data.id,
-                            body: message,
+                            result: message,
                         }),
                     );
                 }
-
-                console.log(
-                    `Browser websocket client received message: ${text}`,
-                );
             }
+            console.log(`Browser websocket client received message: ${text}`);
         };
 
-        webSocket.onclose = (event: object) => {
+        webSocket.onclose = (event: any) => {
             console.log("websocket connection closed");
             webSocket = undefined;
             showBadgeError();
-            reconnectWebSocket();
+            if (event.reason !== "duplicate") {
+                reconnectWebSocket();
+            }
         };
 
         resolve(webSocket);
@@ -149,10 +157,8 @@ export function keepWebSocketAlive(webSocket: WebSocket) {
         if (webSocket && webSocket.readyState === WebSocket.OPEN) {
             webSocket.send(
                 JSON.stringify({
-                    source: "browser",
-                    target: "none",
-                    messageType: "keepAlive",
-                    body: {},
+                    method: "keepAlive",
+                    params: {},
                 }),
             );
         } else {
@@ -756,20 +762,20 @@ async function getFilteredHTMLFragments(
 let currentSiteTranslator = "";
 let currentCrosswordUrl = "";
 async function toggleSiteTranslator(targetTab: chrome.tabs.Tab) {
-    let messageType = "enableSiteTranslator";
-    let messageBody = "";
+    let method = "enableSiteTranslator";
+    let translatorName = "";
     await ensureWebsocketConnected();
     if (targetTab.url) {
         const host = new URL(targetTab.url).host;
 
         if (host === "paleobiodb.org" || host === "www.paleobiodb.org") {
-            messageType = "enableSiteTranslator";
-            messageBody = "browser.paleoBioDb";
+            method = "enableSiteTranslator";
+            translatorName = "browser.paleoBioDb";
             currentSiteTranslator = "browser.paleoBioDb";
         } else {
             if (currentSiteTranslator == "browser.paleoBioDb") {
-                messageType = "disableSiteTranslator";
-                messageBody = "browser.paleoBioDb";
+                method = "disableSiteTranslator";
+                translatorName = "browser.paleoBioDb";
             }
         }
 
@@ -793,8 +799,8 @@ async function toggleSiteTranslator(targetTab: chrome.tabs.Tab) {
                 "https://www.bestcrosswords.com/bestcrosswords/guestconstructor",
             )
         ) {
-            messageType = "enableSiteTranslator";
-            messageBody = "browser.crossword";
+            method = "enableSiteTranslator";
+            translatorName = "browser.crossword";
             currentSiteTranslator = "browser.crossword";
             currentCrosswordUrl = targetTab.url;
         }
@@ -806,14 +812,14 @@ async function toggleSiteTranslator(targetTab: chrome.tabs.Tab) {
         ];
 
         if (commerceHosts.includes(host)) {
-            messageType = "enableSiteTranslator";
-            messageBody = "browser.commerce";
+            method = "enableSiteTranslator";
+            translatorName = "browser.commerce";
             currentSiteTranslator = "browser.commerce";
         }
 
         if (host === "instacart.com" || host === "www.instacart.com") {
-            messageType = "enableSiteTranslator";
-            messageBody = "browser.instacart";
+            method = "enableSiteTranslator";
+            translatorName = "browser.instacart";
             currentSiteTranslator = "browser.instacart";
         }
 
@@ -821,14 +827,12 @@ async function toggleSiteTranslator(targetTab: chrome.tabs.Tab) {
         if (
             webSocket &&
             webSocket.readyState === WebSocket.OPEN &&
-            messageBody
+            translatorName
         ) {
             webSocket.send(
                 JSON.stringify({
-                    source: "browser",
-                    target: "dispatcher",
-                    messageType: messageType,
-                    body: messageBody,
+                    method: method,
+                    params: { translator: translatorName },
                 }),
             );
         }
@@ -840,37 +844,21 @@ async function sendActionToTabIndex(action: any) {
         if (webSocket) {
             try {
                 const callId = new Date().getTime().toString();
-                const messageType = "tabIndexRequest";
 
                 webSocket.send(
                     JSON.stringify({
-                        source: "browser",
-                        target: "dispatcher",
-                        messageType: messageType,
+                        method: action.actionName,
                         id: callId,
-                        body: action,
+                        params: action.parameters,
                     }),
                 );
 
                 const handler = async (event: any) => {
                     const text = await event.data.text();
-                    const data = JSON.parse(text) as WebSocketMessage;
-                    if (
-                        data.target == "browser" &&
-                        data.source == "dispatcher" &&
-                        data.id == callId &&
-                        data.body
-                    ) {
-                        switch (data.messageType) {
-                            case "tabIndexResponse": {
-                                webSocket.removeEventListener(
-                                    "message",
-                                    handler,
-                                );
-                                resolve(data.body);
-                                break;
-                            }
-                        }
+                    const data = JSON.parse(text) as WebSocketMessageV2;
+                    if (data.id == callId && data.result) {
+                        webSocket.removeEventListener("message", handler);
+                        resolve(data.result);
                     }
                 };
 
@@ -1260,10 +1248,10 @@ async function runBrowserAction(action: any) {
     };
 }
 
-async function runSiteAction(messageType: string, action: any) {
+async function runSiteAction(schemaName: string, action: any) {
     let confirmationMessage = "OK";
-    switch (messageType) {
-        case "browserActionRequest.paleoBioDb": {
+    switch (schemaName) {
+        case "browser.paleoBioDb": {
             const targetTab = await getActiveTab();
             const actionName =
                 action.actionName ?? action.fullActionName.split(".").at(-1);
@@ -1288,7 +1276,7 @@ async function runSiteAction(messageType: string, action: any) {
             // to do: update confirmation to include current page screenshot.
             break;
         }
-        case "browserActionRequest.crossword": {
+        case "browser.crossword": {
             const targetTab = await getActiveTab();
 
             const result = await chrome.tabs.sendMessage(targetTab.id!, {
@@ -1299,7 +1287,7 @@ async function runSiteAction(messageType: string, action: any) {
             // to do: update confirmation to include current page screenshot.
             break;
         }
-        case "browserActionRequest.commerce": {
+        case "browser.commerce": {
             const targetTab = await getActiveTab();
 
             const result = await chrome.tabs.sendMessage(targetTab.id!, {
@@ -1519,10 +1507,8 @@ chrome.contextMenus?.onClicked.addListener(
                 if (webSocket && webSocket.readyState === WebSocket.OPEN) {
                     webSocket.send(
                         JSON.stringify({
-                            source: "browser",
-                            target: "dispatcher",
-                            messageType: "enableSiteTranslator",
-                            body: "browser.crossword",
+                            method: "enableSiteTranslator",
+                            params: { translator: "browser.crossword" },
                         }),
                     );
                 }

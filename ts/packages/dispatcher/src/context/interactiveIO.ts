@@ -3,7 +3,11 @@
 
 import { TemplateEditConfig } from "../translation/actionTemplate.js";
 import { CommandHandlerContext } from "./commandHandlerContext.js";
-import { DisplayContent, DisplayAppendMode } from "@typeagent/agent-sdk";
+import {
+    DisplayContent,
+    DisplayAppendMode,
+    AppAction,
+} from "@typeagent/agent-sdk";
 import { RequestMetrics } from "../utils/metrics.js";
 
 export const DispatcherName = "dispatcher";
@@ -22,7 +26,6 @@ export interface IAgentMessage {
     source: string;
     actionIndex?: number | undefined;
     metrics?: RequestMetrics | undefined;
-    actionName?: string | undefined;
 }
 
 export type NotifyExplainedData = {
@@ -38,6 +41,12 @@ export interface ClientIO {
     exit(): void;
 
     // Display
+    setDisplayInfo(
+        source: string,
+        requestId: RequestId,
+        actionIndex?: number,
+        action?: AppAction | string[],
+    ): void;
     setDisplay(message: IAgentMessage): void;
     appendDisplay(message: IAgentMessage, mode: DisplayAppendMode): void;
     setDynamicDisplay(
@@ -94,7 +103,6 @@ export function makeClientIOMessage(
             requestId !== undefined
                 ? context?.metricsManager?.getMetrics(requestId)
                 : undefined,
-        actionName: context?.lastActionName,
     };
 }
 
@@ -111,6 +119,7 @@ export async function askYesNoWithContext(
 export const nullClientIO: ClientIO = {
     clear: () => {},
     exit: () => process.exit(0),
+    setDisplayInfo: () => {},
     setDisplay: () => {},
     appendDisplay: () => {},
     setDynamicDisplay: () => {},

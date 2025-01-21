@@ -17,10 +17,11 @@ import { SettingsView } from "./settingsView";
 import { HelpView } from "./helpView";
 import { MetricsView } from "./metricsView";
 import { ShellSettings } from "../../main/shellSettings";
-import { AppAgentEvent } from "@typeagent/agent-sdk";
 import { CameraView } from "./cameraView";
-import { createWebSocket, webapi } from "./webSocketAPI";
+import { createWebSocket, webapi, webdispatcher } from "./webSocketAPI";
 import * as jose from "jose";
+import { AppAgentEvent } from "@typeagent/agent-sdk";
+import { ClientIO, Dispatcher } from "agent-dispatcher";
 
 export function getClientAPI(): ClientAPI {
     if (globalThis.api !== undefined) {
@@ -28,6 +29,13 @@ export function getClientAPI(): ClientAPI {
     } else {
         return getWebSocketAPI();
     }
+}
+
+export function getDispatcher(): Dispatcher {
+    if (globalThis.dispatcher !== undefined) {
+        return globalThis.dispatcher;
+    }
+    return getWebDispatcher();
 }
 
 export function getWebSocketAPI(): ClientAPI {
@@ -40,6 +48,14 @@ export function getWebSocketAPI(): ClientAPI {
     return globalThis.webApi;
 }
 
+export function getWebDispatcher(): Dispatcher {
+    if (globalThis.webDispatcher === undefined) {
+        globalThis.webDispatcher = webdispatcher;
+    }
+
+    return globalThis.webDispatcher;
+}
+
 function addEvents(
     chatView: ChatView,
     agents: Map<string, string>,
@@ -47,12 +63,136 @@ function addEvents(
     tabsView: TabView,
     cameraView: CameraView,
 ) {
-    const api = getClientAPI();
+    const clientIO: ClientIO = {
+        clear: () => {
+            chatView.clear();
+        },
+        exit: () => {
+            window.close();
+        },
+        setDisplayInfo: (source, requestId, actionIndex, action) => {
+            chatView.setDisplayInfo(source, requestId, actionIndex, action);
+        },
+        setDisplay: (message) => {
+            chatView.addAgentMessage(message);
+        },
+        appendDisplay: (message, mode) => {
+            chatView.addAgentMessage(message, { appendMode: mode });
+        },
+        setDynamicDisplay: (
+            source,
+            requestId,
+            actionIndex,
+            displayId,
+            nextRefreshMs,
+        ) => {
+            chatView.setDynamicDisplay(
+                source,
+                requestId,
+                actionIndex,
+                displayId,
+                nextRefreshMs,
+            );
+        },
+        askYesNo: async (message, requestId, _defaultValue) => {
+            return chatView.askYesNo(message, requestId, "");
+        },
+        proposeAction: async (actionTemplates, requestId, source) => {
+            return chatView.proposeAction(actionTemplates, requestId, source);
+        },
+        notify: (event, requestId, data, source) => {
+            switch (event) {
+                case "explained":
+                    chatView.notifyExplained(requestId, data);
+                    break;
+                case "randomCommandSelected":
+                    chatView.randomCommandSelected(requestId, data.message);
+                    break;
+                case "showNotifications":
+                    switch (data) {
+                        case NotifyCommands.Clear:
+                            notifications.length = 0;
+                            break;
+                        case NotifyCommands.ShowAll:
+                            showNotifications(
+                                requestId,
+                                chatView,
+                                notifications,
+                                true,
+                            );
+                            break;
+                        case NotifyCommands.ShowSummary:
+                            summarizeNotifications(
+                                requestId,
+                                chatView,
+                                notifications,
+                            );
+                            break;
+                        case NotifyCommands.ShowUnread:
+                            showNotifications(
+                                requestId,
+                                chatView,
+                                notifications,
+                            );
+                            break;
+                        default:
+                            console.log("unknown notify command");
+                            break;
+                    }
+                    break;
+                case AppAgentEvent.Error:
+                case AppAgentEvent.Warning:
+                case AppAgentEvent.Info:
+                    notifications.push({
+                        event,
+                        source,
+                        data,
+                        read: false,
+                        requestId,
+                    });
+                    break;
+                default:
+                // ignore
+            }
+        },
+        takeAction: (action, data) => {
+            // Android object gets injected on Android devices, otherwise unavailable
+            try {
+                console.log(`Take Action '${action}' Data: ${data}`);
+                let d: any = data;
+                switch (action) {
+                    case "show-camera": {
+                        cameraView.show();
+                        break;
+                    }
+                    case "set-alarm": {
+                        Android?.setAlarm(d.time);
+                        break;
+                    }
+                    case "call-phonenumber": {
+                        Android?.callPhoneNumber(d.phoneNumber);
+                        break;
+                    }
+                    case "send-sms": {
+                        Android?.sendSMS(d.phoneNumber, d.message);
+                        break;
+                    }
+                    case "search-nearby": {
+                        Android?.searchNearby(d.searchTerm);
+                        break;
+                    }
+                    case "automate-phone-ui": {
+                        Android.automateUI(d.originalRequest);
+                    }
+                }
+            } catch (e) {
+                console.log(e);
+            }
+        },
+    };
 
-    if (api === undefined) {
-        console.log("No API available...on mobile!?");
-        return;
-    }
+    const api = getClientAPI();
+    api.registerClientIO(clientIO);
 
     api.onListenEvent((_, name, token, useLocalWhisper) => {
         console.log(`listen event: ${name}`);
@@ -85,41 +225,6 @@ function addEvents(
             }
         }
     });
-    api.onUpdateDisplay((_, agentMessage, appendMode) => {
-        chatView.addAgentMessage(agentMessage, { appendMode });
-    });
-    api.onSetDynamicActionDisplay(
-        (_, source, id, actionIndex, displayId, nextRefreshMs) =>
-            chatView.setDynamicDisplay(
-                source,
-                id,
-                actionIndex,
-                displayId,
-                nextRefreshMs,
-            ),
-    );
-    api.onClear((_) => {
-        chatView.clear();
-    });
-    api.onNotifyExplained((_, id, data) => {
-        chatView.notifyExplained(id, data);
-    });
-    api.onRandomCommandSelected((_, id, message) => {
-        chatView.randomCommandSelected(id, message);
-    });
-    api.onAskYesNo(async (_, askYesNoId, message, id, source) => {
-        chatView.askYesNo(askYesNoId, message, id, source);
-    });
-    api.onProposeAction(
-        async (_, proposeActionId, actionTemplates, id, source) => {
-            chatView.proposeAction(
-                proposeActionId,
-                actionTemplates,
-                id,
-                source,
-            );
-        },
-    );
     api.onSettingSummaryChanged((_, summary, registeredAgents) => {
         document.title = summary;
         document.title += ` Zoom: ${settingsView.shellSettings.zoomLevel * 100}%`;
@@ -139,10 +244,6 @@ function addEvents(
         console.log(`User asked for help via ${key}`);
         chatView.addUserMessage(`@help`);
     });
-    api.onRandomMessageRequested((_, key) => {
-        console.log(`User asked for a random message via ${key}`);
-        chatView.addUserMessage(`@random`);
-    });
     api.onShowDialog((_, key) => {
         if (key.toLocaleLowerCase() == "settings") {
             tabsView.showTab(key);
@@ -159,74 +260,6 @@ function addEvents(
         document.title = `${newTitle} Zoom: ${value.zoomLevel * 100}%`;
 
         settingsView.shellSettings = value;
-    });
-    api.onNotificationCommand((_, requestId: string, data: any) => {
-        switch (data) {
-            case NotifyCommands.Clear:
-                notifications.length = 0;
-                break;
-            case NotifyCommands.ShowAll:
-                showNotifications(requestId, chatView, notifications, true);
-                break;
-            case NotifyCommands.ShowSummary:
-                summarizeNotifications(requestId, chatView, notifications);
-                break;
-            case NotifyCommands.ShowUnread:
-                showNotifications(requestId, chatView, notifications);
-                break;
-            default:
-                console.log("unknown notify command");
-                break;
-        }
-    });
-    api.onNotify(
-        (
-            _,
-            event: AppAgentEvent,
-            requestId: string,
-            source: string,
-            data: any,
-        ) => {
-            //if (settingsView.shellSettings.notifyFilter.indexOf(event) > -1) {
-            //    showNotifications(requestId, chatView, [ { event, source, data, read: false  } ]);
-            //} else {
-            notifications.push({ event, source, data, read: false, requestId });
-            //}
-        },
-    );
-    api.onTakeAction((_, action: string, data?: unknown) => {
-        // Android object gets injected on Android devices, otherwise unavailable
-        try {
-            console.log(`Take Action '${action}' Data: ${data}`);
-            let d: any = data;
-            switch (action) {
-                case "show-camera": {
-                    cameraView.show();
-                    break;
-                }
-                case "set-alarm": {
-                    Android?.setAlarm(d.time);
-                    break;
-                }
-                case "call-phonenumber": {
-                    Android?.callPhoneNumber(d.phoneNumber);
-                    break;
-                }
-                case "send-sms": {
-                    Android?.sendSMS(d.phoneNumber, d.message);
-                    break;
-                }
-                case "search-nearby": {
-                    Android?.searchNearby(d.searchTerm);
-                    break;
-                }
-                case "automate-phone-ui": {
-                    Android.automateUI(d.originalRequest);
-                }
-            }
-        } catch (e) {
-            console.log(e);
-        }
     });
 }
 
@@ -253,9 +286,8 @@ function showNotifications(
     chatView.addAgentMessage(
         {
             message: { type: "html", content: html },
-            source: "shell",
+            source: "shell.showNotifications",
             requestId: requestId,
-            actionName: "shell.showNotifications",
         },
         { notification: true },
     );
@@ -295,8 +327,7 @@ function summarizeNotifications(
             content: summary,
         },
         requestId: requestId,
-        source: "shell",
-        actionName: "shell.notificationSummary",
+        source: "shell.notificationSummary",
     });
 }
 
@@ -377,11 +408,7 @@ document.addEventListener("DOMContentLoaded", async function () {
     let token: SpeechToken | undefined = await getClientAPI().getSpeechToken();
     const actualToken = token?.token.substring(token?.token.indexOf("#"));
     if (actualToken) {
-        const dToken = jose.decodeProtectedHeader(actualToken);
-        console.log(dToken);
-
         const decoded = jose.decodeJwt(actualToken);
-        console.log(decoded);
 
         if (decoded.given_name) {
             chatView.userGivenName = decoded.given_name

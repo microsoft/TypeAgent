@@ -132,6 +132,7 @@ export type BuyItAgainHeaderSection = {
   products?: ProductTile[];
 };
 
+// The shopping cart button on the page
 export type ShoppingCartButton = {
   label: string;
   detailsLinkCssSelector: string;

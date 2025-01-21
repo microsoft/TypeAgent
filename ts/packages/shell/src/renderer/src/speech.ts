@@ -171,7 +171,10 @@ export function recognizeOnce(
         reco.initialize().then(() => {
             reco.startRecording();
         });
-    } else if (Android?.isSpeechRecognitionSupported()) {
+    } else if (
+        typeof Android !== "undefined" &&
+        Android?.isSpeechRecognitionSupported()
+    ) {
         // use built-in device speech recognition
         Bridge.interfaces.Android.recognize((text: string | undefined) => {
             let result: speechSDK.SpeechRecognitionResult | undefined;
