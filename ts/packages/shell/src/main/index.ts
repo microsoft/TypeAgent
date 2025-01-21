@@ -33,7 +33,8 @@ import {
 } from "./localWhisperCommandHandler.js";
 import { createDispatcherRpcServer } from "agent-dispatcher/rpc/dispatcher/server";
 import { createGenericChannel } from "agent-rpc/channel";
-import net from "node:net";import { createClientIORpcClient } from "agent-dispatcher/rpc/clientio/client";
+import net from "node:net";
+import { createClientIORpcClient } from "agent-dispatcher/rpc/clientio/client";
 
 console.log(auth.AzureTokenScopes.CogServices);
 
