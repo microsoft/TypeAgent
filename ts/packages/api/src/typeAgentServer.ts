@@ -2,15 +2,13 @@
 // Licensed under the MIT License.
 
 import dotenv from "dotenv";
-import { createDispatcher, Dispatcher, getUserDataDir } from "agent-dispatcher";
+import { getUserDataDir } from "agent-dispatcher";
 import { readFileSync } from "node:fs";
 import {
     TypeAgentAPIServerConfig,
     TypeAgentAPIWebServer,
 } from "./webServer.js";
-import { WebAPIClientIO } from "./webClientIO.js";
 import { TypeAgentAPIWebSocketServer } from "./webSocketServer.js";
-import { getDefaultAppAgentProviders } from "agent-dispatcher/internal";
 import {
     // BlobServiceClient,
     // BlockBlobClient,
@@ -25,10 +23,10 @@ import { isDirectoryPath } from "typeagent";
 import { TypeAgentStorageProvider } from "./storageProvider.js";
 import { AzureStorageProvider } from "./storageProviders/azureStorageProvider.js";
 import { AWSStorageProvider } from "./storageProviders/awsStorageProvider.js";
+import { WebDispatcher, createWebDispatcher } from "./webDispatcher.js";
 
 export class TypeAgentServer {
-    private dispatcher: Dispatcher | undefined;
-    private webClientIO: WebAPIClientIO | undefined;
+    private webDispatcher: WebDispatcher | undefined;
     private webSocketServer: TypeAgentAPIWebSocketServer | undefined;
     private webServer: TypeAgentAPIWebServer | undefined;
     private fileWriteDebouncer: Map<string, number> = new Map<string, number>();
@@ -85,17 +83,7 @@ export class TypeAgentServer {
             */
         }
 
-        // dispatcher
-        this.webClientIO = new WebAPIClientIO();
-        this.dispatcher = await createDispatcher("api", {
-            appAgentProviders: getDefaultAppAgentProviders(),
-            explanationAsynchronousMode: true,
-            persistSession: true,
-            enableServiceHost: true,
-            metrics: true,
-            clientIO: this.webClientIO,
-        });
-
+        this.webDispatcher = await createWebDispatcher();
         // web server
         this.webServer = new TypeAgentAPIWebServer(this.config);
         this.webServer.start();
@@ -103,15 +91,14 @@ export class TypeAgentServer {
         // websocket server
         this.webSocketServer = new TypeAgentAPIWebSocketServer(
             this.webServer.server,
-            this.dispatcher,
-            this.webClientIO!,
+            this.webDispatcher.connect,
         );
     }
 
     stop() {
         this.webServer?.stop();
         this.webSocketServer?.stop();
-        this.dispatcher?.close();
+        this.webDispatcher?.close();
     }
 
     /**

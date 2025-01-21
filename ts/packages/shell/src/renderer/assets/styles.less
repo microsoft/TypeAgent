@@ -53,6 +53,10 @@ body {
       color: white;
     }
   }
+
+  .action-text {
+    color: lightgray;
+  }
 }
 
 .wrapper {
@@ -432,6 +436,22 @@ table.table-message td {
   font-style: normal;
   font-weight: bold;
   margin-right: 8px;
+}
+
+.agent-name[action-data]:hover:after {
+  content: attr(action-data);
+  position: absolute;
+  top: 30px;
+  left: 10px;
+  white-space: pre-wrap;
+  background-color: #86d9fd;
+  color: gray;
+  border: 1px solid #d6f3ff;
+  border-radius: 5px;
+  padding: 5px;
+  font-size: 100%;
+  font-family: "Courier New", Courier, monospace;
+  z-index: 100;
 }
 
 .timeString {

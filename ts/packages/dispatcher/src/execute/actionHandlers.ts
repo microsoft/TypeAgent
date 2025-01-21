@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { Action, Actions } from "agent-cache";
+import { Action, Actions, FullAction } from "agent-cache";
 import { CommandHandlerContext } from "../context/commandHandlerContext.js";
 import registerDebug from "debug";
 import { getAppAgentName } from "../translation/agentTranslators.js";
@@ -18,6 +18,7 @@ import {
     Entity,
     AppAgentManifest,
     AppAgent,
+    AppAction,
 } from "@typeagent/agent-sdk";
 import {
     createActionResult,
@@ -49,10 +50,16 @@ function getActionContext(
     systemContext: CommandHandlerContext,
     requestId: string,
     actionIndex?: number,
-    actionName?: string,
+    action?: AppAction | string[],
 ) {
     let context = systemContext;
     const sessionContext = context.agents.getSessionContext(appAgentName);
+    context.clientIO.setDisplayInfo(
+        appAgentName,
+        requestId,
+        actionIndex,
+        action,
+    );
     const actionIO: ActionIO = {
         setDisplay(content: DisplayContent): void {
             context.clientIO.setDisplay(
@@ -62,7 +69,6 @@ function getActionContext(
                     requestId,
                     appAgentName,
                     actionIndex,
-                    actionName,
                 ),
             );
         },
@@ -77,7 +83,6 @@ function getActionContext(
                     requestId,
                     appAgentName,
                     actionIndex,
-                    actionName,
                 ),
                 mode,
             );
@@ -210,6 +215,28 @@ export function createSessionContext<T = unknown>(
     return sessionContext;
 }
 
+function getStreamingActionContext(
+    appAgentName: string,
+    actionIndex: number,
+    systemContext: CommandHandlerContext,
+    fullAction: FullAction,
+) {
+    const actionContext = systemContext.streamingActionContext;
+    systemContext.streamingActionContext = undefined;
+
+    if (actionIndex !== 0 || actionContext === undefined) {
+        return undefined;
+    }
+    // If we are reusing the streaming action context, we need to update the action.
+    systemContext.clientIO.setDisplayInfo(
+        appAgentName,
+        systemContext.requestId,
+        actionIndex,
+        fullAction,
+    );
+    return actionContext;
+}
+
 async function executeAction(
     action: Action,
     context: ActionContext<CommandHandlerContext>,
@@ -235,18 +262,21 @@ async function executeAction(
     }
 
     // Reuse the same streaming action context if one is available.
+    const fullAction = action.toFullAction();
     const { actionContext, closeActionContext } =
-        actionIndex === 0 && systemContext.streamingActionContext
-            ? systemContext.streamingActionContext
-            : getActionContext(
-                  appAgentName,
-                  systemContext,
-                  systemContext.requestId!,
-                  actionIndex,
-                  action.fullActionName,
-              );
-
-    systemContext.streamingActionContext = undefined;
+        getStreamingActionContext(
+            appAgentName,
+            actionIndex,
+            systemContext,
+            fullAction,
+        ) ??
+        getActionContext(
+            appAgentName,
+            systemContext,
+            systemContext.requestId!,
+            actionIndex,
+            fullAction,
+        );
 
     actionContext.profiler = systemContext.commandProfiler?.measure(
         ProfileNames.executeAction,
@@ -382,7 +412,10 @@ export function startStreamPartialAction(
         context,
         context.requestId!,
         0,
-        `${translatorName}.${actionName}`,
+        {
+            translatorName,
+            actionName,
+        },
     );
 
     context.streamingActionContext = actionContextWithClose;
@@ -413,17 +446,12 @@ export async function executeCommand(
     }
 
     // update the last action name
-    const messageActionName =
-        commands.length > 0
-            ? `${appAgentName}.${commands.join(".")}`
-            : undefined;
-
     const { actionContext, closeActionContext } = getActionContext(
         appAgentName,
         context,
         context.requestId!,
         undefined,
-        messageActionName,
+        commands,
     );
 
     try {

@@ -3,7 +3,7 @@
 
 import { RpcChannel } from "agent-rpc/channel";
 import { createRpc } from "agent-rpc/rpc";
-import { DispatcherInvokeFunctions } from "./types.js";
+import { DispatcherInvokeFunctions } from "./dispatcherTypes.js";
 import { Dispatcher } from "../dispatcher.js";
 
 function remoteCallNotSupported(): never {

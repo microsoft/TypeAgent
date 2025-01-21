@@ -6,10 +6,25 @@ import { WebSocketMessage } from "common-utils";
 import registerDebug from "debug";
 import { IncomingMessage } from "node:http";
 
+interface Client {
+    id: string | null;
+    role: string;
+    socket: WebSocket;
+    channelName: string;
+}
+
+interface Channel {
+    name: string;
+    clients: Set<Client>;
+}
+
 const debug = registerDebug("typeagent:serviceHost");
 
 const hostEndpoint = process.env["WEBSOCKET_HOST"] ?? "ws://localhost:8080";
 const url = new URL(hostEndpoint);
+
+// Channels organized by agentType
+const channels: Map<string, Channel> = new Map();
 
 try {
     const wss = new WebSocketServer({
@@ -32,29 +47,90 @@ try {
     wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
         debug("New client connected");
 
-        if (req.url) {
-            const params = new URLSearchParams(req.url.split("?")[1]);
-            const clientId = params.get("clientId");
-            if (clientId) {
-                for (var client of wss.clients) {
-                    if ((client as any).clientId) {
-                        wss.clients.delete(client);
-                    }
-                }
+        const params = new URLSearchParams(req.url?.split("?")[1]);
+        const clientId = params.get("clientId");
+        const channelName = params.get("channel");
+        const role = params.get("role");
 
-                (ws as any).clientId = clientId;
-            }
+        if (!channelName || !role) {
+            ws.send(JSON.stringify({ error: "Missing agentName or role" }));
+            ws.close();
+            return;
         }
 
-        debug(`Connection count: ${wss.clients.size}`);
+        // Ensure the channel exists
+        if (!channels.has(channelName)) {
+            channels.set(channelName, {
+                name: channelName,
+                clients: new Set(),
+            });
+        }
+
+        const channel = channels.get(channelName)!;
+        const client: Client = {
+            id: clientId,
+            role: role,
+            socket: ws,
+            channelName: channelName,
+        };
+
+        if (clientId) {
+            for (var socket of wss.clients) {
+                if ((socket as any).clientId == clientId && socket !== ws) {
+                    debug(
+                        "Closing duplicate socket instance for id " + clientId,
+                    );
+                    socket.close(1013, "duplicate");
+                    wss.clients.delete(socket);
+                    const tempClient = {
+                        id: clientId,
+                        role: role,
+                        socket: socket,
+                        channelName: channelName,
+                    };
+
+                    if (channel.clients.has(tempClient)) {
+                        channel.clients.delete(tempClient);
+                    }
+                }
+            }
+
+            (ws as any).clientId = clientId;
+        }
+
+        channel.clients.add(client);
+        debug(`Client ${clientId} joined channel ${channelName}.`);
 
         ws.on("message", (message: string) => {
             try {
-                const data = JSON.parse(message) as WebSocketMessage;
-                if (data.messageType != "keepAlive") {
-                    // broadcast to all connected clients
-                    // TO DO: add routing to send messages to specific clients
-                    wss.clients.forEach((client) => client.send(message));
+                const data = JSON.parse(message);
+                if (
+                    data.messageType === "keepAlive" ||
+                    data.method === "keepAlive"
+                ) {
+                    return;
+                }
+                let foundAtLeastOneTarget = false;
+                const messageTargetRole =
+                    role !== "client" ? "client" : "dispatcher";
+
+                // Broadcast message to all clients in the same channel that have a different role
+                channel.clients.forEach((currClient) => {
+                    if (
+                        currClient.role === messageTargetRole &&
+                        currClient.socket.readyState === WebSocket.OPEN
+                    ) {
+                        currClient.socket.send(message);
+                        foundAtLeastOneTarget = true;
+                    }
+                });
+
+                if (!foundAtLeastOneTarget) {
+                    const errorMessage =
+                        client.role === "client"
+                            ? `The ${channelName} agent is not connected. The message cannot be processed.`
+                            : `No ${channelName} clients are listening for messaages on this channel`;
+                    ws.send(JSON.stringify({ error: errorMessage }));
                 }
             } catch {
                 debug("WebSocket message not parsed.");
@@ -62,7 +138,14 @@ try {
         });
 
         ws.on("close", () => {
-            debug("Client disconnected");
+            debug(`Client ${clientId} disconnected.`);
+            channel.clients.delete(client);
+
+            // Cleanup empty channels
+            if (channel.clients.size === 0) {
+                channels.delete(channelName);
+                debug(`Channel ${channelName} deleted.`);
+            }
         });
     });
 
