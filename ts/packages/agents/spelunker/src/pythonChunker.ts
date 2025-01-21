@@ -26,7 +26,7 @@ export interface Blob {
 
 export interface Chunk {
     // Names here must match names in chunker.py.
-    id: ChunkId;
+    chunkId: ChunkId;
     treeName: string;
     blobs: Blob[];
     parentId: ChunkId;
@@ -117,7 +117,7 @@ function splitFile(file: ChunkedFile): ChunkedFile[] {
     const parentMap: Map<ChunkId, Chunk> = new Map();
     for (const chunk of file.chunks) {
         // Only nodes with children will be looked up in this map.
-        if (chunk.children.length) parentMap.set(chunk.id, chunk);
+        if (chunk.children.length) parentMap.set(chunk.chunkId, chunk);
     }
 
     const results: ChunkedFile[] = []; // Where output accumulates.

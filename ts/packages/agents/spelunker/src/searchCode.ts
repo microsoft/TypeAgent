@@ -121,16 +121,16 @@ export async function searchCode(
     for (const chunkRow of chunkRows) {
         const blobRows: any[] = db
             .prepare(`SELECT * FROM blobs WHERE chunkId = ?`)
-            .all(chunkRow.id);
+            .all(chunkRow.chunkId);
         const childRows: any[] = db
             .prepare(`SELECT * FROM chunks WHERE parentId = ?`)
-            .all(chunkRow.id);
+            .all(chunkRow.chunkId);
         const chunk: Chunk = {
-            id: chunkRow.id,
+            chunkId: chunkRow.chunkId,
             treeName: chunkRow.treeName,
             blobs: blobRows, // Ignoring chunkId
             parentId: chunkRow.parentId,
-            children: childRows.map((row) => row.id),
+            children: childRows.map((row) => row.chunkId),
             fileName: chunkRow.fileName,
         };
         allChunks.push(chunk);
@@ -197,7 +197,7 @@ function prepChunk(
     chunkDesc: ChunkDescription,
     allChunks: Chunk[],
 ): Chunk | undefined {
-    const chunks = allChunks.filter((chunk) => chunk.id === chunkDesc.chunkId);
+    const chunks = allChunks.filter((chunk) => chunk.chunkId === chunkDesc.chunkId);
     if (chunks.length !== 1) return undefined;
     return chunks[0];
 }
@@ -360,14 +360,14 @@ async function loadDatabase(
 
     const prepDeleteSummaries = db.prepare(`
         DELETE FROM Summaries WHERE chunkId IN (
-            SELECT id
+            SELECT chunkId
             FROM chunks
             WHERE fileName = ?
         )
     `);
     const prepDeleteBlobs = db.prepare(`
         DELETE FROM Blobs WHERE chunkId IN (
-            SELECT id
+            SELECT chunkId
             FROM chunks
             WHERE filename = ?
         )
@@ -386,7 +386,7 @@ async function loadDatabase(
         `SELECT COUNT(*) FROM Chunks WHERE fileName = ?`,
     );
     const prepInsertChunks = db.prepare(
-        `INSERT OR REPLACE INTO Chunks (id, treeName, parentId, fileName) VALUES (?, ?, ?, ?)`,
+        `INSERT OR REPLACE INTO Chunks (chunkId, treeName, parentId, fileName) VALUES (?, ?, ?, ?)`,
     );
     const prepInsertBlobs = db.prepare(
         `INSERT INTO Blobs (chunkId, start, lines, breadcrumb) VALUES (?, ?, ?, ?)`,
@@ -490,18 +490,18 @@ async function loadDatabase(
         for (const chunk of chunkedFile.chunks) {
             // TODO: Assuming this never throws, just remove this
             if (!chunk.fileName) {
-                throw new Error(`Chunk ${chunk.id} has no fileName`);
+                throw new Error(`Chunk ${chunk.chunkId} has no fileName`);
             }
             allChunks.push(chunk);
             prepInsertChunks.run(
-                chunk.id,
+                chunk.chunkId,
                 chunk.treeName,
                 chunk.parentId || null,
                 chunk.fileName,
             );
             for (const blob of chunk.blobs) {
                 prepInsertBlobs.run(
-                    chunk.id,
+                    chunk.chunkId,
                     blob.start,
                     blob.lines.map((line) => line.trimEnd()).join("\n"),
                     blob.breadcrumb ? 1 : 0,
@@ -529,19 +529,19 @@ CREATE TABLE IF NOT EXISTS Files (
     size INTEGER NOT NULL
 );
 CREATE TABLE IF NOT EXISTS Chunks (
-    id TEXT PRIMARY KEY,
+    chunkId TEXT PRIMARY KEY,
     treeName TEXT NOT NULL,
-    parentId TEXT KEY REFERENCES chunks(id), -- May be null
+    parentId TEXT KEY REFERENCES chunks(chunkId), -- May be null
     fileName TEXT KEY REFERENCES files(fileName) NOT NULL
 );
 CREATE TABLE IF NOT EXISTS Blobs (
-    chunkId TEXT KEY REFERENCES chunks(id) NOT NULL,
+    chunkId TEXT KEY REFERENCES chunks(chunkId) NOT NULL,
     start INTEGER NOT NULL, -- 0-based
     lines TEXT NOT NULL,
     breadcrumb BOOLEAN NOT NULL -- Values: 0 or 1
 );
 CREATE TABLE IF NOT EXISTS Summaries (
-    chunkId TEXT PRIMARY KEY REFERENCES chunks(id),
+    chunkId TEXT PRIMARY KEY REFERENCES chunks(chunkId),
     summary TEXT,
     signature TEXT
 )
