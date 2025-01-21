@@ -399,22 +399,38 @@ export async function handleLookup(
         inProgress: new Map<string, LookupProgress>(),
     };
     // Run all lookups concurrently
-    await Promise.all(
+    const results = await Promise.all(
         lookups.map((l) =>
             runLookup(l, lookupContext, context, settings, documentConcurrency),
         ),
     );
-    // Capture answers in the turn impression to return
-    literalResponse = updateActionResult(lookupContext, literalResponse);
-    context.actionIO.setDisplay(literalResponse.displayContent);
-    // Generate entities if needed
-    if (settings.entityGenModel) {
-        const entities = await runEntityExtraction(lookupContext, settings);
-        if (entities.length > 0) {
-            literalResponse.entities.push(...entities);
+    if (results.length > 0) {
+        // Verify we got some answers at least
+        const hasValidResults = results.some((r) => r !== undefined);
+        if (hasValidResults) {
+            // Capture answers in the turn impression to return
+            literalResponse = updateActionResult(
+                lookupContext,
+                literalResponse,
+            );
+            context.actionIO.setDisplay(literalResponse.displayContent);
+            // Generate entities if needed
+            if (settings.entityGenModel) {
+                const entities = await runEntityExtraction(
+                    lookupContext,
+                    settings,
+                );
+                if (entities.length > 0) {
+                    literalResponse.entities.push(...entities);
+                }
+            }
+            logEntities("Lookup Entities:", literalResponse.entities);
+        } else {
+            literalResponse = createActionResult(
+                "There was an error searching for information on Bing.\nPlease ensure that:\n- The BING_API_KEY is correctly configured.\n- Bing is available",
+            );
         }
     }
-    logEntities("Lookup Entities:", literalResponse.entities);
     return literalResponse;
 }
 

@@ -292,7 +292,8 @@ export async function createAgentRpcClient(
         AgentContextCallFunctions
     >(channel, agentContextInvokeHandlers, agentContextCallHandlers);
 
-    // The shim needs to implement all the APIs
+    // The shim needs to implement all the APIs regardless whether the actual agent
+    // has that API.  We remove remove it the one that is not necessary below.
     const agent: Required<AppAgent> = {
         initializeAgentContext() {
             return rpc.invoke("initializeAgentContext", undefined);

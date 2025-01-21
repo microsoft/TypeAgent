@@ -1,10 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { IdGenerator, getClientAPI } from "./main";
+import { IdGenerator, getDispatcher } from "./main";
 import { ChatInput, ExpandableTextarea } from "./chatInput";
 import { iconCheckMarkCircle, iconX } from "./icon";
 import {
+    AppAction,
     DisplayAppendMode,
     DisplayContent,
     DynamicDisplay,
@@ -13,6 +14,7 @@ import { TTS } from "./tts/tts";
 import {
     IAgentMessage,
     NotifyExplainedData,
+    RequestId,
     TemplateEditConfig,
 } from "agent-dispatcher";
 
@@ -209,7 +211,7 @@ export class ChatView {
     private scheduledRefreshTime: number | undefined = undefined;
     setDynamicDisplay(
         source: string,
-        id: string,
+        id: RequestId,
         actionIndex: number,
         displayId: string,
         nextRefreshMs: number,
@@ -226,7 +228,7 @@ export class ChatView {
         }
         this.dynamicDisplays.push({
             source,
-            id,
+            id: id as string,
             actionIndex,
             displayId,
             nextRefreshTime:
@@ -274,8 +276,9 @@ export class ChatView {
                 // Only call getDynamicDisplay once if there are multiple
                 let result = currentDisplay.get(`${source}:${displayId}`);
                 if (result === undefined) {
-                    result = await getClientAPI().getDynamicDisplay(
+                    result = await getDispatcher().getDynamicDisplay(
                         source,
+                        "html",
                         displayId,
                     );
                     currentDisplay.set(`${source}:${displayId}`, result);
@@ -323,11 +326,11 @@ export class ChatView {
         this.scheduleDynamicDisplayRefresh(now);
     }
 
-    private getMessageGroup(id: string) {
-        const messageGroup = this.idToMessageGroup.get(id);
+    private getMessageGroup(id?: string) {
+        const messageGroup = id ? this.idToMessageGroup.get(id) : undefined;
         if (messageGroup === undefined) {
             // for agent initiated messages we need to create an associated message group
-            if (id.startsWith("agent-")) {
+            if (id?.startsWith("agent-")) {
                 const mg: MessageGroup = new MessageGroup(
                     this,
                     this.settingsView!,
@@ -351,10 +354,7 @@ export class ChatView {
     }
 
     showStatusMessage(msg: IAgentMessage, temporary: boolean) {
-        this.getMessageGroup(msg.requestId as string)?.addStatusMessage(
-            msg,
-            temporary,
-        );
+        this.getMessageGroup(msg.requestId)?.addStatusMessage(msg, temporary);
         this.updateScroll();
     }
 
@@ -390,7 +390,7 @@ export class ChatView {
             this.settingsView!,
             request,
             this.messageDiv,
-            getClientAPI().processShellRequest(requestText, id, images),
+            getDispatcher().processCommand(requestText, id, images),
             this.agents,
             this.hideMetrics,
         );
@@ -442,6 +442,19 @@ export class ChatView {
         }
     }
 
+    setDisplayInfo(
+        source: string,
+        requestId: RequestId,
+        actionIndex?: number,
+        action?: AppAction | string[],
+    ) {
+        this.getMessageGroup(requestId)?.setDisplayInfo(
+            source,
+            actionIndex,
+            action,
+        );
+    }
+
     addAgentMessage(
         msg: IAgentMessage,
         options?: {
@@ -460,12 +473,7 @@ export class ChatView {
             return;
         }
 
-        agentMessage.setMessage(
-            content,
-            msg.source,
-            options?.appendMode,
-            msg.actionName,
-        );
+        agentMessage.setMessage(content, msg.source, options?.appendMode);
 
         if (!dynamicUpdate) {
             this.updateScroll();
@@ -479,27 +487,27 @@ export class ChatView {
     }
 
     private ensureAgentMessage(msg: IAgentMessage, notification = false) {
-        return this.getMessageGroup(
-            msg.requestId as string,
-        )?.ensureAgentMessage(msg, notification);
+        return this.getMessageGroup(msg.requestId)?.ensureAgentMessage(
+            msg,
+            notification,
+        );
     }
     public chatInputFocus() {
         this.chatInput.focus();
     }
 
-    public askYesNo(
-        askYesNoId: number,
+    public async askYesNo(
         message: string,
-        requestId: string,
+        requestId: RequestId,
         source: string,
-    ) {
+    ): Promise<boolean> {
         const agentMessage = this.ensureAgentMessage({
             message: "",
             requestId,
             source,
         });
         if (agentMessage === undefined) {
-            return;
+            throw new Error(`Invalid requestId ${requestId}`);
         }
         agentMessage.setMessage(message, source, "inline");
         const choices: InputChoice[] = [
@@ -516,17 +524,19 @@ export class ChatView {
                 value: false,
             },
         ];
-        agentMessage.addChoicePanel(choices, (choice) => {
-            agentMessage.setMessage(`  ${choice.text}`, source, "inline");
-            getClientAPI().sendYesNo(askYesNoId, choice.value);
+        const p = new Promise<boolean>((resolve) => {
+            agentMessage.addChoicePanel(choices, (choice) => {
+                agentMessage.setMessage(`  ${choice.text}`, source, "inline");
+                resolve(choice.value);
+            });
         });
         this.updateScroll();
+        return p;
     }
 
-    public proposeAction(
-        proposeActionId: number,
+    public async proposeAction(
         actionTemplates: TemplateEditConfig,
-        requestId: string,
+        requestId: RequestId,
         source: string,
     ) {
         const agentMessage = this.ensureAgentMessage({
@@ -535,9 +545,9 @@ export class ChatView {
             source,
         });
         if (agentMessage === undefined) {
-            return;
+            throw new Error(`Invalid requestId ${requestId}`);
         }
-        agentMessage.proposeAction(proposeActionId, actionTemplates);
+        return agentMessage?.proposeAction(actionTemplates);
     }
     getMessageElm() {
         return this.topDiv;

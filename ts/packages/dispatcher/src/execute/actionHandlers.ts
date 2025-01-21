@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { Action, Actions } from "agent-cache";
+import { Action, Actions, FullAction } from "agent-cache";
 import { CommandHandlerContext } from "../context/commandHandlerContext.js";
 import registerDebug from "debug";
 import { getAppAgentName } from "../translation/agentTranslators.js";
@@ -18,6 +18,7 @@ import {
     Entity,
     AppAgentManifest,
     AppAgent,
+    AppAction,
 } from "@typeagent/agent-sdk";
 import {
     createActionResult,
@@ -49,9 +50,16 @@ function getActionContext(
     systemContext: CommandHandlerContext,
     requestId: string,
     actionIndex?: number,
+    action?: AppAction | string[],
 ) {
     let context = systemContext;
     const sessionContext = context.agents.getSessionContext(appAgentName);
+    context.clientIO.setDisplayInfo(
+        appAgentName,
+        requestId,
+        actionIndex,
+        action,
+    );
     const actionIO: ActionIO = {
         setDisplay(content: DisplayContent): void {
             context.clientIO.setDisplay(
@@ -207,6 +215,28 @@ export function createSessionContext<T = unknown>(
     return sessionContext;
 }
 
+function getStreamingActionContext(
+    appAgentName: string,
+    actionIndex: number,
+    systemContext: CommandHandlerContext,
+    fullAction: FullAction,
+) {
+    const actionContext = systemContext.streamingActionContext;
+    systemContext.streamingActionContext = undefined;
+
+    if (actionIndex !== 0 || actionContext === undefined) {
+        return undefined;
+    }
+    // If we are reusing the streaming action context, we need to update the action.
+    systemContext.clientIO.setDisplayInfo(
+        appAgentName,
+        systemContext.requestId,
+        actionIndex,
+        fullAction,
+    );
+    return actionContext;
+}
+
 async function executeAction(
     action: Action,
     context: ActionContext<CommandHandlerContext>,
@@ -225,9 +255,6 @@ async function executeAction(
     // Update the last action translator.
     systemContext.lastActionSchemaName = translatorName;
 
-    // Update the last action name.
-    systemContext.lastActionName = action.fullActionName;
-
     if (appAgent.executeAction === undefined) {
         throw new Error(
             `Agent ${appAgentName} does not support executeAction.`,
@@ -235,17 +262,21 @@ async function executeAction(
     }
 
     // Reuse the same streaming action context if one is available.
+    const fullAction = action.toFullAction();
     const { actionContext, closeActionContext } =
-        actionIndex === 0 && systemContext.streamingActionContext
-            ? systemContext.streamingActionContext
-            : getActionContext(
-                  appAgentName,
-                  systemContext,
-                  systemContext.requestId!,
-                  actionIndex,
-              );
-
-    systemContext.streamingActionContext = undefined;
+        getStreamingActionContext(
+            appAgentName,
+            actionIndex,
+            systemContext,
+            fullAction,
+        ) ??
+        getActionContext(
+            appAgentName,
+            systemContext,
+            systemContext.requestId!,
+            actionIndex,
+            fullAction,
+        );
 
     actionContext.profiler = systemContext.commandProfiler?.measure(
         ProfileNames.executeAction,
@@ -381,6 +412,10 @@ export function startStreamPartialAction(
         context,
         context.requestId!,
         0,
+        {
+            translatorName,
+            actionName,
+        },
     );
 
     context.streamingActionContext = actionContextWithClose;
@@ -410,20 +445,16 @@ export async function executeCommand(
         );
     }
 
+    // update the last action name
     const { actionContext, closeActionContext } = getActionContext(
         appAgentName,
         context,
         context.requestId!,
+        undefined,
+        commands,
     );
 
     try {
-        // update the last action name
-        if (commands.length > 0) {
-            context.lastActionName = `${appAgentName}.${commands.join(".")}`;
-        } else {
-            context.lastActionName = undefined;
-        }
-
         actionContext.profiler = context.commandProfiler?.measure(
             ProfileNames.executeCommand,
             true,
@@ -438,7 +469,6 @@ export async function executeCommand(
     } finally {
         actionContext.profiler?.stop();
         actionContext.profiler = undefined;
-        context.lastActionName = undefined;
         closeActionContext();
     }
 }

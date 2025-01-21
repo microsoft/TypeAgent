@@ -13,6 +13,10 @@
   "type": "module",
   "exports": {
     ".": "./dist/index.js",
+    "./rpc/clientio/client": "./dist/rpc/clientIOClient.js",
+    "./rpc/clientio/server": "./dist/rpc/clientIOServer.js",
+    "./rpc/dispatcher/client": "./dist/rpc/dispatcherClient.js",
+    "./rpc/dispatcher/server": "./dist/rpc/dispatcherServer.js",
     "./helpers/console": "./dist/helpers/console.js",
     "./internal": "./dist/internal.js",
     "./explorer": "./dist/explorer.js"

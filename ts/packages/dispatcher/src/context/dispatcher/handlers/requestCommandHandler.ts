@@ -36,7 +36,7 @@ import {
 } from "../../../execute/actionHandlers.js";
 import { unicodeChar } from "../../../command/command.js";
 import {
-    isChangeAssistantAction,
+    isAdditionalActionLookupAction,
     TypeAgentTranslator,
     TranslatedAction,
 } from "../../../translation/agentTranslators.js";
@@ -237,6 +237,13 @@ async function matchRequest(
     return undefined;
 }
 
+function needAllAction(translatedAction: TranslatedAction, schemaName: string) {
+    return (
+        isUnknownAction(translatedAction) ||
+        (isAdditionalActionLookupAction(translatedAction) &&
+            translatedAction.parameters.schemaName === schemaName)
+    );
+}
 async function translateRequestWithSchema(
     schemaName: string,
     request: string,
@@ -270,11 +277,32 @@ async function translateRequestWithSchema(
                 return undefined;
             }
 
-            if (
-                !isUnknownAction(translatedAction) &&
-                (!isChangeAssistantAction(translatedAction) ||
-                    translatedAction.parameters.assistant !== schemaName)
-            ) {
+            if (!needAllAction(translatedAction, schemaName)) {
+                if (isMultipleAction(translatedAction)) {
+                    for (const subaction of translatedAction.parameters
+                        .requests) {
+                        if (!needAllAction(subaction.action, schemaName)) {
+                            continue;
+                        }
+                        // REVIEW: the subaction may not be
+                        const translator = getTranslatorForSchema(
+                            systemContext,
+                            schemaName,
+                        );
+                        const action = await translateWithTranslator(
+                            translator,
+                            schemaName,
+                            subaction.request,
+                            history,
+                            attachments,
+                            context,
+                        );
+                        if (action === undefined) {
+                            return undefined;
+                        }
+                        subaction.action = action;
+                    }
+                }
                 return translatedAction;
             }
         }
@@ -311,7 +339,11 @@ async function translateWithTranslator(
         .translation.stream
         ? (prop: string, value: any, delta: string | undefined) => {
               // TODO: streaming currently doesn't not support multiple actions
-              if (prop === "actionName" && delta === undefined) {
+              if (
+                  prop === "actionName" &&
+                  value !== "unknown" &&
+                  delta === undefined
+              ) {
                   const actionSchemaName =
                       systemContext.agents.getInjectedSchemaForActionName(
                           value,
@@ -414,11 +446,11 @@ async function getNextTranslation(
     forceSearch: boolean,
 ): Promise<NextTranslation | undefined> {
     let request: string;
-    if (isChangeAssistantAction(action)) {
+    if (isAdditionalActionLookupAction(action)) {
         if (!forceSearch) {
             return {
                 request: action.parameters.request,
-                nextSchemaName: action.parameters.assistant,
+                nextSchemaName: action.parameters.schemaName,
                 searched: false,
             };
         }
@@ -490,7 +522,8 @@ async function finalizeAction(
         );
     }
 
-    if (isChangeAssistantAction(currentAction)) {
+    if (isAdditionalActionLookupAction(currentAction)) {
+        // This is the second change, stop it and return unknown
         const unknownAction: UnknownAction = {
             actionName: "unknown",
             parameters: { request: currentAction.parameters.request },

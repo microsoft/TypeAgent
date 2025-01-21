@@ -101,7 +101,6 @@ export type CommandHandlerContext = {
     // Runtime context
     commandLock: Limiter; // Make sure we process one command at a time.
     lastActionSchemaName: string;
-    lastActionName: string | undefined;
     translatorCache: Map<string, TypeAgentTranslator>;
     agentCache: AgentCache;
     currentScriptDir: string;
@@ -365,7 +364,6 @@ export async function initializeCommandHandlerContext(
             commandLock: createLimiter(1), // Make sure we process one command at a time.
             agentCache: await getAgentCache(session, agents, logger),
             lastActionSchemaName: DispatcherName,
-            lastActionName: "request",
             translatorCache: new Map<string, TypeAgentTranslator>(),
             currentScriptDir: process.cwd(),
             chatHistory: createChatHistory(),

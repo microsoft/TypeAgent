@@ -31,6 +31,7 @@
     "@typeagent/agent-sdk": "workspace:*",
     "agent-cache": "workspace:*",
     "agent-dispatcher": "workspace:*",
+    "agent-rpc": "workspace:*",
     "aiclient": "workspace:*",
     "chalk": "^5.3.0",
     "common-utils": "workspace:*",
