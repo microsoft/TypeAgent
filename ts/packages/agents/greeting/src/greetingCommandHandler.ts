@@ -22,7 +22,10 @@ import {
     displayResult,
     displayStatus,
 } from "@typeagent/agent-sdk/helpers/display";
-import { GreetingAction, PersonalizedGreetingAction } from "./greetingActionSchema.js";
+import {
+    GreetingAction,
+    PersonalizedGreetingAction,
+} from "./greetingActionSchema.js";
 
 export function instantiate(): AppAgent {
     return {
@@ -61,7 +64,6 @@ export class GreetingCommandHandler implements CommandHandlerNoParams {
         "Have the agent generate a personalized greeting.";
     private instructions = `You are a breezy greeting generator. Greetings should NOT end with questions.`;
     public async run(context: ActionContext) {
-
         displayStatus("...", context);
 
         //
