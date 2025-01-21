@@ -197,7 +197,9 @@ function prepChunk(
     chunkDesc: ChunkDescription,
     allChunks: Chunk[],
 ): Chunk | undefined {
-    const chunks = allChunks.filter((chunk) => chunk.chunkId === chunkDesc.chunkId);
+    const chunks = allChunks.filter(
+        (chunk) => chunk.chunkId === chunkDesc.chunkId,
+    );
     if (chunks.length !== 1) return undefined;
     return chunks[0];
 }
