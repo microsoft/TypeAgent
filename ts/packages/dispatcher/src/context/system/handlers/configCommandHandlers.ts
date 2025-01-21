@@ -1043,7 +1043,8 @@ export function getConfigCommandHandlers(): CommandHandlerTable {
             pen: {
                 description: "Toggles click note pen handler.",
                 defaultSubCommand: "on",
-                commands: getToggleCommandHandlers("Surface Pen Click Handler", 
+                commands: getToggleCommandHandlers(
+                    "Surface Pen Click Handler",
                     async (isContext, enable) => {
                         if (enable) {
                             spawnPenLauncherProcess("--register");
@@ -1052,14 +1053,16 @@ export function getConfigCommandHandlers(): CommandHandlerTable {
                         }
                     },
                 ),
-            }
+            },
         },
     };
 }
 
 async function spawnPenLauncherProcess(args: string) {
     return new Promise<child_process.ChildProcess>((resolve, reject) => {
-        const child = child_process.spawn(fileURLToPath(penLauncherPath), [ args ] );
+        const child = child_process.spawn(fileURLToPath(penLauncherPath), [
+            args,
+        ]);
         child.on("error", (err) => {
             reject(err);
         });
