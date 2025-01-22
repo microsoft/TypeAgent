@@ -28,10 +28,10 @@ import chalk from "chalk";
 
 type KnowProContext = {
     knowledgeModel: ChatModel;
-    conversation?: kp.ConversationIndex | undefined;
     basePath: string;
     printer: KnowProPrinter;
     podcast?: kp.Podcast | undefined;
+    conversation?: kp.IConversation | undefined;
 };
 
 export async function createKnowproCommands(
@@ -48,7 +48,7 @@ export async function createKnowproCommands(
     commands.kpPodcastImport = podcastImport;
     commands.kpPodcastSave = podcastSave;
     commands.kpPodcastLoad = podcastLoad;
-    commands.kpPodcastSearchTerms = podcastSearchTerms;
+    commands.kpSearchTerms = searchTerms;
 
     /*----------------
      * COMMANDS
@@ -75,6 +75,7 @@ export async function createKnowproCommands(
             return;
         }
         context.podcast = await kp.importPodcast(namedArgs.filePath);
+        context.conversation = context.podcast;
         context.printer.writeLine("Imported podcast:");
         context.printer.writePodcastInfo(context.podcast);
 
@@ -117,13 +118,13 @@ export async function createKnowproCommands(
     commands.kpPodcastSave.metadata = podcastSaveDef();
     async function podcastSave(args: string[] | NamedArgs): Promise<void> {
         const namedArgs = parseNamedArguments(args, podcastSaveDef());
-        const podcast = ensurePodcast();
-        if (!podcast) {
+        if (!context.podcast) {
+            context.printer.writeError("No podcast loaded");
             return;
         }
         context.printer.writeLine("Saving index");
         context.printer.writeLine(namedArgs.filePath);
-        const cData = podcast.serialize();
+        const cData = context.podcast.serialize();
         await ensureDir(path.dirname(namedArgs.filePath));
         await writeJsonFile(namedArgs.filePath, cData);
     }
@@ -140,10 +141,10 @@ export async function createKnowproCommands(
     commands.kpPodcastLoad.metadata = podcastLoadDef();
     async function podcastLoad(args: string[]): Promise<void> {
         const namedArgs = parseNamedArguments(args, podcastLoadDef());
-        const podcastFilePath =
-            namedArgs.filePath ?? namedArgs.name
-                ? podcastNameToFilePath(namedArgs.name)
-                : undefined;
+        let podcastFilePath = namedArgs.filePath;
+        podcastFilePath ??= namedArgs.name
+            ? podcastNameToFilePath(namedArgs.name)
+            : undefined;
         if (!podcastFilePath) {
             context.printer.writeError("No filepath or name provided");
             return;
@@ -168,36 +169,45 @@ export async function createKnowproCommands(
             data.semanticRefs,
             new kp.ConversationIndex(data.semanticIndexData),
         );
+        context.conversation = context.podcast;
     }
 
-    commands.kpPodcastSearchTerms.metadata =
-        "Search knowPro podcast index for given terms";
-    async function podcastSearchTerms(args: string[]): Promise<void> {
-        const podcast = ensurePodcast();
-        if (!podcast || args.length === 0) {
+    commands.kpSearchTerms.metadata =
+        "Search current knowPro conversation by terms";
+    async function searchTerms(args: string[]): Promise<void> {
+        if (args.length === 0) {
             return;
         }
-
+        const conversation = context.conversation;
+        if (!conversation) {
+            context.printer.writeError("No conversation loaded");
+            return;
+        }
         const terms = args; // Todo: De dupe
-        if (podcast.semanticRefIndex) {
+        if (conversation.semanticRefIndex && conversation.semanticRefs) {
+            context.printer.writeInColor(
+                chalk.cyan,
+                `Searching ${conversation.nameTag}...`,
+            );
             const matches = kp.lookupTermsInIndex(
                 terms,
-                podcast.semanticRefIndex,
+                conversation.semanticRefIndex,
             );
             for (const [term, scoredRefs] of matches) {
-                if (scoredRefs) {
+                if (scoredRefs && scoredRefs.length > 0) {
                     context.printer.writeInColor(chalk.cyan, term);
-                    scoredRefs.forEach((ref) =>
+                    for (const scoredRef of scoredRefs) {
                         context.printer.writeSemanticRef(
-                            podcast.semanticRefs[
-                                (ref.semanticRefIndex, ref.score)
+                            conversation.semanticRefs[
+                                scoredRef.semanticRefIndex
                             ],
-                        ),
-                    );
+                            scoredRef.score,
+                        );
+                    }
                 }
             }
         } else {
-            context.printer.writeError("Podcast is not indexed");
+            context.printer.writeError("Conversation is not indexed");
         }
     }
 
@@ -205,13 +215,6 @@ export async function createKnowproCommands(
       End COMMANDS
     ------------*/
 
-    function ensurePodcast() {
-        if (!context.podcast) {
-            context.printer.writeError("No podcast loaded");
-            return;
-        }
-        return context.podcast;
-    }
     const IndexFileSuffix = "_index.json";
     function sourcePathToIndexPath(
         sourcePath: string,
