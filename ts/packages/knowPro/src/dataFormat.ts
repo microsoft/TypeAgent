@@ -96,3 +96,11 @@ export interface TextRange {
     // the end of the range (exclusive)
     end?: TextLocation | undefined;
 }
+
+export interface IConversationData<TMessage> {
+    nameTag: string;
+    messages: TMessage[];
+    tags: string[];
+    semanticRefs: SemanticRef[];
+    semanticIndexData?: ITermToSemanticRefIndexData | undefined;
+}

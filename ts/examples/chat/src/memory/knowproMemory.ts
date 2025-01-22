@@ -4,14 +4,21 @@
 import * as kp from "knowpro";
 import {
     arg,
+    argBool,
+    argNum,
     CommandHandler,
     CommandMetadata,
+    NamedArgs,
     parseNamedArguments,
+    ProgressBar,
 } from "interactive-app";
 import { ChatContext } from "./chatMemory.js";
 import { ChatModel } from "aiclient";
 import fs from "fs";
 import { ChatPrinter } from "../chatPrinter.js";
+import { argDestFile, argSourceFile } from "./common.js";
+import { ensureDir, readJsonFile, writeJsonFile } from "typeagent";
+import path from "path";
 
 type KnowProContext = {
     knowledgeModel: ChatModel;
@@ -30,40 +37,110 @@ export async function createKnowproCommands(
         basePath: "/data/testChat",
         printer: new KnowProPrinter(),
     };
-    commands.kpImportPodcast = importPodcast;
-    commands.kpLoadIndex = loadIndex;
-    commands.kpSaveIndex = saveIndex;
-    commands.kpSearch = searchIndex;
+    commands.kpPodcastImport = podcastImport;
+    commands.kpPodcastSave = podcastSave;
+    commands.kpPodcastLoad = podcastLoad;
+    commands.kpPodcastSearch = podcastSearch;
 
-    function importPodcastDef(): CommandMetadata {
+    function podcastImportDef(): CommandMetadata {
         return {
             description: "Create knowPro index",
             args: {
                 filePath: arg("File path to transcript file"),
             },
+            options: {
+                index: argBool("Build index", true),
+                indexFilePath: arg("Output path for index file"),
+                maxMessages: argNum("Maximum messages to index"),
+            },
         };
     }
-
-    commands.kpImportPodcast.metadata = importPodcastDef();
-    async function importPodcast(args: string[]): Promise<void> {
-        const namedArgs = parseNamedArguments(args, importPodcastDef());
+    commands.kpPodcastImport.metadata = podcastImportDef();
+    async function podcastImport(args: string[]): Promise<void> {
+        const namedArgs = parseNamedArguments(args, podcastImportDef());
         if (!fs.existsSync(namedArgs.filePath)) {
             context.printer.writeError(`${namedArgs.filePath} not found`);
             return;
         }
+        context.podcast = await kp.importPodcast(namedArgs.filePath);
         context.printer.writeLine("Imported podcast:");
-        context.podcast = await kp.importPodcastFromFile(namedArgs.filePath);
         context.printer.writePodcastInfo(context.podcast);
+
+        const messageCount = context.podcast.messages.length;
+        if (messageCount === 0 || !namedArgs.index) {
+            return;
+        }
+
+        context.printer.writeLine();
+        context.printer.writeLine("Building index...");
+        const maxMessages = namedArgs.maxMessages ?? messageCount;
+        let progress = new ProgressBar(context.printer, maxMessages);
+        const indexResult = await context.podcast.buildIndex(() => {
+            progress.advance();
+            return progress.count < maxMessages;
+        });
+        progress.complete();
+        if (!indexResult.success) {
+            context.printer.writeError(indexResult.message);
+            return;
+        }
+        context.printer.writeLine(`Imported ${maxMessages} items`);
+        if (namedArgs.indexFilePath) {
+            context.printer.writeLine("Saving index...");
+            namedArgs.filePath = namedArgs.indexFilePath;
+            await podcastSave(namedArgs);
+        }
     }
 
-    commands.kpLoadIndex.metadata = "Load knowPro index";
-    async function loadIndex(args: string[]): Promise<void> {}
+    function podcastSaveDef(): CommandMetadata {
+        return {
+            description: "Save Podcast",
+            args: {
+                filePath: argDestFile(),
+            },
+        };
+    }
+    commands.kpPodcastSave.metadata = podcastSaveDef();
+    async function podcastSave(args: string[] | NamedArgs): Promise<void> {
+        const namedArgs = parseNamedArguments(args, podcastSaveDef());
+        if (!context.podcast) {
+            context.printer.writeError("No podcast loaded");
+            return;
+        }
+        const cData = context.podcast.serialize();
+        await ensureDir(path.dirname(namedArgs.filePath));
+        await writeJsonFile(namedArgs.filePath, cData);
+    }
 
-    commands.kpSaveIndex.metadata = "Save knowPro index";
-    async function saveIndex(args: string[]): Promise<void> {}
+    function podcastLoadDef(): CommandMetadata {
+        return {
+            description: "Load knowPro podcast",
+            args: {
+                filePath: argSourceFile(),
+            },
+        };
+    }
+    commands.kpPodcastLoad.metadata = podcastLoadDef();
+    async function podcastLoad(args: string[]): Promise<void> {
+        const namedArgs = parseNamedArguments(args, podcastLoadDef());
+        const data = await readJsonFile<
+            kp.IConversationData<kp.PodcastMessage>
+        >(namedArgs.filePath);
+        if (!data) {
+            context.printer.writeError("Could not load podcast data");
+            return;
+        }
+        context.podcast = new kp.Podcast(
+            data.nameTag,
+            data.messages,
+            data.tags,
+            data.semanticRefs,
+            new kp.ConversationIndex(data.semanticIndexData),
+        );
+    }
 
-    commands.kpSearch.metadata = "Search knowPro index";
-    async function searchIndex(): Promise<void> {}
+    commands.kpPodcastSearch.metadata = "Search knowPro podcast index";
+    async function podcastSearch(): Promise<void> {}
 }
 
 class KnowProPrinter extends ChatPrinter {
@@ -85,7 +162,7 @@ class KnowProPrinter extends ChatPrinter {
     }
 }
 
-function getPodcastParticipants(podcast: kp.Podcast) {
+export function getPodcastParticipants(podcast: kp.Podcast) {
     const participants = new Set<string>();
     for (let message of podcast.messages) {
         const meta = message.metadata;

@@ -6,6 +6,7 @@ import {
     IMessage,
     IKnowledgeSource,
     SemanticRef,
+    IConversationData,
 } from "./dataFormat.js";
 import { conversation, split } from "knowledge-processor";
 import { getFileName, readAllText } from "typeagent";
@@ -16,6 +17,7 @@ import {
     buildConversationIndex,
     addTopicToIndex,
 } from "./conversationIndex.js";
+import { Result } from "typechat";
 
 // metadata for podcast messages
 export class PodcastMessageMeta implements IKnowledgeSource {
@@ -94,12 +96,12 @@ export class PodcastMessage implements IMessage<PodcastMessageMeta> {
 }
 
 export class Podcast implements IConversation<PodcastMessageMeta> {
-    semanticRefIndex: ConversationIndex | undefined = undefined;
-    semanticRefs: SemanticRef[] = [];
     constructor(
         public nameTag: string,
         public messages: PodcastMessage[],
         public tags: string[] = [],
+        public semanticRefs: SemanticRef[] = [],
+        public semanticRefIndex: ConversationIndex | undefined = undefined,
     ) {}
 
     addMetadataToIndex() {
@@ -159,24 +161,37 @@ export class Podcast implements IConversation<PodcastMessageMeta> {
         }
     }
 
-    async buildIndex() {
-        await buildConversationIndex(this);
-        this.addMetadataToIndex();
+    async buildIndex(
+        progressCallback?: (
+            text: string,
+            knowledge: conversation.KnowledgeResponse | undefined,
+        ) => boolean,
+    ): Promise<Result<ConversationIndex>> {
+        const result = await buildConversationIndex(this, progressCallback);
+        if (result.success) {
+            this.addMetadataToIndex();
+        }
+        return result;
+    }
+
+    public serialize(): IConversationData<PodcastMessage> {
+        return {
+            nameTag: this.nameTag,
+            messages: this.messages,
+            tags: this.tags,
+            semanticRefs: this.semanticRefs,
+            semanticIndexData: this.semanticRefIndex?.serialize(),
+        };
     }
 }
 
-export async function importPodcastFromFile(
-    filePath: string,
-): Promise<Podcast> {
-    const fileContents = await readAllText(filePath);
-    return importPodcast(getFileName(filePath), fileContents);
-}
-
 export async function importPodcast(
-    podcastName: string,
-    podcastTranscript: string,
-) {
-    const transcriptLines = split(podcastTranscript, /\r?\n/, {
+    transcriptFilePath: string,
+    podcastName?: string,
+): Promise<Podcast> {
+    const transcriptText = await readAllText(transcriptFilePath);
+    podcastName ??= getFileName(transcriptFilePath);
+    const transcriptLines = split(transcriptText, /\r?\n/, {
         removeEmpty: true,
         trim: true,
     });

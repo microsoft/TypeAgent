@@ -57,4 +57,14 @@ export class ChatPrinter extends ChalkWriter {
         );
         this.writeCompletionStats(stats.totalStats.tokenStats);
     }
+
+    public writeProgress(
+        curCount: number,
+        total: number,
+        label?: string | undefined,
+    ): void {
+        label = label ? label + " " : "";
+        const text = `[${label}${curCount} / ${total}]`;
+        this.writeInColor(chalk.gray, text);
+    }
 }
