@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import * as kp from "knowpro";
+import * as knowLib from "knowledge-processor";
 import {
     arg,
     argBool,
@@ -23,6 +24,7 @@ import {
 } from "./common.js";
 import { ensureDir, readJsonFile, writeJsonFile } from "typeagent";
 import path from "path";
+import chalk from "chalk";
 
 type KnowProContext = {
     knowledgeModel: ChatModel;
@@ -46,7 +48,7 @@ export async function createKnowproCommands(
     commands.kpPodcastImport = podcastImport;
     commands.kpPodcastSave = podcastSave;
     commands.kpPodcastLoad = podcastLoad;
-    commands.kpPodcastSearch = podcastSearch;
+    commands.kpPodcastSearchTerms = podcastSearchTerms;
 
     /*----------------
      * COMMANDS
@@ -115,13 +117,13 @@ export async function createKnowproCommands(
     commands.kpPodcastSave.metadata = podcastSaveDef();
     async function podcastSave(args: string[] | NamedArgs): Promise<void> {
         const namedArgs = parseNamedArguments(args, podcastSaveDef());
-        if (!context.podcast) {
-            context.printer.writeError("No podcast loaded");
+        const podcast = ensurePodcast();
+        if (!podcast) {
             return;
         }
         context.printer.writeLine("Saving index");
         context.printer.writeLine(namedArgs.filePath);
-        const cData = context.podcast.serialize();
+        const cData = podcast.serialize();
         await ensureDir(path.dirname(namedArgs.filePath));
         await writeJsonFile(namedArgs.filePath, cData);
     }
@@ -168,13 +170,48 @@ export async function createKnowproCommands(
         );
     }
 
-    commands.kpPodcastSearch.metadata = "Search knowPro podcast index";
-    async function podcastSearch(): Promise<void> {}
+    commands.kpPodcastSearchTerms.metadata =
+        "Search knowPro podcast index for given terms";
+    async function podcastSearchTerms(args: string[]): Promise<void> {
+        const podcast = ensurePodcast();
+        if (!podcast || args.length === 0) {
+            return;
+        }
+
+        const terms = args; // Todo: De dupe
+        if (podcast.semanticRefIndex) {
+            const matches = kp.lookupTermsInIndex(
+                terms,
+                podcast.semanticRefIndex,
+            );
+            for (const [term, scoredRefs] of matches) {
+                if (scoredRefs) {
+                    context.printer.writeInColor(chalk.cyan, term);
+                    scoredRefs.forEach((ref) =>
+                        context.printer.writeSemanticRef(
+                            podcast.semanticRefs[
+                                (ref.semanticRefIndex, ref.score)
+                            ],
+                        ),
+                    );
+                }
+            }
+        } else {
+            context.printer.writeError("Podcast is not indexed");
+        }
+    }
 
     /*---------- 
       End COMMANDS
     ------------*/
 
+    function ensurePodcast() {
+        if (!context.podcast) {
+            context.printer.writeError("No podcast loaded");
+            return;
+        }
+        return context.podcast;
+    }
     const IndexFileSuffix = "_index.json";
     function sourcePathToIndexPath(
         sourcePath: string,
@@ -194,6 +231,37 @@ export async function createKnowproCommands(
 class KnowProPrinter extends ChatPrinter {
     constructor() {
         super();
+    }
+
+    public writeEntity(
+        entity: knowLib.conversation.ConcreteEntity | undefined,
+    ) {
+        if (entity) {
+            this.writeLine(entity.name.toUpperCase());
+            this.writeList(entity.type, { type: "csv" });
+            if (entity.facets) {
+                const facetList = entity.facets.map((f) =>
+                    knowLib.conversation.facetToString(f),
+                );
+                this.writeList(facetList, { type: "ul" });
+            }
+        }
+    }
+
+    public writeSemanticRef(ref: kp.SemanticRef, score?: number | undefined) {
+        if (score) {
+            this.writeInColor(chalk.greenBright, `[${score}]`);
+        }
+        switch (ref.knowledgeType) {
+            default:
+                this.writeLine(ref.knowledgeType);
+                break;
+            case "entity":
+                this.writeEntity(
+                    ref.knowledge as knowLib.conversation.ConcreteEntity,
+                );
+                break;
+        }
     }
 
     public writeConversationInfo(conversation: kp.IConversation) {

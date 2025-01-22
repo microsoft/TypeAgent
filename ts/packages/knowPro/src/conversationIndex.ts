@@ -195,6 +195,18 @@ export async function buildConversationIndex<TMeta extends IKnowledgeSource>(
     return success(semanticRefIndex);
 }
 
+export function lookupTermsInIndex(
+    terms: string[],
+    semanticRefIndex: ITermToSemanticRefIndex,
+): Map<string, ScoredSemanticRef[] | undefined> {
+    const matches = new Map<string, ScoredSemanticRef[] | undefined>();
+    for (const term of terms) {
+        const scoredRefs = semanticRefIndex.lookupTerm(term);
+        matches.set(term, scoredRefs);
+    }
+    return matches;
+}
+
 export class ConversationIndex implements ITermToSemanticRefIndex {
     map: Map<string, ScoredSemanticRef[]> = new Map<
         string,
