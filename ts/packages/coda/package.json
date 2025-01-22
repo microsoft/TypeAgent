@@ -20,7 +20,7 @@
     "build": "pnpm run esbuild-base --sourcemap",
     "clean": "rimraf --glob out dist-pub *.tsbuildinfo *.done.build.log",
     "deploy:local": "pnpm run package && code --install-extension dist-pub/aisystems-coda.vsix --force",
-    "esbuild-base": "esbuild ./src/extension.ts --bundle --outfile=out/extension.js --external:vscode --format=cjs --platform=node",
+    "esbuild-base": "esbuild ./src/extension.ts --bundle --outfile=out/extension.js --external:vscode --format=cjs --platform=node --log-level=warning",
     "esbuild-watch": "pnpm run esbuild-base --sourcemap --watch",
     "package": "mkdirp dist-pub && vsce package --allow-star-activation --allow-missing-repository --no-dependencies -o dist-pub/aisystems-coda.vsix",
     "prettier": "prettier --check . --ignore-path ../../.prettierignore",
