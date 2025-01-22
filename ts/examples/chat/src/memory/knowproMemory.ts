@@ -51,10 +51,9 @@ export async function createKnowproCommands(
             context.printer.writeError(`${namedArgs.filePath} not found`);
             return;
         }
+        context.printer.writeLine("Imported podcast:");
         context.podcast = await kp.importPodcastFromFile(namedArgs.filePath);
-        for (const msg of context.podcast.messages) {
-            context.printer.writePodcastMessage(msg);
-        }
+        context.printer.writePodcastInfo(context.podcast);
     }
 
     commands.kpLoadIndex.metadata = "Load knowPro index";
@@ -72,11 +71,28 @@ class KnowProPrinter extends ChatPrinter {
         super();
     }
 
-    public writePodcastMessage(message: kp.PodcastMessage) {
-        this.writePodcastMetadata(message.metadata);
+    public writeConversationInfo(conversation: kp.IConversation) {
+        this.writeTitle(conversation.nameTag);
+        this.writeLine(`${conversation.messages.length} messages`);
     }
 
-    public writePodcastMetadata(meta: kp.PodcastMessageMeta) {
-        this.writeList(meta.listeners, { type: "csv" });
+    public writePodcastInfo(podcast: kp.Podcast) {
+        this.writeConversationInfo(podcast);
+        this.writeList(getPodcastParticipants(podcast), {
+            type: "csv",
+            title: "Participants",
+        });
     }
+}
+
+function getPodcastParticipants(podcast: kp.Podcast) {
+    const participants = new Set<string>();
+    for (let message of podcast.messages) {
+        const meta = message.metadata;
+        if (meta.speaker) {
+            participants.add(meta.speaker);
+        }
+        meta.listeners.forEach((l) => participants.add(l));
+    }
+    return [...participants.values()];
 }

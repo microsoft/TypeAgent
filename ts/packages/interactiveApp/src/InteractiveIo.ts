@@ -35,6 +35,7 @@ export function createInteractiveIO(): InteractiveIo {
 }
 
 export type ListOptions = {
+    title?: string | undefined;
     type: "ol" | "ul" | "plain" | "csv";
 };
 
@@ -83,6 +84,15 @@ export class ConsoleWriter {
         if (!list) {
             return;
         }
+        const isInline =
+            options && (options.type === "plain" || options.type === "csv");
+        if (options?.title) {
+            if (isInline) {
+                this.write(options.title + ": ");
+            } else {
+                this.writeLine(options.title);
+            }
+        }
         if (typeof list === "string") {
             this.writeLine(this.listItemToString(1, list, options));
             return;
@@ -90,7 +100,7 @@ export class ConsoleWriter {
         if (list.length === 0) {
             return;
         }
-        if (options && (options.type === "plain" || options.type === "csv")) {
+        if (isInline) {
             const sep = options.type === "plain" ? " " : ", ";
             for (let i = 0; i < list.length; ++i) {
                 if (i > 0) {

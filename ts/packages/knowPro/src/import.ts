@@ -8,8 +8,7 @@ import {
     SemanticRef,
 } from "./dataFormat.js";
 import { conversation, split } from "knowledge-processor";
-import path from "path";
-import { readAllText } from "typeagent";
+import { getFileName, readAllText } from "typeagent";
 import {
     ConversationIndex,
     addActionToIndex,
@@ -170,7 +169,7 @@ export async function importPodcastFromFile(
     filePath: string,
 ): Promise<Podcast> {
     const fileContents = await readAllText(filePath);
-    return importPodcast(path.dirname(filePath), fileContents);
+    return importPodcast(getFileName(filePath), fileContents);
 }
 
 export async function importPodcast(
