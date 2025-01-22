@@ -81,6 +81,17 @@ try {
                         "Closing duplicate socket instance for id " + clientId,
                     );
                     socket.close(1013, "duplicate");
+                    wss.clients.delete(socket);
+                    const tempClient = {
+                        id: clientId,
+                        role: role,
+                        socket: socket,
+                        channelName: channelName,
+                    };
+
+                    if (channel.clients.has(tempClient)) {
+                        channel.clients.delete(tempClient);
+                    }
                 }
             }
 
@@ -92,28 +103,34 @@ try {
 
         ws.on("message", (message: string) => {
             try {
-                const data = JSON.parse(message) as WebSocketMessage;
-                if (data.messageType != "keepAlive") {
-                    let foundAtLeastOneTarget = false;
+                const data = JSON.parse(message);
+                if (
+                    data.messageType === "keepAlive" ||
+                    data.method === "keepAlive"
+                ) {
+                    return;
+                }
+                let foundAtLeastOneTarget = false;
+                const messageTargetRole =
+                    role !== "client" ? "client" : "dispatcher";
 
-                    // Broadcast message to all clients in the same channel that have a different role
-                    channel.clients.forEach((client) => {
-                        if (
-                            client.role !== role &&
-                            client.socket.readyState === WebSocket.OPEN
-                        ) {
-                            client.socket.send(message);
-                            foundAtLeastOneTarget = true;
-                        }
-                    });
-
-                    if (!foundAtLeastOneTarget) {
-                        const errorMessage =
-                            data.source === channelName
-                                ? `The ${channelName} agent is not connected. The message cannot be processed.`
-                                : `No ${channelName} clients are listening for messaages on this channel`;
-                        ws.send(JSON.stringify({ error: errorMessage }));
+                // Broadcast message to all clients in the same channel that have a different role
+                channel.clients.forEach((currClient) => {
+                    if (
+                        currClient.role === messageTargetRole &&
+                        currClient.socket.readyState === WebSocket.OPEN
+                    ) {
+                        currClient.socket.send(message);
+                        foundAtLeastOneTarget = true;
                     }
+                });
+
+                if (!foundAtLeastOneTarget) {
+                    const errorMessage =
+                        client.role === "client"
+                            ? `The ${channelName} agent is not connected. The message cannot be processed.`
+                            : `No ${channelName} clients are listening for messaages on this channel`;
+                    ws.send(JSON.stringify({ error: errorMessage }));
                 }
             } catch {
                 debug("WebSocket message not parsed.");

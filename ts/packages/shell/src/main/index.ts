@@ -13,7 +13,7 @@ import {
     WebContents,
     BrowserView,
 } from "electron";
-import { join } from "node:path";
+import path, { join } from "node:path";
 import { electronApp, optimizer, is } from "@electron-toolkit/utils";
 import { runDemo } from "./demo.js";
 import registerDebug from "debug";
@@ -24,7 +24,7 @@ import { unlinkSync } from "fs";
 import { existsSync } from "node:fs";
 import { shellAgentProvider } from "./agent.js";
 import { BrowserAgentIpc } from "./browserIpc.js";
-import { WebSocketMessage } from "common-utils";
+import { WebSocketMessageV2 } from "common-utils";
 import { AzureSpeech } from "./azureSpeech.js";
 import { auth } from "aiclient";
 import {
@@ -33,6 +33,7 @@ import {
 } from "./localWhisperCommandHandler.js";
 import { createDispatcherRpcServer } from "agent-dispatcher/rpc/dispatcher/server";
 import { createGenericChannel } from "agent-rpc/channel";
+import net from "node:net";
 import { createClientIORpcClient } from "agent-dispatcher/rpc/clientio/client";
 
 console.log(auth.AzureTokenScopes.CogServices);
@@ -301,7 +302,7 @@ function createWindow(): void {
         await BrowserAgentIpc.getinstance().ensureWebsocketConnected();
 
         BrowserAgentIpc.getinstance().onMessageReceived = (
-            message: WebSocketMessage,
+            message: WebSocketMessageV2,
         ) => {
             inlineBrowserView?.webContents.send(
                 "received-from-browser-ipc",
@@ -586,7 +587,7 @@ async function initialize() {
 
     ipcMain.on(
         "send-to-browser-ipc",
-        async (_event, data: WebSocketMessage) => {
+        async (_event, data: WebSocketMessageV2) => {
             await BrowserAgentIpc.getinstance().send(data);
         },
     );
@@ -617,6 +618,25 @@ async function initialize() {
         // dock icon is clicked and there are no other windows open.
         if (BrowserWindow.getAllWindows().length === 0) createWindow();
     });
+
+    // On windows, we will spin up a local end point that listens
+    // for pen events which will trigger speech reco
+    if (process.platform == "win32") {
+        const pipePath = path.join("\\\\.\\pipe\\TypeAgent", "speech");
+        const server = net.createServer((stream) => {
+            stream.on("data", (c) => {
+                if (c.toString() == "triggerRecognitionOnce") {
+                    console.log("Pen click note button click received!");
+                    triggerRecognitionOnce();
+                }
+            });
+            stream.on("error", (e) => {
+                console.log(e);
+            });
+        });
+
+        server.listen(pipePath);
+    }
 }
 
 app.whenReady()
@@ -644,6 +664,7 @@ function setupQuit(dispatcher: Dispatcher) {
         } catch (e) {
             debugShellError("Error closing dispatcher", e);
         }
+
         debugShell("Quitting");
         canQuit = true;
         app.quit();

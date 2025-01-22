@@ -7,8 +7,7 @@ export type ChunkId = string;
 // A chunk is a function/method, class or module.
 // Nested chunks are elided from the chunk text (they are their own chunk).
 export type ChunkDescription = {
-    chunkid: ChunkId;
-    filename: string; // File from which the chunk is taken
+    chunkId: ChunkId;
     relevance: number; // Float between 0.0 and 1.0
 };
 

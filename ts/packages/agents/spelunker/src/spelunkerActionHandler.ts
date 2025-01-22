@@ -25,7 +25,7 @@ import {
     getCommandInterface,
 } from "@typeagent/agent-sdk/helpers/command";
 
-import { answerQuestion, ModelContext } from "./answerQuestions.js";
+import { searchCode, QueryContext } from "./searchCode.js";
 import { SpelunkerAction } from "./spelunkerSchema.js";
 
 class RequestCommandHandler implements CommandHandler {
@@ -48,7 +48,7 @@ class RequestCommandHandler implements CommandHandler {
         params: ParsedCommandParams<ParameterDefinitions>,
     ): Promise<void> {
         if (typeof params.args?.question === "string") {
-            const result: ActionResult = await answerQuestion(
+            const result: ActionResult = await searchCode(
                 actionContext.sessionContext.agentContext,
                 params.args.question,
             );
@@ -86,13 +86,13 @@ export function instantiate(): AppAgent {
 
 export type SpelunkerContext = {
     focusFolders: string[];
-    modelContext: ModelContext | undefined;
+    queryContext: QueryContext | undefined;
 };
 
 async function initializeSpelunkerContext(): Promise<SpelunkerContext> {
     return {
         focusFolders: [],
-        modelContext: undefined,
+        queryContext: undefined,
     };
 }
 
@@ -147,12 +147,12 @@ async function handleSpelunkerAction(
     context: SessionContext<SpelunkerContext>,
 ): Promise<ActionResult> {
     switch (action.actionName) {
-        case "answerQuestion": {
+        case "searchCode": {
             if (
                 typeof action.parameters.question == "string" &&
                 action.parameters.question.trim()
             ) {
-                return await answerQuestion(
+                return await searchCode(
                     context.agentContext,
                     action.parameters.question,
                 );

@@ -34,6 +34,8 @@ import {
 import { alwaysEnabledAgents } from "../../appAgentManager.js";
 import { getCacheFactory } from "../../../utils/cacheFactory.js";
 import { resolveCommand } from "../../../command/command.js";
+import child_process from "node:child_process";
+import { fileURLToPath } from "node:url";
 
 const enum AgentToggle {
     Schema,
@@ -48,6 +50,11 @@ const AgentToggleDescription = [
     "agent commands",
     "agents",
 ] as const;
+
+const penLauncherPath = new URL(
+    "../../../../../../../dotnet/penLauncher/bin/Debug/net9.0/penLauncher.exe",
+    import.meta.url,
+);
 
 function getAgentToggleOptions(
     toggle: AgentToggle,
@@ -1033,6 +1040,34 @@ export function getConfigCommandHandlers(): CommandHandlerTable {
                     ),
                 },
             },
+            pen: {
+                description: "Toggles click note pen handler.",
+                defaultSubCommand: "on",
+                commands: getToggleCommandHandlers(
+                    "Surface Pen Click Handler",
+                    async (isContext, enable) => {
+                        if (enable) {
+                            spawnPenLauncherProcess("--register");
+                        } else {
+                            spawnPenLauncherProcess("--unregister");
+                        }
+                    },
+                ),
+            },
         },
     };
+}
+
+async function spawnPenLauncherProcess(args: string) {
+    return new Promise<child_process.ChildProcess>((resolve, reject) => {
+        const child = child_process.spawn(fileURLToPath(penLauncherPath), [
+            args,
+        ]);
+        child.on("error", (err) => {
+            reject(err);
+        });
+        child.on("spawn", () => {
+            resolve(child);
+        });
+    });
 }

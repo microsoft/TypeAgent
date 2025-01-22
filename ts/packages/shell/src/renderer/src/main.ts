@@ -70,6 +70,9 @@ function addEvents(
         exit: () => {
             window.close();
         },
+        setDisplayInfo: (source, requestId, actionIndex, action) => {
+            chatView.setDisplayInfo(source, requestId, actionIndex, action);
+        },
         setDisplay: (message) => {
             chatView.addAgentMessage(message);
         },
@@ -283,9 +286,8 @@ function showNotifications(
     chatView.addAgentMessage(
         {
             message: { type: "html", content: html },
-            source: "shell",
+            source: "shell.showNotifications",
             requestId: requestId,
-            actionName: "shell.showNotifications",
         },
         { notification: true },
     );
@@ -325,8 +327,7 @@ function summarizeNotifications(
             content: summary,
         },
         requestId: requestId,
-        source: "shell",
-        actionName: "shell.notificationSummary",
+        source: "shell.notificationSummary",
     });
 }
 
@@ -407,11 +408,7 @@ document.addEventListener("DOMContentLoaded", async function () {
     let token: SpeechToken | undefined = await getClientAPI().getSpeechToken();
     const actualToken = token?.token.substring(token?.token.indexOf("#"));
     if (actualToken) {
-        const dToken = jose.decodeProtectedHeader(actualToken);
-        console.log(dToken);
-
         const decoded = jose.decodeJwt(actualToken);
-        console.log(decoded);
 
         if (decoded.given_name) {
             chatView.userGivenName = decoded.given_name
