@@ -19,7 +19,15 @@ export async function createDatabase(
     if (createNew) {
         await deleteDatabase(filePath);
     }
-    const db = new Database(filePath);
+    const db = new Database(
+        filePath,
+        process?.versions?.electron === undefined
+            ? {
+                  nativeBinding:
+                      "./node_modules/better-sqlite3/build/Release/better_sqlite3.n.node",
+              }
+            : undefined,
+    );
     db.pragma("journal_mode = WAL");
     return db;
 }

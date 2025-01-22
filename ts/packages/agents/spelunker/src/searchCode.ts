@@ -564,7 +564,15 @@ function createDatabase(context: SpelunkerContext): sqlite.Database {
     } else {
         console_log(`  [Creating database at ${loc}]`);
     }
-    const db = new Database(loc);
+    const db = new Database(
+        loc,
+        process?.versions?.electron === undefined
+            ? {
+                  nativeBinding:
+                      "./node_modules/better-sqlite3/build/Release/better_sqlite3.n.node",
+              }
+            : undefined,
+    );
     // Write-Ahead Logging, improving concurrency and performance
     db.pragma("journal_mode = WAL");
     // Fix permissions to be read/write only by the owner

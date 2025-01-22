@@ -29,6 +29,7 @@
     "lint:fix": "pnpm run prettier:fix",
     "prettier": "prettier --check .",
     "prettier:fix": "prettier --write .",
+    "postinstall": "cd node_modules/.pnpm/node_modules/better-sqlite3 && pnpm exec prebuild-install && shx cp build/Release/better_sqlite3.node build/Release/better_sqlite3.n.node",
     "rebuild": "fluid-build . -t build --rebuild",
     "regen": "pnpm -C packages/cli run regen",
     "regen:builtin": "pnpm -C packages/cli run regen:builtin",
@@ -41,7 +42,8 @@
     "@types/node": "^20.8.9",
     "concurrently": "^8.2.2",
     "markdown-link-check": "^3.12.2",
-    "prettier": "^3.2.5"
+    "prettier": "^3.2.5",
+    "shx": "^0.3.4"
   },
   "packageManager": "pnpm@9.15.4+sha512.b2dc20e2fc72b3e18848459b37359a32064663e5627a51e4c74b2c29dd8e8e0491483c3abb40789cfd578bf362fb6ba8261b05f0387d76792ed6e23ea3b1b6a0",
   "engines": {
