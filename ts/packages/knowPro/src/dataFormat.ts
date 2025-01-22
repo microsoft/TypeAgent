@@ -12,7 +12,7 @@ export interface DeletionInfo {
     reason?: string;
 }
 
-export interface IMessage<TMeta extends IKnowledgeSource> {
+export interface IMessage<TMeta extends IKnowledgeSource = any> {
     // the text of the message, split into chunks
     textChunks: string[];
     // for example, e-mail has a subject, from and to fields; a chat message has a sender and a recipient

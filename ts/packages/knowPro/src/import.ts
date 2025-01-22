@@ -7,7 +7,7 @@ import {
     IKnowledgeSource,
     SemanticRef,
 } from "./dataFormat.js";
-import { conversation } from "knowledge-processor";
+import { conversation, split } from "knowledge-processor";
 import path from "path";
 import { readAllText } from "typeagent";
 import {
@@ -79,7 +79,7 @@ function assignMessageListeners(
     }
 }
 
-class PodcastMessage implements IMessage<PodcastMessageMeta> {
+export class PodcastMessage implements IMessage<PodcastMessageMeta> {
     timestamp: string | undefined;
     constructor(
         public textChunks: string[],
@@ -94,12 +94,12 @@ class PodcastMessage implements IMessage<PodcastMessageMeta> {
     }
 }
 
-class Podcast implements IConversation<PodcastMessageMeta> {
+export class Podcast implements IConversation<PodcastMessageMeta> {
     semanticRefIndex: ConversationIndex | undefined = undefined;
     semanticRefs: SemanticRef[] = [];
     constructor(
         public nameTag: string,
-        public messages: IMessage<PodcastMessageMeta>[],
+        public messages: PodcastMessage[],
         public tags: string[] = [],
     ) {}
 
@@ -166,17 +166,27 @@ class Podcast implements IConversation<PodcastMessageMeta> {
     }
 }
 
-export async function importPodcast(fileName: string) {
-    const basePath = "/data/testChat";
-    const filePath = path.join(basePath, fileName);
+export async function importPodcastFromFile(
+    filePath: string,
+): Promise<Podcast> {
     const fileContents = await readAllText(filePath);
-    const lines = fileContents.split("\r?\n");
+    return importPodcast(path.dirname(filePath), fileContents);
+}
+
+export async function importPodcast(
+    podcastName: string,
+    podcastTranscript: string,
+) {
+    const transcriptLines = split(podcastTranscript, /\r?\n/, {
+        removeEmpty: true,
+        trim: true,
+    });
+    const turnParseRegex = /^(?<speaker>[A-Z0-9 ]+:)?(?<speech>.*)$/;
     const participants = new Set<string>();
-    const regex = /^(?<speaker>[A-Z0-9 ]+:)?(?<speech>.*)$/;
     const msgs: PodcastMessage[] = [];
     let curMsg: PodcastMessage | undefined = undefined;
-    for (const line of lines) {
-        const match = regex.exec(line);
+    for (const line of transcriptLines) {
+        const match = turnParseRegex.exec(line);
         if (match && match.groups) {
             let speaker = match.groups["speaker"];
             let speech = match.groups["speech"];
@@ -208,7 +218,7 @@ export async function importPodcast(fileName: string) {
         msgs.push(curMsg);
     }
     assignMessageListeners(msgs, participants);
-    const pod = new Podcast(fileName, msgs, [fileName]);
+    const pod = new Podcast(podcastName, msgs, [podcastName]);
     // TODO: add timestamps and more tags
     // list all the books
     // what did K say about Children of Time?
