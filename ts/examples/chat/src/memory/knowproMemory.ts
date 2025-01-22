@@ -16,7 +16,11 @@ import { ChatContext } from "./chatMemory.js";
 import { ChatModel } from "aiclient";
 import fs from "fs";
 import { ChatPrinter } from "../chatPrinter.js";
-import { argDestFile, argSourceFile } from "./common.js";
+import {
+    addFileNameSuffixToPath,
+    argDestFile,
+    argSourceFile,
+} from "./common.js";
 import { ensureDir, readJsonFile, writeJsonFile } from "typeagent";
 import path from "path";
 
@@ -34,13 +38,19 @@ export async function createKnowproCommands(
 ): Promise<void> {
     const context: KnowProContext = {
         knowledgeModel: chatContext.models.chatModel,
-        basePath: "/data/testChat",
+        basePath: "/data/testChat/knowpro",
         printer: new KnowProPrinter(),
     };
+    await ensureDir(context.basePath);
+
     commands.kpPodcastImport = podcastImport;
     commands.kpPodcastSave = podcastSave;
     commands.kpPodcastLoad = podcastLoad;
     commands.kpPodcastSearch = podcastSearch;
+
+    /*----------------
+     * COMMANDS
+     *---------------*/
 
     function podcastImportDef(): CommandMetadata {
         return {
@@ -72,7 +82,7 @@ export async function createKnowproCommands(
         }
 
         context.printer.writeLine();
-        context.printer.writeLine("Building index...");
+        context.printer.writeLine("Building index");
         const maxMessages = namedArgs.maxMessages ?? messageCount;
         let progress = new ProgressBar(context.printer, maxMessages);
         const indexResult = await context.podcast.buildIndex(() => {
@@ -85,9 +95,11 @@ export async function createKnowproCommands(
             return;
         }
         context.printer.writeLine(`Imported ${maxMessages} items`);
-        if (namedArgs.indexFilePath) {
-            context.printer.writeLine("Saving index...");
-            namedArgs.filePath = namedArgs.indexFilePath;
+        if (namedArgs.index) {
+            namedArgs.filePath = makeIndexFilePath(
+                namedArgs.filePath,
+                namedArgs.indexFilePath,
+            );
             await podcastSave(namedArgs);
         }
     }
@@ -107,6 +119,8 @@ export async function createKnowproCommands(
             context.printer.writeError("No podcast loaded");
             return;
         }
+        context.printer.writeLine("Saving index");
+        context.printer.writeLine(namedArgs.filePath);
         const cData = context.podcast.serialize();
         await ensureDir(path.dirname(namedArgs.filePath));
         await writeJsonFile(namedArgs.filePath, cData);
@@ -141,6 +155,19 @@ export async function createKnowproCommands(
 
     commands.kpPodcastSearch.metadata = "Search knowPro podcast index";
     async function podcastSearch(): Promise<void> {}
+
+    /*---------- 
+      End COMMANDS
+    ------------*/
+
+    function makeIndexFilePath(
+        sourcePath: string,
+        indexFilePath?: string,
+    ): string {
+        return indexFilePath
+            ? indexFilePath
+            : addFileNameSuffixToPath(sourcePath, "_index.json");
+    }
 }
 
 class KnowProPrinter extends ChatPrinter {
