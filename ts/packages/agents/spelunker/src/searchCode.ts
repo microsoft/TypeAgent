@@ -190,8 +190,8 @@ export async function searchCode(
     const answer = result.answer;
 
     // 7. Produce an action result from that.
-    // TODO: Better entities
     const entities: Entity[] = [];
+    console_log(`  [Entities returned:]`);
     for (const ref of result.references) {
         const chunk = allChunks.find((c) => c.chunkId === ref);
         if (!chunk) continue;
@@ -206,18 +206,18 @@ export async function searchCode(
             lines: string;
             breadcrumb: number;
         } = blobRow;
-        entities.push({
+        const entity = {
             name: chunk.codeName,
-            type: ["code"],
+            type: ["code", chunk.treeName.replace(/Def$/, "").toLowerCase()],
             uniqueId: ref,
             additionalEntityText: `${chunk.fileName}#${blob.start + 1}`,
             // TODO: Include summary and signature somehow
-        });
+        };
+        entities.push(entity);
+        const additionalText = entity.additionalEntityText.replace(process.env.HOME ?? "%%NONSENSE%%", "~");
+        console_log(`    [${entity.name} (${entity.type}) ${entity.uniqueId} ${additionalText}]`);
     }
 
-    console_log(
-        `  [Entities returned: ${JSON.stringify(entities, undefined, 2)}]`,
-    );
     return createActionResultFromMarkdownDisplay(answer, entities);
 }
 
