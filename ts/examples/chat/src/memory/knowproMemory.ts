@@ -48,6 +48,7 @@ export async function createKnowproCommands(
     commands.kpPodcastImport = podcastImport;
     commands.kpPodcastSave = podcastSave;
     commands.kpPodcastLoad = podcastLoad;
+    commands.kpEntities = entities;
     commands.kpSearchTerms = searchTerms;
 
     /*----------------
@@ -178,9 +179,8 @@ export async function createKnowproCommands(
         if (args.length === 0) {
             return;
         }
-        const conversation = context.conversation;
+        const conversation = ensureConversationLoaded();
         if (!conversation) {
-            context.printer.writeError("No conversation loaded");
             return;
         }
         const terms = args; // Todo: De dupe
@@ -211,9 +211,37 @@ export async function createKnowproCommands(
         }
     }
 
+    function entitiesDef(): CommandMetadata {
+        return {
+            description: "Display entities in current conversation",
+        };
+    }
+    commands.entities.metadata = entitiesDef();
+    async function entities(args: string[]): Promise<void> {
+        const conversation = ensureConversationLoaded();
+        if (!conversation) {
+            return;
+        }
+        //
+        // Display all entities
+        //
+        const matches = filterSemanticRefsByType(
+            conversation.semanticRefs,
+            "entity",
+        );
+        context.printer.writeSemanticRefs(matches);
+    }
     /*---------- 
       End COMMANDS
     ------------*/
+
+    function ensureConversationLoaded(): kp.IConversation | undefined {
+        if (context.conversation) {
+            return context.conversation;
+        }
+        context.printer.writeError("No conversation loaded");
+        return undefined;
+    }
 
     const IndexFileSuffix = "_index.json";
     function sourcePathToIndexPath(
@@ -249,6 +277,7 @@ class KnowProPrinter extends ChatPrinter {
                 this.writeList(facetList, { type: "ul" });
             }
         }
+        return this;
     }
 
     public writeSemanticRef(ref: kp.SemanticRef, score?: number | undefined) {
@@ -265,11 +294,22 @@ class KnowProPrinter extends ChatPrinter {
                 );
                 break;
         }
+        return this;
+    }
+
+    public writeSemanticRefs(refs: kp.SemanticRef[] | undefined) {
+        if (refs && refs.length > 0) {
+            for (const ref of refs) {
+                this.writeSemanticRef(ref);
+            }
+        }
+        return this;
     }
 
     public writeConversationInfo(conversation: kp.IConversation) {
         this.writeTitle(conversation.nameTag);
         this.writeLine(`${conversation.messages.length} messages`);
+        return this;
     }
 
     public writePodcastInfo(podcast: kp.Podcast) {
@@ -279,6 +319,21 @@ class KnowProPrinter extends ChatPrinter {
             title: "Participants",
         });
     }
+}
+
+export function filterSemanticRefsByType(
+    semanticRefs: kp.SemanticRef[] | undefined,
+    type: string,
+): kp.SemanticRef[] {
+    const matches: kp.SemanticRef[] = [];
+    if (semanticRefs) {
+        for (const ref of semanticRefs) {
+            if (ref.knowledgeType === type) {
+                matches.push(ref);
+            }
+        }
+    }
+    return matches;
 }
 
 export function getPodcastParticipants(podcast: kp.Podcast) {
