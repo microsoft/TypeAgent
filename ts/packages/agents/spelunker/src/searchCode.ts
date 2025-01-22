@@ -27,6 +27,7 @@ import {
     ErrorItem,
 } from "./pythonChunker.js";
 import { SummarizeSpecs } from "./makeSummarizeSchema.js";
+import { createRequire } from "module";
 
 let epoch: number = 0;
 
@@ -549,6 +550,19 @@ CREATE TABLE IF NOT EXISTS Summaries (
 )
 `;
 
+function getDbOptions() {
+    if (process?.versions?.electron !== undefined) {
+        return undefined;
+    }
+    const r = createRequire(import.meta.url);
+    const betterSqlitePath = r.resolve("better-sqlite3/package.json");
+    const nativeBinding = path.join(
+        betterSqlitePath,
+        "../build/Release/better_sqlite3.n.node",
+    );
+    return { nativeBinding };
+}
+
 function createDatabase(context: SpelunkerContext): sqlite.Database {
     if (!context.queryContext) {
         context.queryContext = createQueryContext();
@@ -564,7 +578,7 @@ function createDatabase(context: SpelunkerContext): sqlite.Database {
     } else {
         console_log(`  [Creating database at ${loc}]`);
     }
-    const db = new Database(loc);
+    const db = new Database(loc, getDbOptions());
     // Write-Ahead Logging, improving concurrency and performance
     db.pragma("journal_mode = WAL");
     // Fix permissions to be read/write only by the owner
