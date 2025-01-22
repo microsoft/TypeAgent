@@ -11,9 +11,6 @@ importers:
       '@fluidframework/build-tools':
         specifier: ^0.35.0-247707
         version: 0.35.0-247707(@types/node@20.8.9)
-      '@playwright/test':
-        specifier: ^1.49.1
-        version: 1.49.1
       '@types/node':
         specifier: ^20.8.9
         version: 20.8.9
