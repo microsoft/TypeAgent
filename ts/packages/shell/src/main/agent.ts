@@ -100,7 +100,15 @@ class ShellSetSettingCommandHandler implements CommandHandler {
         for (const [key, v] of Object.entries(agentContext.settings)) {
             if (key === name) {
                 found = true;
-                agentContext.settings.set(name, value);
+                if (typeof agentContext.settings[key] === "object") {
+                    try {
+                        agentContext.settings.set(name, value);
+                    } catch (e) {
+                        throw new Error(`Unable to set ${key} to ${value}. Details: ${e}`);
+                    }
+                } else {
+                    agentContext.settings.set(name, value);
+                }
                 oldValue = v;
                 break;
             }
