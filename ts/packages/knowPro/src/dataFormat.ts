@@ -1,4 +1,4 @@
-// Copyright (c) Microsoft Corporation and Henry Lucco.
+// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
 import { conversation } from "knowledge-processor";
@@ -12,7 +12,7 @@ export interface DeletionInfo {
     reason?: string;
 }
 
-export interface IMessage<TMeta extends IKnowledgeSource> {
+export interface IMessage<TMeta extends IKnowledgeSource = any> {
     // the text of the message, split into chunks
     textChunks: string[];
     // for example, e-mail has a subject, from and to fields; a chat message has a sender and a recipient
@@ -67,7 +67,7 @@ export interface ITopic {
 
 type ITag = ITopic;
 
-export interface IConversation<TMeta extends IKnowledgeSource> {
+export interface IConversation<TMeta extends IKnowledgeSource = any> {
     nameTag: string;
     tags: string[];
     messages: IMessage<TMeta>[];
@@ -95,4 +95,12 @@ export interface TextRange {
     start: TextLocation;
     // the end of the range (exclusive)
     end?: TextLocation | undefined;
+}
+
+export interface IConversationData<TMessage> {
+    nameTag: string;
+    messages: TMessage[];
+    tags: string[];
+    semanticRefs: SemanticRef[];
+    semanticIndexData?: ITermToSemanticRefIndexData | undefined;
 }

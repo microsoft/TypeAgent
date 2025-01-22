@@ -1,7 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { InteractiveIo, millisecondsToString } from "interactive-app";
+import {
+    getInteractiveIO,
+    InteractiveIo,
+    millisecondsToString,
+} from "interactive-app";
 import { Result } from "typechat";
 import chalk from "chalk";
 import { ChalkWriter } from "./chalkWriter.js";
@@ -9,7 +13,10 @@ import { openai } from "aiclient";
 import { IndexingStats } from "knowledge-processor";
 
 export class ChatPrinter extends ChalkWriter {
-    constructor(io: InteractiveIo) {
+    constructor(io?: InteractiveIo | undefined) {
+        if (!io) {
+            io = getInteractiveIO();
+        }
         super(io);
     }
 
@@ -49,5 +56,15 @@ export class ChatPrinter extends ChalkWriter {
             `Time: ${millisecondsToString(stats.totalStats.timeMs, "m")}`,
         );
         this.writeCompletionStats(stats.totalStats.tokenStats);
+    }
+
+    public writeProgress(
+        curCount: number,
+        total: number,
+        label?: string | undefined,
+    ): void {
+        label = label ? label + " " : "";
+        const text = `[${label}${curCount} / ${total}]`;
+        this.writeInColor(chalk.gray, text);
     }
 }

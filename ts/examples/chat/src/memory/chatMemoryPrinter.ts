@@ -56,16 +56,6 @@ export class ChatMemoryPrinter extends ChatPrinter {
         }
     }
 
-    public writeProgress(
-        curCount: number,
-        total: number,
-        label?: string | undefined,
-    ): void {
-        label = label ? label + " " : "";
-        const text = `[${label}${curCount} / ${total}]`;
-        this.writeInColor(chalk.gray, text);
-    }
-
     public writeBatchProgress(
         batch: collections.Slice,
         label?: string | undefined,

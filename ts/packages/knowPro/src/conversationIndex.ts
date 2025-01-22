@@ -1,4 +1,4 @@
-// Copyright (c) Microsoft Corporation and Henry Lucco.
+// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
 import {
@@ -15,6 +15,7 @@ import {
 } from "./dataFormat.js";
 import { conversation } from "knowledge-processor";
 import { openai } from "aiclient";
+import { error, Result, success } from "typechat";
 
 function addFacet(
     facet: conversation.Facet | undefined,
@@ -128,7 +129,11 @@ export function addActionToIndex(
 
 export async function buildConversationIndex<TMeta extends IKnowledgeSource>(
     convo: IConversation<TMeta>,
-) {
+    progressCallback?: (
+        text: string,
+        knowledge: conversation.KnowledgeResponse | undefined,
+    ) => boolean,
+): Promise<Result<ConversationIndex>> {
     const semanticRefIndex = new ConversationIndex();
     convo.semanticRefIndex = semanticRefIndex;
     if (convo.semanticRefs === undefined) {
@@ -153,31 +158,41 @@ export async function buildConversationIndex<TMeta extends IKnowledgeSource>(
         const msg = convo.messages[i];
         // only one chunk per message for now
         const text = msg.textChunks[0];
-        const knowledge = await extractor.extract(text).catch((err) => {
-            console.log(`Error extracting knowledge: ${err}`);
-            return undefined;
-        });
-        if (knowledge) {
-            for (const entity of knowledge.entities) {
-                addEntityToIndex(entity, semanticRefs, semanticRefIndex, i);
+        try {
+            const knowledge = await extractor.extract(text);
+            if (progressCallback && !progressCallback(text, knowledge)) {
+                break;
             }
-            for (const action of knowledge.actions) {
-                addActionToIndex(action, semanticRefs, semanticRefIndex, i);
+            if (knowledge) {
+                for (const entity of knowledge.entities) {
+                    addEntityToIndex(entity, semanticRefs, semanticRefIndex, i);
+                }
+                for (const action of knowledge.actions) {
+                    addActionToIndex(action, semanticRefs, semanticRefIndex, i);
+                }
+                for (const inverseAction of knowledge.inverseActions) {
+                    addActionToIndex(
+                        inverseAction,
+                        semanticRefs,
+                        semanticRefIndex,
+                        i,
+                    );
+                }
+                for (const topic of knowledge.topics) {
+                    const topicObj: ITopic = { text: topic };
+                    addTopicToIndex(
+                        topicObj,
+                        semanticRefs,
+                        semanticRefIndex,
+                        i,
+                    );
+                }
             }
-            for (const inverseAction of knowledge.inverseActions) {
-                addActionToIndex(
-                    inverseAction,
-                    semanticRefs,
-                    semanticRefIndex,
-                    i,
-                );
-            }
-            for (const topic of knowledge.topics) {
-                const topicObj: ITopic = { text: topic };
-                addTopicToIndex(topicObj, semanticRefs, semanticRefIndex, i);
-            }
+        } catch (ex) {
+            return error(`Error extracting knowledge: ${ex}`);
         }
     }
+    return success(semanticRefIndex);
 }
 
 export class ConversationIndex implements ITermToSemanticRefIndex {
@@ -185,6 +200,12 @@ export class ConversationIndex implements ITermToSemanticRefIndex {
         string,
         ScoredSemanticRef[]
     >();
+
+    constructor(data?: ITermToSemanticRefIndexData | undefined) {
+        if (data) {
+            this.deserialize(data);
+        }
+    }
 
     addTerm(term: string, semanticRefResult: number | ScoredSemanticRef): void {
         if (typeof semanticRefResult === "number") {
@@ -220,5 +241,11 @@ export class ConversationIndex implements ITermToSemanticRefIndex {
             items.push({ term, semanticRefIndices });
         }
         return { items };
+    }
+
+    deserialize(data: ITermToSemanticRefIndexData): void {
+        for (const termData of data.items) {
+            this.map.set(termData.term, termData.semanticRefIndices);
+        }
     }
 }
