@@ -96,7 +96,7 @@ export async function createKnowproCommands(
         }
         context.printer.writeLine(`Imported ${maxMessages} items`);
         if (namedArgs.index) {
-            namedArgs.filePath = makeIndexFilePath(
+            namedArgs.filePath = sourcePathToIndexPath(
                 namedArgs.filePath,
                 namedArgs.indexFilePath,
             );
@@ -129,17 +129,32 @@ export async function createKnowproCommands(
     function podcastLoadDef(): CommandMetadata {
         return {
             description: "Load knowPro podcast",
-            args: {
+            options: {
                 filePath: argSourceFile(),
+                name: arg("Podcast name"),
             },
         };
     }
     commands.kpPodcastLoad.metadata = podcastLoadDef();
     async function podcastLoad(args: string[]): Promise<void> {
         const namedArgs = parseNamedArguments(args, podcastLoadDef());
-        const data = await readJsonFile<
-            kp.IConversationData<kp.PodcastMessage>
-        >(namedArgs.filePath);
+        const podcastFilePath =
+            namedArgs.filePath ?? namedArgs.name
+                ? podcastNameToFilePath(namedArgs.name)
+                : undefined;
+        if (!podcastFilePath) {
+            context.printer.writeError("No filepath or name provided");
+            return;
+        }
+        if (!fs.existsSync(podcastFilePath)) {
+            context.printer.writeError(`${podcastFilePath} not found`);
+            return;
+        }
+
+        const data =
+            await readJsonFile<kp.IConversationData<kp.PodcastMessage>>(
+                podcastFilePath,
+            );
         if (!data) {
             context.printer.writeError("Could not load podcast data");
             return;
@@ -160,13 +175,19 @@ export async function createKnowproCommands(
       End COMMANDS
     ------------*/
 
-    function makeIndexFilePath(
+    const IndexFileSuffix = "_index.json";
+    function sourcePathToIndexPath(
         sourcePath: string,
         indexFilePath?: string,
     ): string {
-        return indexFilePath
-            ? indexFilePath
-            : addFileNameSuffixToPath(sourcePath, "_index.json");
+        return (
+            indexFilePath ??
+            addFileNameSuffixToPath(sourcePath, IndexFileSuffix)
+        );
+    }
+
+    function podcastNameToFilePath(podcastName: string): string {
+        return path.join(context.basePath, podcastName + IndexFileSuffix);
     }
 }
 
