@@ -23,6 +23,9 @@ importers:
       prettier:
         specifier: ^3.2.5
         version: 3.2.5
+      shx:
+        specifier: ^0.3.4
+        version: 0.3.4
 
   examples/agentExamples/echo:
     dependencies:
@@ -49,8 +52,8 @@ importers:
         specifier: workspace:*
         version: link:../../../packages/agentSdk
       better-sqlite3:
-        specifier: 11.5.0
-        version: 11.5.0
+        specifier: 11.8.1
+        version: 11.8.1
       typeagent:
         specifier: workspace:*
         version: link:../../../packages/typeagent
@@ -154,8 +157,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/aiclient
       better-sqlite3:
-        specifier: 11.5.0
-        version: 11.5.0
+        specifier: 11.8.1
+        version: 11.8.1
       debug:
         specifier: ^4.3.4
         version: 4.3.4(supports-color@8.1.1)
@@ -1214,6 +1217,9 @@ importers:
       aiclient:
         specifier: workspace:*
         version: link:../../aiclient
+      better-sqlite3:
+        specifier: 11.8.1
+        version: 11.8.1
       typeagent:
         specifier: workspace:*
         version: link:../../typeagent
@@ -1221,6 +1227,9 @@ importers:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.3)(zod@3.23.8)
     devDependencies:
+      '@types/better-sqlite3':
+        specifier: 7.6.11
+        version: 7.6.11
       copyfiles:
         specifier: ^2.4.1
         version: 2.4.1
@@ -4635,8 +4644,8 @@ packages:
   bent@7.3.12:
     resolution: {integrity: sha512-T3yrKnVGB63zRuoco/7Ybl7BwwGZR0lceoVG5XmQyMIH9s19SV5m+a8qam4if0zQuAmOQTyPTPmsQBdAorGK3w==}
 
-  better-sqlite3@11.5.0:
-    resolution: {integrity: sha512-e/6eggfOutzoK0JWiU36jsisdWoHOfN9iWiW/SieKvb7SAa6aGNmBM/UKyp+/wWSXpLlWNN8tCPwoDNPhzUvuQ==}
+  better-sqlite3@11.8.1:
+    resolution: {integrity: sha512-9BxNaBkblMjhJW8sMRZxnxVTRgbRmssZW0Oxc1MPBTfiR+WW21e2Mk4qu8CzrcZb1LwPCnFsfDEzq+SNcBU8eg==}
 
   binary-extensions@2.2.0:
     resolution: {integrity: sha512-jDctJ/IVQbZoJykoeHbhXpOlNBqGNcwXJKJog42E5HDPUwQTSdjCHdihjj0DlnheQ7blbT6dHOafNAiS8ooQKA==}
@@ -8171,6 +8180,11 @@ packages:
   shelljs@0.8.5:
     resolution: {integrity: sha512-TiwcRcrkhHvbrZbnRcFYMLl30Dfov3HKqzp5tO5b4pt6G/SezKcYhmDg15zXVBswHmctSAQKznqNW2LO5tTDow==}
     engines: {node: '>=4'}
+    hasBin: true
+
+  shx@0.3.4:
+    resolution: {integrity: sha512-N6A9MLVqjxZYcVn8hLmtneQWIJtp8IKzMP4eMnx+nqkvXoqinUPCbUFLp2UcWTEIUONhlk0ewxr/jaVGlc+J+g==}
+    engines: {node: '>=6'}
     hasBin: true
 
   side-channel@1.0.6:
@@ -12433,7 +12447,7 @@ snapshots:
       caseless: 0.12.0
       is-stream: 2.0.1
 
-  better-sqlite3@11.5.0:
+  better-sqlite3@11.8.1:
     dependencies:
       bindings: 1.5.0
       prebuild-install: 7.1.2
@@ -16626,6 +16640,11 @@ snapshots:
       glob: 7.2.3
       interpret: 1.4.0
       rechoir: 0.6.2
+
+  shx@0.3.4:
+    dependencies:
+      minimist: 1.2.8
+      shelljs: 0.8.5
 
   side-channel@1.0.6:
     dependencies:

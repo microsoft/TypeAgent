@@ -5,12 +5,15 @@ import WebSocket from "ws";
 import { createWebSocket, keepWebSocketAlive } from "./webSocket";
 import { handleVSCodeActions } from "./handleCodeEditorActions";
 
-type WebSocketMessage = {
-    source: string;
-    target: string;
+type WebSocketMessageV2 = {
     id?: string;
-    messageType: string;
-    body: any;
+    method: string;
+    params?: any;
+    result?: any;
+    error?: {
+        code?: number | undefined;
+        message: string;
+    };
 };
 
 let webSocket: WebSocket | undefined = undefined;
@@ -26,24 +29,32 @@ async function ensureWebsocketConnected() {
     }
 
     webSocket.binaryType = "arraybuffer";
-    keepWebSocketAlive(webSocket, "code");
+    keepWebSocketAlive(webSocket);
 
     webSocket.onmessage = async (event: any) => {
-        const data: WebSocketMessage = arrayBufferToJson(event.data);
-        if (data.target == "code" && data.messageType == "translatedAction") {
-            const message = await handleVSCodeActions(data.body.action);
-            webSocket?.send(
-                JSON.stringify({
-                    source: data.target,
-                    target: data.source,
-                    messageType: "confirmAction",
-                    id: data.id,
-                    body: {
-                        callId: data.body.callId,
-                        message,
-                    },
-                }),
-            );
+        const data: WebSocketMessageV2 = arrayBufferToJson(event.data);
+
+        if (data.error) {
+            console.error(data.error);
+            return;
+        }
+
+        if (data.method && data.method.indexOf("/") > 0) {
+            const [schema, actionName] = data.method?.split("/");
+
+            if (schema == "code") {
+                const message = await handleVSCodeActions({
+                    actionName: actionName,
+                    parameters: data.params,
+                });
+
+                webSocket?.send(
+                    JSON.stringify({
+                        id: data.id,
+                        result: message,
+                    }),
+                );
+            }
         }
         console.log(
             `vscode extension websocket client received message: ${JSON.stringify(data, null, 2)}`,

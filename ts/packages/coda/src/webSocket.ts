@@ -41,15 +41,13 @@ export async function createWebSocket(
     });
 }
 
-export function keepWebSocketAlive(webSocket: WebSocket, source: string) {
+export function keepWebSocketAlive(webSocket: WebSocket) {
     const keepAliveIntervalId = setInterval(() => {
         if (webSocket && webSocket.readyState === WebSocket.OPEN) {
             webSocket.send(
                 JSON.stringify({
-                    source: `${source}`,
-                    target: "none",
-                    messageType: "keepAlive",
-                    body: {},
+                    method: "keepAlive",
+                    params: {},
                 }),
             );
         } else {
