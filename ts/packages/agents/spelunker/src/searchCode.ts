@@ -84,7 +84,7 @@ function createQueryContext(): QueryContext {
         mode: 0o700,
     };
     fs.mkdirSync(databaseFolder, mkdirOptions);
-    const databaseLocation = path.join(databaseFolder, "database.db");
+    const databaseLocation = path.join(databaseFolder, "codeSearchdatabase.db");
     const database = undefined;
     return {
         chatModel,
@@ -129,6 +129,7 @@ export async function searchCode(
         const chunk: Chunk = {
             chunkId: chunkRow.chunkId,
             treeName: chunkRow.treeName,
+            codeName: chunkRow.codeName,
             blobs: blobRows, // Ignoring chunkId
             parentId: chunkRow.parentId,
             children: childRows.map((row) => row.chunkId),
@@ -187,10 +188,36 @@ export async function searchCode(
 
     // 6. Extract answer and references from result.
     const answer = result.answer;
-    // TODO: References
 
     // 7. Produce an action result from that.
-    const entities: Entity[] = []; // TODO: Construct from references
+    // TODO: Better entities
+    const entities: Entity[] = [];
+    for (const ref of result.references) {
+        const chunk = allChunks.find((c) => c.chunkId === ref);
+        if (!chunk) continue;
+        const blobRow: any = db
+            .prepare(
+                `SELECT * FROM Blobs WHERE chunkId = ? ORDER BY start ASC LIMIT 1`,
+            )
+            .get(ref);
+        const blob: {
+            chunkId: string;
+            start: number;
+            lines: string;
+            breadcrumb: number;
+        } = blobRow;
+        entities.push({
+            name: chunk.codeName,
+            type: ["code"],
+            uniqueId: ref,
+            additionalEntityText: `${chunk.fileName}#${blob.start + 1}`,
+            // TODO: Include summary and signature somehow
+        });
+    }
+
+    console_log(
+        `  [Entities returned: ${JSON.stringify(entities, undefined, 2)}]`,
+    );
     return createActionResultFromMarkdownDisplay(answer, entities);
 }
 
@@ -389,7 +416,7 @@ async function loadDatabase(
         `SELECT COUNT(*) FROM Chunks WHERE fileName = ?`,
     );
     const prepInsertChunks = db.prepare(
-        `INSERT OR REPLACE INTO Chunks (chunkId, treeName, parentId, fileName) VALUES (?, ?, ?, ?)`,
+        `INSERT OR REPLACE INTO Chunks (chunkId, treeName, codeName, parentId, fileName) VALUES (?, ?, ?, ?, ?)`,
     );
     const prepInsertBlobs = db.prepare(
         `INSERT INTO Blobs (chunkId, start, lines, breadcrumb) VALUES (?, ?, ?, ?)`,
@@ -499,6 +526,7 @@ async function loadDatabase(
             prepInsertChunks.run(
                 chunk.chunkId,
                 chunk.treeName,
+                chunk.codeName,
                 chunk.parentId || null,
                 chunk.fileName,
             );
@@ -534,6 +562,7 @@ CREATE TABLE IF NOT EXISTS Files (
 CREATE TABLE IF NOT EXISTS Chunks (
     chunkId TEXT PRIMARY KEY,
     treeName TEXT NOT NULL,
+    codeName TEXT NOT NULL,
     parentId TEXT KEY REFERENCES chunks(chunkId), -- May be null
     fileName TEXT KEY REFERENCES files(fileName) NOT NULL
 );
@@ -546,6 +575,7 @@ CREATE TABLE IF NOT EXISTS Blobs (
 CREATE TABLE IF NOT EXISTS Summaries (
     chunkId TEXT PRIMARY KEY REFERENCES chunks(chunkId),
     summary TEXT,
+    shortName TEXT,
     signature TEXT
 )
 `;
