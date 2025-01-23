@@ -952,8 +952,9 @@ export async function handleCall(
                 filterTracksAction.parameters.trackListEntityId &&
                 clientContext.entityMap
             ) {
+                console.log(`entity id: ${filterTracksAction.parameters.trackListEntityId}`);
                 const entity = clientContext.entityMap.get(
-                    filterTracksAction.parameters.trackListEntityId,
+                    filterTracksAction.parameters.trackListEntityId
                 );
                 if (
                     entity !== undefined &&
@@ -1010,10 +1011,12 @@ export async function handleCall(
             const createPlaylistAction = action as CreatePlaylistAction;
             const name = createPlaylistAction.parameters.name;
             let input = clientContext.currentTrackList;
+
             if (
                 createPlaylistAction.parameters.trackListEntityId &&
                 clientContext.entityMap
             ) {
+                console.log(`entity id: ${createPlaylistAction.parameters.trackListEntityId}`);
                 const entity = clientContext.entityMap.get(
                     createPlaylistAction.parameters.trackListEntityId,
                 );
@@ -1042,10 +1045,14 @@ export async function handleCall(
                 );
                 console.log(`playlist ${name} created with tracks:`);
                 printTrackNames(input, clientContext);
+                const actionResult = await htmlTrackNames(input);
+                let displayText = "";
+                if (actionResult.displayContent && typeof actionResult.displayContent === "object")
+                    if (!Array.isArray(actionResult.displayContent)) {
+                        displayText = actionResult.displayContent.content as string;
+                    }
                 return createActionResultFromHtmlDisplay(
-                    `<div>playlist ${name} created with tracks...</div>${await htmlTrackNames(
-                        input,
-                    )}`,
+                    `<div>playlist ${name} created with tracks...</div>${displayText}`,
                 );
             }
             return createErrorActionResult(

@@ -319,7 +319,7 @@ export async function createAgentRpcClient(
                 rpc.invoke("executeAction", {
                     ...contextParams,
                     action,
-                    entityMap: Array.from(entityMap.entries()),
+                    entityMap: entityMap ? Array.from(entityMap.entries()) : [],
                 }),
             );
         },
