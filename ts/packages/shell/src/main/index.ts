@@ -228,11 +228,17 @@ function createWindow(): void {
     });
 
     // Notify renderer process whenever settings are modified
-    ShellSettings.getinstance().onSettingsChanged = (): void => {
+    ShellSettings.getinstance().onSettingsChanged = (settingName?: string | undefined): void => {
         chatView?.webContents.send(
             "settings-changed",
             ShellSettings.getinstance().getSerializable(),
         );
+
+        if (settingName == "size") {
+            mainWindow?.setSize(ShellSettings.getinstance().width, ShellSettings.getinstance().height);
+        } else if (settingName == "position") {
+            mainWindow?.setPosition(ShellSettings.getinstance().x!, ShellSettings.getinstance().y!);
+        }
     };
 
     ShellSettings.getinstance().onShowSettingsDialog = (
@@ -582,6 +588,9 @@ async function initialize() {
         ShellSettings.getinstance().agentGreeting = settings.agentGreeting;
         ShellSettings.getinstance().partialCompletion =
             settings.partialCompletion;
+        ShellSettings.getinstance().darkMode = settings.darkMode;
+
+        // write the settings to disk
         ShellSettings.getinstance().save();
     });
 

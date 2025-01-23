@@ -37,7 +37,7 @@ export class ShellSettings
     public devUI: boolean;
     public partialCompletion: boolean;
     public disallowedDisplayType: DisplayType[];
-    public onSettingsChanged: EmptyFunction | null;
+    public onSettingsChanged: ((name?: string | undefined) => void) | null;
     public onShowSettingsDialog: ((dialogName: string) => void) | null;
     public onRunDemo: ((interactive: boolean) => void) | null;
     public onToggleTopMost: EmptyFunction | null;
@@ -157,7 +157,7 @@ export class ShellSettings
         }
 
         if (ShellSettings.getinstance().onSettingsChanged != null) {
-            ShellSettings.getinstance().onSettingsChanged!();
+            ShellSettings.getinstance().onSettingsChanged!(name);
         }
     }
 
