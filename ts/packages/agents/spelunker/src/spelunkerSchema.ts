@@ -1,6 +1,18 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+// An entity from memory.ts
+export interface SpelunkerEntity {
+    // the name of the entity such as "Bach" or "frog"
+    name: string;
+    // the types of the entity such as "artist" or "animal"; an entity can have multiple types; entity types should be single words
+    type: string[];
+    // source link, '<file name>#<line number>'
+    additionalEntityText?: string;
+    // unique id for the entity (typically a ChunkId)
+    uniqueId: string;
+}
+
 export type SpelunkerAction =
     | SetFocusAction
     | GetFocusAction
@@ -24,5 +36,6 @@ export type SearchCodeAction = {
     actionName: "searchCode";
     parameters: {
         question: string; // Question to answer
+        entities: SpelunkerEntity[]; // Entities to prioritize in the search
     };
 };

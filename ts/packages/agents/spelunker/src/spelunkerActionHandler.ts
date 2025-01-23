@@ -51,6 +51,7 @@ class RequestCommandHandler implements CommandHandler {
             const result: ActionResult = await searchCode(
                 actionContext.sessionContext.agentContext,
                 params.args.question,
+                [],
             );
             if (typeof result.error == "string") {
                 actionContext.actionIO.appendDisplay({
@@ -155,6 +156,7 @@ async function handleSpelunkerAction(
                 return await searchCode(
                     context.agentContext,
                     action.parameters.question,
+                    action.parameters.entities,
                 );
             }
             return createActionResultFromError("I see no question to answer");

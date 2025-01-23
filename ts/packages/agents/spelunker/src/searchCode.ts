@@ -21,6 +21,7 @@ import { AnswerSpecs } from "./makeAnswerSchema.js";
 import { ChunkDescription, SelectorSpecs } from "./makeSelectorSchema.js";
 import { SpelunkerContext } from "./spelunkerActionHandler.js";
 import {
+    Blob,
     Chunk,
     ChunkedFile,
     chunkifyPythonFiles,
@@ -101,8 +102,12 @@ function createQueryContext(): QueryContext {
 export async function searchCode(
     context: SpelunkerContext,
     input: string,
+    inputEntities: Entity[],
 ): Promise<ActionResult> {
     epoch = 0; // Reset logging clock
+    console_log(
+        `[searchCode question='${input}', entities=${JSON.stringify(inputEntities)}]`,
+    );
 
     // 0. Check if the focus is set.
     if (!context.focusFolders.length) {
@@ -145,6 +150,7 @@ export async function searchCode(
         context,
         allChunks,
         input,
+        inputEntities,
     );
     if (!chunkDescs.length) {
         throw new Error("No chunks selected");
@@ -195,27 +201,28 @@ export async function searchCode(
     for (const ref of result.references) {
         const chunk = allChunks.find((c) => c.chunkId === ref);
         if (!chunk) continue;
-        const blobRow: any = db
+        // Need the first blob; blob.start + 1 gives the line number
+        const blob = db
             .prepare(
                 `SELECT * FROM Blobs WHERE chunkId = ? ORDER BY start ASC LIMIT 1`,
             )
-            .get(ref);
-        const blob: {
-            chunkId: string;
-            start: number;
-            lines: string;
-            breadcrumb: number;
-        } = blobRow;
+            .get(ref) as Blob | undefined;
+        if (!blob) continue;
         const entity = {
             name: chunk.codeName,
             type: ["code", chunk.treeName.replace(/Def$/, "").toLowerCase()],
             uniqueId: ref,
             additionalEntityText: `${chunk.fileName}#${blob.start + 1}`,
-            // TODO: Include summary and signature somehow
+            // TODO: Include summary and signature somehow?
         };
         entities.push(entity);
-        const additionalText = entity.additionalEntityText.replace(process.env.HOME ?? "%%NONSENSE%%", "~");
-        console_log(`    [${entity.name} (${entity.type}) ${entity.uniqueId} ${additionalText}]`);
+        const additionalText = entity.additionalEntityText.replace(
+            process.env.HOME ?? "%%DEADBEEF%%",
+            "~",
+        );
+        console_log(
+            `    [${entity.name} (${entity.type}) ${entity.uniqueId} ${additionalText}]`,
+        );
     }
 
     return createActionResultFromMarkdownDisplay(answer, entities);
@@ -236,6 +243,7 @@ async function selectChunks(
     context: SpelunkerContext,
     chunks: Chunk[],
     input: string,
+    inputEntities: Entity[],
 ): Promise<ChunkDescription[]> {
     console_log(`  [Starting chunk selection ...]`);
     const promises: Promise<ChunkDescription[]>[] = [];
@@ -259,28 +267,50 @@ async function selectChunks(
         );
         promises.push(p);
     }
-    const allChunks: ChunkDescription[] = [];
+    const allChunkDescs: ChunkDescription[] = [];
     for (const p of promises) {
-        const chunks = await p;
-        if (chunks.length) {
-            // console_log(
-            //     "Pushing",
-            //     chunks.length,
-            //     "for",
-            //     chunks[0].chunkId,
-            //     "--",
-            //     chunks[chunks.length - 1].chunkId,
-            // );
-            allChunks.push(...chunks);
+        const chunkDescs = await p;
+        if (chunkDescs.length) {
+            allChunkDescs.push(...chunkDescs);
         }
     }
-    console_log(`  [Total ${allChunks.length} chunks]`);
-    allChunks.sort((a, b) => b.relevance - a.relevance);
+    // Reminder: There's no overlap in chunkIds between the slices
+    console_log(`  [Total ${allChunkDescs.length} chunks selected]`);
+
+    // Give valid input entities a relevance boost to 2.0
+    let boostCount = 0;
+    let newCount = 0;
+    for (const entity of inputEntities) {
+        if (entity.type.includes("code") && entity.uniqueId) {
+            const chunkDesc = allChunkDescs.find(
+                (c) => c.chunkId === entity.uniqueId,
+            );
+            if (chunkDesc) {
+                chunkDesc.relevance = 2.0;
+                boostCount += 1;
+            } else {
+                const chunk = chunks.find((c) => c.chunkId === entity.uniqueId);
+                if (chunk) {
+                    allChunkDescs.push({
+                        chunkId: entity.uniqueId,
+                        relevance: 2.0,
+                    });
+                    newCount += 1;
+                }
+            }
+        }
+    }
+    if (boostCount + newCount) {
+        console_log(
+            `  [Boosted ${boostCount} selected chunks and added ${newCount} newly boosted ones]`,
+        );
+    }
+    allChunkDescs.sort((a, b) => b.relevance - a.relevance);
     // console_log(`  [${allChunks.map((c) => (c.relevance)).join(", ")}]`);
-    allChunks.splice(30);
-    console_log(`  [Keeping ${allChunks.length} chunks]`);
+    allChunkDescs.splice(30);
+    console_log(`  [Keeping ${allChunkDescs.length} chunks]`);
     // console_log(`  [${allChunks.map((c) => [c.chunkId, c.relevance])}]`);
-    return allChunks;
+    return allChunkDescs;
 }
 
 async function selectRelevantChunks(
