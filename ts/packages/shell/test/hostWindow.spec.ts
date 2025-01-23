@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import test, { _electron, Browser, _electron as electron, expect, ViewportSize } from "@playwright/test";
-import { getAppPath } from "./testHelper";
+import { getAppPath, getLastAgentMessage, sendUserRequest, waitForAgentMessage } from "./testHelper";
 import { BrowserWindow, BrowserWindow as bw } from "electron";
 
 
@@ -26,38 +26,25 @@ test("remember window position", async () => {
     const title = await firstWindow.title();
     expect(title.indexOf("🤖") > -1, "Title expecting 🤖 but is missing.");
 
-    // resize the shell
-    const size: ViewportSize = { width: Math.ceil(Math.random() * 800 + 200), height: Math.ceil(Math.random() * 800 + 200) };
-    // //await window.setViewportSize(size);
-    // await firstWindow.setViewportSize(size);
-    await firstWindow.evaluate(`
-        // const { BrowserWindow } = require('electron');        
-        // BrowserWindow.getAllWindows().map((bw) => {
-        //     bw.setBounds({ width: size.width, height: size.height });
-        // });
-        window.width = 100;
-    `);    
+    // wait for agent greeting
+    await waitForAgentMessage(firstWindow, 10000, 1);
 
-    // const width = await browser.evaluate((w) => 
-    //     { 
-    //         eval("window.width = Math.ceil(Math.random() * 800 + 200);")
-    //         return eval("window.width");
-    //     });
-    // const height = await browser.evaluate((w) => 
-    //     { 
-    //         eval("window").height = Math.ceil(Math.random() * 800 + 200);
-    //         return w.height; 
-    //     });
-    
-    // move the shell somewhere
-    const x: number = await browser.evaluate((w) => {
-        w.screenX = Math.ceil(Math.random() * 100);
-        return w.screenX;
-    });
-    const y: number = await browser.evaluate((w) => {
-        w.screenY = Math.ceil(Math.random() * 100);
-        return w.screenY;
-    });
+    // resize the shell by sending @shell settings set size "[width, height]"
+    const width: number = Math.ceil(Math.random() * 800 + 200);
+    const height: number =  Math.ceil(Math.random() * 800 + 200);
+    await sendUserRequest(`@shell set size "[${width}, ${height}]"`, firstWindow);
+
+    // wait for agent response
+    await waitForAgentMessage(firstWindow, 10000, 2);
+
+    // move the window
+    const x: number = Math.ceil(Math.random() * 100);
+    const y: number = Math.ceil(Math.random() * 100);
+
+    await sendUserRequest(`@shell set position "[${x}, ${y}]"`, firstWindow);
+
+    // wait for agent response
+    await waitForAgentMessage(firstWindow, 10000, 3);
 
     // close the application
     await electronApp.close();
@@ -67,13 +54,25 @@ test("remember window position", async () => {
     const newWindow = await newElectronApp.firstWindow();
     const newBrowser = await newElectronApp.browserWindow(newWindow);
 
-    // get the shell size and location
-    const newSize: ViewportSize = newWindow.viewportSize()!;
-    const newX: number = await newBrowser.evaluate((w) => { return w.screenX; });
-    const newY: number = await newBrowser.evaluate((w) => { return w.screenY; });
+    // wait for agent greeting
+    await waitForAgentMessage(newWindow, 10000, 1);
+
+    // get window size/position
+    await sendUserRequest(`@shell show raw`, newWindow);
+
+    // wait for agent response
+    await waitForAgentMessage(newWindow, 10000, 2);
+
+    // get the shell size and location from the raw settings
+    const msg =await getLastAgentMessage(newWindow);
+    const lines: string[] = msg.split("\n");
+    const newWidth: number = parseInt(lines[1].split(":")[1].trim());
+    const newHeight: number = parseInt(lines[2].split(":")[1].trim());
+    const newX: number = parseInt(lines[4].split(":")[1].trim());
+    const newY: number = parseInt(lines[5].split(":")[1].trim());
     
-    expect(newSize.height == size.height, "Window height mismatch!");
-    expect(newSize.width == size.width, "Window width mismatch!");
+    expect(newHeight == height, "Window height mismatch!");
+    expect(newWidth == width, "Window width mismatch!");
     expect(newX == x, "X position mismatch!");
     expect(newY == y, "Y position mismatch!");
 });

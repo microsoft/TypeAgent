@@ -99,6 +99,7 @@ export function setContent(
     elm: HTMLElement,
     content: DisplayContent,
     settingsView: SettingsView,
+    classNameModifier: string,
     appendMode?: DisplayAppendMode,
 ): string | undefined {
     // Remove existing content if we are not appending.
@@ -152,13 +153,13 @@ export function setContent(
 
     if (type === "text") {
         const prevElm = contentDiv.lastChild as HTMLElement | null;
-        if (prevElm?.classList.contains("chat-message-agent-text")) {
+        if (prevElm?.classList.contains(`chat-message-${classNameModifier}-text`)) {
             // If there is an existing text element then append to it.
             contentElm = prevElm;
         } else {
             const span = document.createElement("span");
             // create a text span so we can set "whitespace: break-spaces" css style of text content.
-            span.className = `chat-message-agent-text`;
+            span.className = `chat-message-${classNameModifier}-text`;
             contentDiv.appendChild(span);
             contentElm = span;
         }
