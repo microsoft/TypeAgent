@@ -3,19 +3,21 @@
 
 import test, {
     _electron,
-    Browser,
     _electron as electron,
     expect,
     Page,
-    ViewportSize,
 } from "@playwright/test";
 import {
+    exitApplication,
     getAppPath,
     getLastAgentMessage,
     sendUserRequest,
+    sendUserRequestAndWaitForResponse,
+    sendUserRequestFast,
+    testSetup,
     waitForAgentMessage,
 } from "./testHelper";
-import { send } from "node:process";
+import { exit } from "process";
 
 /**
  * Test to ensure that the shell recall startup layout (position, size)
@@ -23,14 +25,7 @@ import { send } from "node:process";
 test("remember window position", async () => {
     let agentMessageCount = 0;
 
-    // start the app
-    const electronApp = await electron.launch({ args: [getAppPath()] });
-
-    // get the main window
-    const firstWindow: Page = await electronApp.firstWindow();
-
-    // wait for agent greeting
-    await waitForAgentMessage(firstWindow, 10000, ++agentMessageCount);
+    const firstWindow = await testSetup();
 
     // verify shell title
     const title = await firstWindow.title();
@@ -39,39 +34,25 @@ test("remember window position", async () => {
     // resize the shell by sending @shell settings set size "[width, height]"
     const width: number = Math.ceil(Math.random() * 800 + 200);
     const height: number = Math.ceil(Math.random() * 800 + 200);
-    await sendUserRequest(
+    await sendUserRequestAndWaitForResponse(
         `@shell set size "[${width}, ${height}]"`,
         firstWindow,
     );
-
-    // wait for agent response
-    await waitForAgentMessage(firstWindow, 10000, ++agentMessageCount);
 
     // move the window
     const x: number = Math.ceil(Math.random() * 100);
     const y: number = Math.ceil(Math.random() * 100);
 
-    await sendUserRequest(`@shell set position "[${x}, ${y}]"`, firstWindow);
-
-    // wait for agent response
-    await waitForAgentMessage(firstWindow, 10000, ++agentMessageCount);
+    await sendUserRequestAndWaitForResponse(`@shell set position "[${x}, ${y}]"`, firstWindow);
 
     // close the application
-    await electronApp.close();
+    await exitApplication(firstWindow);
 
     // restart the app
-    const newElectronApp = await electron.launch({ args: [getAppPath()] });
-    const newWindow: Page = await newElectronApp.firstWindow();
-
-    // wait for agent greeting
-    agentMessageCount = 0;
-    await waitForAgentMessage(newWindow, 10000, ++agentMessageCount);
+    const newWindow: Page = await testSetup();
 
     // get window size/position
-    await sendUserRequest(`@shell show raw`, newWindow);
-
-    // wait for agent response
-    await waitForAgentMessage(newWindow, 10000, ++agentMessageCount);
+    await sendUserRequestAndWaitForResponse(`@shell show raw`, newWindow);
 
     // get the shell size and location from the raw settings
     const msg = await getLastAgentMessage(newWindow);
@@ -85,6 +66,9 @@ test("remember window position", async () => {
     expect(newWidth, `Window width mismatch! Expected ${width} got ${width}`).toBe(newWidth);
     expect(newX, `X position mismatch! Expected ${x} got ${newX}`).toBe(x);
     expect(newY, `Y position mismatch!Expected ${y} got ${newY}`).toBe(y);
+
+    // close the application
+    await exitApplication(newWindow);
 });
 
 /**
@@ -92,37 +76,26 @@ test("remember window position", async () => {
  */
 test("zoom level", async () => {
 
-    let agentMessageCount = 0;
-
     // start the app
-    const electronApp = await electron.launch({ args: [getAppPath()] });
-
-    // get the main window
-    const mainWindow = await electronApp.firstWindow();
-
-    // wait for agent greeting
-    await waitForAgentMessage(mainWindow, 10000, ++agentMessageCount);
+    const mainWindow = await testSetup();
 
     // test 80% zoom
-    await testZoomLevel(0.8, mainWindow, agentMessageCount++);
+    await testZoomLevel(0.8, mainWindow);
 
     // set the zoom level to 120%
-    await testZoomLevel(1.2, mainWindow, agentMessageCount++);
+    await testZoomLevel(1.2, mainWindow);
 
     // reset zoomLevel
-    await testZoomLevel(1, mainWindow, agentMessageCount++);
+    await testZoomLevel(1, mainWindow);
 
     // close the application
-    await electronApp.close();
+    await exitApplication(mainWindow);
 });
 
-async function testZoomLevel(level: number, page: Page, agentMessageCount: number) {
+async function testZoomLevel(level: number, page: Page) {
 
     // set the zoom level to 80%
-    await sendUserRequest(`@shell set zoomLevel ${level}`, page);
-
-    // wait for agent response
-    await waitForAgentMessage(page, 10000, ++agentMessageCount);
+    await sendUserRequestAndWaitForResponse(`@shell set zoomLevel ${level}`, page);
 
     // get the title
     let title = await page.title();
@@ -141,13 +114,7 @@ test("send button state", async () => {
     let agentMessageCount = 0;
 
     // start the app
-    const electronApp = await electron.launch({ args: [getAppPath()] });
-
-    // get the main window
-    const mainWindow = await electronApp.firstWindow();
-
-    // // wait for agent greeting
-    // await waitForAgentMessage(mainWindow, 10000, ++agentMessageCount);
+    const mainWindow = await testSetup();
 
     // make sure send button is disabled
     const sendButton = await mainWindow.locator("#sendbutton");
@@ -160,5 +127,5 @@ test("send button state", async () => {
     await expect(sendButton, "Send button expected to be enabled.").toBeEnabled();
 
     // close the application
-    await electronApp.close();
+    await exitApplication(mainWindow);
 });

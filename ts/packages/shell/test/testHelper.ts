@@ -1,9 +1,50 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ElectronApplication, Locator, Page } from "@playwright/test";
+import {     
+    _electron,
+    _electron as electron,
+    ElectronApplication, 
+    Locator, 
+    Page } from "@playwright/test";
 import fs from "node:fs";
 import path from "node:path";
+
+let runningApplication: ElectronApplication | null = null;
+
+/**
+ * Starts the electron app and returns the main page after the greeting agent message has been posted.
+ */
+export async function testSetup(): Promise<Page> {
+    // agent message count
+    let agentMessageCount = 0;
+
+    // start the app
+    if (runningApplication !== null) {
+        throw new Error("Application instance already running. Did you shutdown cleanly?");
+    }
+
+    runningApplication = await electron.launch({ args: [getAppPath()] });
+
+    // get the main window
+    const mainWindow: Page = await runningApplication.firstWindow();
+
+    // wait for agent greeting
+    await waitForAgentMessage(mainWindow, 10000, ++agentMessageCount);
+
+    return mainWindow;
+}
+
+/**
+ * Cleanly shuts down any running instance of the Shell
+ * @param page The main window of the application
+ */
+export async function exitApplication(page: Page): Promise<void> {
+    await sendUserRequestFast("@exit", page);
+
+    await runningApplication!.close();
+    runningApplication = null;
+}
 
 /**
  * Gets the correct path based on test context (cmdline vs. VSCode extension)
@@ -27,6 +68,32 @@ export async function sendUserRequest(prompt: string, page: Page) {
     await element.focus();
     await element.fill(prompt);
     await element.press("Enter");
+}
+
+/**
+ * Submits a user request to the system via the chat input box without waiting.
+ * @param prompt The user request/prompt.
+ * @param page The maing page from the electron host application.
+ */
+export async function sendUserRequestFast(prompt: string, page: Page) {    
+    const element = await page.waitForSelector("#phraseDiv");
+    await element.fill(prompt);
+    page.keyboard.down("Enter");
+}
+
+/**
+ * Submits a user request to the system via the chat input box and then waits for the agent's response
+ * @param prompt The user request/prompt.
+ * @param page The maing page from the electron host application.
+ */
+export async function sendUserRequestAndWaitForResponse(prompt: string, page: Page) {
+    const locators: Locator[] = await page.locator('.chat-message-agent-text').all();
+
+    // send the user request
+    await sendUserRequest(prompt, page);
+
+    // wait for agent response
+    await waitForAgentMessage(page, 10000, locators.length + 1);
 }
 
 /**
