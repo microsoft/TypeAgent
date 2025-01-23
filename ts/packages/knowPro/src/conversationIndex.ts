@@ -237,6 +237,10 @@ export async function buildConversationIndex<TMeta extends IKnowledgeSource>(
     return indexingResult;
 }
 
+/**
+ * Notes:
+ *  Case-insensitive
+ */
 export class ConversationIndex implements ITermToSemanticRefIndex {
     map: Map<string, ScoredSemanticRef[]> = new Map<
         string,
@@ -256,6 +260,7 @@ export class ConversationIndex implements ITermToSemanticRefIndex {
                 score: 1,
             };
         }
+        term = this.prepareTerm(term);
         if (this.map.has(term)) {
             this.map.get(term)?.push(semanticRefResult);
         } else {
@@ -264,14 +269,15 @@ export class ConversationIndex implements ITermToSemanticRefIndex {
     }
 
     lookupTerm(term: string, fuzzy = false): ScoredSemanticRef[] {
-        return this.map.get(term) ?? [];
+        return this.map.get(this.prepareTerm(term)) ?? [];
     }
 
     removeTerm(term: string, semanticRefIndex: number): void {
-        this.map.delete(term);
+        this.map.delete(this.prepareTerm(term));
     }
 
     removeTermIfEmpty(term: string): void {
+        term = this.prepareTerm(term);
         if (this.map.has(term) && this.map.get(term)?.length === 0) {
             this.map.delete(term);
         }
@@ -287,7 +293,20 @@ export class ConversationIndex implements ITermToSemanticRefIndex {
 
     deserialize(data: ITermToSemanticRefIndexData): void {
         for (const termData of data.items) {
-            this.map.set(termData.term, termData.semanticRefIndices);
+            if (termData && termData.term) {
+                this.map.set(
+                    this.prepareTerm(termData.term),
+                    termData.semanticRefIndices,
+                );
+            }
         }
+    }
+
+    /**
+     * Do any pre-processing of the term.
+     * @param term
+     */
+    private prepareTerm(term: string): string {
+        return term.toLowerCase();
     }
 }
