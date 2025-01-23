@@ -227,7 +227,11 @@ function addEvents(
     });
     api.onSettingSummaryChanged((_, summary, registeredAgents) => {
         document.title = summary;
-        document.title += ` Zoom: ${settingsView.shellSettings.zoomLevel * 100}%`;
+        if (settingsView.shellSettings.zoomLevel != 0) {
+            document.title += ` Zoom: ${settingsView.shellSettings.zoomLevel * 100}%`;
+        } else {
+            document.title += ` Zoom: 100%`;
+        }
 
         agents.clear();
         for (let key of registeredAgents.keys()) {
@@ -257,7 +261,11 @@ function addEvents(
             document.title.indexOf("Zoom: "),
         );
 
-        document.title = `${newTitle} Zoom: ${value.zoomLevel * 100}%`;
+        if (value.zoomLevel != 0) {
+            document.title = `${newTitle} Zoom: ${value.zoomLevel * 100}%`;
+        } else {
+            document.title = `${newTitle} Zoom: 100%`;
+        }
 
         settingsView.shellSettings = value;
     });
