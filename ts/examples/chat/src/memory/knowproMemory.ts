@@ -48,8 +48,8 @@ export async function createKnowproCommands(
     commands.kpPodcastImport = podcastImport;
     commands.kpPodcastSave = podcastSave;
     commands.kpPodcastLoad = podcastLoad;
-    commands.kpEntities = entities;
     commands.kpSearchTerms = searchTerms;
+    commands.kpSearchEntities = searchEntities;
 
     /*----------------
      * COMMANDS
@@ -84,28 +84,31 @@ export async function createKnowproCommands(
         if (messageCount === 0 || !namedArgs.index) {
             return;
         }
+        if (!namedArgs.index) {
+            return;
+        }
 
+        // Build index
         context.printer.writeLine();
         context.printer.writeLine("Building index");
         const maxMessages = namedArgs.maxMessages ?? messageCount;
         let progress = new ProgressBar(context.printer, maxMessages);
-        const indexResult = await context.podcast.buildIndex(() => {
+        const indexResult = await context.podcast.buildIndex((text, result) => {
             progress.advance();
+            if (!result.success) {
+                context.printer.writeError(`${result.message}\n${text}`);
+            }
             return progress.count < maxMessages;
         });
         progress.complete();
-        if (!indexResult.success) {
-            context.printer.writeError(indexResult.message);
-            return;
-        }
-        context.printer.writeLine(`Imported ${maxMessages} items`);
-        if (namedArgs.index) {
-            namedArgs.filePath = sourcePathToIndexPath(
-                namedArgs.filePath,
-                namedArgs.indexFilePath,
-            );
-            await podcastSave(namedArgs);
-        }
+        context.printer.writeLine(`Indexed ${maxMessages} items`);
+        context.printer.writeIndexingResults(indexResult);
+        // Save the index
+        namedArgs.filePath = sourcePathToIndexPath(
+            namedArgs.filePath,
+            namedArgs.indexFilePath,
+        );
+        await podcastSave(namedArgs);
     }
 
     function podcastSaveDef(): CommandMetadata {
@@ -171,6 +174,7 @@ export async function createKnowproCommands(
             new kp.ConversationIndex(data.semanticIndexData),
         );
         context.conversation = context.podcast;
+        context.printer.writePodcastInfo(context.podcast);
     }
 
     commands.kpSearchTerms.metadata =
@@ -193,18 +197,11 @@ export async function createKnowproCommands(
                 terms,
                 conversation.semanticRefIndex,
             );
-            for (const [term, scoredRefs] of matches) {
-                if (scoredRefs && scoredRefs.length > 0) {
-                    context.printer.writeInColor(chalk.cyan, term);
-                    for (const scoredRef of scoredRefs) {
-                        context.printer.writeSemanticRef(
-                            conversation.semanticRefs[
-                                scoredRef.semanticRefIndex
-                            ],
-                            scoredRef.score,
-                        );
-                    }
-                }
+            for (const match of matches) {
+                context.printer.writeSemanticRef(
+                    conversation.semanticRefs[match.semanticRefIndex],
+                    match.score,
+                );
             }
         } else {
             context.printer.writeError("Conversation is not indexed");
@@ -216,20 +213,23 @@ export async function createKnowproCommands(
             description: "Display entities in current conversation",
         };
     }
-    commands.entities.metadata = entitiesDef();
-    async function entities(args: string[]): Promise<void> {
+    commands.kpSearchEntities.metadata = entitiesDef();
+    async function searchEntities(args: string[]): Promise<void> {
         const conversation = ensureConversationLoaded();
         if (!conversation) {
             return;
         }
-        //
-        // Display all entities
-        //
-        const matches = filterSemanticRefsByType(
-            conversation.semanticRefs,
-            "entity",
-        );
-        context.printer.writeSemanticRefs(matches);
+        if (args.length > 0) {
+        } else {
+            //
+            // Display all entities
+            //
+            const matches = filterSemanticRefsByType(
+                conversation.semanticRefs,
+                "entity",
+            );
+            context.printer.writeSemanticRefs(matches);
+        }
     }
     /*---------- 
       End COMMANDS
@@ -301,6 +301,7 @@ class KnowProPrinter extends ChatPrinter {
         if (refs && refs.length > 0) {
             for (const ref of refs) {
                 this.writeSemanticRef(ref);
+                this.writeLine();
             }
         }
         return this;
@@ -318,6 +319,23 @@ class KnowProPrinter extends ChatPrinter {
             type: "csv",
             title: "Participants",
         });
+    }
+
+    public writeIndexingResults(results: kp.IndexingResult, verbose = false) {
+        if (results.failedMessages.length > 0) {
+            this.writeError(
+                `Errors for ${results.failedMessages.length} messages`,
+            );
+            if (verbose) {
+                for (const failedMessage of results.failedMessages) {
+                    this.writeInColor(
+                        chalk.cyan,
+                        failedMessage.message.textChunks[0],
+                    );
+                    this.writeError(failedMessage.error);
+                }
+            }
+        }
     }
 }
 

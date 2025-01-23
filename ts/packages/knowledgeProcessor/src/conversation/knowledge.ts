@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { asyncArray, collections, loadSchema } from "typeagent";
+import { async, asyncArray, collections, loadSchema } from "typeagent";
 import {
     Action,
     ConcreteEntity,
@@ -9,6 +9,7 @@ import {
     Value,
 } from "./knowledgeSchema.js";
 import {
+    Result,
     TypeChatJsonTranslator,
     TypeChatLanguageModel,
     createJsonTranslator,
@@ -21,6 +22,10 @@ import { unionArrays } from "../setOperations.js";
 export interface KnowledgeExtractor {
     readonly settings: KnowledgeExtractorSettings;
     extract(message: string): Promise<KnowledgeResponse | undefined>;
+    extractWithRetry(
+        message: string,
+        maxRetries: number,
+    ): Promise<Result<KnowledgeResponse>>;
     translator?: TypeChatJsonTranslator<KnowledgeResponse>;
 }
 
@@ -38,20 +43,40 @@ export function createKnowledgeExtractor(
     return {
         settings,
         extract,
+        extractWithRetry,
         translator,
     };
 
     async function extract(
         message: string,
     ): Promise<KnowledgeResponse | undefined> {
-        const result = await translator.translate(message);
+        const result = await extractKnowledge(message);
         if (!result.success) {
             return undefined;
         }
-        if (settings.mergeActionKnowledge) {
-            mergeActionKnowledge(result.data);
-        }
         return result.data;
+    }
+
+    function extractWithRetry(
+        message: string,
+        maxRetries: number,
+    ): Promise<Result<KnowledgeResponse>> {
+        return async.getResultWithRetry(
+            () => extractKnowledge(message),
+            maxRetries,
+        );
+    }
+
+    async function extractKnowledge(
+        message: string,
+    ): Promise<Result<KnowledgeResponse>> {
+        const result = await translator.translate(message);
+        if (result.success) {
+            if (settings.mergeActionKnowledge) {
+                mergeActionKnowledge(result.data);
+            }
+        }
+        return result;
     }
 
     function createTranslator(

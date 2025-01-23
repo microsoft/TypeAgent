@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { conversation } from "knowledge-processor";
+
 // an object that can provide a KnowledgeResponse structure
 export interface IKnowledgeSource {
     getKnowledge: () => conversation.KnowledgeResponse;
@@ -52,6 +53,7 @@ export interface ITermToSemanticRefIndex {
 }
 
 export interface SemanticRef {
+    semanticRefIndex: SemanticRefIndex;
     range: TextRange;
     knowledgeType: "entity" | "action" | "topic" | "tag";
     knowledge:
@@ -71,12 +73,7 @@ export interface IConversation<TMeta extends IKnowledgeSource = any> {
     nameTag: string;
     tags: string[];
     messages: IMessage<TMeta>[];
-    // this should be defined before persisting the conversation
-    semanticRefData?: ITermToSemanticRefIndexData;
-
-    // this should be undefined before persisting the conversation
     semanticRefIndex?: ITermToSemanticRefIndex | undefined;
-    // this should be defined before persisting the conversation
     semanticRefs: SemanticRef[] | undefined;
 }
 

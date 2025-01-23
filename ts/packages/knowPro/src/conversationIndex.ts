@@ -12,10 +12,12 @@ import {
     ITopic,
     TextRange,
     TextLocation,
+    IMessage,
 } from "./dataFormat.js";
 import { conversation } from "knowledge-processor";
 import { openai } from "aiclient";
-import { error, Result, success } from "typechat";
+import { callWithRetry } from "../../typeagent/dist/async.js";
+import { Result } from "typechat";
 
 function addFacet(
     facet: conversation.Facet | undefined,
@@ -47,6 +49,19 @@ function textRangeFromLocation(
     };
 }
 
+function createKnowledgeModel() {
+    const chatModelSettings = openai.apiSettingsFromEnv(
+        openai.ModelType.Chat,
+        undefined,
+        "GPT_4_O",
+    );
+    chatModelSettings.retryPauseMs = 10000;
+    const chatModel = openai.createJsonChatModel(chatModelSettings, [
+        "chatExtractor",
+    ]);
+    return chatModel;
+}
+
 export function addEntityToIndex(
     entity: conversation.ConcreteEntity,
     semanticRefs: SemanticRef[],
@@ -54,12 +69,13 @@ export function addEntityToIndex(
     messageIndex: number,
     chunkIndex = 0,
 ) {
+    const refIndex = semanticRefs.length;
     semanticRefs.push({
+        semanticRefIndex: refIndex,
         range: textRangeFromLocation(messageIndex, chunkIndex),
         knowledgeType: "entity",
         knowledge: entity,
     });
-    const refIndex = semanticRefs.length - 1;
     semanticRefIndex.addTerm(entity.name, refIndex);
     // add each type as a separate term
     for (const type of entity.type) {
@@ -80,12 +96,13 @@ export function addTopicToIndex(
     messageIndex: number,
     chunkIndex = 0,
 ) {
+    const refIndex = semanticRefs.length;
     semanticRefs.push({
+        semanticRefIndex: refIndex,
         range: textRangeFromLocation(messageIndex, chunkIndex),
         knowledgeType: "topic",
         knowledge: topic,
     });
-    const refIndex = semanticRefs.length - 1;
     semanticRefIndex.addTerm(topic.text, refIndex);
 }
 
@@ -96,12 +113,13 @@ export function addActionToIndex(
     messageIndex: number,
     chunkIndex = 0,
 ) {
+    const refIndex = semanticRefs.length;
     semanticRefs.push({
+        semanticRefIndex: refIndex,
         range: textRangeFromLocation(messageIndex, chunkIndex),
         knowledgeType: "action",
         knowledge: action,
     });
-    const refIndex = semanticRefs.length - 1;
     semanticRefIndex.addTerm(action.verbs.join(" "), refIndex);
     if (action.subjectEntityName !== "none") {
         semanticRefIndex.addTerm(action.subjectEntityName, refIndex);
@@ -127,84 +145,96 @@ export function addActionToIndex(
     addFacet(action.subjectEntityFacet, refIndex, semanticRefIndex);
 }
 
+export type IndexingResult = {
+    index: ConversationIndex;
+    failedMessages: { message: IMessage; error: string }[];
+};
+
 export async function buildConversationIndex<TMeta extends IKnowledgeSource>(
     convo: IConversation<TMeta>,
     progressCallback?: (
         text: string,
-        knowledge: conversation.KnowledgeResponse | undefined,
+        knowledgeResult: Result<conversation.KnowledgeResponse>,
     ) => boolean,
-): Promise<Result<ConversationIndex>> {
+): Promise<IndexingResult> {
     const semanticRefIndex = new ConversationIndex();
     convo.semanticRefIndex = semanticRefIndex;
     if (convo.semanticRefs === undefined) {
         convo.semanticRefs = [];
     }
     const semanticRefs = convo.semanticRefs;
-    const chatModelSettings = openai.apiSettingsFromEnv(
-        openai.ModelType.Chat,
-        undefined,
-        "GPT_4_O",
-    );
-    chatModelSettings.retryPauseMs = 10000;
-    const chatModel = openai.createJsonChatModel(chatModelSettings, [
-        "chatExtractor",
-    ]);
+    const chatModel = createKnowledgeModel();
     const extractor = conversation.createKnowledgeExtractor(chatModel, {
         maxContextLength: 4096,
         mergeActionKnowledge: false,
     });
-
+    const maxRetries = 4;
+    let indexingResult: IndexingResult = {
+        index: semanticRefIndex,
+        failedMessages: [],
+    };
     for (let i = 0; i < convo.messages.length; i++) {
         const msg = convo.messages[i];
         // only one chunk per message for now
         const text = msg.textChunks[0];
         try {
-            const knowledge = await extractor.extract(text);
-            if (progressCallback && !progressCallback(text, knowledge)) {
+            const knowledgeResult = await callWithRetry(() =>
+                extractor.extractWithRetry(text, maxRetries),
+            );
+            if (progressCallback && !progressCallback(text, knowledgeResult)) {
                 break;
             }
-            if (knowledge) {
-                for (const entity of knowledge.entities) {
-                    addEntityToIndex(entity, semanticRefs, semanticRefIndex, i);
+            if (knowledgeResult.success) {
+                const knowledge = knowledgeResult.data;
+                if (knowledge) {
+                    for (const entity of knowledge.entities) {
+                        addEntityToIndex(
+                            entity,
+                            semanticRefs,
+                            semanticRefIndex,
+                            i,
+                        );
+                    }
+                    for (const action of knowledge.actions) {
+                        addActionToIndex(
+                            action,
+                            semanticRefs,
+                            semanticRefIndex,
+                            i,
+                        );
+                    }
+                    for (const inverseAction of knowledge.inverseActions) {
+                        addActionToIndex(
+                            inverseAction,
+                            semanticRefs,
+                            semanticRefIndex,
+                            i,
+                        );
+                    }
+                    for (const topic of knowledge.topics) {
+                        const topicObj: ITopic = { text: topic };
+                        addTopicToIndex(
+                            topicObj,
+                            semanticRefs,
+                            semanticRefIndex,
+                            i,
+                        );
+                    }
                 }
-                for (const action of knowledge.actions) {
-                    addActionToIndex(action, semanticRefs, semanticRefIndex, i);
-                }
-                for (const inverseAction of knowledge.inverseActions) {
-                    addActionToIndex(
-                        inverseAction,
-                        semanticRefs,
-                        semanticRefIndex,
-                        i,
-                    );
-                }
-                for (const topic of knowledge.topics) {
-                    const topicObj: ITopic = { text: topic };
-                    addTopicToIndex(
-                        topicObj,
-                        semanticRefs,
-                        semanticRefIndex,
-                        i,
-                    );
-                }
+            } else {
+                indexingResult.failedMessages.push({
+                    message: msg,
+                    error: knowledgeResult.message,
+                });
             }
         } catch (ex) {
-            return error(`Error extracting knowledge: ${ex}`);
+            indexingResult.failedMessages.push({
+                message: msg,
+                error: `${ex}`,
+            });
         }
     }
-    return success(semanticRefIndex);
-}
-
-export function lookupTermsInIndex(
-    terms: string[],
-    semanticRefIndex: ITermToSemanticRefIndex,
-): Map<string, ScoredSemanticRef[] | undefined> {
-    const matches = new Map<string, ScoredSemanticRef[] | undefined>();
-    for (const term of terms) {
-        const scoredRefs = semanticRefIndex.lookupTerm(term);
-        matches.set(term, scoredRefs);
-    }
-    return matches;
+    return indexingResult;
 }
 
 export class ConversationIndex implements ITermToSemanticRefIndex {
