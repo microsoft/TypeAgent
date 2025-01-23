@@ -472,6 +472,7 @@ async function finalizeAction(
     translatorName: string,
     context: ActionContext<CommandHandlerContext>,
     history?: HistoryContext,
+    resultEntityId?: string,
 ): Promise<Action | Action[] | undefined> {
     let currentAction: TranslatedAction | undefined = action;
     let currentTranslatorName: string = translatorName;
@@ -537,6 +538,7 @@ async function finalizeAction(
         ) ?? currentTranslatorName,
         currentAction.actionName,
         currentAction.parameters,
+        resultEntityId,
     );
 }
 
@@ -554,6 +556,7 @@ async function finalizeMultipleActions(
             translatorName,
             context,
             history,
+            request.resultEntityId,
         );
         if (finalizedActions === undefined) {
             return undefined;
