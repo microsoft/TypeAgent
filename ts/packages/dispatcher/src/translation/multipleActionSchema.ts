@@ -20,6 +20,8 @@ export type MultipleAction = {
         requests: {
             request: string;
             action: TranslatedAction;
+            // if the action has a result, the result entity id can be used in future action parameters
+            resultEntityId?: string;
         }[];
     };
 };
@@ -40,6 +42,10 @@ export function createMultipleActionSchema(
                     sc.obj({
                         request: sc.string(),
                         action: types,
+                        resultEntityId: sc.optional(
+                            sc.string(),
+                            "if the action has a result, the result entity id can be used in future action parameters",
+                        ),
                     }),
                 ),
             }),

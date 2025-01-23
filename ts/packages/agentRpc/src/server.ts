@@ -16,6 +16,7 @@ import {
     ClientAction,
     AppAction,
     AppAgentManifest,
+    Entity,
 } from "@typeagent/agent-sdk";
 
 import {
@@ -78,7 +79,10 @@ export function createAgentRpcServer(
             );
         },
         async executeAction(
-            param: Partial<ActionContextParams> & { action: JSONAction },
+            param: Partial<ActionContextParams> & {
+                action: JSONAction;
+                entityMap: [string, Entity][];
+            },
         ): Promise<any> {
             if (agent.executeAction === undefined) {
                 throw new Error("Invalid invocation of executeAction");
@@ -89,6 +93,7 @@ export function createAgentRpcServer(
                     ? fromJSONAction(param.action)
                     : (param.action as unknown as AppAction),
                 getActionContextShim(param),
+                new Map(param.entityMap),
             );
         },
         async validateWildcardMatch(param): Promise<any> {
