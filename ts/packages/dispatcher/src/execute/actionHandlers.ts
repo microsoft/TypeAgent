@@ -241,6 +241,7 @@ async function executeAction(
     action: Action,
     context: ActionContext<CommandHandlerContext>,
     actionIndex: number,
+    entityMap?: Map<string, Entity>,
 ): Promise<ActionResult | undefined> {
     const translatorName = action.translatorName;
 
@@ -293,7 +294,11 @@ async function executeAction(
             `${prefix}Executing action ${action.fullActionName}`,
             context,
         );
-        returnedResult = await appAgent.executeAction(action, actionContext);
+        returnedResult = await appAgent.executeAction(
+            action,
+            actionContext,
+            entityMap,
+        );
     } finally {
         actionContext.profiler?.stop();
         actionContext.profiler = undefined;
@@ -364,12 +369,17 @@ export async function executeActions(
 ) {
     debugActions(`Executing actions: ${JSON.stringify(actions, undefined, 2)}`);
     let actionIndex = 0;
-    const resultMap = new Map<string, Entity>();
+    const entityMap = new Map<string, Entity>();
     for (const action of actions) {
-        const result = await executeAction(action, context, actionIndex);
+        const result = await executeAction(
+            action,
+            context,
+            actionIndex,
+            entityMap,
+        );
         if (result && result.error === undefined) {
             if (result.resultEntity && action.resultEntityId) {
-                resultMap.set(action.resultEntityId, result.resultEntity);
+                entityMap.set(action.resultEntityId, result.resultEntity);
             }
         }
         actionIndex++;
