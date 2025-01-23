@@ -47,7 +47,7 @@ function matchTermsInIndex(
     const matchTable = new MatchTable();
     for (const term of terms) {
         const scoredRefs = semanticRefIndex.lookupTerm(term);
-        if (scoredRefs) {
+        if (scoredRefs && scoredRefs.length > 0) {
             matchedTerms.push(term);
             matchTable.add(scoredRefs);
         }
