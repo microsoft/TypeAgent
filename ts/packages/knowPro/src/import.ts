@@ -16,6 +16,7 @@ import {
     addEntityToIndex,
     buildConversationIndex,
     addTopicToIndex,
+    IndexingResult,
 } from "./conversationIndex.js";
 import { Result } from "typechat";
 
@@ -164,13 +165,11 @@ export class Podcast implements IConversation<PodcastMessageMeta> {
     async buildIndex(
         progressCallback?: (
             text: string,
-            knowledge: conversation.KnowledgeResponse | undefined,
+            knowledgeResult: Result<conversation.KnowledgeResponse>,
         ) => boolean,
-    ): Promise<Result<ConversationIndex>> {
+    ): Promise<IndexingResult> {
         const result = await buildConversationIndex(this, progressCallback);
-        if (result.success) {
-            this.addMetadataToIndex();
-        }
+        this.addMetadataToIndex();
         return result;
     }
 
