@@ -45,19 +45,17 @@ function ensureDynamicTypeAgentManager(): DynamicTypeAgentManager {
     const messageChannelProvider = createGenericChannelProvider(
         (message: any) =>
             window.postMessage({
-                target: "dispatcher",
                 source: "webAgent",
-                messageType: "message",
-                body: message,
+                method: "webAgent/message",
+                params: message,
             } as WebAgentRpcMessage),
     );
 
     const registerChannel = createGenericChannel((message: any) =>
         window.postMessage({
-            target: "dispatcher",
             source: "webAgent",
-            messageType: "register",
-            body: message,
+            method: "webAgent/register",
+            params: message,
         } as WebAgentRegisterMessage),
     );
 
@@ -88,14 +86,14 @@ function ensureDynamicTypeAgentManager(): DynamicTypeAgentManager {
     const messageHandler = (event: MessageEvent) => {
         const data = event.data;
         if (isWebAgentMessageFromDispatcher(data)) {
-            switch (data.messageType) {
-                case "register":
-                    registerChannel.message(data.body);
+            switch (data.method) {
+                case "webAgent/register":
+                    registerChannel.message(data.params);
                     break;
-                case "message":
-                    messageChannelProvider.message(data.body);
+                case "webAgent/message":
+                    messageChannelProvider.message(data.params);
                     break;
-                case "disconnect":
+                case "webAgent/disconnect":
                     messageChannelProvider.disconnect();
                     registerChannel.disconnect();
                     window.removeEventListener("message", messageHandler);
