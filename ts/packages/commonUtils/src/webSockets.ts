@@ -9,14 +9,6 @@ import fs from "node:fs";
 
 const debug = registerDebug("typeagent:websockets");
 
-export type WebSocketMessage = {
-    source: string;
-    target: string;
-    id?: string;
-    messageType: string;
-    body: any;
-};
-
 export type WebSocketMessageV2 = {
     id?: string;
     method: string;
@@ -26,6 +18,7 @@ export type WebSocketMessageV2 = {
         code?: number | undefined;
         message: string;
     };
+    source?: string;
 };
 
 export async function createWebSocket(

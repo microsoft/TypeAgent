@@ -1,8 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { WebSocketMessageV2 } from "common-utils/ws";
-import { WebSocketMessage } from "../../../../commonUtils/dist/indexBrowser";
+import { WebSocketMessageV2 } from "../../../../commonUtils/dist/indexBrowser";
 import {
     isWebAgentMessage,
     isWebAgentMessageFromDispatcher,
@@ -1551,7 +1550,7 @@ chrome.runtime.onConnect.addListener(async (port) => {
 
     const handler = async (event: any) => {
         const message = await event.data.text();
-        const data = JSON.parse(message) as WebSocketMessage;
+        const data = JSON.parse(message) as WebSocketMessageV2;
         if (isWebAgentMessageFromDispatcher(data)) {
             port.postMessage(data);
         }
@@ -1561,8 +1560,8 @@ chrome.runtime.onConnect.addListener(async (port) => {
     const agentNames: string[] = [];
     port.onMessage.addListener((data) => {
         if (isWebAgentMessage(data)) {
-            if (data.messageType === "register") {
-                agentNames.push(data.body.param.name);
+            if (data.method === "webAgent/register") {
+                agentNames.push(data.params.param.name);
             }
             webSocket.send(JSON.stringify(data));
         }
@@ -1571,9 +1570,8 @@ chrome.runtime.onConnect.addListener(async (port) => {
         for (const name of agentNames) {
             const message: WebAgentDisconnectMessage = {
                 source: "webAgent",
-                target: "dispatcher",
-                messageType: "disconnect",
-                body: name,
+                method: "webAgent/disconnect",
+                params: name,
             };
             webSocket.send(JSON.stringify(message));
         }
