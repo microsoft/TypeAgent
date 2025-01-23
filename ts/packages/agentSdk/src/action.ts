@@ -18,6 +18,7 @@ export type ActionResultSuccessNoDisplay = {
     literalText?: string | undefined;
     displayContent?: undefined;
     entities: Entity[];
+    resultEntity?: Entity | undefined;
     dynamicDisplayId?: string | undefined;
     dynamicDisplayNextRefreshMs?: number | undefined;
     additionalInstructions?: string[] | undefined;
@@ -28,6 +29,7 @@ export type ActionResultSuccess = {
     literalText?: string | undefined;
     displayContent: DisplayContent;
     entities: Entity[];
+    resultEntity?: Entity | undefined;
     dynamicDisplayId?: string | undefined;
     dynamicDisplayNextRefreshMs?: number | undefined;
     additionalInstructions?: string[] | undefined;

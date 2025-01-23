@@ -364,8 +364,14 @@ export async function executeActions(
 ) {
     debugActions(`Executing actions: ${JSON.stringify(actions, undefined, 2)}`);
     let actionIndex = 0;
+    const resultMap = new Map<string, Entity>();
     for (const action of actions) {
-        await executeAction(action, context, actionIndex);
+        const result = await executeAction(action, context, actionIndex);
+        if (result && result.error === undefined) {
+            if (result.resultEntity && action.resultEntityId) {
+                resultMap.set(action.resultEntityId, result.resultEntity);
+            }
+        }
         actionIndex++;
     }
 }

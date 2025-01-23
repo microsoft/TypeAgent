@@ -73,6 +73,7 @@ export class Action {
         public readonly translatorName: string,
         public readonly actionName: string,
         public readonly parameters: ParamObjectType | undefined,
+        public readonly resultEntityId?: string,
     ) {}
 
     public get fullActionName() {
