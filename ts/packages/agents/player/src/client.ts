@@ -76,6 +76,7 @@ import {
     DisplayContent,
     Storage,
     ActionResult,
+    Entity,
 } from "@typeagent/agent-sdk";
 import {
     createActionResultFromHtmlDisplay,
@@ -127,6 +128,9 @@ export interface IClientContext {
     currentTrackList?: ITrackCollection;
     lastTrackStartIndex?: number;
     lastTrackEndIndex?: number;
+    entityMap?: Map<string, Entity> | undefined;
+    trackListMap: Map<string, ITrackCollection>;
+    trackListCount: number;
     userData?: UserData | undefined;
 }
 
@@ -361,10 +365,22 @@ export async function getClientContext(
     return {
         deviceId,
         service,
+        trackListMap: new Map<string, ITrackCollection>(),
+        trackListCount: 0,
         userData: instanceStorage
             ? await initializeUserData(instanceStorage, service)
             : undefined,
     };
+}
+
+function internTrackCollection(
+    trackCollection: ITrackCollection,
+    clientContext: IClientContext,
+) {
+    const id = `trackList${clientContext.trackListCount}`;
+    clientContext.trackListMap.set(id, trackCollection.copy());
+    clientContext.trackListCount++;
+    return id;
 }
 
 export async function searchTracks(
@@ -697,7 +713,9 @@ export async function handleCall(
     action: PlayerAction,
     clientContext: IClientContext,
     actionIO: ActionIO,
+    entityMap: Map<string, Entity>,
 ): Promise<ActionResult> {
+    clientContext.entityMap = entityMap;
     switch (action.actionName) {
         case "playRandom":
             return playRandomAction(clientContext, action);
@@ -916,14 +934,41 @@ export async function handleCall(
                 const collection = new TrackCollection(tracks);
                 console.log(chalk.magentaBright("Favorites:"));
                 await updateTrackListAndPrint(collection, clientContext);
-                return htmlTrackNames(collection);
+                const id = internTrackCollection(collection, clientContext);
+                const result = await htmlTrackNames(collection);
+                result.resultEntity = {
+                    name: "getFavoritesResult",
+                    type: ["track-list"],
+                    uniqueId: id,
+                };
+                return result;
             }
             return createErrorActionResult("No favorites found");
         }
         case "filterTracks": {
             const filterTracksAction = action as FilterTracksAction;
-            const trackCollection = clientContext.currentTrackList;
-            if (trackCollection) {
+            let input = clientContext.currentTrackList;
+            if (
+                filterTracksAction.parameters.trackListEntityId &&
+                clientContext.entityMap
+            ) {
+                const entity = clientContext.entityMap.get(
+                    filterTracksAction.parameters.trackListEntityId,
+                );
+                if (
+                    entity !== undefined &&
+                    entity.type.includes("track-list") &&
+                    entity.uniqueId
+                ) {
+                    const trackList = clientContext.trackListMap.get(
+                        entity.uniqueId,
+                    );
+                    if (trackList) {
+                        input = trackList;
+                    }
+                }
+            }
+            if (input) {
                 let filterType: string =
                     filterTracksAction.parameters.filterType;
                 const filterText = filterTracksAction.parameters.filterValue;
@@ -935,7 +980,7 @@ export async function handleCall(
                 const filter = filterType + ":" + filterText;
                 const parseResult = Filter.parseFilter(filter);
                 if (parseResult.ast) {
-                    const trackList = trackCollection.getTracks();
+                    const trackList = input.getTracks();
 
                     const tracks = await applyFilterExpr(
                         clientContext,
@@ -947,7 +992,14 @@ export async function handleCall(
                     const collection = new TrackCollection(tracks);
                     console.log(chalk.magentaBright("Filtered Tracks:"));
                     await updateTrackListAndPrint(collection, clientContext);
-                    return await htmlTrackNames(collection);
+                    const result = await htmlTrackNames(collection);
+                    const id = internTrackCollection(collection, clientContext);
+                    result.resultEntity = {
+                        name: "filterTracksResult",
+                        type: ["track-list"],
+                        uniqueId: id,
+                    };
+                    return result;
                 } else {
                     console.log(parseResult.diagnostics);
                 }
@@ -957,7 +1009,27 @@ export async function handleCall(
         case "createPlaylist": {
             const createPlaylistAction = action as CreatePlaylistAction;
             const name = createPlaylistAction.parameters.name;
-            const input = clientContext.currentTrackList;
+            let input = clientContext.currentTrackList;
+            if (
+                createPlaylistAction.parameters.trackListEntityId &&
+                clientContext.entityMap
+            ) {
+                const entity = clientContext.entityMap.get(
+                    createPlaylistAction.parameters.trackListEntityId,
+                );
+                if (
+                    entity !== undefined &&
+                    entity.type.includes("track-list") &&
+                    entity.uniqueId
+                ) {
+                    const trackList = clientContext.trackListMap.get(
+                        entity.uniqueId,
+                    );
+                    if (trackList) {
+                        input = trackList;
+                    }
+                }
+            }
             if (input !== undefined) {
                 const trackList = input.getTracks();
                 const uris = trackList.map((track) => (track ? track.uri : ""));
