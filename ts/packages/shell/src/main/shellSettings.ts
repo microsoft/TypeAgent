@@ -133,6 +133,7 @@ export class ShellSettings
 
     public set(name: string, value: any) {
         const t = typeof ShellSettings.getinstance()[name];
+        const oldValue = ShellSettings.getinstance()[name];
 
         if (t === typeof value) {
             ShellSettings.getinstance()[name] = value;
@@ -156,7 +157,7 @@ export class ShellSettings
             }
         }
 
-        if (ShellSettings.getinstance().onSettingsChanged != null) {
+        if (ShellSettings.getinstance().onSettingsChanged != null && oldValue != value) {
             ShellSettings.getinstance().onSettingsChanged!(name);
         }
     }

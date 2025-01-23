@@ -15,11 +15,14 @@ import {
     sendUserRequest,
     waitForAgentMessage,
 } from "./testHelper";
+import { send } from "node:process";
 
 /**
  * Test to ensure that the shell recall startup layout (position, size)
  */
 test("remember window position", async () => {
+    let agentMessageCount = 0;
+
     // start the app
     const electronApp = await electron.launch({ args: [getAppPath()] });
 
@@ -27,7 +30,7 @@ test("remember window position", async () => {
     const firstWindow: Page = await electronApp.firstWindow();
 
     // wait for agent greeting
-    await waitForAgentMessage(firstWindow, 10000, 1);
+    await waitForAgentMessage(firstWindow, 10000, ++agentMessageCount);
 
     // verify shell title
     const title = await firstWindow.title();
@@ -42,7 +45,7 @@ test("remember window position", async () => {
     );
 
     // wait for agent response
-    await waitForAgentMessage(firstWindow, 10000, 2);
+    await waitForAgentMessage(firstWindow, 10000, ++agentMessageCount);
 
     // move the window
     const x: number = Math.ceil(Math.random() * 100);
@@ -51,7 +54,7 @@ test("remember window position", async () => {
     await sendUserRequest(`@shell set position "[${x}, ${y}]"`, firstWindow);
 
     // wait for agent response
-    await waitForAgentMessage(firstWindow, 10000, 3);
+    await waitForAgentMessage(firstWindow, 10000, ++agentMessageCount);
 
     // close the application
     await electronApp.close();
@@ -61,13 +64,14 @@ test("remember window position", async () => {
     const newWindow: Page = await newElectronApp.firstWindow();
 
     // wait for agent greeting
-    await waitForAgentMessage(newWindow, 10000, 1);
+    agentMessageCount = 0;
+    await waitForAgentMessage(newWindow, 10000, ++agentMessageCount);
 
     // get window size/position
     await sendUserRequest(`@shell show raw`, newWindow);
 
     // wait for agent response
-    await waitForAgentMessage(newWindow, 10000, 2);
+    await waitForAgentMessage(newWindow, 10000, ++agentMessageCount);
 
     // get the shell size and location from the raw settings
     const msg = await getLastAgentMessage(newWindow);
@@ -87,6 +91,9 @@ test("remember window position", async () => {
  * Ensures zoom level is working
  */
 test("zoom level", async () => {
+
+    let agentMessageCount = 0;
+
     // start the app
     const electronApp = await electron.launch({ args: [getAppPath()] });
 
@@ -94,42 +101,63 @@ test("zoom level", async () => {
     const mainWindow = await electronApp.firstWindow();
 
     // wait for agent greeting
-    await waitForAgentMessage(mainWindow, 10000, 1);
+    await waitForAgentMessage(mainWindow, 10000, ++agentMessageCount);
+
+    // test 80% zoom
+    await testZoomLevel(0.8, mainWindow, agentMessageCount++);
+
+    // set the zoom level to 120%
+    await testZoomLevel(1.2, mainWindow, agentMessageCount++);
+
+    // reset zoomLevel
+    await testZoomLevel(1, mainWindow, agentMessageCount++);
+
+    // close the application
+    await electronApp.close();
+});
+
+async function testZoomLevel(level: number, page: Page, agentMessageCount: number) {
+
+    // set the zoom level to 80%
+    await sendUserRequest(`@shell set zoomLevel ${level}`, page);
+
+    // wait for agent response
+    await waitForAgentMessage(page, 10000, ++agentMessageCount);
 
     // get the title
-    let title = await mainWindow.title();
+    let title = await page.title();
 
     // get zoom level out of title
     let subTitle: string = title.match(/\d+%/)![0];
-    const origZoomLevel: number = parseInt(subTitle.substring(0, subTitle.length - 1));
+    let zoomLevel: number = parseInt(subTitle.substring(0, subTitle.length - 1));
 
-    // // Focus on the body
-    // await mainWindow.focus('body');
+    expect(zoomLevel, `Unexpected zoomLevel, expected ${level * 100}, got ${zoomLevel}`).toBe(level * 100);    
+}
 
-    const e = await mainWindow.waitForSelector(".chat-container");
-await e.focus();
-    // // zoom in
-    // // await mainWindow.press('body', "CTRL+Plus");
-    // await mainWindow.keyboard.down('Control');
-    // //await mainWindow.keyboard.press('+');
-    // await mainWindow.mouse.wheel(0, 5);
-    // await mainWindow.keyboard.up('Control');
-    // await mainWindow.keyboard.press("Control+-");
-    
-    // // for title update
-    // await mainWindow.waitForTimeout(1000);
-    // //await main
-    // //await mainWindow.press('@document', "Control++");
-    await e.press("Control+-");
+/**
+ * Ensure send button is behaving
+ */
+test("send button state", async () => {
+    let agentMessageCount = 0;
 
-    // get the title
-    title = await mainWindow.title(); 
+    // start the app
+    const electronApp = await electron.launch({ args: [getAppPath()] });
 
-    // get zoom level out of title
-    subTitle = title.match(/\d+%/)![0];
-    const newZoomLevel: number = parseInt(subTitle.substring(0, subTitle.length - 1));
-    
-    expect(newZoomLevel, `Zoom not functioning as expected. Expected ${origZoomLevel}% got ${newZoomLevel}%`).toBeGreaterThan(origZoomLevel);
+    // get the main window
+    const mainWindow = await electronApp.firstWindow();
+
+    // // wait for agent greeting
+    // await waitForAgentMessage(mainWindow, 10000, ++agentMessageCount);
+
+    // make sure send button is disabled
+    const sendButton = await mainWindow.locator("#sendbutton");
+    await expect(sendButton, "Send button expected to be disabled.").toBeDisabled();
+
+    // put some text in the text box
+    const element = await mainWindow.waitForSelector("#phraseDiv");
+    await element.fill("This is a test...");
+
+    await expect(sendButton, "Send button expected to be enabled.").toBeEnabled();
 
     // close the application
     await electronApp.close();

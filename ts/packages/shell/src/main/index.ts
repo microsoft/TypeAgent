@@ -239,6 +239,10 @@ function createWindow(): void {
         } else if (settingName == "position") {
             mainWindow?.setPosition(ShellSettings.getinstance().x!, ShellSettings.getinstance().y!);
         }
+
+        if (settingName == "zoomLevel") {
+            setZoomLevel(ShellSettings.getinstance().zoomLevel, chatView);
+        }
     };
 
     ShellSettings.getinstance().onShowSettingsDialog = (
@@ -705,32 +709,29 @@ app.on("window-all-closed", () => {
 });
 
 function zoomIn(chatView: BrowserView) {
-    const curr = chatView.webContents.zoomLevel;
-    chatView.webContents.zoomLevel = Math.min(curr + 0.5, 9);
-
-    ShellSettings.getinstance().set(
-        "zoomLevel",
-        chatView.webContents.zoomLevel,
-    );
-
-    updateZoomInTitle(chatView);
+    setZoomLevel(chatView.webContents.zoomFactor + 0.1, chatView);
 }
 
 function zoomOut(chatView: BrowserView) {
-    const curr = chatView.webContents.zoomLevel;
-    chatView.webContents.zoomLevel = Math.max(curr - 0.5, -8);
-    ShellSettings.getinstance().set(
-        "zoomLevel",
-        chatView.webContents.zoomLevel,
-    );
+    setZoomLevel(chatView.webContents.zoomFactor - 0.1, chatView);
+}
 
-    updateZoomInTitle(chatView);
+function setZoomLevel(zoomLevel: number, chatView: BrowserView | null) {
+
+    if (zoomLevel < 0.1) {
+        zoomLevel = 0.1
+    } else if (zoomLevel > 10) {
+        zoomLevel = 10;
+    }
+
+    chatView!.webContents.zoomFactor = zoomLevel;
+    ShellSettings.getinstance().set("zoomLevel", zoomLevel);
+
+    updateZoomInTitle(chatView!);
 }
 
 function resetZoom(chatView: BrowserView) {
-    chatView.webContents.zoomLevel = 0;
-    ShellSettings.getinstance().set("zoomLevel", 0);
-    updateZoomInTitle(chatView);
+    setZoomLevel(1, chatView);
 }
 
 function updateZoomInTitle(chatView: BrowserView) {
