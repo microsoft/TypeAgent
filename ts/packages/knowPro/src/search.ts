@@ -19,11 +19,13 @@ export function searchTermsInIndex(
     semanticRefIndex: ITermToSemanticRefIndex,
     terms: string[],
     maxMatches?: number,
+    minHitCount?: number,
 ): SearchResult {
     const context = new q.QueryEvalContext();
-    const query = new q.SelectTopN(
+    const query = new q.SelectTopNExpr(
         new q.TermsMatchExpr(semanticRefIndex, terms),
         maxMatches,
+        minHitCount,
     );
     const evalResults = query.eval(context);
     return new SearchResult(

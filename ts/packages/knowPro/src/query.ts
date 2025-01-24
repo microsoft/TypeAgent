@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { mathLib, createTopNList } from "typeagent";
+import { createTopNList } from "typeagent";
 import {
     ITermToSemanticRefIndex,
     ScoredSemanticRef,
@@ -19,15 +19,29 @@ export class QueryEvalContext {
     constructor() {}
 }
 
-export class SelectTopN<T extends MatchAccumulator> implements IQueryOpExpr<T> {
+export class MapExpr<TIn, TOut> implements IQueryOpExpr<TOut> {
+    constructor(
+        public sourceExpr: IQueryOpExpr<TIn>,
+        public mapFn: (value: TIn) => TOut,
+    ) {}
+
+    public eval(context: QueryEvalContext): TOut {
+        return this.mapFn(this.sourceExpr.eval(context));
+    }
+}
+
+export class SelectTopNExpr<T extends MatchAccumulator>
+    implements IQueryOpExpr<T>
+{
     constructor(
         public sourceExpr: IQueryOpExpr<T>,
         public maxMatches: number | undefined = undefined,
+        public minHitCount: number | undefined = undefined,
     ) {}
 
     public eval(context: QueryEvalContext): T {
         const matches = this.sourceExpr.eval(context);
-        const topN = matches.getTopNScoring(this.maxMatches);
+        const topN = matches.getTopNScoring(this.maxMatches, this.minHitCount);
         matches.clearMatches();
         matches.setMatches(topN);
         return matches;
@@ -63,7 +77,7 @@ export interface Match<T = any> {
  * Sort in place
  * @param matches
  */
-export function sortMatchesByScore(matches: Match[]) {
+export function sortMatchesByRelevance(matches: Match[]) {
     matches.sort((x, y) => y.score - x.score);
 }
 
@@ -97,7 +111,7 @@ export class MatchAccumulator<T = any> {
         }
     }
 
-    public getSortedByScore(minHitCount = 0): Match<T>[] {
+    public getSortedByScore(minHitCount?: number): Match<T>[] {
         if (this.matches.size === 0) {
             return [];
         }
@@ -107,26 +121,14 @@ export class MatchAccumulator<T = any> {
     }
 
     /**
-     * Return all matches with the 'top' or maximum score.
-     * @returns
-     */
-    public getTopScoring(): Match<T>[] {
-        if (this.matches.size === 0) {
-            return [];
-        }
-        let maxScore = mathLib.max(
-            this.matches.values(),
-            (v) => v.score,
-        )!.score;
-        return [...this.getMatchesWhere((match) => match.score === maxScore)];
-    }
-
-    /**
      * Return the top N scoring matches
      * @param maxMatches
      * @returns
      */
-    public getTopNScoring(maxMatches?: number, minHitCount = 0): Match<T>[] {
+    public getTopNScoring(
+        maxMatches?: number,
+        minHitCount?: number,
+    ): Match<T>[] {
         if (this.matches.size === 0) {
             return [];
         }
@@ -191,9 +193,9 @@ export class MatchAccumulator<T = any> {
     }
 
     private matchesWithMinHitCount(
-        minHitCount?: number,
+        minHitCount: number | undefined,
     ): IterableIterator<Match<T>> {
-        return minHitCount && minHitCount > 0
+        return minHitCount !== undefined && minHitCount > 0
             ? this.getMatchesWhere((m) => m.hitCount >= minHitCount)
             : this.matches.values();
     }
@@ -229,14 +231,14 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
     }
 
     public override getSortedByScore(
-        minHitCount = 0,
+        minHitCount?: number,
     ): Match<SemanticRefIndex>[] {
         return super.getSortedByScore(this.getMinHitCount(minHitCount));
     }
 
     public override getTopNScoring(
         maxMatches?: number,
-        minHitCount = 0,
+        minHitCount?: number,
     ): Match<SemanticRefIndex>[] {
         return super.getTopNScoring(
             maxMatches,
@@ -249,15 +251,15 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
     }
 
     public toScoredSemanticRefs(): ScoredSemanticRef[] {
-        return this.getSortedByScore().map((m) => {
+        return this.getSortedByScore(0).map((m) => {
             return {
                 semanticRefIndex: m.value,
                 score: m.score,
             };
-        });
+        }, 0);
     }
 
-    private getMinHitCount(minHitCount: number): number {
-        return minHitCount > 0 ? minHitCount : this.terms.size;
+    private getMinHitCount(minHitCount?: number): number {
+        return minHitCount !== undefined ? minHitCount : this.terms.size;
     }
 }

@@ -197,6 +197,8 @@ export async function createKnowproCommands(
             const matches = kp.searchTermsInIndex(
                 conversation.semanticRefIndex,
                 terms,
+                undefined,
+                1,
             );
             if (!matches.hasMatches) {
                 context.printer.writeLine("No matches");
