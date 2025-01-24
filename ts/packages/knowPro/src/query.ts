@@ -5,6 +5,7 @@ import { mathLib, TopNCollection } from "typeagent";
 import {
     ITermToSemanticRefIndex,
     ScoredSemanticRef,
+    SemanticRef,
     SemanticRefIndex,
 } from "./dataFormat.js";
 
@@ -18,10 +19,34 @@ export class QueryEvalContext {
     constructor() {}
 }
 
+export type TermMatches = {
+    semanticRefMatches: ScoredSemanticRef[];
+    termMatches: string[];
+};
+
+export class SelectTopTermMatchesExpr implements IQueryExpr<TermMatches> {
+    constructor(
+        public sourceExpr: IQueryExpr<TermMatchTable>,
+        public maxMatches: number | undefined = undefined,
+    ) {}
+
+    public eval(context: QueryEvalContext): TermMatches {
+        const matches = this.sourceExpr.eval(context);
+        return {
+            termMatches: matches.termMatches,
+            semanticRefMatches: matches.getTopNScoring(
+                this.maxMatches,
+                matches.termMatches.length,
+            ),
+        };
+    }
+}
+
 export class TermsMatchExpr implements IQueryExpr<TermMatchTable> {
     constructor(
         public index: ITermToSemanticRefIndex,
         public terms: string[],
+        predicate?: (match: SemanticRef) => boolean,
     ) {}
 
     public eval(context: QueryEvalContext): TermMatchTable {
@@ -37,34 +62,16 @@ export class TermsMatchExpr implements IQueryExpr<TermMatchTable> {
     }
 }
 
-export type TermMatches = {
-    semanticRefMatches: ScoredSemanticRef[];
-    termMatches: string[];
-};
-
-export class SelectTopTermMatchesExpr implements IQueryExpr<TermMatches> {
-    constructor(
-        public matchExpr: IQueryExpr<TermMatchTable>,
-        public maxMatches: number | undefined = undefined,
-    ) {}
-
-    public eval(context: QueryEvalContext): TermMatches {
-        const matches = this.matchExpr.eval(context);
-        return {
-            termMatches: matches.termMatches,
-            semanticRefMatches: matches.getTopNScoring(
-                this.maxMatches,
-                matches.termMatches.length,
-            ),
-        };
-    }
-}
-
 export class SemanticRefMatchTable {
     public matches: Map<SemanticRefIndex, SemanticRefMatch>;
 
-    constructor() {
+    constructor(matches?: IterableIterator<ScoredSemanticRef>) {
         this.matches = new Map<SemanticRefIndex, SemanticRefMatch>();
+        if (matches) {
+            for (const match of matches) {
+                this.addMatch(match);
+            }
+        }
     }
 
     public get numMatches(): number {
@@ -163,7 +170,7 @@ export class SemanticRefMatchTable {
         }
     }
 
-    public matchesWithMinHitCount(
+    private matchesWithMinHitCount(
         minHitCount?: number,
     ): IterableIterator<SemanticRefMatch> {
         return minHitCount && minHitCount > 0
@@ -174,8 +181,8 @@ export class SemanticRefMatchTable {
 
 export type SemanticRefMatch = {
     semanticRefIndex: SemanticRefIndex;
-    hitCount: number;
     score: number;
+    hitCount: number;
 };
 
 export class TermMatchTable extends SemanticRefMatchTable {
