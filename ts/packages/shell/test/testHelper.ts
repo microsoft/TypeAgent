@@ -10,27 +10,28 @@ import {
 import fs from "node:fs";
 import path from "node:path";
 
-let runningApplication: ElectronApplication | null = null;
+const runningApplication: Map<string, ElectronApplication> = new Map<string, ElectronApplication>();
 
 /**
  * Starts the electron app and returns the main page after the greeting agent message has been posted.
  */
 export async function testSetup(): Promise<Page> {
-    // agent message count
-    let agentMessageCount = 0;
 
+    // this is needed to isolate these tests session from other concurrently running tests
+    process.env["INSTANCE_NAME"] = `test_${process.env["TEST_WORKER_INDEX"]}`;
+    
     // start the app
-    if (runningApplication !== null) {
+    if (runningApplication.has(process.env["TEST_WORKER_INDEX"]!)) {
         throw new Error("Application instance already running. Did you shutdown cleanly?");
     }
 
-    runningApplication = await electron.launch({ args: [getAppPath()] });
+    runningApplication.set(process.env["TEST_WORKER_INDEX"]!, await electron.launch({ args: [getAppPath()] }));
 
     // get the main window
-    const mainWindow: Page = await runningApplication.firstWindow();
+    const mainWindow: Page = await runningApplication.get(process.env["TEST_WORKER_INDEX"]!)!.firstWindow();
 
     // wait for agent greeting
-    await waitForAgentMessage(mainWindow, 10000, ++agentMessageCount);
+    await waitForAgentMessage(mainWindow, 10000, 1);
 
     return mainWindow;
 }
@@ -42,8 +43,9 @@ export async function testSetup(): Promise<Page> {
 export async function exitApplication(page: Page): Promise<void> {
     await sendUserRequestFast("@exit", page);
 
-    await runningApplication!.close();
-    runningApplication = null;
+    await runningApplication.get(process.env["TEST_WORKER_INDEX"]!)!.close();
+    
+    runningApplication.delete(process.env["TEST_WORKER_INDEX"]!);
 }
 
 /**

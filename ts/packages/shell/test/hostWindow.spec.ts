@@ -19,112 +19,118 @@ import {
 } from "./testHelper";
 import { exit } from "process";
 
-/**
- * Test to ensure that the shell recall startup layout (position, size)
- */
-test("remember window position", async () => {
-    let agentMessageCount = 0;
+// Annotate entire file as serial.
+test.describe.configure({ mode: 'serial' });
 
-    const firstWindow = await testSetup();
+test.describe("Shell interface tests", () => {
 
-    // verify shell title
-    const title = await firstWindow.title();
-    expect(title.indexOf("🤖") > -1, "Title expecting 🤖 but is missing.");
+    /**
+     * Test to ensure that the shell recall startup layout (position, size)
+     */
+    test("remember window position", async () => {
+        let agentMessageCount = 0;
 
-    // resize the shell by sending @shell settings set size "[width, height]"
-    const width: number = Math.ceil(Math.random() * 800 + 200);
-    const height: number = Math.ceil(Math.random() * 800 + 200);
-    await sendUserRequestAndWaitForResponse(
-        `@shell set size "[${width}, ${height}]"`,
-        firstWindow,
-    );
+        const firstWindow = await testSetup();
 
-    // move the window
-    const x: number = Math.ceil(Math.random() * 100);
-    const y: number = Math.ceil(Math.random() * 100);
+        // verify shell title
+        const title = await firstWindow.title();
+        expect(title.indexOf("🤖") > -1, "Title expecting 🤖 but is missing.");
 
-    await sendUserRequestAndWaitForResponse(`@shell set position "[${x}, ${y}]"`, firstWindow);
+        // resize the shell by sending @shell settings set size "[width, height]"
+        const width: number = Math.ceil(Math.random() * 800 + 200);
+        const height: number = Math.ceil(Math.random() * 800 + 200);
+        await sendUserRequestAndWaitForResponse(
+            `@shell set size "[${width}, ${height}]"`,
+            firstWindow,
+        );
 
-    // close the application
-    await exitApplication(firstWindow);
+        // move the window
+        const x: number = Math.ceil(Math.random() * 100);
+        const y: number = Math.ceil(Math.random() * 100);
 
-    // restart the app
-    const newWindow: Page = await testSetup();
+        await sendUserRequestAndWaitForResponse(`@shell set position "[${x}, ${y}]"`, firstWindow);
 
-    // get window size/position
-    const msg = await sendUserRequestAndWaitForResponse(`@shell show raw`, newWindow);
+        // close the application
+        await exitApplication(firstWindow);
 
-    // get the shell size and location from the raw settings
-    const lines: string[] = msg.split("\n");
-    const newWidth: number = parseInt(lines[1].split(":")[1].trim());
-    const newHeight: number = parseInt(lines[2].split(":")[1].trim());
-    const newX: number = parseInt(lines[4].split(":")[1].trim());
-    const newY: number = parseInt(lines[5].split(":")[1].trim());
+        // restart the app
+        const newWindow: Page = await testSetup();
 
-    expect(newHeight, `Window height mismatch! Expected ${height} got ${height}`).toBe(newHeight);
-    expect(newWidth, `Window width mismatch! Expected ${width} got ${width}`).toBe(newWidth);
-    expect(newX, `X position mismatch! Expected ${x} got ${newX}`).toBe(x);
-    expect(newY, `Y position mismatch!Expected ${y} got ${newY}`).toBe(y);
+        // get window size/position
+        const msg = await sendUserRequestAndWaitForResponse(`@shell show raw`, newWindow);
 
-    // close the application
-    await exitApplication(newWindow);
-});
+        // get the shell size and location from the raw settings
+        const lines: string[] = msg.split("\n");
+        const newWidth: number = parseInt(lines[1].split(":")[1].trim());
+        const newHeight: number = parseInt(lines[2].split(":")[1].trim());
+        const newX: number = parseInt(lines[4].split(":")[1].trim());
+        const newY: number = parseInt(lines[5].split(":")[1].trim());
 
-/**
- * Ensures zoom level is working
- */
-test("zoom level", async () => {
+        expect(newHeight, `Window height mismatch! Expected ${height} got ${height}`).toBe(newHeight);
+        expect(newWidth, `Window width mismatch! Expected ${width} got ${width}`).toBe(newWidth);
+        expect(newX, `X position mismatch! Expected ${x} got ${newX}`).toBe(x);
+        expect(newY, `Y position mismatch!Expected ${y} got ${newY}`).toBe(y);
 
-    // start the app
-    const mainWindow = await testSetup();
+        // close the application
+        await exitApplication(newWindow);
+    });
 
-    // test 80% zoom
-    await testZoomLevel(0.8, mainWindow);
+    /**
+     * Ensures zoom level is working
+     */
+    test("zoom level", async () => {
 
-    // set the zoom level to 120%
-    await testZoomLevel(1.2, mainWindow);
+        // start the app
+        const mainWindow = await testSetup();
 
-    // reset zoomLevel
-    await testZoomLevel(1, mainWindow);
+        // test 80% zoom
+        await testZoomLevel(0.8, mainWindow);
 
-    // close the application
-    await exitApplication(mainWindow);
-});
+        // set the zoom level to 120%
+        await testZoomLevel(1.2, mainWindow);
 
-async function testZoomLevel(level: number, page: Page) {
+        // reset zoomLevel
+        await testZoomLevel(1, mainWindow);
 
-    // set the zoom level to 80%
-    await sendUserRequestAndWaitForResponse(`@shell set zoomLevel ${level}`, page);
+        // close the application
+        await exitApplication(mainWindow);
+    });
 
-    // get the title
-    let title = await page.title();
+    async function testZoomLevel(level: number, page: Page) {
 
-    // get zoom level out of title
-    let subTitle: string = title.match(/\d+%/)![0];
-    let zoomLevel: number = parseInt(subTitle.substring(0, subTitle.length - 1));
+        // set the zoom level to 80%
+        await sendUserRequestAndWaitForResponse(`@shell set zoomLevel ${level}`, page);
 
-    expect(zoomLevel, `Unexpected zoomLevel, expected ${level * 100}, got ${zoomLevel}`).toBe(level * 100);    
-}
+        // get the title
+        let title = await page.title();
 
-/**
- * Ensure send button is behaving
- */
-test("send button state", async () => {
-    let agentMessageCount = 0;
+        // get zoom level out of title
+        let subTitle: string = title.match(/\d+%/)![0];
+        let zoomLevel: number = parseInt(subTitle.substring(0, subTitle.length - 1));
 
-    // start the app
-    const mainWindow = await testSetup();
+        expect(zoomLevel, `Unexpected zoomLevel, expected ${level * 100}, got ${zoomLevel}`).toBe(level * 100);    
+    }
 
-    // make sure send button is disabled
-    const sendButton = await mainWindow.locator("#sendbutton");
-    await expect(sendButton, "Send button expected to be disabled.").toBeDisabled();
+    /**
+     * Ensure send button is behaving
+     */
+    test("send button state", async () => {
+        let agentMessageCount = 0;
 
-    // put some text in the text box
-    const element = await mainWindow.waitForSelector("#phraseDiv");
-    await element.fill("This is a test...");
+        // start the app
+        const mainWindow = await testSetup();
 
-    await expect(sendButton, "Send button expected to be enabled.").toBeEnabled();
+        // make sure send button is disabled
+        const sendButton = await mainWindow.locator("#sendbutton");
+        await expect(sendButton, "Send button expected to be disabled.").toBeDisabled();
 
-    // close the application
-    await exitApplication(mainWindow);
+        // put some text in the text box
+        const element = await mainWindow.waitForSelector("#phraseDiv");
+        await element.fill("This is a test...");
+
+        await expect(sendButton, "Send button expected to be enabled.").toBeEnabled();
+
+        // close the application
+        await exitApplication(mainWindow);
+    });
 });

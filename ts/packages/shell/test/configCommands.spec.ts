@@ -17,47 +17,53 @@ import {
     waitForAgentMessage,
 } from "./testHelper";
 
-test("@config dev", async () => {
+// Annotate entire file as serial.
+test.describe.configure({ mode: 'serial' });
 
-    // launch the app
-    const mainWindow: Page = await testSetup();
+test.describe("@config Commands", () => {
 
-    let msg = await sendUserRequestAndWaitForResponse(`@config dev`, mainWindow);
+    test("@config dev", async () => {
 
-    expect(msg.toLowerCase(), "Dev mode was not turned on as expected.").toBe("development mode is enabled.")
+        // launch the app
+        const mainWindow: Page = await testSetup();
 
-    msg = await sendUserRequestAndWaitForResponse(`@config dev on`, mainWindow);
+        let msg = await sendUserRequestAndWaitForResponse(`@config dev`, mainWindow);
 
-    expect(msg.toLowerCase(), "Dev mode was not turned on as expected.").toBe("development mode is enabled.")
+        expect(msg.toLowerCase(), "Dev mode was not turned on as expected.").toBe("development mode is enabled.")
 
-    msg = await sendUserRequestAndWaitForResponse(`@config dev off`, mainWindow);
+        msg = await sendUserRequestAndWaitForResponse(`@config dev on`, mainWindow);
 
-    expect(msg.toLowerCase(), "Dev mode was not turned off as expected.").toBe("development mode is disabled.")
+        expect(msg.toLowerCase(), "Dev mode was not turned on as expected.").toBe("development mode is enabled.")
 
-    // close the application
-    await exitApplication(mainWindow);
-});
+        msg = await sendUserRequestAndWaitForResponse(`@config dev off`, mainWindow);
 
-test("@config schema", async () => {
+        expect(msg.toLowerCase(), "Dev mode was not turned off as expected.").toBe("development mode is disabled.")
 
-    // launch the app
-    const mainWindow: Page = await testSetup();
+        // close the application
+        await exitApplication(mainWindow);
+    });
 
-    let msg = await sendUserRequestAndWaitForResponse(`@config schema oracle`, mainWindow);
+    test("@config schema", async () => {
 
-    expect(msg.toLowerCase(), "Oracle scheme should be ON but it is OFF.").toContain("✅");
+        // launch the app
+        const mainWindow: Page = await testSetup();
 
-    msg = await sendUserRequestAndWaitForResponse(`@config schema --off oracle`, mainWindow);
+        let msg = await sendUserRequestAndWaitForResponse(`@config schema oracle`, mainWindow);
 
-    expect(msg.toLowerCase(), "Oracle schema should be OFF but is is ON.").toContain("❌")
+        expect(msg.toLowerCase(), "Oracle scheme should be ON but it is OFF.").toContain("✅");
 
-    msg = await sendUserRequestAndWaitForResponse(`@config dev off`, mainWindow);
+        msg = await sendUserRequestAndWaitForResponse(`@config schema --off oracle`, mainWindow);
 
-    expect(msg.toLowerCase(), "Dev mode was not turned off as expected.").toBe("development mode is disabled.")
+        expect(msg.toLowerCase(), "Oracle schema should be OFF but is is ON.").toContain("❌")
 
-    // close the application
-    await exitApplication(mainWindow);    
+        msg = await sendUserRequestAndWaitForResponse(`@config dev off`, mainWindow);
 
+        expect(msg.toLowerCase(), "Dev mode was not turned off as expected.").toBe("development mode is disabled.")
+
+        // close the application
+        await exitApplication(mainWindow);    
+
+    });
 });
 
 // TODO: Test action correction

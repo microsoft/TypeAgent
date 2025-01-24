@@ -634,7 +634,8 @@ async function initialize() {
 
     // On windows, we will spin up a local end point that listens
     // for pen events which will trigger speech reco
-    if (process.platform == "win32") {
+    // Don't spin this up during testing
+    if (process.platform == "win32" && (process.env["INSTANCE_NAME"] == undefined || process.env["INSTANCE_NAME"].startsWith("test_") == false)) {
         const pipePath = path.join("\\\\.\\pipe\\TypeAgent", "speech");
         const server = net.createServer((stream) => {
             stream.on("data", (c) => {
