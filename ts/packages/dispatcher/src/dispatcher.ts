@@ -24,13 +24,19 @@ import {
 } from "./context/commandHandlerContext.js";
 import { RequestId } from "./context/interactiveIO.js";
 import { RequestMetrics } from "./utils/metrics.js";
+import { FullAction } from "agent-cache";
+
+export type CommandResult = {
+    actions?: FullAction[];
+    metrics?: RequestMetrics;
+};
 
 export interface Dispatcher {
     processCommand(
         command: string,
         requestId?: RequestId,
         attachments?: string[],
-    ): Promise<RequestMetrics | undefined>;
+    ): Promise<CommandResult | undefined>;
 
     getDynamicDisplay(
         appAgentName: string,

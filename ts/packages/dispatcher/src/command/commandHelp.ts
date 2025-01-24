@@ -14,8 +14,6 @@ import {
 } from "@typeagent/agent-sdk/helpers/command";
 import { getDefaultSubCommandDescriptor } from "./command.js";
 import { displayResult } from "@typeagent/agent-sdk/helpers/display";
-import { dispatcherAgent } from "../context/dispatcher/dispatcherAgent.js";
-import { success } from "typechat";
 
 export function getUsage(command: string, descriptor: CommandDescriptor) {
     if (descriptor.help) {
