@@ -33,7 +33,7 @@ test.describe("@session Commands", () => {
         const sessions: string[] = msg.split("\n");
         
         msg = await sendUserRequestAndWaitForResponse(`@session new`, mainWindow);
-        expect(msg.toLowerCase()).toContain("New session created: ");
+        expect(msg.toLowerCase()).toContain("new session created: ");
 
         msg = await sendUserRequestAndWaitForResponse(`@session list`, mainWindow);
         const newSessions: string[] = msg.split("\n");

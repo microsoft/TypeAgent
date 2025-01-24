@@ -40,41 +40,22 @@ export default defineConfig({
     /* Configure projects for major browsers */
     projects: [
         {
+            name: `global setup`,
+            testMatch: /global\.setup\.ts/,
+        },
+        {
             name: "chromium",
             use: { ...devices["Desktop Chrome"] },
             fullyParallel: false
         },
-
-        // {
-        //   name: 'firefox',
-        //   use: { ...devices['Desktop Firefox'] },
-        // },
-
-        // {
-        //   name: 'webkit',
-        //   use: { ...devices['Desktop Safari'] },
-        // },
-
-        /* Test against mobile viewports. */
-        // {
-        //   name: 'Mobile Chrome',
-        //   use: { ...devices['Pixel 5'] },
-        // },
-        // {
-        //   name: 'Mobile Safari',
-        //   use: { ...devices['iPhone 12'] },
-        // },
-
-        /* Test against branded browsers. */
-        // {
-        //   name: 'Microsoft Edge',
-        //   use: { ...devices['Desktop Edge'], channel: 'msedge' },
-        // },
-        // {
-        //   name: 'Google Chrome',
-        //   use: { ...devices['Desktop Chrome'], channel: 'chrome' },
-        // },
+        {
+            name: `global teardown`,
+            testMatch: /global\.teardown\.ts/,
+        },
     ],
+
+    //// path to the global teardown files.
+    //globalTeardown: require.resolve('./test/global-teardown'),    
 
     /* Run your local dev server before starting the tests */
     // webServer: {

@@ -7,10 +7,12 @@ import {
     ElectronApplication, 
     Locator, 
     Page } from "@playwright/test";
+import { profile } from "node:console";
 import fs from "node:fs";
 import path from "node:path";
+import os from "node:os";
 
-const runningApplication: Map<string, ElectronApplication> = new Map<string, ElectronApplication>();
+const runningApplications: Map<string, ElectronApplication> = new Map<string, ElectronApplication>();
 
 /**
  * Starts the electron app and returns the main page after the greeting agent message has been posted.
@@ -18,22 +20,37 @@ const runningApplication: Map<string, ElectronApplication> = new Map<string, Ele
 export async function testSetup(): Promise<Page> {
 
     // this is needed to isolate these tests session from other concurrently running tests
-    process.env["INSTANCE_NAME"] = `test_${process.env["TEST_WORKER_INDEX"]}`;
-    
-    // start the app
-    if (runningApplication.has(process.env["TEST_WORKER_INDEX"]!)) {
-        throw new Error("Application instance already running. Did you shutdown cleanly?");
-    }
+    process.env["INSTANCE_NAME"] = `test_${process.env["TEST_WORKER_INDEX"]}_${process.env["TEST_PARALLEL_INDEX"]}`;
 
-    runningApplication.set(process.env["TEST_WORKER_INDEX"]!, await electron.launch({ args: [getAppPath()] }));
+    // we may have to retry restarting the application due to session file locks or other such startup failures
+    let retryAttempt = 0;
 
-    // get the main window
-    const mainWindow: Page = await runningApplication.get(process.env["TEST_WORKER_INDEX"]!)!.firstWindow();
+    do {
+        try {            
+            if (runningApplications.has(process.env["INSTANCE_NAME"]!)) {
+                throw new Error("Application instance already running. Did you shutdown cleanly?");
+            }
 
-    // wait for agent greeting
-    await waitForAgentMessage(mainWindow, 10000, 1);
+            // start the app
+            runningApplications.set(process.env["INSTANCE_NAME"]!, await electron.launch({ args: [getAppPath()] }));
 
-    return mainWindow;
+            // get the main window
+            const mainWindow: Page = await runningApplications.get(process.env["INSTANCE_NAME"]!)!.firstWindow();
+
+            // wait for agent greeting
+            await waitForAgentMessage(mainWindow, 10000, 1);
+
+            return mainWindow;
+
+        } catch (e) {            
+        console.warn(`Unable to start electrom application (${process.env["INSTANCE_NAME"]}). Attempt ${retryAttempt} of 5`);            
+            retryAttempt++;
+
+            runningApplications.delete(process.env["INSTANCE_NAME"]!);
+        }
+    } while (retryAttempt <= 5);
+
+    throw new Error("Failed to start electrom app after 5 attemps.");
 }
 
 /**
@@ -43,9 +60,9 @@ export async function testSetup(): Promise<Page> {
 export async function exitApplication(page: Page): Promise<void> {
     await sendUserRequestFast("@exit", page);
 
-    await runningApplication.get(process.env["TEST_WORKER_INDEX"]!)!.close();
+    await runningApplications.get(process.env["INSTANCE_NAME"]!)!.close();
     
-    runningApplication.delete(process.env["TEST_WORKER_INDEX"]!);
+    runningApplications.delete(process.env["INSTANCE_NAME"]!);
 }
 
 /**
@@ -136,4 +153,21 @@ export async function waitForAgentMessage(page: Page, timeout: number, expectedM
         messageCount = locators.length;
 
     } while (timeWaited <= timeout && messageCount == originalAgentMessageCount);
+}
+
+export function deleteTestProfiles() {
+    const profileDir = path.join(os.homedir(), ".typeagent", "profiles");
+
+    if (fs.existsSync(profileDir)) {
+        fs.readdirSync(profileDir).map((dirEnt) =>{
+            if (dirEnt.startsWith("test_")) {
+                const dir: string = path.join(profileDir, dirEnt)
+                try {
+                    fs.rmSync(dir, { recursive: true, force: true });
+                } catch (e) {
+                    console.warn(`Unable to delete '${dir}', ${e}`);
+                }
+            }
+        });
+    }
 }
