@@ -343,9 +343,11 @@ export async function handleCalendarAction(
     if (client === undefined) {
         throw new Error("Calendar client not initialized");
     }
-    if (!client.isAuthenticated()) {
+    
+    /*if (!client.isAuthenticated()) {
         await client.login();
-    }
+    }*/
+   
     switch (action.actionName) {
         case "addEvent":
             debug(chalk.green("Handling ADD_EVENT action ..."));
