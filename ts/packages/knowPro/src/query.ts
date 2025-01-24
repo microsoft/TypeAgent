@@ -128,7 +128,7 @@ export class SemanticRefMatchTable {
             this.matches.values(),
             (v) => v.score,
         )!.score;
-        return [...this.filterMatches((match) => match.score === maxScore)];
+        return [...this.getValues((match) => match.score === maxScore)];
     }
 
     /**
@@ -160,7 +160,7 @@ export class SemanticRefMatchTable {
         }
     }
 
-    public *filterMatches(
+    public *getValues(
         predicate: (match: SemanticRefMatch) => boolean,
     ): IterableIterator<SemanticRefMatch> {
         for (const match of this.matches.values()) {
@@ -170,11 +170,27 @@ export class SemanticRefMatchTable {
         }
     }
 
+    public remove(predicate: (match: SemanticRefMatch) => boolean) {
+        const keysToRemove: SemanticRefIndex[] = [];
+        for (const match of this.getValues(predicate)) {
+            keysToRemove.push(match.semanticRefIndex);
+        }
+        this.removeKeys(keysToRemove);
+    }
+
+    public removeKeys(keysToRemove: SemanticRefIndex[]) {
+        if (keysToRemove && keysToRemove.length > 0) {
+            for (const key of keysToRemove) {
+                this.matches.delete(key);
+            }
+        }
+    }
+
     private matchesWithMinHitCount(
         minHitCount?: number,
     ): IterableIterator<SemanticRefMatch> {
         return minHitCount && minHitCount > 0
-            ? this.filterMatches((m) => m.hitCount >= minHitCount)
+            ? this.getValues((m) => m.hitCount >= minHitCount)
             : this.matches.values();
     }
 }
