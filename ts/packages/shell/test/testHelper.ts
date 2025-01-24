@@ -82,11 +82,12 @@ export function getAppPath(): string {
  * @param prompt The user request/prompt.
  * @param page The maing page from the electron host application.
  */
-export async function sendUserRequest(prompt: string, page: Page) {    
-    const element = await page.waitForSelector("#phraseDiv");
-    await element.focus();
-    await element.fill(prompt);
-    await element.press("Enter");
+export async function sendUserRequest(prompt: string, page: Page) { 
+    const locator: Locator = page.locator("#phraseDiv");
+    await locator.waitFor({ timeout: 10000, state: "attached" });
+    await locator.focus();
+    await locator.fill(prompt);
+    await locator.press("Enter");
 }
 
 /**

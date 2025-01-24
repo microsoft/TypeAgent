@@ -79,7 +79,6 @@ test.describe("Shell interface tests", () => {
      * Ensures zoom level is working
      */
     test("zoom level", async () => {
-
         // start the app
         const mainWindow = await testSetup();
 
