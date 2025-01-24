@@ -52,10 +52,9 @@ test("remember window position", async () => {
     const newWindow: Page = await testSetup();
 
     // get window size/position
-    await sendUserRequestAndWaitForResponse(`@shell show raw`, newWindow);
+    const msg = await sendUserRequestAndWaitForResponse(`@shell show raw`, newWindow);
 
     // get the shell size and location from the raw settings
-    const msg = await getLastAgentMessage(newWindow);
     const lines: string[] = msg.split("\n");
     const newWidth: number = parseInt(lines[1].split(":")[1].trim());
     const newHeight: number = parseInt(lines[2].split(":")[1].trim());

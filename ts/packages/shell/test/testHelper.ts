@@ -86,7 +86,7 @@ export async function sendUserRequestFast(prompt: string, page: Page) {
  * @param prompt The user request/prompt.
  * @param page The maing page from the electron host application.
  */
-export async function sendUserRequestAndWaitForResponse(prompt: string, page: Page) {
+export async function sendUserRequestAndWaitForResponse(prompt: string, page: Page): Promise<string> {
     const locators: Locator[] = await page.locator('.chat-message-agent-text').all();
 
     // send the user request
@@ -94,6 +94,9 @@ export async function sendUserRequestAndWaitForResponse(prompt: string, page: Pa
 
     // wait for agent response
     await waitForAgentMessage(page, 10000, locators.length + 1);
+
+    // return the response
+    return await getLastAgentMessage(page);
 }
 
 /**
