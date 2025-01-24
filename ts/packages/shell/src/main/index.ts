@@ -552,10 +552,11 @@ async function initialize() {
     });
     createDispatcherRpcServer(dispatcher, dispatcherChannel.channel);
 
-    if (ShellSettings.getinstance().agentGreeting) {
-        processShellRequest("@greeting", "agent-0", []);
-    }
     ipcMain.on("dom ready", async () => {
+        if (ShellSettings.getinstance().agentGreeting) {
+            processShellRequest("@greeting", "agent-0", []);
+        }
+        
         settingSummary = dispatcher.getSettingSummary();
         chatView?.webContents.send(
             "setting-summary-changed",
@@ -576,6 +577,7 @@ async function initialize() {
             require("electron").shell.openExternal(details.url);
             return { action: "deny" };
         });
+        
     });
 
     await initializeSpeech();

@@ -21,6 +21,8 @@ import {
 } from "@typeagent/agent-sdk/helpers/display";
 import { getLocalWhisperCommandHandlers } from "./localWhisperCommandHandler.js";
 
+const port = process.env.PORT || 9001;
+
 type ShellContext = {
     settings: ShellSettings;
 };
@@ -206,7 +208,7 @@ class ShellOpenWebContentView implements CommandHandler {
 
                 break;
             case "markdown":
-                targetUrl = new URL("http://localhost:9001/");
+                targetUrl = new URL(`http://localhost:${port}/`);
 
                 break;
             default:

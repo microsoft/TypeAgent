@@ -54,9 +54,6 @@ export default defineConfig({
         },
     ],
 
-    //// path to the global teardown files.
-    //globalTeardown: require.resolve('./test/global-teardown'),    
-
     /* Run your local dev server before starting the tests */
     // webServer: {
     //   command: 'npm run start',

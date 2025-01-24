@@ -22,6 +22,10 @@ export async function testSetup(): Promise<Page> {
     // this is needed to isolate these tests session from other concurrently running tests
     process.env["INSTANCE_NAME"] = `test_${process.env["TEST_WORKER_INDEX"]}_${process.env["TEST_PARALLEL_INDEX"]}`;
 
+    // other related multi-instance varibles that need to be modfied to ensure we can run multiple shell instances
+    process.env["PORT"] = (9001 + parseInt(process.env["TEST_WORKER_INDEX"]!)).toString();
+    process.env["WEBSOCKET_HOST"] = (8080 + parseInt(process.env["TEST_WORKER_INDEX"]!)).toString();
+
     // we may have to retry restarting the application due to session file locks or other such startup failures
     let retryAttempt = 0;
 
@@ -32,10 +36,13 @@ export async function testSetup(): Promise<Page> {
             }
 
             // start the app
-            runningApplications.set(process.env["INSTANCE_NAME"]!, await electron.launch({ args: [getAppPath()] }));
+            console.log(`Starting ${process.env["INSTANCE_NAME"]}`);
+            const app: ElectronApplication = await electron.launch({ args: [getAppPath()] });
+            runningApplications.set(process.env["INSTANCE_NAME"]!, app);
 
             // get the main window
-            const mainWindow: Page = await runningApplications.get(process.env["INSTANCE_NAME"]!)!.firstWindow();
+            const mainWindow: Page = await app.firstWindow();
+            await mainWindow.waitForLoadState("domcontentloaded");
 
             // wait for agent greeting
             await waitForAgentMessage(mainWindow, 10000, 1);
@@ -43,8 +50,12 @@ export async function testSetup(): Promise<Page> {
             return mainWindow;
 
         } catch (e) {            
-        console.warn(`Unable to start electrom application (${process.env["INSTANCE_NAME"]}). Attempt ${retryAttempt} of 5`);            
+            console.warn(`Unable to start electrom application (${process.env["INSTANCE_NAME"]}). Attempt ${retryAttempt} of 5`);            
             retryAttempt++;
+
+            if (runningApplications.get(process.env["INSTANCE_NAME"]) !== null) {
+                runningApplications.get(process.env["INSTANCE_NAME"]!)!.close();
+            }
 
             runningApplications.delete(process.env["INSTANCE_NAME"]!);
         }

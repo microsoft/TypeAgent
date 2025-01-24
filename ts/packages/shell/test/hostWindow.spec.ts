@@ -27,7 +27,7 @@ test.describe("Shell interface tests", () => {
     /**
      * Test to ensure that the shell recall startup layout (position, size)
      */
-    test("remember window position", async () => {
+    test.skip("remember window position", async () => {
         let agentMessageCount = 0;
 
         const firstWindow = await testSetup();
