@@ -52,6 +52,7 @@ class RequestCommandHandler implements CommandHandler {
                 actionContext.sessionContext.agentContext,
                 params.args.question,
                 [],
+                [],
             );
             if (typeof result.error == "string") {
                 actionContext.actionIO.appendDisplay({
@@ -138,7 +139,9 @@ async function executeSpelunkerAction(
     entityMap?: Map<string, Entity>,
 ): Promise<ActionResult> {
     const entities = entityMap ? Array.from(entityMap.values()) : [];
-    console.log(`  [spelunker] executeSpelunkerAction: ${action.actionName}, entityMap: ${[...entityMap?.values() ?? []]}, entities: ${entities}]`);
+    console.log(
+        `  [spelunker] executeSpelunkerAction: ${action.actionName}, entityMap: ${[...(entityMap?.values() ?? [])]}, entities: ${entities}]`,
+    );
     const result = await handleSpelunkerAction(
         action as SpelunkerAction,
         context.sessionContext,
@@ -161,6 +164,7 @@ async function handleSpelunkerAction(
                 return await searchCode(
                     context.agentContext,
                     action.parameters.question,
+                    action.parameters.entityUniqueIds,
                     entities,
                 );
             }

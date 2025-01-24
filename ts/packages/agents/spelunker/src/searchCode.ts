@@ -102,11 +102,12 @@ function createQueryContext(): QueryContext {
 export async function searchCode(
     context: SpelunkerContext,
     input: string,
+    entityUniqueIds: string[],
     inputEntities: Entity[],
 ): Promise<ActionResult> {
     epoch = 0; // Reset logging clock
     console_log(
-        `[searchCode question='${input}', entities=${JSON.stringify(inputEntities)}]`,
+        `[searchCode question='${input}', entityUniqueIds=${JSON.stringify(entityUniqueIds)}, entities=${JSON.stringify(inputEntities)}]`,
     );
 
     // 0. Check if the focus is set.

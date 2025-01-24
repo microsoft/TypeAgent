@@ -1,18 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-// An entity from memory.ts
-export interface SpelunkerEntity {
-    // the name of the entity such as "Bach" or "frog"
-    name: string;
-    // the types of the entity such as "artist" or "animal"; an entity can have multiple types; entity types should be single words
-    type: string[];
-    // source link, '<file name>#<line number>'
-    additionalEntityText?: string;
-    // unique id for the entity (typically a ChunkId)
-    uniqueId: string;
-}
-
 export type SpelunkerAction =
     | SetFocusAction
     | GetFocusAction
@@ -22,7 +10,8 @@ export type SpelunkerAction =
 export type SetFocusAction = {
     actionName: "setFocus";
     parameters: {
-        folders: string[]; // Focus exclusively on these folders (may be empty to clear focus)
+        // Focus exclusively on these folders (may be empty to clear focus)
+        folders: string[];
     };
 };
 
@@ -35,6 +24,9 @@ export type GetFocusAction = {
 export type SearchCodeAction = {
     actionName: "searchCode";
     parameters: {
-        question: string; // Question to answer
+        // Question to answer
+        question: string;
+        // Unique Ids of entities relevant to the question, taken from the entities' uniqueId fields
+        entityUniqueIds: string[];
     };
 };
