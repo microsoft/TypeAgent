@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { parseCalendarDateTime } from "datetime-utils";
 import {
     createCalendarGraphClient,
     CalendarClient,
@@ -351,6 +352,10 @@ export async function handleCalendarAction(
             actionEvent = action.parameters.event;
             if (actionEvent.timeRange != undefined) {
                 console.log(action.parameters.event);
+                if(actionEvent.timeRange.startDateTime != undefined) {
+                    let startDateTime = parseCalendarDateTime(actionEvent.timeRange.startDateTime);
+                    console.log("Parsed Start DateTime: " + startDateTime);
+                }
                 return createActionResultFromHtmlDisplay("Event added!");
             } 
             break;
