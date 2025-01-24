@@ -187,7 +187,7 @@ export async function createKnowproCommands(
         if (!conversation) {
             return;
         }
-        const terms = args; // Todo: De dupe
+        const terms = kp.parseQueryTerms(args); // Todo: De dupe
         if (conversation.semanticRefIndex && conversation.semanticRefs) {
             context.printer.writeInColor(
                 chalk.cyan,
@@ -198,7 +198,6 @@ export async function createKnowproCommands(
                 conversation.semanticRefIndex,
                 terms,
                 undefined,
-                1,
             );
             if (!matches.hasMatches) {
                 context.printer.writeLine("No matches");

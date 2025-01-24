@@ -15,6 +15,22 @@ export interface IQueryOpExpr<T> {
     eval(context: QueryEvalContext): T;
 }
 
+export type Term = {
+    text: string;
+    /**
+     * Optional additional score to use when this term matches
+     */
+    score?: number | undefined;
+};
+
+export type QueryTerm = {
+    term: Term;
+    /**
+     * These can be supplied from fuzzy synonym tables and so on
+     */
+    relatedTerms?: Term[] | undefined;
+};
+
 export class QueryEvalContext {
     constructor() {}
 }
@@ -49,21 +65,50 @@ export class SelectTopNExpr<T extends MatchAccumulator>
 }
 
 export class TermsMatchExpr implements IQueryOpExpr<SemanticRefAccumulator> {
+    private matches: SemanticRefAccumulator = new SemanticRefAccumulator();
+    private textLookups: Set<string> = new Set<string>();
     constructor(
         public index: ITermToSemanticRefIndex,
-        public terms: string[],
+        public terms: QueryTerm[],
         predicate?: (match: SemanticRef) => boolean,
     ) {}
 
     public eval(context: QueryEvalContext): SemanticRefAccumulator {
-        const matches = new SemanticRefAccumulator();
-        for (const term of this.terms) {
-            const postings = this.index.lookupTerm(term);
-            if (postings && postings.length > 0) {
-                matches.add(postings, term);
+        for (const queryTerm of this.terms) {
+            // First try matching the primary
+            this.matchTerm(queryTerm.term);
+            // If that does not work, try alternatives, if any
+            if (queryTerm.relatedTerms && queryTerm.relatedTerms.length > 0) {
+                for (const relatedTerm of queryTerm.relatedTerms) {
+                    // Did we already match this related term?
+                    if (this.textLookups.has(relatedTerm.text)) {
+                        // We'll say that the primary term matched.
+                        // This can handle duplicate calls
+                        this.matches.recordTermMatch(queryTerm.term.text);
+                    } else {
+                        // Pass primary term to the matcher.
+                        // If the alternative matches, we mark that as a match *for the primary term*
+                        //    BUT with the score assigned to the alternative
+                        this.matchTerm(relatedTerm, queryTerm.term);
+                    }
+                }
             }
         }
-        return matches;
+        return this.matches;
+    }
+
+    private matchTerm(term: Term, primaryTerm?: Term): boolean {
+        const postings = this.index.lookupTerm(term.text);
+        this.textLookups.add(term.text);
+        if (postings && postings.length > 0) {
+            this.matches.add(
+                postings,
+                primaryTerm ? primaryTerm.text : term.text,
+                term.score,
+            );
+            return true;
+        }
+        return false;
     }
 }
 
@@ -96,11 +141,11 @@ export class MatchAccumulator<T = any> {
         return this.matches.get(value);
     }
 
-    public addMatch(item: T, score: number) {
+    public addMatch(item: T, score: number): void {
         let match = this.matches.get(item);
         if (match) {
             match.hitCount += 1;
-            match.score += match.score;
+            match.score += score;
         } else {
             match = {
                 value: item,
@@ -108,6 +153,13 @@ export class MatchAccumulator<T = any> {
                 hitCount: 1,
             };
             this.matches.set(item, match);
+        }
+    }
+
+    public incrementScore(item: T, score: number): void {
+        let match = this.matches.get(item);
+        if (match) {
+            match.score += match.score;
         }
     }
 
@@ -202,32 +254,28 @@ export class MatchAccumulator<T = any> {
 }
 
 export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
-    private terms: Set<string>;
-
-    constructor(matches?: IterableIterator<ScoredSemanticRef>) {
+    constructor(public termMatches: Set<string> = new Set<string>()) {
         super();
-        this.terms = new Set();
-        if (matches) {
-            for (const match of matches) {
-                this.add(match);
-            }
-        }
     }
 
     public add(
         matches: ScoredSemanticRef | ScoredSemanticRef[],
-        term?: string,
+        term: string,
+        scoreBoost?: number,
     ) {
+        scoreBoost ??= 0;
         if (Array.isArray(matches)) {
             for (const match of matches) {
-                this.addMatch(match.semanticRefIndex, match.score);
+                this.addMatch(match.semanticRefIndex, match.score + scoreBoost);
             }
         } else {
-            this.addMatch(matches.semanticRefIndex, matches.score);
+            this.addMatch(matches.semanticRefIndex, matches.score + scoreBoost);
         }
-        if (term) {
-            this.terms.add(term);
-        }
+        this.recordTermMatch(term);
+    }
+
+    public recordTermMatch(term: string) {
+        this.termMatches.add(term);
     }
 
     public override getSortedByScore(
@@ -246,10 +294,6 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
         );
     }
 
-    public getTerms(): Set<string> {
-        return this.terms;
-    }
-
     public toScoredSemanticRefs(): ScoredSemanticRef[] {
         return this.getSortedByScore(0).map((m) => {
             return {
@@ -260,6 +304,6 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
     }
 
     private getMinHitCount(minHitCount?: number): number {
-        return minHitCount !== undefined ? minHitCount : this.terms.size;
+        return minHitCount !== undefined ? minHitCount : this.termMatches.size;
     }
 }
