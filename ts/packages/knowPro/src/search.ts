@@ -95,12 +95,7 @@ class MatchTable {
         if (this.matches.size === 0) {
             return [];
         }
-        const matchesIterator =
-            minHitCount > 0
-                ? this.filterMatches((match) => match.hitCount >= minHitCount)
-                : this.matches.values();
-
-        const matches = [...matchesIterator];
+        const matches = [...this.matchesWithMinHitCount(minHitCount)];
         matches.sort((x, y) => y.score - x.score);
         return matches;
     }
@@ -134,10 +129,8 @@ class MatchTable {
         }
         if (maxMatches) {
             const topList = new TopNCollection(maxMatches, -1);
-            for (const hit of this.matches.values()) {
-                if (hit.hitCount >= minHitCount) {
-                    topList.push(hit.semanticRefIndex, hit.score);
-                }
+            for (const match of this.matchesWithMinHitCount(minHitCount)) {
+                topList.push(match.semanticRefIndex, match.score);
             }
             const ranked = topList.byRank();
             return ranked.map((m) => {
@@ -159,6 +152,14 @@ class MatchTable {
                 yield match;
             }
         }
+    }
+
+    public matchesWithMinHitCount(
+        minHitCount?: number,
+    ): IterableIterator<Match> {
+        return minHitCount && minHitCount > 0
+            ? this.filterMatches((m) => m.hitCount >= minHitCount)
+            : this.matches.values();
     }
 }
 
