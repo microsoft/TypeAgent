@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { mathLib, TopNCollection } from "typeagent";
+import { mathLib, createTopNList } from "typeagent";
 import {
     ITermToSemanticRefIndex,
     ScoredSemanticRef,
@@ -11,7 +11,7 @@ import {
 
 // Query eval expressions
 
-export interface IQueryExpr<T = void> {
+export interface IQueryOpExpr<T> {
     eval(context: QueryEvalContext): T;
 }
 
@@ -19,95 +19,85 @@ export class QueryEvalContext {
     constructor() {}
 }
 
-export type TermMatches = {
-    semanticRefMatches: ScoredSemanticRef[];
-    termMatches: string[];
-};
-
-export class SelectTopTermMatchesExpr implements IQueryExpr<TermMatches> {
+export class SelectTopN<T extends MatchAccumulator> implements IQueryOpExpr<T> {
     constructor(
-        public sourceExpr: IQueryExpr<TermMatchTable>,
+        public sourceExpr: IQueryOpExpr<T>,
         public maxMatches: number | undefined = undefined,
     ) {}
 
-    public eval(context: QueryEvalContext): TermMatches {
+    public eval(context: QueryEvalContext): T {
         const matches = this.sourceExpr.eval(context);
-        return {
-            termMatches: matches.termMatches,
-            semanticRefMatches: matches.getTopNScoring(
-                this.maxMatches,
-                matches.termMatches.length,
-            ),
-        };
+        const topN = matches.getTopNScoring(this.maxMatches);
+        matches.clearMatches();
+        matches.setMatches(topN);
+        return matches;
     }
 }
 
-export class TermsMatchExpr implements IQueryExpr<TermMatchTable> {
+export class TermsMatchExpr implements IQueryOpExpr<SemanticRefAccumulator> {
     constructor(
         public index: ITermToSemanticRefIndex,
         public terms: string[],
         predicate?: (match: SemanticRef) => boolean,
     ) {}
 
-    public eval(context: QueryEvalContext): TermMatchTable {
-        const matches = new TermMatchTable();
+    public eval(context: QueryEvalContext): SemanticRefAccumulator {
+        const matches = new SemanticRefAccumulator();
         for (const term of this.terms) {
             const postings = this.index.lookupTerm(term);
             if (postings && postings.length > 0) {
-                matches.termMatches.push(term);
-                matches.add(postings);
+                matches.add(postings, term);
             }
         }
         return matches;
     }
 }
 
-export class SemanticRefMatchTable {
-    public matches: Map<SemanticRefIndex, SemanticRefMatch>;
+export interface Match<T = any> {
+    value: T;
+    score: number;
+    hitCount: number;
+}
 
-    constructor(matches?: IterableIterator<ScoredSemanticRef>) {
-        this.matches = new Map<SemanticRefIndex, SemanticRefMatch>();
-        if (matches) {
-            for (const match of matches) {
-                this.addMatch(match);
-            }
-        }
+/**
+ * Sort in place
+ * @param matches
+ */
+export function sortMatchesByScore(matches: Match[]) {
+    matches.sort((x, y) => y.score - x.score);
+}
+
+export class MatchAccumulator<T = any> {
+    private matches: Map<T, Match<T>>;
+
+    constructor() {
+        this.matches = new Map<T, Match<T>>();
     }
 
     public get numMatches(): number {
         return this.matches.size;
     }
 
-    public get(refIndex: SemanticRefIndex): SemanticRefMatch | undefined {
-        return this.matches.get(refIndex);
+    public getMatch(value: T): Match<T> | undefined {
+        return this.matches.get(value);
     }
 
-    public add(matches: ScoredSemanticRef | ScoredSemanticRef[]) {
-        if (Array.isArray(matches)) {
-            for (const match of matches) {
-                this.addMatch(match);
-            }
+    public addMatch(item: T, score: number) {
+        let match = this.matches.get(item);
+        if (match) {
+            match.hitCount += 1;
+            match.score += match.score;
         } else {
-            this.addMatch(matches);
-        }
-    }
-
-    private addMatch(match: ScoredSemanticRef) {
-        let hit = this.matches.get(match.semanticRefIndex);
-        if (hit) {
-            hit.hitCount += 1;
-            hit.score += match.score;
-        } else {
-            hit = {
-                semanticRefIndex: match.semanticRefIndex,
+            match = {
+                value: item,
+                score,
                 hitCount: 1,
-                score: match.score,
             };
-            this.matches.set(match.semanticRefIndex, hit);
+            this.matches.set(item, match);
         }
     }
 
-    public getSortedByScore(minHitCount = 0): ScoredSemanticRef[] {
+    public getSortedByScore(minHitCount = 0): Match<T>[] {
         if (this.matches.size === 0) {
             return [];
         }
@@ -120,7 +110,7 @@ export class SemanticRefMatchTable {
      * Return all matches with the 'top' or maximum score.
      * @returns
      */
-    public getTopScoring(): ScoredSemanticRef[] {
+    public getTopScoring(): Match<T>[] {
         if (this.matches.size === 0) {
             return [];
         }
@@ -128,7 +118,7 @@ export class SemanticRefMatchTable {
             this.matches.values(),
             (v) => v.score,
         )!.score;
-        return [...this.getValues((match) => match.score === maxScore)];
+        return [...this.getMatchesWhere((match) => match.score === maxScore)];
     }
 
     /**
@@ -136,33 +126,29 @@ export class SemanticRefMatchTable {
      * @param maxMatches
      * @returns
      */
-    public getTopNScoring(
-        maxMatches?: number,
-        minHitCount = 0,
-    ): ScoredSemanticRef[] {
+    public getTopNScoring(maxMatches?: number, minHitCount = 0): Match<T>[] {
         if (this.matches.size === 0) {
             return [];
         }
         if (maxMatches && maxMatches > 0) {
-            const topList = new TopNCollection(maxMatches, -1);
+            const topList = createTopNList<T>(maxMatches);
             for (const match of this.matchesWithMinHitCount(minHitCount)) {
-                topList.push(match.semanticRefIndex, match.score);
+                topList.push(match.value, match.score);
             }
             const ranked = topList.byRank();
-            return ranked.map((m) => {
-                return {
-                    semanticRefIndex: m.item,
-                    score: m.score,
-                };
-            });
+            return ranked.map((m) => this.matches.get(m.item)!);
         } else {
             return this.getSortedByScore(minHitCount);
         }
     }
 
-    public *getValues(
-        predicate: (match: SemanticRefMatch) => boolean,
-    ): IterableIterator<SemanticRefMatch> {
+    public getMatches(): IterableIterator<Match<T>> {
+        return this.matches.values();
+    }
+
+    public *getMatchesWhere(
+        predicate: (match: Match<T>) => boolean,
+    ): IterableIterator<Match<T>> {
         for (const match of this.matches.values()) {
             if (predicate(match)) {
                 yield match;
@@ -170,41 +156,108 @@ export class SemanticRefMatchTable {
         }
     }
 
-    public remove(predicate: (match: SemanticRefMatch) => boolean) {
-        const keysToRemove: SemanticRefIndex[] = [];
-        for (const match of this.getValues(predicate)) {
-            keysToRemove.push(match.semanticRefIndex);
+    public removeMatchesWhere(predicate: (match: Match<T>) => boolean): void {
+        const valuesToRemove: T[] = [];
+        for (const match of this.getMatchesWhere(predicate)) {
+            valuesToRemove.push(match.value);
         }
-        this.removeKeys(keysToRemove);
+        this.removeMatches(valuesToRemove);
     }
 
-    public removeKeys(keysToRemove: SemanticRefIndex[]) {
-        if (keysToRemove && keysToRemove.length > 0) {
-            for (const key of keysToRemove) {
-                this.matches.delete(key);
+    public removeMatches(valuesToRemove: T[]): void {
+        if (valuesToRemove.length > 0) {
+            for (const item of valuesToRemove) {
+                this.matches.delete(item);
             }
         }
     }
 
+    public clearMatches(): void {
+        this.matches.clear();
+    }
+
+    public setMatches(matches: Match<T>[] | IterableIterator<Match<T>>): void {
+        for (const match of matches) {
+            this.matches.set(match.value, match);
+        }
+    }
+
+    public mapMatches<M = any>(map: (m: Match<T>) => M): M[] {
+        const items: M[] = [];
+        for (const match of this.matches.values()) {
+            items.push(map(match));
+        }
+        return items;
+    }
+
     private matchesWithMinHitCount(
         minHitCount?: number,
-    ): IterableIterator<SemanticRefMatch> {
+    ): IterableIterator<Match<T>> {
         return minHitCount && minHitCount > 0
-            ? this.getValues((m) => m.hitCount >= minHitCount)
+            ? this.getMatchesWhere((m) => m.hitCount >= minHitCount)
             : this.matches.values();
     }
 }
 
-export type SemanticRefMatch = {
-    semanticRefIndex: SemanticRefIndex;
-    score: number;
-    hitCount: number;
-};
+export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
+    private terms: Set<string>;
 
-export class TermMatchTable extends SemanticRefMatchTable {
-    public termMatches: string[];
-    constructor() {
+    constructor(matches?: IterableIterator<ScoredSemanticRef>) {
         super();
-        this.termMatches = [];
+        this.terms = new Set();
+        if (matches) {
+            for (const match of matches) {
+                this.add(match);
+            }
+        }
+    }
+
+    public add(
+        matches: ScoredSemanticRef | ScoredSemanticRef[],
+        term?: string,
+    ) {
+        if (Array.isArray(matches)) {
+            for (const match of matches) {
+                this.addMatch(match.semanticRefIndex, match.score);
+            }
+        } else {
+            this.addMatch(matches.semanticRefIndex, matches.score);
+        }
+        if (term) {
+            this.terms.add(term);
+        }
+    }
+
+    public override getSortedByScore(
+        minHitCount = 0,
+    ): Match<SemanticRefIndex>[] {
+        return super.getSortedByScore(this.getMinHitCount(minHitCount));
+    }
+
+    public override getTopNScoring(
+        maxMatches?: number,
+        minHitCount = 0,
+    ): Match<SemanticRefIndex>[] {
+        return super.getTopNScoring(
+            maxMatches,
+            this.getMinHitCount(minHitCount),
+        );
+    }
+
+    public getTerms(): Set<string> {
+        return this.terms;
+    }
+
+    public toScoredSemanticRefs(): ScoredSemanticRef[] {
+        return this.getSortedByScore().map((m) => {
+            return {
+                semanticRefIndex: m.value,
+                score: m.score,
+            };
+        });
+    }
+
+    private getMinHitCount(minHitCount: number): number {
+        return minHitCount > 0 ? minHitCount : this.terms.size;
     }
 }

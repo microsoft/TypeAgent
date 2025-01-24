@@ -2,15 +2,11 @@
 // Licensed under the MIT License.
 
 import { ITermToSemanticRefIndex, ScoredSemanticRef } from "./dataFormat.js";
-import {
-    QueryEvalContext,
-    SelectTopTermMatchesExpr,
-    TermsMatchExpr,
-} from "./query.js";
+import * as q from "./query.js";
 
 export class SearchResult {
     constructor(
-        public termMatches: string[] = [],
+        public termMatches: Set<string> = new Set(),
         public semanticRefMatches: ScoredSemanticRef[] = [],
     ) {}
 
@@ -24,14 +20,14 @@ export function searchTermsInIndex(
     terms: string[],
     maxMatches?: number,
 ): SearchResult {
-    const context = new QueryEvalContext();
-    const query = new SelectTopTermMatchesExpr(
-        new TermsMatchExpr(semanticRefIndex, terms),
+    const context = new q.QueryEvalContext();
+    const query = new q.SelectTopN(
+        new q.TermsMatchExpr(semanticRefIndex, terms),
         maxMatches,
     );
     const evalResults = query.eval(context);
     return new SearchResult(
-        evalResults.termMatches,
-        evalResults.semanticRefMatches,
+        evalResults.getTerms(),
+        evalResults.toScoredSemanticRefs(),
     );
 }
