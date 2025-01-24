@@ -193,11 +193,25 @@ export async function createKnowproCommands(
                 chalk.cyan,
                 `Searching ${conversation.nameTag}...`,
             );
-            const matches = kp.lookupTermsInIndex(
-                terms,
+
+            const matches = kp.searchTermsInIndex(
                 conversation.semanticRefIndex,
+                terms,
             );
-            for (const match of matches) {
+            if (!matches.hasMatches) {
+                context.printer.writeLine("No matches");
+                return;
+            }
+
+            context.printer.writeListInColor(
+                chalk.green,
+                matches.matchedTerms,
+                {
+                    title: "Matched terms",
+                    type: "ol",
+                },
+            );
+            for (const match of matches.matchedSemanticRefs) {
                 context.printer.writeSemanticRef(
                     conversation.semanticRefs[match.semanticRefIndex],
                     match.score,

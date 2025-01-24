@@ -4,4 +4,4 @@
 export * from "./import.js";
 export * from "./dataFormat.js";
 export * from "./conversationIndex.js";
-export * from "./query.js";
+export * from "./search.js";
