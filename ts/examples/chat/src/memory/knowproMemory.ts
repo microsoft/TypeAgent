@@ -203,15 +203,11 @@ export async function createKnowproCommands(
                 return;
             }
 
-            context.printer.writeListInColor(
-                chalk.green,
-                matches.matchedTerms,
-                {
-                    title: "Matched terms",
-                    type: "ol",
-                },
-            );
-            for (const match of matches.matchedSemanticRefs) {
+            context.printer.writeListInColor(chalk.green, matches.termMatches, {
+                title: "Matched terms",
+                type: "ol",
+            });
+            for (const match of matches.semanticRefMatches) {
                 context.printer.writeSemanticRef(
                     conversation.semanticRefs[match.semanticRefIndex],
                     match.score,
