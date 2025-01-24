@@ -135,10 +135,14 @@ async function saveContext(
 async function executeSpelunkerAction(
     action: AppAction,
     context: ActionContext<SpelunkerContext>,
+    entityMap?: Map<string, Entity>,
 ): Promise<ActionResult> {
-    let result = await handleSpelunkerAction(
+    const entities = entityMap ? Array.from(entityMap.values()) : [];
+    console.log(`  [spelunker] executeSpelunkerAction: ${action.actionName}, entityMap: ${[...entityMap?.values() ?? []]}, entities: ${entities}]`);
+    const result = await handleSpelunkerAction(
         action as SpelunkerAction,
         context.sessionContext,
+        entities,
     );
     return result;
 }
@@ -146,6 +150,7 @@ async function executeSpelunkerAction(
 async function handleSpelunkerAction(
     action: SpelunkerAction,
     context: SessionContext<SpelunkerContext>,
+    entities: Entity[],
 ): Promise<ActionResult> {
     switch (action.actionName) {
         case "searchCode": {
@@ -156,7 +161,7 @@ async function handleSpelunkerAction(
                 return await searchCode(
                     context.agentContext,
                     action.parameters.question,
-                    action.parameters.entities,
+                    entities,
                 );
             }
             return createActionResultFromError("I see no question to answer");

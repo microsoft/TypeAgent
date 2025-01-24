@@ -36,6 +36,5 @@ export type SearchCodeAction = {
     actionName: "searchCode";
     parameters: {
         question: string; // Question to answer
-        entities: SpelunkerEntity[]; // Entities to prioritize in the search
     };
 };

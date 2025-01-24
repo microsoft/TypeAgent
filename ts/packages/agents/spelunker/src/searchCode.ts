@@ -216,12 +216,8 @@ export async function searchCode(
             // TODO: Include summary and signature somehow?
         };
         entities.push(entity);
-        const additionalText = entity.additionalEntityText.replace(
-            process.env.HOME ?? "%%DEADBEEF%%",
-            "~",
-        );
         console_log(
-            `    [${entity.name} (${entity.type}) ${entity.uniqueId} ${additionalText}]`,
+            `    [${entity.name} (${entity.type}) ${entity.uniqueId} ${entity.additionalEntityText}]`,
         );
     }
 
