@@ -66,7 +66,6 @@ function summarizeResult(result: TestResultFile) {
         console.log(`  ${(key ?? "undefined").padEnd(80)}: ${count}`);
     }
 }
-
 export default class TestTranslateCommand extends Command {
     static args = {
         files: Args.string({
@@ -95,6 +94,10 @@ export default class TestTranslateCommand extends Command {
             char: "o",
             description: "Output test result file",
         }),
+        rerun: Flags.string({
+            char: "R",
+            description: "Rerun failed tests from the test result file",
+        }),
         summarize: Flags.string({
             char: "s",
             description: "Summarize test result file",
@@ -116,44 +119,76 @@ export default class TestTranslateCommand extends Command {
             summarizeResult(result);
             return;
         }
-        const files =
-            argv.length > 0 ? (argv as string[]) : await getTestDataFiles();
+
+        const output: TestResultFile = { pass: [], fail: [] };
+        let requests: string[];
+        let repeat: number;
+        if (flags.rerun) {
+            if (argv.length !== 0) {
+                throw new Error(
+                    "No files should be specified when rerunning failed tests",
+                );
+            }
+
+            const rerun: TestResultFile = JSON.parse(
+                fs.readFileSync(flags.rerun, "utf-8"),
+            );
+
+            if (rerun.pass.length === 0 && rerun.fail.length === 0) {
+                throw new Error("Result file is empty. No tests to rerun.");
+            }
+
+            repeat =
+                rerun.pass.length !== 0
+                    ? rerun.pass[0].actions.length
+                    : rerun.fail[0].actions.length;
+
+            output.pass = rerun.pass;
+            requests = rerun.fail.map((entry) => entry.request);
+            if (flags.repeat !== undefined && flags.repeat !== repeat) {
+                throw new Error("Specified repeat doesn't match result file");
+            }
+        } else {
+            repeat = flags.repeat ?? 1;
+            const files =
+                argv.length > 0 ? (argv as string[]) : await getTestDataFiles();
+
+            const inputs = await Promise.all(
+                files.map(async (file) => {
+                    return { file, data: await readTestData(file) };
+                }),
+            );
+
+            requests = inputs
+                .flatMap((input) =>
+                    input.data.entries.map((e) => ({
+                        request: e.request,
+                        actions: Actions.fromJSON(e.action).toFullActions(),
+                    })),
+                )
+                .map((entry) => entry.request);
+        }
+
         const schemas = flags.translator
             ? Object.fromEntries(flags.translator.map((name) => [name, true]))
             : undefined;
-        const inputs = await Promise.all(
-            files.map(async (file) => {
-                return { file, data: await readTestData(file) };
-            }),
-        );
-        const repeat = flags.repeat ?? 1;
-        const data = inputs.flatMap((input) =>
-            input.data.entries.map((e) => ({
-                request: e.request,
-                actions: Actions.fromJSON(e.action).toFullActions(),
-            })),
-        );
-
-        let inconsistentNoActions = 0;
-        let mismatchNumActions = 0;
-        let mismatchActionNames = 0;
+        let failedTotal = 0;
         let noActions = 0;
         let processed = 0;
 
-        const totalStr = data.length.toString();
+        const totalStr = requests.length.toString();
         function print(msg: string) {
             processed++;
             console.log(
-                `[${processed.toString().padStart(totalStr.length)}/${totalStr} (${mismatchActionNames + mismatchNumActions} Failed)] ${msg}`,
+                `[${processed.toString().padStart(totalStr.length)}/${totalStr}] ${chalk.yellow(`[Fail: ${failedTotal.toString().padStart(totalStr.length)} (${((failedTotal / processed) * 100).toFixed(2).padStart(5)}%)]`)} ${msg}`,
             );
         }
         const concurrency = flags.concurrency ?? 4;
         console.log(
-            `Starting ${data.length} tests (concurrency: ${concurrency}, repeat: ${repeat})`,
+            `Starting ${requests.length} tests (concurrency: ${concurrency}, repeat: ${repeat})`,
         );
         const startTime = performance.now();
 
-        const output: TestResultFile = { pass: [], fail: [] };
         async function worker() {
             const dispatcher = await createDispatcher("cli test translate", {
                 appAgentProviders: getDefaultAppAgentProviders(),
@@ -164,14 +199,13 @@ export default class TestTranslateCommand extends Command {
                 explainer: { enabled: false },
                 cache: { enabled: false },
             });
-            while (data.length > 0) {
-                const entry = data.shift()!;
+            while (requests.length > 0) {
+                const request = requests.shift()!;
 
                 const results: (FullAction[] | undefined)[] = [];
                 for (let i = 0; i < repeat; i++) {
-                    const commandResult = await dispatcher.processCommand(
-                        entry.request,
-                    );
+                    const commandResult =
+                        await dispatcher.processCommand(request);
                     results.push(commandResult?.actions);
                 }
 
@@ -184,17 +218,17 @@ export default class TestTranslateCommand extends Command {
                             continue;
                         }
 
-                        inconsistentNoActions++;
+                        failedTotal++;
                         failed = true;
                         break;
                     }
                     if (actual === undefined) {
-                        inconsistentNoActions++;
+                        failedTotal++;
                         failed = true;
                         break;
                     }
                     if (actual.length !== expected.length) {
-                        mismatchNumActions++;
+                        failedTotal++;
                         failed = true;
                         print(
                             chalk.red(
@@ -214,7 +248,7 @@ export default class TestTranslateCommand extends Command {
                                     `Failed (${actual[i].translatorName}.${actual[i].actionName}) !== (${expected[i].translatorName}.${expected[i].actionName})`,
                                 ),
                             );
-                            mismatchActionNames++;
+                            failedTotal++;
                             failed = true;
                             break;
                         }
@@ -226,7 +260,7 @@ export default class TestTranslateCommand extends Command {
 
                 if (flags.output) {
                     (failed ? output.fail : output.pass).push({
-                        request: entry.request,
+                        request,
                         actions: results,
                     });
                     fs.writeFileSync(
@@ -243,6 +277,7 @@ export default class TestTranslateCommand extends Command {
                     }
                 }
             }
+            await dispatcher.close();
         }
 
         const w: Promise<void>[] = [];
@@ -252,8 +287,6 @@ export default class TestTranslateCommand extends Command {
         await Promise.all(w);
 
         const endTime = performance.now();
-        const failedTotal =
-            inconsistentNoActions + mismatchNumActions + mismatchActionNames;
         const succeededTotal = processed - noActions - failedTotal;
 
         function printPart(name: string, count: number) {
@@ -264,7 +297,7 @@ export default class TestTranslateCommand extends Command {
             }
         }
         console.log(
-            `Stability (repeat: ${repeat}, total ${repeat + 1} times)\nTotal       : ${processed}`,
+            `Stability (repeat: ${repeat})\nTotal          : ${processed}`,
         );
         printPart("Passed", succeededTotal);
         printPart("Failed", failedTotal);
