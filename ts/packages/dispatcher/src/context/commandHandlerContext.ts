@@ -64,15 +64,10 @@ import registerDebug from "debug";
 import path from "node:path";
 import { createSchemaInfoProvider } from "../translation/actionSchemaFileCache.js";
 import { createInlineAppAgentProvider } from "./inlineAgentProvider.js";
+import { CommandResult } from "../dispatcher.js";
 
 const debug = registerDebug("typeagent:dispatcher:init");
 const debugError = registerDebug("typeagent:dispatcher:init:error");
-
-export interface CommandResult {
-    error?: boolean;
-    message?: string;
-    html?: boolean;
-}
 
 export type EmptyFunction = () => void;
 export type SetSettingFunction = (name: string, value: any) => void;
@@ -107,6 +102,7 @@ export type CommandHandlerContext = {
     logger?: Logger | undefined;
     serviceHost: ChildProcess | undefined;
     requestId?: RequestId;
+    commandResult?: CommandResult | undefined;
     chatHistory: ChatHistory;
 
     batchMode: boolean;
@@ -494,6 +490,7 @@ export async function setSessionOnCommandHandlerContext(
         context.logger,
     );
     await setAppAgentStates(context);
+    context.translatorCache.clear();
 }
 
 export async function reloadSessionOnCommandHandlerContext(

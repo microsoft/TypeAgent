@@ -1,4 +1,4 @@
-// Copyright (c) Microsoft Corporation and Henry Lucco.
+// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
 import {
@@ -6,17 +6,19 @@ import {
     IMessage,
     IKnowledgeSource,
     SemanticRef,
+    IConversationData,
 } from "./dataFormat.js";
-import { conversation } from "knowledge-processor";
-import path from "path";
-import { readAllText } from "typeagent";
+import { conversation, split } from "knowledge-processor";
+import { getFileName, readAllText } from "typeagent";
 import {
     ConversationIndex,
     addActionToIndex,
     addEntityToIndex,
     buildConversationIndex,
     addTopicToIndex,
+    IndexingResult,
 } from "./conversationIndex.js";
+import { Result } from "typechat";
 
 // metadata for podcast messages
 export class PodcastMessageMeta implements IKnowledgeSource {
@@ -79,7 +81,7 @@ function assignMessageListeners(
     }
 }
 
-class PodcastMessage implements IMessage<PodcastMessageMeta> {
+export class PodcastMessage implements IMessage<PodcastMessageMeta> {
     timestamp: string | undefined;
     constructor(
         public textChunks: string[],
@@ -94,13 +96,13 @@ class PodcastMessage implements IMessage<PodcastMessageMeta> {
     }
 }
 
-class Podcast implements IConversation<PodcastMessageMeta> {
-    semanticRefIndex: ConversationIndex | undefined = undefined;
-    semanticRefs: SemanticRef[] = [];
+export class Podcast implements IConversation<PodcastMessageMeta> {
     constructor(
         public nameTag: string,
-        public messages: IMessage<PodcastMessageMeta>[],
+        public messages: PodcastMessage[],
         public tags: string[] = [],
+        public semanticRefs: SemanticRef[] = [],
+        public semanticRefIndex: ConversationIndex | undefined = undefined,
     ) {}
 
     addMetadataToIndex() {
@@ -160,23 +162,44 @@ class Podcast implements IConversation<PodcastMessageMeta> {
         }
     }
 
-    async buildIndex() {
-        await buildConversationIndex(this);
+    async buildIndex(
+        progressCallback?: (
+            text: string,
+            knowledgeResult: Result<conversation.KnowledgeResponse>,
+        ) => boolean,
+    ): Promise<IndexingResult> {
+        const result = await buildConversationIndex(this, progressCallback);
         this.addMetadataToIndex();
+        return result;
+    }
+
+    public serialize(): IConversationData<PodcastMessage> {
+        return {
+            nameTag: this.nameTag,
+            messages: this.messages,
+            tags: this.tags,
+            semanticRefs: this.semanticRefs,
+            semanticIndexData: this.semanticRefIndex?.serialize(),
+        };
     }
 }
 
-export async function importPodcast(fileName: string) {
-    const basePath = "/data/testChat";
-    const filePath = path.join(basePath, fileName);
-    const fileContents = await readAllText(filePath);
-    const lines = fileContents.split("\r?\n");
+export async function importPodcast(
+    transcriptFilePath: string,
+    podcastName?: string,
+): Promise<Podcast> {
+    const transcriptText = await readAllText(transcriptFilePath);
+    podcastName ??= getFileName(transcriptFilePath);
+    const transcriptLines = split(transcriptText, /\r?\n/, {
+        removeEmpty: true,
+        trim: true,
+    });
+    const turnParseRegex = /^(?<speaker>[A-Z0-9 ]+:)?(?<speech>.*)$/;
     const participants = new Set<string>();
-    const regex = /^(?<speaker>[A-Z0-9 ]+:)?(?<speech>.*)$/;
     const msgs: PodcastMessage[] = [];
     let curMsg: PodcastMessage | undefined = undefined;
-    for (const line of lines) {
-        const match = regex.exec(line);
+    for (const line of transcriptLines) {
+        const match = turnParseRegex.exec(line);
         if (match && match.groups) {
             let speaker = match.groups["speaker"];
             let speech = match.groups["speech"];
@@ -208,7 +231,7 @@ export async function importPodcast(fileName: string) {
         msgs.push(curMsg);
     }
     assignMessageListeners(msgs, participants);
-    const pod = new Podcast(fileName, msgs, [fileName]);
+    const pod = new Podcast(podcastName, msgs, [podcastName]);
     // TODO: add timestamps and more tags
     // list all the books
     // what did K say about Children of Time?

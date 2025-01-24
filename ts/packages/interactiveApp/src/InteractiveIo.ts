@@ -23,18 +23,20 @@ export function getInteractiveIO(): InteractiveIo {
 }
 
 export function createInteractiveIO(): InteractiveIo {
+    const line = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout,
+    });
     return {
         stdin: process.stdin,
         stdout: process.stdout,
-        readline: readline.createInterface({
-            input: process.stdin,
-            output: process.stdout,
-        }),
+        readline: line,
         writer: new ConsoleWriter(process.stdout),
     };
 }
 
 export type ListOptions = {
+    title?: string | undefined;
     type: "ol" | "ul" | "plain" | "csv";
 };
 
@@ -51,6 +53,14 @@ export class ConsoleWriter {
         if (text) {
             this.stdout.write(text);
         }
+        return this;
+    }
+
+    public writeInline(text: string, prevText?: string): ConsoleWriter {
+        if (prevText) {
+            this.stdout.moveCursor(-prevText.length, 0);
+        }
+        this.write(text);
         return this;
     }
 
@@ -83,6 +93,15 @@ export class ConsoleWriter {
         if (!list) {
             return;
         }
+        const isInline =
+            options && (options.type === "plain" || options.type === "csv");
+        if (options?.title) {
+            if (isInline) {
+                this.write(options.title + ": ");
+            } else {
+                this.writeLine(options.title);
+            }
+        }
         if (typeof list === "string") {
             this.writeLine(this.listItemToString(1, list, options));
             return;
@@ -90,7 +109,7 @@ export class ConsoleWriter {
         if (list.length === 0) {
             return;
         }
-        if (options && (options.type === "plain" || options.type === "csv")) {
+        if (isInline) {
             const sep = options.type === "plain" ? " " : ", ";
             for (let i = 0; i < list.length; ++i) {
                 if (i > 0) {
@@ -194,4 +213,30 @@ export async function askYesNo(
 ): Promise<boolean> {
     let answer = await io.readline.question(`${question} (y/n):`);
     return answer.trim().toLowerCase() === "y";
+}
+
+export class ProgressBar {
+    private _lastText: string = "";
+    constructor(
+        public writer: ConsoleWriter,
+        public total: number,
+        public count = 0,
+    ) {}
+
+    public advance() {
+        if (this.count >= this.total) {
+            return;
+        }
+        ++this.count;
+        let progressText = `[${this.count} / ${this.total}]`;
+        this.writer.writeInline(progressText, this._lastText);
+        this._lastText = progressText;
+    }
+
+    public complete() {
+        if (this._lastText) {
+            this.writer.writeInline("", this._lastText);
+            this._lastText = "";
+        }
+    }
 }

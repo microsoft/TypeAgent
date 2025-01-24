@@ -2,7 +2,11 @@
 // Licensed under the MIT License.
 
 import { AppAction, DisplayContent } from "@typeagent/agent-sdk";
-import { IAgentMessage, NotifyExplainedData } from "agent-dispatcher";
+import {
+    CommandResult,
+    IAgentMessage,
+    NotifyExplainedData,
+} from "agent-dispatcher";
 import { RequestMetrics } from "agent-dispatcher";
 
 import { MessageContainer } from "./messageContainer";
@@ -23,7 +27,7 @@ export class MessageGroup {
         private readonly settingsView: SettingsView,
         request: DisplayContent,
         container: HTMLDivElement,
-        requestPromise: Promise<RequestMetrics | undefined> | undefined,
+        requestPromise: Promise<CommandResult | undefined> | undefined,
         public agents: Map<string, string>,
         private hideMetrics: boolean,
     ) {
@@ -52,7 +56,7 @@ export class MessageGroup {
 
         if (requestPromise) {
             requestPromise
-                .then((metrics) => this.requestCompleted(metrics))
+                .then((result) => this.requestCompleted(result?.metrics))
                 .catch((error) => this.requestException(error));
         }
     }

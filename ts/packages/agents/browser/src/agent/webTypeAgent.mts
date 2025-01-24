@@ -36,10 +36,9 @@ function ensureWebAgentChannels(context: SessionContext<BrowserActionContext>) {
   const channelProvider = createGenericChannelProvider((message) => {
     webSocket.send(
       JSON.stringify({
-        target: "webAgent",
         source: "dispatcher",
-        messageType: "message",
-        body: message,
+        method: "webAgent/message",
+        params: message,
       }),
     );
   });
@@ -47,10 +46,9 @@ function ensureWebAgentChannels(context: SessionContext<BrowserActionContext>) {
   const registerChannel = createGenericChannel((message) => {
     webSocket.send(
       JSON.stringify({
-        target: "webAgent",
         source: "dispatcher",
-        messageType: "register",
-        body: message,
+        method: "webAgent/register",
+        params: message,
       }),
     );
   });
@@ -91,16 +89,16 @@ export async function processWebAgentMessage(
     return;
   }
   try {
-    switch (message.messageType) {
-      case "register":
-        webAgentChannels.registerChannel.message(message.body);
+    switch (message.method) {
+      case "webAgent/register":
+        webAgentChannels.registerChannel.message(message.params);
         break;
-      case "message":
-        webAgentChannels.channelProvider.message(message.body);
+      case "webAgent/message":
+        webAgentChannels.channelProvider.message(message.params);
         break;
-      case "disconnect":
-        await context.removeDynamicAgent(message.body);
-        webAgentChannels.channelProvider.deleteChannel(message.body);
+      case "webAgent/disconnect":
+        await context.removeDynamicAgent(message.params);
+        webAgentChannels.channelProvider.deleteChannel(message.params);
         break;
     }
   } catch (e: any) {
