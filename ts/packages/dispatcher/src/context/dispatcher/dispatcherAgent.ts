@@ -22,10 +22,6 @@ import {
 } from "./schema/dispatcherActionSchema.js";
 import { ClarifyRequestAction } from "./schema/clarifyActionSchema.js";
 
-export function isUnknownAction(action: AppAction): action is UnknownAction {
-    return action.actionName === "unknown";
-}
-
 const dispatcherHandlers: CommandHandlerTable = {
     description: "Type Agent Dispatcher Commands",
     commands: {

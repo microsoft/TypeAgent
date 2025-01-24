@@ -27,6 +27,7 @@ import {
 import {
     displayError,
     displayStatus,
+    displayWarn,
 } from "@typeagent/agent-sdk/helpers/display";
 import { MatchResult } from "agent-cache";
 import { getStorage } from "./storageImpl.js";
@@ -34,6 +35,8 @@ import { IncrementalJsonValueCallBack } from "common-utils";
 import { ProfileNames } from "../utils/profileNames.js";
 import { conversation } from "knowledge-processor";
 import { makeClientIOMessage } from "../context/interactiveIO.js";
+import { UnknownAction } from "../context/dispatcher/schema/dispatcherActionSchema.js";
+import { isUnknownAction } from "../context/dispatcher/dispatcherUtils.js";
 
 const debugActions = registerDebug("typeagent:dispatcher:actions");
 
@@ -326,6 +329,7 @@ async function executeAction(
     if (debugActions.enabled) {
         debugActions(actionResultToString(result));
     }
+
     if (result.error !== undefined) {
         displayError(result.error, actionContext);
         systemContext.chatHistory.addEntry(
@@ -363,10 +367,110 @@ async function executeAction(
     return result;
 }
 
+async function canExecute(
+    actions: Actions,
+    context: ActionContext<CommandHandlerContext>,
+): Promise<boolean> {
+    const systemContext = context.sessionContext.agentContext;
+    const unknown: UnknownAction[] = [];
+    const disabled = new Set<string>();
+    for (const action of actions) {
+        if (isUnknownAction(action)) {
+            unknown.push(action);
+        }
+        if (
+            action.translatorName &&
+            !systemContext.agents.isActionActive(action.translatorName)
+        ) {
+            disabled.add(action.translatorName);
+        }
+    }
+
+    if (unknown.length > 0) {
+        const unknownRequests = unknown.map(
+            (action) => action.parameters.request,
+        );
+        const lines = [
+            `Unable to determine ${actions.action === undefined ? "one or more actions in" : "action for"} the request.`,
+            ...unknownRequests.map((s) => `- ${s}`),
+        ];
+        systemContext.chatHistory.addEntry(
+            lines.join("\n"),
+            [],
+            "assistant",
+            systemContext.requestId,
+        );
+
+        const config = systemContext.session.getConfig();
+        if (
+            !config.translation.switch.search &&
+            !config.translation.switch.embedding &&
+            !config.translation.switch.inline
+        ) {
+            lines.push("");
+            lines.push("Switching agents is disabled");
+        } else {
+            const entries = await Promise.all(
+                unknownRequests.map((request) =>
+                    systemContext.agents.semanticSearchActionSchema(
+                        request,
+                        1,
+                        () => true, // don't filter
+                    ),
+                ),
+            );
+            const schemaNames = new Set(
+                entries
+                    .filter((e) => e !== undefined)
+                    .map((e) => e![0].item.actionSchemaFile.schemaName)
+                    .filter(
+                        (schemaName) =>
+                            !systemContext.agents.isSchemaActive(schemaName),
+                    ),
+            );
+
+            if (schemaNames.size > 0) {
+                lines.push("");
+                lines.push(
+                    `Possible agent${schemaNames.size > 1 ? "s" : ""} to handle the request${unknownRequests.length > 1 ? "s" : ""} are not active: ${Array.from(schemaNames).join(", ")}`,
+                );
+            }
+        }
+
+        displayError(lines, context);
+        return false;
+    }
+
+    if (disabled.size > 0) {
+        const message = `Not executed. Action disabled for ${Array.from(disabled.values()).join(", ")}`;
+        systemContext.chatHistory.addEntry(
+            message,
+            [],
+            "assistant",
+            systemContext.requestId,
+        );
+
+        displayWarn(message, context);
+        return false;
+    }
+
+    return true;
+}
+
 export async function executeActions(
     actions: Actions,
     context: ActionContext<CommandHandlerContext>,
 ) {
+    const systemContext = context.sessionContext.agentContext;
+    if (systemContext.commandResult === undefined) {
+        systemContext.commandResult = { actions: actions.toFullActions() };
+    } else {
+        systemContext.commandResult.actions = actions.toFullActions();
+    }
+
+    if (!(await canExecute(actions, context))) {
+        return;
+    }
     debugActions(`Executing actions: ${JSON.stringify(actions, undefined, 2)}`);
     let actionIndex = 0;
     const entityMap = new Map<string, Entity>();
@@ -453,7 +557,7 @@ export async function executeCommand(
     appAgentName: string,
     context: CommandHandlerContext,
     attachments?: string[],
-) {
+): Promise<void> {
     const appAgent = context.agents.getAppAgent(appAgentName);
     if (appAgent.executeCommand === undefined) {
         throw new Error(
