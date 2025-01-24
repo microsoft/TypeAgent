@@ -4,7 +4,7 @@
 import { ITermToSemanticRefIndex, ScoredSemanticRef } from "./dataFormat.js";
 import {
     QueryEvalContext,
-    SelectTopNSemanticRefsExpr,
+    SelectTopTermMatchesExpr,
     TermsMatchExpr,
 } from "./query.js";
 
@@ -25,10 +25,13 @@ export function searchTermsInIndex(
     maxMatches?: number,
 ): SearchResult {
     const context = new QueryEvalContext();
-    const query = new SelectTopNSemanticRefsExpr(
+    const query = new SelectTopTermMatchesExpr(
         new TermsMatchExpr(semanticRefIndex, terms),
         maxMatches,
     );
-    const [termMatches, semanticRefMatches] = query.eval(context);
-    return new SearchResult(termMatches, semanticRefMatches);
+    const evalResults = query.eval(context);
+    return new SearchResult(
+        evalResults.termMatches,
+        evalResults.semanticRefMatches,
+    );
 }

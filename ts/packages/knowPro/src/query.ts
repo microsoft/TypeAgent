@@ -18,53 +18,54 @@ export class QueryEvalContext {
     constructor() {}
 }
 
-export type TermMatches = string[];
-
-export class TermsMatchExpr
-    implements IQueryExpr<[TermMatches, SemanticRefMatchTable]>
-{
+export class TermsMatchExpr implements IQueryExpr<TermMatchTable> {
     constructor(
         public index: ITermToSemanticRefIndex,
         public terms: string[],
     ) {}
 
-    public eval(
-        context: QueryEvalContext,
-    ): [TermMatches, SemanticRefMatchTable] {
-        const termsMatches: string[] = [];
-        const matches = new SemanticRefMatchTable();
+    public eval(context: QueryEvalContext): TermMatchTable {
+        const matches = new TermMatchTable();
         for (const term of this.terms) {
             const postings = this.index.lookupTerm(term);
             if (postings && postings.length > 0) {
-                termsMatches.push(term);
+                matches.termMatches.push(term);
                 matches.add(postings);
             }
         }
-        return [termsMatches, matches];
+        return matches;
     }
 }
 
-export class SelectTopNSemanticRefsExpr
-    implements IQueryExpr<[TermMatches, ScoredSemanticRef[]]>
-{
+export type TermMatches = {
+    semanticRefMatches: ScoredSemanticRef[];
+    termMatches: string[];
+};
+
+export class SelectTopTermMatchesExpr implements IQueryExpr<TermMatches> {
     constructor(
-        public matchExpr: IQueryExpr<[TermMatches, SemanticRefMatchTable]>,
+        public matchExpr: IQueryExpr<TermMatchTable>,
         public maxMatches: number | undefined = undefined,
     ) {}
 
-    public eval(context: QueryEvalContext): [TermMatches, ScoredSemanticRef[]] {
-        const [termMatches, matchTable] = this.matchExpr.eval(context);
-        return [
-            termMatches,
-            matchTable.getTopNScoring(this.maxMatches, termMatches.length),
-        ];
+    public eval(context: QueryEvalContext): TermMatches {
+        const matches = this.matchExpr.eval(context);
+        return {
+            termMatches: matches.termMatches,
+            semanticRefMatches: matches.getTopNScoring(
+                this.maxMatches,
+                matches.termMatches.length,
+            ),
+        };
     }
 }
 
 export class SemanticRefMatchTable {
-    constructor(
-        public matches = new Map<SemanticRefIndex, SemanticRefMatch>(),
-    ) {}
+    public matches: Map<SemanticRefIndex, SemanticRefMatch>;
+
+    constructor() {
+        this.matches = new Map<SemanticRefIndex, SemanticRefMatch>();
+    }
 
     public get numMatches(): number {
         return this.matches.size;
@@ -176,3 +177,11 @@ export type SemanticRefMatch = {
     hitCount: number;
     score: number;
 };
+
+export class TermMatchTable extends SemanticRefMatchTable {
+    public termMatches: string[];
+    constructor() {
+        super();
+        this.termMatches = [];
+    }
+}
