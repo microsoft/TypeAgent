@@ -466,8 +466,8 @@ async function initializeSpeech() {
 }
 
 async function initializeDispatcher(
-    mainWindow: BrowserWindow,
     chatView: BrowserView,
+    updateSummary: (dispatcher: Dispatcher) => void,
 ) {
     const clientIOChannel = createGenericChannel((message: any) => {
         chatView.webContents.send("clientio-rpc-call", message);
@@ -497,23 +497,6 @@ async function initializeDispatcher(
         clientIO,
     });
 
-    let settingSummary: string = "";
-    function updateSummary() {
-        const newSettingSummary = dispatcher.getSettingSummary();
-        if (newSettingSummary !== settingSummary) {
-            settingSummary = newSettingSummary;
-            chatView.webContents.send(
-                "setting-summary-changed",
-                newSettingSummary,
-                dispatcher.getTranslatorNameToEmojiMap(),
-            );
-
-            mainWindow.setTitle(
-                `${newSettingSummary} Zoom: ${Math.round(chatView.webContents.zoomFactor! * 100)}%`,
-            );
-        }
-    }
-
     async function processShellRequest(
         text: string,
         id: string,
@@ -526,7 +509,7 @@ async function initializeDispatcher(
 
         const metrics = await newDispatcher.processCommand(text, id, images);
         chatView.webContents.send("send-demo-event", "CommandProcessed");
-        updateSummary();
+        updateSummary(dispatcher);
         return metrics;
     }
 
@@ -544,12 +527,11 @@ async function initializeDispatcher(
     });
     createDispatcherRpcServer(dispatcher, dispatcherChannel.channel);
 
+    setupQuit(dispatcher);
+
     // Dispatcher is ready to be called from the client, but we need to wait for the dom to be ready to start
     // using it to process command, so that the client can receive messages.
     debugShell("Dispatcher initialized", performance.now() - time);
-
-    updateSummary();
-    setupQuit(dispatcher);
 
     return dispatcher;
 }
@@ -566,8 +548,25 @@ async function initialize() {
 
     const { mainWindow, chatView } = createWindow();
 
+    let settingSummary: string = "";
+    function updateSummary(dispatcher: Dispatcher) {
+        const newSettingSummary = dispatcher.getSettingSummary();
+        if (newSettingSummary !== settingSummary) {
+            settingSummary = newSettingSummary;
+            chatView.webContents.send(
+                "setting-summary-changed",
+                newSettingSummary,
+                dispatcher.getTranslatorNameToEmojiMap(),
+            );
+
+            mainWindow.setTitle(
+                `${newSettingSummary} Zoom: ${Math.round(chatView.webContents.zoomFactor! * 100)}%`,
+            );
+        }
+    }
+
     // Note: Make sure dom ready before using dispatcher.
-    const dispatcherP = initializeDispatcher(mainWindow, chatView);
+    const dispatcherP = initializeDispatcher(chatView, updateSummary);
 
     ipcMain.on("dom ready", async () => {
         mainWindow.show();
@@ -582,8 +581,10 @@ async function initialize() {
         });
 
         // The dispatcher can be use now that dom is ready and the client is ready to receive messages
+        const dispatcher = await dispatcherP;
+        updateSummary(dispatcher);
         if (ShellSettings.getinstance().agentGreeting) {
-            (await dispatcherP).processCommand("@greeting", "agent-0", []);
+            dispatcher.processCommand("@greeting", "agent-0", []);
         }
     });
 
