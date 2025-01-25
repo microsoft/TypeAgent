@@ -75,9 +75,9 @@ jobs:
         working-directory: ts/packages/shell
       - name: Shell Tests
         timeout-minutes: 180
-        run: |           
-          pnpm exec playwright test
-        working-directory: ts/packages/shell
+        # run: |           
+        #   working-directory: ts/packages/shell
+        run: npx playwright test
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
         with:
