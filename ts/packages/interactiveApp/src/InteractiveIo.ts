@@ -87,7 +87,7 @@ export class ConsoleWriter {
     }
 
     public writeList(
-        list?: string | string[] | (string | undefined)[],
+        list?: string | string[] | (string | undefined)[] | Set<string>,
         options?: ListOptions,
     ): void {
         if (!list) {
@@ -105,6 +105,9 @@ export class ConsoleWriter {
         if (typeof list === "string") {
             this.writeLine(this.listItemToString(1, list, options));
             return;
+        }
+        if (list instanceof Set) {
+            list = [...list.values()];
         }
         if (list.length === 0) {
             return;
