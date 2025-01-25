@@ -187,7 +187,7 @@ export async function createKnowproCommands(
         if (!conversation) {
             return;
         }
-        const terms = kp.parseQueryTerms(args); // Todo: De dupe
+        const terms = parseQueryTerms(args); // Todo: De dupe
         if (conversation.semanticRefIndex && conversation.semanticRefs) {
             context.printer.writeInColor(
                 chalk.cyan,
@@ -375,4 +375,28 @@ export function getPodcastParticipants(podcast: kp.Podcast) {
         meta.listeners.forEach((l) => participants.add(l));
     }
     return [...participants.values()];
+}
+
+export function parseQueryTerms(args: string[]): kp.QueryTerm[] {
+    const queryTerms: kp.QueryTerm[] = [];
+    for (const arg of args) {
+        let allTermStrings = knowLib.split(arg, ";", {
+            trim: true,
+            removeEmpty: true,
+        });
+        if (allTermStrings.length > 0) {
+            allTermStrings = allTermStrings.map((t) => t.toLowerCase());
+            const queryTerm: kp.QueryTerm = {
+                term: { text: allTermStrings[0] },
+            };
+            if (allTermStrings.length > 0) {
+                queryTerm.relatedTerms = [];
+                for (let i = 1; i < allTermStrings.length; ++i) {
+                    queryTerm.relatedTerms.push({ text: allTermStrings[i] });
+                }
+            }
+            queryTerms.push(queryTerm);
+        }
+    }
+    return queryTerms;
 }

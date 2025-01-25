@@ -66,7 +66,6 @@ export class SelectTopNExpr<T extends MatchAccumulator>
 
 export class TermsMatchExpr implements IQueryOpExpr<SemanticRefAccumulator> {
     private matches: SemanticRefAccumulator = new SemanticRefAccumulator();
-    private textLookups: Set<string> = new Set<string>();
     constructor(
         public index: ITermToSemanticRefIndex,
         public terms: QueryTerm[],
@@ -75,40 +74,27 @@ export class TermsMatchExpr implements IQueryOpExpr<SemanticRefAccumulator> {
 
     public eval(context: QueryEvalContext): SemanticRefAccumulator {
         for (const queryTerm of this.terms) {
-            // First try matching the primary
-            this.matchTerm(queryTerm.term);
-            // If that does not work, try alternatives, if any
-            if (queryTerm.relatedTerms && queryTerm.relatedTerms.length > 0) {
-                for (const relatedTerm of queryTerm.relatedTerms) {
-                    // Did we already match this related term?
-                    if (this.textLookups.has(relatedTerm.text)) {
-                        // We'll say that the primary term matched.
-                        // This can handle duplicate calls
-                        this.matches.recordTermMatch(queryTerm.term.text);
-                    } else {
-                        // Pass primary term to the matcher.
-                        // If the alternative matches, we mark that as a match *for the primary term*
-                        //    BUT with the score assigned to the alternative
-                        this.matchTerm(relatedTerm, queryTerm.term);
-                    }
-                }
-            }
+            this.accumulateMatches(queryTerm);
         }
         return this.matches;
     }
 
-    private matchTerm(term: Term, primaryTerm?: Term): boolean {
-        const postings = this.index.lookupTerm(term.text);
-        this.textLookups.add(term.text);
-        if (postings && postings.length > 0) {
-            this.matches.add(
-                postings,
-                primaryTerm ? primaryTerm.text : term.text,
-                term.score,
-            );
-            return true;
+    private accumulateMatches(queryTerm: QueryTerm): void {
+        this.matches.addForTerm(
+            queryTerm.term,
+            this.index.lookupTerm(queryTerm.term.text),
+        );
+        if (queryTerm.relatedTerms && queryTerm.relatedTerms.length > 0) {
+            for (const relatedTerm of queryTerm.relatedTerms) {
+                // Related term matches count as matches for the queryTerm...
+                // BUT are scored with the score of the related term
+                this.matches.addForTermUnion(
+                    queryTerm.term,
+                    this.index.lookupTerm(relatedTerm.text),
+                    relatedTerm.score,
+                );
+            }
         }
-        return false;
     }
 }
 
@@ -141,18 +127,34 @@ export class MatchAccumulator<T = any> {
         return this.matches.get(value);
     }
 
-    public addMatch(item: T, score: number): void {
-        let match = this.matches.get(item);
+    public add(value: T, score: number): void {
+        let match = this.matches.get(value);
         if (match) {
             match.hitCount += 1;
             match.score += score;
         } else {
             match = {
-                value: item,
+                value,
                 score,
                 hitCount: 1,
             };
-            this.matches.set(item, match);
+            this.matches.set(value, match);
+        }
+    }
+
+    public addUnion(value: T, score: number) {
+        let match = this.matches.get(value);
+        if (match) {
+            if (match.score < score) {
+                match.score = score;
+            }
+        } else {
+            match = {
+                value,
+                score,
+                hitCount: 1,
+            };
+            this.matches.set(value, match);
         }
     }
 
@@ -258,20 +260,32 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
         super();
     }
 
-    public add(
-        matches: ScoredSemanticRef | ScoredSemanticRef[],
-        term: string,
+    public addForTerm(
+        term: Term,
+        semanticRefs: ScoredSemanticRef[] | undefined,
         scoreBoost?: number,
     ) {
-        scoreBoost ??= 0;
-        if (Array.isArray(matches)) {
-            for (const match of matches) {
-                this.addMatch(match.semanticRefIndex, match.score + scoreBoost);
+        if (semanticRefs) {
+            scoreBoost ??= term.score ?? 0;
+            for (const match of semanticRefs) {
+                this.add(match.semanticRefIndex, match.score + scoreBoost);
             }
-        } else {
-            this.addMatch(matches.semanticRefIndex, matches.score + scoreBoost);
+            this.recordTermMatch(term.text);
         }
-        this.recordTermMatch(term);
+    }
+
+    public addForTermUnion(
+        term: Term,
+        semanticRefs: ScoredSemanticRef[] | undefined,
+        scoreBoost?: number,
+    ) {
+        if (semanticRefs) {
+            scoreBoost ??= term.score ?? 0;
+            for (const match of semanticRefs) {
+                this.addUnion(match.semanticRefIndex, match.score + scoreBoost);
+            }
+            this.recordTermMatch(term.text);
+        }
     }
 
     public recordTermMatch(term: string) {
