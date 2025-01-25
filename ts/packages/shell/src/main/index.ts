@@ -98,7 +98,8 @@ function setContentSize() {
 
 const time = performance.now();
 debugShell("Starting...");
-function createWindow(): void {
+
+function createWindow() {
     debugShell("Creating window", performance.now() - time);
 
     // Create the browser window.
@@ -310,6 +311,8 @@ function createWindow(): void {
             );
         };
     });
+
+    return { mainWindow, chatView };
 }
 
 /**
@@ -425,21 +428,6 @@ async function triggerRecognitionOnce() {
     );
 }
 
-const clientIOChannel = createGenericChannel((message: any) => {
-    chatView?.webContents.send("clientio-rpc-call", message);
-});
-ipcMain.on("clientio-rpc-reply", (_event, message) => {
-    clientIOChannel.message(message);
-});
-
-const newClientIO = createClientIORpcClient(clientIOChannel.channel);
-const clientIO = {
-    ...newClientIO,
-    exit: () => {
-        app.quit();
-    },
-};
-
 async function initializeSpeech() {
     const key = process.env["SPEECH_SDK_KEY"];
     const region = process.env["SPEECH_SDK_REGION"];
@@ -477,13 +465,24 @@ async function initializeSpeech() {
     }
 }
 
-// This method will be called when Electron has finished
-// initialization and is ready to create browser windows.
-// Some APIs can only be used after this event occurs.
-async function initialize() {
-    debugShell("Ready", performance.now() - time);
-    // Set app user model id for windows
-    electronApp.setAppUserModelId("com.electron");
+async function initializeDispatcher(
+    mainWindow: BrowserWindow,
+    chatView: BrowserView,
+) {
+    const clientIOChannel = createGenericChannel((message: any) => {
+        chatView.webContents.send("clientio-rpc-call", message);
+    });
+    ipcMain.on("clientio-rpc-reply", (_event, message) => {
+        clientIOChannel.message(message);
+    });
+
+    const newClientIO = createClientIORpcClient(clientIOChannel.channel);
+    const clientIO = {
+        ...newClientIO,
+        exit: () => {
+            app.quit();
+        },
+    };
 
     // Set up dispatcher
     const newDispatcher = await createDispatcher("shell", {
@@ -499,6 +498,22 @@ async function initialize() {
     });
 
     let settingSummary: string = "";
+    function updateSummary() {
+        const newSettingSummary = dispatcher.getSettingSummary();
+        if (newSettingSummary !== settingSummary) {
+            settingSummary = newSettingSummary;
+            chatView.webContents.send(
+                "setting-summary-changed",
+                newSettingSummary,
+                dispatcher.getTranslatorNameToEmojiMap(),
+            );
+
+            mainWindow.setTitle(
+                `${newSettingSummary} Zoom: ${Math.round(chatView.webContents.zoomFactor! * 100)}%`,
+            );
+        }
+    }
+
     async function processShellRequest(
         text: string,
         id: string,
@@ -510,21 +525,8 @@ async function initialize() {
         debugShell(newDispatcher.getPrompt(), text);
 
         const metrics = await newDispatcher.processCommand(text, id, images);
-        chatView?.webContents.send("send-demo-event", "CommandProcessed");
-        const newSettingSummary = newDispatcher.getSettingSummary();
-        if (newSettingSummary !== settingSummary) {
-            settingSummary = newSettingSummary;
-            chatView?.webContents.send(
-                "setting-summary-changed",
-                newSettingSummary,
-                newDispatcher.getTranslatorNameToEmojiMap(),
-            );
-
-            mainWindow?.setTitle(
-                `${newSettingSummary} Zoom: ${Math.round(chatView?.webContents.zoomFactor! * 100)}%`,
-            );
-        }
-
+        chatView.webContents.send("send-demo-event", "CommandProcessed");
+        updateSummary();
         return metrics;
     }
 
@@ -535,40 +537,54 @@ async function initialize() {
 
     // Set up the RPC
     const dispatcherChannel = createGenericChannel((message: any) => {
-        chatView?.webContents.send("dispatcher-rpc-reply", message);
+        chatView.webContents.send("dispatcher-rpc-reply", message);
     });
     ipcMain.on("dispatcher-rpc-call", (_event, message) => {
         dispatcherChannel.message(message);
     });
     createDispatcherRpcServer(dispatcher, dispatcherChannel.channel);
 
-    if (ShellSettings.getinstance().agentGreeting) {
-        processShellRequest("@greeting", "agent-0", []);
-    }
-    ipcMain.on("dom ready", async () => {
-        settingSummary = dispatcher.getSettingSummary();
-        chatView?.webContents.send(
-            "setting-summary-changed",
-            settingSummary,
-            dispatcher.getTranslatorNameToEmojiMap(),
-        );
+    debugShell("Dispatcher initialized", performance.now() - time);
 
-        mainWindow?.setTitle(
-            `${settingSummary} Zoom: ${Math.round(chatView?.webContents.zoomFactor! * 100)}%`,
-        );
-        mainWindow?.show();
+    // Dispatcher is ready to use.
+    updateSummary();
+    setupQuit(dispatcher);
+
+    return dispatcher;
+}
+
+// This method will be called when Electron has finished
+// initialization and is ready to create browser windows.
+// Some APIs can only be used after this event occurs.
+async function initialize() {
+    debugShell("Ready", performance.now() - time);
+    // Set app user model id for windows
+    electronApp.setAppUserModelId("com.electron");
+
+    await initializeSpeech();
+
+    const { mainWindow, chatView } = createWindow();
+
+    // Note: Make sure dom ready before using dispatcher.
+    const dispatcherP = initializeDispatcher(mainWindow, chatView);
+
+    ipcMain.on("dom ready", async () => {
+        mainWindow.show();
 
         // Send settings asap
         ShellSettings.getinstance().onSettingsChanged!();
 
         // make sure links are opened in the external browser
-        mainWindow?.webContents.setWindowOpenHandler((details) => {
+        mainWindow.webContents.setWindowOpenHandler((details) => {
             require("electron").shell.openExternal(details.url);
             return { action: "deny" };
         });
+
+        if (ShellSettings.getinstance().agentGreeting) {
+            (await dispatcherP).processCommand("@greeting", "agent-0", []);
+        }
     });
 
-    await initializeSpeech();
     ipcMain.handle("get-localWhisper-status", async () => {
         return isLocalWhisperEnabled();
     });
@@ -592,10 +608,8 @@ async function initialize() {
         },
     );
     globalShortcut.register("Alt+Right", () => {
-        chatView?.webContents.send("send-demo-event", "Alt+Right");
+        chatView.webContents.send("send-demo-event", "Alt+Right");
     });
-
-    setupQuit(dispatcher);
 
     // Default open or close DevTools by F12 in development
     // and ignore CommandOrControl + R in production.
@@ -610,8 +624,6 @@ async function initialize() {
             allowFileAccess: true,
         });
     });
-
-    createWindow();
 
     app.on("activate", function () {
         // On macOS it's common to re-create a window in the app when the
