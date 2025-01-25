@@ -27,7 +27,7 @@ test.describe("Shell interface tests", () => {
     /**
      * Test to ensure that the shell recall startup layout (position, size)
      */
-    test.skip("remember window position", async () => {
+    test("remember window position", async () => {
         let agentMessageCount = 0;
 
         const firstWindow = await testSetup();
@@ -96,7 +96,6 @@ test.describe("Shell interface tests", () => {
     });
 
     async function testZoomLevel(level: number, page: Page) {
-
         // set the zoom level to 80%
         await sendUserRequestAndWaitForResponse(`@shell set zoomLevel ${level}`, page);
 

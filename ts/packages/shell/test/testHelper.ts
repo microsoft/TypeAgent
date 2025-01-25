@@ -24,10 +24,11 @@ export async function testSetup(): Promise<Page> {
 
     // other related multi-instance varibles that need to be modfied to ensure we can run multiple shell instances
     process.env["PORT"] = (9001 + parseInt(process.env["TEST_WORKER_INDEX"]!)).toString();
-    process.env["WEBSOCKET_HOST"] = (8080 + parseInt(process.env["TEST_WORKER_INDEX"]!)).toString();
+    process.env["WEBSOCKET_HOST"] = `ws://localhost:${(8080 + parseInt(process.env["TEST_WORKER_INDEX"]!))}`;
 
     // we may have to retry restarting the application due to session file locks or other such startup failures
     let retryAttempt = 0;
+    const maxRetries = 10;
 
     do {
         try {            
@@ -50,18 +51,18 @@ export async function testSetup(): Promise<Page> {
             return mainWindow;
 
         } catch (e) {            
-            console.warn(`Unable to start electrom application (${process.env["INSTANCE_NAME"]}). Attempt ${retryAttempt} of 5`);            
+            console.warn(`Unable to start electrom application (${process.env["INSTANCE_NAME"]}). Attempt ${retryAttempt} of ${maxRetries}`);            
             retryAttempt++;
 
-            if (runningApplications.get(process.env["INSTANCE_NAME"]) !== null) {
-                runningApplications.get(process.env["INSTANCE_NAME"]!)!.close();
+            if (runningApplications.get(process.env["INSTANCE_NAME"])) {
+                await runningApplications.get(process.env["INSTANCE_NAME"]!)!.close();
             }
 
             runningApplications.delete(process.env["INSTANCE_NAME"]!);
         }
-    } while (retryAttempt <= 5);
+    } while (retryAttempt <= maxRetries);
 
-    throw new Error("Failed to start electrom app after 5 attemps.");
+    throw new Error(`Failed to start electrom app after ${maxRetries} attemps.`);
 }
 
 /**
@@ -93,9 +94,9 @@ export function getAppPath(): string {
  * @param prompt The user request/prompt.
  * @param page The maing page from the electron host application.
  */
-export async function sendUserRequest(prompt: string, page: Page) { 
-    const locator: Locator = page.locator("#phraseDiv");
-    await locator.waitFor({ timeout: 10000, state: "attached" });
+export async function sendUserRequest(prompt: string, page: Page) {
+    const locator: Locator = await page.locator("#phraseDiv");
+    await locator.waitFor({ timeout: 120000, state: "visible" });
     await locator.focus();
     await locator.fill(prompt);
     await locator.press("Enter");
@@ -107,8 +108,9 @@ export async function sendUserRequest(prompt: string, page: Page) {
  * @param page The maing page from the electron host application.
  */
 export async function sendUserRequestFast(prompt: string, page: Page) {    
-    const element = await page.waitForSelector("#phraseDiv");
-    await element.fill(prompt);
+    const locator: Locator = await page.locator("#phraseDiv");
+    await locator.waitFor({ timeout: 120000, state: "visible" });
+    await locator.fill(prompt);
     page.keyboard.down("Enter");
 }
 

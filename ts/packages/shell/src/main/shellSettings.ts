@@ -152,6 +152,7 @@ export class ShellSettings
                         value.toLowerCase() === "true" || value === "1";
                     break;
                 case "object":
+                case "undefined":
                     ShellSettings.getinstance()[name] = JSON.parse(value);
                     break;
             }
