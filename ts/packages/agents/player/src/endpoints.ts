@@ -139,13 +139,6 @@ export async function getTopUserTracks(service: SpotifyService, k = limitMax) {
     return getK(k, get);
 }
 
-export async function getGenreSeeds(service: SpotifyService) {
-    return callRestAPI<SpotifyApi.AvailableGenreSeedsResponse>(
-        service,
-        "https://api.spotify.com/v1/recommendations/available-genre-seeds",
-        {},
-    );
-}
 async function getKCursor<T>(
     k: number,
     get: (

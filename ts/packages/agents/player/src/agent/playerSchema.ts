@@ -6,7 +6,6 @@ export type PlayerAction =
     | PlayTrackAction
     | PlayFromCurrentTrackListAction
     | PlayAlbumAction
-    | PlayAlbumTrackAction
     | PlayArtistAction
     | PlayGenreAction
     | StatusAction
@@ -41,6 +40,7 @@ export interface PlayTrackAction {
     actionName: "playTrack";
     parameters: {
         trackName: string;
+        albumName?: string;
         artists?: string[];
     };
 }
@@ -63,19 +63,11 @@ export interface PlayFromCurrentTrackListAction {
     };
 }
 
-export interface PlayAlbumTrackAction {
-    actionName: "playAlbumTrack";
-    parameters: {
-        albumName: string;
-        trackName: string;
-        artists?: string[];
-    };
-}
-
 export interface PlayArtistAction {
     actionName: "playArtist";
     parameters: {
         artist: string;
+        genre?: string; // option genre if specified.
         quantity?: number;
     };
 }
