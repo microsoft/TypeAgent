@@ -544,9 +544,10 @@ async function initializeDispatcher(
     });
     createDispatcherRpcServer(dispatcher, dispatcherChannel.channel);
 
+    // Dispatcher is ready to be called from the client, but we need to wait for the dom to be ready to start
+    // using it to process command, so that the client can receive messages.
     debugShell("Dispatcher initialized", performance.now() - time);
 
-    // Dispatcher is ready to use.
     updateSummary();
     setupQuit(dispatcher);
 
@@ -580,6 +581,7 @@ async function initialize() {
             return { action: "deny" };
         });
 
+        // The dispatcher can be use now that dom is ready and the client is ready to receive messages
         if (ShellSettings.getinstance().agentGreeting) {
             (await dispatcherP).processCommand("@greeting", "agent-0", []);
         }
