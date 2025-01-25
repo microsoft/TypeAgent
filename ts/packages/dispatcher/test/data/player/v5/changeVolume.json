@@ -1,7 +1,7 @@
 {
   "version": 2,
   "schemaName": "player",
-  "sourceHash": "/coyfq1j8qYAwzuqFo38QLrP2X7DZ/U6UJRPEiLjn7Q=",
+  "sourceHash": "HrhZPog7XXm93zb5xwYtzWspziPTFgFnvgb4UUJ85a8=",
   "explainerName": "v5",
   "entries": [
     {
@@ -57,9 +57,9 @@
             "text": "in audio",
             "category": "context",
             "synonyms": [
-              "of the sound",
+              "in sound",
               "in volume",
-              "of the audio"
+              "in music"
             ],
             "isOptional": true
           },
@@ -67,9 +67,9 @@
             "text": "would be perfect.",
             "category": "politeness",
             "synonyms": [
-              "is fine",
-              "is good",
-              "is okay"
+              "please",
+              "if possible",
+              "that would be great"
             ],
             "isOptional": true
           }
@@ -111,12 +111,12 @@
           "Could you please",
           "Would you mind",
           "If it's not too much trouble,",
-          "May I kindly request"
+          "I would appreciate it if you could"
         ],
         "politeSuffixes": [
           "Thank you.",
-          "I would appreciate it.",
           "Thanks a lot.",
+          "I appreciate it.",
           "That would be great."
         ]
       },
@@ -172,7 +172,7 @@
         "subPhrases": [
           {
             "text": "Adjust the volume",
-            "category": "command",
+            "category": "action",
             "propertyNames": [
               "fullActionName"
             ]
@@ -181,9 +181,9 @@
             "text": "up by",
             "category": "preposition",
             "synonyms": [
-              "to",
               "increase by",
-              "raise by"
+              "raise by",
+              "boost by"
             ],
             "isOptional": true
           },
@@ -237,15 +237,15 @@
                 ]
               },
               {
-                "propertyValue": 50,
+                "propertyValue": 20,
                 "propertySubPhrases": [
-                  "50%"
+                  "20%"
                 ]
               },
               {
-                "propertyValue": 100,
+                "propertyValue": 50,
                 "propertySubPhrases": [
-                  "100%"
+                  "50%"
                 ]
               }
             ]
@@ -256,8 +256,8 @@
           "Would you mind"
         ],
         "politeSuffixes": [
-          "Thank you.",
-          "I appreciate it."
+          "Thank you!",
+          "I would appreciate it."
         ]
       }
     },
@@ -338,21 +338,21 @@
             ],
             "alternatives": [
               {
-                "propertyValue": 20,
-                "propertySubPhrases": [
-                  "increase it by 20%"
-                ]
-              },
-              {
                 "propertyValue": 5,
                 "propertySubPhrases": [
-                  "raise it by 5%"
+                  "increase it by 5%"
                 ]
               },
               {
                 "propertyValue": 15,
                 "propertySubPhrases": [
-                  "boost it by 15%"
+                  "raise it by 15%"
+                ]
+              },
+              {
+                "propertyValue": 20,
+                "propertySubPhrases": [
+                  "boost it by 20%"
                 ]
               }
             ]
@@ -360,13 +360,43 @@
         ],
         "politePrefixes": [
           "Could you please",
-          "Would you mind"
+          "Would you mind",
+          "If it's not too much trouble, could you",
+          "May I kindly ask you to"
         ],
         "politeSuffixes": [
-          "Thank you.",
-          "I would appreciate it."
+          "Thank you!",
+          "I would appreciate it.",
+          "Thanks a lot!",
+          "That would be great."
         ]
-      }
+      },
+      "corrections": [
+        {
+          "data": {
+            "properties": [
+              {
+                "name": "fullActionName",
+                "value": "player.changeVolume",
+                "substrings": [
+                  "Alter the sound level"
+                ]
+              },
+              {
+                "name": "volumeChangePercentage",
+                "value": 10,
+                "substrings": [
+                  "hike it up by 10%"
+                ]
+              }
+            ]
+          },
+          "correction": [
+            "Extraneous parameter: 'volumeChangePercentage' is not a parameter in the action",
+            "Missing parameter: parameter 'parameters.volumeChangePercentage' in the action is missing from explanation"
+          ]
+        }
+      ]
     },
     {
       "request": "Amplify the sound by 30%.",
@@ -402,18 +432,8 @@
             ]
           },
           {
-            "text": "by",
-            "category": "preposition",
-            "synonyms": [
-              "to",
-              "at",
-              "with"
-            ],
-            "isOptional": true
-          },
-          {
-            "text": "30%",
-            "category": "value",
+            "text": "by 30%",
+            "category": "parameter",
             "propertyNames": [
               "parameters.volumeChangePercentage"
             ]
@@ -451,25 +471,25 @@
             "propertyName": "parameters.volumeChangePercentage",
             "propertyValue": 30,
             "propertySubPhrases": [
-              "30%"
+              "by 30%"
             ],
             "alternatives": [
               {
                 "propertyValue": 20,
                 "propertySubPhrases": [
-                  "20%"
+                  "by 20%"
                 ]
               },
               {
                 "propertyValue": 50,
                 "propertySubPhrases": [
-                  "50%"
+                  "by 50%"
                 ]
               },
               {
                 "propertyValue": 10,
                 "propertySubPhrases": [
-                  "10%"
+                  "by 10%"
                 ]
               }
             ]
@@ -480,7 +500,7 @@
           "Would you mind"
         ],
         "politeSuffixes": [
-          "Thank you.",
+          "Thank you!",
           "I would appreciate it."
         ]
       }
@@ -513,7 +533,7 @@
         "subPhrases": [
           {
             "text": "Boost the volume",
-            "category": "command",
+            "category": "action",
             "propertyNames": [
               "fullActionName"
             ]
@@ -594,11 +614,15 @@
         ],
         "politePrefixes": [
           "Could you please",
-          "Would you mind"
+          "Would you mind",
+          "If it's not too much trouble,",
+          "Kindly"
         ],
         "politeSuffixes": [
-          "Thank you!",
-          "I would appreciate it."
+          "Thank you.",
+          "Thanks a lot.",
+          "I appreciate it.",
+          "Much appreciated."
         ]
       }
     },
@@ -616,7 +640,7 @@
             "name": "fullActionName",
             "value": "player.changeVolume",
             "substrings": [
-              "get the sound level up"
+              "sound level up"
             ]
           },
           {
@@ -629,17 +653,17 @@
         ],
         "subPhrases": [
           {
-            "text": "Can we",
+            "text": "Can we get",
             "category": "politeness",
             "synonyms": [
-              "Could we",
-              "Would it be possible to",
-              "Is it okay if we"
+              "Could we have",
+              "May we get",
+              "Would it be possible to get"
             ],
             "isOptional": true
           },
           {
-            "text": "get the sound level up",
+            "text": "the sound level up",
             "category": "action",
             "propertyNames": [
               "fullActionName"
@@ -650,14 +674,14 @@
             "category": "filler",
             "synonyms": [
               "by a good",
-              "by an appropriate",
-              "by a suitable"
+              "by a reasonable",
+              "by an adequate"
             ],
             "isOptional": true
           },
           {
             "text": "10%",
-            "category": "volume change",
+            "category": "value",
             "propertyNames": [
               "parameters.volumeChangePercentage"
             ]
@@ -668,7 +692,7 @@
             "propertyName": "fullActionName",
             "propertyValue": "player.changeVolume",
             "propertySubPhrases": [
-              "get the sound level up"
+              "the sound level up"
             ],
             "alternatives": [
               {
@@ -684,9 +708,9 @@
                 ]
               },
               {
-                "propertyValue": "player.turnUpVolume",
+                "propertyValue": "player.adjustVolume",
                 "propertySubPhrases": [
-                  "turn up the volume"
+                  "adjust the volume"
                 ]
               }
             ]
@@ -757,52 +781,32 @@
         ],
         "subPhrases": [
           {
-            "text": "Can",
+            "text": "Can we have",
             "category": "politeness",
             "synonyms": [
-              "Could",
-              "Would",
-              "May"
-            ],
-            "isOptional": true
-          },
-          {
-            "text": "we",
-            "category": "politeness",
-            "synonyms": [
-              "us",
-              "our",
-              "ourselves"
-            ],
-            "isOptional": true
-          },
-          {
-            "text": "have",
-            "category": "politeness",
-            "synonyms": [
-              "get",
-              "obtain",
-              "receive"
+              "Could we get",
+              "May we have",
+              "Would it be possible to get"
             ],
             "isOptional": true
           },
           {
             "text": "the audio",
-            "category": "action",
+            "category": "category",
             "propertyNames": [
               "fullActionName"
             ]
           },
           {
             "text": "20%",
-            "category": "volumeChange",
+            "category": "percentage",
             "propertyNames": [
               "parameters.volumeChangePercentage"
             ]
           },
           {
             "text": "down",
-            "category": "volumeChange",
+            "category": "direction",
             "propertyNames": [
               "parameters.volumeChangePercentage"
             ]
@@ -859,10 +863,10 @@
                 ]
               },
               {
-                "propertyValue": -50,
+                "propertyValue": 20,
                 "propertySubPhrases": [
-                  "50%",
-                  "down"
+                  "20%",
+                  "up"
                 ]
               }
             ]
@@ -873,8 +877,8 @@
           "Would you mind"
         ],
         "politeSuffixes": [
-          "Thank you!",
-          "If that's okay."
+          "Thank you.",
+          "I would appreciate it."
         ]
       },
       "corrections": [
@@ -936,23 +940,16 @@
             "synonyms": [
               "Could we",
               "Would it be possible to",
-              "Is it okay if we"
+              "Shall we"
             ],
             "isOptional": true
           },
           {
-            "text": "trim down",
+            "text": "trim down the volume",
             "category": "action",
             "propertyNames": [
               "fullActionName",
               "parameters.volumeChangePercentage"
-            ]
-          },
-          {
-            "text": "the volume",
-            "category": "action",
-            "propertyNames": [
-              "fullActionName"
             ]
           },
           {
@@ -967,7 +964,7 @@
           },
           {
             "text": "5%",
-            "category": "volume change",
+            "category": "percentage",
             "propertyNames": [
               "parameters.volumeChangePercentage"
             ]
@@ -978,29 +975,25 @@
             "propertyName": "fullActionName",
             "propertyValue": "player.changeVolume",
             "propertySubPhrases": [
-              "trim down",
-              "the volume"
+              "trim down the volume"
             ],
             "alternatives": [
               {
-                "propertyValue": "player.decreaseVolume",
+                "propertyValue": "player.increaseVolume",
                 "propertySubPhrases": [
-                  "lower",
-                  "the volume"
+                  "increase the volume"
                 ]
               },
               {
-                "propertyValue": "player.reduceVolume",
+                "propertyValue": "player.muteVolume",
                 "propertySubPhrases": [
-                  "reduce",
-                  "the volume"
+                  "mute the volume"
                 ]
               },
               {
-                "propertyValue": "player.turnDownVolume",
+                "propertyValue": "player.setVolume",
                 "propertySubPhrases": [
-                  "turn down",
-                  "the volume"
+                  "set the volume"
                 ]
               }
             ]
@@ -1009,28 +1002,28 @@
             "propertyName": "parameters.volumeChangePercentage",
             "propertyValue": -5,
             "propertySubPhrases": [
-              "trim down",
+              "trim down the volume",
               "5%"
             ],
             "alternatives": [
               {
                 "propertyValue": -10,
                 "propertySubPhrases": [
-                  "trim down",
+                  "trim down the volume",
                   "10%"
                 ]
               },
               {
                 "propertyValue": -15,
                 "propertySubPhrases": [
-                  "trim down",
+                  "trim down the volume",
                   "15%"
                 ]
               },
               {
                 "propertyValue": -20,
                 "propertySubPhrases": [
-                  "trim down",
+                  "trim down the volume",
                   "20%"
                 ]
               }
@@ -1096,7 +1089,7 @@
                 "synonyms": [
                   "Could we",
                   "Would it be possible to",
-                  "Is it okay if we"
+                  "Shall we"
                 ],
                 "isOptional": true
               },
@@ -1119,7 +1112,7 @@
               },
               {
                 "text": "5%",
-                "category": "volume change",
+                "category": "percentage",
                 "propertyNames": [
                   "parameters.volumeChangePercentage"
                 ]
@@ -1187,7 +1180,7 @@
           },
           {
             "text": "10%",
-            "category": "value",
+            "category": "quantity",
             "propertyNames": [
               "parameters.volumeChangePercentage"
             ]
@@ -1214,9 +1207,9 @@
                 ]
               },
               {
-                "propertyValue": "player.turnUpVolume",
+                "propertyValue": "player.boostVolume",
                 "propertySubPhrases": [
-                  "turn up the volume"
+                  "boost the volume"
                 ]
               }
             ]
@@ -1441,7 +1434,7 @@
           },
           {
             "text": "from the volume",
-            "category": "context",
+            "category": "target",
             "propertyNames": [
               "fullActionName"
             ]
@@ -1457,24 +1450,24 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "player.increaseVolume",
-                "propertySubPhrases": [
-                  "increase",
-                  "the volume"
-                ]
-              },
-              {
                 "propertyValue": "player.decreaseVolume",
                 "propertySubPhrases": [
-                  "decrease",
-                  "the volume"
+                  "reduce",
+                  "from the volume"
                 ]
               },
               {
-                "propertyValue": "player.muteVolume",
+                "propertyValue": "player.lowerVolume",
                 "propertySubPhrases": [
-                  "mute",
-                  "the volume"
+                  "lower",
+                  "from the volume"
+                ]
+              },
+              {
+                "propertyValue": "player.dimVolume",
+                "propertySubPhrases": [
+                  "dim",
+                  "from the volume"
                 ]
               }
             ]
@@ -1516,7 +1509,7 @@
           "Would you mind"
         ],
         "politeSuffixes": [
-          "Thank you.",
+          "Thank you!",
           "I would appreciate it."
         ]
       },
@@ -1597,21 +1590,21 @@
             ],
             "alternatives": [
               {
+                "propertyValue": "player.increaseVolume",
+                "propertySubPhrases": [
+                  "Increase the volume"
+                ]
+              },
+              {
+                "propertyValue": "player.raiseVolume",
+                "propertySubPhrases": [
+                  "Raise the volume"
+                ]
+              },
+              {
                 "propertyValue": "player.adjustVolume",
                 "propertySubPhrases": [
                   "Adjust the volume"
-                ]
-              },
-              {
-                "propertyValue": "player.setVolume",
-                "propertySubPhrases": [
-                  "Set the volume"
-                ]
-              },
-              {
-                "propertyValue": "player.modifyVolume",
-                "propertySubPhrases": [
-                  "Modify the volume"
                 ]
               }
             ]
@@ -1626,19 +1619,19 @@
               {
                 "propertyValue": 5,
                 "propertySubPhrases": [
-                  "increase it by 5%"
+                  "bump it up by 5%"
                 ]
               },
               {
                 "propertyValue": 15,
                 "propertySubPhrases": [
-                  "raise it by 15%"
+                  "bump it up by 15%"
                 ]
               },
               {
                 "propertyValue": 20,
                 "propertySubPhrases": [
-                  "boost it by 20%"
+                  "bump it up by 20%"
                 ]
               }
             ]
@@ -1736,9 +1729,9 @@
                 ]
               },
               {
-                "propertyValue": "player.boostVolume",
+                "propertyValue": "player.turnUpVolume",
                 "propertySubPhrases": [
-                  "boost the volume"
+                  "turn up the volume"
                 ]
               }
             ]
@@ -1805,9 +1798,9 @@
             "text": "Could you",
             "category": "politeness",
             "synonyms": [
-              "Please",
-              "Would you mind",
-              "Can you"
+              "Can you",
+              "Would you",
+              "Will you"
             ],
             "isOptional": true
           },
@@ -1853,13 +1846,13 @@
               {
                 "propertyValue": "player.raiseVolume",
                 "propertySubPhrases": [
-                  "raise the audio level"
+                  "raise the volume"
                 ]
               },
               {
                 "propertyValue": "player.boostVolume",
                 "propertySubPhrases": [
-                  "boost the sound level"
+                  "boost the volume"
                 ]
               }
             ]
@@ -1934,18 +1927,11 @@
             "isOptional": true
           },
           {
-            "text": "snip",
+            "text": "snip the volume",
             "category": "action",
             "propertyNames": [
               "fullActionName",
               "parameters.volumeChangePercentage"
-            ]
-          },
-          {
-            "text": "the volume",
-            "category": "action",
-            "propertyNames": [
-              "fullActionName"
             ]
           },
           {
@@ -1960,7 +1946,7 @@
           },
           {
             "text": "5%",
-            "category": "volume change",
+            "category": "value",
             "propertyNames": [
               "parameters.volumeChangePercentage"
             ]
@@ -1971,29 +1957,25 @@
             "propertyName": "fullActionName",
             "propertyValue": "player.changeVolume",
             "propertySubPhrases": [
-              "snip",
-              "the volume"
+              "snip the volume"
             ],
             "alternatives": [
               {
                 "propertyValue": "player.increaseVolume",
                 "propertySubPhrases": [
-                  "increase",
-                  "the volume"
+                  "increase the volume"
                 ]
               },
               {
                 "propertyValue": "player.decreaseVolume",
                 "propertySubPhrases": [
-                  "decrease",
-                  "the volume"
+                  "decrease the volume"
                 ]
               },
               {
                 "propertyValue": "player.muteVolume",
                 "propertySubPhrases": [
-                  "mute",
-                  "the volume"
+                  "mute the volume"
                 ]
               }
             ]
@@ -2002,28 +1984,28 @@
             "propertyName": "parameters.volumeChangePercentage",
             "propertyValue": -5,
             "propertySubPhrases": [
-              "snip",
+              "snip the volume",
               "5%"
             ],
             "alternatives": [
               {
                 "propertyValue": -10,
                 "propertySubPhrases": [
-                  "snip",
+                  "snip the volume",
                   "10%"
                 ]
               },
               {
                 "propertyValue": -15,
                 "propertySubPhrases": [
-                  "snip",
+                  "snip the volume",
                   "15%"
                 ]
               },
               {
                 "propertyValue": -20,
                 "propertySubPhrases": [
-                  "snip",
+                  "snip the volume",
                   "20%"
                 ]
               }
@@ -2106,7 +2088,7 @@
               },
               {
                 "text": "5%",
-                "category": "volume change",
+                "category": "value",
                 "propertyNames": [
                   "parameters.volumeChangePercentage"
                 ]
@@ -2141,7 +2123,7 @@
             "value": -5,
             "substrings": [
               "down",
-              "5%"
+              "by 5%"
             ]
           }
         ],
@@ -2311,8 +2293,18 @@
             ]
           },
           {
-            "text": "by 10%",
-            "category": "specification",
+            "text": "by",
+            "category": "preposition",
+            "synonyms": [
+              "to",
+              "at",
+              "with"
+            ],
+            "isOptional": true
+          },
+          {
+            "text": "10%",
+            "category": "quantity",
             "propertyNames": [
               "parameters.volumeChangePercentage"
             ]
@@ -2339,9 +2331,9 @@
                 ]
               },
               {
-                "propertyValue": "player.adjustVolume",
+                "propertyValue": "player.turnUpVolume",
                 "propertySubPhrases": [
-                  "adjust the volume"
+                  "turn up the volume"
                 ]
               }
             ]
@@ -2350,25 +2342,25 @@
             "propertyName": "parameters.volumeChangePercentage",
             "propertyValue": 10,
             "propertySubPhrases": [
-              "by 10%"
+              "10%"
             ],
             "alternatives": [
               {
                 "propertyValue": 5,
                 "propertySubPhrases": [
-                  "by 5%"
+                  "5%"
                 ]
               },
               {
                 "propertyValue": 15,
                 "propertySubPhrases": [
-                  "by 15%"
+                  "15%"
                 ]
               },
               {
                 "propertyValue": 20,
                 "propertySubPhrases": [
-                  "by 20%"
+                  "20%"
                 ]
               }
             ]
@@ -2415,14 +2407,14 @@
           },
           {
             "text": "on the volume",
-            "category": "object",
+            "category": "context",
             "propertyNames": [
               "fullActionName"
             ]
           },
           {
             "text": "by 10%",
-            "category": "amount",
+            "category": "specification",
             "propertyNames": [
               "parameters.volumeChangePercentage"
             ]
@@ -2452,9 +2444,9 @@
                 ]
               },
               {
-                "propertyValue": "player.setVolume",
+                "propertyValue": "player.unmuteVolume",
                 "propertySubPhrases": [
-                  "Set",
+                  "Unmute",
                   "the volume"
                 ]
               }
@@ -2494,11 +2486,15 @@
         ],
         "politePrefixes": [
           "Could you please",
-          "Would you mind"
+          "Would you mind",
+          "If it's not too much trouble, could you",
+          "May I kindly ask you to"
         ],
         "politeSuffixes": [
           "Thank you.",
-          "I would appreciate it."
+          "Thanks a lot.",
+          "I would appreciate it.",
+          "That would be great."
         ]
       },
       "corrections": [
@@ -2770,21 +2766,21 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "player.mute",
-                "propertySubPhrases": [
-                  "mute"
-                ]
-              },
-              {
                 "propertyValue": "player.increaseVolume",
                 "propertySubPhrases": [
-                  "increase the volume"
+                  "the volume up"
                 ]
               },
               {
-                "propertyValue": "player.decreaseVolume",
+                "propertyValue": "player.muteVolume",
                 "propertySubPhrases": [
-                  "decrease the volume"
+                  "the volume to mute"
+                ]
+              },
+              {
+                "propertyValue": "player.setVolume",
+                "propertySubPhrases": [
+                  "the volume to a specific level"
                 ]
               }
             ]
@@ -2797,9 +2793,9 @@
           "May I kindly ask you to"
         ],
         "politeSuffixes": [
-          "Thank you.",
+          "Thank you!",
           "I would appreciate it.",
-          "Thanks a lot.",
+          "Thanks a lot!",
           "That would be great."
         ]
       },
@@ -2948,8 +2944,8 @@
           "Would you mind"
         ],
         "politeSuffixes": [
-          "Thank you!",
-          "I would appreciate it."
+          "Thank you.",
+          "I appreciate it."
         ]
       },
       "corrections": [
@@ -3000,7 +2996,7 @@
             "value": -10,
             "substrings": [
               "Diminish",
-              "a small 10%"
+              "10%"
             ]
           }
         ],
@@ -3021,8 +3017,18 @@
             ]
           },
           {
-            "text": "by a small 10%",
-            "category": "modifier",
+            "text": "by a small",
+            "category": "filler",
+            "synonyms": [
+              "by a little",
+              "by a bit",
+              "by a tiny"
+            ],
+            "isOptional": true
+          },
+          {
+            "text": "10%",
+            "category": "value",
             "propertyNames": [
               "parameters.volumeChangePercentage"
             ]
@@ -3038,23 +3044,23 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "player.decreaseVolume",
+                "propertyValue": "player.increaseVolume",
                 "propertySubPhrases": [
-                  "Lower",
+                  "Increase",
                   "the volume"
                 ]
               },
               {
-                "propertyValue": "player.reduceVolume",
+                "propertyValue": "player.muteVolume",
                 "propertySubPhrases": [
-                  "Reduce",
+                  "Mute",
                   "the volume"
                 ]
               },
               {
-                "propertyValue": "player.turnDownVolume",
+                "propertyValue": "player.setVolume",
                 "propertySubPhrases": [
-                  "Turn down",
+                  "Set",
                   "the volume"
                 ]
               }
@@ -3065,28 +3071,28 @@
             "propertyValue": -10,
             "propertySubPhrases": [
               "Diminish",
-              "by a small 10%"
+              "10%"
             ],
             "alternatives": [
               {
                 "propertyValue": -5,
                 "propertySubPhrases": [
                   "Diminish",
-                  "by a small 5%"
-                ]
-              },
-              {
-                "propertyValue": -15,
-                "propertySubPhrases": [
-                  "Diminish",
-                  "by a small 15%"
+                  "5%"
                 ]
               },
               {
                 "propertyValue": -20,
                 "propertySubPhrases": [
                   "Diminish",
-                  "by a small 20%"
+                  "20%"
+                ]
+              },
+              {
+                "propertyValue": -15,
+                "propertySubPhrases": [
+                  "Diminish",
+                  "15%"
                 ]
               }
             ]
@@ -3097,7 +3103,7 @@
           "Would you mind"
         ],
         "politeSuffixes": [
-          "Thank you!",
+          "Thank you.",
           "I would appreciate it."
         ]
       },
@@ -3116,13 +3122,13 @@
                 "name": "parameters.volumeChangePercentage",
                 "value": -10,
                 "substrings": [
-                  "a small 10%"
+                  "10%"
                 ]
               }
             ]
           },
           "correction": [
-            "Value -10 for property 'parameters.volumeChangePercentage' doesn't match the number 10 in the substring 'a small 10%'. Missing other substring to explain the value."
+            "Value -10 for property 'parameters.volumeChangePercentage' doesn't match the number 10 in the substring '10%'. Missing other substring to explain the value."
           ]
         }
       ]
@@ -3148,25 +3154,18 @@
             "name": "parameters.volumeChangePercentage",
             "value": -10,
             "substrings": [
-              "Drop",
+              "Drop the volume",
               "10%"
             ]
           }
         ],
         "subPhrases": [
           {
-            "text": "Drop",
+            "text": "Drop the volume",
             "category": "command",
             "propertyNames": [
               "fullActionName",
               "parameters.volumeChangePercentage"
-            ]
-          },
-          {
-            "text": "the volume",
-            "category": "object",
-            "propertyNames": [
-              "fullActionName"
             ]
           },
           {
@@ -3181,7 +3180,7 @@
           },
           {
             "text": "10%",
-            "category": "quantity",
+            "category": "value",
             "propertyNames": [
               "parameters.volumeChangePercentage"
             ]
@@ -3192,29 +3191,25 @@
             "propertyName": "fullActionName",
             "propertyValue": "player.changeVolume",
             "propertySubPhrases": [
-              "Drop",
-              "the volume"
+              "Drop the volume"
             ],
             "alternatives": [
               {
-                "propertyValue": "player.decreaseVolume",
+                "propertyValue": "player.increaseVolume",
                 "propertySubPhrases": [
-                  "Lower",
-                  "the volume"
+                  "Increase the volume"
                 ]
               },
               {
-                "propertyValue": "player.reduceVolume",
+                "propertyValue": "player.muteVolume",
                 "propertySubPhrases": [
-                  "Reduce",
-                  "the volume"
+                  "Mute the volume"
                 ]
               },
               {
-                "propertyValue": "player.turnDownVolume",
+                "propertyValue": "player.setVolume",
                 "propertySubPhrases": [
-                  "Turn down",
-                  "the volume"
+                  "Set the volume"
                 ]
               }
             ]
@@ -3223,29 +3218,29 @@
             "propertyName": "parameters.volumeChangePercentage",
             "propertyValue": -10,
             "propertySubPhrases": [
-              "Drop",
+              "Drop the volume",
               "10%"
             ],
             "alternatives": [
               {
+                "propertyValue": -20,
+                "propertySubPhrases": [
+                  "Drop the volume",
+                  "20%"
+                ]
+              },
+              {
                 "propertyValue": -5,
                 "propertySubPhrases": [
-                  "Drop",
+                  "Drop the volume",
                   "5%"
                 ]
               },
               {
                 "propertyValue": -15,
                 "propertySubPhrases": [
-                  "Drop",
+                  "Drop the volume",
                   "15%"
-                ]
-              },
-              {
-                "propertyValue": -20,
-                "propertySubPhrases": [
-                  "Drop",
-                  "20%"
                 ]
               }
             ]
@@ -3253,11 +3248,15 @@
         ],
         "politePrefixes": [
           "Could you please",
-          "Would you mind"
+          "Would you mind",
+          "If it's not too much trouble, could you",
+          "May I kindly ask you to"
         ],
         "politeSuffixes": [
           "Thank you!",
-          "I would appreciate it."
+          "I would appreciate it.",
+          "Thanks a lot!",
+          "That would be great, thanks!"
         ]
       },
       "corrections": [
@@ -3329,7 +3328,7 @@
           },
           {
             "text": "by 10%",
-            "category": "quantity",
+            "category": "specification",
             "propertyNames": [
               "parameters.volumeChangePercentage"
             ]
@@ -3355,14 +3354,14 @@
                 "propertyValue": "player.raiseVolume",
                 "propertySubPhrases": [
                   "Raise the audio level",
-                  "turn it up"
+                  "boost it"
                 ]
               },
               {
-                "propertyValue": "player.boostVolume",
+                "propertyValue": "player.amplifyVolume",
                 "propertySubPhrases": [
-                  "Boost the sound",
-                  "amplify it"
+                  "Amplify the sound",
+                  "turn it up"
                 ]
               }
             ]
@@ -3400,7 +3399,7 @@
           "Would you mind"
         ],
         "politeSuffixes": [
-          "Thank you!",
+          "Thank you.",
           "I would appreciate it."
         ]
       }
@@ -3434,21 +3433,31 @@
         "subPhrases": [
           {
             "text": "Enhance the audio level",
-            "category": "command",
+            "category": "action",
             "propertyNames": [
               "fullActionName"
             ]
           },
           {
             "text": "jack it up",
-            "category": "command",
+            "category": "action",
             "propertyNames": [
               "fullActionName"
             ]
           },
           {
-            "text": "by 10%",
-            "category": "specification",
+            "text": "by",
+            "category": "preposition",
+            "synonyms": [
+              "at",
+              "to",
+              "with"
+            ],
+            "isOptional": true
+          },
+          {
+            "text": "10%",
+            "category": "value",
             "propertyNames": [
               "parameters.volumeChangePercentage"
             ]
@@ -3490,25 +3499,25 @@
             "propertyName": "parameters.volumeChangePercentage",
             "propertyValue": 10,
             "propertySubPhrases": [
-              "by 10%"
+              "10%"
             ],
             "alternatives": [
               {
                 "propertyValue": 5,
                 "propertySubPhrases": [
-                  "by 5%"
+                  "5%"
                 ]
               },
               {
                 "propertyValue": 15,
                 "propertySubPhrases": [
-                  "by 15%"
+                  "15%"
                 ]
               },
               {
                 "propertyValue": 20,
                 "propertySubPhrases": [
-                  "by 20%"
+                  "20%"
                 ]
               }
             ]
@@ -3521,9 +3530,9 @@
           "May I kindly ask you to"
         ],
         "politeSuffixes": [
-          "Thank you.",
+          "Thank you!",
           "I would appreciate it.",
-          "Thanks a lot.",
+          "Thanks a lot!",
           "That would be great."
         ]
       }
@@ -3541,9 +3550,7 @@
           {
             "name": "fullActionName",
             "value": "player.changeVolume",
-            "substrings": [
-              "cranking up the volume"
-            ]
+            "isImplicit": true
           },
           {
             "name": "parameters.volumeChangePercentage",
@@ -3558,65 +3565,31 @@
             "text": "Fancy",
             "category": "filler",
             "synonyms": [
-              "Would you like",
               "How about",
+              "Would you like",
               "Do you want"
             ],
             "isOptional": true
           },
           {
-            "text": "cranking up the volume",
-            "category": "action",
-            "propertyNames": [
-              "fullActionName"
-            ]
-          },
-          {
-            "text": "by a notable",
+            "text": "cranking up the volume by a notable",
             "category": "filler",
             "synonyms": [
-              "by a significant",
-              "by an impressive",
-              "by a considerable"
+              "increasing the volume by",
+              "raising the volume by",
+              "turning up the volume by"
             ],
             "isOptional": true
           },
           {
             "text": "10%",
-            "category": "value",
+            "category": "parameter",
             "propertyNames": [
               "parameters.volumeChangePercentage"
             ]
           }
         ],
         "propertyAlternatives": [
-          {
-            "propertyName": "fullActionName",
-            "propertyValue": "player.changeVolume",
-            "propertySubPhrases": [
-              "cranking up the volume"
-            ],
-            "alternatives": [
-              {
-                "propertyValue": "player.increaseVolume",
-                "propertySubPhrases": [
-                  "turning up the volume"
-                ]
-              },
-              {
-                "propertyValue": "player.raiseVolume",
-                "propertySubPhrases": [
-                  "raising the volume"
-                ]
-              },
-              {
-                "propertyValue": "player.boostVolume",
-                "propertySubPhrases": [
-                  "boosting the volume"
-                ]
-              }
-            ]
-          },
           {
             "propertyName": "parameters.volumeChangePercentage",
             "propertyValue": 10,
@@ -3640,6 +3613,12 @@
                 "propertyValue": 20,
                 "propertySubPhrases": [
                   "20%"
+                ]
+              },
+              {
+                "propertyValue": 25,
+                "propertySubPhrases": [
+                  "25%"
                 ]
               }
             ]
@@ -3737,9 +3716,9 @@
                 ]
               },
               {
-                "propertyValue": "player.boostVolume",
+                "propertyValue": "player.volumeUp",
                 "propertySubPhrases": [
-                  "boosting the volume"
+                  "volume up"
                 ]
               }
             ]
@@ -3778,7 +3757,7 @@
         ],
         "politeSuffixes": [
           "Thank you!",
-          "Much appreciated!"
+          "I would appreciate it."
         ]
       }
     },
@@ -3811,11 +3790,11 @@
         "subPhrases": [
           {
             "text": "Gently",
-            "category": "filler",
+            "category": "politeness",
             "synonyms": [
-              "softly",
-              "carefully",
-              "gradually"
+              "Please",
+              "Kindly",
+              "Softly"
             ],
             "isOptional": true
           },
@@ -3836,7 +3815,7 @@
           },
           {
             "text": "by 20%",
-            "category": "quantity",
+            "category": "magnitude",
             "propertyNames": [
               "parameters.volumeChangePercentage"
             ]
@@ -3908,15 +3887,11 @@
         ],
         "politePrefixes": [
           "Could you please",
-          "Would you mind",
-          "If it's not too much trouble, could you",
-          "May I kindly ask you to"
+          "Would you mind"
         ],
         "politeSuffixes": [
           "Thank you.",
-          "I would appreciate it.",
-          "Thanks a lot.",
-          "That would be great."
+          "I would appreciate it."
         ]
       },
       "corrections": [
@@ -4068,14 +4043,8 @@
             ]
           }
         ],
-        "politePrefixes": [
-          "Could you please",
-          "Would you mind"
-        ],
-        "politeSuffixes": [
-          "Thank you",
-          "I appreciate it"
-        ]
+        "politePrefixes": [],
+        "politeSuffixes": []
       },
       "corrections": [
         {
@@ -4210,8 +4179,8 @@
             "text": "by a fair",
             "category": "filler",
             "synonyms": [
-              "by a reasonable",
               "by an appropriate",
+              "by a reasonable",
               "by a suitable"
             ],
             "isOptional": true
@@ -4282,15 +4251,11 @@
         ],
         "politePrefixes": [
           "Could you please",
-          "Would you mind",
-          "If it's not too much trouble,",
-          "May I kindly ask you to"
+          "Would you mind"
         ],
         "politeSuffixes": [
           "Thank you!",
-          "I would appreciate it.",
-          "Thanks a lot!",
-          "That would be great!"
+          "I would appreciate it."
         ]
       }
     },
@@ -4324,9 +4289,9 @@
             "text": "How about we",
             "category": "filler",
             "synonyms": [
-              "What if we",
               "Shall we",
-              "Let's"
+              "Let's",
+              "Why don't we"
             ],
             "isOptional": true
           },
@@ -4343,6 +4308,16 @@
             "propertyNames": [
               "parameters.volumeChangePercentage"
             ]
+          },
+          {
+            "text": "?",
+            "category": "punctuation",
+            "synonyms": [
+              ".",
+              "!",
+              ""
+            ],
+            "isOptional": true
           }
         ],
         "propertyAlternatives": [
@@ -4536,9 +4511,9 @@
                 ]
               },
               {
-                "propertyValue": "player.maximizeVolume",
+                "propertyValue": "player.adjustVolume",
                 "propertySubPhrases": [
-                  "maximize",
+                  "adjust",
                   "in audio"
                 ]
               }
@@ -4547,11 +4522,15 @@
         ],
         "politePrefixes": [
           "Could you please",
-          "Would you mind"
+          "Would you mind",
+          "If it's not too much trouble, could you",
+          "May I kindly ask you to"
         ],
         "politeSuffixes": [
           "Thank you.",
-          "I appreciate it."
+          "I would appreciate it.",
+          "Thanks a lot.",
+          "That would be great."
         ]
       },
       "corrections": [
@@ -4593,13 +4572,15 @@
           {
             "name": "fullActionName",
             "value": "player.changeVolume",
-            "isImplicit": true
+            "substrings": [
+              "lift the volume"
+            ]
           },
           {
             "name": "parameters.volumeChangePercentage",
             "value": 25,
             "substrings": [
-              "lift the volume by 25%"
+              "25%"
             ]
           }
         ],
@@ -4610,13 +4591,20 @@
             "synonyms": [
               "please",
               "kindly",
-              "if you don't mind"
+              "would you mind"
             ],
             "isOptional": true
           },
           {
-            "text": "lift the volume by 25%",
-            "category": "volume change",
+            "text": "lift the volume",
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "by 25%",
+            "category": "specification",
             "propertyNames": [
               "parameters.volumeChangePercentage"
             ]
@@ -4624,34 +4612,55 @@
         ],
         "propertyAlternatives": [
           {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.changeVolume",
+            "propertySubPhrases": [
+              "lift the volume"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.increaseVolume",
+                "propertySubPhrases": [
+                  "increase the volume"
+                ]
+              },
+              {
+                "propertyValue": "player.raiseVolume",
+                "propertySubPhrases": [
+                  "raise the volume"
+                ]
+              },
+              {
+                "propertyValue": "player.turnUpVolume",
+                "propertySubPhrases": [
+                  "turn up the volume"
+                ]
+              }
+            ]
+          },
+          {
             "propertyName": "parameters.volumeChangePercentage",
             "propertyValue": 25,
             "propertySubPhrases": [
-              "lift the volume by 25%"
+              "by 25%"
             ],
             "alternatives": [
               {
                 "propertyValue": 10,
                 "propertySubPhrases": [
-                  "lift the volume by 10%"
+                  "by 10%"
                 ]
               },
               {
                 "propertyValue": 50,
                 "propertySubPhrases": [
-                  "lift the volume by 50%"
+                  "by 50%"
                 ]
               },
               {
                 "propertyValue": 75,
                 "propertySubPhrases": [
-                  "lift the volume by 75%"
-                ]
-              },
-              {
-                "propertyValue": 100,
-                "propertySubPhrases": [
-                  "lift the volume by 100%"
+                  "by 75%"
                 ]
               }
             ]
@@ -4691,9 +4700,9 @@
             "text": "I'd be grateful if you could",
             "category": "politeness",
             "synonyms": [
-              "Please",
-              "Kindly",
-              "Would you mind"
+              "please",
+              "kindly",
+              "would you mind"
             ],
             "isOptional": true
           },
@@ -4892,14 +4901,12 @@
         "politePrefixes": [
           "Could you please",
           "Would you kindly",
-          "If it's not too much trouble, could you",
-          "I would appreciate it if you could"
+          "If it's not too much trouble, could you"
         ],
         "politeSuffixes": [
           "Thank you!",
-          "I appreciate it!",
-          "Thanks a lot!",
-          "Much appreciated!"
+          "I would appreciate it.",
+          "Thanks in advance!"
         ]
       }
     },
@@ -4916,39 +4923,37 @@
           {
             "name": "fullActionName",
             "value": "player.changeVolume",
-            "substrings": [
-              "the audio"
-            ]
+            "isImplicit": true
           },
           {
             "name": "parameters.volumeChangePercentage",
             "value": -20,
             "substrings": [
-              "20% softer",
+              "20%",
               "softer"
             ]
           }
         ],
         "subPhrases": [
           {
-            "text": "I'd enjoy",
+            "text": "I'd enjoy the audio",
             "category": "politeness",
             "synonyms": [
-              "I would like",
-              "I want",
-              "I prefer"
+              "I would like the audio",
+              "I want the audio",
+              "Please make the audio"
             ],
             "isOptional": true
           },
           {
-            "text": "the audio",
-            "category": "object",
+            "text": "20%",
+            "category": "volume change",
             "propertyNames": [
-              "fullActionName"
+              "parameters.volumeChangePercentage"
             ]
           },
           {
-            "text": "20% softer",
+            "text": "softer",
             "category": "volume change",
             "propertyNames": [
               "parameters.volumeChangePercentage"
@@ -4959,63 +4964,40 @@
             "category": "politeness",
             "synonyms": [
               "if you can",
-              "if you don't mind",
-              "if it's okay"
+              "if it's not too much trouble",
+              "if you don't mind"
             ],
             "isOptional": true
           }
         ],
         "propertyAlternatives": [
           {
-            "propertyName": "fullActionName",
-            "propertyValue": "player.changeVolume",
-            "propertySubPhrases": [
-              "the audio"
-            ],
-            "alternatives": [
-              {
-                "propertyValue": "player.adjustVolume",
-                "propertySubPhrases": [
-                  "the sound"
-                ]
-              },
-              {
-                "propertyValue": "player.setVolume",
-                "propertySubPhrases": [
-                  "the volume"
-                ]
-              },
-              {
-                "propertyValue": "player.modifyVolume",
-                "propertySubPhrases": [
-                  "the audio level"
-                ]
-              }
-            ]
-          },
-          {
             "propertyName": "parameters.volumeChangePercentage",
             "propertyValue": -20,
             "propertySubPhrases": [
-              "20% softer"
+              "20%",
+              "softer"
             ],
             "alternatives": [
               {
                 "propertyValue": -10,
                 "propertySubPhrases": [
-                  "10% softer"
+                  "10%",
+                  "softer"
                 ]
               },
               {
                 "propertyValue": -30,
                 "propertySubPhrases": [
-                  "30% softer"
+                  "30%",
+                  "softer"
                 ]
               },
               {
                 "propertyValue": -50,
                 "propertySubPhrases": [
-                  "50% softer"
+                  "50%",
+                  "softer"
                 ]
               }
             ]
@@ -5027,7 +5009,7 @@
         ],
         "politeSuffixes": [
           "Thank you!",
-          "I would appreciate it."
+          "I appreciate it!"
         ]
       },
       "corrections": [
@@ -5037,9 +5019,7 @@
               {
                 "name": "fullActionName",
                 "value": "player.changeVolume",
-                "substrings": [
-                  "the audio"
-                ]
+                "isImplicit": true
               },
               {
                 "name": "parameters.volumeChangePercentage",
@@ -5154,8 +5134,8 @@
           "Would you mind"
         ],
         "politeSuffixes": [
-          "Thank you.",
-          "I appreciate it."
+          "Thank you!",
+          "I appreciate it!"
         ]
       },
       "corrections": [
@@ -5227,7 +5207,7 @@
           },
           {
             "text": "by 20%",
-            "category": "volume change",
+            "category": "value",
             "propertyNames": [
               "parameters.volumeChangePercentage"
             ]
@@ -5238,7 +5218,7 @@
             "synonyms": [
               "kindly",
               "if you don't mind",
-              "if you could"
+              "if you please"
             ],
             "isOptional": true
           }
@@ -5254,19 +5234,19 @@
               {
                 "propertyValue": "player.increaseVolume",
                 "propertySubPhrases": [
-                  "increase the audio level"
+                  "increase the volume"
                 ]
               },
               {
                 "propertyValue": "player.raiseVolume",
                 "propertySubPhrases": [
-                  "raise the audio level"
+                  "raise the volume"
                 ]
               },
               {
-                "propertyValue": "player.amplifyVolume",
+                "propertyValue": "player.amplifySound",
                 "propertySubPhrases": [
-                  "amplify the audio level"
+                  "amplify the sound"
                 ]
               }
             ]
@@ -5334,8 +5314,8 @@
             "category": "politeness",
             "synonyms": [
               "please",
-              "kindly",
-              "if you don't mind"
+              "if you don't mind",
+              "if possible"
             ],
             "isOptional": true
           },
@@ -5420,14 +5400,8 @@
             ]
           }
         ],
-        "politePrefixes": [
-          "Could you please",
-          "Would you mind"
-        ],
-        "politeSuffixes": [
-          "Thank you!",
-          "I would appreciate it."
-        ]
+        "politePrefixes": [],
+        "politeSuffixes": []
       }
     },
     {
@@ -5444,7 +5418,7 @@
             "name": "fullActionName",
             "value": "player.changeVolume",
             "substrings": [
-              "audio"
+              "the audio"
             ]
           },
           {
@@ -5462,14 +5436,14 @@
             "category": "politeness",
             "synonyms": [
               "I would like",
-              "I want",
-              "I wish"
+              "I prefer",
+              "I want"
             ],
             "isOptional": true
           },
           {
             "text": "the audio",
-            "category": "category",
+            "category": "object",
             "propertyNames": [
               "fullActionName"
             ]
@@ -5480,13 +5454,13 @@
             "synonyms": [
               "is",
               "be",
-              "become"
+              "to be"
             ],
             "isOptional": true
           },
           {
             "text": "20%",
-            "category": "percentage",
+            "category": "amount",
             "propertyNames": [
               "parameters.volumeChangePercentage"
             ]
@@ -5522,7 +5496,7 @@
               {
                 "propertyValue": "player.decreaseVolume",
                 "propertySubPhrases": [
-                  "the noise"
+                  "the music"
                 ]
               }
             ]
@@ -5561,15 +5535,11 @@
         ],
         "politePrefixes": [
           "Could you please",
-          "Would you mind",
-          "If it's not too much trouble,",
-          "May I ask you to"
+          "Would you mind"
         ],
         "politeSuffixes": [
           "Thank you.",
-          "I would appreciate it.",
-          "Thanks a lot.",
-          "That would be great."
+          "I appreciate it."
         ]
       },
       "corrections": [
@@ -5580,7 +5550,7 @@
                 "name": "fullActionName",
                 "value": "player.changeVolume",
                 "substrings": [
-                  "audio"
+                  "the audio"
                 ]
               },
               {
@@ -5611,7 +5581,9 @@
           {
             "name": "fullActionName",
             "value": "player.changeVolume",
-            "isImplicit": true
+            "substrings": [
+              "cut in the audio"
+            ]
           },
           {
             "name": "parameters.volumeChangePercentage",
@@ -5643,20 +5615,17 @@
           {
             "text": "in the audio",
             "category": "context",
-            "synonyms": [
-              "in the sound",
-              "in the volume",
-              "in the music"
-            ],
-            "isOptional": true
+            "propertyNames": [
+              "fullActionName"
+            ]
           },
           {
             "text": "would be nice.",
             "category": "politeness",
             "synonyms": [
               "please",
-              "if you could",
-              "that would be great"
+              "if possible",
+              "if you don't mind"
             ],
             "isOptional": true
           }
@@ -5688,15 +5657,46 @@
                 ]
               }
             ]
+          },
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.changeVolume",
+            "propertySubPhrases": [
+              "in the audio"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.mute",
+                "propertySubPhrases": [
+                  "mute the audio"
+                ]
+              },
+              {
+                "propertyValue": "player.increaseVolume",
+                "propertySubPhrases": [
+                  "increase the audio"
+                ]
+              },
+              {
+                "propertyValue": "player.decreaseVolume",
+                "propertySubPhrases": [
+                  "decrease the audio"
+                ]
+              }
+            ]
           }
         ],
         "politePrefixes": [
           "Could you please",
-          "Would you mind"
+          "Would you mind",
+          "If it's not too much trouble, could you",
+          "I would appreciate it if you could"
         ],
         "politeSuffixes": [
           "Thank you!",
-          "I would appreciate it."
+          "Thanks a lot!",
+          "I appreciate it!",
+          "That would be great, thanks!"
         ]
       },
       "corrections": [
@@ -5706,7 +5706,9 @@
               {
                 "name": "fullActionName",
                 "value": "player.changeVolume",
-                "isImplicit": true
+                "substrings": [
+                  "cut in the audio"
+                ]
               },
               {
                 "name": "parameters.volumeChangePercentage",
@@ -5795,9 +5797,9 @@
                 ]
               },
               {
-                "propertyValue": "player.volumeUp",
+                "propertyValue": "player.boostVolume",
                 "propertySubPhrases": [
-                  "Volume up"
+                  "Boost the volume"
                 ]
               }
             ]
@@ -5952,8 +5954,8 @@
           "Would you mind"
         ],
         "politeSuffixes": [
-          "Thank you",
-          "I appreciate it"
+          "Thank you.",
+          "I would appreciate it."
         ]
       }
     },
@@ -5988,9 +5990,9 @@
             "text": "Kindly",
             "category": "politeness",
             "synonyms": [
-              "Please",
-              "Would you mind",
-              "Could you"
+              "please",
+              "if you could",
+              "would you mind"
             ],
             "isOptional": true
           },
@@ -6027,23 +6029,23 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "player.decreaseVolume",
+                "propertyValue": "player.increaseVolume",
                 "propertySubPhrases": [
-                  "decrease",
+                  "increase",
                   "the audio level"
                 ]
               },
               {
-                "propertyValue": "player.lowerVolume",
+                "propertyValue": "player.muteVolume",
                 "propertySubPhrases": [
-                  "lower",
+                  "mute",
                   "the audio level"
                 ]
               },
               {
-                "propertyValue": "player.turnDownVolume",
+                "propertyValue": "player.setVolume",
                 "propertySubPhrases": [
-                  "turn down",
+                  "set",
                   "the audio level"
                 ]
               }
@@ -6339,8 +6341,8 @@
           }
         ],
         "politePrefixes": [
-          "Could you please",
-          "Would you mind"
+          "Could we please",
+          "Would you mind if we"
         ],
         "politeSuffixes": [
           "Thank you!",
@@ -6412,7 +6414,7 @@
           },
           {
             "text": "15%",
-            "category": "value",
+            "category": "quantity",
             "propertyNames": [
               "parameters.volumeChangePercentage"
             ]
@@ -6428,23 +6430,23 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "player.decreaseVolume",
+                "propertyValue": "player.lowerVolume",
                 "propertySubPhrases": [
-                  "reduce",
+                  "lower",
                   "the volume"
                 ]
               },
               {
-                "propertyValue": "player.lowerVolume",
+                "propertyValue": "player.decreaseVolume",
                 "propertySubPhrases": [
-                  "lower",
+                  "decrease",
                   "the sound"
                 ]
               },
               {
-                "propertyValue": "player.turnDownVolume",
+                "propertyValue": "player.reduceVolume",
                 "propertySubPhrases": [
-                  "turn down",
+                  "reduce",
                   "the volume"
                 ]
               }
@@ -6461,21 +6463,21 @@
               {
                 "propertyValue": -10,
                 "propertySubPhrases": [
-                  "reduce",
+                  "dial back",
                   "10%"
                 ]
               },
               {
                 "propertyValue": -20,
                 "propertySubPhrases": [
-                  "lower",
+                  "dial back",
                   "20%"
                 ]
               },
               {
                 "propertyValue": -5,
                 "propertySubPhrases": [
-                  "turn down",
+                  "dial back",
                   "5%"
                 ]
               }
@@ -6484,11 +6486,15 @@
         ],
         "politePrefixes": [
           "Could you please",
-          "Would you mind"
+          "Would you mind",
+          "If it's not too much trouble,",
+          "May I kindly ask you to"
         ],
         "politeSuffixes": [
-          "Thank you!",
-          "I would appreciate it."
+          "Thank you.",
+          "I would appreciate it.",
+          "Thanks a lot.",
+          "That would be great."
         ]
       },
       "corrections": [
@@ -6530,9 +6536,7 @@
           {
             "name": "fullActionName",
             "value": "player.changeVolume",
-            "substrings": [
-              "Let's have the sound"
-            ]
+            "substrings": []
           },
           {
             "name": "parameters.volumeChangePercentage",
@@ -6546,31 +6550,34 @@
         "subPhrases": [
           {
             "text": "Let's",
-            "category": "politeness",
+            "category": "filler",
             "synonyms": [
-              "Please",
-              "Kindly",
-              "Would you"
+              "Let us",
+              "We should",
+              "How about"
             ],
             "isOptional": true
           },
           {
             "text": "have the sound",
-            "category": "action",
-            "propertyNames": [
-              "fullActionName"
-            ]
+            "category": "filler",
+            "synonyms": [
+              "adjust the volume",
+              "change the sound",
+              "modify the audio"
+            ],
+            "isOptional": true
           },
           {
             "text": "15%",
-            "category": "volume",
+            "category": "volume change",
             "propertyNames": [
               "parameters.volumeChangePercentage"
             ]
           },
           {
             "text": "lower",
-            "category": "direction",
+            "category": "volume change",
             "propertyNames": [
               "parameters.volumeChangePercentage"
             ]
@@ -6587,33 +6594,6 @@
           }
         ],
         "propertyAlternatives": [
-          {
-            "propertyName": "fullActionName",
-            "propertyValue": "player.changeVolume",
-            "propertySubPhrases": [
-              "have the sound"
-            ],
-            "alternatives": [
-              {
-                "propertyValue": "player.adjustVolume",
-                "propertySubPhrases": [
-                  "adjust the sound"
-                ]
-              },
-              {
-                "propertyValue": "player.setVolume",
-                "propertySubPhrases": [
-                  "set the volume"
-                ]
-              },
-              {
-                "propertyValue": "player.modifyVolume",
-                "propertySubPhrases": [
-                  "modify the volume"
-                ]
-              }
-            ]
-          },
           {
             "propertyName": "parameters.volumeChangePercentage",
             "propertyValue": -15,
@@ -6637,9 +6617,9 @@
                 ]
               },
               {
-                "propertyValue": -5,
+                "propertyValue": -25,
                 "propertySubPhrases": [
-                  "5%",
+                  "25%",
                   "lower"
                 ]
               }
@@ -6656,9 +6636,7 @@
               {
                 "name": "fullActionName",
                 "value": "player.changeVolume",
-                "substrings": [
-                  "Let's have the sound"
-                ]
+                "substrings": []
               },
               {
                 "name": "parameters.volumeChangePercentage",
@@ -6745,21 +6723,21 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "player.raiseVolume",
+                "propertyValue": "player.decreaseVolume",
                 "propertySubPhrases": [
-                  "raise the volume"
+                  "decrease the volume"
                 ]
               },
               {
-                "propertyValue": "player.turnUpVolume",
+                "propertyValue": "player.muteVolume",
                 "propertySubPhrases": [
-                  "turn up the volume"
+                  "mute the volume"
                 ]
               },
               {
-                "propertyValue": "player.boostVolume",
+                "propertyValue": "player.maximizeVolume",
                 "propertySubPhrases": [
-                  "boost the volume"
+                  "maximize the volume"
                 ]
               }
             ]
@@ -6772,9 +6750,9 @@
             ],
             "alternatives": [
               {
-                "propertyValue": 20,
+                "propertyValue": 10,
                 "propertySubPhrases": [
-                  "20%"
+                  "10%"
                 ]
               },
               {
@@ -6784,9 +6762,9 @@
                 ]
               },
               {
-                "propertyValue": 10,
+                "propertyValue": 100,
                 "propertySubPhrases": [
-                  "10%"
+                  "100%"
                 ]
               }
             ]
@@ -6816,7 +6794,7 @@
             "name": "fullActionName",
             "value": "player.changeVolume",
             "substrings": [
-              "make the sound"
+              "Let's make the sound"
             ]
           },
           {
@@ -6831,11 +6809,11 @@
         "subPhrases": [
           {
             "text": "Let's",
-            "category": "filler",
+            "category": "politeness",
             "synonyms": [
               "Let us",
               "We should",
-              "How about"
+              "How about we"
             ],
             "isOptional": true
           },
@@ -6848,14 +6826,14 @@
           },
           {
             "text": "15%",
-            "category": "percentage",
+            "category": "quantity",
             "propertyNames": [
               "parameters.volumeChangePercentage"
             ]
           },
           {
             "text": "more chill",
-            "category": "description",
+            "category": "modifier",
             "propertyNames": [
               "parameters.volumeChangePercentage"
             ]
@@ -6938,7 +6916,7 @@
                 "name": "fullActionName",
                 "value": "player.changeVolume",
                 "substrings": [
-                  "make the sound"
+                  "Let's make the sound"
                 ]
               },
               {
@@ -6985,11 +6963,11 @@
         "subPhrases": [
           {
             "text": "Let's",
-            "category": "filler",
+            "category": "politeness",
             "synonyms": [
-              "Let us",
-              "We should",
-              "How about"
+              "Please",
+              "Kindly",
+              "Would you"
             ],
             "isOptional": true
           },
@@ -7005,8 +6983,8 @@
             "text": "by",
             "category": "preposition",
             "synonyms": [
+              "to",
               "with",
-              "using",
               "at"
             ],
             "isOptional": true
@@ -7084,7 +7062,7 @@
           "Would you mind"
         ],
         "politeSuffixes": [
-          "Thank you.",
+          "Thank you!",
           "I would appreciate it."
         ]
       },
@@ -7134,11 +7112,11 @@
             "subPhrases": [
               {
                 "text": "Let's",
-                "category": "filler",
+                "category": "politeness",
                 "synonyms": [
-                  "Let us",
-                  "We should",
-                  "How about"
+                  "Please",
+                  "Kindly",
+                  "Would you"
                 ],
                 "isOptional": true
               },
@@ -7153,8 +7131,8 @@
                 "text": "by",
                 "category": "preposition",
                 "synonyms": [
+                  "to",
                   "with",
-                  "using",
                   "at"
                 ],
                 "isOptional": true
@@ -7202,11 +7180,11 @@
         "subPhrases": [
           {
             "text": "Let's",
-            "category": "politeness",
+            "category": "filler",
             "synonyms": [
-              "Please",
-              "Kindly",
-              "Would you"
+              "Let us",
+              "We should",
+              "How about"
             ],
             "isOptional": true
           },
@@ -7222,8 +7200,8 @@
             "category": "filler",
             "synonyms": [
               "by exactly",
-              "by precisely",
-              "by"
+              "by a full",
+              "by a complete"
             ],
             "isOptional": true
           },
@@ -7293,11 +7271,15 @@
         ],
         "politePrefixes": [
           "Could you please",
-          "Would you mind"
+          "Would you mind",
+          "If it's not too much trouble,",
+          "May I kindly ask you to"
         ],
         "politeSuffixes": [
           "Thank you!",
-          "I would appreciate it."
+          "I would appreciate it.",
+          "Thanks a lot!",
+          "That would be great!"
         ]
       }
     },
@@ -7484,18 +7466,8 @@
             ]
           },
           {
-            "text": "by",
-            "category": "preposition",
-            "synonyms": [
-              "with",
-              "using",
-              "at"
-            ],
-            "isOptional": true
-          },
-          {
-            "text": "30%",
-            "category": "value",
+            "text": "by 30%",
+            "category": "parameter",
             "propertyNames": [
               "parameters.volumeChangePercentage"
             ]
@@ -7512,19 +7484,19 @@
               {
                 "propertyValue": "player.increaseVolume",
                 "propertySubPhrases": [
-                  "Increase the sound"
+                  "Increase the volume"
                 ]
               },
               {
                 "propertyValue": "player.raiseVolume",
                 "propertySubPhrases": [
-                  "Raise the sound"
+                  "Raise the volume"
                 ]
               },
               {
-                "propertyValue": "player.amplifyVolume",
+                "propertyValue": "player.boostVolume",
                 "propertySubPhrases": [
-                  "Amplify the sound"
+                  "Boost the volume"
                 ]
               }
             ]
@@ -7533,25 +7505,25 @@
             "propertyName": "parameters.volumeChangePercentage",
             "propertyValue": 30,
             "propertySubPhrases": [
-              "30%"
+              "by 30%"
             ],
             "alternatives": [
               {
                 "propertyValue": 20,
                 "propertySubPhrases": [
-                  "20%"
+                  "by 20%"
                 ]
               },
               {
                 "propertyValue": 50,
                 "propertySubPhrases": [
-                  "50%"
+                  "by 50%"
                 ]
               },
               {
                 "propertyValue": 10,
                 "propertySubPhrases": [
-                  "10%"
+                  "by 10%"
                 ]
               }
             ]
@@ -7596,21 +7568,21 @@
         "subPhrases": [
           {
             "text": "Make the sound",
-            "category": "command",
+            "category": "action",
             "propertyNames": [
               "fullActionName"
             ]
           },
           {
             "text": "15%",
-            "category": "percentage",
+            "category": "volume",
             "propertyNames": [
               "parameters.volumeChangePercentage"
             ]
           },
           {
             "text": "less loud",
-            "category": "description",
+            "category": "volume",
             "propertyNames": [
               "parameters.volumeChangePercentage"
             ]
@@ -7680,12 +7652,12 @@
           "Could you please",
           "Would you mind",
           "If it's not too much trouble, could you",
-          "Please"
+          "May I kindly ask you to"
         ],
         "politeSuffixes": [
           "Thank you.",
-          "Thanks a lot.",
           "I would appreciate it.",
+          "Thanks a lot.",
           "That would be great."
         ]
       },
@@ -7729,7 +7701,7 @@
             "name": "fullActionName",
             "value": "player.changeVolume",
             "substrings": [
-              "Make the volume"
+              "Make the volume softer"
             ]
           },
           {
@@ -7743,16 +7715,10 @@
         ],
         "subPhrases": [
           {
-            "text": "Make the volume",
+            "text": "Make the volume softer",
             "category": "command",
             "propertyNames": [
-              "fullActionName"
-            ]
-          },
-          {
-            "text": "softer",
-            "category": "volumeChange",
-            "propertyNames": [
+              "fullActionName",
               "parameters.volumeChangePercentage"
             ]
           },
@@ -7769,25 +7735,25 @@
             "propertyName": "fullActionName",
             "propertyValue": "player.changeVolume",
             "propertySubPhrases": [
-              "Make the volume"
+              "Make the volume softer"
             ],
             "alternatives": [
               {
                 "propertyValue": "player.increaseVolume",
                 "propertySubPhrases": [
-                  "Increase the volume"
-                ]
-              },
-              {
-                "propertyValue": "player.decreaseVolume",
-                "propertySubPhrases": [
-                  "Lower the volume"
+                  "Make the volume louder"
                 ]
               },
               {
                 "propertyValue": "player.muteVolume",
                 "propertySubPhrases": [
                   "Mute the volume"
+                ]
+              },
+              {
+                "propertyValue": "player.unmuteVolume",
+                "propertySubPhrases": [
+                  "Unmute the volume"
                 ]
               }
             ]
@@ -7796,28 +7762,28 @@
             "propertyName": "parameters.volumeChangePercentage",
             "propertyValue": -10,
             "propertySubPhrases": [
-              "softer",
+              "Make the volume softer",
               "by 10%"
             ],
             "alternatives": [
               {
                 "propertyValue": -20,
                 "propertySubPhrases": [
-                  "softer",
+                  "Make the volume softer",
                   "by 20%"
                 ]
               },
               {
                 "propertyValue": -5,
                 "propertySubPhrases": [
-                  "softer",
+                  "Make the volume softer",
                   "by 5%"
                 ]
               },
               {
                 "propertyValue": -15,
                 "propertySubPhrases": [
-                  "softer",
+                  "Make the volume softer",
                   "by 15%"
                 ]
               }
@@ -7841,20 +7807,107 @@
                 "name": "fullActionName",
                 "value": "player.changeVolume",
                 "substrings": [
-                  "Make the volume"
+                  "Make the volume softer"
                 ]
               },
               {
                 "name": "parameters.volumeChangePercentage",
                 "value": -10,
                 "substrings": [
-                  "softer by 10%"
+                  "10%"
                 ]
               }
             ]
           },
           "correction": [
-            "Value -10 for property 'parameters.volumeChangePercentage' doesn't match the number 10 in the substring 'softer by 10%'. Missing other substring to explain the value."
+            "Value -10 for property 'parameters.volumeChangePercentage' doesn't match the number 10 in the substring '10%'. Missing other substring to explain the value."
+          ]
+        },
+        {
+          "data": {
+            "properties": [
+              {
+                "name": "fullActionName",
+                "value": "player.changeVolume",
+                "substrings": [
+                  "Make the volume softer"
+                ]
+              },
+              {
+                "name": "parameters.volumeChangePercentage",
+                "value": -10,
+                "substrings": [
+                  "softer",
+                  "10%"
+                ]
+              }
+            ],
+            "subPhrases": [
+              {
+                "text": "Make the volume softer",
+                "category": "command",
+                "propertyNames": [
+                  "fullActionName"
+                ]
+              },
+              {
+                "text": "softer",
+                "category": "volumeChange",
+                "propertyNames": [
+                  "parameters.volumeChangePercentage"
+                ]
+              },
+              {
+                "text": "by 10%",
+                "category": "volumeChange",
+                "propertyNames": [
+                  "parameters.volumeChangePercentage"
+                ]
+              }
+            ]
+          },
+          "correction": [
+            "Overlapping sub-phrase: explanation has overlapping text 'softer'."
+          ]
+        },
+        {
+          "data": {
+            "properties": [
+              {
+                "name": "fullActionName",
+                "value": "player.changeVolume",
+                "substrings": [
+                  "Make the volume softer"
+                ]
+              },
+              {
+                "name": "parameters.volumeChangePercentage",
+                "value": -10,
+                "substrings": [
+                  "softer",
+                  "10%"
+                ]
+              }
+            ],
+            "subPhrases": [
+              {
+                "text": "Make the volume softer",
+                "category": "command",
+                "propertyNames": [
+                  "fullActionName"
+                ]
+              },
+              {
+                "text": "by 10%",
+                "category": "volumeChange",
+                "propertyNames": [
+                  "parameters.volumeChangePercentage"
+                ]
+              }
+            ]
+          },
+          "correction": [
+            "Explicit property 'parameters.volumeChangePercentage' must be included as property names for all subphrases that contain the substring 'softer'"
           ]
         }
       ]
@@ -7906,15 +7959,15 @@
             "text": "by a sturdy",
             "category": "filler",
             "synonyms": [
-              "by exactly",
-              "by around",
-              "by approximately"
+              "by a solid",
+              "by a good",
+              "by a decent"
             ],
             "isOptional": true
           },
           {
             "text": "10%",
-            "category": "value",
+            "category": "quantity",
             "propertyNames": [
               "parameters.volumeChangePercentage"
             ]
@@ -7978,13 +8031,43 @@
         ],
         "politePrefixes": [
           "Could you please",
-          "Would you mind"
+          "Would you mind",
+          "If it's not too much trouble,",
+          "May I kindly ask you to"
         ],
         "politeSuffixes": [
           "Thank you!",
-          "I would appreciate it."
+          "I would appreciate it.",
+          "Thanks a lot!",
+          "Much appreciated!"
         ]
-      }
+      },
+      "corrections": [
+        {
+          "data": {
+            "properties": [
+              {
+                "name": "fullActionName",
+                "value": "player.changeVolume",
+                "substrings": [
+                  "bumping up the volume"
+                ]
+              },
+              {
+                "name": "volumeChangePercentage",
+                "value": 10,
+                "substrings": [
+                  "10%"
+                ]
+              }
+            ]
+          },
+          "correction": [
+            "Extraneous parameter: 'volumeChangePercentage' is not a parameter in the action",
+            "Missing parameter: parameter 'parameters.volumeChangePercentage' in the action is missing from explanation"
+          ]
+        }
+      ]
     },
     {
       "request": "Mind cranking up the volume by 10%?",
@@ -8016,9 +8099,9 @@
             "text": "Mind",
             "category": "politeness",
             "synonyms": [
+              "Would you mind",
               "Could you",
-              "Would you",
-              "Do you mind"
+              "Can you"
             ],
             "isOptional": true
           },
@@ -8030,18 +8113,8 @@
             ]
           },
           {
-            "text": "by",
-            "category": "preposition",
-            "synonyms": [
-              "to",
-              "at",
-              "with"
-            ],
-            "isOptional": true
-          },
-          {
-            "text": "10%",
-            "category": "quantity",
+            "text": "by 10%",
+            "category": "parameter",
             "propertyNames": [
               "parameters.volumeChangePercentage"
             ]
@@ -8079,25 +8152,25 @@
             "propertyName": "parameters.volumeChangePercentage",
             "propertyValue": 10,
             "propertySubPhrases": [
-              "10%"
+              "by 10%"
             ],
             "alternatives": [
               {
-                "propertyValue": 5,
+                "propertyValue": 20,
                 "propertySubPhrases": [
-                  "5%"
+                  "by 20%"
                 ]
               },
               {
                 "propertyValue": 15,
                 "propertySubPhrases": [
-                  "15%"
+                  "by 15%"
                 ]
               },
               {
-                "propertyValue": 20,
+                "propertyValue": 5,
                 "propertySubPhrases": [
-                  "20%"
+                  "by 5%"
                 ]
               }
             ]
@@ -8109,7 +8182,7 @@
         ],
         "politeSuffixes": [
           "Thank you!",
-          "I would appreciate it."
+          "I would appreciate it!"
         ]
       }
     },
@@ -8165,19 +8238,19 @@
               {
                 "propertyValue": "player.adjustVolume",
                 "propertySubPhrases": [
-                  "Adjust the sound level"
+                  "Adjust the volume"
                 ]
               },
               {
                 "propertyValue": "player.setVolume",
                 "propertySubPhrases": [
-                  "Set the sound level"
+                  "Set the volume"
                 ]
               },
               {
-                "propertyValue": "player.volumeControl",
+                "propertyValue": "player.updateVolume",
                 "propertySubPhrases": [
-                  "Control the sound level"
+                  "Update the sound level"
                 ]
               }
             ]
@@ -8190,12 +8263,6 @@
             ],
             "alternatives": [
               {
-                "propertyValue": 20,
-                "propertySubPhrases": [
-                  "increase it by 20%"
-                ]
-              },
-              {
                 "propertyValue": 5,
                 "propertySubPhrases": [
                   "increase it by 5%"
@@ -8206,17 +8273,27 @@
                 "propertySubPhrases": [
                   "increase it by 15%"
                 ]
+              },
+              {
+                "propertyValue": 20,
+                "propertySubPhrases": [
+                  "increase it by 20%"
+                ]
               }
             ]
           }
         ],
         "politePrefixes": [
           "Could you please",
-          "Would you mind"
+          "Would you mind",
+          "If it's not too much trouble, could you",
+          "May I kindly ask you to"
         ],
         "politeSuffixes": [
-          "Thank you!",
-          "I would appreciate it."
+          "Thank you.",
+          "I would appreciate it.",
+          "Thanks a lot.",
+          "That would be great."
         ]
       }
     },
@@ -8256,18 +8333,8 @@
             ]
           },
           {
-            "text": "by",
-            "category": "preposition",
-            "synonyms": [
-              "at",
-              "with",
-              "to"
-            ],
-            "isOptional": true
-          },
-          {
-            "text": "15%",
-            "category": "percentage",
+            "text": "by 15%",
+            "category": "modifier",
             "propertyNames": [
               "parameters.volumeChangePercentage"
             ]
@@ -8284,19 +8351,19 @@
               {
                 "propertyValue": "player.lowerVolume",
                 "propertySubPhrases": [
-                  "Lower the volume"
+                  "Lower the sound"
                 ]
               },
               {
                 "propertyValue": "player.reduceVolume",
                 "propertySubPhrases": [
-                  "Reduce the volume"
+                  "Reduce the sound"
                 ]
               },
               {
                 "propertyValue": "player.decreaseVolume",
                 "propertySubPhrases": [
-                  "Decrease the volume"
+                  "Decrease the sound"
                 ]
               }
             ]
@@ -8306,28 +8373,28 @@
             "propertyValue": -15,
             "propertySubPhrases": [
               "Muffle the sound",
-              "15%"
+              "by 15%"
             ],
             "alternatives": [
               {
                 "propertyValue": -10,
                 "propertySubPhrases": [
                   "Muffle the sound",
-                  "10%"
+                  "by 10%"
                 ]
               },
               {
                 "propertyValue": -20,
                 "propertySubPhrases": [
                   "Muffle the sound",
-                  "20%"
+                  "by 20%"
                 ]
               },
               {
                 "propertyValue": -25,
                 "propertySubPhrases": [
                   "Muffle the sound",
-                  "25%"
+                  "by 25%"
                 ]
               }
             ]
@@ -8338,7 +8405,7 @@
           "Would you mind"
         ],
         "politeSuffixes": [
-          "Thank you!",
+          "Thank you.",
           "I would appreciate it."
         ]
       },
@@ -8364,56 +8431,6 @@
           },
           "correction": [
             "Value -15 for property 'parameters.volumeChangePercentage' doesn't match the number 15 in the substring '15%'. Missing other substring to explain the value."
-          ]
-        },
-        {
-          "data": {
-            "properties": [
-              {
-                "name": "fullActionName",
-                "value": "player.changeVolume",
-                "substrings": [
-                  "Muffle the sound"
-                ]
-              },
-              {
-                "name": "parameters.volumeChangePercentage",
-                "value": -15,
-                "substrings": [
-                  "Muffle the sound",
-                  "15%"
-                ]
-              }
-            ],
-            "subPhrases": [
-              {
-                "text": "Muffle the sound",
-                "category": "action",
-                "propertyNames": [
-                  "fullActionName"
-                ]
-              },
-              {
-                "text": "by",
-                "category": "preposition",
-                "synonyms": [
-                  "at",
-                  "with",
-                  "to"
-                ],
-                "isOptional": true
-              },
-              {
-                "text": "15%",
-                "category": "percentage",
-                "propertyNames": [
-                  "parameters.volumeChangePercentage"
-                ]
-              }
-            ]
-          },
-          "correction": [
-            "Explicit property 'parameters.volumeChangePercentage' must be included as property names for all subphrases that contain the substring 'Muffle the sound'"
           ]
         }
       ]
@@ -8490,9 +8507,9 @@
                 ]
               },
               {
-                "propertyValue": "player.turnUpVolume",
+                "propertyValue": "player.boostVolume",
                 "propertySubPhrases": [
-                  "Turn up the volume"
+                  "Boost the volume"
                 ]
               }
             ]
@@ -8580,7 +8597,7 @@
           },
           {
             "text": "by 25%",
-            "category": "volume change",
+            "category": "parameter",
             "propertyNames": [
               "parameters.volumeChangePercentage"
             ]
@@ -8799,7 +8816,7 @@
             "synonyms": [
               "Kindly",
               "Would you mind",
-              "Could you please"
+              "Could you"
             ],
             "isOptional": true
           },
@@ -8812,7 +8829,7 @@
           },
           {
             "text": "by 25%",
-            "category": "volume change",
+            "category": "parameter",
             "propertyNames": [
               "parameters.volumeChangePercentage"
             ]
@@ -8891,15 +8908,13 @@
           {
             "name": "fullActionName",
             "value": "player.changeVolume",
-            "substrings": [
-              "request the audio"
-            ]
+            "substrings": []
           },
           {
             "name": "parameters.volumeChangePercentage",
             "value": -20,
             "substrings": [
-              "20% softer",
+              "20%",
               "softer"
             ]
           }
@@ -8916,14 +8931,34 @@
             "isOptional": true
           },
           {
-            "text": "request the audio",
-            "category": "action",
+            "text": "request",
+            "category": "politeness",
+            "synonyms": [
+              "ask",
+              "inquire",
+              "demand"
+            ],
+            "isOptional": true
+          },
+          {
+            "text": "the audio to be",
+            "category": "preposition",
+            "synonyms": [
+              "the sound to be",
+              "the volume to be",
+              "the audio level to be"
+            ],
+            "isOptional": true
+          },
+          {
+            "text": "20%",
+            "category": "percentage",
             "propertyNames": [
-              "fullActionName"
+              "parameters.volumeChangePercentage"
             ]
           },
           {
-            "text": "to be 20% softer",
+            "text": "softer",
             "category": "volume change",
             "propertyNames": [
               "parameters.volumeChangePercentage"
@@ -8932,55 +8967,32 @@
         ],
         "propertyAlternatives": [
           {
-            "propertyName": "fullActionName",
-            "propertyValue": "player.changeVolume",
-            "propertySubPhrases": [
-              "request the audio"
-            ],
-            "alternatives": [
-              {
-                "propertyValue": "player.increaseVolume",
-                "propertySubPhrases": [
-                  "request the audio to be louder"
-                ]
-              },
-              {
-                "propertyValue": "player.mute",
-                "propertySubPhrases": [
-                  "request the audio to be muted"
-                ]
-              },
-              {
-                "propertyValue": "player.unmute",
-                "propertySubPhrases": [
-                  "request the audio to be unmuted"
-                ]
-              }
-            ]
-          },
-          {
             "propertyName": "parameters.volumeChangePercentage",
             "propertyValue": -20,
             "propertySubPhrases": [
-              "to be 20% softer"
+              "20%",
+              "softer"
             ],
             "alternatives": [
               {
                 "propertyValue": -10,
                 "propertySubPhrases": [
-                  "to be 10% softer"
+                  "10%",
+                  "softer"
                 ]
               },
               {
                 "propertyValue": -30,
                 "propertySubPhrases": [
-                  "to be 30% softer"
+                  "30%",
+                  "softer"
                 ]
               },
               {
                 "propertyValue": -50,
                 "propertySubPhrases": [
-                  "to be 50% softer"
+                  "50%",
+                  "softer"
                 ]
               }
             ]
@@ -8988,15 +9000,11 @@
         ],
         "politePrefixes": [
           "Could you please",
-          "Would you mind",
-          "If it's not too much trouble, could you",
-          "May I kindly ask you to"
+          "Would you mind"
         ],
         "politeSuffixes": [
           "Thank you.",
-          "I would appreciate it.",
-          "Thanks a lot.",
-          "That would be great."
+          "I would appreciate it."
         ]
       },
       "corrections": [
@@ -9006,9 +9014,7 @@
               {
                 "name": "fullActionName",
                 "value": "player.changeVolume",
-                "substrings": [
-                  "request the audio"
-                ]
+                "substrings": []
               },
               {
                 "name": "parameters.volumeChangePercentage",
@@ -9070,7 +9076,7 @@
           },
           {
             "text": "10%",
-            "category": "quantity",
+            "category": "value",
             "propertyNames": [
               "parameters.volumeChangePercentage"
             ]
@@ -9093,13 +9099,13 @@
               {
                 "propertyValue": "player.raiseVolume",
                 "propertySubPhrases": [
-                  "Raise the sound level"
+                  "Raise the volume"
                 ]
               },
               {
                 "propertyValue": "player.boostVolume",
                 "propertySubPhrases": [
-                  "Boost the sound"
+                  "Boost the volume"
                 ]
               }
             ]
@@ -9251,7 +9257,7 @@
         ],
         "politeSuffixes": [
           "Thank you.",
-          "I would appreciate it."
+          "I appreciate it."
         ]
       },
       "corrections": [
@@ -9396,7 +9402,7 @@
         "subPhrases": [
           {
             "text": "Set the sound",
-            "category": "command",
+            "category": "action",
             "propertyNames": [
               "fullActionName"
             ]
@@ -9405,9 +9411,9 @@
             "text": "to be",
             "category": "filler",
             "synonyms": [
+              "as",
               "to",
-              "be",
-              "as"
+              "become"
             ],
             "isOptional": true
           },
@@ -9441,15 +9447,15 @@
                 ]
               },
               {
-                "propertyValue": "player.muteVolume",
+                "propertyValue": "player.decreaseVolume",
                 "propertySubPhrases": [
-                  "Mute the sound"
+                  "Decrease the sound"
                 ]
               },
               {
-                "propertyValue": "player.unmuteVolume",
+                "propertyValue": "player.mute",
                 "propertySubPhrases": [
-                  "Unmute the sound"
+                  "Mute the sound"
                 ]
               }
             ]
@@ -9477,9 +9483,9 @@
                 ]
               },
               {
-                "propertyValue": -5,
+                "propertyValue": -30,
                 "propertySubPhrases": [
-                  "5%",
+                  "30%",
                   "quieter"
                 ]
               }
@@ -9488,11 +9494,15 @@
         ],
         "politePrefixes": [
           "Could you please",
-          "Would you mind"
+          "Would you mind",
+          "If it's not too much trouble, could you",
+          "May I ask you to"
         ],
         "politeSuffixes": [
           "Thank you.",
-          "I would appreciate it."
+          "I would appreciate it.",
+          "Thanks a lot.",
+          "That would be great."
         ]
       },
       "corrections": [
@@ -9517,6 +9527,53 @@
           },
           "correction": [
             "Value -15 for property 'parameters.volumeChangePercentage' doesn't match the number 15 in the substring '15% quieter'. Missing other substring to explain the value."
+          ]
+        },
+        {
+          "data": {
+            "properties": [
+              {
+                "name": "fullActionName",
+                "value": "player.changeVolume",
+                "substrings": [
+                  "Set the sound"
+                ]
+              },
+              {
+                "name": "parameters.volumeChangePercentage",
+                "value": -15,
+                "substrings": [
+                  "15%",
+                  "quieter"
+                ]
+              }
+            ],
+            "subPhrases": [
+              {
+                "text": "Set the sound",
+                "category": "action",
+                "propertyNames": [
+                  "fullActionName"
+                ]
+              },
+              {
+                "text": "15%",
+                "category": "percentage",
+                "propertyNames": [
+                  "parameters.volumeChangePercentage"
+                ]
+              },
+              {
+                "text": "quieter",
+                "category": "direction",
+                "propertyNames": [
+                  "parameters.volumeChangePercentage"
+                ]
+              }
+            ]
+          },
+          "correction": [
+            "Missing sub-phrase: explanation missing for 'to be'"
           ]
         }
       ]
@@ -9550,7 +9607,7 @@
         "subPhrases": [
           {
             "text": "Shave the volume",
-            "category": "command",
+            "category": "action",
             "propertyNames": [
               "fullActionName"
             ]
@@ -9559,9 +9616,9 @@
             "text": "by",
             "category": "preposition",
             "synonyms": [
-              "with",
-              "using",
-              "through"
+              "to",
+              "at",
+              "with"
             ],
             "isOptional": true
           },
@@ -9574,7 +9631,7 @@
           },
           {
             "text": "10%",
-            "category": "percentage",
+            "category": "value",
             "propertyNames": [
               "parameters.volumeChangePercentage"
             ]
@@ -9642,11 +9699,15 @@
         ],
         "politePrefixes": [
           "Could you please",
-          "Would you mind"
+          "Would you mind",
+          "If it's not too much trouble, could you",
+          "May I kindly ask you to"
         ],
         "politeSuffixes": [
           "Thank you.",
-          "I would appreciate it."
+          "I would appreciate it.",
+          "Thanks a lot.",
+          "That would be great."
         ]
       },
       "corrections": [
@@ -9791,15 +9852,11 @@
         ],
         "politePrefixes": [
           "Could you please",
-          "Would you mind",
-          "If it's not too much trouble, could you",
-          "May I kindly ask you to"
+          "Would you mind"
         ],
         "politeSuffixes": [
           "Thank you.",
-          "I would appreciate it.",
-          "Thanks a lot.",
-          "That would be great."
+          "I would appreciate it."
         ]
       },
       "corrections": [
@@ -9857,7 +9914,7 @@
         "subPhrases": [
           {
             "text": "Subdue the sound",
-            "category": "action",
+            "category": "command",
             "propertyNames": [
               "fullActionName"
             ]
@@ -9871,7 +9928,7 @@
           },
           {
             "text": "15%",
-            "category": "value",
+            "category": "percentage",
             "propertyNames": [
               "parameters.volumeChangePercentage"
             ]
@@ -10026,7 +10083,7 @@
           },
           {
             "text": "10%",
-            "category": "value",
+            "category": "quantity",
             "propertyNames": [
               "parameters.volumeChangePercentage"
             ]
@@ -10042,23 +10099,23 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "player.decreaseVolume",
+                "propertyValue": "player.increaseVolume",
                 "propertySubPhrases": [
-                  "Lower",
+                  "Increase",
                   "the volume"
                 ]
               },
               {
-                "propertyValue": "player.reduceVolume",
+                "propertyValue": "player.muteVolume",
                 "propertySubPhrases": [
-                  "Reduce",
+                  "Mute",
                   "the volume"
                 ]
               },
               {
-                "propertyValue": "player.turnDownVolume",
+                "propertyValue": "player.setVolume",
                 "propertySubPhrases": [
-                  "Turn down",
+                  "Set",
                   "the volume"
                 ]
               }
@@ -10073,6 +10130,13 @@
             ],
             "alternatives": [
               {
+                "propertyValue": -20,
+                "propertySubPhrases": [
+                  "Take down",
+                  "20%"
+                ]
+              },
+              {
                 "propertyValue": -5,
                 "propertySubPhrases": [
                   "Take down",
@@ -10085,24 +10149,21 @@
                   "Take down",
                   "15%"
                 ]
-              },
-              {
-                "propertyValue": -20,
-                "propertySubPhrases": [
-                  "Take down",
-                  "20%"
-                ]
               }
             ]
           }
         ],
         "politePrefixes": [
           "Could you please",
-          "Would you mind"
+          "Would you mind",
+          "If it's not too much trouble, could you",
+          "May I kindly ask you to"
         ],
         "politeSuffixes": [
           "Thank you.",
-          "I would appreciate it."
+          "I would appreciate it.",
+          "Thanks a lot.",
+          "That would be great."
         ]
       },
       "corrections": [
@@ -10193,15 +10254,8 @@
               {
                 "propertyValue": "player.decreaseVolume",
                 "propertySubPhrases": [
-                  "Decrease",
-                  "the sound"
-                ]
-              },
-              {
-                "propertyValue": "player.lowerVolume",
-                "propertySubPhrases": [
                   "Lower",
-                  "the sound"
+                  "the volume"
                 ]
               },
               {
@@ -10209,6 +10263,13 @@
                 "propertySubPhrases": [
                   "Reduce",
                   "the sound"
+                ]
+              },
+              {
+                "propertyValue": "player.turnDownVolume",
+                "propertySubPhrases": [
+                  "Turn down",
+                  "the volume"
                 ]
               }
             ]
@@ -10236,10 +10297,10 @@
                 ]
               },
               {
-                "propertyValue": -5,
+                "propertyValue": -25,
                 "propertySubPhrases": [
                   "Tone down",
-                  "by 5%"
+                  "by 25%"
                 ]
               }
             ]
@@ -10247,11 +10308,15 @@
         ],
         "politePrefixes": [
           "Could you please",
-          "Would you mind"
+          "Would you mind",
+          "If it's not too much trouble,",
+          "Please"
         ],
         "politeSuffixes": [
-          "Thank you!",
-          "I would appreciate it."
+          "Thank you.",
+          "Thanks.",
+          "I appreciate it.",
+          "If you don't mind."
         ]
       },
       "corrections": [
@@ -10317,9 +10382,9 @@
             "text": "by",
             "category": "preposition",
             "synonyms": [
+              "to",
               "at",
-              "with",
-              "to"
+              "with"
             ],
             "isOptional": true
           },
@@ -10392,7 +10457,7 @@
           "Would you mind"
         ],
         "politeSuffixes": [
-          "Thank you!",
+          "Thank you.",
           "I would appreciate it."
         ]
       }
@@ -10410,9 +10475,7 @@
           {
             "name": "fullActionName",
             "value": "player.changeVolume",
-            "substrings": [
-              "slice the volume"
-            ]
+            "substrings": []
           },
           {
             "name": "parameters.volumeChangePercentage",
@@ -10435,26 +10498,25 @@
             "isOptional": true
           },
           {
-            "text": "slice the volume",
+            "text": "slice",
             "category": "action",
             "propertyNames": [
-              "fullActionName",
               "parameters.volumeChangePercentage"
             ]
           },
           {
-            "text": "by a neat",
+            "text": "the volume by a neat",
             "category": "filler",
             "synonyms": [
-              "by exactly",
-              "by precisely",
-              "by"
+              "the volume by",
+              "the volume",
+              "by a neat"
             ],
             "isOptional": true
           },
           {
             "text": "5%",
-            "category": "value",
+            "category": "percentage",
             "propertyNames": [
               "parameters.volumeChangePercentage"
             ]
@@ -10462,58 +10524,31 @@
         ],
         "propertyAlternatives": [
           {
-            "propertyName": "fullActionName",
-            "propertyValue": "player.changeVolume",
-            "propertySubPhrases": [
-              "slice the volume"
-            ],
-            "alternatives": [
-              {
-                "propertyValue": "player.increaseVolume",
-                "propertySubPhrases": [
-                  "increase the volume"
-                ]
-              },
-              {
-                "propertyValue": "player.decreaseVolume",
-                "propertySubPhrases": [
-                  "decrease the volume"
-                ]
-              },
-              {
-                "propertyValue": "player.muteVolume",
-                "propertySubPhrases": [
-                  "mute the volume"
-                ]
-              }
-            ]
-          },
-          {
             "propertyName": "parameters.volumeChangePercentage",
             "propertyValue": -5,
             "propertySubPhrases": [
-              "slice the volume",
+              "slice",
               "5%"
             ],
             "alternatives": [
               {
                 "propertyValue": -10,
                 "propertySubPhrases": [
-                  "slice the volume",
+                  "slice",
                   "10%"
                 ]
               },
               {
                 "propertyValue": -15,
                 "propertySubPhrases": [
-                  "slice the volume",
+                  "slice",
                   "15%"
                 ]
               },
               {
                 "propertyValue": -20,
                 "propertySubPhrases": [
-                  "slice the volume",
+                  "slice",
                   "20%"
                 ]
               }
@@ -10526,7 +10561,7 @@
         ],
         "politeSuffixes": [
           "Thank you!",
-          "If that's okay with you."
+          "I would appreciate it!"
         ]
       },
       "corrections": [
@@ -10536,9 +10571,7 @@
               {
                 "name": "fullActionName",
                 "value": "player.changeVolume",
-                "substrings": [
-                  "slice the volume"
-                ]
+                "substrings": []
               },
               {
                 "name": "parameters.volumeChangePercentage",
@@ -10551,66 +10584,6 @@
           },
           "correction": [
             "Value -5 for property 'parameters.volumeChangePercentage' doesn't match the number 5 in the substring '5%'. Missing other substring to explain the value."
-          ]
-        },
-        {
-          "data": {
-            "properties": [
-              {
-                "name": "fullActionName",
-                "value": "player.changeVolume",
-                "substrings": [
-                  "slice the volume"
-                ]
-              },
-              {
-                "name": "parameters.volumeChangePercentage",
-                "value": -5,
-                "substrings": [
-                  "slice",
-                  "5%"
-                ]
-              }
-            ],
-            "subPhrases": [
-              {
-                "text": "Wanna",
-                "category": "politeness",
-                "synonyms": [
-                  "Would you like to",
-                  "Do you want to",
-                  "Can you"
-                ],
-                "isOptional": true
-              },
-              {
-                "text": "slice the volume",
-                "category": "action",
-                "propertyNames": [
-                  "fullActionName"
-                ]
-              },
-              {
-                "text": "by a neat",
-                "category": "filler",
-                "synonyms": [
-                  "by exactly",
-                  "by precisely",
-                  "by"
-                ],
-                "isOptional": true
-              },
-              {
-                "text": "5%",
-                "category": "value",
-                "propertyNames": [
-                  "parameters.volumeChangePercentage"
-                ]
-              }
-            ]
-          },
-          "correction": [
-            "Explicit property 'parameters.volumeChangePercentage' must be included as property names for all subphrases that contain the substring 'slice'"
           ]
         }
       ]
@@ -10636,7 +10609,7 @@
             "name": "parameters.volumeChangePercentage",
             "value": 10,
             "substrings": [
-              "by 10%"
+              "10%"
             ]
           }
         ],
@@ -10664,6 +10637,16 @@
             "propertyNames": [
               "parameters.volumeChangePercentage"
             ]
+          },
+          {
+            "text": "?",
+            "category": "punctuation",
+            "synonyms": [
+              ".",
+              "!",
+              ""
+            ],
+            "isOptional": true
           }
         ],
         "propertyAlternatives": [
@@ -10858,8 +10841,8 @@
             "name": "parameters.volumeChangePercentage",
             "value": -5,
             "substrings": [
-              "trim",
-              "5%"
+              "by 5%",
+              "trim"
             ]
           }
         ],
@@ -10961,12 +10944,12 @@
           }
         ],
         "politePrefixes": [
-          "Please",
-          "Could you kindly"
+          "Could you please",
+          "Would you mind"
         ],
         "politeSuffixes": [
           "Thank you",
-          "I would appreciate it"
+          "I appreciate it"
         ]
       },
       "corrections": [
@@ -10984,13 +10967,13 @@
                 "name": "parameters.volumeChangePercentage",
                 "value": -5,
                 "substrings": [
-                  "5%"
+                  "by 5%"
                 ]
               }
             ]
           },
           "correction": [
-            "Value -5 for property 'parameters.volumeChangePercentage' doesn't match the number 5 in the substring '5%'. Missing other substring to explain the value."
+            "Value -5 for property 'parameters.volumeChangePercentage' doesn't match the number 5 in the substring 'by 5%'. Missing other substring to explain the value."
           ]
         },
         {
@@ -11007,8 +10990,8 @@
                 "name": "parameters.volumeChangePercentage",
                 "value": -5,
                 "substrings": [
-                  "trim",
-                  "5%"
+                  "by 5%",
+                  "trim"
                 ]
               }
             ],
@@ -11093,18 +11076,11 @@
             "isOptional": true
           },
           {
-            "text": "drop",
+            "text": "drop the volume",
             "category": "action",
             "propertyNames": [
               "fullActionName",
               "parameters.volumeChangePercentage"
-            ]
-          },
-          {
-            "text": "the volume",
-            "category": "action",
-            "propertyNames": [
-              "fullActionName"
             ]
           },
           {
@@ -11130,29 +11106,25 @@
             "propertyName": "fullActionName",
             "propertyValue": "player.changeVolume",
             "propertySubPhrases": [
-              "drop",
-              "the volume"
+              "drop the volume"
             ],
             "alternatives": [
               {
                 "propertyValue": "player.increaseVolume",
                 "propertySubPhrases": [
-                  "raise",
-                  "the volume"
+                  "raise the volume"
                 ]
               },
               {
                 "propertyValue": "player.muteVolume",
                 "propertySubPhrases": [
-                  "mute",
-                  "the volume"
+                  "mute the volume"
                 ]
               },
               {
                 "propertyValue": "player.unmuteVolume",
                 "propertySubPhrases": [
-                  "unmute",
-                  "the volume"
+                  "unmute the volume"
                 ]
               }
             ]
@@ -11161,28 +11133,28 @@
             "propertyName": "parameters.volumeChangePercentage",
             "propertyValue": -5,
             "propertySubPhrases": [
-              "drop",
+              "drop the volume",
               "5%"
             ],
             "alternatives": [
               {
                 "propertyValue": -10,
                 "propertySubPhrases": [
-                  "drop",
+                  "drop the volume",
                   "10%"
                 ]
               },
               {
                 "propertyValue": -15,
                 "propertySubPhrases": [
-                  "drop",
+                  "drop the volume",
                   "15%"
                 ]
               },
               {
                 "propertyValue": -20,
                 "propertySubPhrases": [
-                  "drop",
+                  "drop the volume",
                   "20%"
                 ]
               }
@@ -11351,14 +11323,14 @@
             "category": "filler",
             "synonyms": [
               "by",
-              "by approximately",
-              "by around"
+              "around",
+              "approximately"
             ],
             "isOptional": true
           },
           {
             "text": "5%",
-            "category": "amount",
+            "category": "value",
             "propertyNames": [
               "parameters.volumeChangePercentage"
             ]

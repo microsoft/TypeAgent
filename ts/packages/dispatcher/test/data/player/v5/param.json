@@ -1,7 +1,7 @@
 {
   "version": 2,
   "schemaName": "player",
-  "sourceHash": "/coyfq1j8qYAwzuqFo38QLrP2X7DZ/U6UJRPEiLjn7Q=",
+  "sourceHash": "HrhZPog7XXm93zb5xwYtzWspziPTFgFnvgb4UUJ85a8=",
   "explainerName": "v5",
   "entries": [
     {
@@ -109,7 +109,7 @@
             "synonyms": [
               "What about",
               "Why don't you",
-              "Maybe"
+              "How's this"
             ],
             "isOptional": true
           },
@@ -132,19 +132,25 @@
               {
                 "propertyValue": "player.playNext",
                 "propertySubPhrases": [
-                  "you choose the next song to play"
+                  "you play the next song"
                 ]
               },
               {
                 "propertyValue": "player.playPrevious",
                 "propertySubPhrases": [
-                  "you choose the previous song to play"
+                  "you play the previous song"
                 ]
               },
               {
                 "propertyValue": "player.playFavorite",
                 "propertySubPhrases": [
-                  "you choose a favorite song to play"
+                  "you play a favorite song"
+                ]
+              },
+              {
+                "propertyValue": "player.playTop",
+                "propertySubPhrases": [
+                  "you play a top song"
                 ]
               }
             ]
@@ -156,7 +162,7 @@
         ],
         "politeSuffixes": [
           "Thank you!",
-          "If you don't mind."
+          "I would appreciate it."
         ]
       }
     },
@@ -178,7 +184,7 @@
         "subPhrases": [
           {
             "text": "Play a song",
-            "category": "action",
+            "category": "command",
             "propertyNames": [
               "fullActionName"
             ]
@@ -189,7 +195,7 @@
             "synonyms": [
               "please",
               "if you could",
-              "would you mind"
+              "kindly"
             ],
             "isOptional": true
           }
@@ -219,23 +225,19 @@
                 "propertySubPhrases": [
                   "Play an album"
                 ]
-              },
-              {
-                "propertyValue": "player.playArtist",
-                "propertySubPhrases": [
-                  "Play music by"
-                ]
               }
             ]
           }
         ],
         "politePrefixes": [
           "Could you please",
-          "Would you mind"
+          "Would you mind",
+          "If it's not too much trouble, could you"
         ],
         "politeSuffixes": [
-          "Thank you",
-          "I would appreciate it"
+          "Thank you!",
+          "I would appreciate it.",
+          "Thanks a lot!"
         ]
       }
     },
@@ -250,14 +252,22 @@
             "name": "fullActionName",
             "value": "player.playRandom",
             "substrings": [
-              "Play some tunes"
+              "Play",
+              "tunes"
             ]
           }
         ],
         "subPhrases": [
           {
-            "text": "Play some tunes",
+            "text": "Play",
             "category": "command",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "some tunes",
+            "category": "content",
             "propertyNames": [
               "fullActionName"
             ]
@@ -278,25 +288,29 @@
             "propertyName": "fullActionName",
             "propertyValue": "player.playRandom",
             "propertySubPhrases": [
-              "Play some tunes"
+              "Play",
+              "some tunes"
             ],
             "alternatives": [
               {
-                "propertyValue": "player.playMusic",
+                "propertyValue": "player.playPlaylist",
                 "propertySubPhrases": [
-                  "Play some music"
+                  "Play",
+                  "a playlist"
                 ]
               },
               {
-                "propertyValue": "player.playSongs",
+                "propertyValue": "player.playAlbum",
                 "propertySubPhrases": [
-                  "Play some songs"
+                  "Play",
+                  "an album"
                 ]
               },
               {
-                "propertyValue": "player.playTracks",
+                "propertyValue": "player.playSong",
                 "propertySubPhrases": [
-                  "Play some tracks"
+                  "Play",
+                  "a song"
                 ]
               }
             ]
@@ -308,7 +322,7 @@
         ],
         "politeSuffixes": [
           "Thank you",
-          "I would appreciate it"
+          "if that's okay"
         ]
       }
     },
@@ -330,11 +344,11 @@
         "subPhrases": [
           {
             "text": "Shall we",
-            "category": "politeness",
+            "category": "confirmation",
             "synonyms": [
               "Can we",
-              "Could we",
-              "Would you like to"
+              "Should we",
+              "Do we want to"
             ],
             "isOptional": true
           },
@@ -385,14 +399,8 @@
             ]
           }
         ],
-        "politePrefixes": [
-          "Would you mind if we",
-          "Could we please"
-        ],
-        "politeSuffixes": [
-          "if that's okay with you?",
-          "if you don't mind?"
-        ]
+        "politePrefixes": [],
+        "politeSuffixes": []
       }
     },
     {
@@ -433,21 +441,21 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "player.getPlaylist",
+                "propertyValue": "player.getTopHits",
                 "propertySubPhrases": [
-                  "my playlist"
+                  "top hits"
                 ]
               },
               {
                 "propertyValue": "player.getRecent",
                 "propertySubPhrases": [
-                  "my recent songs"
+                  "recently played songs"
                 ]
               },
               {
-                "propertyValue": "player.getTopHits",
+                "propertyValue": "player.getRecommended",
                 "propertySubPhrases": [
-                  "top hits"
+                  "recommended songs"
                 ]
               }
             ]
@@ -458,8 +466,8 @@
           "Would you mind"
         ],
         "politeSuffixes": [
-          "thank you",
-          "if you don't mind"
+          "Thank you",
+          "I would appreciate it"
         ]
       }
     },
@@ -473,62 +481,65 @@
           {
             "name": "fullActionName",
             "value": "player.playRandom",
-            "substrings": [
-              "Start the music"
-            ]
+            "isImplicit": true
           }
         ],
         "subPhrases": [
           {
             "text": "Start the music",
             "category": "command",
-            "propertyNames": [
-              "fullActionName"
-            ]
+            "propertyNames": []
           },
           {
             "text": "please",
             "category": "politeness",
             "synonyms": [
               "kindly",
-              "if you could",
-              "would you mind"
+              "if you would",
+              "if you please"
             ],
             "isOptional": true
           }
         ],
-        "propertyAlternatives": [
-          {
-            "propertyName": "fullActionName",
-            "propertyValue": "player.playRandom",
-            "propertySubPhrases": [
-              "Start the music"
-            ],
-            "alternatives": [
-              {
-                "propertyValue": "player.play",
-                "propertySubPhrases": [
-                  "Play the music"
-                ]
-              },
-              {
-                "propertyValue": "player.resume",
-                "propertySubPhrases": [
-                  "Resume the music"
-                ]
-              },
-              {
-                "propertyValue": "player.shuffle",
-                "propertySubPhrases": [
-                  "Shuffle the music"
-                ]
-              }
-            ]
-          }
-        ],
+        "propertyAlternatives": [],
         "politePrefixes": [],
         "politeSuffixes": []
-      }
+      },
+      "corrections": [
+        {
+          "data": {
+            "properties": [
+              {
+                "name": "fullActionName",
+                "value": "player.playRandom",
+                "isImplicit": true
+              }
+            ],
+            "subPhrases": [
+              {
+                "text": "Start the music",
+                "category": "command",
+                "propertyNames": [
+                  "fullActionName"
+                ]
+              },
+              {
+                "text": "please",
+                "category": "politeness",
+                "synonyms": [
+                  "kindly",
+                  "if you would",
+                  "if you please"
+                ],
+                "isOptional": true
+              }
+            ]
+          },
+          "correction": [
+            "Property 'fullActionName' is expected to be implicit and should not be included as a property name in a sub-phrase"
+          ]
+        }
+      ]
     },
     {
       "request": "Turn up the volume on the electronic dance music",
@@ -673,21 +684,21 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "player.playSpecific",
-                "propertySubPhrases": [
-                  "playing a specific song"
-                ]
-              },
-              {
-                "propertyValue": "player.playPlaylist",
-                "propertySubPhrases": [
-                  "playing a playlist"
-                ]
-              },
-              {
-                "propertyValue": "player.playGenre",
+                "propertyValue": "player.playJazz",
                 "propertySubPhrases": [
                   "playing some jazz"
+                ]
+              },
+              {
+                "propertyValue": "player.playRock",
+                "propertySubPhrases": [
+                  "playing some rock"
+                ]
+              },
+              {
+                "propertyValue": "player.playClassical",
+                "propertySubPhrases": [
+                  "playing some classical music"
                 ]
               }
             ]
@@ -742,11 +753,11 @@
           },
           {
             "text": "blastin' on these streets",
-            "category": "location",
+            "category": "context",
             "synonyms": [
-              "playing here",
-              "playing loudly",
-              "playing in this area"
+              "playing loudly here",
+              "blaring around",
+              "booming in this area"
             ],
             "isOptional": true
           }
@@ -762,7 +773,7 @@
               {
                 "propertyValue": "player.playRock",
                 "propertySubPhrases": [
-                  "some rock music"
+                  "some rock tunes"
                 ]
               },
               {
@@ -774,25 +785,25 @@
               {
                 "propertyValue": "player.playClassical",
                 "propertySubPhrases": [
-                  "some classical music"
+                  "some classical tunes"
                 ]
               },
               {
                 "propertyValue": "player.playHipHop",
                 "propertySubPhrases": [
-                  "some hip hop beats"
+                  "some hip-hop tunes"
                 ]
               }
             ]
           }
         ],
         "politePrefixes": [
-          "Could you please",
-          "Would you mind"
+          "Excuse me,",
+          "Could you please"
         ],
         "politeSuffixes": [
-          "Thank you!",
-          "I would appreciate it!"
+          "Thank you.",
+          "I would appreciate it."
         ]
       }
     }
