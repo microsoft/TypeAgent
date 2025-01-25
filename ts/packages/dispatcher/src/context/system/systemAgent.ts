@@ -61,7 +61,7 @@ import {
     getParameterNames,
     validateAction,
 } from "action-schema";
-import { EnvCommandHandler } from "./handlers/envCommandHandler.js";
+import { EnvCommandHandler, getEnvCommandHandlers } from "./handlers/envCommandHandler.js";
 import { executeNotificationAction } from "./action/notificationActionHandler.js";
 import { executeHistoryAction } from "./action/historyActionHandler.js";
 
@@ -357,7 +357,7 @@ const systemHandlers: CommandHandlerTable = {
         random: getRandomCommandHandlers(),
         notify: getNotifyCommandHandlers(),
         token: getTokenCommandHandlers(),
-        env: new EnvCommandHandler(),
+        env: getEnvCommandHandlers(),
     },
 };
 

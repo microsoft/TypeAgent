@@ -1,10 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { app } from "electron";
 import registerDebug from "debug";
 import { readFileSync, existsSync, writeFileSync } from "fs";
-import path from "path";
 import {
     defaultSettings,
     ShellSettingsType,
@@ -15,6 +13,8 @@ import {
     DisplayType,
     EmptyFunction,
 } from "../preload/electronTypes.js";
+import { getInstanceDir } from "agent-dispatcher";
+import path from "path";
 
 const debugShell = registerDebug("typeagent:shell");
 
@@ -94,7 +94,7 @@ export class ShellSettings
     }
 
     public static get filePath(): string {
-        return path.join(app.getPath("userData"), "shellSettings.json");
+        return path.join(getInstanceDir(), "shellSettings.json");
     }
 
     public static getinstance = (): ShellSettings => {
