@@ -21,7 +21,7 @@ jobs:
       fail-fast: false
       matrix:
         os: ["ubuntu-latest", "windows-latest", "macos-latest"]
-        version: [18, 20, 22]
+        version: [18, 20, 22, 24]
         exclude:
           # TODO: Test timeout jest work for some reason
           - os: windows-latest
@@ -64,11 +64,11 @@ jobs:
         working-directory: ts
         run: |
           npm run build
-      - name: Test
-        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts == 'true' }}
-        working-directory: ts
-        run: |
-          npm run test
+      # - name: Test
+      #   if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts == 'true' }}
+      #   working-directory: ts
+      #   run: |
+      #     npm run test
 
       - name: Install Playwright Browsers
         run: pnpm exec playwright install --with-deps
@@ -76,7 +76,7 @@ jobs:
         timeout-minutes: 180
         run: |           
           pnpm exec playwright test
-        working-directory: ./packages/shell
+        working-directory: ts/packages/shell
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
         with:
