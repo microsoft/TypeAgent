@@ -1,0 +1,92 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
+name: Shell Tests
+on:
+  push:
+    branches: [ dev/robgruen/electron_tests ]
+
+# run only one of these at a time
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+
+permissions:
+  pull-requests: read
+  contents: read  
+
+jobs:
+  build_ts:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ["ubuntu-latest", "windows-latest", "macos-latest"]
+        version: [18, 20, 22, 24]
+        exclude:
+          # TODO: Test timeout jest work for some reason
+          - os: windows-latest
+            version: 22
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - if: runner.os == 'Linux'
+        run: |
+          sudo apt install libsecret-1-0
+      - name: Setup Git LF
+        run: |
+          git config --global core.autocrlf false
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            ts:
+              - "ts/**"
+              - ".github/workflows/build-ts.yml"
+      - uses: pnpm/action-setup@v4
+        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts == 'true' }}
+        name: Install pnpm
+        with:
+          package_json_file: ts/package.json
+      - uses: actions/setup-node@v4
+        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts == 'true' }}
+        with:
+          node-version: ${{ matrix.version }}
+          cache: "pnpm"
+          cache-dependency-path: ts/pnpm-lock.yaml
+      - name: Install dependencies
+        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts == 'true' }}
+        working-directory: ts
+        run: |
+          pnpm install --frozen-lockfile --strict-peer-dependencies
+      - name: Build
+        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts == 'true' }}
+        working-directory: ts
+        run: |
+          npm run build
+      # - name: Test
+      #   if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts == 'true' }}
+      #   working-directory: ts
+      #   run: |
+      #     npm run test
+
+      - name: Install Playwright Browsers
+        run: pnpm exec playwright install --with-deps
+      - name: Shell Tests
+        timeout-minutes: 180
+        run: |           
+          pnpm exec playwright test
+        working-directory: ts/packages/shell
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 30
+
+
+      - name: Lint
+        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts == 'true' }}
+        working-directory: ts
+        run: |
+          npm run lint
