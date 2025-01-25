@@ -78,6 +78,7 @@ jobs:
         # run: |           
         #   working-directory: ts/packages/shell
         run: npx playwright test
+        working-directory: ts/packages/shell
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
         with:
