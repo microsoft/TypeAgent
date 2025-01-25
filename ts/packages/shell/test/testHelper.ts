@@ -95,11 +95,21 @@ export function getAppPath(): string {
  * @param page The maing page from the electron host application.
  */
 export async function sendUserRequest(prompt: string, page: Page) {
+    try {
     const locator: Locator = await page.locator("#phraseDiv");
-    await locator.waitFor({ timeout: 120000, state: "visible" });
+    await locator.waitFor({ timeout: 30000, state: "visible" });
     await locator.focus();
     await locator.fill(prompt);
     await locator.press("Enter");
+    } catch (e) {
+        // TODO: find alternate method when the above fails.
+        console.log(e);
+        const l3 = await page.locator(".chat-input");
+        
+        const l2 = await page.locator(".user-textarea");
+        
+        const element = await page.waitForSelector("#phraseDiv");
+    }
 }
 
 /**
