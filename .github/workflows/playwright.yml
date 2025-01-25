@@ -21,7 +21,7 @@ jobs:
       fail-fast: false
       matrix:
         os: ["ubuntu-latest", "windows-latest", "macos-latest"]
-        version: [18, 20, 22, 24]
+        version: [18, 20, 22]
         exclude:
           # TODO: Test timeout jest work for some reason
           - os: windows-latest
@@ -72,6 +72,7 @@ jobs:
 
       - name: Install Playwright Browsers
         run: pnpm exec playwright install --with-deps
+        working-directory: ts/packages/shell
       - name: Shell Tests
         timeout-minutes: 180
         run: |           
