@@ -22,7 +22,8 @@ test.describe.configure({ mode: 'serial' });
 
 test.describe("@config Commands", () => {
 
-    test("@config dev", async () => {
+    test("@config dev", async ({}, testInfo) => {
+        console.log(`Running test '${testInfo.title}`);
 
         // launch the app
         const mainWindow: Page = await startShell();
@@ -43,7 +44,8 @@ test.describe("@config Commands", () => {
         await exitApplication(mainWindow);
     });
 
-    test("@config schema", async () => {
+    test("@config schema", async ({}, testInfo) => {
+        console.log(`Running test '${testInfo.title}`);
 
         // launch the app
         const mainWindow: Page = await startShell();

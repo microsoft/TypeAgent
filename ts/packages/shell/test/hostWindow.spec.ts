@@ -27,7 +27,9 @@ test.describe("Shell interface tests", () => {
     /**
      * Test to ensure that the shell recall startup layout (position, size)
      */
-    test("remember window position", async () => {
+    test("remember window position", async ({}, testInfo) => {
+        console.log(`Running test '${testInfo.title}`);
+
         let agentMessageCount = 0;
 
         const firstWindow = await startShell();
@@ -78,7 +80,9 @@ test.describe("Shell interface tests", () => {
     /**
      * Ensures zoom level is working
      */
-    test("zoom level", async () => {
+    test("zoom level", async ({}, testInfo) => {
+        console.log(`Running test '${testInfo.title}`);
+
         // start the app
         const mainWindow = await startShell();
 
@@ -112,7 +116,9 @@ test.describe("Shell interface tests", () => {
     /**
      * Ensure send button is behaving
      */
-    test("send button state", async () => {
+    test("send button state", async ({}, testInfo) => {
+        console.log(`Running test '${testInfo.title}`);
+        
         let agentMessageCount = 0;
 
         // start the app

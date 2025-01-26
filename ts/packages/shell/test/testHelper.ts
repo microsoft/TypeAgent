@@ -6,7 +6,8 @@ import {
     _electron as electron,
     ElectronApplication, 
     Locator, 
-    Page } from "@playwright/test";
+    Page, 
+    TestDetails} from "@playwright/test";
 import { profile } from "node:console";
 import fs from "node:fs";
 import path from "node:path";
@@ -18,6 +19,7 @@ const runningApplications: Map<string, ElectronApplication> = new Map<string, El
  * Starts the electron app and returns the main page after the greeting agent message has been posted.
  */
 export async function startShell(): Promise<Page> {
+
     // this is needed to isolate these tests session from other concurrently running tests
     process.env["INSTANCE_NAME"] = `test_${process.env["TEST_WORKER_INDEX"]}_${process.env["TEST_PARALLEL_INDEX"]}`;
 
@@ -35,7 +37,6 @@ export async function startShell(): Promise<Page> {
                 throw new Error("Application instance already running. Did you shutdown cleanly?");
             }
 
-            // start the app
             console.log(`Starting ${process.env["INSTANCE_NAME"]}`);
             const app: ElectronApplication = await electron.launch({ args: [getAppPath()] });
             runningApplications.set(process.env["INSTANCE_NAME"]!, app);

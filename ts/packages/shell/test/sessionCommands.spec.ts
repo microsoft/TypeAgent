@@ -24,7 +24,7 @@ test.describe.configure({ mode: 'serial' });
 test.describe("@session Commands", () => {
 
     test("@session new/list", async ({}, testInfo) => {
-        console.log(`Starting test '${testInfo.title}'`);
+        console.log(`Running test '${testInfo.title}`);
 
         // launch the app
         const mainWindow: Page = await startShell();
@@ -49,7 +49,8 @@ test.describe("@session Commands", () => {
         await exitApplication(mainWindow);
     });
 
-    test("@session new/delete/list/info", async () => {
+    test("@session new/delete/list/info", async ({}, testInfo) => {
+        console.log(`Running test '${testInfo.title}`);
 
         // launch the app
         const mainWindow: Page = await startShell();

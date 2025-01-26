@@ -6,7 +6,9 @@ test("dummy", async () => {
     // do nothing
 });
 
-test("simple", async () => {
+test("simple", async ({}, testInfo) => {
+    console.log(`Running test '${testInfo.title}`);
+
     const app: ElectronApplication = await electron.launch({ args: [getAppPath()] });
     const mainWindow: Page = await app.firstWindow();
     await mainWindow.bringToFront();
