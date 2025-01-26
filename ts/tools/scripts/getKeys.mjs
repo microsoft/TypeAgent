@@ -45,11 +45,10 @@ async function getSecretListWithElevation(keyVaultClient, vaultName) {
             // Wait for the role to be activated
             console.log(chalk.green("Elevation successful."));
             console.warn(chalk.yellowBright("Waiting 5 seconds..."));
+            await new Promise((res) => setTimeout(res, 5000));
         } catch (e) {
             console.warn(chalk.yellow("Elevation failed...attempting to get secrets without elevation."));
-        } 
-
-        await new Promise((res) => setTimeout(res, 5000));
+        }         
         return await keyVaultClient.getSecrets(vaultName);
     }
 }
