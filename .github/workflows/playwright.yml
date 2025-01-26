@@ -69,7 +69,7 @@ jobs:
       #     npm run test
       - name: Test CLI
         run: |
-            npm run start:dev interactive 
+            npm run start:dev 'prompt' 'why is the sky blue'
         working-directory: ts/packages/cli
       - name: Shell Tests
         timeout-minutes: 180
