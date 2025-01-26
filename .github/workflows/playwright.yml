@@ -6,6 +6,10 @@ on:
   push:
     branches: [ dev/robgruen/electron_tests ]
 
+permissions:
+  id-token: write
+  contents: read    
+
 # run only one of these at a time
 concurrency:
   group: ${{ github.workflow }}
