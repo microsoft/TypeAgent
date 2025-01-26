@@ -54,6 +54,7 @@ export default defineConfig({
             use: { ...devices["Desktop Chrome"] },
             fullyParallel: false,
             dependencies: [ "global setup"],
+            testMatch: /simple\.spec\.ts/,
         },
     ],
 

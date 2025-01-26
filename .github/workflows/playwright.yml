@@ -51,7 +51,7 @@ jobs:
       - uses: actions/setup-node@v4
         if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts == 'true' }}
         with:
-          node-version: ${{ matrix.version }}
+          node-version: 22
           cache: "pnpm"
           cache-dependency-path: ts/pnpm-lock.yaml
       - name: Install dependencies
