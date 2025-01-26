@@ -105,7 +105,7 @@ export async function sendUserRequest(prompt: string, page: Page) {
 
 
     try {
-        const locator: Locator = await page.getByTestId("phraseDiv");
+        const locator: Locator = await page.locator("#phraseDiv");
         //const locator: Locator = await page.locator(".user-textarea");
         await locator.waitFor({ timeout: 60000, state: "visible" });
         await locator.focus({ timeout: 60000 });

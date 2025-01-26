@@ -37,7 +37,6 @@ export class ExpandableTextarea {
         this.textEntry.contentEditable = "true";
         this.textEntry.role = "textbox";
         this.textEntry.id = id;
-        this.textEntry.setAttribute("data-testid", id);
         this.textEntry.addEventListener("keydown", (event) => {
             if (this.entryHandlers.onKeydown !== undefined) {
                 if (!this.entryHandlers.onKeydown(this, event)) {
