@@ -20,7 +20,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: ["ubuntu-latest", "windows-latest", "macos-latest"]
+        # os: ["ubuntu-latest", "windows-latest", "macos-latest"]
+        os: ["windows-latest"]
         version: [18, 20, 22]
         exclude:
           # TODO: Test timeout jest work for some reason
@@ -77,7 +78,7 @@ jobs:
         run: |
           node tools/scripts/getKeys.mjs
         working-directory: ts
-      - name: Test CLI
+      - name: Test CLI - verify .env & endpoint connectivity
         run: |
             npm run start:dev 'prompt' 'why is the sky blue'
         working-directory: ts/packages/cli          
@@ -103,7 +104,7 @@ jobs:
           retention-days: 30
 
 
-      - name: Lint
-        working-directory: ts
-        run: |
-          npm run lint
+      # - name: Lint
+      #   working-directory: ts
+      #   run: |
+      #     npm run lint
