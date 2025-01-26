@@ -95,9 +95,18 @@ export function getAppPath(): string {
  * @param page The maing page from the electron host application.
  */
 export async function sendUserRequest(prompt: string, page: Page) {
+
+    // let locator: Locator | undefined = undefined;
+
+    // // try to get the locator in two different ways and repeat that twice before failing
+    // try {
+
+    // }
+
+
     try {
-        //const locator: Locator = await page.locator("#phraseDiv");
-        const locator: Locator = await page.locator(".user-textarea");
+        const locator: Locator = await page.getByTestId("phraseDiv");
+        //const locator: Locator = await page.locator(".user-textarea");
         await locator.waitFor({ timeout: 30000, state: "visible" });
         await locator.focus();
         await locator.fill(prompt);
