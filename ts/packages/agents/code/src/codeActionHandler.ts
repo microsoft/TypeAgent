@@ -64,7 +64,7 @@ async function updateCodeContext(
                 const text = event.data.toString();
                 const data = JSON.parse(text) as WebSocketMessageV2;
 
-                if (data.id && data.result) {
+                if (data.id !== undefined && data.result !== undefined) {
                     const pendingCall = agentContext.pendingCall.get(
                         Number(data.id),
                     );
