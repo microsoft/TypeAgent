@@ -107,10 +107,10 @@ export async function sendUserRequest(prompt: string, page: Page) {
     try {
         const locator: Locator = await page.getByTestId("phraseDiv");
         //const locator: Locator = await page.locator(".user-textarea");
-        await locator.waitFor({ timeout: 30000, state: "visible" });
-        await locator.focus();
-        await locator.fill(prompt);
-        await locator.press("Enter");
+        await locator.waitFor({ timeout: 60000, state: "visible" });
+        await locator.focus({ timeout: 60000 });
+        await locator.fill(prompt, { timeout: 60000 });
+        await locator.press("Enter", { timeout: 60000 });
     } catch (e) {
         // TODO: find alternate method when the above fails.
         console.log(e);
@@ -133,7 +133,7 @@ export async function sendUserRequest(prompt: string, page: Page) {
 export async function sendUserRequestFast(prompt: string, page: Page) {    
     const locator: Locator = await page.locator(".user-textarea");
     await locator.waitFor({ timeout: 120000, state: "visible" });
-    await locator.fill(prompt);
+    await locator.fill(prompt, { timeout: 60000 });
     page.keyboard.down("Enter");
 }
 
