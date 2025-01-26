@@ -80,7 +80,7 @@ jobs:
 
       - name: Get Keys
         run: |
-          node ../tools/scripts/getKeys.mjs
+          node ts/tools/scripts/getKeys.mjs
       - name: Shell Tests
         timeout-minutes: 180
         # run: |           
