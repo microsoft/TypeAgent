@@ -67,6 +67,10 @@ jobs:
       #   working-directory: ts
       #   run: |
       #     npm run test
+      - name: Test CLI
+        run: |
+            npm run start:dev interactive 
+        working-directory: ts/packages/cli
       - name: Shell Tests
         timeout-minutes: 180
         # run: |           
@@ -78,12 +82,14 @@ jobs:
         with:
           name: test-results
           path: ts/packages/shell/test-results/
+          overwrite: true
           retention-days: 30        
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
         with:
           name: playwright-report
           path: ts/packages/shell/playwright-report/
+          overwrite: true
           retention-days: 30
 
 
