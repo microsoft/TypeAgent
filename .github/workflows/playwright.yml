@@ -67,21 +67,19 @@ jobs:
       #   working-directory: ts
       #   run: |
       #     npm run test
-      # - name: Test CLI
-      #   run: |
-      #       npm run start:dev 'prompt' 'why is the sky blue'
-      #   working-directory: ts/packages/cli
       - name: Login to Azure
         uses: azure/login@v2.2.0
         with:
           client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_5B0D2D6BA40F4710B45721D2112356DD }}
           tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_39BB903136F14B6EAD8F53A8AB78E3AA }}
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_F36C1F2C4B2C49CA8DD5C52FAB98FA30 }}
-          #auth-type: IDENTITY
-
       - name: Get Keys
         run: |
           node ts/tools/scripts/getKeys.mjs
+      - name: Test CLI
+        run: |
+            npm run start:dev 'prompt' 'why is the sky blue'
+        working-directory: ts/packages/cli          
       - name: Shell Tests
         timeout-minutes: 180
         # run: |           
