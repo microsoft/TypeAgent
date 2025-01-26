@@ -62,7 +62,6 @@ async function updateCodeContext(
             };
             webSocket.onmessage = async (event: any) => {
                 const text = event.data.toString();
-                console.log(`Received message: ${text}`);
                 const data = JSON.parse(text) as WebSocketMessageV2;
 
                 if (data.id !== undefined && data.result !== undefined) {
