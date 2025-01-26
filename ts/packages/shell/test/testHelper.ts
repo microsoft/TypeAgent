@@ -17,8 +17,7 @@ const runningApplications: Map<string, ElectronApplication> = new Map<string, El
 /**
  * Starts the electron app and returns the main page after the greeting agent message has been posted.
  */
-export async function testSetup(): Promise<Page> {
-
+export async function startShell(): Promise<Page> {
     // this is needed to isolate these tests session from other concurrently running tests
     process.env["INSTANCE_NAME"] = `test_${process.env["TEST_WORKER_INDEX"]}_${process.env["TEST_PARALLEL_INDEX"]}`;
 
@@ -105,10 +104,13 @@ export async function sendUserRequest(prompt: string, page: Page) {
         // TODO: find alternate method when the above fails.
         console.log(e);
         const l3 = await page.locator(".chat-input");
+        console.log(`Found ${l3}`);
         
         const l2 = await page.locator(".user-textarea");
+        console.log(`Found ${l2}`);
         
         const element = await page.waitForSelector("#phraseDiv");
+        console.log(`Found ${element}`);
     }
 }
 

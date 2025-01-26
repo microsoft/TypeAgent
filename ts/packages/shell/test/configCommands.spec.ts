@@ -13,7 +13,7 @@ import {
     getLastAgentMessage,
     sendUserRequest,
     sendUserRequestAndWaitForResponse,
-    testSetup,
+    startShell,
     waitForAgentMessage,
 } from "./testHelper";
 
@@ -25,7 +25,7 @@ test.describe("@config Commands", () => {
     test("@config dev", async () => {
 
         // launch the app
-        const mainWindow: Page = await testSetup();
+        const mainWindow: Page = await startShell();
 
         let msg = await sendUserRequestAndWaitForResponse(`@config dev`, mainWindow);
 
@@ -46,7 +46,7 @@ test.describe("@config Commands", () => {
     test("@config schema", async () => {
 
         // launch the app
-        const mainWindow: Page = await testSetup();
+        const mainWindow: Page = await startShell();
 
         let msg = await sendUserRequestAndWaitForResponse(`@config schema oracle`, mainWindow);
 

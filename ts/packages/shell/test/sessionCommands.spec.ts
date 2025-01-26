@@ -13,7 +13,7 @@ import {
     getLastAgentMessage,
     sendUserRequest,
     sendUserRequestAndWaitForResponse,
-    testSetup,
+    startShell,
     waitForAgentMessage,
 } from "./testHelper";
 import { session } from "electron";
@@ -23,10 +23,11 @@ test.describe.configure({ mode: 'serial' });
 
 test.describe("@session Commands", () => {
 
-    test("@session new/list", async () => {
+    test("@session new/list", async ({}, testInfo) => {
+        console.log(`Starting test '${testInfo.title}'`);
 
         // launch the app
-        const mainWindow: Page = await testSetup();
+        const mainWindow: Page = await startShell();
 
         // get the session count
         let msg = await sendUserRequestAndWaitForResponse(`@session list`, mainWindow);
@@ -51,7 +52,7 @@ test.describe("@session Commands", () => {
     test("@session new/delete/list/info", async () => {
 
         // launch the app
-        const mainWindow: Page = await testSetup();
+        const mainWindow: Page = await startShell();
 
         // create a new session so we have at least two
         let msg = await sendUserRequestAndWaitForResponse(`@session new`, mainWindow);

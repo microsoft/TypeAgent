@@ -14,7 +14,7 @@ import {
     sendUserRequest,
     sendUserRequestAndWaitForResponse,
     sendUserRequestFast,
-    testSetup,
+    startShell,
     waitForAgentMessage,
 } from "./testHelper";
 import { exit } from "process";
@@ -30,7 +30,7 @@ test.describe("Shell interface tests", () => {
     test("remember window position", async () => {
         let agentMessageCount = 0;
 
-        const firstWindow = await testSetup();
+        const firstWindow = await startShell();
 
         // verify shell title
         const title = await firstWindow.title();
@@ -54,7 +54,7 @@ test.describe("Shell interface tests", () => {
         await exitApplication(firstWindow);
 
         // restart the app
-        const newWindow: Page = await testSetup();
+        const newWindow: Page = await startShell();
 
         // get window size/position
         const msg = await sendUserRequestAndWaitForResponse(`@shell show raw`, newWindow);
@@ -80,7 +80,7 @@ test.describe("Shell interface tests", () => {
      */
     test("zoom level", async () => {
         // start the app
-        const mainWindow = await testSetup();
+        const mainWindow = await startShell();
 
         // test 80% zoom
         await testZoomLevel(0.8, mainWindow);
@@ -116,7 +116,7 @@ test.describe("Shell interface tests", () => {
         let agentMessageCount = 0;
 
         // start the app
-        const mainWindow = await testSetup();
+        const mainWindow = await startShell();
 
         // make sure send button is disabled
         const sendButton = await mainWindow.locator("#sendbutton");
