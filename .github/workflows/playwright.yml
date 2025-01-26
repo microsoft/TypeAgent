@@ -75,7 +75,8 @@ jobs:
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_F36C1F2C4B2C49CA8DD5C52FAB98FA30 }}
       - name: Get Keys
         run: |
-          node ts/tools/scripts/getKeys.mjs
+          node tools/scripts/getKeys.mjs
+        working-directory: ts
       - name: Test CLI
         run: |
             npm run start:dev 'prompt' 'why is the sky blue'
