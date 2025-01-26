@@ -158,6 +158,8 @@ class AzPIMClient {
 
             if (!continueOnFailure) {
                 fatal(12, "Unable to get principal id of the current user.");
+            } else {
+                throw "Unable to get principal id of the current user.";
             }
         }
     }
