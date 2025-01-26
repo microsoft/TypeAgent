@@ -1,4 +1,4 @@
-import test, { ElectronApplication,_electron,
+import test, { ElectronApplication,Page,_electron,
     _electron as electron, } from "@playwright/test";
 import { getAppPath, testSetup } from "./testHelper";
 
@@ -7,7 +7,11 @@ test("dummy", async () => {
 });
 
 test("simple", async () => {
-    const window = await testSetup();
-    await window.waitForTimeout(3000);
-    await window.close();
+    const app: ElectronApplication = await electron.launch({ args: [getAppPath()] });
+    const mainWindow: Page = await app.firstWindow();
+    await mainWindow.bringToFront();
+    await app.close();
+    // const window = await testSetup();
+    // await window.waitForTimeout(3000);
+    // await window.close();
 });

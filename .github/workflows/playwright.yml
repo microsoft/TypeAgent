@@ -44,35 +44,29 @@ jobs:
               - "ts/**"
               - ".github/workflows/build-ts.yml"
       - uses: pnpm/action-setup@v4
-        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts == 'true' }}
         name: Install pnpm
         with:
           package_json_file: ts/package.json
       - uses: actions/setup-node@v4
-        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts == 'true' }}
         with:
-          node-version: 22
+          node-version: lts/*
           cache: "pnpm"
-          cache-dependency-path: ts/pnpm-lock.yaml
-      - name: Install dependencies
-        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts == 'true' }}
+          cache-dependency-path: ts/pnpm-lock.yaml          
+      - name: Install dependencies (pnpm)
         working-directory: ts
         run: |
           pnpm install --frozen-lockfile --strict-peer-dependencies
+      - name: Install Playwright Browsers
+        run: pnpm exec playwright install --with-deps
+        working-directory: ts/packages/shell
       - name: Build
-        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts == 'true' }}
         working-directory: ts
         run: |
           npm run build
       # - name: Test
-      #   if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts == 'true' }}
       #   working-directory: ts
       #   run: |
       #     npm run test
-
-      - name: Install Playwright Browsers
-        run: pnpm exec playwright install --with-deps
-        working-directory: ts/packages/shell
       - name: Shell Tests
         timeout-minutes: 180
         # run: |           
@@ -88,7 +82,6 @@ jobs:
 
 
       - name: Lint
-        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts == 'true' }}
         working-directory: ts
         run: |
           npm run lint
