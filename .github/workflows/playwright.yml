@@ -15,10 +15,6 @@ concurrency:
   group: ${{ github.workflow }}
   cancel-in-progress: true
 
-permissions:
-  pull-requests: read
-  contents: read  
-
 jobs:
   build_ts:
     strategy:
