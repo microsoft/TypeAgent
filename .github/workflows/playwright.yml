@@ -5,6 +5,8 @@ name: Shell Tests
 on:
   push:
     branches: [ dev/robgruen/electron_tests ]
+  # schedule:
+  #   - cron: "0 0 * * *"
 
 permissions:
   id-token: write
@@ -50,7 +52,7 @@ jobs:
           package_json_file: ts/package.json
       - uses: actions/setup-node@v4
         with:
-          node-version: lts/*
+          node-version: ${{ matrix.version }}
           cache: "pnpm"
           cache-dependency-path: ts/pnpm-lock.yaml          
       - name: Install dependencies (pnpm)
