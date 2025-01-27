@@ -351,11 +351,15 @@ async function executeAction(
                 result.dynamicDisplayNextRefreshMs!,
             );
         }
+        const combinedEntities = [...result.entities];
+        if (result.resultEntity) {
+            combinedEntities.push(result.resultEntity);
+        }
         systemContext.chatHistory.addEntry(
             result.literalText
                 ? result.literalText
                 : `Action ${action.fullActionName} completed.`,
-            result.entities,
+            combinedEntities,
             "assistant",
             systemContext.requestId,
             undefined,
