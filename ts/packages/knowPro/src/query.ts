@@ -98,9 +98,12 @@ export class TermsMatchExpr implements IQueryOpExpr<SemanticRefAccumulator> {
     }
 }
 
-export interface Match<T = any> {
+export interface Scored<T = any> {
     value: T;
     score: number;
+}
+
+export interface Match<T = any> extends Scored<T> {
     hitCount: number;
 }
 

@@ -14,10 +14,18 @@ import {
     TextLocation,
     IMessage,
 } from "./dataFormat.js";
-import { conversation } from "knowledge-processor";
-import { openai } from "aiclient";
-import { callWithRetry } from "../../typeagent/dist/async.js";
+import { conversation, createEmbeddingCache } from "knowledge-processor";
+import { openai, TextEmbeddingModel } from "aiclient";
 import { Result } from "typechat";
+import {
+    async,
+    createTopNList,
+    dotProduct,
+    EmbeddedValue,
+    generateEmbedding,
+    NormalizedEmbedding,
+} from "typeagent";
+import { Scored } from "./query.js";
 
 function addFacet(
     facet: conversation.Facet | undefined,
@@ -178,7 +186,7 @@ export async function buildConversationIndex<TMeta extends IKnowledgeSource>(
         // only one chunk per message for now
         const text = msg.textChunks[0];
         try {
-            const knowledgeResult = await callWithRetry(() =>
+            const knowledgeResult = await async.callWithRetry(() =>
                 extractor.extractWithRetry(text, maxRetries),
             );
             if (progressCallback && !progressCallback(text, knowledgeResult)) {
@@ -237,16 +245,15 @@ export async function buildConversationIndex<TMeta extends IKnowledgeSource>(
     return indexingResult;
 }
 
+export type ConversationIndexSettings = {
+    fuzzySettings: EmbeddingIndexSettings;
+};
 /**
  * Notes:
  *  Case-insensitive
  */
 export class ConversationIndex implements ITermToSemanticRefIndex {
-    map: Map<string, ScoredSemanticRef[]> = new Map<
-        string,
-        ScoredSemanticRef[]
-    >();
-
+    private map: Map<string, ScoredSemanticRef[]> = new Map();
     constructor(data?: ITermToSemanticRefIndexData | undefined) {
         if (data) {
             this.deserialize(data);
@@ -308,5 +315,88 @@ export class ConversationIndex implements ITermToSemanticRefIndex {
      */
     private prepareTerm(term: string): string {
         return term.toLowerCase();
+    }
+}
+
+export interface IFuzzyTermMap {
+    lookupTerm(
+        text: string,
+        maxMatches: number,
+        minScore?: number,
+    ): Promise<Scored<string>[] | undefined>;
+}
+
+export type EmbeddingIndexSettings = {
+    embeddingModel: TextEmbeddingModel;
+    retryMaxAttempts?: number;
+    retryPauseMs?: number;
+    concurrency?: number;
+};
+
+export function createEmbeddingIndexSettings(): EmbeddingIndexSettings {
+    return {
+        embeddingModel: createEmbeddingCache(openai.createEmbeddingModel(), 64),
+        retryMaxAttempts: 2,
+        retryPauseMs: 2000,
+        concurrency: 2,
+    };
+}
+
+export class TermEmbeddingMap implements IFuzzyTermMap {
+    termEmbeddings: Map<string, EmbeddedValue<string>>;
+
+    constructor(public settings: EmbeddingIndexSettings) {
+        this.termEmbeddings = new Map();
+    }
+
+    public async lookupTerm(
+        term: string,
+        maxMatches?: number,
+        minScore?: number,
+    ): Promise<Scored<string>[] | undefined> {
+        minScore ??= 0;
+        const termEmbedding = await generateEmbedding(
+            this.settings.embeddingModel,
+            term,
+        );
+        if (maxMatches && maxMatches > 0) {
+            return this.lookupMaxCount(termEmbedding, maxMatches, minScore);
+        } else {
+            return this.lookupAll(termEmbedding, minScore);
+        }
+    }
+
+    public removeTerm(term: string) {
+        this.termEmbeddings.delete(term);
+    }
+
+    private lookupAll(termEmbedding: NormalizedEmbedding, minScore: number) {
+        let matches: Scored<string>[] = [];
+        for (const candidateTerm of this.termEmbeddings.values()) {
+            const score = dotProduct(termEmbedding, candidateTerm.embedding);
+            if (score >= minScore) {
+                matches.push({ value: candidateTerm.value, score });
+            }
+        }
+        // Sort by score, descending
+        matches.sort((x, y) => y.score - x.score);
+        return matches;
+    }
+
+    private lookupMaxCount(
+        termEmbedding: NormalizedEmbedding,
+        maxMatches: number,
+        minScore: number,
+    ): Scored<string>[] {
+        const topNMatches = createTopNList<string>(maxMatches);
+        for (const candidateTerm of this.termEmbeddings.values()) {
+            const score = dotProduct(termEmbedding, candidateTerm.embedding);
+            if (score >= minScore) {
+                topNMatches.push(candidateTerm.value, score);
+            }
+        }
+        return topNMatches.byRank().map((m) => {
+            return { value: m.item, score: m.score };
+        });
     }
 }
