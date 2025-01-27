@@ -42,7 +42,7 @@ export async function createWebSocket(
 
         endpoint += `?channel=${channel}&role=${role}`;
         if (clientId) {
-            endpoint += `clientId=${clientId}`;
+            endpoint += `&clientId=${clientId}`;
         }
 
         const webSocket = new WebSocket(endpoint);

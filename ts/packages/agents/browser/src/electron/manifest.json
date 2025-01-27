@@ -6,7 +6,7 @@
   "action": {},
   "content_scripts": [
     {
-      "matches": ["https://*/*"],
+      "matches": ["https://*/*", "http://localhost:9000/"],
       "js": ["contentScript.js"],
       "all_frames": true,
       "run_at": "document_start"
@@ -16,6 +16,13 @@
       "js": ["agentActivation.js"],
       "world": "MAIN",
       "run_at": "document_start"
+    },
+    {
+      "matches": ["https://*/*", "http://localhost:9000/"],
+      "js": ["webTypeAgentMain.js"],
+      "run_at": "document_start",
+      "all_frames": true,
+      "world": "MAIN"
     },
     {
       "matches": ["https://*/*"],
