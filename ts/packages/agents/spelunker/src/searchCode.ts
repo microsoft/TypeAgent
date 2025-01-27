@@ -21,6 +21,7 @@ import { AnswerSpecs } from "./makeAnswerSchema.js";
 import { ChunkDescription, SelectorSpecs } from "./makeSelectorSchema.js";
 import { SpelunkerContext } from "./spelunkerActionHandler.js";
 import {
+    Blob,
     Chunk,
     ChunkedFile,
     chunkifyPythonFiles,
@@ -84,7 +85,7 @@ function createQueryContext(): QueryContext {
         mode: 0o700,
     };
     fs.mkdirSync(databaseFolder, mkdirOptions);
-    const databaseLocation = path.join(databaseFolder, "database.db");
+    const databaseLocation = path.join(databaseFolder, "codeSearchdatabase.db");
     const database = undefined;
     return {
         chatModel,
@@ -101,8 +102,13 @@ function createQueryContext(): QueryContext {
 export async function searchCode(
     context: SpelunkerContext,
     input: string,
+    entityUniqueIds: string[],
+    inputEntities: Entity[],
 ): Promise<ActionResult> {
     epoch = 0; // Reset logging clock
+    console_log(
+        `[searchCode question='${input}', entityUniqueIds=${JSON.stringify(entityUniqueIds)}, entities=${JSON.stringify(inputEntities)}]`,
+    );
 
     // 0. Check if the focus is set.
     if (!context.focusFolders.length) {
@@ -129,6 +135,7 @@ export async function searchCode(
         const chunk: Chunk = {
             chunkId: chunkRow.chunkId,
             treeName: chunkRow.treeName,
+            codeName: chunkRow.codeName,
             blobs: blobRows, // Ignoring chunkId
             parentId: chunkRow.parentId,
             children: childRows.map((row) => row.chunkId),
@@ -144,6 +151,7 @@ export async function searchCode(
         context,
         allChunks,
         input,
+        inputEntities,
     );
     if (!chunkDescs.length) {
         throw new Error("No chunks selected");
@@ -187,10 +195,33 @@ export async function searchCode(
 
     // 6. Extract answer and references from result.
     const answer = result.answer;
-    // TODO: References
 
     // 7. Produce an action result from that.
-    const entities: Entity[] = []; // TODO: Construct from references
+    const entities: Entity[] = [];
+    console_log(`  [Entities returned:]`);
+    for (const ref of result.references) {
+        const chunk = allChunks.find((c) => c.chunkId === ref);
+        if (!chunk) continue;
+        // Need the first blob; blob.start + 1 gives the line number
+        const blob = db
+            .prepare(
+                `SELECT * FROM Blobs WHERE chunkId = ? ORDER BY start ASC LIMIT 1`,
+            )
+            .get(ref) as Blob | undefined;
+        if (!blob) continue;
+        const entity = {
+            name: chunk.codeName,
+            type: ["code", chunk.treeName.replace(/Def$/, "").toLowerCase()],
+            uniqueId: ref,
+            additionalEntityText: `${chunk.fileName}#${blob.start + 1}`,
+            // TODO: Include summary and signature somehow?
+        };
+        entities.push(entity);
+        console_log(
+            `    [${entity.name} (${entity.type}) ${entity.uniqueId} ${entity.additionalEntityText}]`,
+        );
+    }
+
     return createActionResultFromMarkdownDisplay(answer, entities);
 }
 
@@ -209,6 +240,7 @@ async function selectChunks(
     context: SpelunkerContext,
     chunks: Chunk[],
     input: string,
+    inputEntities: Entity[],
 ): Promise<ChunkDescription[]> {
     console_log(`  [Starting chunk selection ...]`);
     const promises: Promise<ChunkDescription[]>[] = [];
@@ -232,28 +264,50 @@ async function selectChunks(
         );
         promises.push(p);
     }
-    const allChunks: ChunkDescription[] = [];
+    const allChunkDescs: ChunkDescription[] = [];
     for (const p of promises) {
-        const chunks = await p;
-        if (chunks.length) {
-            // console_log(
-            //     "Pushing",
-            //     chunks.length,
-            //     "for",
-            //     chunks[0].chunkId,
-            //     "--",
-            //     chunks[chunks.length - 1].chunkId,
-            // );
-            allChunks.push(...chunks);
+        const chunkDescs = await p;
+        if (chunkDescs.length) {
+            allChunkDescs.push(...chunkDescs);
         }
     }
-    console_log(`  [Total ${allChunks.length} chunks]`);
-    allChunks.sort((a, b) => b.relevance - a.relevance);
+    // Reminder: There's no overlap in chunkIds between the slices
+    console_log(`  [Total ${allChunkDescs.length} chunks selected]`);
+
+    // Give valid input entities a relevance boost to 2.0
+    let boostCount = 0;
+    let newCount = 0;
+    for (const entity of inputEntities) {
+        if (entity.type.includes("code") && entity.uniqueId) {
+            const chunkDesc = allChunkDescs.find(
+                (c) => c.chunkId === entity.uniqueId,
+            );
+            if (chunkDesc) {
+                chunkDesc.relevance = 2.0;
+                boostCount += 1;
+            } else {
+                const chunk = chunks.find((c) => c.chunkId === entity.uniqueId);
+                if (chunk) {
+                    allChunkDescs.push({
+                        chunkId: entity.uniqueId,
+                        relevance: 2.0,
+                    });
+                    newCount += 1;
+                }
+            }
+        }
+    }
+    if (boostCount + newCount) {
+        console_log(
+            `  [Boosted ${boostCount} selected chunks and added ${newCount} newly boosted ones]`,
+        );
+    }
+    allChunkDescs.sort((a, b) => b.relevance - a.relevance);
     // console_log(`  [${allChunks.map((c) => (c.relevance)).join(", ")}]`);
-    allChunks.splice(30);
-    console_log(`  [Keeping ${allChunks.length} chunks]`);
+    allChunkDescs.splice(30);
+    console_log(`  [Keeping ${allChunkDescs.length} chunks]`);
     // console_log(`  [${allChunks.map((c) => [c.chunkId, c.relevance])}]`);
-    return allChunks;
+    return allChunkDescs;
 }
 
 async function selectRelevantChunks(
@@ -389,7 +443,7 @@ async function loadDatabase(
         `SELECT COUNT(*) FROM Chunks WHERE fileName = ?`,
     );
     const prepInsertChunks = db.prepare(
-        `INSERT OR REPLACE INTO Chunks (chunkId, treeName, parentId, fileName) VALUES (?, ?, ?, ?)`,
+        `INSERT OR REPLACE INTO Chunks (chunkId, treeName, codeName, parentId, fileName) VALUES (?, ?, ?, ?, ?)`,
     );
     const prepInsertBlobs = db.prepare(
         `INSERT INTO Blobs (chunkId, start, lines, breadcrumb) VALUES (?, ?, ?, ?)`,
@@ -499,6 +553,7 @@ async function loadDatabase(
             prepInsertChunks.run(
                 chunk.chunkId,
                 chunk.treeName,
+                chunk.codeName,
                 chunk.parentId || null,
                 chunk.fileName,
             );
@@ -534,6 +589,7 @@ CREATE TABLE IF NOT EXISTS Files (
 CREATE TABLE IF NOT EXISTS Chunks (
     chunkId TEXT PRIMARY KEY,
     treeName TEXT NOT NULL,
+    codeName TEXT NOT NULL,
     parentId TEXT KEY REFERENCES chunks(chunkId), -- May be null
     fileName TEXT KEY REFERENCES files(fileName) NOT NULL
 );
@@ -546,6 +602,7 @@ CREATE TABLE IF NOT EXISTS Blobs (
 CREATE TABLE IF NOT EXISTS Summaries (
     chunkId TEXT PRIMARY KEY REFERENCES chunks(chunkId),
     summary TEXT,
+    shortName TEXT,
     signature TEXT
 )
 `;

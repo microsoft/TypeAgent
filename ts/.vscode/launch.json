@@ -53,7 +53,7 @@
           "cwd": "${workspaceFolder}/packages/cli",
           "program": "./bin/run.js",
           "args": [ "interactive" ],
-          "console": "externalTerminal",
+          "console": "integratedTerminal",
           //"preLaunchTask": "pnpm: build",
           "outFiles": [
               "${workspaceFolder}/**/*.js"

@@ -10,7 +10,8 @@ export type SpelunkerAction =
 export type SetFocusAction = {
     actionName: "setFocus";
     parameters: {
-        folders: string[]; // Focus exclusively on these folders (may be empty to clear focus)
+        // Focus exclusively on these folders (may be empty to clear focus)
+        folders: string[];
     };
 };
 
@@ -23,6 +24,9 @@ export type GetFocusAction = {
 export type SearchCodeAction = {
     actionName: "searchCode";
     parameters: {
-        question: string; // Question to answer
+        // Question to answer
+        question: string;
+        // Unique Ids of entities relevant to the question, taken from the entities' uniqueId fields
+        entityUniqueIds: string[];
     };
 };
