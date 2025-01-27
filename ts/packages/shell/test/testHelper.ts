@@ -41,9 +41,9 @@ export async function startShell(): Promise<Page> {
             const app: ElectronApplication = await electron.launch({ args: [getAppPath()] });
             runningApplications.set(process.env["INSTANCE_NAME"]!, app);
 
-            app.on('window', async (data) => {
-                console.log(`New Window created! ${await data.content()}`);
-            });
+            // app.on('window', async (data) => {
+            //     console.log(`New Window created! ${await data.content()}`);
+            // });
 
             // get the main window        
             const mainWindow: Page = await getMainWindow(app);
