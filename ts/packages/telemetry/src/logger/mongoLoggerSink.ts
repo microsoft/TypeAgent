@@ -11,24 +11,24 @@ const UPLOAD_DELAY = 1000;
 class MongoDBLoggerSink implements LoggerSink {
     private pendingEvents: LogEvent[] = [];
     private timeout: NodeJS.Timeout | undefined;
+    private disabled = false;
     constructor(
         private readonly dbUrl: string,
         private readonly dbName: string,
         private readonly collectionName: string,
         private readonly isEnabled?: () => boolean,
+        private readonly onErrorDisable?: (error: string) => void,
     ) {}
 
     public logEvent(event: LogEvent) {
-        if (this.isEnabled === undefined || this.isEnabled()) {
+        if (
+            !this.disabled &&
+            (this.isEnabled === undefined || this.isEnabled())
+        ) {
             this.pendingEvents.push(event);
-        }
-
-        this.scheduleUpload();
-    }
-
-    private scheduleUpload() {
-        if (!this.timeout) {
-            this.timeout = setTimeout(() => this.upload(), UPLOAD_DELAY);
+            if (this.timeout === undefined) {
+                this.timeout = setTimeout(() => this.upload(), UPLOAD_DELAY);
+            }
         }
     }
 
@@ -47,9 +47,23 @@ class MongoDBLoggerSink implements LoggerSink {
                     await client.close();
                 }
             }
-        } catch (e) {
-            // TODO: ignore?
-            debugMongo(`ERROR: ${e}`);
+        } catch (e: any) {
+            if (
+                typeof e.message === "string" &&
+                e.message.includes("Invalid key")
+            ) {
+                // Disable
+                if (this.onErrorDisable) {
+                    this.onErrorDisable(`DB Logging disabled: ${e.toString()}`);
+                } else {
+                    console.error(`DB Logging disabled: ${e.toString()}`);
+                }
+
+                this.disabled = true;
+            } else {
+                // TODO: ignore?
+                debugMongo(`ERROR: ${e}`);
+            }
         }
     }
 }
@@ -58,6 +72,7 @@ export function createMongoDBLoggerSink(
     dbName: string,
     collectionName: string,
     isEnabled?: () => boolean,
+    onErrorDisable?: (error: string) => void,
 ): LoggerSink | undefined {
     const dbUrl = process.env["MONGODB_CONNECTION_STRING"] ?? null;
     if (dbUrl === null || dbUrl === "") {
@@ -65,5 +80,11 @@ export function createMongoDBLoggerSink(
             "MONGODB_CONNECTION_STRING environment variable not set",
         );
     }
-    return new MongoDBLoggerSink(dbUrl, dbName, collectionName, isEnabled);
+    return new MongoDBLoggerSink(
+        dbUrl,
+        dbName,
+        collectionName,
+        isEnabled,
+        onErrorDisable,
+    );
 }

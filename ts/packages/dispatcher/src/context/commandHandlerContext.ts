@@ -205,6 +205,7 @@ export type InitializeCommandHandlerContextOptions = SessionOptions & {
     clientIO?: ClientIO | undefined; // undefined to disable any IO.
     enableServiceHost?: boolean; // default to false,
     metrics?: boolean; // default to false
+    dblogging?: boolean; // default to false
 };
 
 async function getSession(instanceDir?: string) {
@@ -232,6 +233,14 @@ function getLoggerSink(isDbEnabled: () => boolean, clientIO: ClientIO) {
             "telemetrydb",
             "dispatcherlogs",
             isDbEnabled,
+            (e: string) => {
+                clientIO.notify(
+                    AppAgentEvent.Warning,
+                    undefined,
+                    e,
+                    DispatcherName,
+                );
+            },
         );
     } catch (e) {
         clientIO.notify(
@@ -353,7 +362,7 @@ export async function initializeCommandHandlerContext(
             instanceDir,
             conversationManager,
             explanationAsynchronousMode,
-            dblogging: true,
+            dblogging: options?.dblogging ?? false,
             clientIO,
 
             // Runtime context

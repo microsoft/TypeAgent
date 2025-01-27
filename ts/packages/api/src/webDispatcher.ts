@@ -30,6 +30,7 @@ export async function createWebDispatcher(): Promise<WebDispatcher> {
         persistSession: true,
         enableServiceHost: true,
         metrics: true,
+        dblogging: true,
         clientIO: clientIO,
     });
 
