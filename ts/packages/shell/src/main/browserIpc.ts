@@ -62,6 +62,7 @@ export class BrowserAgentIpc {
 
                     if (
                         (schema == "browser" ||
+                            schema == "webAgent" ||
                             schema.startsWith("browser.")) &&
                         this.onMessageReceived
                     ) {

@@ -6,6 +6,9 @@ const { webFrame } = require("electron");
 
 import DOMPurify from "dompurify";
 import { ipcRenderer } from "electron";
+import EventEmitter from "events";
+
+const internalEventEmitter = new EventEmitter();
 
 ipcRenderer.on("received-from-browser-ipc", async (_, data) => {
     if (data.error) {
@@ -46,6 +49,8 @@ ipcRenderer.on("received-from-browser-ipc", async (_, data) => {
                 id: data.id,
                 result: message,
             });
+        } else if (schema == "webAgent"){
+            internalEventEmitter.emit('web-agent-message', data);
         }
 
         console.log(
@@ -384,10 +389,10 @@ async function runBrowserAction(action: any) {
     };
 }
 
-async function runSiteAction(messageType: string, action: any) {
+async function runSiteAction(schemaName: string, action: any) {
     let confirmationMessage = "OK";
-    switch (messageType) {
-        case "browserActionRequest.paleoBioDb": {
+    switch (schemaName) {
+        case "browser.paleoBioDb": {
             const actionName =
                 action.actionName ?? action.fullActionName.split(".").at(-1);
             if (
@@ -410,7 +415,7 @@ async function runSiteAction(messageType: string, action: any) {
 
             break;
         }
-        case "browserActionRequest.crossword": {
+        case "browser.crossword": {
             sendScriptAction({
                 type: "run_crossword_action",
                 action: action,
@@ -418,7 +423,7 @@ async function runSiteAction(messageType: string, action: any) {
 
             break;
         }
-        case "browserActionRequest.commerce": {
+        case "browser.commerce": {
             sendScriptAction({
                 type: "run_commerce_action",
                 action: action,
@@ -449,7 +454,16 @@ contextBridge.exposeInMainWorld("browserConnect", {
                 params: { translator: translatorName },
             });
         }
+    }
+});
+
+contextBridge.exposeInMainWorld("webAgentApi", {
+    onWebAgentMessage: (callback: (message: any) => void) => {
+        internalEventEmitter.on('web-agent-message', callback);
     },
+    sendWebAgentMessage: (message: any) => {
+        sendToBrowserAgent(message);
+    }
 });
 
 window.onbeforeunload = () => {
