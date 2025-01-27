@@ -397,13 +397,15 @@ function getAllPyFilesSync(dir: string): string[] {
 
 // Should be in actionHelpers.ts
 function createActionResultFromMarkdownDisplay(
-    markdownText: string,
-    entities?: Entity[],
+    literalText: string,
+    entities: Entity[],
+    resultEntity?: Entity,
 ): ActionResultSuccess {
     return {
-        literalText: markdownText,
-        entities: entities ?? [],
-        displayContent: { type: "markdown", content: markdownText },
+        literalText,
+        entities,
+        resultEntity,
+        displayContent: { type: "markdown", content: literalText },
     };
 }
 
