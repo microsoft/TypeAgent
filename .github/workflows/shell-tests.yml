@@ -84,7 +84,7 @@ jobs:
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_F36C1F2C4B2C49CA8DD5C52FAB98FA30 }}
       - name: Get Keys
         run: |
-          node tools/scripts/getKeys.mjs --private build-pipeline-kv
+          node tools/scripts/getKeys.mjs --vault build-pipeline-kv
         working-directory: ts
       - name: Test CLI - verify .env & endpoint connectivity
         run: |
