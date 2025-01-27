@@ -49,8 +49,8 @@ ipcRenderer.on("received-from-browser-ipc", async (_, data) => {
                 id: data.id,
                 result: message,
             });
-        } else if (schema == "webAgent"){
-            internalEventEmitter.emit('web-agent-message', data);
+        } else if (schema == "webAgent") {
+            internalEventEmitter.emit("web-agent-message", data);
         }
 
         console.log(
@@ -454,16 +454,16 @@ contextBridge.exposeInMainWorld("browserConnect", {
                 params: { translator: translatorName },
             });
         }
-    }
+    },
 });
 
 contextBridge.exposeInMainWorld("webAgentApi", {
     onWebAgentMessage: (callback: (message: any) => void) => {
-        internalEventEmitter.on('web-agent-message', callback);
+        internalEventEmitter.on("web-agent-message", callback);
     },
     sendWebAgentMessage: (message: any) => {
         sendToBrowserAgent(message);
-    }
+    },
 });
 
 window.onbeforeunload = () => {

@@ -25,8 +25,8 @@ declare global {
         webAgentApi: {
             onWebAgentMessage: (callback: (message: any) => void) => void;
             sendWebAgentMessage: (message: any) => void;
-          };
-    }    
+        };
+    }
 }
 
 type DynamicTypeAgentManager = {
@@ -59,13 +59,13 @@ function ensureDynamicTypeAgentManager(): DynamicTypeAgentManager {
 
             if (window.webAgentApi) {
                 window.webAgentApi.sendWebAgentMessage(rpcMessage);
-            }else{
+            } else {
                 window.postMessage(rpcMessage);
             }
-        }
+        },
     );
 
-    const registerChannel = createGenericChannel((message: any) =>{
+    const registerChannel = createGenericChannel((message: any) => {
         const rpcMessage = {
             source: "webAgent",
             method: "webAgent/register",
@@ -74,11 +74,10 @@ function ensureDynamicTypeAgentManager(): DynamicTypeAgentManager {
 
         if (window.webAgentApi) {
             window.webAgentApi.sendWebAgentMessage(rpcMessage);
-        }else{
+        } else {
             window.postMessage(rpcMessage);
         }
-        }
-    );
+    });
 
     const rpc = createRpc<DynamicTypeAgentManagerInvokeFunctions>(
         registerChannel.channel,
@@ -123,18 +122,17 @@ function ensureDynamicTypeAgentManager(): DynamicTypeAgentManager {
             }
         }
     };
-    
+
     if (window.webAgentApi) {
-        window.webAgentApi.onWebAgentMessage((event) =>{
+        window.webAgentApi.onWebAgentMessage((event) => {
             messageHandler(event);
         });
-    }else{
+    } else {
         window.addEventListener("message", messageHandler);
     }
 
     return manager;
 }
-
 
 global.registerTypeAgent = async (
     name: string,
@@ -144,4 +142,3 @@ global.registerTypeAgent = async (
     const manager = ensureDynamicTypeAgentManager();
     return manager.addTypeAgent(name, manifest, agent);
 };
-
