@@ -7,6 +7,7 @@ import {
     ScoredSemanticRef,
     SemanticRef,
     SemanticRefIndex,
+    Term,
 } from "./dataFormat.js";
 
 // Query eval expressions
@@ -14,14 +15,6 @@ import {
 export interface IQueryOpExpr<T> {
     eval(context: QueryEvalContext): T;
 }
-
-export type Term = {
-    text: string;
-    /**
-     * Optional additional score to use when this term matches
-     */
-    score?: number | undefined;
-};
 
 export type QueryTerm = {
     term: Term;
@@ -98,12 +91,9 @@ export class TermsMatchExpr implements IQueryOpExpr<SemanticRefAccumulator> {
     }
 }
 
-export interface Scored<T = any> {
+export interface Match<T = any> {
     value: T;
     score: number;
-}
-
-export interface Match<T = any> extends Scored<T> {
     hitCount: number;
 }
 

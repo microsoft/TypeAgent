@@ -9,16 +9,21 @@ import {
     IConversationData,
 } from "./dataFormat.js";
 import { conversation, split } from "knowledge-processor";
-import { getFileName, readAllText } from "typeagent";
+import { collections, getFileName, readAllText } from "typeagent";
 import {
     ConversationIndex,
     addActionToIndex,
     addEntityToIndex,
     buildConversationIndex,
     addTopicToIndex,
-    IndexingResult,
+    ConversationIndexingResult,
 } from "./conversationIndex.js";
 import { Result } from "typechat";
+import {
+    buildTermSemanticIndex,
+    SemanticIndexSettings,
+    TermSemanticIndex,
+} from "./termIndex.js";
 
 // metadata for podcast messages
 export class PodcastMessageMeta implements IKnowledgeSource {
@@ -96,14 +101,22 @@ export class PodcastMessage implements IMessage<PodcastMessageMeta> {
     }
 }
 
+export type PodcastSettings = {
+    relatedTermIndexSettings?: SemanticIndexSettings;
+};
+
 export class Podcast implements IConversation<PodcastMessageMeta> {
+    public settings: PodcastSettings;
     constructor(
         public nameTag: string,
         public messages: PodcastMessage[],
         public tags: string[] = [],
         public semanticRefs: SemanticRef[] = [],
         public semanticRefIndex: ConversationIndex | undefined = undefined,
-    ) {}
+        public relatedTermsIndex: TermSemanticIndex | undefined = undefined,
+    ) {
+        this.settings = {};
+    }
 
     addMetadataToIndex() {
         for (let i = 0; i < this.messages.length; i++) {
@@ -162,15 +175,29 @@ export class Podcast implements IConversation<PodcastMessageMeta> {
         }
     }
 
-    async buildIndex(
+    public async buildIndex(
         progressCallback?: (
             text: string,
             knowledgeResult: Result<conversation.KnowledgeResponse>,
         ) => boolean,
-    ): Promise<IndexingResult> {
+    ): Promise<ConversationIndexingResult> {
         const result = await buildConversationIndex(this, progressCallback);
         this.addMetadataToIndex();
         return result;
+    }
+
+    public async buildRelatedTermsIndex(
+        progressCallback?: (terms: collections.Slice<string>) => void,
+    ): Promise<void> {
+        if (this.settings.relatedTermIndexSettings && this.semanticRefIndex) {
+            const allTerms = this.semanticRefIndex?.getTerms();
+            await buildTermSemanticIndex(
+                this.settings.relatedTermIndexSettings,
+                allTerms,
+                4,
+                progressCallback,
+            );
+        }
     }
 
     public serialize(): IConversationData<PodcastMessage> {

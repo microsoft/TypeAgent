@@ -332,7 +332,10 @@ class KnowProPrinter extends ChatPrinter {
         });
     }
 
-    public writeIndexingResults(results: kp.IndexingResult, verbose = false) {
+    public writeIndexingResults(
+        results: kp.ConversationIndexingResult,
+        verbose = false,
+    ) {
         if (results.failedMessages.length > 0) {
             this.writeError(
                 `Errors for ${results.failedMessages.length} messages`,

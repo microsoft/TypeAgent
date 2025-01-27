@@ -14,18 +14,10 @@ import {
     TextLocation,
     IMessage,
 } from "./dataFormat.js";
-import { conversation, createEmbeddingCache } from "knowledge-processor";
-import { openai, TextEmbeddingModel } from "aiclient";
+import { conversation } from "knowledge-processor";
+import { openai } from "aiclient";
 import { Result } from "typechat";
-import {
-    async,
-    createTopNList,
-    dotProduct,
-    EmbeddedValue,
-    generateEmbedding,
-    NormalizedEmbedding,
-} from "typeagent";
-import { Scored } from "./query.js";
+import { async } from "typeagent";
 
 function addFacet(
     facet: conversation.Facet | undefined,
@@ -153,7 +145,7 @@ export function addActionToIndex(
     addFacet(action.subjectEntityFacet, refIndex, semanticRefIndex);
 }
 
-export type IndexingResult = {
+export type ConversationIndexingResult = {
     index: ConversationIndex;
     failedMessages: { message: IMessage; error: string }[];
 };
@@ -164,7 +156,7 @@ export async function buildConversationIndex<TMeta extends IKnowledgeSource>(
         text: string,
         knowledgeResult: Result<conversation.KnowledgeResponse>,
     ) => boolean,
-): Promise<IndexingResult> {
+): Promise<ConversationIndexingResult> {
     const semanticRefIndex = new ConversationIndex();
     convo.semanticRefIndex = semanticRefIndex;
     if (convo.semanticRefs === undefined) {
@@ -177,7 +169,7 @@ export async function buildConversationIndex<TMeta extends IKnowledgeSource>(
         mergeActionKnowledge: false,
     });
     const maxRetries = 4;
-    let indexingResult: IndexingResult = {
+    let indexingResult: ConversationIndexingResult = {
         index: semanticRefIndex,
         failedMessages: [],
     };
@@ -245,19 +237,21 @@ export async function buildConversationIndex<TMeta extends IKnowledgeSource>(
     return indexingResult;
 }
 
-export type ConversationIndexSettings = {
-    fuzzySettings: EmbeddingIndexSettings;
-};
 /**
  * Notes:
  *  Case-insensitive
  */
 export class ConversationIndex implements ITermToSemanticRefIndex {
     private map: Map<string, ScoredSemanticRef[]> = new Map();
+
     constructor(data?: ITermToSemanticRefIndexData | undefined) {
         if (data) {
             this.deserialize(data);
         }
+    }
+
+    getTerms(): string[] {
+        return [...this.map.keys()];
     }
 
     addTerm(term: string, semanticRefResult: number | ScoredSemanticRef): void {
@@ -275,7 +269,7 @@ export class ConversationIndex implements ITermToSemanticRefIndex {
         }
     }
 
-    lookupTerm(term: string, fuzzy = false): ScoredSemanticRef[] {
+    lookupTerm(term: string): ScoredSemanticRef[] {
         return this.map.get(this.prepareTerm(term)) ?? [];
     }
 
@@ -315,88 +309,5 @@ export class ConversationIndex implements ITermToSemanticRefIndex {
      */
     private prepareTerm(term: string): string {
         return term.toLowerCase();
-    }
-}
-
-export interface IFuzzyTermMap {
-    lookupTerm(
-        text: string,
-        maxMatches: number,
-        minScore?: number,
-    ): Promise<Scored<string>[] | undefined>;
-}
-
-export type EmbeddingIndexSettings = {
-    embeddingModel: TextEmbeddingModel;
-    retryMaxAttempts?: number;
-    retryPauseMs?: number;
-    concurrency?: number;
-};
-
-export function createEmbeddingIndexSettings(): EmbeddingIndexSettings {
-    return {
-        embeddingModel: createEmbeddingCache(openai.createEmbeddingModel(), 64),
-        retryMaxAttempts: 2,
-        retryPauseMs: 2000,
-        concurrency: 2,
-    };
-}
-
-export class TermEmbeddingMap implements IFuzzyTermMap {
-    termEmbeddings: Map<string, EmbeddedValue<string>>;
-
-    constructor(public settings: EmbeddingIndexSettings) {
-        this.termEmbeddings = new Map();
-    }
-
-    public async lookupTerm(
-        term: string,
-        maxMatches?: number,
-        minScore?: number,
-    ): Promise<Scored<string>[] | undefined> {
-        minScore ??= 0;
-        const termEmbedding = await generateEmbedding(
-            this.settings.embeddingModel,
-            term,
-        );
-        if (maxMatches && maxMatches > 0) {
-            return this.lookupMaxCount(termEmbedding, maxMatches, minScore);
-        } else {
-            return this.lookupAll(termEmbedding, minScore);
-        }
-    }
-
-    public removeTerm(term: string) {
-        this.termEmbeddings.delete(term);
-    }
-
-    private lookupAll(termEmbedding: NormalizedEmbedding, minScore: number) {
-        let matches: Scored<string>[] = [];
-        for (const candidateTerm of this.termEmbeddings.values()) {
-            const score = dotProduct(termEmbedding, candidateTerm.embedding);
-            if (score >= minScore) {
-                matches.push({ value: candidateTerm.value, score });
-            }
-        }
-        // Sort by score, descending
-        matches.sort((x, y) => y.score - x.score);
-        return matches;
-    }
-
-    private lookupMaxCount(
-        termEmbedding: NormalizedEmbedding,
-        maxMatches: number,
-        minScore: number,
-    ): Scored<string>[] {
-        const topNMatches = createTopNList<string>(maxMatches);
-        for (const candidateTerm of this.termEmbeddings.values()) {
-            const score = dotProduct(termEmbedding, candidateTerm.embedding);
-            if (score >= minScore) {
-                topNMatches.push(candidateTerm.value, score);
-            }
-        }
-        return topNMatches.byRank().map((m) => {
-            return { value: m.item, score: m.score };
-        });
     }
 }
