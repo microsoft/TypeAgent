@@ -10,6 +10,7 @@ import {
     SimilarityType,
     generateTextEmbeddingsWithRetry,
     collections,
+    dotProduct,
 } from "typeagent";
 import { Term, ITermToRelatedTermsIndex } from "./dataFormat.js";
 
@@ -17,12 +18,15 @@ export async function buildTermSemanticIndex(
     settings: SemanticIndexSettings,
     terms: string[],
     batchSize: number,
-    progressCallback?: (terms: collections.Slice<string>) => void,
+    progressCallback?: (
+        terms: string[],
+        batch: collections.Slice<string>,
+    ) => void,
 ): Promise<TermSemanticIndex> {
     const termIndex = new TermSemanticIndex(settings);
     for (const slice of collections.slices(terms, batchSize)) {
         if (progressCallback) {
-            progressCallback(slice);
+            progressCallback(terms, slice);
         }
         await termIndex.push(slice.value);
     }
@@ -61,16 +65,23 @@ export class TermSemanticIndex implements ITermToRelatedTermsIndex {
             this.settings.embeddingModel,
             term,
         );
-        const matches = indexesOfNearest(
-            this.termEmbeddings,
-            termEmbedding,
-            this.settings.maxMatches,
-            SimilarityType.Dot,
-            this.settings.minScore,
-        );
-        return matches.map((m) => {
-            return { text: this.termText[m.item], score: m.score };
-        });
+        if (this.settings.maxMatches && this.settings.maxMatches > 0) {
+            const matches = indexesOfNearest(
+                this.termEmbeddings,
+                termEmbedding,
+                this.settings.maxMatches,
+                SimilarityType.Dot,
+                this.settings.minScore,
+            );
+            return matches.map((m) => {
+                return { text: this.termText[m.item], score: m.score };
+            });
+        } else {
+            return this.indexesOfNearestTerms(
+                termEmbedding,
+                this.settings.minScore,
+            );
+        }
     }
 
     public remove(term: string): boolean {
@@ -82,24 +93,36 @@ export class TermSemanticIndex implements ITermToRelatedTermsIndex {
         }
         return false;
     }
+
+    private indexesOfNearestTerms(
+        other: NormalizedEmbedding,
+        minScore?: number,
+    ): Term[] {
+        minScore ??= 0;
+        const matches: Term[] = [];
+        for (let i = 0; i < this.termEmbeddings.length; ++i) {
+            const score: number = dotProduct(this.termEmbeddings[i], other);
+            if (score >= minScore) {
+                matches.push({ text: this.termText[i], score });
+            }
+        }
+        matches.sort((x, y) => y.score! - x.score!);
+        return matches;
+    }
 }
 
 export type SemanticIndexSettings = {
     embeddingModel: TextEmbeddingModel;
-    maxMatches: number;
-    minScore?: number;
+    maxMatches?: number | undefined;
+    minScore?: number | undefined;
     retryMaxAttempts?: number;
     retryPauseMs?: number;
 };
 
-export function createSemanticIndexSettings(
-    maxMatches: number,
-    minScore: number,
-): SemanticIndexSettings {
+export function createSemanticIndexSettings(): SemanticIndexSettings {
     return {
         embeddingModel: createEmbeddingCache(openai.createEmbeddingModel(), 64),
-        maxMatches,
-        minScore,
+        minScore: 0.8,
         retryMaxAttempts: 2,
         retryPauseMs: 2000,
     };

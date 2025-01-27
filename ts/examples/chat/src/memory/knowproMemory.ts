@@ -50,6 +50,7 @@ export async function createKnowproCommands(
     commands.kpPodcastLoad = podcastLoad;
     commands.kpSearchTerms = searchTerms;
     commands.kpSearchEntities = searchEntities;
+    commands.kpPodcastBuildIndex = podcastBuildIndex;
 
     /*----------------
      * COMMANDS
@@ -242,6 +243,30 @@ export async function createKnowproCommands(
             context.printer.writeSemanticRefs(matches);
         }
     }
+
+    async function podcastBuildIndex(args: string[]): Promise<void> {
+        if (!context.podcast) {
+            context.printer.writeError("No podcast loaded");
+            return;
+        }
+        if (!context.podcast.semanticRefIndex) {
+            context.printer.writeError("Podcast not indexed");
+            return;
+        }
+
+        const progress = new ProgressBar(
+            context.printer,
+            context.podcast.semanticRefIndex.size,
+        );
+        await context.podcast.buildRelatedTermsIndex(16, (terms, batch) => {
+            progress.advance(batch.value.length);
+        });
+        progress.complete();
+        context.printer.writeLine(
+            `Semantic Indexed ${context.podcast.semanticRefIndex.size} terms`,
+        );
+    }
+
     /*---------- 
       End COMMANDS
     ------------*/

@@ -8,7 +8,7 @@ import {
     SemanticRef,
     IConversationData,
 } from "./dataFormat.js";
-import { conversation, split } from "knowledge-processor";
+import { conversation, createEmbeddingCache, split } from "knowledge-processor";
 import { collections, getFileName, readAllText } from "typeagent";
 import {
     ConversationIndex,
@@ -24,6 +24,7 @@ import {
     SemanticIndexSettings,
     TermSemanticIndex,
 } from "./termIndex.js";
+import { openai } from "aiclient";
 
 // metadata for podcast messages
 export class PodcastMessageMeta implements IKnowledgeSource {
@@ -105,6 +106,17 @@ export type PodcastSettings = {
     relatedTermIndexSettings?: SemanticIndexSettings;
 };
 
+export function createPodcastSettings(): PodcastSettings {
+    return {
+        relatedTermIndexSettings: {
+            embeddingModel: createEmbeddingCache(
+                openai.createEmbeddingModel(),
+                64,
+            ),
+        },
+    };
+}
+
 export class Podcast implements IConversation<PodcastMessageMeta> {
     public settings: PodcastSettings;
     constructor(
@@ -115,7 +127,7 @@ export class Podcast implements IConversation<PodcastMessageMeta> {
         public semanticRefIndex: ConversationIndex | undefined = undefined,
         public relatedTermsIndex: TermSemanticIndex | undefined = undefined,
     ) {
-        this.settings = {};
+        this.settings = createPodcastSettings();
     }
 
     addMetadataToIndex() {
@@ -187,14 +199,18 @@ export class Podcast implements IConversation<PodcastMessageMeta> {
     }
 
     public async buildRelatedTermsIndex(
-        progressCallback?: (terms: collections.Slice<string>) => void,
+        batchSize: number = 8,
+        progressCallback?: (
+            terms: string[],
+            batch: collections.Slice<string>,
+        ) => void,
     ): Promise<void> {
         if (this.settings.relatedTermIndexSettings && this.semanticRefIndex) {
             const allTerms = this.semanticRefIndex?.getTerms();
             await buildTermSemanticIndex(
                 this.settings.relatedTermIndexSettings,
                 allTerms,
-                4,
+                batchSize,
                 progressCallback,
             );
         }

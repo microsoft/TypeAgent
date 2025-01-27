@@ -250,6 +250,10 @@ export class ConversationIndex implements ITermToSemanticRefIndex {
         }
     }
 
+    get size(): number {
+        return this.map.size;
+    }
+
     getTerms(): string[] {
         return [...this.map.keys()];
     }
