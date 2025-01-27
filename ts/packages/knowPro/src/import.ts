@@ -7,6 +7,7 @@ import {
     IKnowledgeSource,
     SemanticRef,
     IConversationData,
+    ITextEmbeddingData,
 } from "./dataFormat.js";
 import { conversation, createEmbeddingCache, split } from "knowledge-processor";
 import { collections, getFileName, readAllText } from "typeagent";
@@ -103,7 +104,7 @@ export class PodcastMessage implements IMessage<PodcastMessageMeta> {
 }
 
 export type PodcastSettings = {
-    relatedTermIndexSettings?: SemanticIndexSettings;
+    relatedTermIndexSettings: SemanticIndexSettings;
 };
 
 export function createPodcastSettings(): PodcastSettings {
@@ -203,11 +204,11 @@ export class Podcast implements IConversation<PodcastMessageMeta> {
         progressCallback?: (
             terms: string[],
             batch: collections.Slice<string>,
-        ) => void,
+        ) => boolean,
     ): Promise<void> {
         if (this.settings.relatedTermIndexSettings && this.semanticRefIndex) {
             const allTerms = this.semanticRefIndex?.getTerms();
-            await buildTermSemanticIndex(
+            this.relatedTermsIndex = await buildTermSemanticIndex(
                 this.settings.relatedTermIndexSettings,
                 allTerms,
                 batchSize,
@@ -216,15 +217,34 @@ export class Podcast implements IConversation<PodcastMessageMeta> {
         }
     }
 
-    public serialize(): IConversationData<PodcastMessage> {
+    public serialize(): PodcastData {
         return {
             nameTag: this.nameTag,
             messages: this.messages,
             tags: this.tags,
             semanticRefs: this.semanticRefs,
             semanticIndexData: this.semanticRefIndex?.serialize(),
+            relatedTermIndexData: this.relatedTermsIndex?.serialize(),
         };
     }
+
+    public deserialize(data: PodcastData): void {
+        if (data.semanticIndexData) {
+            this.semanticRefIndex = new ConversationIndex(
+                data.semanticIndexData,
+            );
+        }
+        if (data.relatedTermIndexData) {
+            this.relatedTermsIndex = new TermSemanticIndex(
+                this.settings.relatedTermIndexSettings,
+                data.relatedTermIndexData,
+            );
+        }
+    }
+}
+
+export interface PodcastData extends IConversationData<PodcastMessage> {
+    relatedTermIndexData?: ITextEmbeddingData | undefined;
 }
 
 export async function importPodcast(

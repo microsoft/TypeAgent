@@ -245,7 +245,7 @@ export class ConversationIndex implements ITermToSemanticRefIndex {
     private map: Map<string, ScoredSemanticRef[]> = new Map();
 
     constructor(data?: ITermToSemanticRefIndexData | undefined) {
-        if (data) {
+        if (data !== undefined) {
             this.deserialize(data);
         }
     }

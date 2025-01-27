@@ -12,7 +12,13 @@ import {
     collections,
     dotProduct,
 } from "typeagent";
-import { Term, ITermToRelatedTermsIndex } from "./dataFormat.js";
+import {
+    Term,
+    ITermToRelatedTermsIndex,
+    ITextSemanticIndex,
+    ITextEmbeddingDataItem,
+    ITextEmbeddingData,
+} from "./dataFormat.js";
 
 export async function buildTermSemanticIndex(
     settings: SemanticIndexSettings,
@@ -21,25 +27,33 @@ export async function buildTermSemanticIndex(
     progressCallback?: (
         terms: string[],
         batch: collections.Slice<string>,
-    ) => void,
+    ) => boolean,
 ): Promise<TermSemanticIndex> {
     const termIndex = new TermSemanticIndex(settings);
     for (const slice of collections.slices(terms, batchSize)) {
-        if (progressCallback) {
-            progressCallback(terms, slice);
+        if (progressCallback && !progressCallback(terms, slice)) {
+            break;
         }
         await termIndex.push(slice.value);
     }
     return termIndex;
 }
 
-export class TermSemanticIndex implements ITermToRelatedTermsIndex {
+export class TermSemanticIndex
+    implements ITermToRelatedTermsIndex, ITextSemanticIndex
+{
     private termText: string[];
     private termEmbeddings: NormalizedEmbedding[];
 
-    constructor(public settings: SemanticIndexSettings) {
+    constructor(
+        public settings: SemanticIndexSettings,
+        data?: ITextEmbeddingData,
+    ) {
         this.termText = [];
         this.termEmbeddings = [];
+        if (data !== undefined) {
+            this.deserialize(data);
+        }
     }
 
     public async push(terms: string | string[]): Promise<void> {
@@ -48,16 +62,21 @@ export class TermSemanticIndex implements ITermToRelatedTermsIndex {
                 this.settings.embeddingModel,
                 terms,
             );
-            this.termText.push(...terms);
-            this.termEmbeddings.push(...embeddings);
+            for (let i = 0; i < terms.length; ++i) {
+                this.pushTermEmbedding(terms[i], embeddings[i]);
+            }
         } else {
             const embedding = await generateEmbedding(
                 this.settings.embeddingModel,
                 terms,
             );
-            this.termText.push(terms);
-            this.termEmbeddings.push(embedding);
+            this.pushTermEmbedding(terms, embedding);
         }
+    }
+
+    public pushTermEmbedding(term: string, embedding: NormalizedEmbedding) {
+        this.termText.push(term);
+        this.termEmbeddings.push(embedding);
     }
 
     public async lookupTerm(term: string): Promise<Term[] | undefined> {
@@ -65,7 +84,10 @@ export class TermSemanticIndex implements ITermToRelatedTermsIndex {
             this.settings.embeddingModel,
             term,
         );
-        if (this.settings.maxMatches && this.settings.maxMatches > 0) {
+        if (
+            this.settings.maxMatches !== undefined &&
+            this.settings.maxMatches > 0
+        ) {
             const matches = indexesOfNearest(
                 this.termEmbeddings,
                 termEmbedding,
@@ -92,6 +114,27 @@ export class TermSemanticIndex implements ITermToRelatedTermsIndex {
             return true;
         }
         return false;
+    }
+
+    public deserialize(data: ITextEmbeddingData): void {
+        if (data.embeddingData !== undefined) {
+            for (const item of data.embeddingData) {
+                this.pushTermEmbedding(item.text, item.embedding);
+            }
+        }
+    }
+
+    public serialize(): ITextEmbeddingData {
+        const embeddingData: ITextEmbeddingDataItem[] = [];
+        for (let i = 0; i < this.termText.length; ++i) {
+            embeddingData.push({
+                text: this.termText[i],
+                embedding: this.termEmbeddings[i],
+            });
+        }
+        return {
+            embeddingData,
+        };
     }
 
     private indexesOfNearestTerms(

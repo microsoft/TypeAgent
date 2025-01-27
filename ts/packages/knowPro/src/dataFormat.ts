@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { conversation } from "knowledge-processor";
+import { NormalizedEmbedding } from "typeagent";
 
 // an object that can provide a KnowledgeResponse structure
 export interface IKnowledgeSource {
@@ -113,4 +114,18 @@ export type Term = {
 
 export interface ITermToRelatedTermsIndex {
     lookupTerm(term: string): Promise<Term[] | undefined>;
+}
+
+export interface ITextSemanticIndex {
+    serialize(): ITextEmbeddingData;
+    deserialize(data: ITextEmbeddingData): void;
+}
+
+export interface ITextEmbeddingData {
+    embeddingData?: ITextEmbeddingDataItem[] | undefined;
+}
+
+export interface ITextEmbeddingDataItem {
+    text: string;
+    embedding: NormalizedEmbedding;
 }
