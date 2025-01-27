@@ -41,10 +41,6 @@ export async function startShell(): Promise<Page> {
             const app: ElectronApplication = await electron.launch({ args: [getAppPath()] });
             runningApplications.set(process.env["INSTANCE_NAME"]!, app);
 
-            // app.on('window', async (data) => {
-            //     console.log(`New Window created! ${await data.content()}`);
-            // });
-
             // get the main window        
             const mainWindow: Page = await getMainWindow(app);
 
@@ -117,25 +113,11 @@ export function getAppPath(): string {
  */
 export async function sendUserRequest(prompt: string, page: Page) {
 
-    try {
-        const locator: Locator = page.locator("#phraseDiv");
-        //const locator: Locator = await page.locator(".user-textarea");
-        await locator.waitFor({ timeout: 30000, state: "visible" });
-        await locator.focus({ timeout: 30000 });
-        await locator.fill(prompt, { timeout: 30000 });
-        await locator.press("Enter", { timeout: 30000 });
-
-        return;
-    } catch (e) {
-        // // TODO: find alternate method when the above fails.
-        // console.log(e);    
-
-        // let title = await page.title();
-        // console.log(title);
-
-        // const c = await page.content();
-        // console.log(c);
-    }
+    const locator: Locator = page.locator("#phraseDiv");
+    await locator.waitFor({ timeout: 30000, state: "visible" });
+    await locator.focus({ timeout: 30000 });
+    await locator.fill(prompt, { timeout: 30000 });
+    await locator.press("Enter", { timeout: 30000 });
 }
 
 /**
