@@ -90,11 +90,23 @@ jobs:
         run: |
             npm run start:dev 'prompt' 'why is the sky blue'
         working-directory: ts/packages/cli      
+      
+
+      - name: Build for Linux
+        if: matrix.os == 'ubuntu-latest'
+        working-directory: ts/packages/shell
+        run: |
+          sudo chown root /home/runner/work/TypeAgent/TypeAgent/ts/node_modules/.pnpm/electron@30.0.1/node_modules/electron/dist/chrome-sandbox
+          sudo chmod 4755 /home/runner/work/TypeAgent/TypeAgent/ts/node_modules/.pnpm/electron@30.0.1/node_modules/electron/dist/chrome-sandbox
+
       - name: Run shell
         run: |
             npm start
         working-directory: ts/packages/shell     
-      - name: Shell Tests
+      
+      
+      
+        - name: Shell Tests
         timeout-minutes: 180
         # run: |           
         #   working-directory: ts/packages/shell
