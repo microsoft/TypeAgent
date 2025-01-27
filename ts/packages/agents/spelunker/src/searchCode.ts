@@ -222,7 +222,17 @@ export async function searchCode(
         );
     }
 
-    return createActionResultFromMarkdownDisplay(answer, entities);
+    const resultEntity: Entity = {
+        name: `answer for ${input}`,
+        type: ["text", "answer", "markdown"],
+        uniqueId: "<TODO: unique ID>",
+        additionalEntityText: answer,
+    };
+    return createActionResultFromMarkdownDisplay(
+        answer,
+        entities,
+        resultEntity,
+    );
 }
 
 function prepChunk(
@@ -399,7 +409,7 @@ function getAllPyFilesSync(dir: string): string[] {
 function createActionResultFromMarkdownDisplay(
     literalText: string,
     entities: Entity[],
-    resultEntity?: Entity,
+    resultEntity: Entity,
 ): ActionResultSuccess {
     return {
         literalText,
