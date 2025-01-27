@@ -37,16 +37,19 @@ export async function startShell(): Promise<Page> {
                 throw new Error("Application instance already running. Did you shutdown cleanly?");
             }
 
-            console.log(`Starting ${process.env["INSTANCE_NAME"]}`);
+            console.log(`Starting electron instance '${process.env["INSTANCE_NAME"]}'`);
             const app: ElectronApplication = await electron.launch({ args: [getAppPath()] });
             runningApplications.set(process.env["INSTANCE_NAME"]!, app);
 
-            // get the main window
-            const mainWindow: Page = await app.firstWindow();
-            await mainWindow.waitForLoadState("domcontentloaded");
+            app.on('window', async (data) => {
+                console.log(`New Window created! ${await data.content()}`);
+            });
+
+            // get the main window        
+            const mainWindow: Page = await getMainWindow(app);
 
             // wait for agent greeting
-            await waitForAgentMessage(mainWindow, 10000, 1);
+            await waitForAgentMessage(mainWindow, 30000, 1);
 
             return mainWindow;
 
@@ -63,6 +66,24 @@ export async function startShell(): Promise<Page> {
     } while (retryAttempt <= maxRetries);
 
     throw new Error(`Failed to start electrom app after ${maxRetries} attemps.`);
+}
+
+async function getMainWindow(app: ElectronApplication): Promise<Page> {
+    const window: Page = await app.firstWindow();
+    await window.waitForLoadState("domcontentloaded");
+
+    // is this the correct window?
+    if ((await window.title()).length > 0) {
+        return window;
+    }
+
+    // if we change the # of windows beyond 2 we'll have to update this function to correctly disambiguate which window is the correct one
+    if (app.windows.length > 2) {
+        throw "Please update this logic to select the correct main window. (testHelper.ts->getMainWindow())";
+    }
+
+    // since there are only two windows we know that if the first one isn't the right one we can just return the second one
+    return app.windows[app.windows.length - 1];
 }
 
 /**
@@ -96,32 +117,24 @@ export function getAppPath(): string {
  */
 export async function sendUserRequest(prompt: string, page: Page) {
 
-    // let locator: Locator | undefined = undefined;
-
-    // // try to get the locator in two different ways and repeat that twice before failing
-    // try {
-
-    // }
-
-
     try {
-        const locator: Locator = await page.locator("#phraseDiv");
+        const locator: Locator = page.locator("#phraseDiv");
         //const locator: Locator = await page.locator(".user-textarea");
         await locator.waitFor({ timeout: 30000, state: "visible" });
         await locator.focus({ timeout: 30000 });
         await locator.fill(prompt, { timeout: 30000 });
         await locator.press("Enter", { timeout: 30000 });
+
+        return;
     } catch (e) {
-        // TODO: find alternate method when the above fails.
-        console.log(e);
-        const l3 = await page.locator(".chat-input");
-        console.log(`Found ${l3}`);
-        
-        const l2 = await page.locator(".user-textarea");
-        console.log(`Found ${l2}`);
-        
-        const element = await page.waitForSelector("#phraseDiv");
-        console.log(`Found ${element}`);
+        // // TODO: find alternate method when the above fails.
+        // console.log(e);    
+
+        // let title = await page.title();
+        // console.log(title);
+
+        // const c = await page.content();
+        // console.log(c);
     }
 }
 
@@ -131,7 +144,7 @@ export async function sendUserRequest(prompt: string, page: Page) {
  * @param page The maing page from the electron host application.
  */
 export async function sendUserRequestFast(prompt: string, page: Page) {    
-    const locator: Locator = await page.locator(".user-textarea");
+    const locator: Locator = page.locator("#phraseDiv");
     await locator.waitFor({ timeout: 120000, state: "visible" });
     await locator.fill(prompt, { timeout: 30000 });
     page.keyboard.down("Enter");
@@ -149,7 +162,7 @@ export async function sendUserRequestAndWaitForResponse(prompt: string, page: Pa
     await sendUserRequest(prompt, page);
 
     // wait for agent response
-    await waitForAgentMessage(page, 10000, locators.length + 1);
+    await waitForAgentMessage(page, 30000, locators.length + 1);
 
     // return the response
     return await getLastAgentMessage(page);

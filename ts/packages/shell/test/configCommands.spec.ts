@@ -10,7 +10,6 @@ import test, {
 import {
     exitApplication,
     getAppPath,
-    getLastAgentMessage,
     sendUserRequest,
     sendUserRequestAndWaitForResponse,
     startShell,
