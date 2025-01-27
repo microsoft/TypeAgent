@@ -67,10 +67,10 @@ jobs:
         run: |
           npm run build
 
-      - name: Build Shell
-        working-directory: ts/packages/shell
-        run: |
-          npm run build
+      # - name: Build Shell
+      #   working-directory: ts/packages/shell
+      #   run: |
+      #     npm run build
 
       # - name: Test
       #   working-directory: ts
@@ -92,8 +92,8 @@ jobs:
         working-directory: ts/packages/cli      
       - name: Run shell
         run: |
-            npm run shell
-        working-directory: ts/packages/cli      
+            npm start
+        working-directory: ts/packages/shell     
       - name: Shell Tests
         timeout-minutes: 180
         # run: |           
