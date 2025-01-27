@@ -89,7 +89,11 @@ jobs:
       - name: Test CLI - verify .env & endpoint connectivity
         run: |
             npm run start:dev 'prompt' 'why is the sky blue'
-        working-directory: ts/packages/cli          
+        working-directory: ts/packages/cli      
+      - name: Run shell
+        run: |
+            npm run shell
+        working-directory: ts/packages/cli      
       - name: Shell Tests
         timeout-minutes: 180
         # run: |           
