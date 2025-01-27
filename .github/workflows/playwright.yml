@@ -65,7 +65,7 @@ jobs:
       - name: Build
         working-directory: ts
         run: |
-          npm run build
+          npm run build:mac
       # - name: Test
       #   working-directory: ts
       #   run: |
