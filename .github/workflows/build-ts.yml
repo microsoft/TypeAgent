@@ -32,10 +32,6 @@ jobs:
       matrix:
         os: ["ubuntu-latest", "windows-latest", "macos-latest"]
         version: [18, 20, 22]
-        exclude:
-          # TODO: Test timeout jest work for some reason
-          - os: windows-latest
-            version: 22
 
     runs-on: ${{ matrix.os }}
     steps:
