@@ -62,32 +62,17 @@ jobs:
       - name: Install Playwright Browsers
         run: pnpm exec playwright install --with-deps
         working-directory: ts/packages/shell
-      - name: Build
+      - name: Build repo
         working-directory: ts
         run: |
           npm run build
 
-
-      - name: Build for Mac
-        if: matrix.os == 'macos-latest'
+      - name: Build Shell
         working-directory: ts/packages/shell
         run: |
-          npm run build:mac
+          npm run build
 
-      - name: Build for Windows
-        if: matrix.os == 'windows-latest'
-        working-directory: ts/packages/shell
-        run: |
-          npm run build:win
-
-      - name: Build for Linux
-        if: matrix.os == 'ubuntu-latest'
-        working-directory: ts/packages/shell
-        run: |
-          npm run build:linux
-
-
-          # - name: Test
+      # - name: Test
       #   working-directory: ts
       #   run: |
       #     npm run test
