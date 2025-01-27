@@ -66,11 +66,28 @@ jobs:
         working-directory: ts
         run: |
           npm run build
+
+
       - name: Build for Mac
+        if: matrix.os == 'macos-latest'
         working-directory: ts/packages/shell
         run: |
           npm run build:mac
-      # - name: Test
+
+      - name: Build for Windows
+        if: matrix.os == 'windows-latest'
+        working-directory: ts/packages/shell
+        run: |
+          npm run build:win
+
+      - name: Build for Linux
+        if: matrix.os == 'ubuntu-latest'
+        working-directory: ts/packages/shell
+        run: |
+          npm run build:linux
+
+
+          # - name: Test
       #   working-directory: ts
       #   run: |
       #     npm run test
