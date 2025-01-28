@@ -1,16 +1,10 @@
 {
   "agents": {
     "player": {
-      "name": "music",
-      "imports": [
-        "./test/data/player/**/*.json"
-      ]
+      "name": "music"
     },
     "calendar": {
-      "name": "calendar",
-      "imports": [
-        "./test/data/calendar/**/*.json"
-      ]
+      "name": "calendar"
     },
     "email": {
       "name": "email"
@@ -68,7 +62,7 @@
     }
   },
   "tests": [
-    "./test/data/**/**/*.json",
+    "./test/data/explanations/**/**/*.json",
     "./test/repo/explanations/**/**/*.json"
   ]
 }

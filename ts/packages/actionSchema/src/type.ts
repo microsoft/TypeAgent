@@ -110,7 +110,7 @@ export type SchemaType =
 export interface ActionSchemaObject extends SchemaTypeObject {
     fields: {
         actionName: SchemaObjectField<SchemaTypeStringUnion>;
-        parameters: SchemaObjectField<
+        parameters?: SchemaObjectField<
             | SchemaTypeObject
             | SchemaTypeReference<
                   | SchemaTypeAliasDefinition<SchemaTypeObject>

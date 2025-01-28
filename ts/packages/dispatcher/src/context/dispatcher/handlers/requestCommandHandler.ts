@@ -348,6 +348,10 @@ async function translateWithTranslator(
                           value,
                       ) ?? schemaName;
 
+                  if (!systemContext.agents.isActionActive(actionSchemaName)) {
+                      // don't stream if action is not active for the schema
+                      return;
+                  }
                   const prefix = getSchemaNamePrefix(
                       actionSchemaName,
                       systemContext,

@@ -3,7 +3,10 @@
 
 export { createDispatcher, Dispatcher, CommandResult } from "./dispatcher.js";
 export type { CommandCompletionResult } from "./command/completion.js";
-export type { AppAgentProvider } from "./agentProvider/agentProvider.js";
+export type {
+    AppAgentProvider,
+    ConstructionProvider,
+} from "./agentProvider/agentProvider.js";
 export type {
     ClientIO,
     RequestId,
@@ -15,4 +18,4 @@ export type {
     TemplateEditConfig,
     TemplateData,
 } from "./translation/actionTemplate.js";
-export { getUserDataDir } from "./utils/userData.js";
+export { getUserDataDir, getInstanceDir } from "./utils/userData.js";

@@ -3,7 +3,7 @@
 
 import fs from "node:fs";
 import { ActionSchemaFile, ActionSchemaTypeDefinition } from "action-schema";
-import { ActionConfig } from "./agentTranslators.js";
+import { ActionConfig } from "./actionConfig.js";
 import {
     generateEmbeddingWithRetry,
     generateTextEmbeddingsWithRetry,

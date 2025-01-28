@@ -21,6 +21,8 @@ import {
 } from "@typeagent/agent-sdk/helpers/display";
 import { getLocalWhisperCommandHandlers } from "./localWhisperCommandHandler.js";
 
+const port = process.env.PORT || 9001;
+
 type ShellContext = {
     settings: ShellSettings;
 };
@@ -100,7 +102,17 @@ class ShellSetSettingCommandHandler implements CommandHandler {
         for (const [key, v] of Object.entries(agentContext.settings)) {
             if (key === name) {
                 found = true;
-                agentContext.settings.set(name, value);
+                if (typeof agentContext.settings[key] === "object") {
+                    try {
+                        agentContext.settings.set(name, value);
+                    } catch (e) {
+                        throw new Error(
+                            `Unable to set ${key} to ${value}. Details: ${e}`,
+                        );
+                    }
+                } else {
+                    agentContext.settings.set(name, value);
+                }
                 oldValue = v;
                 break;
             }
@@ -198,7 +210,7 @@ class ShellOpenWebContentView implements CommandHandler {
 
                 break;
             case "markdown":
-                targetUrl = new URL("http://localhost:9001/");
+                targetUrl = new URL(`http://localhost:${port}/`);
 
                 break;
             default:

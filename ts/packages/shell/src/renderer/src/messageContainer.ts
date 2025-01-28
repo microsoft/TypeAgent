@@ -248,6 +248,7 @@ export class MessageContainer {
             this.messageDiv,
             content,
             this.settingsView,
+            this.classNameSuffix,
             appendMode === "inline" && this.lastAppendMode !== "inline"
                 ? "block"
                 : appendMode,

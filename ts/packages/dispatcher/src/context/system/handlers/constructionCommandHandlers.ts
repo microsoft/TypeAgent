@@ -13,13 +13,10 @@ import {
     convertTestDataToExplanationData,
     readTestData,
 } from "../../../utils/test/testData.js";
-import { getPackageFilePath } from "../../../utils/getPackageFilePath.js";
 import { ConstructionStore, printImportConstructionResult } from "agent-cache";
 import { getSessionConstructionDirPath } from "../../session.js";
-import { getAppAgentName } from "../../../translation/agentTranslators.js";
 import { askYesNoWithContext } from "../../interactiveIO.js";
 import { glob } from "glob";
-import { getDispatcherConfig } from "../../../utils/config.js";
 import {
     displayInfo,
     displayResult,
@@ -303,26 +300,12 @@ class ConstructionListCommandHandler implements CommandHandler {
 
 async function getImportTranslationFiles(
     context: CommandHandlerContext,
-    test: boolean,
+    extended: boolean,
 ) {
-    const config = getDispatcherConfig();
-    let files: string[];
-    if (test) {
-        files = config.tests;
-    } else {
-        const infos = config.agents;
-        const enabledAgents = new Set(
-            context.agents
-                .getSchemaNames()
-                .filter((name) => context.agents.isSchemaEnabled(name))
-                .map(getAppAgentName),
-        );
-
-        files = Object.entries(infos).flatMap(([name, info]) =>
-            enabledAgents.has(name) && info.imports ? info.imports : [],
-        );
+    if (context.constructionProvider === undefined) {
+        return [];
     }
-    return await glob(files.map((f) => getPackageFilePath(f)));
+    return context.constructionProvider.getImportTranslationFiles(extended);
 }
 
 async function expandPaths(paths: string[]) {
@@ -339,9 +322,9 @@ class ConstructionImportCommandHandler implements CommandHandler {
     public readonly description = "Import constructions from test data";
     public readonly parameters = {
         flags: {
-            test: {
+            extended: {
                 description:
-                    "Load from the file specifed in the test section of the config if no file argument is specified, ",
+                    "Load host specified extended test files if no file argument is specified",
                 char: "t",
                 default: false,
             },
@@ -349,7 +332,7 @@ class ConstructionImportCommandHandler implements CommandHandler {
         args: {
             file: {
                 description:
-                    "Path to the construction file to import from. Load from agent config if not specified.",
+                    "Path to the construction file to import from. Load host specified test files if not specified.",
                 multiple: true,
                 optional: true,
             },
@@ -365,7 +348,10 @@ class ConstructionImportCommandHandler implements CommandHandler {
         const inputs =
             args.file !== undefined
                 ? await expandPaths(args.file)
-                : await getImportTranslationFiles(systemContext, flags.test);
+                : await getImportTranslationFiles(
+                      systemContext,
+                      flags.extended,
+                  );
 
         if (inputs.length === 0) {
             if (args.file === undefined) {

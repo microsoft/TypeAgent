@@ -23,6 +23,7 @@
     "cli:dev": "pnpm -C packages/cli run start:dev",
     "elevate": "node tools/scripts/elevate.js",
     "getKeys": "node tools/scripts/getKeys.mjs",
+    "getKeys:build": "node tools/scripts/getKeys.mjs --vault build-pipeline-kv",
     "postinstall": "cd node_modules/.pnpm/node_modules/better-sqlite3 && pnpm exec prebuild-install && shx cp build/Release/better_sqlite3.node build/Release/better_sqlite3.n.node",
     "knowledgeVisualizer": "pnpm -C packages/knowledgeVisualizer exec npm run start",
     "kv": "pnpm -C packages/knowledgeVisualizer exec npm run start",
@@ -34,8 +35,10 @@
     "regen": "pnpm -C packages/cli run regen",
     "regen:builtin": "pnpm -C packages/cli run regen:builtin",
     "shell": "pnpm -C packages/shell run dev",
-    "test": "pnpm -r --no-sort --stream --workspace-concurrency=0 run test",
-    "test:full": "pnpm run -r --parallel --stream test:full"
+    "shell:test": "npx --prefix packages/shell playwright test simple.spec.ts",
+    "test": "pnpm run test:local && pnpm run test:live",
+    "test:live": "pnpm -r --no-sort --stream --workspace-concurrency=0 run test:live",
+    "test:local": "pnpm -r --no-sort --stream --workspace-concurrency=0 run test:local"
   },
   "devDependencies": {
     "@fluidframework/build-tools": "^0.35.0-247707",

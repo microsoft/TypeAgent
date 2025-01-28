@@ -4,13 +4,17 @@
 import dotenv from "dotenv";
 dotenv.config({ path: new URL("../../../../.env", import.meta.url) });
 
-import { getCacheFactory } from "../src/utils/cacheFactory.js";
-import { readTestData } from "../src/utils/test/testData.js";
+import {
+    createSchemaInfoProvider,
+    getCacheFactory,
+    readTestData,
+    createActionConfigProvider,
+} from "agent-dispatcher/internal";
 import { Actions, RequestAction } from "agent-cache";
-import { createSchemaInfoProviderFromDefaultAppAgentProviders } from "../src/utils/defaultAppProviders.js";
+import { getDefaultAppAgentProviders } from "../src/defaultAgentProviders.js";
 import { glob } from "glob";
 
-const dataFiles = ["test/data/**/v5/*.json"];
+const dataFiles = ["test/data/explanations/**/v5/*.json"];
 
 const inputs = await Promise.all(
     (await glob(dataFiles)).map((f) => readTestData(f)),
@@ -31,6 +35,9 @@ const matchConfig = {
     rejectReferences: false,
 };
 
+const schemaInfoProvider = createSchemaInfoProvider(
+    await createActionConfigProvider(getDefaultAppAgentProviders(undefined)),
+);
 describe("construction", () => {
     describe("roundtrip", () => {
         it.each(testInput)(
@@ -51,8 +58,7 @@ describe("construction", () => {
                     requestAction,
                     explanation,
                     {
-                        schemaInfoProvider:
-                            createSchemaInfoProviderFromDefaultAppAgentProviders(),
+                        schemaInfoProvider,
                     },
                 );
 

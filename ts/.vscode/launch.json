@@ -339,7 +339,39 @@
             "env": {
               "REMOTE_DEBUGGING_PORT": "9222"
             }
-        },       
+        },
+        {
+            "type": "node",
+            "request": "launch",
+            "name": "Launch getKeys (shared key vault)",
+            "skipFiles": [
+                "<node_internals>/**"
+            ],
+            "cwd": "${workspaceFolder}",
+            "program": "tools/scripts/getKeys.mjs",
+            "args": [ ],
+            "console": "externalTerminal",
+            //"preLaunchTask": "pnpm: build",
+            "outFiles": [
+                "${workspaceFolder}/**/*.js"
+            ]
+          },
+          {
+            "type": "node",
+            "request": "launch",
+            "name": "Launch getKeys (private key vault)",
+            "skipFiles": [
+                "<node_internals>/**"
+            ],
+            "cwd": "${workspaceFolder}",
+            "program": "tools/scripts/getKeys.mjs",
+            "args": [ "--vault", "build-pipeline-kv" ],
+            "console": "externalTerminal",
+            //"preLaunchTask": "pnpm: build",
+            "outFiles": [
+                "${workspaceFolder}/**/*.js"
+            ]
+          },                  
     ]
 }
 
