@@ -5,10 +5,10 @@ import fs from "node:fs";
 import path from "node:path";
 import chalk from "chalk";
 import {
-    ActionConfigProvider,
     loadAgentJsonTranslator,
     TranslatedAction,
 } from "../../translation/agentTranslators.js";
+import { ActionConfigProvider } from "../../translation/actionConfigProvider.js";
 import {
     JSONAction,
     RequestAction,

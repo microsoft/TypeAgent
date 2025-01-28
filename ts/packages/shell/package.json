@@ -39,6 +39,7 @@
     "ansi_up": "^6.0.2",
     "common-utils": "workspace:*",
     "debug": "4.3.4",
+    "default-agent-provider": "workspace:*",
     "dompurify": "^3.1.6",
     "dotenv": "^16.3.1",
     "electron-updater": "^6.3.2",

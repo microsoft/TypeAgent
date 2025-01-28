@@ -19,12 +19,12 @@ import {
 } from "common-utils";
 import {
     getInjectedActionConfigs,
-    ActionConfigProvider,
-    ActionConfig,
     createChangeAssistantActionSchema,
     TranslatedAction,
 } from "./agentTranslators.js";
 import { createMultipleActionSchema } from "./multipleActionSchema.js";
+import { ActionConfig } from "./actionConfig.js";
+import { ActionConfigProvider } from "./actionConfigProvider.js";
 
 function createActionSchemaJsonValidator<T extends TranslatedAction>(
     actionSchemaGroup: ActionSchemaGroup,

@@ -3,8 +3,7 @@
 
 import { getPackageFilePath } from "../src/utils/getPackageFilePath.js";
 import { Actions, RequestAction } from "agent-cache";
-import { readTestData } from "../src/utils/test/testData.js";
-import { getCacheFactory } from "../src/utils/cacheFactory.js";
+import { getCacheFactory, readTestData } from "agent-dispatcher/internal";
 import { glob } from "glob";
 
 const dataFiles = ["test/data/**/**/*.json"];
