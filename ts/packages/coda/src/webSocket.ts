@@ -17,7 +17,7 @@ export async function createWebSocket(
     clientId?: string,
 ) {
     return new Promise<WebSocket | undefined>((resolve, reject) => {
-        let endpoint = "ws://localhost:8080";
+        let endpoint = process.env["WEBSOCKET_HOST"] ?? "ws://localhost:8080";
         endpoint += `?channel=${channel}&role=${role}`;
         if (clientId) {
             endpoint += `clientId=${clientId}`;
