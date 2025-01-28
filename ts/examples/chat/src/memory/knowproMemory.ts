@@ -187,7 +187,7 @@ export async function createKnowproCommands(
         if (!conversation) {
             return;
         }
-        const terms = args; // Todo: De dupe
+        const terms = parseQueryTerms(args); // Todo: De dupe
         if (conversation.semanticRefIndex && conversation.semanticRefs) {
             context.printer.writeInColor(
                 chalk.cyan,
@@ -197,21 +197,18 @@ export async function createKnowproCommands(
             const matches = kp.searchTermsInIndex(
                 conversation.semanticRefIndex,
                 terms,
+                undefined,
             );
             if (!matches.hasMatches) {
                 context.printer.writeLine("No matches");
                 return;
             }
 
-            context.printer.writeListInColor(
-                chalk.green,
-                matches.matchedTerms,
-                {
-                    title: "Matched terms",
-                    type: "ol",
-                },
-            );
-            for (const match of matches.matchedSemanticRefs) {
+            context.printer.writeListInColor(chalk.green, matches.termMatches, {
+                title: "Matched terms",
+                type: "ol",
+            });
+            for (const match of matches.semanticRefMatches) {
                 context.printer.writeSemanticRef(
                     conversation.semanticRefs[match.semanticRefIndex],
                     match.score,
@@ -378,4 +375,28 @@ export function getPodcastParticipants(podcast: kp.Podcast) {
         meta.listeners.forEach((l) => participants.add(l));
     }
     return [...participants.values()];
+}
+
+export function parseQueryTerms(args: string[]): kp.QueryTerm[] {
+    const queryTerms: kp.QueryTerm[] = [];
+    for (const arg of args) {
+        let allTermStrings = knowLib.split(arg, ";", {
+            trim: true,
+            removeEmpty: true,
+        });
+        if (allTermStrings.length > 0) {
+            allTermStrings = allTermStrings.map((t) => t.toLowerCase());
+            const queryTerm: kp.QueryTerm = {
+                term: { text: allTermStrings[0] },
+            };
+            if (allTermStrings.length > 0) {
+                queryTerm.relatedTerms = [];
+                for (let i = 1; i < allTermStrings.length; ++i) {
+                    queryTerm.relatedTerms.push({ text: allTermStrings[i] });
+                }
+            }
+            queryTerms.push(queryTerm);
+        }
+    }
+    return queryTerms;
 }

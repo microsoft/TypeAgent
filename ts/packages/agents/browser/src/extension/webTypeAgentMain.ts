@@ -20,6 +20,13 @@ declare global {
         manifest: AppAgentManifest,
         agent: AppAgent,
     ): void;
+
+    interface Window {
+        webAgentApi: {
+            onWebAgentMessage: (callback: (message: any) => void) => void;
+            sendWebAgentMessage: (message: any) => void;
+        };
+    }
 }
 
 type DynamicTypeAgentManager = {
@@ -43,21 +50,34 @@ function ensureDynamicTypeAgentManager(): DynamicTypeAgentManager {
         return manager;
     }
     const messageChannelProvider = createGenericChannelProvider(
-        (message: any) =>
-            window.postMessage({
+        (message: any) => {
+            const rpcMessage = {
                 source: "webAgent",
                 method: "webAgent/message",
                 params: message,
-            } as WebAgentRpcMessage),
+            } as WebAgentRpcMessage;
+
+            if (window.webAgentApi) {
+                window.webAgentApi.sendWebAgentMessage(rpcMessage);
+            } else {
+                window.postMessage(rpcMessage);
+            }
+        },
     );
 
-    const registerChannel = createGenericChannel((message: any) =>
-        window.postMessage({
+    const registerChannel = createGenericChannel((message: any) => {
+        const rpcMessage = {
             source: "webAgent",
             method: "webAgent/register",
             params: message,
-        } as WebAgentRegisterMessage),
-    );
+        } as WebAgentRegisterMessage;
+
+        if (window.webAgentApi) {
+            window.webAgentApi.sendWebAgentMessage(rpcMessage);
+        } else {
+            window.postMessage(rpcMessage);
+        }
+    });
 
     const rpc = createRpc<DynamicTypeAgentManagerInvokeFunctions>(
         registerChannel.channel,
@@ -102,7 +122,14 @@ function ensureDynamicTypeAgentManager(): DynamicTypeAgentManager {
             }
         }
     };
-    window.addEventListener("message", messageHandler);
+
+    if (window.webAgentApi) {
+        window.webAgentApi.onWebAgentMessage((event) => {
+            messageHandler(event);
+        });
+    } else {
+        window.addEventListener("message", messageHandler);
+    }
 
     return manager;
 }

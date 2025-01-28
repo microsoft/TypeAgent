@@ -22,7 +22,6 @@ import { createActionResultFromError } from "@typeagent/agent-sdk/helpers/action
 import { searchAlbum, searchTracks } from "../client.js";
 import { htmlStatus } from "../playback.js";
 import { getPlayerCommandInterface } from "./playerCommands.js";
-import { getGenreSeeds } from "../endpoints.js";
 import {
     resolveArtists,
     searchArtists,
@@ -97,14 +96,6 @@ async function enableSpotify(context: SessionContext<PlayerActionContext>) {
     return clientContext.service.retrieveUser().username;
 }
 
-async function validateGenre(genre: string, context: IClientContext) {
-    const genreSeeds = await getGenreSeeds(context.service);
-    if (genreSeeds) {
-        return genreSeeds.genres.includes(genre);
-    }
-    return false;
-}
-
 async function validatePlayerWildcardMatch(
     action: PlayerAction,
     context: SessionContext<PlayerActionContext>,
@@ -119,7 +110,7 @@ async function validatePlayerWildcardMatch(
             return validateTrack(
                 action.parameters.trackName,
                 action.parameters.artists,
-                undefined,
+                action.parameters.albumName,
                 clientContext,
             );
 
@@ -129,17 +120,13 @@ async function validatePlayerWildcardMatch(
                 action.parameters.artists,
                 clientContext,
             );
-        case "playAlbumTrack":
-            return await validateTrack(
-                action.parameters.trackName,
-                action.parameters.artists,
-                action.parameters.albumName,
+        case "playArtist":
+            return await validateArtist(
+                action.parameters.artist,
                 clientContext,
             );
-        case "playArtist":
-            return validateArtist(action.parameters.artist, clientContext);
         case "playGenre":
-            return await validateGenre(action.parameters.genre, clientContext);
+            return false;
     }
     return true;
 }
@@ -261,13 +248,14 @@ async function getPlayerActionCompletion(
     let track = false;
     let artist = false;
     let album = false;
-    let genre = false;
     switch (action.actionName) {
         case "playTrack":
             if (propertyName === "parameters.trackName") {
                 track = true;
             } else if (propertyName.startsWith("parameters.artists.")) {
                 artist = true;
+            } else if (propertyName === "parameters.albumName") {
+                album = true;
             }
             break;
         case "playAlbum":
@@ -277,24 +265,12 @@ async function getPlayerActionCompletion(
                 artist = true;
             }
             break;
-        case "playAlbumTrack":
-            if (propertyName === "parameters.albumName") {
-                album = true;
-            } else if (propertyName.startsWith("parameters.artists.")) {
-                artist = true;
-            } else if (propertyName.startsWith("parameters.trackName")) {
-                track = true;
-            }
-            break;
         case "playArtist":
             if (propertyName === "parameters.artist") {
                 artist = true;
             }
             break;
         case "playGenre":
-            if (propertyName === "parameters.genre") {
-                genre = true;
-            }
             break;
     }
 
@@ -312,12 +288,6 @@ async function getPlayerActionCompletion(
     if (artist) {
         for (const artist of userData.data.artists.values()) {
             result.push(artist.name);
-        }
-    }
-    if (genre) {
-        const genreSeeds = await getGenreSeeds(clientContext.service);
-        if (genreSeeds) {
-            result.push(...genreSeeds.genres);
         }
     }
     return result;

@@ -11,7 +11,6 @@ import {
     GetPlaylistAction,
     PlayAlbumAction,
     PlayFromCurrentTrackListAction,
-    PlayAlbumTrackAction,
     PlayArtistAction,
     PlayerAction,
     PlayGenreAction,
@@ -86,6 +85,7 @@ import {
     equivalentNames,
     findAlbums,
     findArtistTopTracks,
+    findArtistTracksWithGenre,
     findTracks,
     findTracksWithGenre,
 } from "./search.js";
@@ -463,6 +463,9 @@ async function playTrackAction(
     clientContext: IClientContext,
     action: PlayTrackAction,
 ): Promise<ActionResult> {
+    if (action.parameters.albumName) {
+        return playTrackWithAlbum(clientContext, action);
+    }
     const tracks = await findTracks(
         clientContext,
         action.parameters.trackName,
@@ -475,6 +478,39 @@ async function playTrackAction(
     }
     const collection = new TrackCollection(tracks);
     return playTrackCollection(collection, clientContext);
+}
+
+async function playTrackWithAlbum(
+    clientContext: IClientContext,
+    action: PlayTrackAction,
+): Promise<ActionResult> {
+    const albums = await findAlbums(
+        action.parameters.albumName!,
+        action.parameters.artists,
+        clientContext,
+    );
+
+    const trackName = action.parameters.trackName;
+    for (const album of albums) {
+        const track = album.tracks.items.find(
+            // TODO: Might want to use fuzzy matching here.
+            (track) =>
+                track.name
+                    .toLowerCase()
+                    .includes(action.parameters.trackName.toLowerCase()),
+        );
+        if (track !== undefined) {
+            return playTrackCollection(
+                new TrackCollection([toTrackObjectFull(track, album)]),
+                clientContext,
+            );
+        }
+    }
+
+    // Even though we search thru all the possible matched albums, just use the first one
+    return createErrorActionResult(
+        `Track ${trackName} not found in album ${albums[0].name}`,
+    );
 }
 
 async function playFromCurrentTrackListAction(
@@ -537,47 +573,22 @@ async function playAlbumAction(
     );
 }
 
-async function playAlbumTrackAction(
-    clientContext: IClientContext,
-    action: PlayAlbumTrackAction,
-): Promise<ActionResult> {
-    const albums = await findAlbums(
-        action.parameters.albumName,
-        action.parameters.artists,
-        clientContext,
-    );
-
-    const trackName = action.parameters.trackName;
-    for (const album of albums) {
-        const track = album.tracks.items.find(
-            // TODO: Might want to use fuzzy matching here.
-            (track) =>
-                track.name
-                    .toLowerCase()
-                    .includes(action.parameters.trackName.toLowerCase()),
-        );
-        if (track !== undefined) {
-            return playTrackCollection(
-                new TrackCollection([toTrackObjectFull(track, album)]),
-                clientContext,
-            );
-        }
-    }
-
-    // Even though we search thru all the possible matched albums, just use the first one
-    return createErrorActionResult(
-        `Track ${trackName} not found in album ${albums[0].name}`,
-    );
-}
-
 async function playArtistAction(
     clientContext: IClientContext,
     action: PlayArtistAction,
 ): Promise<ActionResult> {
-    const tracks = await findArtistTopTracks(
-        action.parameters.artist,
-        clientContext,
-    );
+    const tracks = await (action.parameters.genre
+        ? findArtistTracksWithGenre(
+              action.parameters.artist,
+              action.parameters.genre,
+              clientContext,
+          )
+        : findArtistTopTracks(
+              action.parameters.artist,
+
+              clientContext,
+          ));
+
     const quantity = action.parameters.quantity ?? 0;
     if (quantity > 0) {
         tracks.splice(quantity);
@@ -725,8 +736,6 @@ export async function handleCall(
             return playFromCurrentTrackListAction(clientContext, action);
         case "playAlbum":
             return playAlbumAction(clientContext, action);
-        case "playAlbumTrack":
-            return playAlbumTrackAction(clientContext, action);
         case "playArtist":
             return playArtistAction(clientContext, action);
         case "playGenre":
@@ -952,9 +961,11 @@ export async function handleCall(
                 filterTracksAction.parameters.trackListEntityId &&
                 clientContext.entityMap
             ) {
-                console.log(`entity id: ${filterTracksAction.parameters.trackListEntityId}`);
+                console.log(
+                    `entity id: ${filterTracksAction.parameters.trackListEntityId}`,
+                );
                 const entity = clientContext.entityMap.get(
-                    filterTracksAction.parameters.trackListEntityId
+                    filterTracksAction.parameters.trackListEntityId,
                 );
                 if (
                     entity !== undefined &&
@@ -1016,7 +1027,9 @@ export async function handleCall(
                 createPlaylistAction.parameters.trackListEntityId &&
                 clientContext.entityMap
             ) {
-                console.log(`entity id: ${createPlaylistAction.parameters.trackListEntityId}`);
+                console.log(
+                    `entity id: ${createPlaylistAction.parameters.trackListEntityId}`,
+                );
                 const entity = clientContext.entityMap.get(
                     createPlaylistAction.parameters.trackListEntityId,
                 );
@@ -1047,9 +1060,13 @@ export async function handleCall(
                 printTrackNames(input, clientContext);
                 const actionResult = await htmlTrackNames(input);
                 let displayText = "";
-                if (actionResult.displayContent && typeof actionResult.displayContent === "object")
+                if (
+                    actionResult.displayContent &&
+                    typeof actionResult.displayContent === "object"
+                )
                     if (!Array.isArray(actionResult.displayContent)) {
-                        displayText = actionResult.displayContent.content as string;
+                        displayText = actionResult.displayContent
+                            .content as string;
                     }
                 return createActionResultFromHtmlDisplay(
                     `<div>playlist ${name} created with tracks...</div>${displayText}`,

@@ -52,10 +52,12 @@ export interface ITermToSemanticRefIndex {
     ): ScoredSemanticRef[] | undefined;
 }
 
+export type KnowledgeType = "entity" | "action" | "topic" | "tag";
+
 export interface SemanticRef {
     semanticRefIndex: SemanticRefIndex;
     range: TextRange;
-    knowledgeType: "entity" | "action" | "topic" | "tag";
+    knowledgeType: KnowledgeType;
     knowledge:
         | conversation.ConcreteEntity
         | conversation.Action

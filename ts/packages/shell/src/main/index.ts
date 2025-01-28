@@ -98,7 +98,8 @@ function setContentSize() {
 
 const time = performance.now();
 debugShell("Starting...");
-function createWindow(): void {
+
+function createWindow() {
     debugShell("Creating window", performance.now() - time);
 
     // Create the browser window.
@@ -310,6 +311,8 @@ function createWindow(): void {
             );
         };
     });
+
+    return { mainWindow, chatView };
 }
 
 /**
@@ -425,21 +428,6 @@ async function triggerRecognitionOnce() {
     );
 }
 
-const clientIOChannel = createGenericChannel((message: any) => {
-    chatView?.webContents.send("clientio-rpc-call", message);
-});
-ipcMain.on("clientio-rpc-reply", (_event, message) => {
-    clientIOChannel.message(message);
-});
-
-const newClientIO = createClientIORpcClient(clientIOChannel.channel);
-const clientIO = {
-    ...newClientIO,
-    exit: () => {
-        app.quit();
-    },
-};
-
 async function initializeSpeech() {
     const key = process.env["SPEECH_SDK_KEY"];
     const region = process.env["SPEECH_SDK_REGION"];
@@ -477,13 +465,24 @@ async function initializeSpeech() {
     }
 }
 
-// This method will be called when Electron has finished
-// initialization and is ready to create browser windows.
-// Some APIs can only be used after this event occurs.
-async function initialize() {
-    debugShell("Ready", performance.now() - time);
-    // Set app user model id for windows
-    electronApp.setAppUserModelId("com.electron");
+async function initializeDispatcher(
+    chatView: BrowserView,
+    updateSummary: (dispatcher: Dispatcher) => void,
+) {
+    const clientIOChannel = createGenericChannel((message: any) => {
+        chatView.webContents.send("clientio-rpc-call", message);
+    });
+    ipcMain.on("clientio-rpc-reply", (_event, message) => {
+        clientIOChannel.message(message);
+    });
+
+    const newClientIO = createClientIORpcClient(clientIOChannel.channel);
+    const clientIO = {
+        ...newClientIO,
+        exit: () => {
+            app.quit();
+        },
+    };
 
     // Set up dispatcher
     const newDispatcher = await createDispatcher("shell", {
@@ -495,10 +494,10 @@ async function initialize() {
         persistSession: true,
         enableServiceHost: true,
         metrics: true,
+        dblogging: true,
         clientIO,
     });
 
-    let settingSummary: string = "";
     async function processShellRequest(
         text: string,
         id: string,
@@ -510,21 +509,8 @@ async function initialize() {
         debugShell(newDispatcher.getPrompt(), text);
 
         const metrics = await newDispatcher.processCommand(text, id, images);
-        chatView?.webContents.send("send-demo-event", "CommandProcessed");
-        const newSettingSummary = newDispatcher.getSettingSummary();
-        if (newSettingSummary !== settingSummary) {
-            settingSummary = newSettingSummary;
-            chatView?.webContents.send(
-                "setting-summary-changed",
-                newSettingSummary,
-                newDispatcher.getTranslatorNameToEmojiMap(),
-            );
-
-            mainWindow?.setTitle(
-                `${newSettingSummary} Zoom: ${Math.round(chatView?.webContents.zoomFactor! * 100)}%`,
-            );
-        }
-
+        chatView.webContents.send("send-demo-event", "CommandProcessed");
+        updateSummary(dispatcher);
         return metrics;
     }
 
@@ -535,40 +521,74 @@ async function initialize() {
 
     // Set up the RPC
     const dispatcherChannel = createGenericChannel((message: any) => {
-        chatView?.webContents.send("dispatcher-rpc-reply", message);
+        chatView.webContents.send("dispatcher-rpc-reply", message);
     });
     ipcMain.on("dispatcher-rpc-call", (_event, message) => {
         dispatcherChannel.message(message);
     });
     createDispatcherRpcServer(dispatcher, dispatcherChannel.channel);
 
-    if (ShellSettings.getinstance().agentGreeting) {
-        processShellRequest("@greeting", "agent-0", []);
-    }
-    ipcMain.on("dom ready", async () => {
-        settingSummary = dispatcher.getSettingSummary();
-        chatView?.webContents.send(
-            "setting-summary-changed",
-            settingSummary,
-            dispatcher.getTranslatorNameToEmojiMap(),
-        );
+    setupQuit(dispatcher);
 
-        mainWindow?.setTitle(
-            `${settingSummary} Zoom: ${Math.round(chatView?.webContents.zoomFactor! * 100)}%`,
-        );
-        mainWindow?.show();
+    // Dispatcher is ready to be called from the client, but we need to wait for the dom to be ready to start
+    // using it to process command, so that the client can receive messages.
+    debugShell("Dispatcher initialized", performance.now() - time);
+
+    return dispatcher;
+}
+
+// This method will be called when Electron has finished
+// initialization and is ready to create browser windows.
+// Some APIs can only be used after this event occurs.
+async function initialize() {
+    debugShell("Ready", performance.now() - time);
+    // Set app user model id for windows
+    electronApp.setAppUserModelId("com.electron");
+
+    await initializeSpeech();
+
+    const { mainWindow, chatView } = createWindow();
+
+    let settingSummary: string = "";
+    function updateSummary(dispatcher: Dispatcher) {
+        const newSettingSummary = dispatcher.getSettingSummary();
+        if (newSettingSummary !== settingSummary) {
+            settingSummary = newSettingSummary;
+            chatView.webContents.send(
+                "setting-summary-changed",
+                newSettingSummary,
+                dispatcher.getTranslatorNameToEmojiMap(),
+            );
+
+            mainWindow.setTitle(
+                `${newSettingSummary} Zoom: ${Math.round(chatView.webContents.zoomFactor! * 100)}%`,
+            );
+        }
+    }
+
+    // Note: Make sure dom ready before using dispatcher.
+    const dispatcherP = initializeDispatcher(chatView, updateSummary);
+
+    ipcMain.on("dom ready", async () => {
+        mainWindow.show();
 
         // Send settings asap
         ShellSettings.getinstance().onSettingsChanged!();
 
         // make sure links are opened in the external browser
-        mainWindow?.webContents.setWindowOpenHandler((details) => {
+        mainWindow.webContents.setWindowOpenHandler((details) => {
             require("electron").shell.openExternal(details.url);
             return { action: "deny" };
         });
+
+        // The dispatcher can be use now that dom is ready and the client is ready to receive messages
+        const dispatcher = await dispatcherP;
+        updateSummary(dispatcher);
+        if (ShellSettings.getinstance().agentGreeting) {
+            dispatcher.processCommand("@greeting", "agent-0", []);
+        }
     });
 
-    await initializeSpeech();
     ipcMain.handle("get-localWhisper-status", async () => {
         return isLocalWhisperEnabled();
     });
@@ -592,10 +612,8 @@ async function initialize() {
         },
     );
     globalShortcut.register("Alt+Right", () => {
-        chatView?.webContents.send("send-demo-event", "Alt+Right");
+        chatView.webContents.send("send-demo-event", "Alt+Right");
     });
-
-    setupQuit(dispatcher);
 
     // Default open or close DevTools by F12 in development
     // and ignore CommandOrControl + R in production.
@@ -610,8 +628,6 @@ async function initialize() {
             allowFileAccess: true,
         });
     });
-
-    createWindow();
 
     app.on("activate", function () {
         // On macOS it's common to re-create a window in the app when the

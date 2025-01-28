@@ -65,6 +65,7 @@ export default class RequestCommand extends Command {
                 : { enabled: false },
             cache: { enabled: false },
             persist: true,
+            dblogging: true,
         });
         await dispatcher.processCommand(
             `@dispatcher request ${args.request}`,

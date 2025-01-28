@@ -50,6 +50,7 @@ export default class TranslateCommand extends Command {
             translation: { model: flags.model },
             cache: { enabled: false },
             persist: true,
+            dblogging: true,
         });
         await dispatcher.processCommand(
             `@dispatcher translate ${args.request}`,

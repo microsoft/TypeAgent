@@ -228,7 +228,7 @@ function getTranslatorSchemaDef(
         };
     }
 
-    if (actionConfig.schemaFile.type !== "ts") {
+    if (actionConfig.schemaFile.type === "ts") {
         return {
             kind: "inline",
             typeName: actionConfig.schemaType,

@@ -75,6 +75,7 @@ export default class Interactive extends Command {
                 persistSession: !flags.memory,
                 enableServiceHost: true,
                 clientIO,
+                dblogging: true,
             });
             try {
                 if (args.input) {
