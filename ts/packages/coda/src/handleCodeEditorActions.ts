@@ -412,15 +412,22 @@ export async function handleVSCodeActions(action: any) {
         action.actionName ?? action.fullActionName.split(".").at(-1);
 
     if (actionName) {
-        const promises = [
-            handleBaseEditorActions(action),
-            handleGeneralKBActions(action),
-            handleDisplayKBActions(action),
-            handleDebugActions(action),
+        const handlers = [
+            handleBaseEditorActions,
+            handleGeneralKBActions,
+            handleDisplayKBActions,
+            handleDebugActions,
         ];
 
-        const actionResult = await Promise.race(promises);
-        if (!actionResult.handled) {
+        const results = await Promise.all(
+            handlers.map((handler: any) => handler(action)),
+        );
+
+        const handledResult = results.find((result: any) => result.handled);
+        if (handledResult) {
+            actionResult = handledResult;
+        } else {
+            actionResult.handled = false;
             actionResult.message = `Did not handle the action: "${actionName}"`;
         }
     }
