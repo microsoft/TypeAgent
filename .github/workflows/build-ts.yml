@@ -101,9 +101,10 @@ jobs:
       - name: Shell Tests - smoke
         if: {{ matrix.os }} == "windows-latest"
         timeout-minutes: 60
-        run: |
-          npx playwright test simple.spec.ts
-          rm ../../.env
+        run: npx playwright test simple.spec.ts
         working-directory: ts/packages/shell
         continue-on-error: true
+      - name: Cleanup ENV file
+          run: rm .env
+
 
