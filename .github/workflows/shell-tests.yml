@@ -1,7 +1,7 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-name: Shell Tests
+name: Shell Tests - Full Suite
 on:
   push:
     branches: [ dev/robgruen/electron_tests ]
@@ -108,8 +108,12 @@ jobs:
         timeout-minutes: 180
         # run: |           
         #   working-directory: ts/packages/shell
-        run: npx playwright test
+        run: |
+          npx playwright test
+          rm ../../.env
+
         working-directory: ts/packages/shell
+
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
         with:
