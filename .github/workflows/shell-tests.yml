@@ -4,9 +4,9 @@
 name: Shell Tests - Full Suite
 on:
   push:
-    branches: [ dev/robgruen/electron_tests ]
-  # schedule:
-  #   - cron: "0 0 * * *"
+    branches: [ "main", "dev/robgruen/electron_tests" ]
+   schedule:
+     - cron: "0 0 * * *"  #start of every day
 
 permissions:
   id-token: write
