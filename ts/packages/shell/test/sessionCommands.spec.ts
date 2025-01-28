@@ -19,10 +19,9 @@ import {
 import { session } from "electron";
 
 // Annotate entire file as serial.
-test.describe.configure({ mode: 'serial' });
+test.describe.configure({ mode: "serial" });
 
 test.describe("@session Commands", () => {
-
     test("@session new/list", async ({}, testInfo) => {
         console.log(`Running test '${testInfo.title}`);
 
@@ -30,17 +29,28 @@ test.describe("@session Commands", () => {
         const mainWindow: Page = await startShell();
 
         // get the session count
-        let msg = await sendUserRequestAndWaitForResponse(`@session list`, mainWindow);
-        
+        let msg = await sendUserRequestAndWaitForResponse(
+            `@session list`,
+            mainWindow,
+        );
+
         const sessions: string[] = msg.split("\n");
-        
-        msg = await sendUserRequestAndWaitForResponse(`@session new`, mainWindow);
+
+        msg = await sendUserRequestAndWaitForResponse(
+            `@session new`,
+            mainWindow,
+        );
         expect(msg.toLowerCase()).toContain("new session created: ");
 
-        msg = await sendUserRequestAndWaitForResponse(`@session list`, mainWindow);
+        msg = await sendUserRequestAndWaitForResponse(
+            `@session list`,
+            mainWindow,
+        );
         const newSessions: string[] = msg.split("\n");
 
-        expect(newSessions.length, "Session count mismatch!").toBe(sessions.length + 1);
+        expect(newSessions.length, "Session count mismatch!").toBe(
+            sessions.length + 1,
+        );
 
         msg = await sendUserRequestAndWaitForResponse(`@history`, mainWindow);
         expect(msg.length, "History NOT cleared!").toBe(0);
@@ -56,41 +66,66 @@ test.describe("@session Commands", () => {
         const mainWindow: Page = await startShell();
 
         // create a new session so we have at least two
-        let msg = await sendUserRequestAndWaitForResponse(`@session new`, mainWindow);
+        let msg = await sendUserRequestAndWaitForResponse(
+            `@session new`,
+            mainWindow,
+        );
         expect(msg.toLowerCase()).toContain("new session created: ");
 
         // get the session count
-        msg = await sendUserRequestAndWaitForResponse(`@session list`, mainWindow);
+        msg = await sendUserRequestAndWaitForResponse(
+            `@session list`,
+            mainWindow,
+        );
         let sessions = msg.split("\n");
         const originalSessionCount: number = sessions.length;
-        const sessionName: string = sessions[sessions.length - 1];       
-        
+        const sessionName: string = sessions[sessions.length - 1];
+
         // issue delete session command
-        msg = await sendUserRequestAndWaitForResponse(`@session delete ${sessions[0]}`, mainWindow);
+        msg = await sendUserRequestAndWaitForResponse(
+            `@session delete ${sessions[0]}`,
+            mainWindow,
+        );
         expect(msg.toLowerCase()).toContain("are you sure");
 
         // click on cancel button
         await mainWindow.locator(".choice-button", { hasText: "No" }).click();
-        
+
         // verify session not deleted
-        msg = await sendUserRequestAndWaitForResponse(`@session list`, mainWindow);
+        msg = await sendUserRequestAndWaitForResponse(
+            `@session list`,
+            mainWindow,
+        );
         sessions = msg.split("\n");
-        expect(sessions.length, "Session accidentally deleted.").toBe(originalSessionCount);
+        expect(sessions.length, "Session accidentally deleted.").toBe(
+            originalSessionCount,
+        );
 
         // reissue delete session command
-        msg = await sendUserRequestAndWaitForResponse(`@session delete ${sessions[0]}`, mainWindow);
+        msg = await sendUserRequestAndWaitForResponse(
+            `@session delete ${sessions[0]}`,
+            mainWindow,
+        );
         expect(msg.toLowerCase()).toContain("are you sure");
-        
+
         // click on Yes button
         await mainWindow.locator(".choice-button", { hasText: "Yes" }).click();
 
         // get new session count
-        msg = await sendUserRequestAndWaitForResponse(`@session list`, mainWindow);
+        msg = await sendUserRequestAndWaitForResponse(
+            `@session list`,
+            mainWindow,
+        );
         sessions = msg.split("\n");
-        expect(sessions.length, "Session accidentally deleted.").toBe(originalSessionCount - 1);
+        expect(sessions.length, "Session accidentally deleted.").toBe(
+            originalSessionCount - 1,
+        );
 
         // get session info
-        msg = await sendUserRequestAndWaitForResponse(`@session info`, mainWindow);
+        msg = await sendUserRequestAndWaitForResponse(
+            `@session info`,
+            mainWindow,
+        );
         sessions = msg.split("\n");
         expect(sessions[1], "Wrong session selected.").toContain(sessionName);
 
@@ -104,14 +139,20 @@ test.describe("@session Commands", () => {
         // launch the app
         const mainWindow: Page = await startShell();
 
-        // reset         
-        let msg = await sendUserRequestAndWaitForResponse(`@session reset`, mainWindow);
+        // reset
+        let msg = await sendUserRequestAndWaitForResponse(
+            `@session reset`,
+            mainWindow,
+        );
         expect(msg).toContain("Session settings revert to default.");
 
         // issue clear session command
-        msg = await sendUserRequestAndWaitForResponse(`@session clear`, mainWindow);
+        msg = await sendUserRequestAndWaitForResponse(
+            `@session clear`,
+            mainWindow,
+        );
         expect(msg.toLowerCase()).toContain("are you sure");
-        
+
         // click on Yes button
         await mainWindow.locator(".choice-button", { hasText: "Yes" }).click();
 
@@ -119,23 +160,34 @@ test.describe("@session Commands", () => {
         await exitApplication(mainWindow);
     });
 
-    test("@session open", async({}, testInfo) => {
+    test("@session open", async ({}, testInfo) => {
         console.log(`Running test '${testInfo.title}`);
 
         // launch the app
         const mainWindow: Page = await startShell();
 
-        // create a new session        
-        let msg = await sendUserRequestAndWaitForResponse(`@session new`, mainWindow);
+        // create a new session
+        let msg = await sendUserRequestAndWaitForResponse(
+            `@session new`,
+            mainWindow,
+        );
         expect(msg.toLowerCase()).toContain("new session created: ");
 
         // get the session list
-        msg = await sendUserRequestAndWaitForResponse(`@session list`, mainWindow);
+        msg = await sendUserRequestAndWaitForResponse(
+            `@session list`,
+            mainWindow,
+        );
         const sessions: string[] = msg.split("\n");
 
         // open the earlier session
-        msg = await sendUserRequestAndWaitForResponse(`@session open ${sessions[0]}`, mainWindow);
-        expect(msg, `Unexpected session openend!`).toBe(`Session opened: ${sessions[0]}`);
+        msg = await sendUserRequestAndWaitForResponse(
+            `@session open ${sessions[0]}`,
+            mainWindow,
+        );
+        expect(msg, `Unexpected session openend!`).toBe(
+            `Session opened: ${sessions[0]}`,
+        );
 
         // close the application
         await exitApplication(mainWindow);

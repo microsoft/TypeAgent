@@ -158,7 +158,10 @@ export class ShellSettings
             }
         }
 
-        if (ShellSettings.getinstance().onSettingsChanged != null && oldValue != value) {
+        if (
+            ShellSettings.getinstance().onSettingsChanged != null &&
+            oldValue != value
+        ) {
             ShellSettings.getinstance().onSettingsChanged!(name);
         }
     }

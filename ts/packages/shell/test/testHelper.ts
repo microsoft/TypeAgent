@@ -1,67 +1,85 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import {     
+import {
     _electron,
     _electron as electron,
-    ElectronApplication, 
-    Locator, 
-    Page, 
-    TestDetails} from "@playwright/test";
+    ElectronApplication,
+    Locator,
+    Page,
+    TestDetails,
+} from "@playwright/test";
 import { profile } from "node:console";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 
-const runningApplications: Map<string, ElectronApplication> = new Map<string, ElectronApplication>();
+const runningApplications: Map<string, ElectronApplication> = new Map<
+    string,
+    ElectronApplication
+>();
 
 /**
  * Starts the electron app and returns the main page after the greeting agent message has been posted.
  */
 export async function startShell(): Promise<Page> {
-
     // this is needed to isolate these tests session from other concurrently running tests
-    process.env["INSTANCE_NAME"] = `test_${process.env["TEST_WORKER_INDEX"]}_${process.env["TEST_PARALLEL_INDEX"]}`;
+    process.env["INSTANCE_NAME"] =
+        `test_${process.env["TEST_WORKER_INDEX"]}_${process.env["TEST_PARALLEL_INDEX"]}`;
 
     // other related multi-instance varibles that need to be modfied to ensure we can run multiple shell instances
-    process.env["PORT"] = (9001 + parseInt(process.env["TEST_WORKER_INDEX"]!)).toString();
-    process.env["WEBSOCKET_HOST"] = `ws://localhost:${(8080 + parseInt(process.env["TEST_WORKER_INDEX"]!))}`;
+    process.env["PORT"] = (
+        9001 + parseInt(process.env["TEST_WORKER_INDEX"]!)
+    ).toString();
+    process.env["WEBSOCKET_HOST"] =
+        `ws://localhost:${8080 + parseInt(process.env["TEST_WORKER_INDEX"]!)}`;
 
     // we may have to retry restarting the application due to session file locks or other such startup failures
     let retryAttempt = 0;
     const maxRetries = 10;
 
     do {
-        try {            
+        try {
             if (runningApplications.has(process.env["INSTANCE_NAME"]!)) {
-                throw new Error("Application instance already running. Did you shutdown cleanly?");
+                throw new Error(
+                    "Application instance already running. Did you shutdown cleanly?",
+                );
             }
 
-            console.log(`Starting electron instance '${process.env["INSTANCE_NAME"]}'`);
-            const app: ElectronApplication = await electron.launch({ args: [getAppPath()] });
+            console.log(
+                `Starting electron instance '${process.env["INSTANCE_NAME"]}'`,
+            );
+            const app: ElectronApplication = await electron.launch({
+                args: [getAppPath()],
+            });
             runningApplications.set(process.env["INSTANCE_NAME"]!, app);
 
-            // get the main window        
+            // get the main window
             const mainWindow: Page = await getMainWindow(app);
 
             // wait for agent greeting
             await waitForAgentMessage(mainWindow, 30000, 1);
 
             return mainWindow;
-
-        } catch (e) {            
-            console.warn(`Unable to start electrom application (${process.env["INSTANCE_NAME"]}). Attempt ${retryAttempt} of ${maxRetries}`);            
+        } catch (e) {
+            console.warn(
+                `Unable to start electrom application (${process.env["INSTANCE_NAME"]}). Attempt ${retryAttempt} of ${maxRetries}`,
+            );
             retryAttempt++;
 
             if (runningApplications.get(process.env["INSTANCE_NAME"])) {
-                await runningApplications.get(process.env["INSTANCE_NAME"]!)!.close();
+                await runningApplications
+                    .get(process.env["INSTANCE_NAME"]!)!
+                    .close();
             }
 
             runningApplications.delete(process.env["INSTANCE_NAME"]!);
         }
     } while (retryAttempt <= maxRetries);
 
-    throw new Error(`Failed to start electrom app after ${maxRetries} attemps.`);
+    throw new Error(
+        `Failed to start electrom app after ${maxRetries} attemps.`,
+    );
 }
 
 async function getMainWindow(app: ElectronApplication): Promise<Page> {
@@ -90,7 +108,7 @@ export async function exitApplication(page: Page): Promise<void> {
     await sendUserRequestFast("@exit", page);
 
     await runningApplications.get(process.env["INSTANCE_NAME"]!)!.close();
-    
+
     runningApplications.delete(process.env["INSTANCE_NAME"]!);
 }
 
@@ -112,7 +130,6 @@ export function getAppPath(): string {
  * @param page The maing page from the electron host application.
  */
 export async function sendUserRequest(prompt: string, page: Page) {
-
     const locator: Locator = page.locator("#phraseDiv");
     await locator.waitFor({ timeout: 30000, state: "visible" });
     await locator.focus({ timeout: 30000 });
@@ -125,7 +142,7 @@ export async function sendUserRequest(prompt: string, page: Page) {
  * @param prompt The user request/prompt.
  * @param page The maing page from the electron host application.
  */
-export async function sendUserRequestFast(prompt: string, page: Page) {    
+export async function sendUserRequestFast(prompt: string, page: Page) {
     const locator: Locator = page.locator("#phraseDiv");
     await locator.waitFor({ timeout: 120000, state: "visible" });
     await locator.fill(prompt, { timeout: 30000 });
@@ -137,8 +154,13 @@ export async function sendUserRequestFast(prompt: string, page: Page) {
  * @param prompt The user request/prompt.
  * @param page The maing page from the electron host application.
  */
-export async function sendUserRequestAndWaitForResponse(prompt: string, page: Page): Promise<string> {
-    const locators: Locator[] = await page.locator('.chat-message-agent-text').all();
+export async function sendUserRequestAndWaitForResponse(
+    prompt: string,
+    page: Page,
+): Promise<string> {
+    const locators: Locator[] = await page
+        .locator(".chat-message-agent-text")
+        .all();
 
     // send the user request
     await sendUserRequest(prompt, page);
@@ -155,21 +177,29 @@ export async function sendUserRequestAndWaitForResponse(prompt: string, page: Pa
  * @param page The maing page from the electron host application.
  */
 export async function getLastAgentMessage(page: Page): Promise<string> {
-    const locators: Locator[] = await page.locator('.chat-message-agent-text').all();
+    const locators: Locator[] = await page
+        .locator(".chat-message-agent-text")
+        .all();
 
     return locators[0].innerText();
 }
 
 /**
- * 
+ *
  * @param page The page where the chatview is hosted
  * @param timeout The maximum amount of time to wait for the agent message
  * @param expectedMessageCount The expected # of agent messages at this time.
  * @returns When the expected # of messages is reached or the timeout is reached.  Whichever occurrs first.
  */
-export async function waitForAgentMessage(page: Page, timeout: number, expectedMessageCount?: number | undefined): Promise<void> {
+export async function waitForAgentMessage(
+    page: Page,
+    timeout: number,
+    expectedMessageCount?: number | undefined,
+): Promise<void> {
     let timeWaited = 0;
-    let locators: Locator[] = await page.locator('.chat-message-agent-text').all();
+    let locators: Locator[] = await page
+        .locator(".chat-message-agent-text")
+        .all();
     let originalAgentMessageCount = locators.length;
     let messageCount = originalAgentMessageCount;
 
@@ -180,20 +210,22 @@ export async function waitForAgentMessage(page: Page, timeout: number, expectedM
     do {
         await page.waitForTimeout(1000);
         timeWaited += 1000;
-        
-        locators = await page.locator('.chat-message-agent-text').all();
-        messageCount = locators.length;
 
-    } while (timeWaited <= timeout && messageCount == originalAgentMessageCount);
+        locators = await page.locator(".chat-message-agent-text").all();
+        messageCount = locators.length;
+    } while (
+        timeWaited <= timeout &&
+        messageCount == originalAgentMessageCount
+    );
 }
 
 export function deleteTestProfiles() {
     const profileDir = path.join(os.homedir(), ".typeagent", "profiles");
 
     if (fs.existsSync(profileDir)) {
-        fs.readdirSync(profileDir).map((dirEnt) =>{
+        fs.readdirSync(profileDir).map((dirEnt) => {
             if (dirEnt.startsWith("test_")) {
-                const dir: string = path.join(profileDir, dirEnt)
+                const dir: string = path.join(profileDir, dirEnt);
                 try {
                     fs.rmSync(dir, { recursive: true, force: true });
                 } catch (e) {

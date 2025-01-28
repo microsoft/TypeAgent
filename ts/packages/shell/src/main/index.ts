@@ -229,16 +229,24 @@ function createWindow() {
     });
 
     // Notify renderer process whenever settings are modified
-    ShellSettings.getinstance().onSettingsChanged = (settingName?: string | undefined): void => {
+    ShellSettings.getinstance().onSettingsChanged = (
+        settingName?: string | undefined,
+    ): void => {
         chatView?.webContents.send(
             "settings-changed",
             ShellSettings.getinstance().getSerializable(),
         );
 
         if (settingName == "size") {
-            mainWindow?.setSize(ShellSettings.getinstance().width, ShellSettings.getinstance().height);
+            mainWindow?.setSize(
+                ShellSettings.getinstance().width,
+                ShellSettings.getinstance().height,
+            );
         } else if (settingName == "position") {
-            mainWindow?.setPosition(ShellSettings.getinstance().x!, ShellSettings.getinstance().y!);
+            mainWindow?.setPosition(
+                ShellSettings.getinstance().x!,
+                ShellSettings.getinstance().y!,
+            );
         }
 
         if (settingName == "zoomLevel") {
@@ -651,7 +659,11 @@ async function initialize() {
     // On windows, we will spin up a local end point that listens
     // for pen events which will trigger speech reco
     // Don't spin this up during testing
-    if (process.platform == "win32" && (process.env["INSTANCE_NAME"] == undefined || process.env["INSTANCE_NAME"].startsWith("test_") == false)) {
+    if (
+        process.platform == "win32" &&
+        (process.env["INSTANCE_NAME"] == undefined ||
+            process.env["INSTANCE_NAME"].startsWith("test_") == false)
+    ) {
         const pipePath = path.join("\\\\.\\pipe\\TypeAgent", "speech");
         const server = net.createServer((stream) => {
             stream.on("data", (c) => {
@@ -734,9 +746,8 @@ function zoomOut(chatView: BrowserView) {
 }
 
 function setZoomLevel(zoomLevel: number, chatView: BrowserView | null) {
-
     if (zoomLevel < 0.1) {
-        zoomLevel = 0.1
+        zoomLevel = 0.1;
     } else if (zoomLevel > 10) {
         zoomLevel = 10;
     }

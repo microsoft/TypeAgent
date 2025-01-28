@@ -153,7 +153,11 @@ export function setContent(
 
     if (type === "text") {
         const prevElm = contentDiv.lastChild as HTMLElement | null;
-        if (prevElm?.classList.contains(`chat-message-${classNameModifier}-text`)) {
+        if (
+            prevElm?.classList.contains(
+                `chat-message-${classNameModifier}-text`,
+            )
+        ) {
             // If there is an existing text element then append to it.
             contentElm = prevElm;
         } else {

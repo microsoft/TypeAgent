@@ -61,7 +61,10 @@ import {
     getParameterNames,
     validateAction,
 } from "action-schema";
-import { EnvCommandHandler, getEnvCommandHandlers } from "./handlers/envCommandHandler.js";
+import {
+    EnvCommandHandler,
+    getEnvCommandHandlers,
+} from "./handlers/envCommandHandler.js";
 import { executeNotificationAction } from "./action/notificationActionHandler.js";
 import { executeHistoryAction } from "./action/historyActionHandler.js";
 

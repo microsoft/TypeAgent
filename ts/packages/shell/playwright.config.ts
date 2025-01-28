@@ -23,8 +23,8 @@ export default defineConfig({
     /* Retry on CI only */
     retries: process.env.CI ? 2 : 0,
     /* Opt out of parallel tests on CI. */
-    workers: 1, // fails with timeouts with more than 2 workers. :( 
-        //process.env.CI ? 1 : undefined,
+    workers: 1, // fails with timeouts with more than 2 workers. :(
+    //process.env.CI ? 1 : undefined,
     /* Reporter to use. See https://playwright.dev/docs/test-reporters */
     reporter: "html",
     /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
@@ -35,7 +35,7 @@ export default defineConfig({
         /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
         trace: "on-first-retry",
     },
-    
+
     maxFailures: 0,
     timeout: 300_000, // Set global timeout to 120 seconds
 
@@ -49,12 +49,12 @@ export default defineConfig({
         {
             name: `global teardown`,
             testMatch: /global\.teardown\.ts/,
-        },        
+        },
         {
             name: "chromium",
             use: { ...devices["Desktop Chrome"] },
             fullyParallel: false,
-            dependencies: [ "global setup"],
+            dependencies: ["global setup"],
             //testMatch: /simple\.spec\.ts/,
         },
     ],

@@ -106,7 +106,9 @@ class ShellSetSettingCommandHandler implements CommandHandler {
                     try {
                         agentContext.settings.set(name, value);
                     } catch (e) {
-                        throw new Error(`Unable to set ${key} to ${value}. Details: ${e}`);
+                        throw new Error(
+                            `Unable to set ${key} to ${value}. Details: ${e}`,
+                        );
                     }
                 } else {
                     agentContext.settings.set(name, value);

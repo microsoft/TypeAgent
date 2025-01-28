@@ -251,7 +251,7 @@ export class MessageContainer {
             this.classNameSuffix,
             appendMode === "inline" && this.lastAppendMode !== "inline"
                 ? "block"
-                : appendMode,            
+                : appendMode,
         );
 
         this.speak(speakText, appendMode);

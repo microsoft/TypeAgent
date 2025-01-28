@@ -39,7 +39,7 @@ async function getSecretListWithElevation(keyVaultClient, vaultName) {
                 roleName: "Key Vault Administrator",
                 expirationType: "AfterDuration",
                 expirationDuration: "PT5M", // activate for 5 minutes
-                continueOnFailure: true
+                continueOnFailure: true,
             });
 
             // Wait for the role to be activated
@@ -47,8 +47,12 @@ async function getSecretListWithElevation(keyVaultClient, vaultName) {
             console.warn(chalk.yellowBright("Waiting 5 seconds..."));
             await new Promise((res) => setTimeout(res, 5000));
         } catch (e) {
-            console.warn(chalk.yellow("Elevation failed...attempting to get secrets without elevation."));
-        }         
+            console.warn(
+                chalk.yellow(
+                    "Elevation failed...attempting to get secrets without elevation.",
+                ),
+            );
+        }
         return await keyVaultClient.getSecrets(vaultName);
     }
 }

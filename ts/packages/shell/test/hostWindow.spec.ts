@@ -20,10 +20,9 @@ import {
 import { exit } from "process";
 
 // Annotate entire file as serial.
-test.describe.configure({ mode: 'serial' });
+test.describe.configure({ mode: "serial" });
 
 test.describe("Shell interface tests", () => {
-
     /**
      * Test to ensure that the shell recall startup layout (position, size)
      */
@@ -50,7 +49,10 @@ test.describe("Shell interface tests", () => {
         const x: number = Math.ceil(Math.random() * 100);
         const y: number = Math.ceil(Math.random() * 100);
 
-        await sendUserRequestAndWaitForResponse(`@shell set position "[${x}, ${y}]"`, firstWindow);
+        await sendUserRequestAndWaitForResponse(
+            `@shell set position "[${x}, ${y}]"`,
+            firstWindow,
+        );
 
         // close the application
         await exitApplication(firstWindow);
@@ -59,7 +61,10 @@ test.describe("Shell interface tests", () => {
         const newWindow: Page = await startShell();
 
         // get window size/position
-        const msg = await sendUserRequestAndWaitForResponse(`@shell show raw`, newWindow);
+        const msg = await sendUserRequestAndWaitForResponse(
+            `@shell show raw`,
+            newWindow,
+        );
 
         // get the shell size and location from the raw settings
         const lines: string[] = msg.split("\n");
@@ -68,8 +73,14 @@ test.describe("Shell interface tests", () => {
         const newX: number = parseInt(lines[4].split(":")[1].trim());
         const newY: number = parseInt(lines[5].split(":")[1].trim());
 
-        expect(newHeight, `Window height mismatch! Expected ${height} got ${height}`).toBe(newHeight);
-        expect(newWidth, `Window width mismatch! Expected ${width} got ${width}`).toBe(newWidth);
+        expect(
+            newHeight,
+            `Window height mismatch! Expected ${height} got ${height}`,
+        ).toBe(newHeight);
+        expect(
+            newWidth,
+            `Window width mismatch! Expected ${width} got ${width}`,
+        ).toBe(newWidth);
         expect(newX, `X position mismatch! Expected ${x} got ${newX}`).toBe(x);
         expect(newY, `Y position mismatch!Expected ${y} got ${newY}`).toBe(y);
 
@@ -101,16 +112,24 @@ test.describe("Shell interface tests", () => {
 
     async function testZoomLevel(level: number, page: Page) {
         // set the zoom level to 80%
-        await sendUserRequestAndWaitForResponse(`@shell set zoomLevel ${level}`, page);
+        await sendUserRequestAndWaitForResponse(
+            `@shell set zoomLevel ${level}`,
+            page,
+        );
 
         // get the title
         let title = await page.title();
 
         // get zoom level out of title
         let subTitle: string = title.match(/\d+%/)![0];
-        let zoomLevel: number = parseInt(subTitle.substring(0, subTitle.length - 1));
+        let zoomLevel: number = parseInt(
+            subTitle.substring(0, subTitle.length - 1),
+        );
 
-        expect(zoomLevel, `Unexpected zoomLevel, expected ${level * 100}, got ${zoomLevel}`).toBe(level * 100);    
+        expect(
+            zoomLevel,
+            `Unexpected zoomLevel, expected ${level * 100}, got ${zoomLevel}`,
+        ).toBe(level * 100);
     }
 
     /**
@@ -118,7 +137,7 @@ test.describe("Shell interface tests", () => {
      */
     test("send button state", async ({}, testInfo) => {
         console.log(`Running test '${testInfo.title}`);
-        
+
         let agentMessageCount = 0;
 
         // start the app
@@ -126,13 +145,19 @@ test.describe("Shell interface tests", () => {
 
         // make sure send button is disabled
         const sendButton = await mainWindow.locator("#sendbutton");
-        await expect(sendButton, "Send button expected to be disabled.").toBeDisabled();
+        await expect(
+            sendButton,
+            "Send button expected to be disabled.",
+        ).toBeDisabled();
 
         // put some text in the text box
         const element = await mainWindow.waitForSelector("#phraseDiv");
         await element.fill("This is a test...");
 
-        await expect(sendButton, "Send button expected to be enabled.").toBeEnabled();
+        await expect(
+            sendButton,
+            "Send button expected to be enabled.",
+        ).toBeEnabled();
 
         // close the application
         await exitApplication(mainWindow);
