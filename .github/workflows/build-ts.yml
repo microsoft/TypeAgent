@@ -97,7 +97,6 @@ jobs:
         run: |
             npm run start:dev 'prompt' 'why is the sky blue'
         working-directory: ts/packages/cli
-        continue-on-error: true
       - name: Shell Tests - smoke
         if: {{ matrix.os }} == "windows-latest"
         timeout-minutes: 60
