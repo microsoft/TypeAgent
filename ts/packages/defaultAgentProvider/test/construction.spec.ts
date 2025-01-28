@@ -14,7 +14,7 @@ import { Actions, RequestAction } from "agent-cache";
 import { getDefaultAppAgentProviders } from "../src/defaultAgentProviders.js";
 import { glob } from "glob";
 
-const dataFiles = ["test/data/**/v5/*.json"];
+const dataFiles = ["test/data/explanations/**/v5/*.json"];
 
 const inputs = await Promise.all(
     (await glob(dataFiles)).map((f) => readTestData(f)),

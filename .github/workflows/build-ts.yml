@@ -79,7 +79,7 @@ jobs:
         if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts == 'true' }}
         working-directory: ts
         run: |
-          npm run test
+          npm run test:local
       - name: Lint
         if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts == 'true' }}
         working-directory: ts
@@ -104,10 +104,16 @@ jobs:
         working-directory: ts/packages/cli
         continue-on-error: true
       - name: Shell Tests - smoke
-        if: ${{ github.event_name != 'merge_group' && runner.os =='windows' }}
+        if: ${{ github.event_name != 'merge_group' && runner.os =='windows' && runner.version == '22' }}
         timeout-minutes: 60
         run: |
           npx playwright test simple.spec.ts
           rm ../../.env
         working-directory: ts/packages/shell
+        continue-on-error: true
+      - name: Live Tests
+        if: ${{ github.event_name != 'merge_group' && runner.os =='linux' && runner.version == '22' }}
+        timeout-minutes: 60
+        run: |
+          npm run test:live
         continue-on-error: true

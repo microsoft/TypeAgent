@@ -181,7 +181,7 @@ export default class ExplanationDataRegenerateCommand extends Command {
     static description = "Regenerate the data in the explanation data file";
     static example = [
         `$ <%= config.bin %> <%= command.id %> -f data.json`,
-        `$ <%= config.bin %> <%= command.id %> -f test/data/**/*.json --explainer ${getDefaultExplainerName()} --correction *`,
+        `$ <%= config.bin %> <%= command.id %> -f test/data/explanations/**/**/*.json --explainer ${getDefaultExplainerName()} --correction *`,
         `$ <%= config.bin %> <%= command.id %> -b ${getDefaultExplainerName()}`,
     ];
 
