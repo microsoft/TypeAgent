@@ -4,7 +4,7 @@
 name: Shell Tests - Full Suite
 on:
   push:
-    branches: [ "main", "dev/robgruen/electron_tests" ]
+    branches: [ "main" ]
    schedule:
      - cron: "0 0 * * *"  #start of every day
 
