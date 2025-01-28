@@ -1,15 +1,16 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { parseCalendarDateTime } from "./datetime/calendarDateTimeParser.js";
+import {
+    parseCalendarDateTime,
+    calcEndDateTime,
+} from "./datetime/calendarDateTimeParser.js";
 import {
     createCalendarGraphClient,
     CalendarClient,
-    //getNormalizedDateRange,
-    //getNormalizedDateTimes,
-    //getTimeZoneName,
+    getTimeZoneName,
     GraphEntity,
-    //getUniqueLocalId,
+    getUniqueLocalId,
     //ErrorResponse,
 } from "graph-utils";
 import chalk from "chalk";
@@ -140,9 +141,7 @@ function deleteLocalGraphEventId(
         }
     }
 }
-*/
 
-/*
 function getGraphEventId(
     localEventId: string,
     calendarContext?: CalendarActionContext,
@@ -158,24 +157,6 @@ function getGraphEventId(
     }
     return graphEventId;
 }*/
-
-/*
-function getLocalEventId(
-    graphEventId: string,
-    calendarContext?: CalendarActionContext,
-) {
-    let localEventId = undefined;
-    if (graphEventId !== undefined && calendarContext !== undefined) {
-        let graphEventRefIds = calendarContext.graphEventIds?.find(
-            (graphEventRefId) => graphEventRefId.graphEventId === graphEventId,
-        );
-        if (graphEventRefIds !== undefined) {
-            localEventId = graphEventRefIds.localEventId;
-        }
-    }
-    return localEventId;
-}
-*/
 
 async function updateCalendarContext(
     enable: boolean,
@@ -204,8 +185,7 @@ async function executeCalendarAction(
     return result;
 }
 
-/*
-function findEventsDisplayHtml(events: any[] | GraphEntity): string {
+/*function findEventsDisplayHtml(events: any[] | GraphEntity): string {
     if (events) {
         if (Array.isArray(events) && events.length > 0) {
             const eventsCopy = events.map(
@@ -233,10 +213,9 @@ function findEventsDisplayHtml(events: any[] | GraphEntity): string {
         }
     }
     return "";
-}
+}*/
 
-
-async function getParticipantsToAdd(
+/*async function getParticipantsToAdd(
     participants: string[] | undefined,
     calendarClient: CalendarClient,
 ): Promise<string[] | undefined> {
@@ -252,8 +231,6 @@ async function getParticipantsToAdd(
     }
     return participantsToAdd;
 }
-
-
 
 async function addParticipantsToMeeting(
     participantsInMeeting: string[] | undefined,
@@ -286,6 +263,22 @@ async function addParticipantsToMeeting(
     return eventId;
 }
 
+function getLocalEventId(
+    graphEventId: string,
+    calendarContext?: CalendarActionContext,
+) {
+    let localEventId = undefined;
+    if (graphEventId !== undefined && calendarContext !== undefined) {
+        let graphEventRefIds = calendarContext.graphEventIds?.find(
+            (graphEventRefId) => graphEventRefId.graphEventId === graphEventId,
+        );
+        if (graphEventRefIds !== undefined) {
+            localEventId = graphEventRefIds.localEventId;
+        }
+    }
+    return localEventId;
+}
+
 
 function updateCalendarEntity(
     calendarContext: CalendarActionContext,
@@ -302,7 +295,7 @@ function updateCalendarEntity(
         }
     }
     return localEventId;
-}
+}*/
 
 function addCalendarEntity(
     calendarContext: CalendarActionContext,
@@ -331,7 +324,6 @@ function addCalendarEntity(
     }
     return undefined;
 }
-*/
 
 export async function handleCalendarAction(
     action: CalendarAction,
@@ -343,29 +335,118 @@ export async function handleCalendarAction(
     if (client === undefined) {
         throw new Error("Calendar client not initialized");
     }
-    
-    /*if (!client.isAuthenticated()) {
+    if (!client.isAuthenticated()) {
         await client.login();
-    }*/
-   
+    }
+    let error = "Failed to execute the action!";
+
     switch (action.actionName) {
         case "addEvent":
             debug(chalk.green("Handling ADD_EVENT action ..."));
             actionEvent = action.parameters.event;
             if (actionEvent.timeRange != undefined) {
-                console.log(action.parameters.event);
-                if(actionEvent.timeRange.startDateTime != undefined) {
-                    let startDateTime = parseCalendarDateTime(actionEvent.timeRange.startDateTime);
-                    console.log("Parsed Start DateTime: " + startDateTime);
+                if (
+                    actionEvent.timeRange.startDateTime !== undefined &&
+                    actionEvent.timeRange.startDateTime?.day !== undefined
+                ) {
+                    let startDateTime = parseCalendarDateTime(
+                        actionEvent.timeRange.startDateTime,
+                    );
+                    if (startDateTime !== undefined) {
+                        let endDateTimeRes = calcEndDateTime(
+                            startDateTime,
+                            actionEvent.timeRange.duration ?? "1h",
+                        );
+                        if (
+                            endDateTimeRes.success &&
+                            endDateTimeRes.parsedDateTime !== undefined
+                        ) {
+                            let endDateTime = endDateTimeRes.parsedDateTime;
+
+                            let participantsToAdd: string[] | undefined = [];
+                            if (
+                                actionEvent.participants &&
+                                actionEvent.participants.length > 0
+                            ) {
+                                participantsToAdd =
+                                    await client.getEmailAddressesOfUsernamesLocal(
+                                        actionEvent.participants,
+                                    );
+                            }
+
+                            actionEvent.description =
+                                actionEvent.description ?? "Meeting";
+                            let eventid = await client.createCalendarEvent(
+                                actionEvent.description ?? "Meeting",
+                                actionEvent.description ?? "",
+                                startDateTime,
+                                endDateTime,
+                                getTimeZoneName(),
+                                participantsToAdd,
+                            );
+
+                            if (eventid !== undefined) {
+                                const localId = addCalendarEntity(
+                                    calendarContext,
+                                    eventid,
+                                    actionEvent.description,
+                                    participantsToAdd ?? [],
+                                );
+                                debug(
+                                    chalk.bgCyanBright(
+                                        `Successfully added the (local eventid:${localId}) event:${eventid}`,
+                                    ),
+                                );
+                                const displayText =
+                                    await populateMeetingDetails(
+                                        startDateTime,
+                                        endDateTime,
+                                        actionEvent.description,
+                                        eventid,
+                                    );
+                                debug(displayText);
+
+                                let result =
+                                    createActionResultFromHtmlDisplay(
+                                        displayText,
+                                    );
+
+                                if (result && localId) {
+                                    result.entities = [
+                                        {
+                                            name: `${actionEvent.description}`,
+                                            type: ["event"],
+                                            additionalEntityText: localId,
+                                            uniqueId: localId,
+                                        },
+                                    ];
+                                    return result;
+                                } //end if(result && localId)
+                            } else {
+                                debug(
+                                    chalk.bgRedBright(
+                                        "Failed to add the event, please try again!",
+                                    ),
+                                );
+                                return createActionResultFromError(
+                                    "Failed to add the event, please try again!",
+                                );
+                            }
+                        }
+                    }
+                } else {
+                    error = "Missing start date";
                 }
-                return createActionResultFromHtmlDisplay("Event added!");
-            } 
+            } else {
+                error = "Missing time range";
+            }
             break;
-            
+
         default:
             throw new Error(`Unknown action: ${(action as any).actionName}`);
     }
-    return createActionResultFromError("Failed to execute the action!");
+
+    return createActionResultFromError(error);
 }
 
 /*
@@ -389,7 +470,7 @@ async function populateMeetingDetailsFromEvent(
         return result;
     }
 }
-
+*/
 
 async function populateMeetingDetails(
     startDateTime: string,
@@ -406,6 +487,7 @@ async function populateMeetingDetails(
     return meetingDetailsHTML;
 }
 
+/*
 async function populateMeetingDetailsMin(
     header: string,
     description: string,
@@ -417,5 +499,4 @@ async function populateMeetingDetailsMin(
         `<h4>${header}<br>${description}</h4></a><div style="font-size: 12px;">` +
         "</div></div>";
     return meetingDetailsHTML;
-}
-*/
+}*/

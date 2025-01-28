@@ -409,7 +409,7 @@ export async function handleCalendarAction(
                         getTimeZoneName(),
                         participantsToAdd,
                     );
-                    if (eventid != undefined) {
+                    if (eventid !== undefined) {
                         const localId = addCalendarEntity(
                             calendarContext,
                             eventid,

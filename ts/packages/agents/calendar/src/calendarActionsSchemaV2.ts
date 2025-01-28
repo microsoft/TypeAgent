@@ -73,8 +73,7 @@ export type EventReference = {
     eventid?: string;
 };
 
-export type CalendarAction =
-    | AddEventAction;
+export type CalendarAction = AddEventAction;
 
 // Add an event to the calendar
 export type AddEventAction = {
