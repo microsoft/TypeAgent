@@ -21,6 +21,7 @@ import {
     addFileNameSuffixToPath,
     argDestFile,
     argSourceFile,
+    parseFreeAndNamedArguments,
 } from "./common.js";
 import { ensureDir, readJsonFile, writeJsonFile } from "typeagent";
 import path from "path";
@@ -159,8 +160,15 @@ export async function createKnowproCommands(
         context.printer.writePodcastInfo(context.podcast);
     }
 
-    commands.kpSearchTerms.metadata =
-        "Search current knowPro conversation by terms";
+    function searchTermsDef(): CommandMetadata {
+        return {
+            description: "Search current knowPro conversation by terms",
+            options: {
+                maxMatches: argNum("Maximum matches to display", 25),
+            },
+        };
+    }
+    commands.kpSearchTerms.metadata = searchTermsDef();
     async function searchTerms(args: string[]): Promise<void> {
         if (args.length === 0) {
             return;
@@ -169,7 +177,11 @@ export async function createKnowproCommands(
         if (!conversation) {
             return;
         }
-        const terms = parseQueryTerms(args); // Todo: De dupe
+        let [termArgs, namedArgs] = parseFreeAndNamedArguments(
+            args,
+            searchTermsDef(),
+        );
+        const terms = parseQueryTerms(termArgs); // Todo: De dupe
         if (conversation.semanticRefIndex && conversation.semanticRefs) {
             context.printer.writeInColor(
                 chalk.cyan,
@@ -179,22 +191,13 @@ export async function createKnowproCommands(
             const matches = await kp.searchTermsInConversation(
                 conversation,
                 terms,
+                namedArgs.maxMatches,
             );
             if (!matches.hasMatches) {
                 context.printer.writeLine("No matches");
                 return;
             }
-
-            context.printer.writeListInColor(chalk.green, matches.termMatches, {
-                title: "Matched terms",
-                type: "ol",
-            });
-            for (const match of matches.semanticRefMatches) {
-                context.printer.writeSemanticRef(
-                    conversation.semanticRefs[match.semanticRefIndex],
-                    match.score,
-                );
-            }
+            context.printer.writeSearchResults(conversation, matches);
         } else {
             ``;
             context.printer.writeError("Conversation is not indexed");
@@ -366,6 +369,25 @@ class KnowProPrinter extends ChatPrinter {
             }
         }
         return this;
+    }
+
+    public writeSearchResults(
+        conversation: kp.IConversation,
+        results: kp.SearchResult,
+    ) {
+        this.writeListInColor(chalk.green, results.termMatches, {
+            title: "Matched terms",
+            type: "ol",
+        });
+        this.writeLine(`${results.semanticRefMatches.length} matches`);
+        for (let i = 0; i < results.semanticRefMatches.length; ++i) {
+            const match = results.semanticRefMatches[i];
+            this.write(`(${i + 1})`);
+            this.writeSemanticRef(
+                conversation.semanticRefs![match.semanticRefIndex],
+                match.score,
+            );
+        }
     }
 
     public writeConversationInfo(conversation: kp.IConversation) {

@@ -66,7 +66,7 @@ export class TermsMatchExpr implements IQueryOpExpr<SemanticRefAccumulator> {
     }
 
     private accumulateMatches(queryTerm: QueryTerm): void {
-        this.matches.addForTerm(
+        this.matches.addTermMatch(
             queryTerm.term,
             this.index.lookupTerm(queryTerm.term.text),
         );
@@ -74,7 +74,7 @@ export class TermsMatchExpr implements IQueryOpExpr<SemanticRefAccumulator> {
             for (const relatedTerm of queryTerm.relatedTerms) {
                 // Related term matches count as matches for the queryTerm...
                 // BUT are scored with the score of the related term
-                this.matches.addForTermUnion(
+                this.matches.addRelatedTermMatch(
                     queryTerm.term,
                     this.index.lookupTerm(relatedTerm.text),
                     relatedTerm.score,
@@ -147,9 +147,19 @@ export class MatchAccumulator<T = any> {
         return this.matches.get(value);
     }
 
+    public setMatch(match: Match<T>): void {
+        this.matches.set(match.value, match);
+    }
+
+    public setMatches(matches: Match<T>[] | IterableIterator<Match<T>>): void {
+        for (const match of matches) {
+            this.matches.set(match.value, match);
+        }
+    }
+
     public add(value: T, score: number): void {
         let match = this.matches.get(value);
-        if (match) {
+        if (match !== undefined) {
             match.hitCount += 1;
             match.score += score;
         } else {
@@ -159,29 +169,6 @@ export class MatchAccumulator<T = any> {
                 hitCount: 1,
             };
             this.matches.set(value, match);
-        }
-    }
-
-    public addUnion(value: T, score: number) {
-        let match = this.matches.get(value);
-        if (match) {
-            if (match.score < score) {
-                match.score = score;
-            }
-        } else {
-            match = {
-                value,
-                score,
-                hitCount: 1,
-            };
-            this.matches.set(value, match);
-        }
-    }
-
-    public incrementScore(item: T, score: number): void {
-        let match = this.matches.get(item);
-        if (match) {
-            match.score += match.score;
         }
     }
 
@@ -252,12 +239,6 @@ export class MatchAccumulator<T = any> {
         this.matches.clear();
     }
 
-    public setMatches(matches: Match<T>[] | IterableIterator<Match<T>>): void {
-        for (const match of matches) {
-            this.matches.set(match.value, match);
-        }
-    }
-
     public mapMatches<M = any>(map: (m: Match<T>) => M): M[] {
         const items: M[] = [];
         for (const match of this.matches.values()) {
@@ -280,7 +261,7 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
         super();
     }
 
-    public addForTerm(
+    public addTermMatch(
         term: Term,
         semanticRefs: ScoredSemanticRef[] | undefined,
         scoreBoost?: number,
@@ -294,15 +275,28 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
         }
     }
 
-    public addForTermUnion(
+    public addRelatedTermMatch(
         term: Term,
         semanticRefs: ScoredSemanticRef[] | undefined,
         scoreBoost?: number,
     ) {
         if (semanticRefs) {
             scoreBoost ??= term.score ?? 0;
-            for (const match of semanticRefs) {
-                this.addUnion(match.semanticRefIndex, match.score + scoreBoost);
+            for (const semanticRef of semanticRefs) {
+                let score = semanticRef.score + scoreBoost;
+                let match = this.getMatch(semanticRef.semanticRefIndex);
+                if (match !== undefined) {
+                    if (match.score < score) {
+                        match.score = score;
+                    }
+                } else {
+                    match = {
+                        value: semanticRef.semanticRefIndex,
+                        score,
+                        hitCount: 1,
+                    };
+                    this.setMatch(match);
+                }
             }
             this.recordTermMatch(term.text);
         }
