@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { glob } from "glob";
-import { AppAgentInfo } from "agent-dispatcher/internal";
+import { AppAgentInfo } from "agent-dispatcher/helpers/npmAgentProvider";
 import { getPackageFilePath } from "./getPackageFilePath.js";
 import fs from "node:fs";
 

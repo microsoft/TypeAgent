@@ -3,14 +3,22 @@
 
 import { Args, Command, Flags } from "@oclif/core";
 import { createDispatcher } from "agent-dispatcher";
-import { getCacheFactory } from "agent-dispatcher/internal";
+import {
+    createActionConfigProvider,
+    getCacheFactory,
+    getInstanceDir,
+    getSchemaNamesForActionConfigProvider,
+} from "agent-dispatcher/internal";
 import { getDefaultAppAgentProviders } from "default-agent-provider";
-import { getSchemaNamesFromDefaultAppAgentProviders } from "default-agent-provider/internal";
 import chalk from "chalk";
 import { getChatModelNames } from "aiclient";
 import { readFileSync, existsSync } from "fs";
 
 const modelNames = await getChatModelNames();
+const defaultAppAgentProviders = getDefaultAppAgentProviders(getInstanceDir());
+const schemaNames = getSchemaNamesForActionConfigProvider(
+    await createActionConfigProvider(defaultAppAgentProviders),
+);
 export default class RequestCommand extends Command {
     static args = {
         request: Args.string({
@@ -27,7 +35,7 @@ export default class RequestCommand extends Command {
     static flags = {
         translator: Flags.string({
             description: "Schema name",
-            options: getSchemaNamesFromDefaultAppAgentProviders(),
+            options: schemaNames,
             multiple: true,
         }),
         explainer: Flags.string({
@@ -53,7 +61,7 @@ export default class RequestCommand extends Command {
             ? Object.fromEntries(flags.translator.map((name) => [name, true]))
             : undefined;
         const dispatcher = await createDispatcher("cli run request", {
-            appAgentProviders: getDefaultAppAgentProviders(),
+            appAgentProviders: defaultAppAgentProviders,
             schemas,
             actions: schemas,
             commands: { dispatcher: true },

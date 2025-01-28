@@ -38,6 +38,7 @@ import { createDispatcherRpcServer } from "agent-dispatcher/rpc/dispatcher/serve
 import { createGenericChannel } from "agent-rpc/channel";
 import net from "node:net";
 import { createClientIORpcClient } from "agent-dispatcher/rpc/clientio/client";
+import { getInstanceDir } from "agent-dispatcher/internal";
 
 console.log(auth.AzureTokenScopes.CogServices);
 
@@ -491,7 +492,7 @@ async function initializeDispatcher(
     const newDispatcher = await createDispatcher("shell", {
         appAgentProviders: [
             shellAgentProvider,
-            ...getDefaultAppAgentProviders(),
+            ...getDefaultAppAgentProviders(getInstanceDir()),
         ],
         explanationAsynchronousMode: true,
         persistSession: true,

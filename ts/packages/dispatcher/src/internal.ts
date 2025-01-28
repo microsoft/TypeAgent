@@ -22,18 +22,10 @@ export { getAssistantSelectionSchemas } from "./translation/unknownSwitcher.js";
 export { getActionSchema } from "./translation/actionSchemaFileCache.js";
 export { getFullSchemaText } from "./translation/agentTranslators.js";
 
+export { loadAgentJsonTranslator } from "./translation/agentTranslators.js";
+export { createSchemaInfoProvider } from "./translation/actionSchemaFileCache.js";
 export {
-    ActionConfig,
-    ActionConfigProvider,
-    convertToActionConfig,
-    loadAgentJsonTranslator,
-} from "./translation/agentTranslators.js";
-export {
-    AppAgentInfo,
-    createNpmAppAgentProvider,
-} from "./agentProvider/npmAgentProvider.js";
-export {
-    ActionSchemaFileCache,
-    createSchemaInfoProvider,
-} from "./translation/actionSchemaFileCache.js";
+    createActionConfigProvider,
+    getSchemaNamesForActionConfigProvider,
+} from "./agentProvider/agentProviderUtils.js";
 export { getInstanceDir } from "./utils/userData.js";

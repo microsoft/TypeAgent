@@ -4,10 +4,19 @@
 import { Args, Command, Flags } from "@oclif/core";
 import { createDispatcher } from "agent-dispatcher";
 import { getDefaultAppAgentProviders } from "default-agent-provider";
-import { getSchemaNamesFromDefaultAppAgentProviders } from "default-agent-provider/internal";
 import { getChatModelNames } from "aiclient";
+import {
+    createActionConfigProvider,
+    getInstanceDir,
+    getSchemaNamesForActionConfigProvider,
+} from "agent-dispatcher/internal";
 
 const modelNames = await getChatModelNames();
+const defaultAppAgentProviders = getDefaultAppAgentProviders(getInstanceDir());
+const schemaNames = getSchemaNamesForActionConfigProvider(
+    await createActionConfigProvider(defaultAppAgentProviders),
+);
+
 export default class TranslateCommand extends Command {
     static args = {
         request: Args.string({
@@ -20,7 +29,7 @@ export default class TranslateCommand extends Command {
     static flags = {
         translator: Flags.string({
             description: "Translator name",
-            options: getSchemaNamesFromDefaultAppAgentProviders(),
+            options: schemaNames,
             multiple: true,
         }),
         model: Flags.string({
@@ -41,7 +50,7 @@ export default class TranslateCommand extends Command {
             : undefined;
 
         const dispatcher = await createDispatcher("cli run translate", {
-            appAgentProviders: getDefaultAppAgentProviders(),
+            appAgentProviders: defaultAppAgentProviders,
             schemas,
             actions: null,
             commands: { dispatcher: true },

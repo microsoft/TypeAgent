@@ -14,5 +14,7 @@ export interface ConstructionProvider {
     getBuiltinConstructionConfig(
         explainerName: string,
     ): { data: string[]; file: string } | undefined;
-    getImportTranslationFiles(extended: boolean): Promise<string[]>;
+
+    // extended: default is true to get all translation files
+    getImportTranslationFiles(extended?: boolean): Promise<string[]>;
 }

@@ -4,12 +4,18 @@
 import { Args, Command, Flags } from "@oclif/core";
 import chalk from "chalk";
 import { CorrectionRecord } from "agent-cache";
-import { getCacheFactory, readTestData } from "agent-dispatcher/internal";
 import {
-    getSchemaNamesFromDefaultAppAgentProviders,
-    getTestDataFiles,
-} from "default-agent-provider/internal";
+    getCacheFactory,
+    readTestData,
+    getSchemaNamesForActionConfigProvider,
+    createActionConfigProvider,
+    getInstanceDir,
+} from "agent-dispatcher/internal";
 import path from "node:path";
+import {
+    getDefaultAppAgentProviders,
+    getDefaultConstructionProvider,
+} from "default-agent-provider";
 
 function commonPathPrefix(s: string[]) {
     const paths = s.map((str) => str.split(path.sep));
@@ -136,6 +142,12 @@ function printStats(
     console.log();
 }
 
+const schemaNames = getSchemaNamesForActionConfigProvider(
+    await createActionConfigProvider(
+        getDefaultAppAgentProviders(getInstanceDir()),
+    ),
+);
+
 export default class ExplanationDataStatCommmand extends Command {
     static strict = false;
     static args = {
@@ -147,7 +159,7 @@ export default class ExplanationDataStatCommmand extends Command {
     static flags = {
         translator: Flags.string({
             description: "Filter by translator",
-            options: getSchemaNamesFromDefaultAppAgentProviders(),
+            options: schemaNames,
             multiple: true,
         }),
         explainer: Flags.string({
@@ -188,7 +200,9 @@ export default class ExplanationDataStatCommmand extends Command {
     async run(): Promise<void> {
         const { flags, argv } = await this.parse(ExplanationDataStatCommmand);
         const files =
-            argv.length !== 0 ? (argv as string[]) : await getTestDataFiles();
+            argv.length !== 0
+                ? (argv as string[])
+                : await getDefaultConstructionProvider().getImportTranslationFiles();
 
         const collectOneStat = (
             statsMap: Map<string, Record<string, number>>,

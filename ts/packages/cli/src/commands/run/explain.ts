@@ -4,9 +4,13 @@
 import { Args, Command, Flags } from "@oclif/core";
 import chalk from "chalk";
 import { RequestAction, Actions } from "agent-cache";
-import { getCacheFactory } from "agent-dispatcher/internal";
+import {
+    createActionConfigProvider,
+    getCacheFactory,
+    getInstanceDir,
+    getSchemaNamesForActionConfigProvider,
+} from "agent-dispatcher/internal";
 import { getDefaultAppAgentProviders } from "default-agent-provider";
-import { getSchemaNamesFromDefaultAppAgentProviders } from "default-agent-provider/internal";
 import { withConsoleClientIO } from "agent-dispatcher/helpers/console";
 import { ClientIO, createDispatcher } from "agent-dispatcher";
 
@@ -21,6 +25,12 @@ const testRequest = new RequestAction(
         },
     }),
 );
+
+const defaultAgentProviders = getDefaultAppAgentProviders(getInstanceDir());
+const schemaNames = getSchemaNamesForActionConfigProvider(
+    await createActionConfigProvider(defaultAgentProviders),
+);
+
 export default class ExplainCommand extends Command {
     static args = {
         request: Args.string({
@@ -31,7 +41,7 @@ export default class ExplainCommand extends Command {
     static flags = {
         translator: Flags.string({
             description: "Translator names",
-            options: getSchemaNamesFromDefaultAppAgentProviders(),
+            options: schemaNames,
             multiple: true,
         }),
         explainer: Flags.string({
@@ -87,7 +97,7 @@ export default class ExplainCommand extends Command {
 
         await withConsoleClientIO(async (clientIO: ClientIO) => {
             const dispatcher = await createDispatcher("cli run explain", {
-                appAgentProviders: getDefaultAppAgentProviders(),
+                appAgentProviders: defaultAgentProviders,
                 schemas,
                 actions: null, // We don't need any actions
                 commands: { dispatcher: true },

@@ -10,6 +10,8 @@ import {
     getCacheFactory,
     convertTestDataToExplanationData,
     readTestData,
+    createActionConfigProvider,
+    createSchemaInfoProvider,
 } from "agent-dispatcher/internal";
 import {
     Actions,
@@ -22,22 +24,22 @@ import {
     normalizeParamValue,
     normalizeParamString,
 } from "agent-cache";
-import { createSchemaInfoProviderFromDefaultAppAgentProviders } from "../src/defaultAgentProviders.js";
 import { glob } from "glob";
 import { fileURLToPath } from "node:url";
+import { getDefaultAppAgentProviders } from "../src/defaultAgentProviders.js";
+
+const schemaInfoProvider = createSchemaInfoProvider(
+    await createActionConfigProvider(getDefaultAppAgentProviders(undefined)),
+);
 
 export async function getImportedCache(
     explainerName: string,
     merge: boolean = false,
 ) {
-    const cache = getCacheFactory().create(
-        explainerName,
-        createSchemaInfoProviderFromDefaultAppAgentProviders(),
-        {
-            mergeMatchSets: merge,
-            cacheConflicts: true,
-        },
-    );
+    const cache = getCacheFactory().create(explainerName, schemaInfoProvider, {
+        mergeMatchSets: merge,
+        cacheConflicts: true,
+    });
     await cache.import(
         inputs
             .filter(([i]) => i.explainerName === explainerName)

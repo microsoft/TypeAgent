@@ -7,12 +7,17 @@ import {
     getAssistantSelectionSchemas,
     getFullSchemaText,
     getActionSchema,
+    createActionConfigProvider,
+    getSchemaNamesForActionConfigProvider,
+    getInstanceDir,
 } from "agent-dispatcher/internal";
-import {
-    getSchemaNamesFromDefaultAppAgentProviders,
-    getActionConfigProviderFromDefaultAppAgentProviders,
-} from "default-agent-provider/internal";
 import { generateSchemaTypeDefinition } from "action-schema";
+import { getDefaultAppAgentProviders } from "default-agent-provider";
+
+const provider = await createActionConfigProvider(
+    getDefaultAppAgentProviders(getInstanceDir()),
+);
+const schemaNames = getSchemaNamesForActionConfigProvider(provider);
 
 export default class Schema extends Command {
     static description = "Show schema used by translators";
@@ -45,7 +50,7 @@ export default class Schema extends Command {
         translator: Args.string({
             description: "Translator name",
             required: true,
-            options: getSchemaNamesFromDefaultAppAgentProviders(),
+            options: schemaNames,
         }),
         actionName: Args.string({
             description: "Action name",
@@ -55,7 +60,6 @@ export default class Schema extends Command {
 
     async run(): Promise<void> {
         const { args, flags } = await this.parse(Schema);
-        const provider = getActionConfigProviderFromDefaultAppAgentProviders();
         if (!flags.assistant) {
             if (args.actionName) {
                 const actionSchema = getActionSchema(
@@ -87,7 +91,7 @@ export default class Schema extends Command {
             );
         } else {
             const schemas = getAssistantSelectionSchemas(
-                getSchemaNamesFromDefaultAppAgentProviders(),
+                schemaNames,
                 provider,
             ).map((entry) => entry.schema);
             console.log(

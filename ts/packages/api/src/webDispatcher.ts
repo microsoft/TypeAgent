@@ -2,13 +2,14 @@
 // Licensed under the MIT License.
 
 import { createDispatcher } from "agent-dispatcher";
+import { getInstanceDir } from "agent-dispatcher/internal";
+import { createClientIORpcClient } from "agent-dispatcher/rpc/clientio/client";
+import { createDispatcherRpcServer } from "agent-dispatcher/rpc/dispatcher/server";
+import { createGenericChannel } from "agent-rpc/channel";
 import {
     getDefaultAppAgentProviders,
     getDefaultConstructionProvider,
 } from "default-agent-provider";
-import { createClientIORpcClient } from "agent-dispatcher/rpc/clientio/client";
-import { createDispatcherRpcServer } from "agent-dispatcher/rpc/dispatcher/server";
-import { createGenericChannel } from "agent-rpc/channel";
 import WebSocket from "ws";
 
 export interface WebDispatcher {
@@ -28,7 +29,7 @@ export async function createWebDispatcher(): Promise<WebDispatcher> {
 
     const clientIO = createClientIORpcClient(clientIOChannel.channel);
     const dispatcher = await createDispatcher("api", {
-        appAgentProviders: getDefaultAppAgentProviders(),
+        appAgentProviders: getDefaultAppAgentProviders(getInstanceDir()),
         explanationAsynchronousMode: true,
         persistSession: true,
         enableServiceHost: true,

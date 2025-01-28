@@ -29,8 +29,8 @@ function patchPaths(manifest: ActionManifest, dir: string) {
         );
     }
     if (manifest.subActionManifests) {
-        for (const subManfiest of Object.values(manifest.subActionManifests)) {
-            patchPaths(subManfiest, dir);
+        for (const subManifest of Object.values(manifest.subActionManifests)) {
+            patchPaths(subManifest, dir);
         }
     }
 }

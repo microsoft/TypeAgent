@@ -1,18 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { AppAgentManifest } from "@typeagent/agent-sdk";
 import { AppAgentProvider } from "agent-dispatcher";
-import {
-    ActionConfig,
-    ActionConfigProvider,
-    convertToActionConfig,
-    AppAgentInfo,
-    createNpmAppAgentProvider,
-    ActionSchemaFileCache,
-    createSchemaInfoProvider,
-    getInstanceDir,
-} from "agent-dispatcher/internal";
+import { createNpmAppAgentProvider } from "agent-dispatcher/helpers/npmAgentProvider";
 
 import path from "node:path";
 import fs from "node:fs";
@@ -48,80 +38,19 @@ function getExternalAgentsConfig(instanceDir: string): AppAgentConfig {
     return externalAppAgentsConfig;
 }
 
-let externalAppAgentProvider: AppAgentProvider | undefined;
 function getExternalAppAgentProvider(instanceDir: string): AppAgentProvider {
-    if (externalAppAgentProvider === undefined) {
-        externalAppAgentProvider = createNpmAppAgentProvider(
-            getExternalAgentsConfig(instanceDir).agents,
-            path.join(instanceDir, "externalagents/package.json"),
-        );
-    }
-    return externalAppAgentProvider;
-}
-
-export function getDefaultAppAgentProviders(): AppAgentProvider[] {
-    return [
-        getBuiltinAppAgentProvider(),
-        getExternalAppAgentProvider(getInstanceDir()),
-    ];
-}
-
-let appAgentConfigs: Map<string, AppAgentManifest> | undefined;
-async function getDefaultAppAgentManifests() {
-    if (appAgentConfigs === undefined) {
-        appAgentConfigs = new Map();
-        const appAgentProviders = getDefaultAppAgentProviders();
-        for (const provider of appAgentProviders) {
-            for (const name of provider.getAppAgentNames()) {
-                const manifest = await provider.getAppAgentManifest(name);
-                appAgentConfigs.set(name, manifest);
-            }
-        }
-    }
-    return appAgentConfigs;
-}
-
-const actionConfigs: { [key: string]: ActionConfig } = await (async () => {
-    const configs = {};
-    const appAgentConfigs = await getDefaultAppAgentManifests();
-    for (const [name, config] of appAgentConfigs.entries()) {
-        convertToActionConfig(name, config, configs);
-    }
-    return configs;
-})();
-
-export function getSchemaNamesFromDefaultAppAgentProviders() {
-    return Object.keys(actionConfigs);
-}
-
-let actionConfigProvider: ActionConfigProvider | undefined;
-export function getActionConfigProviderFromDefaultAppAgentProviders(): ActionConfigProvider {
-    if (actionConfigProvider === undefined) {
-        const actionSchemaFileCache = new ActionSchemaFileCache();
-        actionConfigProvider = {
-            tryGetActionConfig(schemaName: string) {
-                return actionConfigs[schemaName];
-            },
-            getActionConfig(schemaName: string) {
-                const config = actionConfigs[schemaName];
-                if (!config) {
-                    throw new Error(`Unknown schema name: ${schemaName}`);
-                }
-                return config;
-            },
-            getActionConfigs() {
-                return Object.entries(actionConfigs);
-            },
-            getActionSchemaFileForConfig(actionConfig: ActionConfig) {
-                return actionSchemaFileCache.getActionSchemaFile(actionConfig);
-            },
-        };
-    }
-    return actionConfigProvider;
-}
-
-export function createSchemaInfoProviderFromDefaultAppAgentProviders() {
-    return createSchemaInfoProvider(
-        getActionConfigProviderFromDefaultAppAgentProviders(),
+    return createNpmAppAgentProvider(
+        getExternalAgentsConfig(instanceDir).agents,
+        path.join(instanceDir, "externalagents/package.json"),
     );
+}
+
+export function getDefaultAppAgentProviders(
+    instanceDir: string | undefined,
+): AppAgentProvider[] {
+    const providers = [getBuiltinAppAgentProvider()];
+    if (instanceDir !== undefined) {
+        providers.push(getExternalAppAgentProvider(instanceDir));
+    }
+    return providers;
 }

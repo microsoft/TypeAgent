@@ -4,12 +4,16 @@
 import { Args, Command, Flags } from "@oclif/core";
 import { Actions, FullAction } from "agent-cache";
 import { createDispatcher } from "agent-dispatcher";
-import { readTestData } from "agent-dispatcher/internal";
-import { getDefaultAppAgentProviders } from "default-agent-provider";
 import {
-    getTestDataFiles,
-    getSchemaNamesFromDefaultAppAgentProviders,
-} from "default-agent-provider/internal";
+    readTestData,
+    getSchemaNamesForActionConfigProvider,
+    createActionConfigProvider,
+    getInstanceDir,
+} from "agent-dispatcher/internal";
+import {
+    getDefaultAppAgentProviders,
+    getDefaultConstructionProvider,
+} from "default-agent-provider";
 import chalk from "chalk";
 import fs from "node:fs";
 import { getElapsedString } from "common-utils";
@@ -66,6 +70,12 @@ function summarizeResult(result: TestResultFile) {
         console.log(`  ${(key ?? "undefined").padEnd(80)}: ${count}`);
     }
 }
+
+const defaultAppAgentProviders = getDefaultAppAgentProviders(getInstanceDir());
+const schemaNames = getSchemaNamesForActionConfigProvider(
+    await createActionConfigProvider(defaultAppAgentProviders),
+);
+
 export default class TestTranslateCommand extends Command {
     static args = {
         files: Args.string({
@@ -78,7 +88,7 @@ export default class TestTranslateCommand extends Command {
     static flags = {
         translator: Flags.string({
             description: "Schema names",
-            options: getSchemaNamesFromDefaultAppAgentProviders(),
+            options: schemaNames,
             multiple: true,
         }),
         concurrency: Flags.integer({
@@ -151,7 +161,9 @@ export default class TestTranslateCommand extends Command {
         } else {
             repeat = flags.repeat ?? 1;
             const files =
-                argv.length > 0 ? (argv as string[]) : await getTestDataFiles();
+                argv.length > 0
+                    ? (argv as string[])
+                    : await getDefaultConstructionProvider().getImportTranslationFiles();
 
             const inputs = await Promise.all(
                 files.map(async (file) => {
@@ -191,7 +203,7 @@ export default class TestTranslateCommand extends Command {
 
         async function worker() {
             const dispatcher = await createDispatcher("cli test translate", {
-                appAgentProviders: getDefaultAppAgentProviders(),
+                appAgentProviders: defaultAppAgentProviders,
                 schemas,
                 actions: null,
                 commands: { dispatcher: true },

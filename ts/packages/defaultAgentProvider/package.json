@@ -12,8 +12,7 @@
   "author": "Microsoft",
   "type": "module",
   "exports": {
-    ".": "./dist/index.js",
-    "./internal": "./dist/internal.js"
+    ".": "./dist/index.js"
   },
   "scripts": {
     "build": "npm run tsc",

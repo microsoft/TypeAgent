@@ -22,10 +22,10 @@ import {
 } from "./session.js";
 import {
     loadAgentJsonTranslator,
-    ActionConfigProvider,
     TypeAgentTranslator,
     createTypeAgentTranslatorForSelectedActions,
 } from "../translation/agentTranslators.js";
+import { ActionConfigProvider } from "../translation/actionConfigProvider.js";
 import { getCacheFactory } from "../utils/cacheFactory.js";
 import { createServiceHost } from "./system/handlers/serviceHost/serviceHostCommandHandler.js";
 import {

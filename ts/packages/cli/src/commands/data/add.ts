@@ -11,17 +11,21 @@ import {
     printTestDataStats,
     getEmptyTestData,
     getCacheFactory,
+    createActionConfigProvider,
+    getSchemaNamesForActionConfigProvider,
+    getInstanceDir,
 } from "agent-dispatcher/internal";
-import {
-    getSchemaNamesFromDefaultAppAgentProviders,
-    getActionConfigProviderFromDefaultAppAgentProviders,
-} from "default-agent-provider/internal";
 import chalk from "chalk";
 import { getDefaultExplainerName } from "agent-cache";
 import { getChatModelMaxConcurrency, getChatModelNames } from "aiclient";
+import { getDefaultAppAgentProviders } from "default-agent-provider";
 
 const cacheFactory = getCacheFactory();
 const modelNames = await getChatModelNames();
+const provider = await createActionConfigProvider(
+    getDefaultAppAgentProviders(getInstanceDir()),
+);
+const schemaNames = getSchemaNamesForActionConfigProvider(provider);
 export default class ExplanationDataAddCommand extends Command {
     static args = {
         request: Args.string({
@@ -48,7 +52,7 @@ export default class ExplanationDataAddCommand extends Command {
         }),
         translator: Flags.string({
             description: "Translator name",
-            options: getSchemaNamesFromDefaultAppAgentProviders(),
+            options: schemaNames,
         }),
         explainer: Flags.string({
             description:
@@ -97,7 +101,6 @@ export default class ExplanationDataAddCommand extends Command {
             }
             inputs.push(args.request);
         }
-        const provider = getActionConfigProviderFromDefaultAppAgentProviders();
         if (inputs.length !== 0) {
             let existingData: TestData;
             if (
