@@ -6,7 +6,7 @@ import { readTestData } from "agent-dispatcher/internal";
 import { Actions, RequestAction } from "agent-cache";
 import { glob } from "glob";
 
-const dataFiles = ["test/data/**/**/*.json"];
+const dataFiles = ["test/data/explanations/**/**/*.json"];
 
 const inputs = await Promise.all(
     (await glob(dataFiles)).map((f) => readTestData(getPackageFilePath(f))),
