@@ -28,6 +28,7 @@ export interface Chunk {
     // Names here must match names in chunker.py.
     chunkId: ChunkId;
     treeName: string;
+    codeName: string;
     blobs: Blob[];
     parentId: ChunkId;
     children: ChunkId[];

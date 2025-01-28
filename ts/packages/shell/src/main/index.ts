@@ -494,6 +494,7 @@ async function initializeDispatcher(
         persistSession: true,
         enableServiceHost: true,
         metrics: true,
+        dblogging: true,
         clientIO,
     });
 
