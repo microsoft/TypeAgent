@@ -24,7 +24,7 @@
     "prettier": "prettier --check . --ignore-path ../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
     "start": "electron-vite preview",
-    "test": "npx playwright test",
+    "shell:test": "npx playwright test",
     "typecheck": "concurrently npm:typecheck:node npm:typecheck:web",
     "typecheck:node": "tsc -p tsconfig.node.json",
     "typecheck:web": "tsc -p tsconfig.web.json"
