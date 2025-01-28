@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { parseCalendarDateTime } from "datetime-utils";
+import { parseCalendarDateTime } from "./datetime/calendarDateTimeParser.js";
 import {
     createCalendarGraphClient,
     CalendarClient,
