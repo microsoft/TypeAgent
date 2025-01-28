@@ -18,7 +18,7 @@ import { SchemaConfig } from "../src/schemaConfig.js";
 const defaultAgentProviderPath = fileURLToPath(
     new URL("../../../defaultAgentProvider", import.meta.url),
 );
-const configPath = path.resolve(defaultAgentProviderPath, "./src/config.json");
+const configPath = path.resolve(defaultAgentProviderPath, "./data/config.json");
 const config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
 
 const tests: {
