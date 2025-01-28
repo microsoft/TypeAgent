@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ITermToSemanticRefIndex, ScoredSemanticRef } from "./dataFormat.js";
+import { IConversation, ScoredSemanticRef } from "./dataFormat.js";
 import * as q from "./query.js";
 
 export class SearchResult {
@@ -15,19 +15,55 @@ export class SearchResult {
     }
 }
 
-export function searchTermsInIndex(
-    semanticRefIndex: ITermToSemanticRefIndex,
+export async function searchTermsInConversation(
+    conversation: IConversation,
     terms: q.QueryTerm[],
     maxMatches?: number,
     minHitCount?: number,
-): SearchResult {
+): Promise<SearchResult> {
+    const semanticRefIndex = conversation.semanticRefIndex;
+    if (semanticRefIndex === undefined) {
+        return new SearchResult();
+    }
+
+    const relatedTermIndex = conversation.relatedTermsIndex;
     const context = new q.QueryEvalContext();
+    const queryTerms = new q.QueryTermsExpr(terms);
     const query = new q.SelectTopNExpr(
-        new q.TermsMatchExpr(semanticRefIndex, terms),
+        new q.TermsMatchExpr(
+            semanticRefIndex,
+            relatedTermIndex !== undefined
+                ? new q.ResolveRelatedTermsExpr(relatedTermIndex, queryTerms)
+                : queryTerms,
+        ),
         maxMatches,
         minHitCount,
     );
-    const evalResults = query.eval(context);
+    const evalResults = await query.eval(context);
+    return new SearchResult(
+        evalResults.termMatches,
+        evalResults.toScoredSemanticRefs(),
+    );
+}
+
+export async function searchTermsInConversationExact(
+    conversation: IConversation,
+    terms: q.QueryTerm[],
+    maxMatches?: number,
+    minHitCount?: number,
+): Promise<SearchResult> {
+    const semanticRefIndex = conversation.semanticRefIndex;
+    if (semanticRefIndex === undefined) {
+        return new SearchResult();
+    }
+
+    const context = new q.QueryEvalContext();
+    const query = new q.SelectTopNExpr(
+        new q.TermsMatchExpr(semanticRefIndex, new q.QueryTermsExpr(terms)),
+        maxMatches,
+        minHitCount,
+    );
+    const evalResults = await query.eval(context);
     return new SearchResult(
         evalResults.termMatches,
         evalResults.toScoredSemanticRefs(),

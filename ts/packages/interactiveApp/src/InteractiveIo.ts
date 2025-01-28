@@ -226,11 +226,15 @@ export class ProgressBar {
         public count = 0,
     ) {}
 
-    public advance() {
+    public advance(amount: number = 1) {
         if (this.count >= this.total) {
             return;
         }
-        ++this.count;
+        let next = this.count + amount;
+        if (next >= this.total) {
+            next = this.total;
+        }
+        this.count = next;
         let progressText = `[${this.count} / ${this.total}]`;
         this.writer.writeInline(progressText, this._lastText);
         this._lastText = progressText;
