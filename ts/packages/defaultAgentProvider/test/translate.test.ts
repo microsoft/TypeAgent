@@ -5,10 +5,13 @@ import dotenv from "dotenv";
 dotenv.config({ path: new URL("../../../../.env", import.meta.url) });
 
 import { getPackageFilePath } from "../src/utils/getPackageFilePath.js";
-import { readTestData } from "../src/utils/test/testData.js";
-import { loadAgentJsonTranslator } from "../src/translation/agentTranslators.js";
+import {
+    readTestData,
+    loadAgentJsonTranslator,
+} from "agent-dispatcher/internal";
+import { createActionConfigProvider } from "agent-dispatcher/internal";
 import { JSONAction } from "agent-cache";
-import { getActionConfigProviderFromDefaultAppAgentProviders } from "../src/utils/defaultAppProviders.js";
+import { getDefaultAppAgentProviders } from "../src/defaultAgentProviders.js";
 const dataFiles = [
     "test/data/player/v5/simple.json",
     "test/data/player/v5/full.json",
@@ -27,13 +30,16 @@ const testInput = inputs.flatMap((f) =>
     ]),
 );
 
+const provider = await createActionConfigProvider(
+    getDefaultAppAgentProviders(undefined),
+);
 describe("translation", () => {
     it.each(testInput)(
         "translate [%s] '%s'",
         async (translatorName, request, action) => {
             const translator = loadAgentJsonTranslator(
                 translatorName,
-                getActionConfigProviderFromDefaultAppAgentProviders(),
+                provider,
             );
             const result = await translator.translate(request);
             expect(result.success).toBe(true);

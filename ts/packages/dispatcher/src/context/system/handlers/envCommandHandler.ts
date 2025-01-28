@@ -2,13 +2,18 @@
 // Licensed under the MIT License.
 
 import {
+    CommandHandler,
     CommandHandlerNoParams,
     CommandHandlerTable,
 } from "@typeagent/agent-sdk/helpers/command";
 import { CommandHandlerContext } from "../../commandHandlerContext.js";
-import { ActionContext } from "@typeagent/agent-sdk";
-import { displayResult } from "@typeagent/agent-sdk/helpers/display";
+import { ActionContext, ParsedCommandParams } from "@typeagent/agent-sdk";
+import {
+    displayError,
+    displayResult,
+} from "@typeagent/agent-sdk/helpers/display";
 import dotenv from "dotenv";
+import { Action } from "agent-cache";
 
 export class EnvCommandHandler implements CommandHandlerNoParams {
     public readonly description =
@@ -37,4 +42,40 @@ export class EnvCommandHandler implements CommandHandlerNoParams {
 
         displayResult(table, context);
     }
+}
+
+export class EnvVarCommandHandler implements CommandHandler {
+    public readonly description: string =
+        "Echos the value of a named environment variable to the user interface";
+    public readonly parameters = {
+        args: {
+            name: {
+                description: "The name of the environment variable.",
+            },
+        },
+    } as const;
+    public async run(
+        context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        if (process.env[params.args.name]) {
+            displayResult(process.env[params.args.name]!, context);
+        } else {
+            displayError(
+                `The environment variable ${params.args.name} does not exist.`,
+                context,
+            );
+        }
+    }
+}
+
+export function getEnvCommandHandlers(): CommandHandlerTable {
+    return {
+        description: "Environment variable commands",
+        defaultSubCommand: "all",
+        commands: {
+            all: new EnvCommandHandler(),
+            get: new EnvVarCommandHandler(),
+        },
+    };
 }

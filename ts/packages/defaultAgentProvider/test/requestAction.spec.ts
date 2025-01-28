@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { getPackageFilePath } from "../src/utils/getPackageFilePath.js";
-import { readTestData } from "../src/utils/test/testData.js";
+import { readTestData } from "agent-dispatcher/internal";
 import { Actions, RequestAction } from "agent-cache";
 import { glob } from "glob";
 
