@@ -5,8 +5,7 @@
     {"request": "Did duke win its bball game", "action": "chat.lookupAndGenerateResponse"},
     {"request": "Lookup duke result on the web", "action": "chat.lookupAndGenerateResponse"},
     {"request": "add play to the To do list", "action": "list.addItems"},
-    {"request": "add homework to To do list", "action": "list.addItems"},
-    {"request": "add shopping to To do list", "action": "list.addItems"},
+    {"request": "add homework to To do list", "action": "list.addItems"},    
     {"request": "add plan holiday to To do list.", "action": "list.addItems"},
     {
         "request": "get my top 50 favorite songs, filter the current list to Bach pieces, and create a playlist call test",
