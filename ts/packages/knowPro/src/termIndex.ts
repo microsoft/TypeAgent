@@ -2,7 +2,6 @@
 // Licensed under the MIT License.
 
 import { openai, TextEmbeddingModel } from "aiclient";
-import { createEmbeddingCache } from "knowledge-processor";
 import {
     generateEmbedding,
     indexesOfNearest,
@@ -119,7 +118,10 @@ export class TermSemanticIndex
     public deserialize(data: ITextEmbeddingData): void {
         if (data.embeddingData !== undefined) {
             for (const item of data.embeddingData) {
-                this.pushTermEmbedding(item.text, item.embedding);
+                this.pushTermEmbedding(
+                    item.text,
+                    new Float32Array(item.embedding),
+                );
             }
         }
     }
@@ -129,7 +131,7 @@ export class TermSemanticIndex
         for (let i = 0; i < this.termText.length; ++i) {
             embeddingData.push({
                 text: this.termText[i],
-                embedding: this.termEmbeddings[i],
+                embedding: Array.from<number>(this.termEmbeddings[i]),
             });
         }
         return {
@@ -156,15 +158,15 @@ export class TermSemanticIndex
 
 export type SemanticIndexSettings = {
     embeddingModel: TextEmbeddingModel;
+    minScore: number;
     maxMatches?: number | undefined;
-    minScore?: number | undefined;
     retryMaxAttempts?: number;
     retryPauseMs?: number;
 };
 
 export function createSemanticIndexSettings(): SemanticIndexSettings {
     return {
-        embeddingModel: createEmbeddingCache(openai.createEmbeddingModel(), 64),
+        embeddingModel: openai.createEmbeddingModel(),
         minScore: 0.8,
         retryMaxAttempts: 2,
         retryPauseMs: 2000,

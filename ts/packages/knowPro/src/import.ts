@@ -9,7 +9,7 @@ import {
     IConversationData,
     ITextEmbeddingData,
 } from "./dataFormat.js";
-import { conversation, createEmbeddingCache, split } from "knowledge-processor";
+import { conversation, split } from "knowledge-processor";
 import { collections, getFileName, readAllText } from "typeagent";
 import {
     ConversationIndex,
@@ -22,10 +22,10 @@ import {
 import { Result } from "typechat";
 import {
     buildTermSemanticIndex,
+    createSemanticIndexSettings,
     SemanticIndexSettings,
     TermSemanticIndex,
 } from "./termIndex.js";
-import { openai } from "aiclient";
 
 // metadata for podcast messages
 export class PodcastMessageMeta implements IKnowledgeSource {
@@ -109,12 +109,7 @@ export type PodcastSettings = {
 
 export function createPodcastSettings(): PodcastSettings {
     return {
-        relatedTermIndexSettings: {
-            embeddingModel: createEmbeddingCache(
-                openai.createEmbeddingModel(),
-                64,
-            ),
-        },
+        relatedTermIndexSettings: createSemanticIndexSettings(),
     };
 }
 

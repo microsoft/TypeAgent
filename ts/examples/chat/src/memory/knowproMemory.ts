@@ -63,7 +63,8 @@ export async function createKnowproCommands(
                 filePath: arg("File path to transcript file"),
             },
             options: {
-                index: argBool("Build index", true),
+                knowLedge: argBool("Index knowledge", true),
+                related: argBool("Index related terms", true),
                 indexFilePath: arg("Output path for index file"),
                 maxMessages: argNum("Maximum messages to index"),
             },
@@ -86,7 +87,7 @@ export async function createKnowproCommands(
         }
 
         // Build index
-        await podcastBuildIndex(args);
+        await podcastBuildIndex(namedArgs);
         // Save the index
         namedArgs.filePath = sourcePathToIndexPath(
             namedArgs.filePath,
@@ -175,10 +176,9 @@ export async function createKnowproCommands(
                 `Searching ${conversation.nameTag}...`,
             );
 
-            const matches = kp.searchTermsInIndex(
-                conversation.semanticRefIndex,
+            const matches = await kp.searchTermsInConversation(
+                conversation,
                 terms,
-                undefined,
             );
             if (!matches.hasMatches) {
                 context.printer.writeLine("No matches");
@@ -196,6 +196,7 @@ export async function createKnowproCommands(
                 );
             }
         } else {
+            ``;
             context.printer.writeError("Conversation is not indexed");
         }
     }
@@ -235,7 +236,9 @@ export async function createKnowproCommands(
         };
     }
     commands.kpPodcastBuildIndex.metadata = podcastBuildIndexDef();
-    async function podcastBuildIndex(args: string[]): Promise<void> {
+    async function podcastBuildIndex(
+        args: string[] | NamedArgs,
+    ): Promise<void> {
         if (!context.podcast) {
             context.printer.writeError("No podcast loaded");
             return;

@@ -2,7 +2,6 @@
 // Licensed under the MIT License.
 
 import { conversation } from "knowledge-processor";
-import { NormalizedEmbedding } from "typeagent";
 
 // an object that can provide a KnowledgeResponse structure
 export interface IKnowledgeSource {
@@ -127,5 +126,5 @@ export interface ITextEmbeddingData {
 
 export interface ITextEmbeddingDataItem {
     text: string;
-    embedding: NormalizedEmbedding;
+    embedding: number[];
 }
