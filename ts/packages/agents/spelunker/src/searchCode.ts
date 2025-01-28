@@ -222,7 +222,17 @@ export async function searchCode(
         );
     }
 
-    return createActionResultFromMarkdownDisplay(answer, entities);
+    const resultEntity: Entity = {
+        name: `answer for ${input}`,
+        type: ["text", "answer", "markdown"],
+        uniqueId: "<TODO: unique ID>",
+        additionalEntityText: answer,
+    };
+    return createActionResultFromMarkdownDisplay(
+        answer,
+        entities,
+        resultEntity,
+    );
 }
 
 function prepChunk(
@@ -397,13 +407,15 @@ function getAllPyFilesSync(dir: string): string[] {
 
 // Should be in actionHelpers.ts
 function createActionResultFromMarkdownDisplay(
-    markdownText: string,
-    entities?: Entity[],
+    literalText: string,
+    entities: Entity[],
+    resultEntity: Entity,
 ): ActionResultSuccess {
     return {
-        literalText: markdownText,
-        entities: entities ?? [],
-        displayContent: { type: "markdown", content: markdownText },
+        literalText,
+        entities,
+        resultEntity,
+        displayContent: { type: "markdown", content: literalText },
     };
 }
 
