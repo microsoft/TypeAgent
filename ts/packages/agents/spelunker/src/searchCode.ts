@@ -378,6 +378,7 @@ function createTranslator<T extends object>(
  * (First version written by ChatGPT)
  */
 const supportedExtensions = [".py", ".ts"];
+const skipDirectories = ["node_modules", ".git", "dist"];
 function getAllSourceFilesSync(dir: string): string[] {
     let results: string[] = [];
 
@@ -391,7 +392,12 @@ function getAllSourceFilesSync(dir: string): string[] {
         const filePath = path.join(absoluteDir, file);
         const stat = fs.statSync(filePath);
 
-        if (stat && !stat.isSymbolicLink() && stat.isDirectory()) {
+        if (
+            stat &&
+            !stat.isSymbolicLink() &&
+            stat.isDirectory() &&
+            !skipDirectories.includes(file)
+        ) {
             // Recursively search in subdirectories
             results = results.concat(getAllSourceFilesSync(filePath));
         } else if (
