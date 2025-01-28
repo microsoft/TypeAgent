@@ -32,7 +32,6 @@ function createTestClientIO(data: IAgentMessage[]): ClientIO {
 }
 
 describe("dispatcher", () => {
-
     describe("Custom Provider", () => {
         describe("Command", () => {
             const output: IAgentMessage[] = [];
