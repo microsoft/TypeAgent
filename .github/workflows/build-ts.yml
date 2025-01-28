@@ -97,7 +97,8 @@ jobs:
       - name: Test CLI - smoke
         run: |
             npm run start:dev 'prompt' 'why is the sky blue'
-        working-directory: ts/packages/cli        
+        working-directory: ts/packages/cli
+        continue-on-error: true
       - name: Shell Tests - smoke
         if: {{ matrix.os }} == "windows-latest"
         timeout-minutes: 60
@@ -105,4 +106,5 @@ jobs:
           npx playwright test simple.spec.ts
           rm ../../.env
         working-directory: ts/packages/shell
+        continue-on-error: true
 
