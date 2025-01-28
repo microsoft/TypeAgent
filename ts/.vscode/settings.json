@@ -5,6 +5,7 @@
         "AUTOINCREMENT",
         "Exif",
         "exifreader",
+        "Knowpro",
         "lightgray",
         "NOCASE",
         "oclif",

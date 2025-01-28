@@ -1,7 +1,7 @@
 {
   "version": 2,
   "schemaName": "player",
-  "sourceHash": "/coyfq1j8qYAwzuqFo38QLrP2X7DZ/U6UJRPEiLjn7Q=",
+  "sourceHash": "HrhZPog7XXm93zb5xwYtzWspziPTFgFnvgb4UUJ85a8=",
   "explainerName": "v5",
   "entries": [
     {
@@ -17,7 +17,9 @@
           {
             "name": "fullActionName",
             "value": "player.searchTracks",
-            "substrings": []
+            "substrings": [
+              "Find acoustic versions of popular songs"
+            ]
           },
           {
             "name": "parameters.query",
@@ -30,13 +32,10 @@
         "subPhrases": [
           {
             "text": "Find",
-            "category": "command",
-            "synonyms": [
-              "Search for",
-              "Look for",
-              "Locate"
-            ],
-            "isOptional": true
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
           },
           {
             "text": "acoustic versions of popular songs",
@@ -48,6 +47,33 @@
         ],
         "propertyAlternatives": [
           {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.searchTracks",
+            "propertySubPhrases": [
+              "Find"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.findTracks",
+                "propertySubPhrases": [
+                  "Search"
+                ]
+              },
+              {
+                "propertyValue": "player.lookupTracks",
+                "propertySubPhrases": [
+                  "Look up"
+                ]
+              },
+              {
+                "propertyValue": "player.browseTracks",
+                "propertySubPhrases": [
+                  "Browse"
+                ]
+              }
+            ]
+          },
+          {
             "propertyName": "parameters.query",
             "propertyValue": "acoustic versions of popular songs",
             "propertySubPhrases": [
@@ -55,27 +81,21 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "live versions of popular songs",
+                "propertyValue": "acoustic covers of hit songs",
                 "propertySubPhrases": [
-                  "live versions of popular songs"
+                  "acoustic covers of hit songs"
                 ]
               },
               {
-                "propertyValue": "cover versions of popular songs",
+                "propertyValue": "unplugged versions of famous tracks",
                 "propertySubPhrases": [
-                  "cover versions of popular songs"
+                  "unplugged versions of famous tracks"
                 ]
               },
               {
-                "propertyValue": "unplugged versions of popular songs",
+                "propertyValue": "acoustic renditions of top songs",
                 "propertySubPhrases": [
-                  "unplugged versions of popular songs"
-                ]
-              },
-              {
-                "propertyValue": "instrumental versions of popular songs",
-                "propertySubPhrases": [
-                  "instrumental versions of popular songs"
+                  "acoustic renditions of top songs"
                 ]
               }
             ]
@@ -89,7 +109,7 @@
         "politeSuffixes": [
           "Thank you!",
           "I would appreciate it.",
-          "Thanks a lot!"
+          "Thanks in advance!"
         ]
       }
     },
@@ -136,18 +156,28 @@
           },
           {
             "text": "music",
-            "category": "content",
+            "category": "command",
             "propertyNames": [
               "fullActionName"
             ]
           },
           {
-            "text": "for relaxation",
+            "text": "for",
+            "category": "preposition",
+            "synonyms": [
+              "to",
+              "in order to",
+              "so as to"
+            ],
+            "isOptional": true
+          },
+          {
+            "text": "relaxation",
             "category": "purpose",
             "synonyms": [
-              "to relax",
-              "for calming",
-              "for unwinding"
+              "calm",
+              "unwind",
+              "chill"
             ],
             "isOptional": true
           }
@@ -162,24 +192,24 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "player.searchGenre",
+                "propertyValue": "player.playSong",
                 "propertySubPhrases": [
-                  "Search",
-                  "music"
+                  "Play",
+                  "song"
                 ]
               },
               {
-                "propertyValue": "player.browseGenre",
+                "propertyValue": "player.playAlbum",
                 "propertySubPhrases": [
-                  "Browse",
-                  "music"
+                  "Play",
+                  "album"
                 ]
               },
               {
-                "propertyValue": "player.discoverGenre",
+                "propertyValue": "player.playPlaylist",
                 "propertySubPhrases": [
-                  "Discover",
-                  "music"
+                  "Play",
+                  "playlist"
                 ]
               }
             ]
@@ -192,11 +222,134 @@
             ],
             "alternatives": [
               {
+                "propertyValue": "jazz",
+                "propertySubPhrases": [
+                  "jazz"
+                ]
+              },
+              {
+                "propertyValue": "classical",
+                "propertySubPhrases": [
+                  "classical"
+                ]
+              },
+              {
                 "propertyValue": "ambient",
                 "propertySubPhrases": [
                   "ambient"
                 ]
+              }
+            ]
+          }
+        ],
+        "politePrefixes": [
+          "Could you please",
+          "Would you mind"
+        ],
+        "politeSuffixes": [
+          "Thank you",
+          "I would appreciate it"
+        ]
+      }
+    },
+    {
+      "request": "Find chillwave tracks for a laid-back evening",
+      "action": {
+        "fullActionName": "player.playGenre",
+        "parameters": {
+          "genre": "chillwave"
+        }
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.playGenre",
+            "substrings": [
+              "Find",
+              "tracks"
+            ]
+          },
+          {
+            "name": "parameters.genre",
+            "value": "chillwave",
+            "substrings": [
+              "chillwave"
+            ]
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Find",
+            "category": "command",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "chillwave",
+            "category": "genre",
+            "propertyNames": [
+              "parameters.genre"
+            ]
+          },
+          {
+            "text": "tracks",
+            "category": "object",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "for a laid-back evening",
+            "category": "context",
+            "synonyms": [
+              "for a relaxing evening",
+              "for a calm night",
+              "for a peaceful evening"
+            ],
+            "isOptional": true
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.playGenre",
+            "propertySubPhrases": [
+              "Find",
+              "tracks"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.playPlaylist",
+                "propertySubPhrases": [
+                  "Play",
+                  "playlist"
+                ]
               },
+              {
+                "propertyValue": "player.playAlbum",
+                "propertySubPhrases": [
+                  "Play",
+                  "album"
+                ]
+              },
+              {
+                "propertyValue": "player.playArtist",
+                "propertySubPhrases": [
+                  "Play",
+                  "artist"
+                ]
+              }
+            ]
+          },
+          {
+            "propertyName": "parameters.genre",
+            "propertyValue": "chillwave",
+            "propertySubPhrases": [
+              "chillwave"
+            ],
+            "alternatives": [
               {
                 "propertyValue": "lofi",
                 "propertySubPhrases": [
@@ -204,9 +357,15 @@
                 ]
               },
               {
-                "propertyValue": "downtempo",
+                "propertyValue": "ambient",
                 "propertySubPhrases": [
-                  "downtempo"
+                  "ambient"
+                ]
+              },
+              {
+                "propertyValue": "jazz",
+                "propertySubPhrases": [
+                  "jazz"
                 ]
               }
             ]
@@ -214,118 +373,15 @@
         ],
         "politePrefixes": [
           "Could you please",
-          "Would you mind"
+          "Would you mind",
+          "If it's not too much trouble,",
+          "May I kindly ask you to"
         ],
         "politeSuffixes": [
           "Thank you!",
-          "I would appreciate it."
-        ]
-      }
-    },
-    {
-      "request": "Find chillwave tracks for a laid-back evening",
-      "action": {
-        "fullActionName": "player.searchTracks",
-        "parameters": {
-          "query": "chillwave tracks for a laid-back evening"
-        }
-      },
-      "explanation": {
-        "properties": [
-          {
-            "name": "fullActionName",
-            "value": "player.searchTracks",
-            "substrings": [
-              "Find"
-            ]
-          },
-          {
-            "name": "parameters.query",
-            "value": "chillwave tracks for a laid-back evening",
-            "substrings": [
-              "chillwave tracks for a laid-back evening"
-            ]
-          }
-        ],
-        "subPhrases": [
-          {
-            "text": "Find",
-            "category": "action",
-            "propertyNames": [
-              "fullActionName"
-            ]
-          },
-          {
-            "text": "chillwave tracks for a laid-back evening",
-            "category": "query",
-            "propertyNames": [
-              "parameters.query"
-            ]
-          }
-        ],
-        "propertyAlternatives": [
-          {
-            "propertyName": "fullActionName",
-            "propertyValue": "player.searchTracks",
-            "propertySubPhrases": [
-              "Find"
-            ],
-            "alternatives": [
-              {
-                "propertyValue": "player.findSongs",
-                "propertySubPhrases": [
-                  "Find"
-                ]
-              },
-              {
-                "propertyValue": "player.lookupMusic",
-                "propertySubPhrases": [
-                  "Find"
-                ]
-              },
-              {
-                "propertyValue": "player.searchMusic",
-                "propertySubPhrases": [
-                  "Find"
-                ]
-              }
-            ]
-          },
-          {
-            "propertyName": "parameters.query",
-            "propertyValue": "chillwave tracks for a laid-back evening",
-            "propertySubPhrases": [
-              "chillwave tracks for a laid-back evening"
-            ],
-            "alternatives": [
-              {
-                "propertyValue": "chillwave songs for a relaxed night",
-                "propertySubPhrases": [
-                  "chillwave songs for a relaxed night"
-                ]
-              },
-              {
-                "propertyValue": "chillwave music for a calm evening",
-                "propertySubPhrases": [
-                  "chillwave music for a calm evening"
-                ]
-              },
-              {
-                "propertyValue": "chillwave tunes for a peaceful night",
-                "propertySubPhrases": [
-                  "chillwave tunes for a peaceful night"
-                ]
-              }
-            ]
-          }
-        ],
-        "politePrefixes": [
-          "Could you please",
-          "Would you mind"
-        ],
-        "politeSuffixes": [
-          "Thank you!",
-          "I would appreciate it!"
+          "I would appreciate it.",
+          "Thanks a lot!",
+          "That would be great."
         ]
       }
     },
@@ -385,13 +441,13 @@
                 ]
               },
               {
-                "propertyValue": "player.lookupTracks",
+                "propertyValue": "music.searchTracks",
                 "propertySubPhrases": [
                   "Find"
                 ]
               },
               {
-                "propertyValue": "player.searchMusic",
+                "propertyValue": "audio.searchTracks",
                 "propertySubPhrases": [
                   "Find"
                 ]
@@ -431,8 +487,8 @@
           "Would you mind"
         ],
         "politeSuffixes": [
-          "Thank you!",
-          "I appreciate it!"
+          "Thank you",
+          "I would appreciate it"
         ]
       }
     },
@@ -492,15 +548,15 @@
                 ]
               },
               {
-                "propertyValue": "player.queueTracks",
+                "propertyValue": "player.addTracksToQueue",
                 "propertySubPhrases": [
                   "Queue"
                 ]
               },
               {
-                "propertyValue": "player.addTracks",
+                "propertyValue": "player.shuffleTracks",
                 "propertySubPhrases": [
-                  "Add"
+                  "Shuffle"
                 ]
               }
             ]
@@ -606,7 +662,7 @@
           },
           {
             "text": "The Eagles",
-            "category": "artist",
+            "category": "artistName",
             "propertyNames": [
               "parameters.artists.0"
             ]
@@ -621,15 +677,15 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "Stairway to Heaven",
-                "propertySubPhrases": [
-                  "Stairway to Heaven"
-                ]
-              },
-              {
                 "propertyValue": "Bohemian Rhapsody",
                 "propertySubPhrases": [
                   "Bohemian Rhapsody"
+                ]
+              },
+              {
+                "propertyValue": "Stairway to Heaven",
+                "propertySubPhrases": [
+                  "Stairway to Heaven"
                 ]
               },
               {
@@ -648,15 +704,15 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "Led Zeppelin",
-                "propertySubPhrases": [
-                  "Led Zeppelin"
-                ]
-              },
-              {
                 "propertyValue": "Queen",
                 "propertySubPhrases": [
                   "Queen"
+                ]
+              },
+              {
+                "propertyValue": "Led Zeppelin",
+                "propertySubPhrases": [
+                  "Led Zeppelin"
                 ]
               },
               {
@@ -670,11 +726,13 @@
         ],
         "politePrefixes": [
           "Could you please",
-          "Would you mind"
+          "Would you mind",
+          "If it's not too much trouble, could you"
         ],
         "politeSuffixes": [
-          "Thank you",
-          "I appreciate it"
+          "Thank you!",
+          "I would appreciate it.",
+          "Thanks a lot!"
         ]
       },
       "corrections": [
@@ -728,7 +786,7 @@
               },
               {
                 "text": "The Eagles",
-                "category": "artist",
+                "category": "artistName",
                 "propertyNames": [
                   "parameters.artists.0"
                 ]
@@ -793,19 +851,19 @@
               {
                 "propertyValue": "player.findSongs",
                 "propertySubPhrases": [
-                  "Search"
+                  "Find"
                 ]
               },
               {
                 "propertyValue": "player.lookupTracks",
                 "propertySubPhrases": [
-                  "Look up"
+                  "Find"
                 ]
               },
               {
-                "propertyValue": "player.discoverTracks",
+                "propertyValue": "player.searchMusic",
                 "propertySubPhrases": [
-                  "Discover"
+                  "Find"
                 ]
               }
             ]
@@ -840,11 +898,15 @@
         ],
         "politePrefixes": [
           "Could you please",
-          "Would you mind"
+          "Would you mind",
+          "If it's not too much trouble,",
+          "May I kindly ask you to"
         ],
         "politeSuffixes": [
           "Thank you!",
-          "I would appreciate it."
+          "I would appreciate it.",
+          "Thanks a lot!",
+          "Your help is much appreciated."
         ]
       }
     },
@@ -900,19 +962,19 @@
               {
                 "propertyValue": "player.findSongs",
                 "propertySubPhrases": [
-                  "Find"
+                  "Search"
                 ]
               },
               {
-                "propertyValue": "player.lookupTracks",
+                "propertyValue": "player.lookupMusic",
                 "propertySubPhrases": [
-                  "Find"
+                  "Look up"
                 ]
               },
               {
-                "propertyValue": "player.searchMusic",
+                "propertyValue": "player.discoverTracks",
                 "propertySubPhrases": [
-                  "Find"
+                  "Discover"
                 ]
               }
             ]
@@ -925,15 +987,15 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "chill study music",
+                "propertyValue": "chill music for focus",
                 "propertySubPhrases": [
-                  "chill study music"
+                  "chill music for focus"
                 ]
               },
               {
-                "propertyValue": "relaxing music for studying",
+                "propertyValue": "ambient sounds for concentration",
                 "propertySubPhrases": [
-                  "relaxing music for studying"
+                  "ambient sounds for concentration"
                 ]
               },
               {
@@ -950,103 +1012,139 @@
           "Would you mind"
         ],
         "politeSuffixes": [
-          "Thank you",
-          "I would appreciate it"
+          "Thank you!",
+          "I would appreciate it."
         ]
       }
     },
     {
       "request": "Find me some jazz tunes from the 60s",
       "action": {
-        "fullActionName": "player.searchTracks",
+        "fullActionName": "player.playGenre",
         "parameters": {
-          "query": "jazz tunes from the 60s"
+          "genre": "jazz",
+          "quantity": 60
         }
       },
       "explanation": {
         "properties": [
           {
             "name": "fullActionName",
-            "value": "player.searchTracks",
+            "value": "player.playGenre",
+            "substrings": []
+          },
+          {
+            "name": "parameters.genre",
+            "value": "jazz",
             "substrings": [
-              "Find me some jazz tunes from the 60s"
+              "jazz"
             ]
           },
           {
-            "name": "parameters.query",
-            "value": "jazz tunes from the 60s",
+            "name": "parameters.quantity",
+            "value": 60,
             "substrings": [
-              "jazz tunes from the 60s"
+              "60s"
             ]
           }
         ],
         "subPhrases": [
           {
-            "text": "Find me some",
-            "category": "command",
+            "text": "Find me",
+            "category": "politeness",
+            "synonyms": [
+              "Get me",
+              "Fetch me",
+              "Bring me"
+            ],
+            "isOptional": true
+          },
+          {
+            "text": "some",
+            "category": "filler",
+            "synonyms": [
+              "a few",
+              "a couple of",
+              "several"
+            ],
+            "isOptional": true
+          },
+          {
+            "text": "jazz",
+            "category": "genre",
             "propertyNames": [
-              "fullActionName"
+              "parameters.genre"
             ]
           },
           {
-            "text": "jazz tunes from the 60s",
-            "category": "query",
+            "text": "tunes",
+            "category": "filler",
+            "synonyms": [
+              "songs",
+              "tracks",
+              "melodies"
+            ],
+            "isOptional": true
+          },
+          {
+            "text": "from the 60s",
+            "category": "quantity",
             "propertyNames": [
-              "parameters.query"
+              "parameters.quantity"
             ]
           }
         ],
         "propertyAlternatives": [
           {
-            "propertyName": "fullActionName",
-            "propertyValue": "player.searchTracks",
+            "propertyName": "parameters.genre",
+            "propertyValue": "jazz",
             "propertySubPhrases": [
-              "Find me some"
+              "jazz"
             ],
             "alternatives": [
               {
-                "propertyValue": "player.playTracks",
+                "propertyValue": "blues",
                 "propertySubPhrases": [
-                  "Play me some"
+                  "blues"
                 ]
               },
               {
-                "propertyValue": "player.addTracksToQueue",
+                "propertyValue": "rock",
                 "propertySubPhrases": [
-                  "Queue up some"
+                  "rock"
                 ]
               },
               {
-                "propertyValue": "player.recommendTracks",
+                "propertyValue": "classical",
                 "propertySubPhrases": [
-                  "Recommend me some"
+                  "classical"
                 ]
               }
             ]
           },
           {
-            "propertyName": "parameters.query",
-            "propertyValue": "jazz tunes from the 60s",
+            "propertyName": "parameters.quantity",
+            "propertyValue": 60,
             "propertySubPhrases": [
-              "jazz tunes from the 60s"
+              "from the 60s"
             ],
             "alternatives": [
               {
-                "propertyValue": "rock songs from the 70s",
+                "propertyValue": 70,
                 "propertySubPhrases": [
-                  "rock songs from the 70s"
+                  "from the 70s"
                 ]
               },
               {
-                "propertyValue": "pop hits from the 80s",
+                "propertyValue": 80,
                 "propertySubPhrases": [
-                  "pop hits from the 80s"
+                  "from the 80s"
                 ]
               },
               {
-                "propertyValue": "classical music from the 90s",
+                "propertyValue": 90,
                 "propertySubPhrases": [
-                  "classical music from the 90s"
+                  "from the 90s"
                 ]
               }
             ]
@@ -1090,7 +1188,7 @@
         "subPhrases": [
           {
             "text": "Find music",
-            "category": "command",
+            "category": "action",
             "propertyNames": [
               "fullActionName"
             ]
@@ -1101,7 +1199,7 @@
             "synonyms": [
               "from",
               "of",
-              "with"
+              "featuring"
             ],
             "isOptional": true
           },
@@ -1182,14 +1280,12 @@
         "politePrefixes": [
           "Could you please",
           "Would you mind",
-          "If it's not too much trouble, could you",
-          "May I kindly ask you to"
+          "If it's not too much trouble, could you"
         ],
         "politeSuffixes": [
           "Thank you!",
-          "I would appreciate it!",
-          "Thanks a lot!",
-          "Much appreciated!"
+          "I would appreciate it.",
+          "Thanks a lot!"
         ]
       }
     },
@@ -1259,15 +1355,15 @@
                 ]
               },
               {
-                "propertyValue": "player.browseTracks",
+                "propertyValue": "player.pauseTracks",
                 "propertySubPhrases": [
-                  "Browse music"
+                  "Pause music"
                 ]
               },
               {
-                "propertyValue": "player.recommendTracks",
+                "propertyValue": "player.stopTracks",
                 "propertySubPhrases": [
-                  "Recommend music"
+                  "Stop music"
                 ]
               }
             ]
@@ -1286,15 +1382,136 @@
                 ]
               },
               {
+                "propertyValue": "classic artists",
+                "propertySubPhrases": [
+                  "classic artists"
+                ]
+              },
+              {
                 "propertyValue": "new releases",
                 "propertySubPhrases": [
                   "new releases"
                 ]
+              }
+            ]
+          }
+        ],
+        "politePrefixes": [
+          "Could you please",
+          "Would you mind",
+          "If it's not too much trouble, could you",
+          "May I kindly ask you to"
+        ],
+        "politeSuffixes": [
+          "Thank you!",
+          "I would appreciate it!",
+          "Thanks a lot!",
+          "Much appreciated!"
+        ]
+      }
+    },
+    {
+      "request": "Find music for a beach party",
+      "action": {
+        "fullActionName": "player.playGenre",
+        "parameters": {
+          "genre": "beach party"
+        }
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.playGenre",
+            "substrings": [
+              "Find music"
+            ]
+          },
+          {
+            "name": "parameters.genre",
+            "value": "beach party",
+            "substrings": [
+              "beach party"
+            ]
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Find music",
+            "category": "command",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "for a",
+            "category": "preposition",
+            "synonyms": [
+              "for the",
+              "for an",
+              "for"
+            ],
+            "isOptional": true
+          },
+          {
+            "text": "beach party",
+            "category": "genre",
+            "propertyNames": [
+              "parameters.genre"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.playGenre",
+            "propertySubPhrases": [
+              "Find music"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.playSong",
+                "propertySubPhrases": [
+                  "Play a song"
+                ]
               },
               {
-                "propertyValue": "top charts",
+                "propertyValue": "player.playAlbum",
                 "propertySubPhrases": [
-                  "top charts"
+                  "Play an album"
+                ]
+              },
+              {
+                "propertyValue": "player.playPlaylist",
+                "propertySubPhrases": [
+                  "Play a playlist"
+                ]
+              }
+            ]
+          },
+          {
+            "propertyName": "parameters.genre",
+            "propertyValue": "beach party",
+            "propertySubPhrases": [
+              "beach party"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "rock",
+                "propertySubPhrases": [
+                  "rock"
+                ]
+              },
+              {
+                "propertyValue": "jazz",
+                "propertySubPhrases": [
+                  "jazz"
+                ]
+              },
+              {
+                "propertyValue": "classical",
+                "propertySubPhrases": [
+                  "classical"
                 ]
               }
             ]
@@ -1311,165 +1528,34 @@
       }
     },
     {
-      "request": "Find music for a beach party",
-      "action": {
-        "fullActionName": "player.searchTracks",
-        "parameters": {
-          "query": "beach party"
-        }
-      },
-      "explanation": {
-        "properties": [
-          {
-            "name": "fullActionName",
-            "value": "player.searchTracks",
-            "isImplicit": true
-          },
-          {
-            "name": "parameters.query",
-            "value": "beach party",
-            "substrings": [
-              "beach party"
-            ]
-          }
-        ],
-        "subPhrases": [
-          {
-            "text": "Find",
-            "category": "command",
-            "propertyNames": []
-          },
-          {
-            "text": "music for a",
-            "category": "context",
-            "propertyNames": []
-          },
-          {
-            "text": "beach party",
-            "category": "query",
-            "propertyNames": [
-              "parameters.query"
-            ]
-          }
-        ],
-        "propertyAlternatives": [
-          {
-            "propertyName": "parameters.query",
-            "propertyValue": "beach party",
-            "propertySubPhrases": [
-              "beach party"
-            ],
-            "alternatives": [
-              {
-                "propertyValue": "pool party",
-                "propertySubPhrases": [
-                  "pool party"
-                ]
-              },
-              {
-                "propertyValue": "summer party",
-                "propertySubPhrases": [
-                  "summer party"
-                ]
-              },
-              {
-                "propertyValue": "tropical party",
-                "propertySubPhrases": [
-                  "tropical party"
-                ]
-              },
-              {
-                "propertyValue": "island party",
-                "propertySubPhrases": [
-                  "island party"
-                ]
-              }
-            ]
-          }
-        ],
-        "politePrefixes": [
-          "Could you please",
-          "Would you mind"
-        ],
-        "politeSuffixes": [
-          "Thank you!",
-          "I would appreciate it."
-        ]
-      },
-      "corrections": [
-        {
-          "data": {
-            "properties": [
-              {
-                "name": "fullActionName",
-                "value": "player.searchTracks",
-                "isImplicit": true
-              },
-              {
-                "name": "parameters.query",
-                "value": "beach party",
-                "substrings": [
-                  "beach party"
-                ]
-              }
-            ],
-            "subPhrases": [
-              {
-                "text": "Find",
-                "category": "command",
-                "propertyNames": [
-                  "fullActionName"
-                ]
-              },
-              {
-                "text": "music for a",
-                "category": "context",
-                "propertyNames": []
-              },
-              {
-                "text": "beach party",
-                "category": "query",
-                "propertyNames": [
-                  "parameters.query"
-                ]
-              }
-            ]
-          },
-          "correction": [
-            "Property 'fullActionName' is expected to be implicit and should not be included as a property name in a sub-phrase"
-          ]
-        }
-      ]
-    },
-    {
       "request": "Find music from the Baroque period",
       "action": {
-        "fullActionName": "player.searchTracks",
+        "fullActionName": "player.playGenre",
         "parameters": {
-          "query": "Baroque period"
+          "genre": "Baroque"
         }
       },
       "explanation": {
         "properties": [
           {
             "name": "fullActionName",
-            "value": "player.searchTracks",
+            "value": "player.playGenre",
             "substrings": [
               "Find music"
             ]
           },
           {
-            "name": "parameters.query",
-            "value": "Baroque period",
+            "name": "parameters.genre",
+            "value": "Baroque",
             "substrings": [
-              "Baroque period"
+              "Baroque"
             ]
           }
         ],
         "subPhrases": [
           {
             "text": "Find music",
-            "category": "action",
+            "category": "command",
             "propertyNames": [
               "fullActionName"
             ]
@@ -1486,63 +1572,63 @@
           },
           {
             "text": "Baroque period",
-            "category": "query",
+            "category": "genre",
             "propertyNames": [
-              "parameters.query"
+              "parameters.genre"
             ]
           }
         ],
         "propertyAlternatives": [
           {
             "propertyName": "fullActionName",
-            "propertyValue": "player.searchTracks",
+            "propertyValue": "player.playGenre",
             "propertySubPhrases": [
               "Find music"
             ],
             "alternatives": [
               {
-                "propertyValue": "player.playTracks",
+                "propertyValue": "player.playSong",
                 "propertySubPhrases": [
-                  "Play music"
+                  "Play a song"
                 ]
               },
               {
-                "propertyValue": "player.pauseTracks",
+                "propertyValue": "player.playAlbum",
                 "propertySubPhrases": [
-                  "Pause music"
+                  "Play an album"
                 ]
               },
               {
-                "propertyValue": "player.stopTracks",
+                "propertyValue": "player.playPlaylist",
                 "propertySubPhrases": [
-                  "Stop music"
+                  "Play a playlist"
                 ]
               }
             ]
           },
           {
-            "propertyName": "parameters.query",
-            "propertyValue": "Baroque period",
+            "propertyName": "parameters.genre",
+            "propertyValue": "Baroque",
             "propertySubPhrases": [
               "Baroque period"
             ],
             "alternatives": [
               {
-                "propertyValue": "Classical period",
+                "propertyValue": "Classical",
                 "propertySubPhrases": [
                   "Classical period"
                 ]
               },
               {
-                "propertyValue": "Romantic period",
+                "propertyValue": "Romantic",
                 "propertySubPhrases": [
                   "Romantic period"
                 ]
               },
               {
-                "propertyValue": "Modern period",
+                "propertyValue": "Jazz",
                 "propertySubPhrases": [
-                  "Modern period"
+                  "Jazz era"
                 ]
               }
             ]
@@ -1553,8 +1639,8 @@
           "Would you mind"
         ],
         "politeSuffixes": [
-          "Thank you!",
-          "I would appreciate it."
+          "Thank you",
+          "I appreciate it"
         ]
       }
     },
@@ -1563,7 +1649,7 @@
       "action": {
         "fullActionName": "player.playGenre",
         "parameters": {
-          "genre": "wedding reception"
+          "genre": "wedding"
         }
       },
       "explanation": {
@@ -1577,9 +1663,9 @@
           },
           {
             "name": "parameters.genre",
-            "value": "wedding reception",
+            "value": "wedding",
             "substrings": [
-              "wedding reception"
+              "wedding"
             ]
           }
         ],
@@ -1592,17 +1678,7 @@
             ]
           },
           {
-            "text": "at a",
-            "category": "preposition",
-            "synonyms": [
-              "during a",
-              "for a",
-              "in a"
-            ],
-            "isOptional": true
-          },
-          {
-            "text": "wedding reception",
+            "text": "at a wedding reception",
             "category": "genre",
             "propertyNames": [
               "parameters.genre"
@@ -1639,27 +1715,27 @@
           },
           {
             "propertyName": "parameters.genre",
-            "propertyValue": "wedding reception",
+            "propertyValue": "wedding",
             "propertySubPhrases": [
-              "wedding reception"
+              "at a wedding reception"
             ],
             "alternatives": [
               {
                 "propertyValue": "party",
                 "propertySubPhrases": [
-                  "party"
+                  "at a party"
                 ]
               },
               {
                 "propertyValue": "birthday",
                 "propertySubPhrases": [
-                  "birthday"
+                  "at a birthday party"
                 ]
               },
               {
-                "propertyValue": "corporate event",
+                "propertyValue": "corporate",
                 "propertySubPhrases": [
-                  "corporate event"
+                  "at a corporate event"
                 ]
               }
             ]
@@ -1668,14 +1744,12 @@
         "politePrefixes": [
           "Could you please",
           "Would you mind",
-          "If it's not too much trouble, could you",
-          "May I kindly ask you to"
+          "If it's not too much trouble, could you"
         ],
         "politeSuffixes": [
           "Thank you!",
-          "I would appreciate it!",
-          "Thanks a lot!",
-          "Much appreciated!"
+          "I would appreciate it.",
+          "Thanks in advance!"
         ]
       }
     },
@@ -1693,7 +1767,7 @@
             "name": "fullActionName",
             "value": "player.searchTracks",
             "substrings": [
-              "Find"
+              "Find punk rock songs by The Ramones"
             ]
           },
           {
@@ -1722,13 +1796,10 @@
           },
           {
             "text": "songs by",
-            "category": "filler",
-            "synonyms": [
-              "tracks by",
-              "music by",
-              "tunes by"
-            ],
-            "isOptional": true
+            "category": "music search",
+            "propertyNames": [
+              "fullActionName"
+            ]
           },
           {
             "text": "The Ramones",
@@ -1743,25 +1814,29 @@
             "propertyName": "fullActionName",
             "propertyValue": "player.searchTracks",
             "propertySubPhrases": [
-              "Find"
+              "Find",
+              "songs by"
             ],
             "alternatives": [
               {
                 "propertyValue": "player.findSongs",
                 "propertySubPhrases": [
-                  "Find"
+                  "Find",
+                  "songs by"
                 ]
               },
               {
-                "propertyValue": "player.lookupTracks",
+                "propertyValue": "music.searchTracks",
                 "propertySubPhrases": [
-                  "Find"
+                  "Find",
+                  "songs by"
                 ]
               },
               {
-                "propertyValue": "player.searchMusic",
+                "propertyValue": "audio.searchTracks",
                 "propertySubPhrases": [
-                  "Find"
+                  "Find",
+                  "songs by"
                 ]
               }
             ]
@@ -1775,17 +1850,17 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "punk rock Ramones",
-                "propertySubPhrases": [
-                  "punk rock",
-                  "The Ramones"
-                ]
-              },
-              {
                 "propertyValue": "rock The Ramones",
                 "propertySubPhrases": [
                   "rock",
                   "The Ramones"
+                ]
+              },
+              {
+                "propertyValue": "punk rock The Clash",
+                "propertySubPhrases": [
+                  "punk rock",
+                  "The Clash"
                 ]
               },
               {
@@ -1800,13 +1875,11 @@
         ],
         "politePrefixes": [
           "Could you please",
-          "Would you mind",
-          "If it's not too much trouble, could you"
+          "Would you mind"
         ],
         "politeSuffixes": [
           "Thank you!",
-          "I would appreciate it.",
-          "Thanks in advance!"
+          "I would appreciate it."
         ]
       }
     },
@@ -1815,7 +1888,7 @@
       "action": {
         "fullActionName": "player.searchTracks",
         "parameters": {
-          "query": "road trip playlist"
+          "query": "road trip"
         }
       },
       "explanation": {
@@ -1829,9 +1902,9 @@
           },
           {
             "name": "parameters.query",
-            "value": "road trip playlist",
+            "value": "road trip",
             "substrings": [
-              "road trip playlist"
+              "road trip"
             ]
           }
         ],
@@ -1854,11 +1927,21 @@
             "isOptional": true
           },
           {
-            "text": "road trip playlist",
+            "text": "road trip",
             "category": "query",
             "propertyNames": [
               "parameters.query"
             ]
+          },
+          {
+            "text": "playlist",
+            "category": "filler",
+            "synonyms": [
+              "list",
+              "collection",
+              "set"
+            ],
+            "isOptional": true
           }
         ],
         "propertyAlternatives": [
@@ -1870,48 +1953,48 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "player.findSongs",
+                "propertyValue": "player.searchAlbums",
                 "propertySubPhrases": [
-                  "Search for songs"
+                  "Find albums"
                 ]
               },
               {
-                "propertyValue": "player.lookupTracks",
+                "propertyValue": "player.searchArtists",
                 "propertySubPhrases": [
-                  "Look up songs"
+                  "Find artists"
                 ]
               },
               {
-                "propertyValue": "player.getTracks",
+                "propertyValue": "player.searchPlaylists",
                 "propertySubPhrases": [
-                  "Get songs"
+                  "Find playlists"
                 ]
               }
             ]
           },
           {
             "propertyName": "parameters.query",
-            "propertyValue": "road trip playlist",
+            "propertyValue": "road trip",
             "propertySubPhrases": [
-              "road trip playlist"
+              "road trip"
             ],
             "alternatives": [
               {
-                "propertyValue": "driving playlist",
+                "propertyValue": "workout",
                 "propertySubPhrases": [
-                  "driving playlist"
+                  "workout"
                 ]
               },
               {
-                "propertyValue": "travel playlist",
+                "propertyValue": "relaxation",
                 "propertySubPhrases": [
-                  "travel playlist"
+                  "relaxation"
                 ]
               },
               {
-                "propertyValue": "journey playlist",
+                "propertyValue": "party",
                 "propertySubPhrases": [
-                  "journey playlist"
+                  "party"
                 ]
               }
             ]
@@ -1919,11 +2002,15 @@
         ],
         "politePrefixes": [
           "Could you please",
-          "Would you mind"
+          "Would you mind",
+          "If it's not too much trouble,",
+          "I would appreciate it if you could"
         ],
         "politeSuffixes": [
           "Thank you!",
-          "I would appreciate it."
+          "Thanks a lot!",
+          "I appreciate it!",
+          "Much appreciated!"
         ]
       }
     },
@@ -1993,15 +2080,15 @@
                 ]
               },
               {
-                "propertyValue": "player.findTracks",
+                "propertyValue": "player.queueTracks",
                 "propertySubPhrases": [
-                  "Locate songs"
+                  "Queue songs"
                 ]
               },
               {
-                "propertyValue": "player.browseTracks",
+                "propertyValue": "player.recommendTracks",
                 "propertySubPhrases": [
-                  "Browse songs"
+                  "Recommend songs"
                 ]
               }
             ]
@@ -2014,21 +2101,21 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "dinner date",
+                "propertyValue": "party",
                 "propertySubPhrases": [
-                  "dinner date"
+                  "party"
                 ]
               },
               {
-                "propertyValue": "candlelight dinner",
+                "propertyValue": "workout",
                 "propertySubPhrases": [
-                  "candlelight dinner"
+                  "workout"
                 ]
               },
               {
-                "propertyValue": "intimate dinner",
+                "propertyValue": "study session",
                 "propertySubPhrases": [
-                  "intimate dinner"
+                  "study session"
                 ]
               }
             ]
@@ -2036,15 +2123,11 @@
         ],
         "politePrefixes": [
           "Could you please",
-          "Would you mind",
-          "If it's not too much trouble, could you",
-          "May I kindly ask you to"
+          "Would you mind"
         ],
         "politeSuffixes": [
-          "Thank you!",
-          "I would appreciate it!",
-          "Thanks a lot!",
-          "Much appreciated!"
+          "Thank you",
+          "I would appreciate it"
         ]
       }
     },
@@ -2062,7 +2145,7 @@
             "name": "fullActionName",
             "value": "player.searchTracks",
             "substrings": [
-              "Find songs"
+              "Find songs from the soundtrack of The Greatest Showman"
             ]
           },
           {
@@ -2082,17 +2165,7 @@
             ]
           },
           {
-            "text": "from the",
-            "category": "preposition",
-            "synonyms": [
-              "of the",
-              "in the",
-              "from"
-            ],
-            "isOptional": true
-          },
-          {
-            "text": "soundtrack of The Greatest Showman",
+            "text": "from the soundtrack of The Greatest Showman",
             "category": "query",
             "propertyNames": [
               "parameters.query"
@@ -2114,15 +2187,15 @@
                 ]
               },
               {
-                "propertyValue": "player.addTracksToPlaylist",
+                "propertyValue": "player.addTracksToQueue",
                 "propertySubPhrases": [
-                  "Add songs to playlist"
+                  "Add songs to queue"
                 ]
               },
               {
-                "propertyValue": "player.queueTracks",
+                "propertyValue": "player.downloadTracks",
                 "propertySubPhrases": [
-                  "Queue songs"
+                  "Download songs"
                 ]
               }
             ]
@@ -2131,25 +2204,25 @@
             "propertyName": "parameters.query",
             "propertyValue": "soundtrack of The Greatest Showman",
             "propertySubPhrases": [
-              "soundtrack of The Greatest Showman"
+              "from the soundtrack of The Greatest Showman"
             ],
             "alternatives": [
               {
                 "propertyValue": "soundtrack of La La Land",
                 "propertySubPhrases": [
-                  "soundtrack of La La Land"
+                  "from the soundtrack of La La Land"
                 ]
               },
               {
                 "propertyValue": "soundtrack of Hamilton",
                 "propertySubPhrases": [
-                  "soundtrack of Hamilton"
+                  "from the soundtrack of Hamilton"
                 ]
               },
               {
-                "propertyValue": "soundtrack of Frozen",
+                "propertyValue": "soundtrack of Moana",
                 "propertySubPhrases": [
-                  "soundtrack of Frozen"
+                  "from the soundtrack of Moana"
                 ]
               }
             ]
@@ -2157,11 +2230,15 @@
         ],
         "politePrefixes": [
           "Could you please",
-          "Would you mind"
+          "Would you mind",
+          "If it's not too much trouble, could you",
+          "May I kindly ask you to"
         ],
         "politeSuffixes": [
           "Thank you!",
-          "I would appreciate it!"
+          "I would appreciate it!",
+          "Thanks a lot!",
+          "Much appreciated!"
         ]
       }
     },
@@ -2170,7 +2247,7 @@
       "action": {
         "fullActionName": "player.searchTracks",
         "parameters": {
-          "query": "songs that feature a saxophone"
+          "query": "saxophone"
         }
       },
       "explanation": {
@@ -2178,29 +2255,38 @@
           {
             "name": "fullActionName",
             "value": "player.searchTracks",
-            "substrings": []
+            "substrings": [
+              "Find songs"
+            ]
           },
           {
             "name": "parameters.query",
-            "value": "songs that feature a saxophone",
+            "value": "saxophone",
             "substrings": [
-              "songs that feature a saxophone"
+              "saxophone"
             ]
           }
         ],
         "subPhrases": [
           {
-            "text": "Find",
-            "category": "command",
+            "text": "Find songs",
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "that feature a",
+            "category": "filler",
             "synonyms": [
-              "Search for",
-              "Look for",
-              "Locate"
+              "including",
+              "with",
+              "featuring"
             ],
             "isOptional": true
           },
           {
-            "text": "songs that feature a saxophone",
+            "text": "saxophone",
             "category": "query",
             "propertyNames": [
               "parameters.query"
@@ -2209,28 +2295,55 @@
         ],
         "propertyAlternatives": [
           {
-            "propertyName": "parameters.query",
-            "propertyValue": "songs that feature a saxophone",
+            "propertyName": "fullActionName",
+            "propertyValue": "player.searchTracks",
             "propertySubPhrases": [
-              "songs that feature a saxophone"
+              "Find songs"
             ],
             "alternatives": [
               {
-                "propertyValue": "songs with a saxophone solo",
+                "propertyValue": "player.searchAlbums",
                 "propertySubPhrases": [
-                  "songs with a saxophone solo"
+                  "Find albums"
                 ]
               },
               {
-                "propertyValue": "tracks featuring saxophone",
+                "propertyValue": "player.searchArtists",
                 "propertySubPhrases": [
-                  "tracks featuring saxophone"
+                  "Find artists"
                 ]
               },
               {
-                "propertyValue": "music with saxophone",
+                "propertyValue": "player.searchPlaylists",
                 "propertySubPhrases": [
-                  "music with saxophone"
+                  "Find playlists"
+                ]
+              }
+            ]
+          },
+          {
+            "propertyName": "parameters.query",
+            "propertyValue": "saxophone",
+            "propertySubPhrases": [
+              "saxophone"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "guitar",
+                "propertySubPhrases": [
+                  "guitar"
+                ]
+              },
+              {
+                "propertyValue": "piano",
+                "propertySubPhrases": [
+                  "piano"
+                ]
+              },
+              {
+                "propertyValue": "drums",
+                "propertySubPhrases": [
+                  "drums"
                 ]
               }
             ]
@@ -2238,11 +2351,13 @@
         ],
         "politePrefixes": [
           "Could you please",
-          "Would you mind"
+          "Would you mind",
+          "If it's not too much trouble, could you"
         ],
         "politeSuffixes": [
           "Thank you!",
-          "I would appreciate it!"
+          "I would appreciate it.",
+          "Thanks a lot!"
         ]
       }
     },
@@ -2274,7 +2389,7 @@
         "subPhrases": [
           {
             "text": "Find",
-            "category": "command",
+            "category": "action",
             "propertyNames": [
               "fullActionName"
             ]
@@ -2335,9 +2450,9 @@
                 ]
               },
               {
-                "propertyValue": "road trip sing-along songs",
+                "propertyValue": "road trip anthems",
                 "propertySubPhrases": [
-                  "road trip sing-along songs"
+                  "road trip anthems"
                 ]
               }
             ]
@@ -2349,7 +2464,7 @@
         ],
         "politeSuffixes": [
           "Thank you!",
-          "I would appreciate it."
+          "I would appreciate it!"
         ]
       }
     },
@@ -2358,7 +2473,7 @@
       "action": {
         "fullActionName": "player.searchTracks",
         "parameters": {
-          "query": "boost your mood"
+          "query": "songs to boost your mood"
         }
       },
       "explanation": {
@@ -2366,38 +2481,24 @@
           {
             "name": "fullActionName",
             "value": "player.searchTracks",
-            "substrings": [
-              "Find songs"
-            ]
+            "substrings": []
           },
           {
             "name": "parameters.query",
-            "value": "boost your mood",
+            "value": "songs to boost your mood",
             "substrings": [
-              "boost your mood"
+              "songs to boost your mood"
             ]
           }
         ],
         "subPhrases": [
           {
-            "text": "Find songs",
-            "category": "action",
-            "propertyNames": [
-              "fullActionName"
-            ]
+            "text": "Find",
+            "category": "command",
+            "propertyNames": []
           },
           {
-            "text": "to",
-            "category": "preposition",
-            "synonyms": [
-              "for",
-              "in order to",
-              "so as to"
-            ],
-            "isOptional": true
-          },
-          {
-            "text": "boost your mood",
+            "text": "songs to boost your mood",
             "category": "query",
             "propertyNames": [
               "parameters.query"
@@ -2406,55 +2507,34 @@
         ],
         "propertyAlternatives": [
           {
-            "propertyName": "fullActionName",
-            "propertyValue": "player.searchTracks",
-            "propertySubPhrases": [
-              "Find songs"
-            ],
-            "alternatives": [
-              {
-                "propertyValue": "player.findSongs",
-                "propertySubPhrases": [
-                  "Find songs"
-                ]
-              },
-              {
-                "propertyValue": "music.searchTracks",
-                "propertySubPhrases": [
-                  "Find songs"
-                ]
-              },
-              {
-                "propertyValue": "audio.searchTracks",
-                "propertySubPhrases": [
-                  "Find songs"
-                ]
-              }
-            ]
-          },
-          {
             "propertyName": "parameters.query",
-            "propertyValue": "boost your mood",
+            "propertyValue": "songs to boost your mood",
             "propertySubPhrases": [
-              "boost your mood"
+              "songs to boost your mood"
             ],
             "alternatives": [
               {
-                "propertyValue": "lift your spirits",
+                "propertyValue": "songs to relax",
                 "propertySubPhrases": [
-                  "lift your spirits"
+                  "songs to relax"
                 ]
               },
               {
-                "propertyValue": "cheer you up",
+                "propertyValue": "songs to energize",
                 "propertySubPhrases": [
-                  "cheer you up"
+                  "songs to energize"
                 ]
               },
               {
-                "propertyValue": "improve your mood",
+                "propertyValue": "songs to focus",
                 "propertySubPhrases": [
-                  "improve your mood"
+                  "songs to focus"
+                ]
+              },
+              {
+                "propertyValue": "songs to sleep",
+                "propertySubPhrases": [
+                  "songs to sleep"
                 ]
               }
             ]
@@ -2463,12 +2543,14 @@
         "politePrefixes": [
           "Could you please",
           "Would you mind",
-          "If it's not too much trouble, could you"
+          "Kindly",
+          "Please"
         ],
         "politeSuffixes": [
-          "Thank you!",
-          "I would appreciate it!",
-          "Thanks a lot!"
+          "Thank you",
+          "Thanks",
+          "I appreciate it",
+          "If you don't mind"
         ]
       }
     },
@@ -2549,21 +2631,21 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "songs for a shower",
+                "propertyValue": "shower songs",
                 "propertySubPhrases": [
-                  "songs for a shower"
+                  "shower songs"
                 ]
               },
               {
-                "propertyValue": "shower singing songs",
+                "propertyValue": "singing in the shower",
                 "propertySubPhrases": [
-                  "shower singing songs"
+                  "singing in the shower"
                 ]
               },
               {
-                "propertyValue": "music for shower time",
+                "propertyValue": "songs for shower time",
                 "propertySubPhrases": [
-                  "music for shower time"
+                  "songs for shower time"
                 ]
               }
             ]
@@ -2571,41 +2653,35 @@
         ],
         "politePrefixes": [
           "Could you please",
-          "Would you mind"
+          "Would you mind",
+          "If it's not too much trouble, could you"
         ],
         "politeSuffixes": [
           "Thank you!",
-          "I would appreciate it."
+          "I would appreciate it.",
+          "Thanks a lot!"
         ]
       }
     },
     {
       "request": "Find songs with the word love in the title",
       "action": {
-        "fullActionName": "player.filterTracks",
+        "fullActionName": "player.searchTracks",
         "parameters": {
-          "filterType": "name",
-          "filterValue": "love"
+          "query": "love"
         }
       },
       "explanation": {
         "properties": [
           {
             "name": "fullActionName",
-            "value": "player.filterTracks",
+            "value": "player.searchTracks",
             "substrings": [
               "Find songs"
             ]
           },
           {
-            "name": "parameters.filterType",
-            "value": "name",
-            "substrings": [
-              "in the title"
-            ]
-          },
-          {
-            "name": "parameters.filterValue",
+            "name": "parameters.query",
             "value": "love",
             "substrings": [
               "love"
@@ -2622,59 +2698,62 @@
           },
           {
             "text": "with the word",
-            "category": "preposition",
+            "category": "filler",
             "synonyms": [
-              "containing",
-              "including",
-              "featuring"
+              "containing the word",
+              "that includes the word",
+              "featuring the word"
             ],
             "isOptional": true
           },
           {
             "text": "love",
-            "category": "filterValue",
+            "category": "query",
             "propertyNames": [
-              "parameters.filterValue"
+              "parameters.query"
             ]
           },
           {
             "text": "in the title",
-            "category": "filterType",
-            "propertyNames": [
-              "parameters.filterType"
-            ]
+            "category": "filler",
+            "synonyms": [
+              "in the name",
+              "in the song title",
+              "in the track title"
+            ],
+            "isOptional": true
           }
         ],
         "propertyAlternatives": [
           {
             "propertyName": "fullActionName",
-            "propertyValue": "player.filterTracks",
+            "propertyValue": "player.searchTracks",
             "propertySubPhrases": [
               "Find songs"
             ],
             "alternatives": [
               {
-                "propertyValue": "player.searchTracks",
+                "propertyValue": "player.searchAlbums",
                 "propertySubPhrases": [
-                  "Search for songs"
+                  "Find albums"
                 ]
               },
               {
-                "propertyValue": "player.findTracks",
+                "propertyValue": "player.searchArtists",
                 "propertySubPhrases": [
-                  "Locate songs"
+                  "Find artists"
                 ]
               },
               {
-                "propertyValue": "player.getTracks",
+                "propertyValue": "player.searchPlaylists",
                 "propertySubPhrases": [
-                  "Get songs"
+                  "Find playlists"
                 ]
               }
             ]
           },
           {
-            "propertyName": "parameters.filterValue",
+            "propertyName": "parameters.query",
             "propertyValue": "love",
             "propertySubPhrases": [
               "love"
@@ -2699,42 +2778,19 @@
                 ]
               }
             ]
-          },
-          {
-            "propertyName": "parameters.filterType",
-            "propertyValue": "name",
-            "propertySubPhrases": [
-              "in the title"
-            ],
-            "alternatives": [
-              {
-                "propertyValue": "artist",
-                "propertySubPhrases": [
-                  "by the artist"
-                ]
-              },
-              {
-                "propertyValue": "album",
-                "propertySubPhrases": [
-                  "in the album"
-                ]
-              },
-              {
-                "propertyValue": "genre",
-                "propertySubPhrases": [
-                  "in the genre"
-                ]
-              }
-            ]
           }
         ],
         "politePrefixes": [
           "Could you please",
-          "Would you mind"
+          "Would you mind",
+          "If it's not too much trouble, could you",
+          "May I kindly ask you to"
         ],
         "politeSuffixes": [
           "Thank you!",
-          "I would appreciate it."
+          "I would appreciate it!",
+          "Thanks a lot!",
+          "Much appreciated!"
         ]
       }
     },
@@ -2751,7 +2807,9 @@
           {
             "name": "fullActionName",
             "value": "player.searchTracks",
-            "substrings": []
+            "substrings": [
+              "Find"
+            ]
           },
           {
             "name": "parameters.query",
@@ -2764,11 +2822,23 @@
         "subPhrases": [
           {
             "text": "Find",
-            "category": "command",
-            "propertyNames": []
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
           },
           {
-            "text": "the best of 90s R&B",
+            "text": "the",
+            "category": "filler",
+            "synonyms": [
+              "a",
+              "an",
+              "that"
+            ],
+            "isOptional": true
+          },
+          {
+            "text": "best of 90s R&B",
             "category": "query",
             "propertyNames": [
               "parameters.query"
@@ -2777,28 +2847,55 @@
         ],
         "propertyAlternatives": [
           {
-            "propertyName": "parameters.query",
-            "propertyValue": "best of 90s R&B",
+            "propertyName": "fullActionName",
+            "propertyValue": "player.searchTracks",
             "propertySubPhrases": [
-              "the best of 90s R&B"
+              "Find"
             ],
             "alternatives": [
               {
-                "propertyValue": "best of 80s R&B",
+                "propertyValue": "player.findTracks",
                 "propertySubPhrases": [
-                  "the best of 80s R&B"
+                  "Search"
                 ]
               },
               {
-                "propertyValue": "best of 2000s R&B",
+                "propertyValue": "player.lookupTracks",
                 "propertySubPhrases": [
-                  "the best of 2000s R&B"
+                  "Look up"
                 ]
               },
               {
-                "propertyValue": "best of 90s pop",
+                "propertyValue": "player.discoverTracks",
                 "propertySubPhrases": [
-                  "the best of 90s pop"
+                  "Discover"
+                ]
+              }
+            ]
+          },
+          {
+            "propertyName": "parameters.query",
+            "propertyValue": "best of 90s R&B",
+            "propertySubPhrases": [
+              "best of 90s R&B"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "top 90s R&B",
+                "propertySubPhrases": [
+                  "top 90s R&B"
+                ]
+              },
+              {
+                "propertyValue": "greatest 90s R&B",
+                "propertySubPhrases": [
+                  "greatest 90s R&B"
+                ]
+              },
+              {
+                "propertyValue": "90s R&B hits",
+                "propertySubPhrases": [
+                  "90s R&B hits"
                 ]
               }
             ]
@@ -2806,13 +2903,11 @@
         ],
         "politePrefixes": [
           "Could you please",
-          "Would you mind",
-          "If it's not too much trouble, could you"
+          "Would you mind"
         ],
         "politeSuffixes": [
           "Thank you!",
-          "I would appreciate it.",
-          "Thanks in advance!"
+          "I would appreciate it."
         ]
       }
     },
@@ -2829,7 +2924,9 @@
           {
             "name": "fullActionName",
             "value": "player.searchTracks",
-            "substrings": []
+            "substrings": [
+              "Find"
+            ]
           },
           {
             "name": "parameters.query",
@@ -2842,11 +2939,23 @@
         "subPhrases": [
           {
             "text": "Find",
-            "category": "command",
-            "propertyNames": []
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
           },
           {
-            "text": "the best of country rock",
+            "text": "the",
+            "category": "filler",
+            "synonyms": [
+              "a",
+              "an",
+              "some"
+            ],
+            "isOptional": true
+          },
+          {
+            "text": "best of country rock",
             "category": "query",
             "propertyNames": [
               "parameters.query"
@@ -2855,28 +2964,55 @@
         ],
         "propertyAlternatives": [
           {
-            "propertyName": "parameters.query",
-            "propertyValue": "best of country rock",
+            "propertyName": "fullActionName",
+            "propertyValue": "player.searchTracks",
             "propertySubPhrases": [
-              "the best of country rock"
+              "Find"
             ],
             "alternatives": [
               {
-                "propertyValue": "top country rock hits",
+                "propertyValue": "player.playTracks",
                 "propertySubPhrases": [
-                  "the top country rock hits"
+                  "Play"
                 ]
               },
               {
-                "propertyValue": "greatest country rock songs",
+                "propertyValue": "player.addTracksToQueue",
                 "propertySubPhrases": [
-                  "the greatest country rock songs"
+                  "Queue"
                 ]
               },
               {
-                "propertyValue": "country rock classics",
+                "propertyValue": "player.shuffleTracks",
                 "propertySubPhrases": [
-                  "the country rock classics"
+                  "Shuffle"
+                ]
+              }
+            ]
+          },
+          {
+            "propertyName": "parameters.query",
+            "propertyValue": "best of country rock",
+            "propertySubPhrases": [
+              "best of country rock"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "top country rock",
+                "propertySubPhrases": [
+                  "top country rock"
+                ]
+              },
+              {
+                "propertyValue": "greatest country rock",
+                "propertySubPhrases": [
+                  "greatest country rock"
+                ]
+              },
+              {
+                "propertyValue": "country rock hits",
+                "propertySubPhrases": [
+                  "country rock hits"
                 ]
               }
             ]
@@ -2884,13 +3020,11 @@
         ],
         "politePrefixes": [
           "Could you please",
-          "Would you mind",
-          "If it's not too much trouble, could you"
+          "Would you mind"
         ],
         "politeSuffixes": [
           "Thank you!",
-          "I would appreciate it.",
-          "Thanks in advance!"
+          "I would appreciate it."
         ]
       }
     },
@@ -2946,19 +3080,19 @@
               {
                 "propertyValue": "player.findTracks",
                 "propertySubPhrases": [
-                  "Find"
+                  "Locate"
                 ]
               },
               {
                 "propertyValue": "player.lookupTracks",
                 "propertySubPhrases": [
-                  "Find"
+                  "Search for"
                 ]
               },
               {
-                "propertyValue": "player.locateTracks",
+                "propertyValue": "player.browseTracks",
                 "propertySubPhrases": [
-                  "Find"
+                  "Browse"
                 ]
               }
             ]
@@ -2973,19 +3107,19 @@
               {
                 "propertyValue": "top electronic trance music",
                 "propertySubPhrases": [
-                  "the best of electronic trance music"
+                  "the top electronic trance music"
                 ]
               },
               {
                 "propertyValue": "greatest electronic trance music",
                 "propertySubPhrases": [
-                  "the best of electronic trance music"
+                  "the greatest electronic trance music"
                 ]
               },
               {
-                "propertyValue": "finest electronic trance music",
+                "propertyValue": "popular electronic trance music",
                 "propertySubPhrases": [
-                  "the best of electronic trance music"
+                  "the popular electronic trance music"
                 ]
               }
             ]
@@ -2996,8 +3130,8 @@
           "Would you mind"
         ],
         "politeSuffixes": [
-          "Thank you!",
-          "I would appreciate it."
+          "Thank you",
+          "I appreciate it"
         ]
       }
     },
@@ -3014,9 +3148,7 @@
           {
             "name": "fullActionName",
             "value": "player.searchTracks",
-            "substrings": [
-              "Find"
-            ]
+            "substrings": []
           },
           {
             "name": "parameters.query",
@@ -3029,23 +3161,11 @@
         "subPhrases": [
           {
             "text": "Find",
-            "category": "action",
-            "propertyNames": [
-              "fullActionName"
-            ]
+            "category": "command",
+            "propertyNames": []
           },
           {
-            "text": "the",
-            "category": "filler",
-            "synonyms": [
-              "a",
-              "an",
-              "some"
-            ],
-            "isOptional": true
-          },
-          {
-            "text": "best of reggaeton",
+            "text": "the best of reggaeton",
             "category": "query",
             "propertyNames": [
               "parameters.query"
@@ -3054,55 +3174,28 @@
         ],
         "propertyAlternatives": [
           {
-            "propertyName": "fullActionName",
-            "propertyValue": "player.searchTracks",
-            "propertySubPhrases": [
-              "Find"
-            ],
-            "alternatives": [
-              {
-                "propertyValue": "player.findSongs",
-                "propertySubPhrases": [
-                  "Find"
-                ]
-              },
-              {
-                "propertyValue": "player.lookupTracks",
-                "propertySubPhrases": [
-                  "Find"
-                ]
-              },
-              {
-                "propertyValue": "player.searchMusic",
-                "propertySubPhrases": [
-                  "Find"
-                ]
-              }
-            ]
-          },
-          {
             "propertyName": "parameters.query",
             "propertyValue": "best of reggaeton",
             "propertySubPhrases": [
-              "best of reggaeton"
+              "the best of reggaeton"
             ],
             "alternatives": [
               {
                 "propertyValue": "top reggaeton hits",
                 "propertySubPhrases": [
-                  "top reggaeton hits"
-                ]
-              },
-              {
-                "propertyValue": "reggaeton favorites",
-                "propertySubPhrases": [
-                  "reggaeton favorites"
+                  "the top reggaeton hits"
                 ]
               },
               {
                 "propertyValue": "popular reggaeton songs",
                 "propertySubPhrases": [
-                  "popular reggaeton songs"
+                  "the popular reggaeton songs"
+                ]
+              },
+              {
+                "propertyValue": "greatest reggaeton tracks",
+                "propertySubPhrases": [
+                  "the greatest reggaeton tracks"
                 ]
               }
             ]
@@ -3111,14 +3204,12 @@
         "politePrefixes": [
           "Could you please",
           "Would you mind",
-          "If it's not too much trouble, could you",
-          "Please"
+          "If it's not too much trouble, could you"
         ],
         "politeSuffixes": [
           "Thank you!",
-          "Thanks a lot!",
-          "I would appreciate it!",
-          "Much appreciated!"
+          "I would appreciate it.",
+          "Thanks in advance!"
         ]
       }
     },
@@ -3135,39 +3226,28 @@
           {
             "name": "fullActionName",
             "value": "player.searchTracks",
-            "substrings": []
+            "substrings": [
+              "Find"
+            ]
           },
           {
             "name": "parameters.query",
             "value": "best of synth-pop",
             "substrings": [
-              "best of synth-pop"
+              "the best of synth-pop"
             ]
           }
         ],
         "subPhrases": [
           {
             "text": "Find",
-            "category": "command",
-            "synonyms": [
-              "Search",
-              "Look for",
-              "Locate"
-            ],
-            "isOptional": true
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
           },
           {
-            "text": "the",
-            "category": "preposition",
-            "synonyms": [
-              "a",
-              "an",
-              "some"
-            ],
-            "isOptional": true
-          },
-          {
-            "text": "best of synth-pop",
+            "text": "the best of synth-pop",
             "category": "query",
             "propertyNames": [
               "parameters.query"
@@ -3176,28 +3256,55 @@
         ],
         "propertyAlternatives": [
           {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.searchTracks",
+            "propertySubPhrases": [
+              "Find"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.findTracks",
+                "propertySubPhrases": [
+                  "Find"
+                ]
+              },
+              {
+                "propertyValue": "music.searchTracks",
+                "propertySubPhrases": [
+                  "Find"
+                ]
+              },
+              {
+                "propertyValue": "audio.searchTracks",
+                "propertySubPhrases": [
+                  "Find"
+                ]
+              }
+            ]
+          },
+          {
             "propertyName": "parameters.query",
             "propertyValue": "best of synth-pop",
             "propertySubPhrases": [
-              "best of synth-pop"
+              "the best of synth-pop"
             ],
             "alternatives": [
               {
                 "propertyValue": "top synth-pop hits",
                 "propertySubPhrases": [
-                  "top synth-pop hits"
-                ]
-              },
-              {
-                "propertyValue": "greatest synth-pop songs",
-                "propertySubPhrases": [
-                  "greatest synth-pop songs"
+                  "the best of synth-pop"
                 ]
               },
               {
                 "propertyValue": "synth-pop classics",
                 "propertySubPhrases": [
-                  "synth-pop classics"
+                  "the best of synth-pop"
+                ]
+              },
+              {
+                "propertyValue": "greatest synth-pop songs",
+                "propertySubPhrases": [
+                  "the best of synth-pop"
                 ]
               }
             ]
@@ -3205,11 +3312,13 @@
         ],
         "politePrefixes": [
           "Could you please",
-          "Would you mind"
+          "Would you mind",
+          "If it's not too much trouble, could you"
         ],
         "politeSuffixes": [
           "Thank you!",
-          "I would appreciate it."
+          "I would appreciate it.",
+          "Thanks in advance!"
         ]
       }
     },
@@ -3226,9 +3335,7 @@
           {
             "name": "fullActionName",
             "value": "player.searchTracks",
-            "substrings": [
-              "Find"
-            ]
+            "isImplicit": true
           },
           {
             "name": "parameters.query",
@@ -3241,13 +3348,105 @@
         "subPhrases": [
           {
             "text": "Find",
+            "category": "command",
+            "propertyNames": []
+          },
+          {
+            "text": "the greatest hits of the 80s",
+            "category": "query",
+            "propertyNames": [
+              "parameters.query"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "parameters.query",
+            "propertyValue": "greatest hits of the 80s",
+            "propertySubPhrases": [
+              "the greatest hits of the 80s"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "greatest hits of the 90s",
+                "propertySubPhrases": [
+                  "the greatest hits of the 90s"
+                ]
+              },
+              {
+                "propertyValue": "top songs of the 80s",
+                "propertySubPhrases": [
+                  "the top songs of the 80s"
+                ]
+              },
+              {
+                "propertyValue": "best of the 80s",
+                "propertySubPhrases": [
+                  "the best of the 80s"
+                ]
+              }
+            ]
+          }
+        ],
+        "politePrefixes": [
+          "Could you please",
+          "Would you mind",
+          "If it's not too much trouble,",
+          "May I kindly ask you to"
+        ],
+        "politeSuffixes": [
+          "Thank you.",
+          "I would appreciate it.",
+          "Thanks a lot.",
+          "Much appreciated."
+        ]
+      }
+    },
+    {
+      "request": "Find the most iconic guitar solos",
+      "action": {
+        "fullActionName": "player.searchTracks",
+        "parameters": {
+          "query": "iconic guitar solos"
+        }
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.searchTracks",
+            "substrings": [
+              "Find"
+            ]
+          },
+          {
+            "name": "parameters.query",
+            "value": "iconic guitar solos",
+            "substrings": [
+              "iconic guitar solos"
+            ]
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Find",
             "category": "action",
             "propertyNames": [
               "fullActionName"
             ]
           },
           {
-            "text": "the greatest hits of the 80s",
+            "text": "the most",
+            "category": "filler",
+            "synonyms": [
+              "the best",
+              "the greatest",
+              "the top"
+            ],
+            "isOptional": true
+          },
+          {
+            "text": "iconic guitar solos",
             "category": "query",
             "propertyNames": [
               "parameters.query"
@@ -3263,7 +3462,7 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "player.findSongs",
+                "propertyValue": "player.findTracks",
                 "propertySubPhrases": [
                   "Find"
                 ]
@@ -3275,7 +3474,7 @@
                 ]
               },
               {
-                "propertyValue": "player.searchMusic",
+                "propertyValue": "player.searchSongs",
                 "propertySubPhrases": [
                   "Find"
                 ]
@@ -3284,109 +3483,27 @@
           },
           {
             "propertyName": "parameters.query",
-            "propertyValue": "greatest hits of the 80s",
+            "propertyValue": "iconic guitar solos",
             "propertySubPhrases": [
-              "the greatest hits of the 80s"
+              "iconic guitar solos"
             ],
             "alternatives": [
-              {
-                "propertyValue": "top songs of the 80s",
-                "propertySubPhrases": [
-                  "the top songs of the 80s"
-                ]
-              },
-              {
-                "propertyValue": "best tracks of the 80s",
-                "propertySubPhrases": [
-                  "the best tracks of the 80s"
-                ]
-              },
-              {
-                "propertyValue": "80s hit songs",
-                "propertySubPhrases": [
-                  "80s hit songs"
-                ]
-              }
-            ]
-          }
-        ],
-        "politePrefixes": [
-          "Could you please",
-          "Would you mind"
-        ],
-        "politeSuffixes": [
-          "Thank you!",
-          "I would appreciate it."
-        ]
-      }
-    },
-    {
-      "request": "Find the most iconic guitar solos",
-      "action": {
-        "fullActionName": "player.searchTracks",
-        "parameters": {
-          "query": "most iconic guitar solos"
-        }
-      },
-      "explanation": {
-        "properties": [
-          {
-            "name": "fullActionName",
-            "value": "player.searchTracks",
-            "substrings": []
-          },
-          {
-            "name": "parameters.query",
-            "value": "most iconic guitar solos",
-            "substrings": [
-              "most iconic guitar solos"
-            ]
-          }
-        ],
-        "subPhrases": [
-          {
-            "text": "Find",
-            "category": "command",
-            "propertyNames": []
-          },
-          {
-            "text": "the most iconic guitar solos",
-            "category": "query",
-            "propertyNames": [
-              "parameters.query"
-            ]
-          }
-        ],
-        "propertyAlternatives": [
-          {
-            "propertyName": "parameters.query",
-            "propertyValue": "most iconic guitar solos",
-            "propertySubPhrases": [
-              "the most iconic guitar solos"
-            ],
-            "alternatives": [
-              {
-                "propertyValue": "best guitar solos",
-                "propertySubPhrases": [
-                  "the best guitar solos"
-                ]
-              },
               {
                 "propertyValue": "famous guitar solos",
                 "propertySubPhrases": [
-                  "the famous guitar solos"
+                  "famous guitar solos"
                 ]
               },
               {
                 "propertyValue": "legendary guitar solos",
                 "propertySubPhrases": [
-                  "the legendary guitar solos"
+                  "legendary guitar solos"
                 ]
               },
               {
-                "propertyValue": "greatest guitar solos",
+                "propertyValue": "classic guitar solos",
                 "propertySubPhrases": [
-                  "the greatest guitar solos"
+                  "classic guitar solos"
                 ]
               }
             ]
@@ -3394,11 +3511,13 @@
         ],
         "politePrefixes": [
           "Could you please",
-          "Would you mind"
+          "Would you mind",
+          "If it's not too much trouble, could you"
         ],
         "politeSuffixes": [
           "Thank you!",
-          "I would appreciate it."
+          "I would appreciate it.",
+          "Thanks in advance!"
         ]
       }
     },
@@ -3430,23 +3549,13 @@
         "subPhrases": [
           {
             "text": "Find",
-            "category": "command",
+            "category": "action",
             "propertyNames": [
               "fullActionName"
             ]
           },
           {
-            "text": "the",
-            "category": "filler",
-            "synonyms": [
-              "a",
-              "an",
-              "some"
-            ],
-            "isOptional": true
-          },
-          {
-            "text": "most relaxing songs ever",
+            "text": "the most relaxing songs ever",
             "category": "query",
             "propertyNames": [
               "parameters.query"
@@ -3464,13 +3573,13 @@
               {
                 "propertyValue": "player.findTracks",
                 "propertySubPhrases": [
-                  "Search"
+                  "Locate"
                 ]
               },
               {
                 "propertyValue": "player.lookupTracks",
                 "propertySubPhrases": [
-                  "Look up"
+                  "Search for"
                 ]
               },
               {
@@ -3485,25 +3594,25 @@
             "propertyName": "parameters.query",
             "propertyValue": "most relaxing songs ever",
             "propertySubPhrases": [
-              "most relaxing songs ever"
+              "the most relaxing songs ever"
             ],
             "alternatives": [
               {
-                "propertyValue": "most calming songs ever",
+                "propertyValue": "most calming music ever",
                 "propertySubPhrases": [
-                  "most calming songs ever"
+                  "the most calming music ever"
                 ]
               },
               {
-                "propertyValue": "most soothing songs ever",
+                "propertyValue": "most soothing tracks ever",
                 "propertySubPhrases": [
-                  "most soothing songs ever"
+                  "the most soothing tracks ever"
                 ]
               },
               {
-                "propertyValue": "most peaceful songs ever",
+                "propertyValue": "most peaceful melodies ever",
                 "propertySubPhrases": [
-                  "most peaceful songs ever"
+                  "the most peaceful melodies ever"
                 ]
               }
             ]
@@ -3516,7 +3625,7 @@
         ],
         "politeSuffixes": [
           "Thank you!",
-          "I would appreciate it.",
+          "I would really appreciate it.",
           "Thanks a lot!"
         ]
       }
@@ -3534,7 +3643,9 @@
           {
             "name": "fullActionName",
             "value": "player.searchTracks",
-            "substrings": []
+            "substrings": [
+              "Find the top 10 viral songs on TikTok"
+            ]
           },
           {
             "name": "parameters.query",
@@ -3546,12 +3657,14 @@
         ],
         "subPhrases": [
           {
-            "text": "Find the",
+            "text": "Find",
             "category": "command",
-            "propertyNames": []
+            "propertyNames": [
+              "fullActionName"
+            ]
           },
           {
-            "text": "top 10 viral songs on TikTok",
+            "text": "the top 10 viral songs on TikTok",
             "category": "query",
             "propertyNames": [
               "parameters.query"
@@ -3560,28 +3673,55 @@
         ],
         "propertyAlternatives": [
           {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.searchTracks",
+            "propertySubPhrases": [
+              "Find"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.findTracks",
+                "propertySubPhrases": [
+                  "Find"
+                ]
+              },
+              {
+                "propertyValue": "player.lookupTracks",
+                "propertySubPhrases": [
+                  "Find"
+                ]
+              },
+              {
+                "propertyValue": "player.getTracks",
+                "propertySubPhrases": [
+                  "Find"
+                ]
+              }
+            ]
+          },
+          {
             "propertyName": "parameters.query",
             "propertyValue": "top 10 viral songs on TikTok",
             "propertySubPhrases": [
-              "top 10 viral songs on TikTok"
+              "the top 10 viral songs on TikTok"
             ],
             "alternatives": [
               {
                 "propertyValue": "top 10 trending songs on TikTok",
                 "propertySubPhrases": [
-                  "top 10 trending songs on TikTok"
+                  "the top 10 trending songs on TikTok"
                 ]
               },
               {
                 "propertyValue": "top 10 popular songs on TikTok",
                 "propertySubPhrases": [
-                  "top 10 popular songs on TikTok"
+                  "the top 10 popular songs on TikTok"
                 ]
               },
               {
                 "propertyValue": "top 10 hit songs on TikTok",
                 "propertySubPhrases": [
-                  "top 10 hit songs on TikTok"
+                  "the top 10 hit songs on TikTok"
                 ]
               }
             ]
@@ -3593,7 +3733,7 @@
         ],
         "politeSuffixes": [
           "Thank you!",
-          "I would appreciate it."
+          "I appreciate it!"
         ]
       }
     },
@@ -3624,7 +3764,9 @@
           {
             "text": "Find",
             "category": "command",
-            "propertyNames": []
+            "propertyNames": [
+              "fullActionName"
+            ]
           },
           {
             "text": "top hits from the 2000s",
@@ -3636,6 +3778,33 @@
         ],
         "propertyAlternatives": [
           {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.searchTracks",
+            "propertySubPhrases": [
+              "Find"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.findSongs",
+                "propertySubPhrases": [
+                  "Find"
+                ]
+              },
+              {
+                "propertyValue": "music.searchTracks",
+                "propertySubPhrases": [
+                  "Find"
+                ]
+              },
+              {
+                "propertyValue": "audio.searchTracks",
+                "propertySubPhrases": [
+                  "Find"
+                ]
+              }
+            ]
+          },
+          {
             "propertyName": "parameters.query",
             "propertyValue": "top hits from the 2000s",
             "propertySubPhrases": [
@@ -3643,27 +3812,21 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "top hits from the 1990s",
+                "propertyValue": "top songs from the 2000s",
                 "propertySubPhrases": [
-                  "top hits from the 1990s"
+                  "top songs from the 2000s"
                 ]
               },
               {
-                "propertyValue": "top hits from the 2010s",
+                "propertyValue": "best hits from the 2000s",
                 "propertySubPhrases": [
-                  "top hits from the 2010s"
+                  "best hits from the 2000s"
                 ]
               },
               {
-                "propertyValue": "top rock hits from the 2000s",
+                "propertyValue": "popular tracks from the 2000s",
                 "propertySubPhrases": [
-                  "top rock hits from the 2000s"
-                ]
-              },
-              {
-                "propertyValue": "top pop hits from the 2000s",
-                "propertySubPhrases": [
-                  "top pop hits from the 2000s"
+                  "popular tracks from the 2000s"
                 ]
               }
             ]
@@ -3671,15 +3834,11 @@
         ],
         "politePrefixes": [
           "Could you please",
-          "Would you mind",
-          "If it's not too much trouble, could you",
-          "May I kindly ask you to"
+          "Would you mind"
         ],
         "politeSuffixes": [
           "Thank you!",
-          "I would appreciate it!",
-          "Thanks a lot!",
-          "Much appreciated!"
+          "I would appreciate it."
         ]
       }
     },
@@ -3697,7 +3856,7 @@
             "name": "fullActionName",
             "value": "player.searchTracks",
             "substrings": [
-              "Find tracks featuring"
+              "Find tracks"
             ]
           },
           {
@@ -3710,11 +3869,21 @@
         ],
         "subPhrases": [
           {
-            "text": "Find tracks featuring",
+            "text": "Find tracks",
             "category": "action",
             "propertyNames": [
               "fullActionName"
             ]
+          },
+          {
+            "text": "featuring",
+            "category": "preposition",
+            "synonyms": [
+              "with",
+              "including",
+              "starring"
+            ],
+            "isOptional": true
           },
           {
             "text": "Ariana Grande",
@@ -3729,25 +3898,25 @@
             "propertyName": "fullActionName",
             "propertyValue": "player.searchTracks",
             "propertySubPhrases": [
-              "Find tracks featuring"
+              "Find tracks"
             ],
             "alternatives": [
               {
                 "propertyValue": "player.findSongs",
                 "propertySubPhrases": [
-                  "Search for songs by"
+                  "Find songs"
                 ]
               },
               {
-                "propertyValue": "music.lookupTracks",
+                "propertyValue": "player.lookupTracks",
                 "propertySubPhrases": [
-                  "Look up tracks by"
+                  "Look up tracks"
                 ]
               },
               {
-                "propertyValue": "audio.searchMusic",
+                "propertyValue": "player.searchMusic",
                 "propertySubPhrases": [
-                  "Find music featuring"
+                  "Search music"
                 ]
               }
             ]
@@ -3807,7 +3976,7 @@
             "name": "fullActionName",
             "value": "player.playAlbum",
             "substrings": [
-              "Find tracks from the album Rumours by Fleetwood Mac"
+              "Find tracks from the album"
             ]
           },
           {
@@ -3835,7 +4004,7 @@
           },
           {
             "text": "Rumours",
-            "category": "albumName",
+            "category": "album name",
             "propertyNames": [
               "parameters.albumName"
             ]
@@ -3852,7 +4021,7 @@
           },
           {
             "text": "Fleetwood Mac",
-            "category": "artistName",
+            "category": "artist name",
             "propertyNames": [
               "parameters.artists.0"
             ]
@@ -3875,7 +4044,7 @@
               {
                 "propertyValue": "player.addAlbumToPlaylist",
                 "propertySubPhrases": [
-                  "Add tracks from the album"
+                  "Add tracks from the album to playlist"
                 ]
               },
               {
@@ -3945,12 +4114,12 @@
           "Could you please",
           "Would you mind",
           "If it's not too much trouble, could you",
-          "May I kindly ask you to"
+          "I would appreciate it if you could"
         ],
         "politeSuffixes": [
           "Thank you!",
-          "I would appreciate it!",
           "Thanks a lot!",
+          "I appreciate it!",
           "Much appreciated!"
         ]
       }
@@ -3968,9 +4137,7 @@
           {
             "name": "fullActionName",
             "value": "player.searchTracks",
-            "substrings": [
-              "Look for"
-            ]
+            "substrings": []
           },
           {
             "name": "parameters.query",
@@ -3984,46 +4151,22 @@
           {
             "text": "Look for",
             "category": "command",
-            "propertyNames": [
-              "fullActionName"
-            ]
+            "synonyms": [
+              "Search for",
+              "Find",
+              "Locate"
+            ],
+            "isOptional": true
           },
           {
             "text": "90s grunge bands like Nirvana",
-            "category": "searchQuery",
+            "category": "search query",
             "propertyNames": [
               "parameters.query"
             ]
           }
         ],
         "propertyAlternatives": [
-          {
-            "propertyName": "fullActionName",
-            "propertyValue": "player.searchTracks",
-            "propertySubPhrases": [
-              "Look for"
-            ],
-            "alternatives": [
-              {
-                "propertyValue": "player.findSongs",
-                "propertySubPhrases": [
-                  "Find"
-                ]
-              },
-              {
-                "propertyValue": "player.lookupTracks",
-                "propertySubPhrases": [
-                  "Search for"
-                ]
-              },
-              {
-                "propertyValue": "player.browseTracks",
-                "propertySubPhrases": [
-                  "Browse"
-                ]
-              }
-            ]
-          },
           {
             "propertyName": "parameters.query",
             "propertyValue": "90s grunge bands like Nirvana",
@@ -4032,21 +4175,21 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "90s alternative rock bands like Pearl Jam",
+                "propertyValue": "90s grunge bands like Pearl Jam",
                 "propertySubPhrases": [
-                  "90s alternative rock bands like Pearl Jam"
+                  "90s grunge bands like Pearl Jam"
                 ]
               },
               {
-                "propertyValue": "90s rock bands like Soundgarden",
+                "propertyValue": "90s grunge bands like Soundgarden",
                 "propertySubPhrases": [
-                  "90s rock bands like Soundgarden"
+                  "90s grunge bands like Soundgarden"
                 ]
               },
               {
-                "propertyValue": "90s punk bands like Green Day",
+                "propertyValue": "90s grunge bands like Alice in Chains",
                 "propertySubPhrases": [
-                  "90s punk bands like Green Day"
+                  "90s grunge bands like Alice in Chains"
                 ]
               }
             ]
@@ -4057,8 +4200,8 @@
           "Would you mind"
         ],
         "politeSuffixes": [
-          "Thank you",
-          "I appreciate it"
+          "Thank you!",
+          "I appreciate it!"
         ]
       }
     },
@@ -4090,7 +4233,7 @@
         "subPhrases": [
           {
             "text": "Look for",
-            "category": "command",
+            "category": "action",
             "propertyNames": [
               "fullActionName"
             ]
@@ -4161,11 +4304,13 @@
         ],
         "politePrefixes": [
           "Could you please",
-          "Would you mind"
+          "Would you mind",
+          "If it's not too much trouble, could you"
         ],
         "politeSuffixes": [
           "Thank you!",
-          "I would appreciate it."
+          "I would appreciate it.",
+          "Thanks a lot!"
         ]
       }
     },
@@ -4197,7 +4342,7 @@
         "subPhrases": [
           {
             "text": "Look for",
-            "category": "command",
+            "category": "action",
             "propertyNames": [
               "fullActionName"
             ]
@@ -4227,13 +4372,13 @@
               {
                 "propertyValue": "player.lookupTracks",
                 "propertySubPhrases": [
-                  "Lookup"
+                  "Search for"
                 ]
               },
               {
-                "propertyValue": "player.searchMusic",
+                "propertyValue": "player.browseTracks",
                 "propertySubPhrases": [
-                  "Search for"
+                  "Browse"
                 ]
               }
             ]
@@ -4246,21 +4391,21 @@
             ],
             "alternatives": [
               {
+                "propertyValue": "Jingle Bells by Frank Sinatra",
+                "propertySubPhrases": [
+                  "Jingle Bells by Frank Sinatra"
+                ]
+              },
+              {
                 "propertyValue": "Last Christmas by Wham!",
                 "propertySubPhrases": [
                   "Last Christmas by Wham!"
                 ]
               },
               {
-                "propertyValue": "Jingle Bell Rock by Bobby Helms",
+                "propertyValue": "Santa Claus Is Coming to Town by Bruce Springsteen",
                 "propertySubPhrases": [
-                  "Jingle Bell Rock by Bobby Helms"
-                ]
-              },
-              {
-                "propertyValue": "Feliz Navidad by José Feliciano",
-                "propertySubPhrases": [
-                  "Feliz Navidad by José Feliciano"
+                  "Santa Claus Is Coming to Town by Bruce Springsteen"
                 ]
               }
             ]
@@ -4304,7 +4449,7 @@
         "subPhrases": [
           {
             "text": "Look for",
-            "category": "action",
+            "category": "command",
             "propertyNames": [
               "fullActionName"
             ]
@@ -4338,9 +4483,9 @@
                 ]
               },
               {
-                "propertyValue": "player.browseTracks",
+                "propertyValue": "player.seekTracks",
                 "propertySubPhrases": [
-                  "Browse"
+                  "Seek"
                 ]
               }
             ]
@@ -4411,7 +4556,7 @@
         "subPhrases": [
           {
             "text": "Look for",
-            "category": "action",
+            "category": "command",
             "propertyNames": [
               "fullActionName"
             ]
@@ -4441,13 +4586,13 @@
               {
                 "propertyValue": "player.lookupTracks",
                 "propertySubPhrases": [
-                  "Lookup"
+                  "Search for"
                 ]
               },
               {
-                "propertyValue": "player.searchMusic",
+                "propertyValue": "player.browseTracks",
                 "propertySubPhrases": [
-                  "Search for"
+                  "Browse"
                 ]
               }
             ]
@@ -4486,7 +4631,7 @@
         ],
         "politeSuffixes": [
           "Thank you",
-          "I would appreciate it"
+          "I appreciate it"
         ]
       }
     },
@@ -4495,7 +4640,7 @@
       "action": {
         "fullActionName": "player.searchTracks",
         "parameters": {
-          "query": "Cant Help Falling in Love by Elvis Presley"
+          "query": "Can't Help Falling in Love by Elvis Presley"
         }
       },
       "explanation": {
@@ -4509,7 +4654,7 @@
           },
           {
             "name": "parameters.query",
-            "value": "Cant Help Falling in Love by Elvis Presley",
+            "value": "Can't Help Falling in Love by Elvis Presley",
             "substrings": [
               "Cant Help Falling in Love by Elvis Presley"
             ]
@@ -4561,7 +4706,7 @@
           },
           {
             "propertyName": "parameters.query",
-            "propertyValue": "Cant Help Falling in Love by Elvis Presley",
+            "propertyValue": "Can't Help Falling in Love by Elvis Presley",
             "propertySubPhrases": [
               "Cant Help Falling in Love by Elvis Presley"
             ],
@@ -4579,9 +4724,9 @@
                 ]
               },
               {
-                "propertyValue": "Love Me Tender by Elvis Presley",
+                "propertyValue": "Hound Dog by Elvis Presley",
                 "propertySubPhrases": [
-                  "Love Me Tender by Elvis Presley"
+                  "Hound Dog by Elvis Presley"
                 ]
               }
             ]
@@ -4592,8 +4737,8 @@
           "Would you mind"
         ],
         "politeSuffixes": [
-          "Thank you",
-          "I would appreciate it"
+          "Thank you!",
+          "I would appreciate it."
         ]
       }
     },
@@ -4625,7 +4770,7 @@
         "subPhrases": [
           {
             "text": "Look for",
-            "category": "command",
+            "category": "action",
             "propertyNames": [
               "fullActionName"
             ]
@@ -4655,7 +4800,7 @@
               {
                 "propertyValue": "player.lookupTracks",
                 "propertySubPhrases": [
-                  "Search for"
+                  "Lookup"
                 ]
               },
               {
@@ -4674,15 +4819,15 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "rock songs by Elvis Presley",
+                "propertyValue": "rock hits by Elvis Presley",
                 "propertySubPhrases": [
-                  "rock songs by Elvis Presley"
+                  "rock hits by Elvis Presley"
                 ]
               },
               {
-                "propertyValue": "pop tracks by Michael Jackson",
+                "propertyValue": "pop songs by Michael Jackson",
                 "propertySubPhrases": [
-                  "pop tracks by Michael Jackson"
+                  "pop songs by Michael Jackson"
                 ]
               },
               {
@@ -4717,9 +4862,7 @@
           {
             "name": "fullActionName",
             "value": "player.searchTracks",
-            "substrings": [
-              "Look for"
-            ]
+            "substrings": []
           },
           {
             "name": "parameters.query",
@@ -4733,46 +4876,22 @@
           {
             "text": "Look for",
             "category": "command",
-            "propertyNames": [
-              "fullActionName"
-            ]
+            "synonyms": [
+              "Search for",
+              "Find",
+              "Seek"
+            ],
+            "isOptional": true
           },
           {
             "text": "energetic workout playlists",
-            "category": "searchQuery",
+            "category": "query",
             "propertyNames": [
               "parameters.query"
             ]
           }
         ],
         "propertyAlternatives": [
-          {
-            "propertyName": "fullActionName",
-            "propertyValue": "player.searchTracks",
-            "propertySubPhrases": [
-              "Look for"
-            ],
-            "alternatives": [
-              {
-                "propertyValue": "player.findSongs",
-                "propertySubPhrases": [
-                  "Search for"
-                ]
-              },
-              {
-                "propertyValue": "player.lookupTracks",
-                "propertySubPhrases": [
-                  "Find"
-                ]
-              },
-              {
-                "propertyValue": "player.browseTracks",
-                "propertySubPhrases": [
-                  "Browse"
-                ]
-              }
-            ]
-          },
           {
             "propertyName": "parameters.query",
             "propertyValue": "energetic workout playlists",
@@ -4781,21 +4900,21 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "high-energy exercise playlists",
+                "propertyValue": "calm workout playlists",
                 "propertySubPhrases": [
-                  "high-energy exercise playlists"
-                ]
-              },
-              {
-                "propertyValue": "upbeat fitness playlists",
-                "propertySubPhrases": [
-                  "upbeat fitness playlists"
+                  "calm workout playlists"
                 ]
               },
               {
                 "propertyValue": "intense workout playlists",
                 "propertySubPhrases": [
                   "intense workout playlists"
+                ]
+              },
+              {
+                "propertyValue": "relaxing workout playlists",
+                "propertySubPhrases": [
+                  "relaxing workout playlists"
                 ]
               }
             ]
@@ -4873,9 +4992,9 @@
                 ]
               },
               {
-                "propertyValue": "player.searchMusic",
+                "propertyValue": "player.browseTracks",
                 "propertySubPhrases": [
-                  "Search for"
+                  "Browse"
                 ]
               }
             ]
@@ -4888,21 +5007,21 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "Grammy winners",
+                "propertyValue": "Grammy Award winners",
                 "propertySubPhrases": [
-                  "Grammy winners"
+                  "Grammy Award winners"
                 ]
               },
               {
-                "propertyValue": "Oscar winners",
+                "propertyValue": "Billboard Hot 100",
                 "propertySubPhrases": [
-                  "Oscar winners"
+                  "Billboard Hot 100"
                 ]
               },
               {
-                "propertyValue": "Nobel Prize winners",
+                "propertyValue": "MTV Music Award winners",
                 "propertySubPhrases": [
-                  "Nobel Prize winners"
+                  "MTV Music Award winners"
                 ]
               }
             ]
@@ -4976,7 +5095,7 @@
               {
                 "propertyValue": "player.lookupMusic",
                 "propertySubPhrases": [
-                  "Search for"
+                  "Look up"
                 ]
               },
               {
@@ -5075,15 +5194,15 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "player.findTracks",
+                "propertyValue": "player.findSongs",
                 "propertySubPhrases": [
                   "Find"
                 ]
               },
               {
-                "propertyValue": "player.locateTracks",
+                "propertyValue": "player.lookupTracks",
                 "propertySubPhrases": [
-                  "Locate"
+                  "Lookup"
                 ]
               },
               {
@@ -5108,15 +5227,15 @@
                 ]
               },
               {
-                "propertyValue": "Grammy winning albums",
+                "propertyValue": "Billboard top songs",
                 "propertySubPhrases": [
-                  "Grammy winning albums"
+                  "Billboard top songs"
                 ]
               },
               {
-                "propertyValue": "Grammy award-winning artists",
+                "propertyValue": "Top 40 hits",
                 "propertySubPhrases": [
-                  "Grammy award-winning artists"
+                  "Top 40 hits"
                 ]
               }
             ]
@@ -5209,15 +5328,15 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "Blinding Lights by The Weeknd",
-                "propertySubPhrases": [
-                  "Blinding Lights by The Weeknd"
-                ]
-              },
-              {
                 "propertyValue": "Shape of You by Ed Sheeran",
                 "propertySubPhrases": [
                   "Shape of You by Ed Sheeran"
+                ]
+              },
+              {
+                "propertyValue": "Blinding Lights by The Weeknd",
+                "propertySubPhrases": [
+                  "Blinding Lights by The Weeknd"
                 ]
               },
               {
@@ -5234,8 +5353,8 @@
           "Would you mind"
         ],
         "politeSuffixes": [
-          "Thank you!",
-          "I would appreciate it."
+          "Thank you",
+          "I would appreciate it"
         ]
       }
     },
@@ -5269,7 +5388,7 @@
             "synonyms": [
               "Search for",
               "Find",
-              "Locate"
+              "Seek out"
             ],
             "isOptional": true
           },
@@ -5355,7 +5474,7 @@
           },
           {
             "text": "iconic 70s disco tracks",
-            "category": "query",
+            "category": "searchQuery",
             "propertyNames": [
               "parameters.query"
             ]
@@ -5376,13 +5495,13 @@
                 ]
               },
               {
-                "propertyValue": "player.lookupTracks",
+                "propertyValue": "player.lookupMusic",
                 "propertySubPhrases": [
                   "Find"
                 ]
               },
               {
-                "propertyValue": "player.browseMusic",
+                "propertyValue": "player.browseTracks",
                 "propertySubPhrases": [
                   "Browse"
                 ]
@@ -5403,15 +5522,15 @@
                 ]
               },
               {
-                "propertyValue": "popular 90s pop hits",
+                "propertyValue": "famous 90s pop hits",
                 "propertySubPhrases": [
-                  "popular 90s pop hits"
+                  "famous 90s pop hits"
                 ]
               },
               {
-                "propertyValue": "famous 60s jazz tunes",
+                "propertyValue": "popular 2000s hip hop tracks",
                 "propertySubPhrases": [
-                  "famous 60s jazz tunes"
+                  "popular 2000s hip hop tracks"
                 ]
               }
             ]
@@ -5422,8 +5541,8 @@
           "Would you mind"
         ],
         "politeSuffixes": [
-          "Thank you",
-          "I appreciate it"
+          "Thank you!",
+          "I would appreciate it."
         ]
       }
     },
@@ -5440,7 +5559,9 @@
           {
             "name": "fullActionName",
             "value": "player.searchTracks",
-            "isImplicit": true
+            "substrings": [
+              "Look for"
+            ]
           },
           {
             "name": "parameters.query",
@@ -5453,8 +5574,10 @@
         "subPhrases": [
           {
             "text": "Look for",
-            "category": "command",
-            "propertyNames": []
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
           },
           {
             "text": "instrumental jazz music",
@@ -5466,6 +5589,33 @@
         ],
         "propertyAlternatives": [
           {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.searchTracks",
+            "propertySubPhrases": [
+              "Look for"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.findSongs",
+                "propertySubPhrases": [
+                  "Find"
+                ]
+              },
+              {
+                "propertyValue": "player.locateTracks",
+                "propertySubPhrases": [
+                  "Locate"
+                ]
+              },
+              {
+                "propertyValue": "player.searchMusic",
+                "propertySubPhrases": [
+                  "Search for"
+                ]
+              }
+            ]
+          },
+          {
             "propertyName": "parameters.query",
             "propertyValue": "instrumental jazz music",
             "propertySubPhrases": [
@@ -5473,21 +5623,21 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "smooth jazz music",
+                "propertyValue": "classical music",
                 "propertySubPhrases": [
-                  "smooth jazz music"
+                  "classical music"
                 ]
               },
               {
-                "propertyValue": "classic jazz music",
+                "propertyValue": "rock music",
                 "propertySubPhrases": [
-                  "classic jazz music"
+                  "rock music"
                 ]
               },
               {
-                "propertyValue": "modern jazz music",
+                "propertyValue": "pop music",
                 "propertySubPhrases": [
-                  "modern jazz music"
+                  "pop music"
                 ]
               }
             ]
@@ -5495,11 +5645,13 @@
         ],
         "politePrefixes": [
           "Could you please",
-          "Would you mind"
+          "Would you mind",
+          "If it's not too much trouble, could you"
         ],
         "politeSuffixes": [
           "Thank you!",
-          "I would appreciate it."
+          "I would appreciate it.",
+          "Thanks a lot!"
         ]
       }
     },
@@ -5638,7 +5790,7 @@
         "subPhrases": [
           {
             "text": "Look for",
-            "category": "action",
+            "category": "command",
             "propertyNames": [
               "fullActionName"
             ]
@@ -5712,8 +5864,8 @@
           "Would you mind"
         ],
         "politeSuffixes": [
-          "Thank you!",
-          "I would appreciate it."
+          "Thank you",
+          "I would appreciate it"
         ]
       }
     },
@@ -5806,9 +5958,9 @@
                 ]
               },
               {
-                "propertyValue": "Rolling in the Deep by Adele",
+                "propertyValue": "Thriller by Michael Jackson",
                 "propertySubPhrases": [
-                  "Rolling in the Deep by Adele"
+                  "Thriller by Michael Jackson"
                 ]
               }
             ]
@@ -5816,11 +5968,15 @@
         ],
         "politePrefixes": [
           "Could you please",
-          "Would you mind"
+          "Would you mind",
+          "Kindly",
+          "Please"
         ],
         "politeSuffixes": [
-          "Thank you!",
-          "I would appreciate it."
+          "Thank you",
+          "Thanks",
+          "I would appreciate it",
+          "If you don't mind"
         ]
       }
     },
@@ -5927,7 +6083,7 @@
         ],
         "politeSuffixes": [
           "Thank you!",
-          "I would appreciate it."
+          "I would appreciate it!"
         ]
       }
     },
@@ -5959,7 +6115,7 @@
         "subPhrases": [
           {
             "text": "Look for",
-            "category": "command",
+            "category": "action",
             "propertyNames": [
               "fullActionName"
             ]
@@ -5993,7 +6149,7 @@
                 ]
               },
               {
-                "propertyValue": "player.browseMusic",
+                "propertyValue": "player.browseTracks",
                 "propertySubPhrases": [
                   "Browse"
                 ]
@@ -6030,11 +6186,15 @@
         ],
         "politePrefixes": [
           "Could you please",
-          "Would you mind"
+          "Would you mind",
+          "Kindly",
+          "Please"
         ],
         "politeSuffixes": [
           "Thank you",
-          "Thanks a lot"
+          "Thanks a lot",
+          "I appreciate it",
+          "Much appreciated"
         ]
       }
     },
@@ -6094,13 +6254,13 @@
                 ]
               },
               {
-                "propertyValue": "player.lookupTracks",
+                "propertyValue": "player.lookupMusic",
                 "propertySubPhrases": [
-                  "Search for"
+                  "Lookup"
                 ]
               },
               {
-                "propertyValue": "player.browseMusic",
+                "propertyValue": "player.browseTracks",
                 "propertySubPhrases": [
                   "Browse"
                 ]
@@ -6137,14 +6297,10 @@
         ],
         "politePrefixes": [
           "Could you please",
-          "Would you mind",
-          "If it's not too much trouble, could you",
-          "May I kindly ask you to"
+          "Would you mind"
         ],
         "politeSuffixes": [
-          "thank you",
-          "please",
-          "if you don't mind",
+          "Thank you",
           "I would appreciate it"
         ]
       }
@@ -6226,21 +6382,21 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "pop hits from the 80s",
+                "propertyValue": "90s rock hits",
                 "propertySubPhrases": [
-                  "pop hits from the 80s"
+                  "90s rock hits"
                 ]
               },
               {
-                "propertyValue": "jazz classics from the 70s",
+                "propertyValue": "rock classics from the 90s",
                 "propertySubPhrases": [
-                  "jazz classics from the 70s"
+                  "rock classics from the 90s"
                 ]
               },
               {
-                "propertyValue": "hip hop tracks from the 2000s",
+                "propertyValue": "90s rock anthems",
                 "propertySubPhrases": [
-                  "hip hop tracks from the 2000s"
+                  "90s rock anthems"
                 ]
               }
             ]
@@ -6251,8 +6407,8 @@
           "Would you mind"
         ],
         "politeSuffixes": [
-          "Thank you!",
-          "I would appreciate it."
+          "Thank you",
+          "I would appreciate it"
         ]
       }
     },
@@ -6284,7 +6440,7 @@
         "subPhrases": [
           {
             "text": "Look for",
-            "category": "command",
+            "category": "action",
             "propertyNames": [
               "fullActionName"
             ]
@@ -6358,8 +6514,8 @@
           "Would you mind"
         ],
         "politeSuffixes": [
-          "Thank you",
-          "I would appreciate it"
+          "Thank you!",
+          "I would appreciate it."
         ]
       }
     },
@@ -6376,9 +6532,7 @@
           {
             "name": "fullActionName",
             "value": "player.searchTracks",
-            "substrings": [
-              "Look for"
-            ]
+            "isImplicit": true
           },
           {
             "name": "parameters.query",
@@ -6392,9 +6546,12 @@
           {
             "text": "Look for",
             "category": "command",
-            "propertyNames": [
-              "fullActionName"
-            ]
+            "synonyms": [
+              "Find",
+              "Search for",
+              "Seek"
+            ],
+            "isOptional": true
           },
           {
             "text": "salsa music to dance to",
@@ -6406,33 +6563,6 @@
         ],
         "propertyAlternatives": [
           {
-            "propertyName": "fullActionName",
-            "propertyValue": "player.searchTracks",
-            "propertySubPhrases": [
-              "Look for"
-            ],
-            "alternatives": [
-              {
-                "propertyValue": "player.findSongs",
-                "propertySubPhrases": [
-                  "Find"
-                ]
-              },
-              {
-                "propertyValue": "player.lookupTracks",
-                "propertySubPhrases": [
-                  "Search for"
-                ]
-              },
-              {
-                "propertyValue": "player.browseMusic",
-                "propertySubPhrases": [
-                  "Browse"
-                ]
-              }
-            ]
-          },
-          {
             "propertyName": "parameters.query",
             "propertyValue": "salsa music to dance to",
             "propertySubPhrases": [
@@ -6440,21 +6570,21 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "jazz music to relax to",
+                "propertyValue": "bachata music to dance to",
                 "propertySubPhrases": [
-                  "jazz music to relax to"
+                  "bachata music to dance to"
                 ]
               },
               {
-                "propertyValue": "rock music to workout to",
+                "propertyValue": "merengue music to dance to",
                 "propertySubPhrases": [
-                  "rock music to workout to"
+                  "merengue music to dance to"
                 ]
               },
               {
-                "propertyValue": "classical music to study to",
+                "propertyValue": "reggaeton music to dance to",
                 "propertySubPhrases": [
-                  "classical music to study to"
+                  "reggaeton music to dance to"
                 ]
               }
             ]
@@ -6462,11 +6592,15 @@
         ],
         "politePrefixes": [
           "Could you please",
-          "Would you mind"
+          "Would you mind",
+          "If it's not too much trouble, could you",
+          "May I kindly ask you to"
         ],
         "politeSuffixes": [
           "Thank you!",
-          "I would appreciate it."
+          "I would appreciate it.",
+          "Thanks a lot!",
+          "Your help is appreciated."
         ]
       }
     },
@@ -6605,7 +6739,7 @@
         "subPhrases": [
           {
             "text": "Look for",
-            "category": "command",
+            "category": "action",
             "propertyNames": [
               "fullActionName"
             ]
@@ -6635,13 +6769,13 @@
               {
                 "propertyValue": "player.lookupTracks",
                 "propertySubPhrases": [
-                  "Lookup"
+                  "Search for"
                 ]
               },
               {
-                "propertyValue": "player.searchMusic",
+                "propertyValue": "player.browseTracks",
                 "propertySubPhrases": [
-                  "Search for"
+                  "Browse"
                 ]
               }
             ]
@@ -6679,8 +6813,8 @@
           "Would you mind"
         ],
         "politeSuffixes": [
-          "Thank you!",
-          "I would appreciate it."
+          "Thank you",
+          "Please"
         ]
       }
     },
@@ -6712,7 +6846,7 @@
         "subPhrases": [
           {
             "text": "Look for",
-            "category": "command",
+            "category": "action",
             "propertyNames": [
               "fullActionName"
             ]
@@ -6742,13 +6876,13 @@
               {
                 "propertyValue": "player.lookupTracks",
                 "propertySubPhrases": [
-                  "Search for"
+                  "Lookup"
                 ]
               },
               {
-                "propertyValue": "player.browseTracks",
+                "propertyValue": "player.searchMusic",
                 "propertySubPhrases": [
-                  "Browse"
+                  "Search for"
                 ]
               }
             ]
@@ -6787,7 +6921,7 @@
         ],
         "politeSuffixes": [
           "Thank you!",
-          "I would appreciate it."
+          "I appreciate it!"
         ]
       }
     },
@@ -6819,7 +6953,7 @@
         "subPhrases": [
           {
             "text": "Look for",
-            "category": "action",
+            "category": "command",
             "propertyNames": [
               "fullActionName"
             ]
@@ -6893,8 +7027,8 @@
           "Would you mind"
         ],
         "politeSuffixes": [
-          "Thank you",
-          "I would appreciate it"
+          "Thank you!",
+          "I would appreciate it!"
         ]
       }
     },
@@ -7001,7 +7135,7 @@
         ],
         "politeSuffixes": [
           "Thank you",
-          "I would appreciate it"
+          "I appreciate it"
         ]
       }
     },
@@ -7026,7 +7160,7 @@
             "name": "parameters.query",
             "value": "latest hip-hop releases",
             "substrings": [
-              "latest hip-hop releases"
+              "the latest hip-hop releases"
             ]
           }
         ],
@@ -7039,17 +7173,7 @@
             ]
           },
           {
-            "text": "the",
-            "category": "filler",
-            "synonyms": [
-              "a",
-              "an",
-              "that"
-            ],
-            "isOptional": true
-          },
-          {
-            "text": "latest hip-hop releases",
+            "text": "the latest hip-hop releases",
             "category": "query",
             "propertyNames": [
               "parameters.query"
@@ -7071,15 +7195,15 @@
                 ]
               },
               {
-                "propertyValue": "player.lookupTracks",
-                "propertySubPhrases": [
-                  "Search for"
-                ]
-              },
-              {
                 "propertyValue": "player.browseMusic",
                 "propertySubPhrases": [
                   "Browse"
+                ]
+              },
+              {
+                "propertyValue": "player.discoverTracks",
+                "propertySubPhrases": [
+                  "Discover"
                 ]
               }
             ]
@@ -7088,25 +7212,25 @@
             "propertyName": "parameters.query",
             "propertyValue": "latest hip-hop releases",
             "propertySubPhrases": [
-              "latest hip-hop releases"
+              "the latest hip-hop releases"
             ],
             "alternatives": [
               {
-                "propertyValue": "new hip-hop tracks",
+                "propertyValue": "new rap songs",
                 "propertySubPhrases": [
-                  "new hip-hop tracks"
+                  "new rap songs"
                 ]
               },
               {
-                "propertyValue": "recent hip-hop songs",
+                "propertyValue": "recent hip-hop tracks",
                 "propertySubPhrases": [
-                  "recent hip-hop songs"
+                  "recent hip-hop tracks"
                 ]
               },
               {
-                "propertyValue": "current hip-hop hits",
+                "propertyValue": "fresh hip-hop music",
                 "propertySubPhrases": [
-                  "current hip-hop hits"
+                  "fresh hip-hop music"
                 ]
               }
             ]
@@ -7117,8 +7241,8 @@
           "Would you mind"
         ],
         "politeSuffixes": [
-          "Thank you!",
-          "I would appreciate it."
+          "Thank you",
+          "I appreciate it"
         ]
       }
     },
@@ -7150,23 +7274,13 @@
         "subPhrases": [
           {
             "text": "Look for",
-            "category": "command",
+            "category": "action",
             "propertyNames": [
               "fullActionName"
             ]
           },
           {
-            "text": "the",
-            "category": "filler",
-            "synonyms": [
-              "a",
-              "an",
-              "some"
-            ],
-            "isOptional": true
-          },
-          {
-            "text": "most streamed songs this week",
+            "text": "the most streamed songs this week",
             "category": "query",
             "propertyNames": [
               "parameters.query"
@@ -7184,13 +7298,13 @@
               {
                 "propertyValue": "player.findTracks",
                 "propertySubPhrases": [
-                  "Find"
+                  "Search for"
                 ]
               },
               {
                 "propertyValue": "player.lookupTracks",
                 "propertySubPhrases": [
-                  "Look up"
+                  "Find"
                 ]
               },
               {
@@ -7205,25 +7319,25 @@
             "propertyName": "parameters.query",
             "propertyValue": "most streamed songs this week",
             "propertySubPhrases": [
-              "most streamed songs this week"
+              "the most streamed songs this week"
             ],
             "alternatives": [
               {
                 "propertyValue": "top songs this week",
                 "propertySubPhrases": [
-                  "top songs this week"
+                  "the top songs this week"
                 ]
               },
               {
-                "propertyValue": "most popular tracks this week",
+                "propertyValue": "popular songs this week",
                 "propertySubPhrases": [
-                  "most popular tracks this week"
+                  "the popular songs this week"
                 ]
               },
               {
-                "propertyValue": "most played songs this week",
+                "propertyValue": "trending songs this week",
                 "propertySubPhrases": [
-                  "most played songs this week"
+                  "the trending songs this week"
                 ]
               }
             ]
@@ -7338,13 +7452,11 @@
         ],
         "politePrefixes": [
           "Could you please",
-          "Would you mind",
-          "If it's not too much trouble, could you"
+          "Would you mind"
         ],
         "politeSuffixes": [
           "Thank you!",
-          "I would appreciate it.",
-          "Thanks a lot!"
+          "I would appreciate it."
         ]
       }
     },
@@ -7373,17 +7485,12 @@
         ],
         "subPhrases": [
           {
-            "text": "Look for the",
+            "text": "Look for",
             "category": "command",
-            "synonyms": [
-              "Search for the",
-              "Find the",
-              "Get the"
-            ],
-            "isOptional": true
+            "propertyNames": []
           },
           {
-            "text": "ultimate workout mix",
+            "text": "the ultimate workout mix",
             "category": "query",
             "propertyNames": [
               "parameters.query"
@@ -7395,25 +7502,25 @@
             "propertyName": "parameters.query",
             "propertyValue": "ultimate workout mix",
             "propertySubPhrases": [
-              "ultimate workout mix"
+              "the ultimate workout mix"
             ],
             "alternatives": [
               {
                 "propertyValue": "best workout playlist",
                 "propertySubPhrases": [
-                  "best workout playlist"
+                  "the best workout playlist"
                 ]
               },
               {
                 "propertyValue": "top gym songs",
                 "propertySubPhrases": [
-                  "top gym songs"
+                  "the top gym songs"
                 ]
               },
               {
-                "propertyValue": "high energy music",
+                "propertyValue": "high energy exercise music",
                 "propertySubPhrases": [
-                  "high energy music"
+                  "the high energy exercise music"
                 ]
               }
             ]
@@ -7424,8 +7531,8 @@
           "Would you mind"
         ],
         "politeSuffixes": [
-          "Thank you!",
-          "I would appreciate it."
+          "Thank you",
+          "I would appreciate it"
         ]
       }
     },
@@ -7457,7 +7564,7 @@
         "subPhrases": [
           {
             "text": "Look for",
-            "category": "command",
+            "category": "action",
             "propertyNames": [
               "fullActionName"
             ]
@@ -7487,13 +7594,13 @@
               {
                 "propertyValue": "player.lookupTracks",
                 "propertySubPhrases": [
-                  "Search for"
+                  "Lookup"
                 ]
               },
               {
-                "propertyValue": "player.browseTracks",
+                "propertyValue": "player.searchMusic",
                 "propertySubPhrases": [
-                  "Browse"
+                  "Search for"
                 ]
               }
             ]
@@ -7531,8 +7638,8 @@
           "Would you mind"
         ],
         "politeSuffixes": [
-          "Thank you!",
-          "I would appreciate it."
+          "Thank you",
+          "I appreciate it"
         ]
       }
     },
@@ -7613,21 +7720,21 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "relaxing music for meditation",
+                "propertyValue": "relaxing music for yoga",
                 "propertySubPhrases": [
-                  "relaxing music for meditation"
+                  "relaxing music for yoga"
                 ]
               },
               {
-                "propertyValue": "calm sounds for meditation",
+                "propertyValue": "calm sounds for sleep",
                 "propertySubPhrases": [
-                  "calm sounds for meditation"
+                  "calm sounds for sleep"
                 ]
               },
               {
-                "propertyValue": "meditation background music",
+                "propertyValue": "nature sounds for relaxation",
                 "propertySubPhrases": [
-                  "meditation background music"
+                  "nature sounds for relaxation"
                 ]
               }
             ]
@@ -7638,8 +7745,8 @@
           "Would you mind"
         ],
         "politeSuffixes": [
-          "Thank you!",
-          "I would appreciate it."
+          "Thank you",
+          "I would appreciate it"
         ]
       }
     },
@@ -7671,7 +7778,7 @@
         "subPhrases": [
           {
             "text": "Search for",
-            "category": "command",
+            "category": "action",
             "propertyNames": [
               "fullActionName"
             ]
@@ -7695,19 +7802,19 @@
               {
                 "propertyValue": "player.searchAlbums",
                 "propertySubPhrases": [
-                  "Find albums by"
+                  "Find"
                 ]
               },
               {
                 "propertyValue": "player.searchArtists",
                 "propertySubPhrases": [
-                  "Look up artists like"
+                  "Look up"
                 ]
               },
               {
                 "propertyValue": "player.searchPlaylists",
                 "propertySubPhrases": [
-                  "Search for playlists containing"
+                  "Browse"
                 ]
               }
             ]
@@ -7720,15 +7827,15 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "jazz albums from Miles Davis",
-                "propertySubPhrases": [
-                  "jazz albums from Miles Davis"
-                ]
-              },
-              {
                 "propertyValue": "rock albums from The Beatles",
                 "propertySubPhrases": [
                   "rock albums from The Beatles"
+                ]
+              },
+              {
+                "propertyValue": "jazz albums from Miles Davis",
+                "propertySubPhrases": [
+                  "jazz albums from Miles Davis"
                 ]
               },
               {
@@ -7742,11 +7849,15 @@
         ],
         "politePrefixes": [
           "Could you please",
-          "Would you mind"
+          "Would you mind",
+          "Kindly",
+          "Please"
         ],
         "politeSuffixes": [
-          "Thank you",
-          "I would appreciate it"
+          "Thank you.",
+          "Thanks a lot.",
+          "I appreciate it.",
+          "Much appreciated."
         ]
       }
     },
@@ -7833,15 +7944,15 @@
                 ]
               },
               {
-                "propertyValue": "pop songs",
+                "propertyValue": "jazz standards",
                 "propertySubPhrases": [
-                  "pop songs"
+                  "jazz standards"
                 ]
               },
               {
-                "propertyValue": "jazz tunes",
+                "propertyValue": "pop hits",
                 "propertySubPhrases": [
-                  "jazz tunes"
+                  "pop hits"
                 ]
               }
             ]
@@ -7850,14 +7961,12 @@
         "politePrefixes": [
           "Could you please",
           "Would you mind",
-          "If it's not too much trouble, could you",
-          "May I kindly ask you to"
+          "If it's not too much trouble, could you"
         ],
         "politeSuffixes": [
           "Thank you!",
-          "I would appreciate it!",
-          "Thanks a lot!",
-          "Much appreciated!"
+          "I would appreciate it.",
+          "Thanks a lot!"
         ]
       }
     },
@@ -7911,13 +8020,13 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "player.findSongs",
+                "propertyValue": "player.findTracks",
                 "propertySubPhrases": [
                   "Find"
                 ]
               },
               {
-                "propertyValue": "player.lookupMusic",
+                "propertyValue": "player.lookupTracks",
                 "propertySubPhrases": [
                   "Look up"
                 ]
@@ -7938,9 +8047,9 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "symphonies by Beethoven",
+                "propertyValue": "Beethoven's symphonies",
                 "propertySubPhrases": [
-                  "symphonies by Beethoven"
+                  "Beethoven's symphonies"
                 ]
               },
               {
@@ -7950,9 +8059,9 @@
                 ]
               },
               {
-                "propertyValue": "Beethoven's orchestral works",
+                "propertyValue": "Beethoven's string quartets",
                 "propertySubPhrases": [
-                  "Beethoven's orchestral works"
+                  "Beethoven's string quartets"
                 ]
               }
             ]
@@ -7963,8 +8072,8 @@
           "Would you mind"
         ],
         "politeSuffixes": [
-          "Thank you!",
-          "I would appreciate it."
+          "Thank you",
+          "I appreciate it"
         ]
       }
     },
@@ -8045,21 +8154,21 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "acoustic covers by popular YouTubers",
+                "propertyValue": "cover songs by popular YouTubers",
                 "propertySubPhrases": [
-                  "acoustic covers by popular YouTubers"
+                  "cover songs by popular YouTubers"
                 ]
               },
               {
-                "propertyValue": "piano covers by well-known YouTubers",
+                "propertyValue": "cover songs by well-known YouTubers",
                 "propertySubPhrases": [
-                  "piano covers by well-known YouTubers"
+                  "cover songs by well-known YouTubers"
                 ]
               },
               {
-                "propertyValue": "guitar covers by trending YouTubers",
+                "propertyValue": "cover songs by top YouTubers",
                 "propertySubPhrases": [
-                  "guitar covers by trending YouTubers"
+                  "cover songs by top YouTubers"
                 ]
               }
             ]
@@ -8174,11 +8283,15 @@
         ],
         "politePrefixes": [
           "Could you please",
-          "Would you mind"
+          "Would you mind",
+          "If it's not too much trouble, could you",
+          "May I kindly ask you to"
         ],
         "politeSuffixes": [
-          "Thank you",
-          "I would appreciate it"
+          "Thank you!",
+          "I would appreciate it!",
+          "Thanks a lot!",
+          "Much appreciated!"
         ]
       }
     },
@@ -8187,7 +8300,7 @@
       "action": {
         "fullActionName": "player.searchTracks",
         "parameters": {
-          "query": "Dont Stop Believin by Journey"
+          "query": "Don't Stop Believin by Journey"
         }
       },
       "explanation": {
@@ -8201,7 +8314,7 @@
           },
           {
             "name": "parameters.query",
-            "value": "Dont Stop Believin by Journey",
+            "value": "Don't Stop Believin by Journey",
             "substrings": [
               "Dont Stop Believin by Journey"
             ]
@@ -8253,7 +8366,7 @@
           },
           {
             "propertyName": "parameters.query",
-            "propertyValue": "Dont Stop Believin by Journey",
+            "propertyValue": "Don't Stop Believin by Journey",
             "propertySubPhrases": [
               "Dont Stop Believin by Journey"
             ],
@@ -8282,14 +8395,14 @@
         "politePrefixes": [
           "Could you please",
           "Would you mind",
-          "If it's not too much trouble, could you",
-          "May I kindly ask you to"
+          "Kindly",
+          "Please"
         ],
         "politeSuffixes": [
-          "thank you.",
-          "please.",
-          "if you don't mind.",
-          "thanks a lot."
+          "Thank you",
+          "Thanks",
+          "I appreciate it",
+          "Much appreciated"
         ]
       }
     },
@@ -8355,9 +8468,9 @@
                 ]
               },
               {
-                "propertyValue": "player.searchMusic",
+                "propertyValue": "player.querySongs",
                 "propertySubPhrases": [
-                  "Search music for"
+                  "Query"
                 ]
               }
             ]
@@ -8396,7 +8509,7 @@
         ],
         "politeSuffixes": [
           "Thank you",
-          "I would appreciate it"
+          "I appreciate it"
         ]
       }
     },
@@ -8499,11 +8612,15 @@
         ],
         "politePrefixes": [
           "Could you please",
-          "Would you mind"
+          "Would you mind",
+          "If it's not too much trouble,",
+          "May I kindly ask you to"
         ],
         "politeSuffixes": [
-          "Thank you!",
-          "I would appreciate it."
+          "Thank you.",
+          "I would appreciate it.",
+          "Thanks a lot.",
+          "Much appreciated."
         ]
       }
     },
@@ -8559,19 +8676,19 @@
               {
                 "propertyValue": "player.findSongs",
                 "propertySubPhrases": [
-                  "Find"
+                  "Find songs"
                 ]
               },
               {
                 "propertyValue": "player.lookupMusic",
                 "propertySubPhrases": [
-                  "Look up"
+                  "Look up music"
                 ]
               },
               {
                 "propertyValue": "player.browseTracks",
                 "propertySubPhrases": [
-                  "Browse"
+                  "Browse tracks"
                 ]
               }
             ]
@@ -8584,21 +8701,21 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "traditional music from different countries",
+                "propertyValue": "traditional music globally",
                 "propertySubPhrases": [
-                  "traditional music from different countries"
+                  "traditional music globally"
                 ]
               },
               {
-                "propertyValue": "world folk songs",
+                "propertyValue": "worldwide folk songs",
                 "propertySubPhrases": [
-                  "world folk songs"
+                  "worldwide folk songs"
                 ]
               },
               {
-                "propertyValue": "global folk music",
+                "propertyValue": "international folk tunes",
                 "propertySubPhrases": [
-                  "global folk music"
+                  "international folk tunes"
                 ]
               }
             ]
@@ -8609,8 +8726,8 @@
           "Would you mind"
         ],
         "politeSuffixes": [
-          "Thank you",
-          "I would appreciate it"
+          "Thank you!",
+          "I would appreciate it."
         ]
       }
     },
@@ -8676,9 +8793,9 @@
                 ]
               },
               {
-                "propertyValue": "player.browseTracks",
+                "propertyValue": "player.discoverTracks",
                 "propertySubPhrases": [
-                  "Browse"
+                  "Discover"
                 ]
               }
             ]
@@ -8716,8 +8833,8 @@
           "Would you mind"
         ],
         "politeSuffixes": [
-          "Thank you",
-          "I would appreciate it"
+          "Thank you!",
+          "I would appreciate it."
         ]
       }
     },
@@ -8783,9 +8900,9 @@
                 ]
               },
               {
-                "propertyValue": "player.discoverTracks",
+                "propertyValue": "player.querySongs",
                 "propertySubPhrases": [
-                  "Discover"
+                  "Query"
                 ]
               }
             ]
@@ -8810,9 +8927,9 @@
                 ]
               },
               {
-                "propertyValue": "Irreplaceable by Beyoncé",
+                "propertyValue": "Formation by Beyoncé",
                 "propertySubPhrases": [
-                  "Irreplaceable by Beyoncé"
+                  "Formation by Beyoncé"
                 ]
               }
             ]
@@ -8821,12 +8938,14 @@
         "politePrefixes": [
           "Could you please",
           "Would you mind",
-          "If it's not too much trouble, could you"
+          "If it's not too much trouble,",
+          "May I kindly ask you to"
         ],
         "politeSuffixes": [
           "Thank you!",
           "I would appreciate it.",
-          "Thanks a lot!"
+          "Thanks a lot!",
+          "Much appreciated!"
         ]
       }
     },
@@ -8892,9 +9011,9 @@
                 ]
               },
               {
-                "propertyValue": "player.browseTracks",
+                "propertyValue": "player.querySongs",
                 "propertySubPhrases": [
-                  "Browse"
+                  "Query"
                 ]
               }
             ]
@@ -8929,11 +9048,15 @@
         ],
         "politePrefixes": [
           "Could you please",
-          "Would you mind"
+          "Would you mind",
+          "Kindly",
+          "Please"
         ],
         "politeSuffixes": [
           "Thank you",
-          "I would appreciate it"
+          "Thanks",
+          "I appreciate it",
+          "Much appreciated"
         ]
       }
     },
@@ -8965,7 +9088,7 @@
         "subPhrases": [
           {
             "text": "Search for",
-            "category": "action",
+            "category": "command",
             "propertyNames": [
               "fullActionName"
             ]
@@ -9049,7 +9172,7 @@
       "action": {
         "fullActionName": "player.searchTracks",
         "parameters": {
-          "query": "Imagine by John Lennon"
+          "query": "Imagine John Lennon"
         }
       },
       "explanation": {
@@ -9063,7 +9186,7 @@
           },
           {
             "name": "parameters.query",
-            "value": "Imagine by John Lennon",
+            "value": "Imagine John Lennon",
             "substrings": [
               "Imagine by John Lennon"
             ]
@@ -9106,34 +9229,34 @@
                 ]
               },
               {
-                "propertyValue": "player.browseTracks",
+                "propertyValue": "player.locateTracks",
                 "propertySubPhrases": [
-                  "Browse"
+                  "Locate"
                 ]
               }
             ]
           },
           {
             "propertyName": "parameters.query",
-            "propertyValue": "Imagine by John Lennon",
+            "propertyValue": "Imagine John Lennon",
             "propertySubPhrases": [
               "Imagine by John Lennon"
             ],
             "alternatives": [
               {
-                "propertyValue": "Hey Jude by The Beatles",
+                "propertyValue": "Hey Jude The Beatles",
                 "propertySubPhrases": [
                   "Hey Jude by The Beatles"
                 ]
               },
               {
-                "propertyValue": "Bohemian Rhapsody by Queen",
+                "propertyValue": "Bohemian Rhapsody Queen",
                 "propertySubPhrases": [
                   "Bohemian Rhapsody by Queen"
                 ]
               },
               {
-                "propertyValue": "Hotel California by Eagles",
+                "propertyValue": "Hotel California Eagles",
                 "propertySubPhrases": [
                   "Hotel California by Eagles"
                 ]
@@ -9213,9 +9336,9 @@
                 ]
               },
               {
-                "propertyValue": "player.discoverMusic",
+                "propertyValue": "player.browseMusic",
                 "propertySubPhrases": [
-                  "Discover music"
+                  "Browse music"
                 ]
               }
             ]
@@ -9228,21 +9351,21 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "alternative rock bands like The Strokes",
+                "propertyValue": "alternative bands like The Strokes",
                 "propertySubPhrases": [
-                  "alternative rock bands like The Strokes"
+                  "alternative bands like The Strokes"
                 ]
               },
               {
-                "propertyValue": "indie pop bands like Vampire Weekend",
+                "propertyValue": "rock bands like The Black Keys",
                 "propertySubPhrases": [
-                  "indie pop bands like Vampire Weekend"
+                  "rock bands like The Black Keys"
                 ]
               },
               {
-                "propertyValue": "garage rock bands like The White Stripes",
+                "propertyValue": "indie artists like Tame Impala",
                 "propertySubPhrases": [
-                  "garage rock bands like The White Stripes"
+                  "indie artists like Tame Impala"
                 ]
               }
             ]
@@ -9250,11 +9373,15 @@
         ],
         "politePrefixes": [
           "Could you please",
-          "Would you mind"
+          "Would you mind",
+          "If it's not too much trouble,",
+          "May I kindly ask you to"
         ],
         "politeSuffixes": [
-          "Thank you",
-          "I would appreciate it"
+          "Thank you!",
+          "I would appreciate it.",
+          "Thanks a lot!",
+          "That would be great!"
         ]
       }
     },
@@ -9271,7 +9398,9 @@
           {
             "name": "fullActionName",
             "value": "player.searchTracks",
-            "isImplicit": true
+            "substrings": [
+              "Search for"
+            ]
           },
           {
             "name": "parameters.query",
@@ -9285,7 +9414,9 @@
           {
             "text": "Search for",
             "category": "action",
-            "propertyNames": []
+            "propertyNames": [
+              "fullActionName"
+            ]
           },
           {
             "text": "Italian opera classics",
@@ -9297,6 +9428,33 @@
         ],
         "propertyAlternatives": [
           {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.searchTracks",
+            "propertySubPhrases": [
+              "Search for"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.findSongs",
+                "propertySubPhrases": [
+                  "Find"
+                ]
+              },
+              {
+                "propertyValue": "player.lookupMusic",
+                "propertySubPhrases": [
+                  "Look up"
+                ]
+              },
+              {
+                "propertyValue": "player.browseTracks",
+                "propertySubPhrases": [
+                  "Browse"
+                ]
+              }
+            ]
+          },
+          {
             "propertyName": "parameters.query",
             "propertyValue": "Italian opera classics",
             "propertySubPhrases": [
@@ -9304,27 +9462,21 @@
             ],
             "alternatives": [
               {
+                "propertyValue": "Italian classical music",
+                "propertySubPhrases": [
+                  "Italian classical music"
+                ]
+              },
+              {
+                "propertyValue": "Italian opera hits",
+                "propertySubPhrases": [
+                  "Italian opera hits"
+                ]
+              },
+              {
                 "propertyValue": "Italian opera arias",
                 "propertySubPhrases": [
                   "Italian opera arias"
-                ]
-              },
-              {
-                "propertyValue": "Italian opera overtures",
-                "propertySubPhrases": [
-                  "Italian opera overtures"
-                ]
-              },
-              {
-                "propertyValue": "Italian opera duets",
-                "propertySubPhrases": [
-                  "Italian opera duets"
-                ]
-              },
-              {
-                "propertyValue": "Italian opera choruses",
-                "propertySubPhrases": [
-                  "Italian opera choruses"
                 ]
               }
             ]
@@ -9335,49 +9487,10 @@
           "Would you mind"
         ],
         "politeSuffixes": [
-          "Thank you!",
-          "I would appreciate it."
+          "Thank you",
+          "I appreciate it"
         ]
-      },
-      "corrections": [
-        {
-          "data": {
-            "properties": [
-              {
-                "name": "fullActionName",
-                "value": "player.searchTracks",
-                "isImplicit": true
-              },
-              {
-                "name": "parameters.query",
-                "value": "Italian opera classics",
-                "substrings": [
-                  "Italian opera classics"
-                ]
-              }
-            ],
-            "subPhrases": [
-              {
-                "text": "Search for",
-                "category": "action",
-                "propertyNames": [
-                  "fullActionName"
-                ]
-              },
-              {
-                "text": "Italian opera classics",
-                "category": "query",
-                "propertyNames": [
-                  "parameters.query"
-                ]
-              }
-            ]
-          },
-          "correction": [
-            "Property 'fullActionName' is expected to be implicit and should not be included as a property name in a sub-phrase"
-          ]
-        }
-      ]
+      }
     },
     {
       "request": "Search for Let It Be by The Beatles",
@@ -9441,9 +9554,9 @@
                 ]
               },
               {
-                "propertyValue": "player.queryTracks",
+                "propertyValue": "player.browseTracks",
                 "propertySubPhrases": [
-                  "Query"
+                  "Browse"
                 ]
               }
             ]
@@ -9575,9 +9688,9 @@
                 ]
               },
               {
-                "propertyValue": "Adele's ballads",
+                "propertyValue": "Adele ballads",
                 "propertySubPhrases": [
-                  "Adele's ballads"
+                  "Adele ballads"
                 ]
               }
             ]
@@ -9588,8 +9701,8 @@
           "Would you mind"
         ],
         "politeSuffixes": [
-          "Thank you!",
-          "I would appreciate it."
+          "Thank you",
+          "I appreciate it"
         ]
       }
     },
@@ -9621,7 +9734,7 @@
         "subPhrases": [
           {
             "text": "Search for",
-            "category": "command",
+            "category": "action",
             "propertyNames": [
               "fullActionName"
             ]
@@ -9655,9 +9768,9 @@
                 ]
               },
               {
-                "propertyValue": "player.searchMusic",
+                "propertyValue": "player.querySongs",
                 "propertySubPhrases": [
-                  "Search music for"
+                  "Query"
                 ]
               }
             ]
@@ -9695,8 +9808,8 @@
           "Would you mind"
         ],
         "politeSuffixes": [
-          "Thank you!",
-          "I would appreciate it!"
+          "Thank you",
+          "I appreciate it"
         ]
       }
     },
@@ -9803,7 +9916,7 @@
         ],
         "politeSuffixes": [
           "Thank you",
-          "I would appreciate it"
+          "I appreciate it"
         ]
       }
     },
@@ -9869,7 +9982,7 @@
                 ]
               },
               {
-                "propertyValue": "player.browseTracks",
+                "propertyValue": "player.browseSongs",
                 "propertySubPhrases": [
                   "Browse"
                 ]
@@ -9906,15 +10019,11 @@
         ],
         "politePrefixes": [
           "Could you please",
-          "Would you mind",
-          "Kindly",
-          "If it's not too much trouble"
+          "Would you mind"
         ],
         "politeSuffixes": [
-          "Thank you",
-          "Thanks a lot",
-          "I appreciate it",
-          "Much appreciated"
+          "Thank you!",
+          "I would appreciate it."
         ]
       }
     },
@@ -9980,7 +10089,7 @@
                 ]
               },
               {
-                "propertyValue": "player.queryTracks",
+                "propertyValue": "player.querySongs",
                 "propertySubPhrases": [
                   "Query"
                 ]
@@ -10017,11 +10126,15 @@
         ],
         "politePrefixes": [
           "Could you please",
-          "Would you mind"
+          "Would you mind",
+          "Kindly",
+          "If it's not too much trouble"
         ],
         "politeSuffixes": [
           "Thank you!",
-          "I would appreciate it!"
+          "I would appreciate it.",
+          "Thanks a lot!",
+          "Much appreciated!"
         ]
       }
     },
@@ -10128,7 +10241,7 @@
         ],
         "politeSuffixes": [
           "Thank you",
-          "I would appreciate it"
+          "I appreciate it"
         ]
       }
     },
@@ -10192,21 +10305,21 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "player.searchAlbums",
+                "propertyValue": "player.findSongs",
                 "propertySubPhrases": [
-                  "Search for albums"
+                  "Find songs"
                 ]
               },
               {
-                "propertyValue": "player.searchArtists",
+                "propertyValue": "player.lookupTracks",
                 "propertySubPhrases": [
-                  "Search for artists"
+                  "Look up songs"
                 ]
               },
               {
-                "propertyValue": "player.searchPlaylists",
+                "propertyValue": "player.discoverTracks",
                 "propertySubPhrases": [
-                  "Search for playlists"
+                  "Discover songs"
                 ]
               }
             ]
@@ -10219,12 +10332,6 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "Elvis Presley",
-                "propertySubPhrases": [
-                  "Elvis Presley"
-                ]
-              },
-              {
                 "propertyValue": "The Rolling Stones",
                 "propertySubPhrases": [
                   "The Rolling Stones"
@@ -10235,6 +10342,12 @@
                 "propertySubPhrases": [
                   "Queen"
                 ]
+              },
+              {
+                "propertyValue": "Led Zeppelin",
+                "propertySubPhrases": [
+                  "Led Zeppelin"
+                ]
               }
             ]
           }
@@ -10244,8 +10357,8 @@
           "Would you mind"
         ],
         "politeSuffixes": [
-          "Thank you",
-          "I would appreciate it"
+          "Thank you!",
+          "I would appreciate it."
         ]
       }
     },
@@ -10456,12 +10569,14 @@
         "politePrefixes": [
           "Could you please",
           "Would you mind",
-          "If it's not too much trouble, could you"
+          "If it's not too much trouble, could you",
+          "May I kindly ask you to"
         ],
         "politeSuffixes": [
           "Thank you!",
-          "I would appreciate it.",
-          "Thanks a lot!"
+          "I would appreciate it!",
+          "Thanks a lot!",
+          "Much appreciated!"
         ]
       }
     },
@@ -10527,9 +10642,9 @@
                 ]
               },
               {
-                "propertyValue": "player.discoverTracks",
+                "propertyValue": "player.searchMusic",
                 "propertySubPhrases": [
-                  "Discover"
+                  "Search music for"
                 ]
               }
             ]
@@ -10568,7 +10683,7 @@
         ],
         "politeSuffixes": [
           "Thank you",
-          "I would appreciate it"
+          "I appreciate it"
         ]
       }
     },
@@ -10577,7 +10692,7 @@
       "action": {
         "fullActionName": "player.searchTracks",
         "parameters": {
-          "query": "Thriller album by Michael Jackson"
+          "query": "Thriller by Michael Jackson"
         }
       },
       "explanation": {
@@ -10586,44 +10701,28 @@
             "name": "fullActionName",
             "value": "player.searchTracks",
             "substrings": [
-              "Search for"
+              "Search for the album"
             ]
           },
           {
             "name": "parameters.query",
-            "value": "Thriller album by Michael Jackson",
+            "value": "Thriller by Michael Jackson",
             "substrings": [
-              "Thriller",
-              "album",
-              "by Michael Jackson"
+              "Thriller by Michael Jackson"
             ]
           }
         ],
         "subPhrases": [
           {
-            "text": "Search for",
+            "text": "Search for the album",
             "category": "action",
             "propertyNames": [
               "fullActionName"
             ]
           },
           {
-            "text": "the album",
-            "category": "object",
-            "propertyNames": [
-              "parameters.query"
-            ]
-          },
-          {
-            "text": "Thriller",
-            "category": "title",
-            "propertyNames": [
-              "parameters.query"
-            ]
-          },
-          {
-            "text": "by Michael Jackson",
-            "category": "artist",
+            "text": "Thriller by Michael Jackson",
+            "category": "query",
             "propertyNames": [
               "parameters.query"
             ]
@@ -10634,60 +10733,52 @@
             "propertyName": "fullActionName",
             "propertyValue": "player.searchTracks",
             "propertySubPhrases": [
-              "Search for"
+              "Search for the album"
             ],
             "alternatives": [
               {
-                "propertyValue": "player.findTracks",
+                "propertyValue": "player.searchAlbums",
                 "propertySubPhrases": [
-                  "Find"
+                  "Find the album"
                 ]
               },
               {
-                "propertyValue": "player.lookupTracks",
+                "propertyValue": "player.searchSongs",
                 "propertySubPhrases": [
-                  "Look up"
+                  "Search for the song"
                 ]
               },
               {
-                "propertyValue": "player.browseTracks",
+                "propertyValue": "player.searchArtists",
                 "propertySubPhrases": [
-                  "Browse"
+                  "Look for the artist"
                 ]
               }
             ]
           },
           {
             "propertyName": "parameters.query",
-            "propertyValue": "Thriller album by Michael Jackson",
+            "propertyValue": "Thriller by Michael Jackson",
             "propertySubPhrases": [
-              "the album",
-              "Thriller",
-              "by Michael Jackson"
+              "Thriller by Michael Jackson"
             ],
             "alternatives": [
               {
-                "propertyValue": "Bad album by Michael Jackson",
+                "propertyValue": "Bad by Michael Jackson",
                 "propertySubPhrases": [
-                  "the album",
-                  "Bad",
-                  "by Michael Jackson"
+                  "Bad by Michael Jackson"
                 ]
               },
               {
-                "propertyValue": "Dangerous album by Michael Jackson",
+                "propertyValue": "Dangerous by Michael Jackson",
                 "propertySubPhrases": [
-                  "the album",
-                  "Dangerous",
-                  "by Michael Jackson"
+                  "Dangerous by Michael Jackson"
                 ]
               },
               {
-                "propertyValue": "Off the Wall album by Michael Jackson",
+                "propertyValue": "Off the Wall by Michael Jackson",
                 "propertySubPhrases": [
-                  "the album",
-                  "Off the Wall",
-                  "by Michael Jackson"
+                  "Off the Wall by Michael Jackson"
                 ]
               }
             ]
@@ -10698,8 +10789,8 @@
           "Would you mind"
         ],
         "politeSuffixes": [
-          "Thank you!",
-          "I would appreciate it."
+          "Thank you",
+          "I would appreciate it"
         ]
       }
     },
@@ -10803,14 +10894,14 @@
         "politePrefixes": [
           "Could you please",
           "Would you mind",
-          "If it's not too much trouble, could you",
-          "May I kindly ask you to"
+          "Kindly",
+          "Please"
         ],
         "politeSuffixes": [
-          "Thank you!",
-          "I would appreciate it!",
-          "Thanks a lot!",
-          "Much appreciated!"
+          "Thank you",
+          "Thanks a lot",
+          "I appreciate it",
+          "Much appreciated"
         ]
       }
     },
@@ -10876,7 +10967,7 @@
                 ]
               },
               {
-                "propertyValue": "player.browseTracks",
+                "propertyValue": "player.browseSongs",
                 "propertySubPhrases": [
                   "Browse"
                 ]
@@ -10913,11 +11004,13 @@
         ],
         "politePrefixes": [
           "Could you please",
-          "Would you mind"
+          "Would you mind",
+          "If it's not too much trouble, could you"
         ],
         "politeSuffixes": [
           "Thank you!",
-          "I would appreciate it."
+          "I would appreciate it.",
+          "Thanks a lot!"
         ]
       }
     },
@@ -11020,15 +11113,11 @@
         ],
         "politePrefixes": [
           "Could you please",
-          "Would you mind",
-          "If it's not too much trouble, could you",
-          "May I kindly ask you to"
+          "Would you mind"
         ],
         "politeSuffixes": [
-          "thank you",
-          "please",
-          "if you don't mind",
-          "I would appreciate it"
+          "Thank you",
+          "I appreciate it"
         ]
       }
     },
@@ -11135,7 +11224,7 @@
         ],
         "politeSuffixes": [
           "Thank you",
-          "I appreciate it"
+          "I would appreciate it"
         ]
       }
     },
@@ -11201,9 +11290,9 @@
                 ]
               },
               {
-                "propertyValue": "player.discoverTracks",
+                "propertyValue": "player.searchMusic",
                 "propertySubPhrases": [
-                  "Discover"
+                  "Search music for"
                 ]
               }
             ]
@@ -11241,8 +11330,8 @@
           "Would you mind"
         ],
         "politeSuffixes": [
-          "Thank you",
-          "I would appreciate it"
+          "Thank you!",
+          "I would appreciate it."
         ]
       }
     },
@@ -11346,12 +11435,14 @@
         "politePrefixes": [
           "Could you please",
           "Would you mind",
-          "If it's not too much trouble, could you"
+          "If it's not too much trouble,",
+          "May I kindly ask you to"
         ],
         "politeSuffixes": [
-          "Thank you!",
+          "Thank you.",
           "I would appreciate it.",
-          "Thanks a lot!"
+          "Thanks a lot.",
+          "Much appreciated."
         ]
       }
     }

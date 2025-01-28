@@ -9,8 +9,14 @@ import {
     ItemIndexingStats,
     SourceTextBlock,
 } from "knowledge-processor";
-import { asyncArray, ChatUserInterface, dateTime } from "typeagent";
+import {
+    asyncArray,
+    ChatUserInterface,
+    dateTime,
+    getFileName,
+} from "typeagent";
 import { ChatMemoryPrinter } from "./chatMemoryPrinter.js";
+import path from "path";
 
 export async function pause(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
@@ -68,6 +74,13 @@ export function indexingStatsToCsv(
 
 export function completionStatsToCsv(stats: openai.CompletionUsageStats) {
     return `${stats.prompt_tokens},${stats.completion_tokens},${stats.total_tokens}`;
+}
+
+export function addFileNameSuffixToPath(sourcePath: string, suffix: string) {
+    return path.join(
+        path.dirname(sourcePath),
+        getFileName(sourcePath) + suffix,
+    );
 }
 
 export function argSourceFile(defaultValue?: string | undefined): ArgDef {

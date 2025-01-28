@@ -6,7 +6,7 @@
     "outDir": "../dist/test",
     "types": ["node", "jest"],
   },
-  "include": ["./**/*", "../src/conversation/testData.ts"],
+  "include": ["./**/*"],
   "ts-node": {
     "esm": true
   },

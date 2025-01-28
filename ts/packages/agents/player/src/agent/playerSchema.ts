@@ -6,7 +6,6 @@ export type PlayerAction =
     | PlayTrackAction
     | PlayFromCurrentTrackListAction
     | PlayAlbumAction
-    | PlayAlbumTrackAction
     | PlayArtistAction
     | PlayGenreAction
     | StatusAction
@@ -41,6 +40,7 @@ export interface PlayTrackAction {
     actionName: "playTrack";
     parameters: {
         trackName: string;
+        albumName?: string;
         artists?: string[];
     };
 }
@@ -63,19 +63,11 @@ export interface PlayFromCurrentTrackListAction {
     };
 }
 
-export interface PlayAlbumTrackAction {
-    actionName: "playAlbumTrack";
-    parameters: {
-        albumName: string;
-        trackName: string;
-        artists?: string[];
-    };
-}
-
 export interface PlayArtistAction {
     actionName: "playArtist";
     parameters: {
         artist: string;
+        genre?: string; // option genre if specified.
         quantity?: number;
     };
 }
@@ -183,7 +175,7 @@ export interface GetAlbumAction {
     actionName: "getAlbum";
 }
 
-// Set the current track list to the user's favorite tracks
+// result of this action is an entity of type 'track-list' with the user's favorites
 export interface GetFavoritesAction {
     actionName: "getFavorites";
     parameters?: {
@@ -192,11 +184,13 @@ export interface GetFavoritesAction {
     };
 }
 
-// apply a filter to match tracks in the current track list
-// set the current track list to the tracks that match the filter
+// apply a filter to match tracks in the track list given by the entity id
+// result of this action is an entity of type 'track-list' with the tracks that match the filter
 export interface FilterTracksAction {
     actionName: "filterTracks";
     parameters: {
+        // track list entity to use as the source of tracks
+        trackListEntityId: string;
         // filter type is one of "genre", "artist", "name"; name does a fuzzy match on the track name
         filterType: "genre" | "artist" | "name";
         // filter value is the value to match against
@@ -206,12 +200,14 @@ export interface FilterTracksAction {
     };
 }
 
-// create a new playlist from the current track list
+// create a new playlist from a track list entity
 export interface CreatePlaylistAction {
     actionName: "createPlaylist";
     parameters: {
         // name of playlist to create
         name: string;
+        // track list entity to use as the source of tracks
+        trackListEntityId: string;
     };
 }
 

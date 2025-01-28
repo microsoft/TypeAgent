@@ -25,7 +25,7 @@ import {
     getCommandInterface,
 } from "@typeagent/agent-sdk/helpers/command";
 
-import { answerQuestion, ModelContext } from "./answerQuestions.js";
+import { searchCode, QueryContext } from "./searchCode.js";
 import { SpelunkerAction } from "./spelunkerSchema.js";
 
 class RequestCommandHandler implements CommandHandler {
@@ -48,9 +48,11 @@ class RequestCommandHandler implements CommandHandler {
         params: ParsedCommandParams<ParameterDefinitions>,
     ): Promise<void> {
         if (typeof params.args?.question === "string") {
-            const result: ActionResult = await answerQuestion(
+            const result: ActionResult = await searchCode(
                 actionContext.sessionContext.agentContext,
                 params.args.question,
+                [],
+                [],
             );
             if (typeof result.error == "string") {
                 actionContext.actionIO.appendDisplay({
@@ -86,13 +88,13 @@ export function instantiate(): AppAgent {
 
 export type SpelunkerContext = {
     focusFolders: string[];
-    modelContext: ModelContext | undefined;
+    queryContext: QueryContext | undefined;
 };
 
 async function initializeSpelunkerContext(): Promise<SpelunkerContext> {
     return {
         focusFolders: [],
-        modelContext: undefined,
+        queryContext: undefined,
     };
 }
 
@@ -134,10 +136,13 @@ async function saveContext(
 async function executeSpelunkerAction(
     action: AppAction,
     context: ActionContext<SpelunkerContext>,
+    entityMap?: Map<string, Entity>,
 ): Promise<ActionResult> {
-    let result = await handleSpelunkerAction(
+    const entities = entityMap ? Array.from(entityMap.values()) : [];
+    const result = await handleSpelunkerAction(
         action as SpelunkerAction,
         context.sessionContext,
+        entities,
     );
     return result;
 }
@@ -145,16 +150,19 @@ async function executeSpelunkerAction(
 async function handleSpelunkerAction(
     action: SpelunkerAction,
     context: SessionContext<SpelunkerContext>,
+    entities: Entity[],
 ): Promise<ActionResult> {
     switch (action.actionName) {
-        case "answerQuestion": {
+        case "searchCode": {
             if (
                 typeof action.parameters.question == "string" &&
                 action.parameters.question.trim()
             ) {
-                return await answerQuestion(
+                return await searchCode(
                     context.agentContext,
                     action.parameters.question,
+                    action.parameters.entityUniqueIds,
+                    entities,
                 );
             }
             return createActionResultFromError("I see no question to answer");

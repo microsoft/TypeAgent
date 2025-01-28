@@ -12,6 +12,7 @@ import {
     DisplayContent,
     DisplayType,
     DynamicDisplay,
+    Entity,
     ParameterDefinitions,
     ParsedCommandParams,
     StorageListOptions,
@@ -120,7 +121,10 @@ export type AgentInvokeFunctions = {
         },
     ) => Promise<void>;
     executeAction: (
-        param: Partial<ActionContextParams> & { action: JSONAction },
+        param: Partial<ActionContextParams> & {
+            action: JSONAction;
+            entityMap: [string, Entity][];
+        },
     ) => Promise<ActionResult | undefined>;
     validateWildcardMatch: (
         param: Partial<ContextParams> & { action: JSONAction },

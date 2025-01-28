@@ -12,8 +12,7 @@ let port: chrome.runtime.Port | undefined;
 function sendDisconnect() {
     const message: WebAgentDisconnectMessageFromDispatcher = {
         source: "dispatcher",
-        target: "webAgent",
-        messageType: "disconnect",
+        method: "webAgent/disconnect",
     };
 
     window.postMessage(message);

@@ -3,12 +3,7 @@
 
 import registerDebug from "debug";
 import { IClientContext } from "./client.js";
-import {
-    getAlbums,
-    getArtistTopTracks,
-    getGenreSeeds,
-    search,
-} from "./endpoints.js";
+import { getAlbums, getArtistTopTracks, search } from "./endpoints.js";
 import { MusicItemInfo, SpotifyUserData } from "./userData.js";
 import chalk from "chalk";
 import { SpotifyService } from "./service.js";
@@ -282,6 +277,40 @@ async function searchAlbumsWithTrackArtists(
     return filtered.length === 0 ? undefined : filtered;
 }
 
+export async function findArtistTracksWithGenre(
+    artistName: string,
+    genre: string,
+    context: IClientContext,
+) {
+    const artists = await searchArtistSorted(artistName, context);
+    if (artists === undefined) {
+        throw new Error(`Unable to find artist '${artistName}'`);
+    }
+
+    const query: SpotifyQuery = {
+        artist: [artistName],
+        query: [genre],
+    };
+
+    const queryString = toQueryString(query);
+    const param: SpotifyApi.SearchForItemParameterObject = {
+        q: queryString,
+        type: "track",
+        limit: 50,
+        offset: 0,
+    };
+    const result = await search(param, context.service);
+    const tracks = result?.tracks?.items?.filter((track) =>
+        track.artists.some((trackArtist) => trackArtist.id === artists[0].id),
+    );
+    if (tracks === undefined || tracks.length === 0) {
+        throw new Error(
+            `Unable find track with genre '${genre}' and artist '${artistName}'`,
+        );
+    }
+    return tracks;
+}
+
 export async function findArtistTopTracks(
     artistName: string,
     context: IClientContext,
@@ -290,6 +319,7 @@ export async function findArtistTopTracks(
     if (artists === undefined) {
         throw new Error(`Unable to find artist '${artistName}'`);
     }
+
     const artist = artists[0];
     const artistId = artist.id;
     const result = await getArtistTopTracks(context.service, artistId);
@@ -374,7 +404,7 @@ async function expandMovmentTracks(
     return expandedTracks;
 }
 
-async function sortAndExpandMovment(
+async function sortAndExpandMovement(
     context: IClientContext,
     query: SpotifyQuery,
     tracks: SpotifyApi.TrackObjectFull[],
@@ -418,19 +448,10 @@ export async function findTracksWithGenre(
     quantity: number = 0,
 ): Promise<SpotifyApi.TrackObjectFull[]> {
     // TODO: cache this.
-    const genreSeed = await getGenreSeeds(context.service);
+    const query: SpotifyQuery = {
+        query: [genre],
+    };
 
-    const matchedGenre = genreSeed?.genres.find((g) =>
-        equivalentNames(g, genre),
-    );
-
-    const query: SpotifyQuery = matchedGenre
-        ? {
-              genre: [matchedGenre],
-          }
-        : {
-              query: [genre],
-          };
     const queryString = toQueryString(query);
     const param: SpotifyApi.SearchForItemParameterObject = {
         q: queryString,
@@ -444,7 +465,7 @@ export async function findTracksWithGenre(
         throw new Error(`Unable find track with genre '${genre}'`);
     }
 
-    return sortAndExpandMovment(context, query, tracks, quantity);
+    return sortAndExpandMovement(context, query, tracks, quantity);
 }
 
 function filterByArtists<
@@ -499,7 +520,7 @@ export async function findTracks(
         );
     }
 
-    return sortAndExpandMovment(context, query, tracks, quantity);
+    return sortAndExpandMovement(context, query, tracks, quantity);
 }
 
 function dumpArtists(

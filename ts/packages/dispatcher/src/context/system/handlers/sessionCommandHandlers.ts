@@ -149,7 +149,7 @@ class SessionClearCommandHandler implements CommandHandlerNoParams {
             systemContext,
             systemContext.session,
         );
-        displaySuccess(`Session cleared.`, context);
+        displaySuccess(`Session data cleared.`, context);
     }
 }
 

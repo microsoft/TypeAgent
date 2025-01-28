@@ -4,17 +4,11 @@
 import {
     ActionContext,
     AppAgent,
-    AppAction,
     ActionResult,
     ActionResultSuccess,
 } from "@typeagent/agent-sdk";
 import { createTypeChat, promptLib } from "typeagent";
 import { createActionResult } from "@typeagent/agent-sdk/helpers/action";
-
-import {
-    GreetingAction,
-    PersonalizedGreetingAction,
-} from "./greetingActionSchema.js";
 import { randomInt } from "node:crypto";
 import {
     CommandHandlerNoParams,
@@ -26,11 +20,15 @@ import { PromptSection, Result, TypeChatJsonTranslator } from "typechat";
 import {
     displayError,
     displayResult,
+    displayStatus,
 } from "@typeagent/agent-sdk/helpers/display";
+import {
+    GreetingAction,
+    PersonalizedGreetingAction,
+} from "./greetingActionSchema.js";
 
 export function instantiate(): AppAgent {
     return {
-        executeAction: executeGreetingAction,
         ...getCommandInterface(handlers),
     };
 }
@@ -66,6 +64,8 @@ export class GreetingCommandHandler implements CommandHandlerNoParams {
         "Have the agent generate a personalized greeting.";
     private instructions = `You are a breezy greeting generator. Greetings should NOT end with questions.`;
     public async run(context: ActionContext) {
+        displayStatus("...", context);
+
         //
         // Create Model
         //
@@ -147,29 +147,6 @@ const handlers: CommandHandlerTable = {
     defaultSubCommand: new GreetingCommandHandler(),
     commands: {},
 };
-
-async function executeGreetingAction(
-    action: AppAction,
-    context: ActionContext,
-) {
-    let result = await handleGreetingAction(action as GreetingAction, context);
-    return result;
-}
-
-async function handleGreetingAction(
-    action: GreetingAction,
-    context: ActionContext,
-) {
-    switch (action.actionName) {
-        case "personalizedGreetingAction": {
-            return handlePersonalizedGreetingAction(
-                action as PersonalizedGreetingAction,
-            );
-        }
-        default:
-            throw new Error(`Unknown action: ${action.actionName}`);
-    }
-}
 
 function handlePersonalizedGreetingAction(
     greetingAction: PersonalizedGreetingAction,

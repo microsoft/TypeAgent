@@ -20,6 +20,13 @@ declare global {
         manifest: AppAgentManifest,
         agent: AppAgent,
     ): void;
+
+    interface Window {
+        webAgentApi: {
+            onWebAgentMessage: (callback: (message: any) => void) => void;
+            sendWebAgentMessage: (message: any) => void;
+        };
+    }
 }
 
 type DynamicTypeAgentManager = {
@@ -43,23 +50,34 @@ function ensureDynamicTypeAgentManager(): DynamicTypeAgentManager {
         return manager;
     }
     const messageChannelProvider = createGenericChannelProvider(
-        (message: any) =>
-            window.postMessage({
-                target: "dispatcher",
+        (message: any) => {
+            const rpcMessage = {
                 source: "webAgent",
-                messageType: "message",
-                body: message,
-            } as WebAgentRpcMessage),
+                method: "webAgent/message",
+                params: message,
+            } as WebAgentRpcMessage;
+
+            if (window.webAgentApi) {
+                window.webAgentApi.sendWebAgentMessage(rpcMessage);
+            } else {
+                window.postMessage(rpcMessage);
+            }
+        },
     );
 
-    const registerChannel = createGenericChannel((message: any) =>
-        window.postMessage({
-            target: "dispatcher",
+    const registerChannel = createGenericChannel((message: any) => {
+        const rpcMessage = {
             source: "webAgent",
-            messageType: "register",
-            body: message,
-        } as WebAgentRegisterMessage),
-    );
+            method: "webAgent/register",
+            params: message,
+        } as WebAgentRegisterMessage;
+
+        if (window.webAgentApi) {
+            window.webAgentApi.sendWebAgentMessage(rpcMessage);
+        } else {
+            window.postMessage(rpcMessage);
+        }
+    });
 
     const rpc = createRpc<DynamicTypeAgentManagerInvokeFunctions>(
         registerChannel.channel,
@@ -88,14 +106,14 @@ function ensureDynamicTypeAgentManager(): DynamicTypeAgentManager {
     const messageHandler = (event: MessageEvent) => {
         const data = event.data;
         if (isWebAgentMessageFromDispatcher(data)) {
-            switch (data.messageType) {
-                case "register":
-                    registerChannel.message(data.body);
+            switch (data.method) {
+                case "webAgent/register":
+                    registerChannel.message(data.params);
                     break;
-                case "message":
-                    messageChannelProvider.message(data.body);
+                case "webAgent/message":
+                    messageChannelProvider.message(data.params);
                     break;
-                case "disconnect":
+                case "webAgent/disconnect":
                     messageChannelProvider.disconnect();
                     registerChannel.disconnect();
                     window.removeEventListener("message", messageHandler);
@@ -104,7 +122,14 @@ function ensureDynamicTypeAgentManager(): DynamicTypeAgentManager {
             }
         }
     };
-    window.addEventListener("message", messageHandler);
+
+    if (window.webAgentApi) {
+        window.webAgentApi.onWebAgentMessage((event) => {
+            messageHandler(event);
+        });
+    } else {
+        window.addEventListener("message", messageHandler);
+    }
 
     return manager;
 }

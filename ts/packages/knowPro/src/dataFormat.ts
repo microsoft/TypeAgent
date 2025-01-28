@@ -1,7 +1,8 @@
-// Copyright (c) Microsoft Corporation and Henry Lucco.
+// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
 import { conversation } from "knowledge-processor";
+
 // an object that can provide a KnowledgeResponse structure
 export interface IKnowledgeSource {
     getKnowledge: () => conversation.KnowledgeResponse;
@@ -12,7 +13,7 @@ export interface DeletionInfo {
     reason?: string;
 }
 
-export interface IMessage<TMeta extends IKnowledgeSource> {
+export interface IMessage<TMeta extends IKnowledgeSource = any> {
     // the text of the message, split into chunks
     textChunks: string[];
     // for example, e-mail has a subject, from and to fields; a chat message has a sender and a recipient
@@ -39,21 +40,22 @@ export type ScoredSemanticRef = {
 };
 
 export interface ITermToSemanticRefIndex {
+    getTerms(): string[];
     addTerm(
         term: string,
         semanticRefIndex: SemanticRefIndex,
         strength?: number,
     ): void;
     removeTerm(term: string, semanticRefIndex: SemanticRefIndex): void;
-    lookupTerm(
-        term: string,
-        fuzzy?: boolean | undefined,
-    ): ScoredSemanticRef[] | undefined;
+    lookupTerm(term: string): ScoredSemanticRef[] | undefined;
 }
 
+export type KnowledgeType = "entity" | "action" | "topic" | "tag";
+
 export interface SemanticRef {
+    semanticRefIndex: SemanticRefIndex;
     range: TextRange;
-    knowledgeType: "entity" | "action" | "topic" | "tag";
+    knowledgeType: KnowledgeType;
     knowledge:
         | conversation.ConcreteEntity
         | conversation.Action
@@ -67,17 +69,13 @@ export interface ITopic {
 
 type ITag = ITopic;
 
-export interface IConversation<TMeta extends IKnowledgeSource> {
+export interface IConversation<TMeta extends IKnowledgeSource = any> {
     nameTag: string;
     tags: string[];
     messages: IMessage<TMeta>[];
-    // this should be defined before persisting the conversation
-    semanticRefData?: ITermToSemanticRefIndexData;
-
-    // this should be undefined before persisting the conversation
     semanticRefIndex?: ITermToSemanticRefIndex | undefined;
-    // this should be defined before persisting the conversation
     semanticRefs: SemanticRef[] | undefined;
+    relatedTermsIndex?: ITermToRelatedTermsIndex | undefined;
 }
 
 export interface TextLocation {
@@ -95,4 +93,38 @@ export interface TextRange {
     start: TextLocation;
     // the end of the range (exclusive)
     end?: TextLocation | undefined;
+}
+
+export interface IConversationData<TMessage> {
+    nameTag: string;
+    messages: TMessage[];
+    tags: string[];
+    semanticRefs: SemanticRef[];
+    semanticIndexData?: ITermToSemanticRefIndexData | undefined;
+}
+
+export type Term = {
+    text: string;
+    /**
+     * Optional additional score to use when this term matches
+     */
+    score?: number | undefined;
+};
+
+export interface ITermToRelatedTermsIndex {
+    lookupTerm(term: string): Promise<Term[] | undefined>;
+}
+
+export interface ITextSemanticIndex {
+    serialize(): ITextEmbeddingData;
+    deserialize(data: ITextEmbeddingData): void;
+}
+
+export interface ITextEmbeddingData {
+    embeddingData?: ITextEmbeddingDataItem[] | undefined;
+}
+
+export interface ITextEmbeddingDataItem {
+    text: string;
+    embedding: number[];
 }

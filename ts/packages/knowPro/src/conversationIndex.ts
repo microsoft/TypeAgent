@@ -1,4 +1,4 @@
-// Copyright (c) Microsoft Corporation and Henry Lucco.
+// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
 import {
@@ -12,9 +12,12 @@ import {
     ITopic,
     TextRange,
     TextLocation,
+    IMessage,
 } from "./dataFormat.js";
 import { conversation } from "knowledge-processor";
 import { openai } from "aiclient";
+import { Result } from "typechat";
+import { async } from "typeagent";
 
 function addFacet(
     facet: conversation.Facet | undefined,
@@ -46,6 +49,19 @@ function textRangeFromLocation(
     };
 }
 
+function createKnowledgeModel() {
+    const chatModelSettings = openai.apiSettingsFromEnv(
+        openai.ModelType.Chat,
+        undefined,
+        "GPT_4_O",
+    );
+    chatModelSettings.retryPauseMs = 10000;
+    const chatModel = openai.createJsonChatModel(chatModelSettings, [
+        "chatExtractor",
+    ]);
+    return chatModel;
+}
+
 export function addEntityToIndex(
     entity: conversation.ConcreteEntity,
     semanticRefs: SemanticRef[],
@@ -53,12 +69,13 @@ export function addEntityToIndex(
     messageIndex: number,
     chunkIndex = 0,
 ) {
+    const refIndex = semanticRefs.length;
     semanticRefs.push({
+        semanticRefIndex: refIndex,
         range: textRangeFromLocation(messageIndex, chunkIndex),
         knowledgeType: "entity",
         knowledge: entity,
     });
-    const refIndex = semanticRefs.length - 1;
     semanticRefIndex.addTerm(entity.name, refIndex);
     // add each type as a separate term
     for (const type of entity.type) {
@@ -79,12 +96,13 @@ export function addTopicToIndex(
     messageIndex: number,
     chunkIndex = 0,
 ) {
+    const refIndex = semanticRefs.length;
     semanticRefs.push({
+        semanticRefIndex: refIndex,
         range: textRangeFromLocation(messageIndex, chunkIndex),
         knowledgeType: "topic",
         knowledge: topic,
     });
-    const refIndex = semanticRefs.length - 1;
     semanticRefIndex.addTerm(topic.text, refIndex);
 }
 
@@ -95,12 +113,13 @@ export function addActionToIndex(
     messageIndex: number,
     chunkIndex = 0,
 ) {
+    const refIndex = semanticRefs.length;
     semanticRefs.push({
+        semanticRefIndex: refIndex,
         range: textRangeFromLocation(messageIndex, chunkIndex),
         knowledgeType: "action",
         knowledge: action,
     });
-    const refIndex = semanticRefs.length - 1;
     semanticRefIndex.addTerm(action.verbs.join(" "), refIndex);
     if (action.subjectEntityName !== "none") {
         semanticRefIndex.addTerm(action.subjectEntityName, refIndex);
@@ -126,65 +145,118 @@ export function addActionToIndex(
     addFacet(action.subjectEntityFacet, refIndex, semanticRefIndex);
 }
 
+export type ConversationIndexingResult = {
+    index: ConversationIndex;
+    failedMessages: { message: IMessage; error: string }[];
+};
+
 export async function buildConversationIndex<TMeta extends IKnowledgeSource>(
     convo: IConversation<TMeta>,
-) {
+    progressCallback?: (
+        text: string,
+        knowledgeResult: Result<conversation.KnowledgeResponse>,
+    ) => boolean,
+): Promise<ConversationIndexingResult> {
     const semanticRefIndex = new ConversationIndex();
     convo.semanticRefIndex = semanticRefIndex;
     if (convo.semanticRefs === undefined) {
         convo.semanticRefs = [];
     }
     const semanticRefs = convo.semanticRefs;
-    const chatModelSettings = openai.apiSettingsFromEnv(
-        openai.ModelType.Chat,
-        undefined,
-        "GPT_4_O",
-    );
-    chatModelSettings.retryPauseMs = 10000;
-    const chatModel = openai.createJsonChatModel(chatModelSettings, [
-        "chatExtractor",
-    ]);
+    const chatModel = createKnowledgeModel();
     const extractor = conversation.createKnowledgeExtractor(chatModel, {
         maxContextLength: 4096,
         mergeActionKnowledge: false,
     });
-
+    const maxRetries = 4;
+    let indexingResult: ConversationIndexingResult = {
+        index: semanticRefIndex,
+        failedMessages: [],
+    };
     for (let i = 0; i < convo.messages.length; i++) {
         const msg = convo.messages[i];
         // only one chunk per message for now
         const text = msg.textChunks[0];
-        const knowledge = await extractor.extract(text).catch((err) => {
-            console.log(`Error extracting knowledge: ${err}`);
-            return undefined;
-        });
-        if (knowledge) {
-            for (const entity of knowledge.entities) {
-                addEntityToIndex(entity, semanticRefs, semanticRefIndex, i);
+        try {
+            const knowledgeResult = await async.callWithRetry(() =>
+                extractor.extractWithRetry(text, maxRetries),
+            );
+            if (progressCallback && !progressCallback(text, knowledgeResult)) {
+                break;
             }
-            for (const action of knowledge.actions) {
-                addActionToIndex(action, semanticRefs, semanticRefIndex, i);
+            if (knowledgeResult.success) {
+                const knowledge = knowledgeResult.data;
+                if (knowledge) {
+                    for (const entity of knowledge.entities) {
+                        addEntityToIndex(
+                            entity,
+                            semanticRefs,
+                            semanticRefIndex,
+                            i,
+                        );
+                    }
+                    for (const action of knowledge.actions) {
+                        addActionToIndex(
+                            action,
+                            semanticRefs,
+                            semanticRefIndex,
+                            i,
+                        );
+                    }
+                    for (const inverseAction of knowledge.inverseActions) {
+                        addActionToIndex(
+                            inverseAction,
+                            semanticRefs,
+                            semanticRefIndex,
+                            i,
+                        );
+                    }
+                    for (const topic of knowledge.topics) {
+                        const topicObj: ITopic = { text: topic };
+                        addTopicToIndex(
+                            topicObj,
+                            semanticRefs,
+                            semanticRefIndex,
+                            i,
+                        );
+                    }
+                }
+            } else {
+                indexingResult.failedMessages.push({
+                    message: msg,
+                    error: knowledgeResult.message,
+                });
             }
-            for (const inverseAction of knowledge.inverseActions) {
-                addActionToIndex(
-                    inverseAction,
-                    semanticRefs,
-                    semanticRefIndex,
-                    i,
-                );
-            }
-            for (const topic of knowledge.topics) {
-                const topicObj: ITopic = { text: topic };
-                addTopicToIndex(topicObj, semanticRefs, semanticRefIndex, i);
-            }
+        } catch (ex) {
+            indexingResult.failedMessages.push({
+                message: msg,
+                error: `${ex}`,
+            });
         }
     }
+    return indexingResult;
 }
 
+/**
+ * Notes:
+ *  Case-insensitive
+ */
 export class ConversationIndex implements ITermToSemanticRefIndex {
-    map: Map<string, ScoredSemanticRef[]> = new Map<
-        string,
-        ScoredSemanticRef[]
-    >();
+    private map: Map<string, ScoredSemanticRef[]> = new Map();
+
+    constructor(data?: ITermToSemanticRefIndexData | undefined) {
+        if (data !== undefined) {
+            this.deserialize(data);
+        }
+    }
+
+    get size(): number {
+        return this.map.size;
+    }
+
+    getTerms(): string[] {
+        return [...this.map.keys()];
+    }
 
     addTerm(term: string, semanticRefResult: number | ScoredSemanticRef): void {
         if (typeof semanticRefResult === "number") {
@@ -193,6 +265,7 @@ export class ConversationIndex implements ITermToSemanticRefIndex {
                 score: 1,
             };
         }
+        term = this.prepareTerm(term);
         if (this.map.has(term)) {
             this.map.get(term)?.push(semanticRefResult);
         } else {
@@ -200,15 +273,16 @@ export class ConversationIndex implements ITermToSemanticRefIndex {
         }
     }
 
-    lookupTerm(term: string, fuzzy = false): ScoredSemanticRef[] {
-        return this.map.get(term) ?? [];
+    lookupTerm(term: string): ScoredSemanticRef[] {
+        return this.map.get(this.prepareTerm(term)) ?? [];
     }
 
     removeTerm(term: string, semanticRefIndex: number): void {
-        this.map.delete(term);
+        this.map.delete(this.prepareTerm(term));
     }
 
     removeTermIfEmpty(term: string): void {
+        term = this.prepareTerm(term);
         if (this.map.has(term) && this.map.get(term)?.length === 0) {
             this.map.delete(term);
         }
@@ -220,5 +294,24 @@ export class ConversationIndex implements ITermToSemanticRefIndex {
             items.push({ term, semanticRefIndices });
         }
         return { items };
+    }
+
+    deserialize(data: ITermToSemanticRefIndexData): void {
+        for (const termData of data.items) {
+            if (termData && termData.term) {
+                this.map.set(
+                    this.prepareTerm(termData.term),
+                    termData.semanticRefIndices,
+                );
+            }
+        }
+    }
+
+    /**
+     * Do any pre-processing of the term.
+     * @param term
+     */
+    private prepareTerm(term: string): string {
+        return term.toLowerCase();
     }
 }

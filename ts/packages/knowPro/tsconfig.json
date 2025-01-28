@@ -6,6 +6,7 @@
   "include": [],
   "references": [
     { "path": "./src" },
+    { "path": "./test" }
   ],
   "ts-node": {
     "esm": true

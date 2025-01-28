@@ -1,4 +1,4 @@
-// Copyright (c) Microsoft Corporation and Henry Lucco.
+// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
 import {
@@ -6,17 +6,26 @@ import {
     IMessage,
     IKnowledgeSource,
     SemanticRef,
+    IConversationData,
+    ITextEmbeddingData,
 } from "./dataFormat.js";
-import { conversation } from "knowledge-processor";
-import path from "path";
-import { readAllText } from "typeagent";
+import { conversation, split } from "knowledge-processor";
+import { collections, getFileName, readAllText } from "typeagent";
 import {
     ConversationIndex,
     addActionToIndex,
     addEntityToIndex,
     buildConversationIndex,
     addTopicToIndex,
+    ConversationIndexingResult,
 } from "./conversationIndex.js";
+import { Result } from "typechat";
+import {
+    buildTermSemanticIndex,
+    createSemanticIndexSettings,
+    SemanticIndexSettings,
+    TermSemanticIndex,
+} from "./termIndex.js";
 
 // metadata for podcast messages
 export class PodcastMessageMeta implements IKnowledgeSource {
@@ -79,7 +88,7 @@ function assignMessageListeners(
     }
 }
 
-class PodcastMessage implements IMessage<PodcastMessageMeta> {
+export class PodcastMessage implements IMessage<PodcastMessageMeta> {
     timestamp: string | undefined;
     constructor(
         public textChunks: string[],
@@ -94,14 +103,28 @@ class PodcastMessage implements IMessage<PodcastMessageMeta> {
     }
 }
 
-class Podcast implements IConversation<PodcastMessageMeta> {
-    semanticRefIndex: ConversationIndex | undefined = undefined;
-    semanticRefs: SemanticRef[] = [];
+export type PodcastSettings = {
+    relatedTermIndexSettings: SemanticIndexSettings;
+};
+
+export function createPodcastSettings(): PodcastSettings {
+    return {
+        relatedTermIndexSettings: createSemanticIndexSettings(),
+    };
+}
+
+export class Podcast implements IConversation<PodcastMessageMeta> {
+    public settings: PodcastSettings;
     constructor(
         public nameTag: string,
-        public messages: IMessage<PodcastMessageMeta>[],
+        public messages: PodcastMessage[],
         public tags: string[] = [],
-    ) {}
+        public semanticRefs: SemanticRef[] = [],
+        public semanticRefIndex: ConversationIndex | undefined = undefined,
+        public relatedTermsIndex: TermSemanticIndex | undefined = undefined,
+    ) {
+        this.settings = createPodcastSettings();
+    }
 
     addMetadataToIndex() {
         for (let i = 0; i < this.messages.length; i++) {
@@ -160,23 +183,81 @@ class Podcast implements IConversation<PodcastMessageMeta> {
         }
     }
 
-    async buildIndex() {
-        await buildConversationIndex(this);
+    public async buildIndex(
+        progressCallback?: (
+            text: string,
+            knowledgeResult: Result<conversation.KnowledgeResponse>,
+        ) => boolean,
+    ): Promise<ConversationIndexingResult> {
+        const result = await buildConversationIndex(this, progressCallback);
         this.addMetadataToIndex();
+        return result;
+    }
+
+    public async buildRelatedTermsIndex(
+        batchSize: number = 8,
+        progressCallback?: (
+            terms: string[],
+            batch: collections.Slice<string>,
+        ) => boolean,
+    ): Promise<void> {
+        if (this.settings.relatedTermIndexSettings && this.semanticRefIndex) {
+            const allTerms = this.semanticRefIndex?.getTerms();
+            this.relatedTermsIndex = await buildTermSemanticIndex(
+                this.settings.relatedTermIndexSettings,
+                allTerms,
+                batchSize,
+                progressCallback,
+            );
+        }
+    }
+
+    public serialize(): PodcastData {
+        return {
+            nameTag: this.nameTag,
+            messages: this.messages,
+            tags: this.tags,
+            semanticRefs: this.semanticRefs,
+            semanticIndexData: this.semanticRefIndex?.serialize(),
+            relatedTermIndexData: this.relatedTermsIndex?.serialize(),
+        };
+    }
+
+    public deserialize(data: PodcastData): void {
+        if (data.semanticIndexData) {
+            this.semanticRefIndex = new ConversationIndex(
+                data.semanticIndexData,
+            );
+        }
+        if (data.relatedTermIndexData) {
+            this.relatedTermsIndex = new TermSemanticIndex(
+                this.settings.relatedTermIndexSettings,
+                data.relatedTermIndexData,
+            );
+        }
     }
 }
 
-export async function importPodcast(fileName: string) {
-    const basePath = "/data/testChat";
-    const filePath = path.join(basePath, fileName);
-    const fileContents = await readAllText(filePath);
-    const lines = fileContents.split("\r?\n");
+export interface PodcastData extends IConversationData<PodcastMessage> {
+    relatedTermIndexData?: ITextEmbeddingData | undefined;
+}
+
+export async function importPodcast(
+    transcriptFilePath: string,
+    podcastName?: string,
+): Promise<Podcast> {
+    const transcriptText = await readAllText(transcriptFilePath);
+    podcastName ??= getFileName(transcriptFilePath);
+    const transcriptLines = split(transcriptText, /\r?\n/, {
+        removeEmpty: true,
+        trim: true,
+    });
+    const turnParseRegex = /^(?<speaker>[A-Z0-9 ]+:)?(?<speech>.*)$/;
     const participants = new Set<string>();
-    const regex = /^(?<speaker>[A-Z0-9 ]+:)?(?<speech>.*)$/;
     const msgs: PodcastMessage[] = [];
     let curMsg: PodcastMessage | undefined = undefined;
-    for (const line of lines) {
-        const match = regex.exec(line);
+    for (const line of transcriptLines) {
+        const match = turnParseRegex.exec(line);
         if (match && match.groups) {
             let speaker = match.groups["speaker"];
             let speech = match.groups["speech"];
@@ -208,7 +289,7 @@ export async function importPodcast(fileName: string) {
         msgs.push(curMsg);
     }
     assignMessageListeners(msgs, participants);
-    const pod = new Podcast(fileName, msgs, [fileName]);
+    const pod = new Podcast(podcastName, msgs, [podcastName]);
     // TODO: add timestamps and more tags
     // list all the books
     // what did K say about Children of Time?
