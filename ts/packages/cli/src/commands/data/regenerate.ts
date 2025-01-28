@@ -11,13 +11,12 @@ import {
     TestDataEntry,
     FailedTestDataEntry,
     getCacheFactory,
-    getBuiltinConstructionConfig,
     GenerateDataInput,
     getEmptyTestData,
-    getTestDataFiles,
-    createSchemaInfoProviderFromDefaultAppAgentProviders,
     convertTestDataToExplanationData,
-    getActionConfigProviderFromDefaultAppAgentProviders,
+    createActionConfigProvider,
+    createSchemaInfoProvider,
+    getInstanceDir,
 } from "agent-dispatcher/internal";
 import {
     Actions,
@@ -29,6 +28,15 @@ import {
 import { createLimiter, getElapsedString } from "common-utils";
 import { getChatModelMaxConcurrency, getChatModelNames } from "aiclient";
 import { Entity } from "@typeagent/agent-sdk";
+import {
+    getDefaultAppAgentProviders,
+    getDefaultConstructionProvider,
+} from "default-agent-provider";
+
+const provider = await createActionConfigProvider(
+    getDefaultAppAgentProviders(getInstanceDir()),
+);
+const schemaInfoProvider = createSchemaInfoProvider(provider);
 
 function toEntities(actions: Actions): Entity[] {
     const entities: Entity[] = [];
@@ -49,7 +57,7 @@ function toEntities(actions: Actions): Entity[] {
 }
 
 const modelNames = await getChatModelNames();
-export default class ExplanationDataRegenerateCommmand extends Command {
+export default class ExplanationDataRegenerateCommand extends Command {
     static strict = false;
     static args = {
         files: Args.string({
@@ -179,7 +187,7 @@ export default class ExplanationDataRegenerateCommmand extends Command {
 
     async run(): Promise<void> {
         const { flags, argv } = await this.parse(
-            ExplanationDataRegenerateCommmand,
+            ExplanationDataRegenerateCommand,
         );
         if (argv.length > 0 && flags.builtin) {
             throw new Error(
@@ -190,7 +198,9 @@ export default class ExplanationDataRegenerateCommmand extends Command {
         const startTime = performance.now();
 
         const builtinConstructionConfig = flags.builtin
-            ? getBuiltinConstructionConfig(flags.builtin)
+            ? getDefaultConstructionProvider().getBuiltinConstructionConfig(
+                  flags.builtin,
+              )
             : undefined;
 
         let files;
@@ -203,7 +213,9 @@ export default class ExplanationDataRegenerateCommmand extends Command {
             }
         } else {
             files =
-                argv.length > 0 ? (argv as string[]) : await getTestDataFiles();
+                argv.length > 0
+                    ? (argv as string[])
+                    : await getDefaultConstructionProvider().getImportTranslationFiles();
         }
         const inputs = await Promise.all(
             files.map(async (file) => {
@@ -223,7 +235,6 @@ export default class ExplanationDataRegenerateCommmand extends Command {
         }
 
         const explainerOverride = flags.builtin ?? flags.override;
-        const provider = getActionConfigProviderFromDefaultAppAgentProviders();
         const partialExplanationRegen =
             flags.correction ||
             flags.error ||
@@ -526,7 +537,7 @@ export default class ExplanationDataRegenerateCommmand extends Command {
         if (builtinConstructionConfig !== undefined) {
             const agentCache = getCacheFactory().create(
                 flags.builtin!,
-                createSchemaInfoProviderFromDefaultAppAgentProviders(),
+                schemaInfoProvider,
             );
             await agentCache.constructionStore.newCache(
                 flags.none ? undefined : builtinConstructionConfig.file,

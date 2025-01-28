@@ -9,10 +9,10 @@ import {
 import { CommandHandlerContext } from "./commandHandlerContext.js";
 import {
     convertToActionConfig,
-    getAppAgentName,
     ActionConfig,
-    ActionConfigProvider,
-} from "../translation/agentTranslators.js";
+} from "../translation/actionConfig.js";
+import { ActionConfigProvider } from "../translation/actionConfigProvider.js";
+import { getAppAgentName } from "../translation/agentTranslators.js";
 import { createSessionContext } from "../execute/actionHandlers.js";
 import { AppAgentProvider } from "../agentProvider/agentProvider.js";
 import registerDebug from "debug";

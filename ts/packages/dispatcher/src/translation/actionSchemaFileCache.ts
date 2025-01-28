@@ -10,7 +10,8 @@ import {
     SchemaConfig,
     toJSONActionSchemaFile,
 } from "action-schema";
-import { ActionConfig, ActionConfigProvider } from "./agentTranslators.js";
+import { ActionConfig } from "./actionConfig.js";
+import { ActionConfigProvider } from "./actionConfigProvider.js";
 import { getPackageFilePath } from "../utils/getPackageFilePath.js";
 import { AppAction } from "@typeagent/agent-sdk";
 import { DeepPartialUndefined, simpleStarRegex } from "common-utils";

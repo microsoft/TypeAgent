@@ -7,7 +7,7 @@ import {
 } from "common-utils";
 import { Result, success } from "typechat";
 import registerDebug from "debug";
-import { ActionConfigProvider } from "./agentTranslators.js";
+import { ActionConfigProvider } from "./actionConfigProvider.js";
 import {
     generateSchemaTypeDefinition,
     ActionSchemaCreator as sc,

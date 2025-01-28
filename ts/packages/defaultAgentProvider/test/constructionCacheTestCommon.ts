@@ -6,11 +6,13 @@ dotenv.config({ path: new URL("../../../../.env", import.meta.url) });
 
 import path from "node:path";
 import fs from "node:fs";
-import { getCacheFactory } from "../src/utils/cacheFactory.js";
 import {
+    getCacheFactory,
     convertTestDataToExplanationData,
     readTestData,
-} from "../src/utils/test/testData.js";
+    createActionConfigProvider,
+    createSchemaInfoProvider,
+} from "agent-dispatcher/internal";
 import {
     Actions,
     AgentCache,
@@ -22,22 +24,22 @@ import {
     normalizeParamValue,
     normalizeParamString,
 } from "agent-cache";
-import { createSchemaInfoProviderFromDefaultAppAgentProviders } from "../src/utils/defaultAppProviders.js";
 import { glob } from "glob";
 import { fileURLToPath } from "node:url";
+import { getDefaultAppAgentProviders } from "../src/defaultAgentProviders.js";
+
+const schemaInfoProvider = createSchemaInfoProvider(
+    await createActionConfigProvider(getDefaultAppAgentProviders(undefined)),
+);
 
 export async function getImportedCache(
     explainerName: string,
     merge: boolean = false,
 ) {
-    const cache = getCacheFactory().create(
-        explainerName,
-        createSchemaInfoProviderFromDefaultAppAgentProviders(),
-        {
-            mergeMatchSets: merge,
-            cacheConflicts: true,
-        },
-    );
+    const cache = getCacheFactory().create(explainerName, schemaInfoProvider, {
+        mergeMatchSets: merge,
+        cacheConflicts: true,
+    });
     await cache.import(
         inputs
             .filter(([i]) => i.explainerName === explainerName)
