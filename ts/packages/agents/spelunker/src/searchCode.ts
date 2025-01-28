@@ -139,6 +139,7 @@ export async function searchCode(
         };
         allChunks.push(chunk);
     }
+    console_log(`  [Loaded ${allChunks.length} chunks]`);
 
     // 3. Ask a fast LLM for the most relevant chunks, rank them, and keep tthe best 30.
     // This is done concurrently for real-time speed.
