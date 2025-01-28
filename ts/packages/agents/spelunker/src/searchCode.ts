@@ -20,15 +20,11 @@ import { loadSchema } from "typeagent";
 import { AnswerSpecs } from "./makeAnswerSchema.js";
 import { ChunkDescription, SelectorSpecs } from "./makeSelectorSchema.js";
 import { SpelunkerContext } from "./spelunkerActionHandler.js";
-import {
-    Blob,
-    Chunk,
-    ChunkedFile,
-    chunkifyPythonFiles,
-    ErrorItem,
-} from "./pythonChunker.js";
+import { Blob, Chunk, ChunkedFile, ChunkerErrorItem } from "./chunkSchema.js";
+import { chunkifyPythonFiles } from "./pythonChunker.js";
 import { SummarizeSpecs } from "./makeSummarizeSchema.js";
 import { createRequire } from "module";
+import { chunkifyTypeScriptFiles } from "./typescriptChunker.js";
 
 let epoch: number = 0;
 
@@ -363,14 +359,15 @@ function createTranslator<T extends object>(
 }
 
 /**
- * Recursively gathers all .py files under a given directory synchronously.
+ * Recursively gathers all .py and .ts files under a given directory synchronously.
  *
  * @param dir - The directory to search within.
  * @returns An array of absolute paths to .py files.
  *
- * (Written by ChatGPT)
+ * (First version written by ChatGPT)
  */
-function getAllPyFilesSync(dir: string): string[] {
+const supportedExtensions = [".py", ".ts"];
+function getAllSourceFilesSync(dir: string): string[] {
     let results: string[] = [];
 
     // Resolve the directory to an absolute path
@@ -385,9 +382,13 @@ function getAllPyFilesSync(dir: string): string[] {
 
         if (stat && !stat.isSymbolicLink() && stat.isDirectory()) {
             // Recursively search in subdirectories
-            results = results.concat(getAllPyFilesSync(filePath));
-        } else if (stat && stat.isFile() && path.extname(file) === ".py") {
-            // If it's a .py file, add to the results
+            results = results.concat(getAllSourceFilesSync(filePath));
+        } else if (
+            stat &&
+            stat.isFile() &&
+            supportedExtensions.includes(path.extname(file))
+        ) {
+            // If it's a supported file type, add to the results
             results.push(filePath);
         }
     });
@@ -449,12 +450,12 @@ async function loadDatabase(
         `INSERT INTO Blobs (chunkId, start, lines, breadcrumb) VALUES (?, ?, ?, ?)`,
     );
 
-    // 1a. Find all .py files in the focus directories (locally, using a subprocess).
+    // 1a. Find all source files in the focus directories (locally, using a subprocess).
     // TODO: Factor into simpler functions
-    console_log(`[Step 1a: Find .py files]`);
+    console_log(`[Step 1a: Find source files (of supported languages)]`);
     const files: string[] = []; // TODO: Include mtime and size, since we do a stat anyways
     for (let i = 0; i < context.focusFolders.length; i++) {
-        files.push(...getAllPyFilesSync(context.focusFolders[i]));
+        files.push(...getAllSourceFilesSync(context.focusFolders[i]));
     }
 
     // Compare files found and files in the database.
@@ -526,10 +527,19 @@ async function loadDatabase(
     console_log(
         `[Step 1b: Chunking ${filesToDo.length} out of ${files.length} files]`,
     );
-    const allItems: (ChunkedFile | ErrorItem)[] =
-        await chunkifyPythonFiles(filesToDo);
+    const filesToDoPy = filesToDo.filter((f) => f.endsWith(".py"));
+    const filesToDoTs = filesToDo.filter((f) => f.endsWith(".ts"));
+    const allItems: (ChunkedFile | ChunkerErrorItem)[] = [];
+    if (filesToDoPy.length) {
+        const pyItems = await chunkifyPythonFiles(filesToDoPy);
+        allItems.push(...pyItems);
+    }
+    if (filesToDoTs.length) {
+        const tsItems = await chunkifyTypeScriptFiles(filesToDoTs);
+        allItems.push(...tsItems);
+    }
     const allErrorItems = allItems.filter(
-        (item): item is ErrorItem => "error" in item,
+        (item): item is ChunkerErrorItem => "error" in item,
     );
     for (const errorItem of allErrorItems) {
         // TODO: Use appendDisplay (requires passing actionContext)
