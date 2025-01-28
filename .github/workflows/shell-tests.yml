@@ -3,10 +3,10 @@
 
 name: Shell Tests - Full Suite
 on:
-  push:
-    branches: [ "main" ]
-   schedule:
-     - cron: "0 0 * * *"  #start of every day
+  # push:
+  #   branches: [ "main" ]
+  schedule:
+    - cron: "0 0 * * *"  #start of every day
 
 permissions:
   id-token: write
