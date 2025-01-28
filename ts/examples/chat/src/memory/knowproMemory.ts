@@ -164,7 +164,7 @@ export async function createKnowproCommands(
         return {
             description: "Search current knowPro conversation by terms",
             options: {
-                maxMatches: argNum("Maximum matches to display", 25),
+                maxToDisplay: argNum("Maximum matches to display", 25),
             },
         };
     }
@@ -191,13 +191,16 @@ export async function createKnowproCommands(
             const matches = await kp.searchTermsInConversation(
                 conversation,
                 terms,
-                namedArgs.maxMatches,
             );
             if (!matches.hasMatches) {
                 context.printer.writeLine("No matches");
                 return;
             }
-            context.printer.writeSearchResults(conversation, matches);
+            context.printer.writeSearchResults(
+                conversation,
+                matches,
+                namedArgs.maxToDisplay,
+            );
         } else {
             ``;
             context.printer.writeError("Conversation is not indexed");
@@ -331,7 +334,7 @@ class KnowProPrinter extends ChatPrinter {
     public writeEntity(
         entity: knowLib.conversation.ConcreteEntity | undefined,
     ) {
-        if (entity) {
+        if (entity !== undefined) {
             this.writeLine(entity.name.toUpperCase());
             this.writeList(entity.type, { type: "csv" });
             if (entity.facets) {
@@ -344,18 +347,35 @@ class KnowProPrinter extends ChatPrinter {
         return this;
     }
 
-    public writeSemanticRef(ref: kp.SemanticRef, score?: number | undefined) {
-        if (score) {
-            this.writeInColor(chalk.greenBright, `[${score}]`);
+    public writeAction(action: knowLib.conversation.Action | undefined) {
+        if (action !== undefined) {
+            this.writeLine(knowLib.conversation.actionToString(action));
         }
-        switch (ref.knowledgeType) {
+    }
+
+    public writeTopic(topic: kp.ITopic | undefined) {
+        if (topic !== undefined) {
+            this.writeLine(topic.text);
+        }
+    }
+
+    public writeSemanticRef(semanticRef: kp.SemanticRef) {
+        switch (semanticRef.knowledgeType) {
             default:
-                this.writeLine(ref.knowledgeType);
+                this.writeLine(semanticRef.knowledgeType);
                 break;
             case "entity":
                 this.writeEntity(
-                    ref.knowledge as knowLib.conversation.ConcreteEntity,
+                    semanticRef.knowledge as knowLib.conversation.ConcreteEntity,
                 );
+                break;
+            case "action":
+                this.writeAction(
+                    semanticRef.knowledge as knowLib.conversation.Action,
+                );
+                break;
+            case "topic":
+                this.writeTopic(semanticRef.knowledge as kp.ITopic);
                 break;
         }
         return this;
@@ -374,19 +394,30 @@ class KnowProPrinter extends ChatPrinter {
     public writeSearchResults(
         conversation: kp.IConversation,
         results: kp.SearchResult,
+        maxToDisplay: number,
     ) {
-        this.writeListInColor(chalk.green, results.termMatches, {
+        this.writeListInColor(chalk.cyanBright, results.termMatches, {
             title: "Matched terms",
             type: "ol",
         });
-        this.writeLine(`${results.semanticRefMatches.length} matches`);
-        for (let i = 0; i < results.semanticRefMatches.length; ++i) {
+        maxToDisplay = Math.min(
+            results.semanticRefMatches.length,
+            maxToDisplay,
+        );
+        this.writeLine(
+            `Displaying ${maxToDisplay} matches of total ${results.semanticRefMatches.length}`,
+        );
+        for (let i = 0; i < maxToDisplay; ++i) {
             const match = results.semanticRefMatches[i];
-            this.write(`(${i + 1})`);
-            this.writeSemanticRef(
-                conversation.semanticRefs![match.semanticRefIndex],
-                match.score,
+            const semanticRef =
+                conversation.semanticRefs![match.semanticRefIndex];
+
+            this.writeInColor(
+                chalk.green,
+                `#${i + 1}: ${semanticRef.knowledgeType} [${match.score}]`,
             );
+            this.writeSemanticRef(semanticRef);
+            this.writeLine();
         }
     }
 
