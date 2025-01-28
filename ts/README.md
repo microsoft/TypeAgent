@@ -213,7 +213,7 @@ Run `npm run test` at the root.
 
 If new translator or explainer, or any of the translator schema or explanation schema changes, the built-in construction cache and the test data needs to be regenerated and be evaluated for correctness.
 
-Test data are located in the [dispatcher](./packages/dispatcher)'s [test/data](./packages/dispatcher/test/data) directory. Each test data files are for specify translator and explainer.
+Test data are located in the [defaultAgentProvider](./packages/defaultAgentProvider)'s [test/data](./packages/defaultAgentProvider/test/data) directory. Each test data files are for specify translator and explainer.
 
 Use the `agent-cli data add` command to add new test cases.
 

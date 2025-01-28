@@ -16,8 +16,8 @@ import {
 } from "./dataFormat.js";
 import { conversation } from "knowledge-processor";
 import { openai } from "aiclient";
-import { callWithRetry } from "../../typeagent/dist/async.js";
 import { Result } from "typechat";
+import { async } from "typeagent";
 
 function addFacet(
     facet: conversation.Facet | undefined,
@@ -145,7 +145,7 @@ export function addActionToIndex(
     addFacet(action.subjectEntityFacet, refIndex, semanticRefIndex);
 }
 
-export type IndexingResult = {
+export type ConversationIndexingResult = {
     index: ConversationIndex;
     failedMessages: { message: IMessage; error: string }[];
 };
@@ -156,7 +156,7 @@ export async function buildConversationIndex<TMeta extends IKnowledgeSource>(
         text: string,
         knowledgeResult: Result<conversation.KnowledgeResponse>,
     ) => boolean,
-): Promise<IndexingResult> {
+): Promise<ConversationIndexingResult> {
     const semanticRefIndex = new ConversationIndex();
     convo.semanticRefIndex = semanticRefIndex;
     if (convo.semanticRefs === undefined) {
@@ -169,7 +169,7 @@ export async function buildConversationIndex<TMeta extends IKnowledgeSource>(
         mergeActionKnowledge: false,
     });
     const maxRetries = 4;
-    let indexingResult: IndexingResult = {
+    let indexingResult: ConversationIndexingResult = {
         index: semanticRefIndex,
         failedMessages: [],
     };
@@ -178,7 +178,7 @@ export async function buildConversationIndex<TMeta extends IKnowledgeSource>(
         // only one chunk per message for now
         const text = msg.textChunks[0];
         try {
-            const knowledgeResult = await callWithRetry(() =>
+            const knowledgeResult = await async.callWithRetry(() =>
                 extractor.extractWithRetry(text, maxRetries),
             );
             if (progressCallback && !progressCallback(text, knowledgeResult)) {
@@ -242,15 +242,20 @@ export async function buildConversationIndex<TMeta extends IKnowledgeSource>(
  *  Case-insensitive
  */
 export class ConversationIndex implements ITermToSemanticRefIndex {
-    map: Map<string, ScoredSemanticRef[]> = new Map<
-        string,
-        ScoredSemanticRef[]
-    >();
+    private map: Map<string, ScoredSemanticRef[]> = new Map();
 
     constructor(data?: ITermToSemanticRefIndexData | undefined) {
-        if (data) {
+        if (data !== undefined) {
             this.deserialize(data);
         }
+    }
+
+    get size(): number {
+        return this.map.size;
+    }
+
+    getTerms(): string[] {
+        return [...this.map.keys()];
     }
 
     addTerm(term: string, semanticRefResult: number | ScoredSemanticRef): void {
@@ -268,7 +273,7 @@ export class ConversationIndex implements ITermToSemanticRefIndex {
         }
     }
 
-    lookupTerm(term: string, fuzzy = false): ScoredSemanticRef[] {
+    lookupTerm(term: string): ScoredSemanticRef[] {
         return this.map.get(this.prepareTerm(term)) ?? [];
     }
 

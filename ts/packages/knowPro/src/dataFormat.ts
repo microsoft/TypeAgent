@@ -40,16 +40,14 @@ export type ScoredSemanticRef = {
 };
 
 export interface ITermToSemanticRefIndex {
+    getTerms(): string[];
     addTerm(
         term: string,
         semanticRefIndex: SemanticRefIndex,
         strength?: number,
     ): void;
     removeTerm(term: string, semanticRefIndex: SemanticRefIndex): void;
-    lookupTerm(
-        term: string,
-        fuzzy?: boolean | undefined,
-    ): ScoredSemanticRef[] | undefined;
+    lookupTerm(term: string): ScoredSemanticRef[] | undefined;
 }
 
 export type KnowledgeType = "entity" | "action" | "topic" | "tag";
@@ -77,6 +75,7 @@ export interface IConversation<TMeta extends IKnowledgeSource = any> {
     messages: IMessage<TMeta>[];
     semanticRefIndex?: ITermToSemanticRefIndex | undefined;
     semanticRefs: SemanticRef[] | undefined;
+    relatedTermsIndex?: ITermToRelatedTermsIndex | undefined;
 }
 
 export interface TextLocation {
@@ -102,4 +101,30 @@ export interface IConversationData<TMessage> {
     tags: string[];
     semanticRefs: SemanticRef[];
     semanticIndexData?: ITermToSemanticRefIndexData | undefined;
+}
+
+export type Term = {
+    text: string;
+    /**
+     * Optional additional score to use when this term matches
+     */
+    score?: number | undefined;
+};
+
+export interface ITermToRelatedTermsIndex {
+    lookupTerm(term: string): Promise<Term[] | undefined>;
+}
+
+export interface ITextSemanticIndex {
+    serialize(): ITextEmbeddingData;
+    deserialize(data: ITextEmbeddingData): void;
+}
+
+export interface ITextEmbeddingData {
+    embeddingData?: ITextEmbeddingDataItem[] | undefined;
+}
+
+export interface ITextEmbeddingDataItem {
+    text: string;
+    embedding: number[];
 }

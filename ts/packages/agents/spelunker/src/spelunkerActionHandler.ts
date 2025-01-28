@@ -139,9 +139,6 @@ async function executeSpelunkerAction(
     entityMap?: Map<string, Entity>,
 ): Promise<ActionResult> {
     const entities = entityMap ? Array.from(entityMap.values()) : [];
-    console.log(
-        `  [spelunker] executeSpelunkerAction: ${action.actionName}, entityMap: ${[...(entityMap?.values() ?? [])]}, entities: ${entities}]`,
-    );
     const result = await handleSpelunkerAction(
         action as SpelunkerAction,
         context.sessionContext,

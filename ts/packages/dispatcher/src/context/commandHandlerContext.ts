@@ -22,10 +22,10 @@ import {
 } from "./session.js";
 import {
     loadAgentJsonTranslator,
-    ActionConfigProvider,
     TypeAgentTranslator,
     createTypeAgentTranslatorForSelectedActions,
 } from "../translation/agentTranslators.js";
+import { ActionConfigProvider } from "../translation/actionConfigProvider.js";
 import { getCacheFactory } from "../utils/cacheFactory.js";
 import { createServiceHost } from "./system/handlers/serviceHost/serviceHostCommandHandler.js";
 import {
@@ -49,7 +49,10 @@ import {
     AppAgentStateOptions,
     SetStateResult,
 } from "./appAgentManager.js";
-import { AppAgentProvider } from "../agentProvider/agentProvider.js";
+import {
+    AppAgentProvider,
+    ConstructionProvider,
+} from "../agentProvider/agentProvider.js";
 import { RequestMetricsManager } from "../utils/metrics.js";
 import { getSchemaNamePrefix } from "../execute/actionHandlers.js";
 import { displayError } from "@typeagent/agent-sdk/helpers/display";
@@ -104,6 +107,7 @@ export type CommandHandlerContext = {
     requestId?: RequestId;
     commandResult?: CommandResult | undefined;
     chatHistory: ChatHistory;
+    constructionProvider?: ConstructionProvider | undefined;
 
     batchMode: boolean;
 
@@ -175,7 +179,8 @@ export async function getTranslatorForSelectedActions(
 async function getAgentCache(
     session: Session,
     provider: ActionConfigProvider,
-    logger: Logger | undefined,
+    constructionProvider?: ConstructionProvider,
+    logger?: Logger,
 ) {
     const cacheFactory = getCacheFactory();
     const explainerName = session.explainerName;
@@ -189,7 +194,7 @@ async function getAgentCache(
     );
 
     try {
-        await setupAgentCache(session, agentCache);
+        await setupAgentCache(session, agentCache, constructionProvider);
     } catch (e) {
         // Silence the error, the cache will be disabled
     }
@@ -206,6 +211,7 @@ export type InitializeCommandHandlerContextOptions = SessionOptions & {
     enableServiceHost?: boolean; // default to false,
     metrics?: boolean; // default to false
     dblogging?: boolean; // default to false
+    constructionProvider?: ConstructionProvider;
 };
 
 async function getSession(instanceDir?: string) {
@@ -356,6 +362,7 @@ export async function initializeCommandHandlerContext(
             ? ensureCacheDir(instanceDir)
             : undefined;
         const agents = new AppAgentManager(cacheDirPath);
+        const constructionProvider = options?.constructionProvider;
         const context: CommandHandlerContext = {
             agents,
             session,
@@ -367,7 +374,12 @@ export async function initializeCommandHandlerContext(
 
             // Runtime context
             commandLock: createLimiter(1), // Make sure we process one command at a time.
-            agentCache: await getAgentCache(session, agents, logger),
+            agentCache: await getAgentCache(
+                session,
+                agents,
+                constructionProvider,
+                logger,
+            ),
             lastActionSchemaName: DispatcherName,
             translatorCache: new Map<string, TypeAgentTranslator>(),
             currentScriptDir: process.cwd(),
@@ -377,6 +389,7 @@ export async function initializeCommandHandlerContext(
             metricsManager: metrics ? new RequestMetricsManager() : undefined,
             batchMode: false,
             instanceDirLock,
+            constructionProvider,
         };
 
         await addAppAgentProviders(
@@ -496,6 +509,7 @@ export async function setSessionOnCommandHandlerContext(
     context.agentCache = await getAgentCache(
         context.session,
         context.agents,
+        context.constructionProvider,
         context.logger,
     );
     await setAppAgentStates(context);
@@ -543,6 +557,7 @@ export async function changeContextConfig(
             systemContext.agentCache = await getAgentCache(
                 session,
                 systemContext.agents,
+                systemContext.constructionProvider,
                 systemContext.logger,
             );
         } catch (e: any) {
@@ -570,7 +585,11 @@ export async function changeContextConfig(
     if (changed.cache?.enabled !== undefined) {
         // the cache state is changed.
         // Auto save, model and builtInCache is configured in setupAgentCache as well.
-        await setupAgentCache(session, agentCache);
+        await setupAgentCache(
+            session,
+            agentCache,
+            systemContext.constructionProvider,
+        );
     } else {
         const autoSave = changed.cache?.autoSave;
         if (autoSave !== undefined) {
@@ -589,7 +608,12 @@ export async function changeContextConfig(
         }
         const builtInCache = changed.cache?.builtInCache;
         if (builtInCache !== undefined) {
-            await setupBuiltInCache(session, agentCache, builtInCache);
+            await setupBuiltInCache(
+                session,
+                agentCache,
+                builtInCache,
+                systemContext.constructionProvider,
+            );
         }
     }
 

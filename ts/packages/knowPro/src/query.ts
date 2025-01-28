@@ -3,25 +3,19 @@
 
 import { createTopNList } from "typeagent";
 import {
+    ITermToRelatedTermsIndex,
     ITermToSemanticRefIndex,
     ScoredSemanticRef,
     SemanticRef,
     SemanticRefIndex,
+    Term,
 } from "./dataFormat.js";
 
 // Query eval expressions
 
 export interface IQueryOpExpr<T> {
-    eval(context: QueryEvalContext): T;
+    eval(context: QueryEvalContext): Promise<T>;
 }
-
-export type Term = {
-    text: string;
-    /**
-     * Optional additional score to use when this term matches
-     */
-    score?: number | undefined;
-};
 
 export type QueryTerm = {
     term: Term;
@@ -35,17 +29,6 @@ export class QueryEvalContext {
     constructor() {}
 }
 
-export class MapExpr<TIn, TOut> implements IQueryOpExpr<TOut> {
-    constructor(
-        public sourceExpr: IQueryOpExpr<TIn>,
-        public mapFn: (value: TIn) => TOut,
-    ) {}
-
-    public eval(context: QueryEvalContext): TOut {
-        return this.mapFn(this.sourceExpr.eval(context));
-    }
-}
-
 export class SelectTopNExpr<T extends MatchAccumulator>
     implements IQueryOpExpr<T>
 {
@@ -55,8 +38,8 @@ export class SelectTopNExpr<T extends MatchAccumulator>
         public minHitCount: number | undefined = undefined,
     ) {}
 
-    public eval(context: QueryEvalContext): T {
-        const matches = this.sourceExpr.eval(context);
+    public async eval(context: QueryEvalContext): Promise<T> {
+        const matches = await this.sourceExpr.eval(context);
         const topN = matches.getTopNScoring(this.maxMatches, this.minHitCount);
         matches.clearMatches();
         matches.setMatches(topN);
@@ -68,12 +51,15 @@ export class TermsMatchExpr implements IQueryOpExpr<SemanticRefAccumulator> {
     private matches: SemanticRefAccumulator = new SemanticRefAccumulator();
     constructor(
         public index: ITermToSemanticRefIndex,
-        public terms: QueryTerm[],
+        public terms: IQueryOpExpr<QueryTerm[]>,
         predicate?: (match: SemanticRef) => boolean,
     ) {}
 
-    public eval(context: QueryEvalContext): SemanticRefAccumulator {
-        for (const queryTerm of this.terms) {
+    public async eval(
+        context: QueryEvalContext,
+    ): Promise<SemanticRefAccumulator> {
+        const terms = await this.terms.eval(context);
+        for (const queryTerm of terms) {
             this.accumulateMatches(queryTerm);
         }
         return this.matches;
@@ -95,6 +81,40 @@ export class TermsMatchExpr implements IQueryOpExpr<SemanticRefAccumulator> {
                 );
             }
         }
+    }
+}
+
+export class ResolveRelatedTermsExpr implements IQueryOpExpr<QueryTerm[]> {
+    constructor(
+        public index: ITermToRelatedTermsIndex,
+        public terms: IQueryOpExpr<QueryTerm[]>,
+    ) {}
+
+    public async eval(context: QueryEvalContext): Promise<QueryTerm[]> {
+        const terms = await this.terms.eval(context);
+        for (const queryTerm of terms) {
+            if (
+                queryTerm.relatedTerms === undefined ||
+                queryTerm.relatedTerms.length === 0
+            ) {
+                const relatedTerms = await this.index.lookupTerm(
+                    queryTerm.term.text,
+                );
+                if (relatedTerms !== undefined && relatedTerms.length > 0) {
+                    queryTerm.relatedTerms ??= [];
+                    queryTerm.relatedTerms.push(...relatedTerms);
+                }
+            }
+        }
+        return terms;
+    }
+}
+
+export class QueryTermsExpr implements IQueryOpExpr<QueryTerm[]> {
+    constructor(public terms: QueryTerm[]) {}
+
+    public eval(context: QueryEvalContext): Promise<QueryTerm[]> {
+        return Promise.resolve(this.terms);
     }
 }
 

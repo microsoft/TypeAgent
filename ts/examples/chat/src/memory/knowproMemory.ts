@@ -50,6 +50,7 @@ export async function createKnowproCommands(
     commands.kpPodcastLoad = podcastLoad;
     commands.kpSearchTerms = searchTerms;
     commands.kpSearchEntities = searchEntities;
+    commands.kpPodcastBuildIndex = podcastBuildIndex;
 
     /*----------------
      * COMMANDS
@@ -62,7 +63,8 @@ export async function createKnowproCommands(
                 filePath: arg("File path to transcript file"),
             },
             options: {
-                index: argBool("Build index", true),
+                knowLedge: argBool("Index knowledge", true),
+                related: argBool("Index related terms", true),
                 indexFilePath: arg("Output path for index file"),
                 maxMessages: argNum("Maximum messages to index"),
             },
@@ -80,29 +82,12 @@ export async function createKnowproCommands(
         context.printer.writeLine("Imported podcast:");
         context.printer.writePodcastInfo(context.podcast);
 
-        const messageCount = context.podcast.messages.length;
-        if (messageCount === 0 || !namedArgs.index) {
-            return;
-        }
         if (!namedArgs.index) {
             return;
         }
 
         // Build index
-        context.printer.writeLine();
-        context.printer.writeLine("Building index");
-        const maxMessages = namedArgs.maxMessages ?? messageCount;
-        let progress = new ProgressBar(context.printer, maxMessages);
-        const indexResult = await context.podcast.buildIndex((text, result) => {
-            progress.advance();
-            if (!result.success) {
-                context.printer.writeError(`${result.message}\n${text}`);
-            }
-            return progress.count < maxMessages;
-        });
-        progress.complete();
-        context.printer.writeLine(`Indexed ${maxMessages} items`);
-        context.printer.writeIndexingResults(indexResult);
+        await podcastBuildIndex(namedArgs);
         // Save the index
         namedArgs.filePath = sourcePathToIndexPath(
             namedArgs.filePath,
@@ -158,10 +143,7 @@ export async function createKnowproCommands(
             return;
         }
 
-        const data =
-            await readJsonFile<kp.IConversationData<kp.PodcastMessage>>(
-                podcastFilePath,
-            );
+        const data = await readJsonFile<kp.PodcastData>(podcastFilePath);
         if (!data) {
             context.printer.writeError("Could not load podcast data");
             return;
@@ -171,8 +153,8 @@ export async function createKnowproCommands(
             data.messages,
             data.tags,
             data.semanticRefs,
-            new kp.ConversationIndex(data.semanticIndexData),
         );
+        context.podcast.deserialize(data);
         context.conversation = context.podcast;
         context.printer.writePodcastInfo(context.podcast);
     }
@@ -194,10 +176,9 @@ export async function createKnowproCommands(
                 `Searching ${conversation.nameTag}...`,
             );
 
-            const matches = kp.searchTermsInIndex(
-                conversation.semanticRefIndex,
+            const matches = await kp.searchTermsInConversation(
+                conversation,
                 terms,
-                undefined,
             );
             if (!matches.hasMatches) {
                 context.printer.writeLine("No matches");
@@ -215,6 +196,7 @@ export async function createKnowproCommands(
                 );
             }
         } else {
+            ``;
             context.printer.writeError("Conversation is not indexed");
         }
     }
@@ -242,6 +224,74 @@ export async function createKnowproCommands(
             context.printer.writeSemanticRefs(matches);
         }
     }
+
+    function podcastBuildIndexDef(): CommandMetadata {
+        return {
+            description: "Build index",
+            options: {
+                knowLedge: argBool("Index knowledge", false),
+                related: argBool("Index related terms", false),
+                maxMessages: argNum("Maximum messages to index"),
+            },
+        };
+    }
+    commands.kpPodcastBuildIndex.metadata = podcastBuildIndexDef();
+    async function podcastBuildIndex(
+        args: string[] | NamedArgs,
+    ): Promise<void> {
+        if (!context.podcast) {
+            context.printer.writeError("No podcast loaded");
+            return;
+        }
+        if (!context.podcast.semanticRefIndex) {
+            context.printer.writeError("Podcast not indexed");
+            return;
+        }
+        const messageCount = context.podcast.messages.length;
+        if (messageCount === 0) {
+            return;
+        }
+
+        const namedArgs = parseNamedArguments(args, podcastBuildIndexDef());
+        // Build index
+        context.printer.writeLine();
+        context.printer.writeLine("Building index");
+        if (namedArgs.knowledge) {
+            context.printer.writeLine("Building knowledge index");
+            const maxMessages = namedArgs.maxMessages ?? messageCount;
+            let progress = new ProgressBar(context.printer, maxMessages);
+            const indexResult = await context.podcast.buildIndex(
+                (text, result) => {
+                    progress.advance();
+                    if (!result.success) {
+                        context.printer.writeError(
+                            `${result.message}\n${text}`,
+                        );
+                    }
+                    return progress.count < maxMessages;
+                },
+            );
+            progress.complete();
+            context.printer.writeLine(`Indexed ${maxMessages} items`);
+            context.printer.writeIndexingResults(indexResult);
+        }
+        if (namedArgs.related) {
+            context.printer.writeLine("Building semantic index");
+            const progress = new ProgressBar(
+                context.printer,
+                context.podcast.semanticRefIndex.size,
+            );
+            await context.podcast.buildRelatedTermsIndex(16, (terms, batch) => {
+                progress.advance(batch.value.length);
+                return true;
+            });
+            progress.complete();
+            context.printer.writeLine(
+                `Semantic Indexed ${context.podcast.semanticRefIndex.size} terms`,
+            );
+        }
+    }
+
     /*---------- 
       End COMMANDS
     ------------*/
@@ -332,7 +382,10 @@ class KnowProPrinter extends ChatPrinter {
         });
     }
 
-    public writeIndexingResults(results: kp.IndexingResult, verbose = false) {
+    public writeIndexingResults(
+        results: kp.ConversationIndexingResult,
+        verbose = false,
+    ) {
         if (results.failedMessages.length > 0) {
             this.writeError(
                 `Errors for ${results.failedMessages.length} messages`,

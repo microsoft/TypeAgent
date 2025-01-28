@@ -18,7 +18,10 @@ import { electronApp, optimizer, is } from "@electron-toolkit/utils";
 import { runDemo } from "./demo.js";
 import registerDebug from "debug";
 import { createDispatcher, Dispatcher } from "agent-dispatcher";
-import { getDefaultAppAgentProviders } from "agent-dispatcher/internal";
+import {
+    getDefaultAppAgentProviders,
+    getDefaultConstructionProvider,
+} from "default-agent-provider";
 import { ShellSettings } from "./shellSettings.js";
 import { unlinkSync } from "fs";
 import { existsSync } from "node:fs";
@@ -35,6 +38,7 @@ import { createDispatcherRpcServer } from "agent-dispatcher/rpc/dispatcher/serve
 import { createGenericChannel } from "agent-rpc/channel";
 import net from "node:net";
 import { createClientIORpcClient } from "agent-dispatcher/rpc/clientio/client";
+import { getInstanceDir } from "agent-dispatcher/internal";
 
 console.log(auth.AzureTokenScopes.CogServices);
 
@@ -229,11 +233,29 @@ function createWindow() {
     });
 
     // Notify renderer process whenever settings are modified
-    ShellSettings.getinstance().onSettingsChanged = (): void => {
+    ShellSettings.getinstance().onSettingsChanged = (
+        settingName?: string | undefined,
+    ): void => {
         chatView?.webContents.send(
             "settings-changed",
             ShellSettings.getinstance().getSerializable(),
         );
+
+        if (settingName == "size") {
+            mainWindow?.setSize(
+                ShellSettings.getinstance().width,
+                ShellSettings.getinstance().height,
+            );
+        } else if (settingName == "position") {
+            mainWindow?.setPosition(
+                ShellSettings.getinstance().x!,
+                ShellSettings.getinstance().y!,
+            );
+        }
+
+        if (settingName == "zoomLevel") {
+            setZoomLevel(ShellSettings.getinstance().zoomLevel, chatView);
+        }
     };
 
     ShellSettings.getinstance().onShowSettingsDialog = (
@@ -488,7 +510,7 @@ async function initializeDispatcher(
     const newDispatcher = await createDispatcher("shell", {
         appAgentProviders: [
             shellAgentProvider,
-            ...getDefaultAppAgentProviders(),
+            ...getDefaultAppAgentProviders(getInstanceDir()),
         ],
         explanationAsynchronousMode: true,
         persistSession: true,
@@ -496,6 +518,7 @@ async function initializeDispatcher(
         metrics: true,
         dblogging: true,
         clientIO,
+        constructionProvider: getDefaultConstructionProvider(),
     });
 
     async function processShellRequest(
@@ -602,6 +625,9 @@ async function initialize() {
         ShellSettings.getinstance().agentGreeting = settings.agentGreeting;
         ShellSettings.getinstance().partialCompletion =
             settings.partialCompletion;
+        ShellSettings.getinstance().darkMode = settings.darkMode;
+
+        // write the settings to disk
         ShellSettings.getinstance().save();
     });
 
@@ -637,7 +663,12 @@ async function initialize() {
 
     // On windows, we will spin up a local end point that listens
     // for pen events which will trigger speech reco
-    if (process.platform == "win32") {
+    // Don't spin this up during testing
+    if (
+        process.platform == "win32" &&
+        (process.env["INSTANCE_NAME"] == undefined ||
+            process.env["INSTANCE_NAME"].startsWith("test_") == false)
+    ) {
         const pipePath = path.join("\\\\.\\pipe\\TypeAgent", "speech");
         const server = net.createServer((stream) => {
             stream.on("data", (c) => {
@@ -712,32 +743,28 @@ app.on("window-all-closed", () => {
 });
 
 function zoomIn(chatView: BrowserView) {
-    const curr = chatView.webContents.zoomLevel;
-    chatView.webContents.zoomLevel = Math.min(curr + 0.5, 9);
-
-    ShellSettings.getinstance().set(
-        "zoomLevel",
-        chatView.webContents.zoomLevel,
-    );
-
-    updateZoomInTitle(chatView);
+    setZoomLevel(chatView.webContents.zoomFactor + 0.1, chatView);
 }
 
 function zoomOut(chatView: BrowserView) {
-    const curr = chatView.webContents.zoomLevel;
-    chatView.webContents.zoomLevel = Math.max(curr - 0.5, -8);
-    ShellSettings.getinstance().set(
-        "zoomLevel",
-        chatView.webContents.zoomLevel,
-    );
+    setZoomLevel(chatView.webContents.zoomFactor - 0.1, chatView);
+}
 
-    updateZoomInTitle(chatView);
+function setZoomLevel(zoomLevel: number, chatView: BrowserView | null) {
+    if (zoomLevel < 0.1) {
+        zoomLevel = 0.1;
+    } else if (zoomLevel > 10) {
+        zoomLevel = 10;
+    }
+
+    chatView!.webContents.zoomFactor = zoomLevel;
+    ShellSettings.getinstance().set("zoomLevel", zoomLevel);
+
+    updateZoomInTitle(chatView!);
 }
 
 function resetZoom(chatView: BrowserView) {
-    chatView.webContents.zoomLevel = 0;
-    ShellSettings.getinstance().set("zoomLevel", 0);
-    updateZoomInTitle(chatView);
+    setZoomLevel(1, chatView);
 }
 
 function updateZoomInTitle(chatView: BrowserView) {

@@ -168,6 +168,7 @@ export class ChatInput {
         this.inputContainer = document.createElement("div");
         this.inputContainer.className = "chat-input";
         this.sendButton = document.createElement("button");
+        this.sendButton.id = "sendbutton";
         this.sendButton.appendChild(iconSend());
         this.sendButton.className = "chat-input-button";
         this.sendButton.onclick = () => {
