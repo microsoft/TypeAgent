@@ -45,7 +45,7 @@ async function ensureWebsocketConnected() {
             if (schema == "code") {
                 const message = await handleVSCodeActions({
                     actionName: actionName,
-                    parameters: data.params,
+                    parameters: data?.params ?? {},
                 });
 
                 webSocket?.send(
