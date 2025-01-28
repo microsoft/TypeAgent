@@ -71,6 +71,7 @@ jobs:
         run: |
           pnpm install --frozen-lockfile --strict-peer-dependencies
       - name: Install Playwright Browsers
+        if: ${{ runner.os == 'windows' }}
         run: pnpm exec playwright install --with-deps
         working-directory: ts/packages/shell
       - name: Build
