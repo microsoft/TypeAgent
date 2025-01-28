@@ -1,10 +1,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { AgentInfo } from "../internal.js";
 import { getPackageFilePath } from "./getPackageFilePath.js";
 import fs from "node:fs";
-import { glob } from "glob";
-import type { AgentInfo } from "../agentProvider/npmAgentProvider.js";
 
 export type ExplainerConfig = {
     constructions?: {
@@ -38,9 +37,4 @@ export function getBuiltinConstructionConfig(explainerName: string) {
               file: getPackageFilePath(config?.file),
           }
         : undefined;
-}
-
-export async function getTestDataFiles() {
-    const config = await getDispatcherConfig();
-    return glob(config.tests.map((f) => getPackageFilePath(f)));
 }

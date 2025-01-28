@@ -4,12 +4,11 @@
 import { Args, Command, Flags } from "@oclif/core";
 import chalk from "chalk";
 import { CorrectionRecord } from "agent-cache";
+import { getCacheFactory, readTestData } from "agent-dispatcher/internal";
 import {
-    getCacheFactory,
     getSchemaNamesFromDefaultAppAgentProviders,
-    readTestData,
     getTestDataFiles,
-} from "agent-dispatcher/internal";
+} from "default-agent-provider/internal";
 import path from "node:path";
 
 function commonPathPrefix(s: string[]) {

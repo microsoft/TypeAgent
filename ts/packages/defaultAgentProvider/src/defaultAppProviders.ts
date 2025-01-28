@@ -2,41 +2,45 @@
 // Licensed under the MIT License.
 
 import { AppAgentManifest } from "@typeagent/agent-sdk";
-import { AppAgentProvider } from "../agentProvider/agentProvider.js";
+import { AppAgentProvider } from "agent-dispatcher";
 import {
     ActionConfig,
     ActionConfigProvider,
     convertToActionConfig,
-} from "../translation/agentTranslators.js";
-import {
     AgentInfo,
     createNpmAppAgentProvider,
-} from "../agentProvider/npmAgentProvider.js";
-import { getDispatcherConfig } from "./config.js";
-import path from "node:path";
-import fs from "node:fs";
-import {
     ActionSchemaFileCache,
     createSchemaInfoProvider,
-} from "../translation/actionSchemaFileCache.js";
-import { getInstanceDir } from "./userData.js";
+    getInstanceDir,
+} from "agent-dispatcher/internal";
+
+import path from "node:path";
+import fs from "node:fs";
+import { getPackageFilePath } from "./utils/getPackageFilePath.js";
+
+type AppAgentConfig = {
+    agents: { [key: string]: AgentInfo };
+};
+
+function getBuiltinAppAgentConfig(): AppAgentConfig {
+    return JSON.parse(
+        fs.readFileSync(getPackageFilePath("./src/config.json"), "utf8"),
+    );
+}
 
 let builtinAppAgentProvider: AppAgentProvider | undefined;
 export function getBuiltinAppAgentProvider(): AppAgentProvider {
     if (builtinAppAgentProvider === undefined) {
         builtinAppAgentProvider = createNpmAppAgentProvider(
-            getDispatcherConfig().agents,
+            getBuiltinAppAgentConfig().agents,
             import.meta.url,
         );
     }
     return builtinAppAgentProvider;
 }
 
-type ExternalConfig = {
-    agents: { [key: string]: AgentInfo };
-};
-let externalAppAgentsConfig: ExternalConfig | undefined;
-function getExternalAgentsConfig(instanceDir: string): ExternalConfig {
+let externalAppAgentsConfig: AppAgentConfig | undefined;
+function getExternalAgentsConfig(instanceDir: string): AppAgentConfig {
     if (externalAppAgentsConfig === undefined) {
         if (
             fs.existsSync(path.join(instanceDir, "externalAgentsConfig.json"))
@@ -46,7 +50,7 @@ function getExternalAgentsConfig(instanceDir: string): ExternalConfig {
                     path.join(instanceDir, "externalAgentsConfig.json"),
                     "utf8",
                 ),
-            ) as ExternalConfig;
+            ) as AppAgentConfig;
         } else {
             externalAppAgentsConfig = { agents: {} };
         }

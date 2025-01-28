@@ -18,7 +18,7 @@ import { electronApp, optimizer, is } from "@electron-toolkit/utils";
 import { runDemo } from "./demo.js";
 import registerDebug from "debug";
 import { createDispatcher, Dispatcher } from "agent-dispatcher";
-import { getDefaultAppAgentProviders } from "agent-dispatcher/internal";
+import { getDefaultAppAgentProviders } from "default-agent-provider";
 import { ShellSettings } from "./shellSettings.js";
 import { unlinkSync } from "fs";
 import { existsSync } from "node:fs";

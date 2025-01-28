@@ -4,12 +4,12 @@
 import { Args, Command, Flags } from "@oclif/core";
 import { Actions, FullAction } from "agent-cache";
 import { createDispatcher } from "agent-dispatcher";
+import { readTestData } from "agent-dispatcher/internal";
+import { getDefaultAppAgentProviders } from "default-agent-provider";
 import {
-    getDefaultAppAgentProviders,
-    getSchemaNamesFromDefaultAppAgentProviders,
     getTestDataFiles,
-    readTestData,
-} from "agent-dispatcher/internal";
+    getSchemaNamesFromDefaultAppAgentProviders,
+} from "default-agent-provider/internal";
 import chalk from "chalk";
 import fs from "node:fs";
 import { getElapsedString } from "common-utils";

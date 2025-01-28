@@ -6,10 +6,12 @@ import { composeTranslatorSchemas } from "common-utils";
 import {
     getAssistantSelectionSchemas,
     getFullSchemaText,
-    getSchemaNamesFromDefaultAppAgentProviders,
-    getActionConfigProviderFromDefaultAppAgentProviders,
     getActionSchema,
 } from "agent-dispatcher/internal";
+import {
+    getSchemaNamesFromDefaultAppAgentProviders,
+    getActionConfigProviderFromDefaultAppAgentProviders,
+} from "default-agent-provider/internal";
 import { generateSchemaTypeDefinition } from "action-schema";
 
 export default class Schema extends Command {

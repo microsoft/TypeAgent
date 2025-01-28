@@ -6,11 +6,11 @@ dotenv.config({ path: new URL("../../../../.env", import.meta.url) });
 
 import path from "node:path";
 import fs from "node:fs";
-import { getCacheFactory } from "../src/utils/cacheFactory.js";
 import {
+    getCacheFactory,
     convertTestDataToExplanationData,
     readTestData,
-} from "../src/utils/test/testData.js";
+} from "agent-dispatcher/internal";
 import {
     Actions,
     AgentCache,
@@ -22,7 +22,7 @@ import {
     normalizeParamValue,
     normalizeParamString,
 } from "agent-cache";
-import { createSchemaInfoProviderFromDefaultAppAgentProviders } from "../src/utils/defaultAppProviders.js";
+import { createSchemaInfoProviderFromDefaultAppAgentProviders } from "../src/defaultAppProviders.js";
 import { glob } from "glob";
 import { fileURLToPath } from "node:url";
 

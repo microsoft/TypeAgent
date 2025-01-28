@@ -3,11 +3,9 @@
 
 import { Args, Command, Flags } from "@oclif/core";
 import { createDispatcher } from "agent-dispatcher";
-import {
-    getCacheFactory,
-    getSchemaNamesFromDefaultAppAgentProviders,
-    getDefaultAppAgentProviders,
-} from "agent-dispatcher/internal";
+import { getCacheFactory } from "agent-dispatcher/internal";
+import { getDefaultAppAgentProviders } from "default-agent-provider";
+import { getSchemaNamesFromDefaultAppAgentProviders } from "default-agent-provider/internal";
 import chalk from "chalk";
 import { getChatModelNames } from "aiclient";
 import { readFileSync, existsSync } from "fs";

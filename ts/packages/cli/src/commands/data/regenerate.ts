@@ -14,11 +14,14 @@ import {
     getBuiltinConstructionConfig,
     GenerateDataInput,
     getEmptyTestData,
+    convertTestDataToExplanationData,
+} from "agent-dispatcher/internal";
+
+import {
     getTestDataFiles,
     createSchemaInfoProviderFromDefaultAppAgentProviders,
-    convertTestDataToExplanationData,
     getActionConfigProviderFromDefaultAppAgentProviders,
-} from "agent-dispatcher/internal";
+} from "default-agent-provider/internal";
 import {
     Actions,
     getDefaultExplainerName,

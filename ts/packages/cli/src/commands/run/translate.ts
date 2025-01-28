@@ -3,10 +3,8 @@
 
 import { Args, Command, Flags } from "@oclif/core";
 import { createDispatcher } from "agent-dispatcher";
-import {
-    getSchemaNamesFromDefaultAppAgentProviders,
-    getDefaultAppAgentProviders,
-} from "agent-dispatcher/internal";
+import { getDefaultAppAgentProviders } from "default-agent-provider";
+import { getSchemaNamesFromDefaultAppAgentProviders } from "default-agent-provider/internal";
 import { getChatModelNames } from "aiclient";
 
 const modelNames = await getChatModelNames();

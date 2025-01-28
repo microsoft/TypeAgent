@@ -19,13 +19,22 @@ export {
 } from "./utils/test/testData.js";
 
 export { getBuiltinConstructionConfig } from "./utils/config.js";
-export {
-    getSchemaNamesFromDefaultAppAgentProviders,
-    getActionConfigProviderFromDefaultAppAgentProviders,
-    createSchemaInfoProviderFromDefaultAppAgentProviders,
-    getDefaultAppAgentProviders,
-} from "./utils/defaultAppProviders.js";
 export { getAssistantSelectionSchemas } from "./translation/unknownSwitcher.js";
 export { getActionSchema } from "./translation/actionSchemaFileCache.js";
 export { getFullSchemaText } from "./translation/agentTranslators.js";
-export { getTestDataFiles } from "./utils/config.js";
+
+export {
+    ActionConfig,
+    ActionConfigProvider,
+    convertToActionConfig,
+    loadAgentJsonTranslator,
+} from "./translation/agentTranslators.js";
+export {
+    AgentInfo,
+    createNpmAppAgentProvider,
+} from "./agentProvider/npmAgentProvider.js";
+export {
+    ActionSchemaFileCache,
+    createSchemaInfoProvider,
+} from "./translation/actionSchemaFileCache.js";
+export { getInstanceDir } from "./utils/userData.js";

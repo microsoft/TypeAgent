@@ -4,11 +4,9 @@
 import { Args, Command, Flags } from "@oclif/core";
 import chalk from "chalk";
 import { RequestAction, Actions } from "agent-cache";
-import {
-    getCacheFactory,
-    getDefaultAppAgentProviders,
-    getSchemaNamesFromDefaultAppAgentProviders,
-} from "agent-dispatcher/internal";
+import { getCacheFactory } from "agent-dispatcher/internal";
+import { getDefaultAppAgentProviders } from "default-agent-provider";
+import { getSchemaNamesFromDefaultAppAgentProviders } from "default-agent-provider/internal";
 import { withConsoleClientIO } from "agent-dispatcher/helpers/console";
 import { ClientIO, createDispatcher } from "agent-dispatcher";
 

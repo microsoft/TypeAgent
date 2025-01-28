@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { createDispatcher } from "agent-dispatcher";
-import { getDefaultAppAgentProviders } from "agent-dispatcher/internal";
+import { getDefaultAppAgentProviders } from "default-agent-provider";
 import { createClientIORpcClient } from "agent-dispatcher/rpc/clientio/client";
 import { createDispatcherRpcServer } from "agent-dispatcher/rpc/dispatcher/server";
 import { createGenericChannel } from "agent-rpc/channel";

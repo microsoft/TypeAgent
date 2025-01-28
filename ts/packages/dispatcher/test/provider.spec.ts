@@ -4,7 +4,7 @@
 import { createNpmAppAgentProvider } from "../src/agentProvider/npmAgentProvider.js";
 import { createDispatcher, Dispatcher } from "../src/dispatcher.js";
 import { fileURLToPath } from "node:url";
-import { getBuiltinAppAgentProvider } from "../src/utils/defaultAppProviders.js";
+
 import {
     ClientIO,
     IAgentMessage,
@@ -32,14 +32,6 @@ function createTestClientIO(data: IAgentMessage[]): ClientIO {
 }
 
 describe("dispatcher", () => {
-    describe("Built-in Provider", () => {
-        it("startup and shutdown", async () => {
-            const dispatcher = await createDispatcher("test", {
-                appAgentProviders: [getBuiltinAppAgentProvider()],
-            });
-            await dispatcher.close();
-        });
-    });
 
     describe("Custom Provider", () => {
         describe("Command", () => {

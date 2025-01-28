@@ -11,9 +11,11 @@ import {
     printTestDataStats,
     getEmptyTestData,
     getCacheFactory,
+} from "agent-dispatcher/internal";
+import {
     getSchemaNamesFromDefaultAppAgentProviders,
     getActionConfigProviderFromDefaultAppAgentProviders,
-} from "agent-dispatcher/internal";
+} from "default-agent-provider/internal";
 import chalk from "chalk";
 import { getDefaultExplainerName } from "agent-cache";
 import { getChatModelMaxConcurrency, getChatModelNames } from "aiclient";

@@ -5,9 +5,9 @@ import { Args, Command, Flags } from "@oclif/core";
 import {
     readTestData,
     getCacheFactory,
-    createSchemaInfoProviderFromDefaultAppAgentProviders,
     convertTestDataToExplanationData,
 } from "agent-dispatcher/internal";
+import { createSchemaInfoProviderFromDefaultAppAgentProviders } from "default-agent-provider/internal";
 import { printImportConstructionResult } from "agent-cache";
 import fs from "node:fs";
 import chalk from "chalk";

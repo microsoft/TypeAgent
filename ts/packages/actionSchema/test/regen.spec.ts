@@ -15,10 +15,10 @@ import { generateActionSchema } from "../src/generator.js";
 import prettier from "prettier";
 import { SchemaConfig } from "../src/schemaConfig.js";
 
-const dispatcherPath = fileURLToPath(
-    new URL("../../../dispatcher", import.meta.url),
+const defaultAgentProviderPath = fileURLToPath(
+    new URL("../../../defaultAgentProvider", import.meta.url),
 );
-const configPath = path.resolve(dispatcherPath, "./data/config.json");
+const configPath = path.resolve(defaultAgentProviderPath, "./src/config.json");
 const config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
 
 const tests: {
@@ -37,7 +37,7 @@ type Config = {
     subActionManifests?: Record<string, Config>;
 };
 
-function loadSchmeaConfig(fileName: string) {
+function loadSchemaConfig(fileName: string) {
     try {
         const parsedFileName = path.parse(fileName);
         const schemaConfigFileName = path.join(
@@ -58,7 +58,7 @@ function addTest(schemaName: string, config: Config, dir: string) {
     const schema = config.schema;
     if (schema) {
         const fileName = path.resolve(dir, schema.schemaFile);
-        const schemaConfig = loadSchmeaConfig(fileName);
+        const schemaConfig = loadSchemaConfig(fileName);
         tests.push({
             source: fs.readFileSync(fileName, "utf-8"),
             schemaConfig,
@@ -77,11 +77,14 @@ function addTest(schemaName: string, config: Config, dir: string) {
     }
 }
 
-const dispatcherRequire = createRequire(`${dispatcherPath}/src`);
+const defaultAgentProviderRequire = createRequire(
+    `${defaultAgentProviderPath}/src`,
+);
 for (const [name, entry] of Object.entries(config.agents) as [string, any][]) {
     const manifestModulePath = `${entry.name}/agent/manifest`;
-    const manifestPath = dispatcherRequire.resolve(manifestModulePath);
-    const manifest = dispatcherRequire(manifestPath);
+    const manifestPath =
+        defaultAgentProviderRequire.resolve(manifestModulePath);
+    const manifest = defaultAgentProviderRequire(manifestPath);
     const manifestDir = path.dirname(manifestPath);
     addTest(name, manifest, manifestDir);
 }

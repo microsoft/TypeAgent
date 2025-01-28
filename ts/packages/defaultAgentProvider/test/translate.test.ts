@@ -5,10 +5,12 @@ import dotenv from "dotenv";
 dotenv.config({ path: new URL("../../../../.env", import.meta.url) });
 
 import { getPackageFilePath } from "../src/utils/getPackageFilePath.js";
-import { readTestData } from "../src/utils/test/testData.js";
-import { loadAgentJsonTranslator } from "../src/translation/agentTranslators.js";
+import {
+    readTestData,
+    loadAgentJsonTranslator,
+} from "agent-dispatcher/internal";
 import { JSONAction } from "agent-cache";
-import { getActionConfigProviderFromDefaultAppAgentProviders } from "../src/utils/defaultAppProviders.js";
+import { getActionConfigProviderFromDefaultAppAgentProviders } from "../src/defaultAppProviders.js";
 const dataFiles = [
     "test/data/player/v5/simple.json",
     "test/data/player/v5/full.json",

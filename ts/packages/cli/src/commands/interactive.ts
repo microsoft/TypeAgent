@@ -2,11 +2,9 @@
 // Licensed under the MIT License.
 
 import { Args, Command, Flags } from "@oclif/core";
-import {
-    getSchemaNamesFromDefaultAppAgentProviders,
-    getCacheFactory,
-    getDefaultAppAgentProviders,
-} from "agent-dispatcher/internal";
+import { getCacheFactory } from "agent-dispatcher/internal";
+import { getDefaultAppAgentProviders } from "default-agent-provider";
+import { getSchemaNamesFromDefaultAppAgentProviders } from "default-agent-provider/internal";
 import inspector from "node:inspector";
 import { getChatModelNames } from "aiclient";
 import {
