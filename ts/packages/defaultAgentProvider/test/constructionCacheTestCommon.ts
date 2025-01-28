@@ -22,7 +22,7 @@ import {
     normalizeParamValue,
     normalizeParamString,
 } from "agent-cache";
-import { createSchemaInfoProviderFromDefaultAppAgentProviders } from "../src/defaultAppProviders.js";
+import { createSchemaInfoProviderFromDefaultAppAgentProviders } from "../src/defaultAgentProviders.js";
 import { glob } from "glob";
 import { fileURLToPath } from "node:url";
 

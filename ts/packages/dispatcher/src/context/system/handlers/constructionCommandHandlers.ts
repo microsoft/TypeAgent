@@ -13,13 +13,10 @@ import {
     convertTestDataToExplanationData,
     readTestData,
 } from "../../../utils/test/testData.js";
-import { getPackageFilePath } from "../../../utils/getPackageFilePath.js";
 import { ConstructionStore, printImportConstructionResult } from "agent-cache";
 import { getSessionConstructionDirPath } from "../../session.js";
-import { getAppAgentName } from "../../../translation/agentTranslators.js";
 import { askYesNoWithContext } from "../../interactiveIO.js";
 import { glob } from "glob";
-import { getDispatcherConfig } from "../../../utils/config.js";
 import {
     displayInfo,
     displayResult,
@@ -305,10 +302,10 @@ async function getImportTranslationFiles(
     context: CommandHandlerContext,
     extended: boolean,
 ) {
-    if (context.getTestDataFiles === undefined) {
+    if (context.constructionProvider === undefined) {
         return [];
     }
-    return context.getTestDataFiles(extended);
+    return context.constructionProvider.getImportTranslationFiles(extended);
 }
 
 async function expandPaths(paths: string[]) {

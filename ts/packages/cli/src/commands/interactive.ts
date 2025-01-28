@@ -3,11 +3,11 @@
 
 import { Args, Command, Flags } from "@oclif/core";
 import { getCacheFactory } from "agent-dispatcher/internal";
-import { getDefaultAppAgentProviders } from "default-agent-provider";
 import {
-    getSchemaNamesFromDefaultAppAgentProviders,
-    getTestDataFiles,
-} from "default-agent-provider/internal";
+    getDefaultAppAgentProviders,
+    getDefaultConstructionProvider,
+} from "default-agent-provider";
+import { getSchemaNamesFromDefaultAppAgentProviders } from "default-agent-provider/internal";
 import inspector from "node:inspector";
 import { getChatModelNames } from "aiclient";
 import {
@@ -77,7 +77,7 @@ export default class Interactive extends Command {
                 enableServiceHost: true,
                 clientIO,
                 dblogging: true,
-                getTestDataFiles,
+                constructionProvider: getDefaultConstructionProvider(),
             });
             try {
                 if (args.input) {

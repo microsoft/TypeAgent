@@ -11,7 +11,6 @@ import {
     TestDataEntry,
     FailedTestDataEntry,
     getCacheFactory,
-    getBuiltinConstructionConfig,
     GenerateDataInput,
     getEmptyTestData,
     convertTestDataToExplanationData,
@@ -32,6 +31,7 @@ import {
 import { createLimiter, getElapsedString } from "common-utils";
 import { getChatModelMaxConcurrency, getChatModelNames } from "aiclient";
 import { Entity } from "@typeagent/agent-sdk";
+import { getDefaultConstructionProvider } from "default-agent-provider";
 
 function toEntities(actions: Actions): Entity[] {
     const entities: Entity[] = [];
@@ -193,7 +193,9 @@ export default class ExplanationDataRegenerateCommmand extends Command {
         const startTime = performance.now();
 
         const builtinConstructionConfig = flags.builtin
-            ? getBuiltinConstructionConfig(flags.builtin)
+            ? getDefaultConstructionProvider().getBuiltinConstructionConfig(
+                  flags.builtin,
+              )
             : undefined;
 
         let files;

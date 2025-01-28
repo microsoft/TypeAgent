@@ -10,7 +10,7 @@ import {
     loadAgentJsonTranslator,
 } from "agent-dispatcher/internal";
 import { JSONAction } from "agent-cache";
-import { getActionConfigProviderFromDefaultAppAgentProviders } from "../src/defaultAppProviders.js";
+import { getActionConfigProviderFromDefaultAppAgentProviders } from "../src/defaultAgentProviders.js";
 const dataFiles = [
     "test/data/player/v5/simple.json",
     "test/data/player/v5/full.json",

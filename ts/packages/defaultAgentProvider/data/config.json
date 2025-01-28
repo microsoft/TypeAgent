@@ -1,16 +1,10 @@
 {
   "agents": {
     "player": {
-      "name": "music",
-      "imports": [
-        "./test/data/player/**/*.json"
-      ]
+      "name": "music"
     },
     "calendar": {
-      "name": "calendar",
-      "imports": [
-        "./test/data/calendar/**/*.json"
-      ]
+      "name": "calendar"
     },
     "email": {
       "name": "email"
@@ -60,11 +54,10 @@
   "explainers": {
     "v5": {
       "constructions": {
-        "data": [
-          "./data/explainer/v5/data/player/basic.json"
-        ],
+        "data": ["./data/explainer/v5/data/player/basic.json"],
         "file": "./data/explainer/v5/constructions.json"
       }
     }
-  }
+  },
+  "tests": ["./test/data/**/**/*.json", "./test/repo/explanations/**/**/*.json"]
 }

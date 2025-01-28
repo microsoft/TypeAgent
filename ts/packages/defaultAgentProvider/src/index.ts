@@ -1,4 +1,5 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-export { getDefaultAppAgentProviders } from "./defaultAppProviders.js";
+export { getDefaultAppAgentProviders } from "./defaultAgentProviders.js";
+export { getDefaultConstructionProvider } from "./defaultConstructionProvider.js";

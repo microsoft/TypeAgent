@@ -9,3 +9,10 @@ export interface AppAgentProvider {
     loadAppAgent(appAgentName: string): Promise<AppAgent>;
     unloadAppAgent(appAgentName: string): void;
 }
+
+export interface ConstructionProvider {
+    getBuiltinConstructionConfig(
+        explainerName: string,
+    ): { data: string[]; file: string } | undefined;
+    getImportTranslationFiles(extended: boolean): Promise<string[]>;
+}

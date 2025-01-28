@@ -5,5 +5,5 @@ export {
     getSchemaNamesFromDefaultAppAgentProviders,
     getActionConfigProviderFromDefaultAppAgentProviders,
     createSchemaInfoProviderFromDefaultAppAgentProviders,
-} from "./defaultAppProviders.js";
-export { getTestDataFiles } from "./testDataFiles.js";
+} from "./defaultAgentProviders.js";
+export { getTestDataFiles } from "./utils/config.js";

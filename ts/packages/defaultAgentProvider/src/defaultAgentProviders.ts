@@ -16,23 +16,13 @@ import {
 
 import path from "node:path";
 import fs from "node:fs";
-import { getPackageFilePath } from "./utils/getPackageFilePath.js";
-
-type AppAgentConfig = {
-    agents: { [key: string]: AppAgentInfo };
-};
-
-function getBuiltinAppAgentConfig(): AppAgentConfig {
-    return JSON.parse(
-        fs.readFileSync(getPackageFilePath("./src/config.json"), "utf8"),
-    );
-}
+import { getConfig, AppAgentConfig } from "./utils/config.js";
 
 let builtinAppAgentProvider: AppAgentProvider | undefined;
 export function getBuiltinAppAgentProvider(): AppAgentProvider {
     if (builtinAppAgentProvider === undefined) {
         builtinAppAgentProvider = createNpmAppAgentProvider(
-            getBuiltinAppAgentConfig().agents,
+            getConfig().agents,
             import.meta.url,
         );
     }

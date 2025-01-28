@@ -2,8 +2,10 @@
 // Licensed under the MIT License.
 
 import { createDispatcher } from "agent-dispatcher";
-import { getDefaultAppAgentProviders } from "default-agent-provider";
-import { getTestDataFiles } from "default-agent-provider/internal";
+import {
+    getDefaultAppAgentProviders,
+    getDefaultConstructionProvider,
+} from "default-agent-provider";
 import { createClientIORpcClient } from "agent-dispatcher/rpc/clientio/client";
 import { createDispatcherRpcServer } from "agent-dispatcher/rpc/dispatcher/server";
 import { createGenericChannel } from "agent-rpc/channel";
@@ -33,7 +35,7 @@ export async function createWebDispatcher(): Promise<WebDispatcher> {
         metrics: true,
         dblogging: true,
         clientIO: clientIO,
-        getTestDataFiles,
+        constructionProvider: getDefaultConstructionProvider(),
     });
 
     let settingSummary: string = "";

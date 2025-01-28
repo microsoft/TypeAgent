@@ -18,8 +18,10 @@ import { electronApp, optimizer, is } from "@electron-toolkit/utils";
 import { runDemo } from "./demo.js";
 import registerDebug from "debug";
 import { createDispatcher, Dispatcher } from "agent-dispatcher";
-import { getDefaultAppAgentProviders } from "default-agent-provider";
-import { getTestDataFiles } from "default-agent-provider/internal";
+import {
+    getDefaultAppAgentProviders,
+    getDefaultConstructionProvider,
+} from "default-agent-provider";
 import { ShellSettings } from "./shellSettings.js";
 import { unlinkSync } from "fs";
 import { existsSync } from "node:fs";
@@ -497,7 +499,7 @@ async function initializeDispatcher(
         metrics: true,
         dblogging: true,
         clientIO,
-        getTestDataFiles,
+        constructionProvider: getDefaultConstructionProvider(),
     });
 
     async function processShellRequest(

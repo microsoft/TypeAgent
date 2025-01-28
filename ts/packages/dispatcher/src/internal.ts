@@ -18,7 +18,6 @@ export {
     convertTestDataToExplanationData,
 } from "./utils/test/testData.js";
 
-export { getBuiltinConstructionConfig } from "./utils/config.js";
 export { getAssistantSelectionSchemas } from "./translation/unknownSwitcher.js";
 export { getActionSchema } from "./translation/actionSchemaFileCache.js";
 export { getFullSchemaText } from "./translation/agentTranslators.js";

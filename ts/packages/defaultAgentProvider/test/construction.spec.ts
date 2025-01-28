@@ -6,7 +6,7 @@ dotenv.config({ path: new URL("../../../../.env", import.meta.url) });
 
 import { getCacheFactory, readTestData } from "agent-dispatcher/internal";
 import { Actions, RequestAction } from "agent-cache";
-import { createSchemaInfoProviderFromDefaultAppAgentProviders } from "../src/defaultAppProviders.js";
+import { createSchemaInfoProviderFromDefaultAppAgentProviders } from "../src/defaultAgentProviders.js";
 import { glob } from "glob";
 
 const dataFiles = ["test/data/**/v5/*.json"];
