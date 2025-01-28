@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 import test, { ElectronApplication,Page,_electron,
     _electron as electron,
     expect, } from "@playwright/test";
