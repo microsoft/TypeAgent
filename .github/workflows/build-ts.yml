@@ -95,7 +95,7 @@ jobs:
       - name: Get Keys
         if: ${{ github.event_name != 'merge_group' }}
         run: |
-          node tools/scripts/getKeys.mjs --vault build-pipeline-kv
+          npm run getKeys:build
         working-directory: ts
       - name: Test CLI - smoke
         if: ${{ github.event_name != 'merge_group' }}
