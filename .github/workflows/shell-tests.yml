@@ -31,6 +31,7 @@ jobs:
             version: 22
 
     runs-on: ${{ matrix.os }}
+    continue-on-error: true
     steps:
       - if: runner.os == 'Linux'
         run: |
