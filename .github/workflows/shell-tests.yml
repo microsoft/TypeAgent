@@ -66,16 +66,6 @@ jobs:
         working-directory: ts
         run: |
           npm run build
-
-      # - name: Build Shell
-      #   working-directory: ts/packages/shell
-      #   run: |
-      #     npm run build
-
-      # - name: Test
-      #   working-directory: ts
-      #   run: |
-      #     npm run test
       - name: Login to Azure
         uses: azure/login@v2.2.0
         with:
@@ -89,31 +79,13 @@ jobs:
       - name: Test CLI - verify .env & endpoint connectivity
         run: |
             npm run start:dev 'prompt' 'why is the sky blue'
-        working-directory: ts/packages/cli      
-      
-
-      # - name: Build for Linux
-      #   if: matrix.os == 'ubuntu-latest'
-      #   working-directory: ts/packages/shell
-      #   run: |
-      #     sudo chown root /home/runner/work/TypeAgent/TypeAgent/ts/node_modules/.pnpm/electron@30.0.1/node_modules/electron/dist/chrome-sandbox
-      #     sudo chmod 4755 /home/runner/work/TypeAgent/TypeAgent/ts/node_modules/.pnpm/electron@30.0.1/node_modules/electron/dist/chrome-sandbox
-
-      # - name: Run shell
-      #   run: |
-      #       npm start
-      #   working-directory: ts/packages/shell     
-      
+        working-directory: ts/packages/cli        
       - name: Shell Tests
-        timeout-minutes: 180
-        # run: |           
-        #   working-directory: ts/packages/shell
+        timeout-minutes: 60
         run: |
           npx playwright test
           rm ../../.env
-
         working-directory: ts/packages/shell
-
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
         with:
@@ -128,9 +100,3 @@ jobs:
           path: ts/packages/shell/playwright-report/
           overwrite: true
           retention-days: 30
-
-
-      # - name: Lint
-      #   working-directory: ts
-      #   run: |
-      #     npm run lint
