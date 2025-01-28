@@ -69,6 +69,9 @@ jobs:
         working-directory: ts
         run: |
           pnpm install --frozen-lockfile --strict-peer-dependencies
+      - name: Install Playwright Browsers
+        run: pnpm exec playwright install --with-deps
+        working-directory: ts/packages/shell
       - name: Build
         if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts == 'true' }}
         working-directory: ts
