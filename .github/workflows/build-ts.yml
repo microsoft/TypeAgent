@@ -22,7 +22,6 @@ permissions:
   pull-requests: read
   contents: read
   id-token: write
-  id-token: write
 
 env:
   NODE_OPTIONS: --max_old_space_size=8192
