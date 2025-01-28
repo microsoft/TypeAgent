@@ -3,13 +3,22 @@
 
 import { createTopNList } from "typeagent";
 import {
+    IConversation,
     ITermToRelatedTermsIndex,
     ITermToSemanticRefIndex,
+    KnowledgeType,
     ScoredSemanticRef,
     SemanticRef,
     SemanticRefIndex,
     Term,
 } from "./dataFormat.js";
+
+export function isConversationSearchable(conversation: IConversation): boolean {
+    return (
+        conversation.semanticRefIndex !== undefined &&
+        conversation.semanticRefs !== undefined
+    );
+}
 
 // Query eval expressions
 
@@ -26,7 +35,21 @@ export type QueryTerm = {
 };
 
 export class QueryEvalContext {
-    constructor() {}
+    constructor(private conversation: IConversation) {
+        if (!isConversationSearchable(conversation)) {
+            throw new Error(`${conversation.nameTag} is not initialized`);
+        }
+    }
+
+    public get semanticRefIndex(): ITermToSemanticRefIndex {
+        return this.conversation.semanticRefIndex!;
+    }
+    public get semanticRefs(): SemanticRef[] {
+        return this.conversation.semanticRefs!;
+    }
+    public get relatedTermIndex(): ITermToRelatedTermsIndex | undefined {
+        return this.conversation.relatedTermsIndex;
+    }
 }
 
 export class SelectTopNExpr<T extends MatchAccumulator>
@@ -50,25 +73,28 @@ export class SelectTopNExpr<T extends MatchAccumulator>
 export class TermsMatchExpr implements IQueryOpExpr<SemanticRefAccumulator> {
     private matches: SemanticRefAccumulator = new SemanticRefAccumulator();
     constructor(
-        public index: ITermToSemanticRefIndex,
         public terms: IQueryOpExpr<QueryTerm[]>,
-        predicate?: (match: SemanticRef) => boolean,
+        public semanticRefIndex?: ITermToSemanticRefIndex,
     ) {}
 
     public async eval(
         context: QueryEvalContext,
     ): Promise<SemanticRefAccumulator> {
+        const index = this.semanticRefIndex ?? context.semanticRefIndex;
         const terms = await this.terms.eval(context);
         for (const queryTerm of terms) {
-            this.accumulateMatches(queryTerm);
+            this.accumulateMatches(index, queryTerm);
         }
         return this.matches;
     }
 
-    private accumulateMatches(queryTerm: QueryTerm): void {
+    private accumulateMatches(
+        index: ITermToSemanticRefIndex,
+        queryTerm: QueryTerm,
+    ): void {
         this.matches.addTermMatch(
             queryTerm.term,
-            this.index.lookupTerm(queryTerm.term.text),
+            index.lookupTerm(queryTerm.term.text),
         );
         if (queryTerm.relatedTerms && queryTerm.relatedTerms.length > 0) {
             for (const relatedTerm of queryTerm.relatedTerms) {
@@ -76,7 +102,7 @@ export class TermsMatchExpr implements IQueryOpExpr<SemanticRefAccumulator> {
                 // BUT are scored with the score of the related term
                 this.matches.addRelatedTermMatch(
                     queryTerm.term,
-                    this.index.lookupTerm(relatedTerm.text),
+                    index.lookupTerm(relatedTerm.text),
                     relatedTerm.score,
                 );
             }
@@ -86,23 +112,26 @@ export class TermsMatchExpr implements IQueryOpExpr<SemanticRefAccumulator> {
 
 export class ResolveRelatedTermsExpr implements IQueryOpExpr<QueryTerm[]> {
     constructor(
-        public index: ITermToRelatedTermsIndex,
         public terms: IQueryOpExpr<QueryTerm[]>,
+        public index?: ITermToRelatedTermsIndex,
     ) {}
 
     public async eval(context: QueryEvalContext): Promise<QueryTerm[]> {
         const terms = await this.terms.eval(context);
-        for (const queryTerm of terms) {
-            if (
-                queryTerm.relatedTerms === undefined ||
-                queryTerm.relatedTerms.length === 0
-            ) {
-                const relatedTerms = await this.index.lookupTerm(
-                    queryTerm.term.text,
-                );
-                if (relatedTerms !== undefined && relatedTerms.length > 0) {
-                    queryTerm.relatedTerms ??= [];
-                    queryTerm.relatedTerms.push(...relatedTerms);
+        const index = this.index ?? context.relatedTermIndex;
+        if (index !== undefined) {
+            for (const queryTerm of terms) {
+                if (
+                    queryTerm.relatedTerms === undefined ||
+                    queryTerm.relatedTerms.length === 0
+                ) {
+                    const relatedTerms = await index.lookupTerm(
+                        queryTerm.term.text,
+                    );
+                    if (relatedTerms !== undefined && relatedTerms.length > 0) {
+                        queryTerm.relatedTerms ??= [];
+                        queryTerm.relatedTerms.push(...relatedTerms);
+                    }
                 }
             }
         }
@@ -256,6 +285,17 @@ export class MatchAccumulator<T = any> {
     }
 }
 
+export class Group<K, V> extends Map<K, V[]> {
+    public push(key: K, value: V): void {
+        const items = this.get(key);
+        if (items !== undefined) {
+            items.push(value);
+        } else {
+            this.set(key, [value]);
+        }
+    }
+}
+
 export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
     constructor(public termMatches: Set<string> = new Set<string>()) {
         super();
@@ -320,6 +360,17 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
             maxMatches,
             this.getMinHitCount(minHitCount),
         );
+    }
+
+    public groupMatchesByKnowledgeType(
+        semanticRefs: SemanticRef[],
+    ): Group<KnowledgeType, Match<SemanticRefIndex>> {
+        const groups = new Group<KnowledgeType, Match<SemanticRefIndex>>();
+        for (const match of this.getMatches()) {
+            const semanticRef = semanticRefs[match.value];
+            groups.push(semanticRef.knowledgeType, match);
+        }
+        return groups;
     }
 
     public toScoredSemanticRefs(): ScoredSemanticRef[] {

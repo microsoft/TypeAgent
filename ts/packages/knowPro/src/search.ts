@@ -21,19 +21,16 @@ export async function searchTermsInConversation(
     maxMatches?: number,
     minHitCount?: number,
 ): Promise<SearchResult> {
-    const semanticRefIndex = conversation.semanticRefIndex;
-    if (semanticRefIndex === undefined) {
+    if (!q.isConversationSearchable(conversation)) {
         return new SearchResult();
     }
 
-    const relatedTermIndex = conversation.relatedTermsIndex;
-    const context = new q.QueryEvalContext();
+    const context = new q.QueryEvalContext(conversation);
     const queryTerms = new q.QueryTermsExpr(terms);
     const query = new q.SelectTopNExpr(
         new q.TermsMatchExpr(
-            semanticRefIndex,
-            relatedTermIndex !== undefined
-                ? new q.ResolveRelatedTermsExpr(relatedTermIndex, queryTerms)
+            conversation.relatedTermsIndex !== undefined
+                ? new q.ResolveRelatedTermsExpr(queryTerms)
                 : queryTerms,
         ),
         maxMatches,
@@ -52,14 +49,13 @@ export async function searchTermsInConversationExact(
     maxMatches?: number,
     minHitCount?: number,
 ): Promise<SearchResult> {
-    const semanticRefIndex = conversation.semanticRefIndex;
-    if (semanticRefIndex === undefined) {
+    if (!q.isConversationSearchable(conversation)) {
         return new SearchResult();
     }
 
-    const context = new q.QueryEvalContext();
+    const context = new q.QueryEvalContext(conversation);
     const query = new q.SelectTopNExpr(
-        new q.TermsMatchExpr(semanticRefIndex, new q.QueryTermsExpr(terms)),
+        new q.TermsMatchExpr(new q.QueryTermsExpr(terms)),
         maxMatches,
         minHitCount,
     );
