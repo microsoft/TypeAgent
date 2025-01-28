@@ -68,9 +68,10 @@ export async function chunkifyTypeScriptFiles(
                 };
                 chunks.push(chunk);
             } catch (e: any) {
-                console.log(
-                    `Error picking apart ${func.name}: ${fileName}: ${e.message}`,
-                );
+                results.push({
+                    error: `${func.name?.escapedText}: ${e.message}`,
+                    filename: fileName,
+                });
             }
         }
         // console.log("========================================================");
