@@ -18,7 +18,10 @@ import { electronApp, optimizer, is } from "@electron-toolkit/utils";
 import { runDemo } from "./demo.js";
 import registerDebug from "debug";
 import { createDispatcher, Dispatcher } from "agent-dispatcher";
-import { getDefaultAppAgentProviders } from "agent-dispatcher/internal";
+import {
+    getDefaultAppAgentProviders,
+    getDefaultConstructionProvider,
+} from "default-agent-provider";
 import { ShellSettings } from "./shellSettings.js";
 import { unlinkSync } from "fs";
 import { existsSync } from "node:fs";
@@ -35,6 +38,7 @@ import { createDispatcherRpcServer } from "agent-dispatcher/rpc/dispatcher/serve
 import { createGenericChannel } from "agent-rpc/channel";
 import net from "node:net";
 import { createClientIORpcClient } from "agent-dispatcher/rpc/clientio/client";
+import { getInstanceDir } from "agent-dispatcher/internal";
 
 console.log(auth.AzureTokenScopes.CogServices);
 
@@ -506,7 +510,7 @@ async function initializeDispatcher(
     const newDispatcher = await createDispatcher("shell", {
         appAgentProviders: [
             shellAgentProvider,
-            ...getDefaultAppAgentProviders(),
+            ...getDefaultAppAgentProviders(getInstanceDir()),
         ],
         explanationAsynchronousMode: true,
         persistSession: true,
@@ -514,6 +518,7 @@ async function initializeDispatcher(
         metrics: true,
         dblogging: true,
         clientIO,
+        constructionProvider: getDefaultConstructionProvider(),
     });
 
     async function processShellRequest(
