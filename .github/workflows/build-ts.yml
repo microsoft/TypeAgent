@@ -33,10 +33,6 @@ jobs:
       matrix:
         os: ["ubuntu-latest", "windows-latest", "macos-latest"]
         version: [18, 20, 22]
-        exclude:
-          # TODO: Test timeout jest work for some reason
-          - os: windows-latest
-            version: 22
 
     runs-on: ${{ matrix.os }}
     steps:
@@ -71,7 +67,7 @@ jobs:
         run: |
           pnpm install --frozen-lockfile --strict-peer-dependencies
       - name: Install Playwright Browsers
-        if: ${{ runner.os == 'windows' }}
+        if: ${{ runner.os == 'windows' && matrix.version == '22' }}
         run: pnpm exec playwright install --with-deps
         working-directory: ts/packages/shell
       - name: Build
@@ -83,7 +79,7 @@ jobs:
         if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts == 'true' }}
         working-directory: ts
         run: |
-          npm run test
+          npm run test:local
       - name: Lint
         if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts == 'true' }}
         working-directory: ts
@@ -96,7 +92,7 @@ jobs:
           client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_5B0D2D6BA40F4710B45721D2112356DD }}
           tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_39BB903136F14B6EAD8F53A8AB78E3AA }}
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_F36C1F2C4B2C49CA8DD5C52FAB98FA30 }}
-      - name: Get Keys        
+      - name: Get Keys
         if: ${{ github.event_name != 'merge_group' }}
         run: |
           node tools/scripts/getKeys.mjs --vault build-pipeline-kv
@@ -104,15 +100,21 @@ jobs:
       - name: Test CLI - smoke
         if: ${{ github.event_name != 'merge_group' }}
         run: |
-            npm run start:dev 'prompt' 'why is the sky blue'
+          npm run start:dev 'prompt' 'why is the sky blue'
         working-directory: ts/packages/cli
         continue-on-error: true
       - name: Shell Tests - smoke
-        if: ${{ github.event_name != 'merge_group' && runner.os =='windows' }}
+        if: ${{ github.event_name != 'merge_group' && runner.os == 'windows' && matrix.version == '22' }}
         timeout-minutes: 60
         run: |
           npx playwright test simple.spec.ts
           rm ../../.env
         working-directory: ts/packages/shell
         continue-on-error: true
-
+      - name: Live Tests
+        if: ${{ github.event_name != 'merge_group' && runner.os == 'linux' && matrix.version == '22' }}
+        timeout-minutes: 60
+        run: |
+          npm run test:live
+        working-directory: ts
+        continue-on-error: true
