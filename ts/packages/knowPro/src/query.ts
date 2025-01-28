@@ -63,15 +63,12 @@ export class SelectTopNExpr<T extends MatchAccumulator>
 
     public async eval(context: QueryEvalContext): Promise<T> {
         const matches = await this.sourceExpr.eval(context);
-        const topN = matches.getTopNScoring(this.maxMatches, this.minHitCount);
-        matches.clearMatches();
-        matches.setMatches(topN);
-        return matches;
+        matches.reduceTopNScoring(this.maxMatches, this.minHitCount);
+        return Promise.resolve(matches);
     }
 }
 
 export class TermsMatchExpr implements IQueryOpExpr<SemanticRefAccumulator> {
-    private matches: SemanticRefAccumulator = new SemanticRefAccumulator();
     constructor(
         public terms: IQueryOpExpr<QueryTerm[]>,
         public semanticRefIndex?: ITermToSemanticRefIndex,
@@ -80,19 +77,22 @@ export class TermsMatchExpr implements IQueryOpExpr<SemanticRefAccumulator> {
     public async eval(
         context: QueryEvalContext,
     ): Promise<SemanticRefAccumulator> {
+        const matchAccumulator: SemanticRefAccumulator =
+            new SemanticRefAccumulator();
         const index = this.semanticRefIndex ?? context.semanticRefIndex;
         const terms = await this.terms.eval(context);
         for (const queryTerm of terms) {
-            this.accumulateMatches(index, queryTerm);
+            this.accumulateMatches(index, matchAccumulator, queryTerm);
         }
-        return this.matches;
+        return Promise.resolve(matchAccumulator);
     }
 
     private accumulateMatches(
         index: ITermToSemanticRefIndex,
+        matchAccumulator: SemanticRefAccumulator,
         queryTerm: QueryTerm,
     ): void {
-        this.matches.addTermMatch(
+        matchAccumulator.addTermMatch(
             queryTerm.term,
             index.lookupTerm(queryTerm.term.text),
         );
@@ -100,7 +100,7 @@ export class TermsMatchExpr implements IQueryOpExpr<SemanticRefAccumulator> {
             for (const relatedTerm of queryTerm.relatedTerms) {
                 // Related term matches count as matches for the queryTerm...
                 // BUT are scored with the score of the related term
-                this.matches.addRelatedTermMatch(
+                matchAccumulator.addRelatedTermMatch(
                     queryTerm.term,
                     index.lookupTerm(relatedTerm.text),
                     relatedTerm.score,
@@ -144,6 +144,43 @@ export class QueryTermsExpr implements IQueryOpExpr<QueryTerm[]> {
 
     public eval(context: QueryEvalContext): Promise<QueryTerm[]> {
         return Promise.resolve(this.terms);
+    }
+}
+
+export class GroupByKnowledgeTypeExpr
+    implements IQueryOpExpr<Map<KnowledgeType, SemanticRefAccumulator>>
+{
+    constructor(public matches: IQueryOpExpr<SemanticRefAccumulator>) {}
+
+    public async eval(
+        context: QueryEvalContext,
+    ): Promise<Map<KnowledgeType, SemanticRefAccumulator>> {
+        const semanticRefMatches = await this.matches.eval(context);
+        return semanticRefMatches.groupMatchesByKnowledgeType(
+            context.semanticRefs,
+        );
+    }
+}
+
+export class SelectTopNKnowledgeGroupExpr
+    implements IQueryOpExpr<Map<KnowledgeType, SemanticRefAccumulator>>
+{
+    constructor(
+        public sourceExpr: IQueryOpExpr<
+            Map<KnowledgeType, SemanticRefAccumulator>
+        >,
+        public maxMatches: number | undefined = undefined,
+        public minHitCount: number | undefined = undefined,
+    ) {}
+
+    public async eval(
+        context: QueryEvalContext,
+    ): Promise<Map<KnowledgeType, SemanticRefAccumulator>> {
+        const groupsAccumulators = await this.sourceExpr.eval(context);
+        for (const accumulator of groupsAccumulators.values()) {
+            accumulator.reduceTopNScoring(this.maxMatches, this.minHitCount);
+        }
+        return groupsAccumulators;
     }
 }
 
@@ -276,23 +313,24 @@ export class MatchAccumulator<T = any> {
         return items;
     }
 
+    public reduceTopNScoring(
+        maxMatches?: number,
+        minHitCount?: number,
+    ): number {
+        const topN = this.getTopNScoring(maxMatches, minHitCount);
+        this.clearMatches();
+        if (topN.length > 0) {
+            this.setMatches(topN);
+        }
+        return topN.length;
+    }
+
     private matchesWithMinHitCount(
         minHitCount: number | undefined,
     ): IterableIterator<Match<T>> {
         return minHitCount !== undefined && minHitCount > 0
             ? this.getMatchesWhere((m) => m.hitCount >= minHitCount)
             : this.matches.values();
-    }
-}
-
-export class Group<K, V> extends Map<K, V[]> {
-    public push(key: K, value: V): void {
-        const items = this.get(key);
-        if (items !== undefined) {
-            items.push(value);
-        } else {
-            this.set(key, [value]);
-        }
     }
 }
 
@@ -364,11 +402,17 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
 
     public groupMatchesByKnowledgeType(
         semanticRefs: SemanticRef[],
-    ): Group<KnowledgeType, Match<SemanticRefIndex>> {
-        const groups = new Group<KnowledgeType, Match<SemanticRefIndex>>();
+    ): Map<KnowledgeType, SemanticRefAccumulator> {
+        const groups = new Map<KnowledgeType, SemanticRefAccumulator>();
         for (const match of this.getMatches()) {
             const semanticRef = semanticRefs[match.value];
-            groups.push(semanticRef.knowledgeType, match);
+            let group = groups.get(semanticRef.knowledgeType);
+            if (group === undefined) {
+                group = new SemanticRefAccumulator();
+                group.termMatches = this.termMatches;
+                groups.set(semanticRef.knowledgeType, group);
+            }
+            group.setMatch(match);
         }
         return groups;
     }

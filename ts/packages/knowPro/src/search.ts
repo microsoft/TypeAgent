@@ -1,46 +1,52 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { IConversation, ScoredSemanticRef } from "./dataFormat.js";
+import {
+    IConversation,
+    KnowledgeType,
+    ScoredSemanticRef,
+} from "./dataFormat.js";
 import * as q from "./query.js";
 
-export class SearchResult {
-    constructor(
-        public termMatches: Set<string> = new Set(),
-        public semanticRefMatches: ScoredSemanticRef[] = [],
-    ) {}
-
-    public get hasMatches(): boolean {
-        return this.semanticRefMatches.length > 0;
-    }
-}
+export type SearchResult = {
+    termMatches: Set<string>;
+    semanticRefMatches: ScoredSemanticRef[];
+};
 
 export async function searchTermsInConversation(
     conversation: IConversation,
     terms: q.QueryTerm[],
     maxMatches?: number,
     minHitCount?: number,
-): Promise<SearchResult> {
+): Promise<Map<KnowledgeType, SearchResult> | undefined> {
     if (!q.isConversationSearchable(conversation)) {
-        return new SearchResult();
+        return undefined;
     }
 
     const context = new q.QueryEvalContext(conversation);
     const queryTerms = new q.QueryTermsExpr(terms);
-    const query = new q.SelectTopNExpr(
-        new q.TermsMatchExpr(
-            conversation.relatedTermsIndex !== undefined
-                ? new q.ResolveRelatedTermsExpr(queryTerms)
-                : queryTerms,
+    const query = new q.SelectTopNKnowledgeGroupExpr(
+        new q.GroupByKnowledgeTypeExpr(
+            new q.TermsMatchExpr(
+                conversation.relatedTermsIndex !== undefined
+                    ? new q.ResolveRelatedTermsExpr(queryTerms)
+                    : queryTerms,
+            ),
         ),
         maxMatches,
         minHitCount,
     );
     const evalResults = await query.eval(context);
-    return new SearchResult(
-        evalResults.termMatches,
-        evalResults.toScoredSemanticRefs(),
-    );
+    const semanticRefMatches = new Map<KnowledgeType, SearchResult>();
+    for (const [type, accumulator] of evalResults) {
+        if (accumulator.numMatches > 0) {
+            semanticRefMatches.set(type, {
+                termMatches: accumulator.termMatches,
+                semanticRefMatches: accumulator.toScoredSemanticRefs(),
+            });
+        }
+    }
+    return semanticRefMatches;
 }
 
 export async function searchTermsInConversationExact(
@@ -48,9 +54,9 @@ export async function searchTermsInConversationExact(
     terms: q.QueryTerm[],
     maxMatches?: number,
     minHitCount?: number,
-): Promise<SearchResult> {
+): Promise<SearchResult | undefined> {
     if (!q.isConversationSearchable(conversation)) {
-        return new SearchResult();
+        return undefined;
     }
 
     const context = new q.QueryEvalContext(conversation);
@@ -60,8 +66,8 @@ export async function searchTermsInConversationExact(
         minHitCount,
     );
     const evalResults = await query.eval(context);
-    return new SearchResult(
-        evalResults.termMatches,
-        evalResults.toScoredSemanticRefs(),
-    );
+    return {
+        termMatches: evalResults.termMatches,
+        semanticRefMatches: evalResults.toScoredSemanticRefs(),
+    };
 }
