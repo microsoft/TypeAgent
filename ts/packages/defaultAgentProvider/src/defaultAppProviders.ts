@@ -7,7 +7,7 @@ import {
     ActionConfig,
     ActionConfigProvider,
     convertToActionConfig,
-    AgentInfo,
+    AppAgentInfo,
     createNpmAppAgentProvider,
     ActionSchemaFileCache,
     createSchemaInfoProvider,
@@ -19,7 +19,7 @@ import fs from "node:fs";
 import { getPackageFilePath } from "./utils/getPackageFilePath.js";
 
 type AppAgentConfig = {
-    agents: { [key: string]: AgentInfo };
+    agents: { [key: string]: AppAgentInfo };
 };
 
 function getBuiltinAppAgentConfig(): AppAgentConfig {

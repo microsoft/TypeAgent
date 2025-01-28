@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { AgentInfo } from "../internal.js";
+import { AppAgentInfo } from "../internal.js";
 import { getPackageFilePath } from "./getPackageFilePath.js";
 import fs from "node:fs";
 
@@ -13,9 +13,7 @@ export type ExplainerConfig = {
 };
 
 export type Config = {
-    agents: { [key: string]: AgentInfo };
     explainers: { [key: string]: ExplainerConfig };
-    tests: string[];
 };
 
 let config: Config | undefined;

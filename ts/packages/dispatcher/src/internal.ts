@@ -30,7 +30,7 @@ export {
     loadAgentJsonTranslator,
 } from "./translation/agentTranslators.js";
 export {
-    AgentInfo,
+    AppAgentInfo,
     createNpmAppAgentProvider,
 } from "./agentProvider/npmAgentProvider.js";
 export {

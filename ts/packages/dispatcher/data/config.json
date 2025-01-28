@@ -66,9 +66,5 @@
         "file": "./data/explainer/v5/constructions.json"
       }
     }
-  },
-  "tests": [
-    "./test/data/**/**/*.json",
-    "./test/repo/explanations/**/**/*.json"
-  ]
+  }
 }

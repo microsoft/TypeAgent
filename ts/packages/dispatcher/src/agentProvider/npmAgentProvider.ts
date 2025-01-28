@@ -15,14 +15,10 @@ const enum ExecutionMode {
     DispatcherProcess = "dispatcher",
 }
 
-export type ModuleAppAgentInfo = {
+export type AppAgentInfo = {
     name: string;
     path?: string;
     execMode?: ExecutionMode;
-};
-
-export type AgentInfo = ModuleAppAgentInfo & {
-    imports?: string[]; // for @const import
 };
 
 function patchPaths(manifest: ActionManifest, dir: string) {
@@ -39,14 +35,14 @@ function patchPaths(manifest: ActionManifest, dir: string) {
     }
 }
 
-function getRequire(info: ModuleAppAgentInfo, requirePath: string) {
+function getRequire(info: AppAgentInfo, requirePath: string) {
     // path.sep at the at is necessary for it to work.
     // REVIEW: adding package.json is necessary for jest-resolve to work in tests for some reason.
     const loadPath = `${info.path ? `${path.resolve(info.path)}${path.sep}package.json` : requirePath}`;
     return createRequire(loadPath);
 }
 
-async function loadManifest(info: ModuleAppAgentInfo, requirePath: string) {
+async function loadManifest(info: AppAgentInfo, requirePath: string) {
     const require = getRequire(info, requirePath);
     const manifestPath = require.resolve(`${info.name}/agent/manifest`);
     const config = require(manifestPath) as AppAgentManifest;
@@ -59,7 +55,7 @@ function enableExecutionMode() {
 }
 
 async function loadModuleAgent(
-    info: ModuleAppAgentInfo,
+    info: AppAgentInfo,
     appAgentName: string,
     requirePath: string,
 ): Promise<AgentProcess> {
@@ -85,7 +81,7 @@ async function loadModuleAgent(
 }
 
 async function loadAppAgentManifest(
-    config: Record<string, ModuleAppAgentInfo>,
+    config: Record<string, AppAgentInfo>,
     requirePath: string,
 ) {
     const appAgents: Map<string, AppAgentManifest> = new Map();
@@ -96,7 +92,7 @@ async function loadAppAgentManifest(
 }
 
 export function createNpmAppAgentProvider(
-    configs: Record<string, ModuleAppAgentInfo>,
+    configs: Record<string, AppAgentInfo>,
     requirePath: string,
 ): AppAgentProvider {
     const moduleAgents = new Map<string, AgentProcess>();

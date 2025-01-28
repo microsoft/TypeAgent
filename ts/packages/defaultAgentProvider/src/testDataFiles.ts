@@ -9,6 +9,9 @@ const testDataFiles = [
     "./test/repo/explanations/**/**/*.json",
 ];
 
-export async function getTestDataFiles() {
-    return glob(testDataFiles.map((f) => getPackageFilePath(f)));
+export async function getTestDataFiles(extended: boolean = true) {
+    const testDataFilePaths = extended
+        ? testDataFiles
+        : testDataFiles.slice(0, 1);
+    return glob(testDataFilePaths.map((f) => getPackageFilePath(f)));
 }

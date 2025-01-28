@@ -104,6 +104,7 @@ export type CommandHandlerContext = {
     requestId?: RequestId;
     commandResult?: CommandResult | undefined;
     chatHistory: ChatHistory;
+    getTestDataFiles?: ((extended: boolean) => Promise<string[]>) | undefined;
 
     batchMode: boolean;
 
@@ -206,6 +207,7 @@ export type InitializeCommandHandlerContextOptions = SessionOptions & {
     enableServiceHost?: boolean; // default to false,
     metrics?: boolean; // default to false
     dblogging?: boolean; // default to false
+    getTestDataFiles?: (extended: boolean) => Promise<string[]>;
 };
 
 async function getSession(instanceDir?: string) {
@@ -377,6 +379,7 @@ export async function initializeCommandHandlerContext(
             metricsManager: metrics ? new RequestMetricsManager() : undefined,
             batchMode: false,
             instanceDirLock,
+            getTestDataFiles: options?.getTestDataFiles,
         };
 
         await addAppAgentProviders(
