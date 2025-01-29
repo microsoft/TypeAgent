@@ -6,9 +6,6 @@ const { webFrame } = require("electron");
 
 import DOMPurify from "dompurify";
 import { ipcRenderer } from "electron";
-import EventEmitter from "events";
-
-const internalEventEmitter = new EventEmitter();
 
 ipcRenderer.on("received-from-browser-ipc", async (_, data) => {
     if (data.error) {
@@ -16,10 +13,10 @@ ipcRenderer.on("received-from-browser-ipc", async (_, data) => {
         return;
     }
 
-    if (data.method && data.method.indexOf("/") > 0) {
+    if (data.method !== undefined && data.method.indexOf("/") > 0) {
         const [schema, actionName] = data.method?.split("/");
 
-        if (schema == "browser") {
+        if (schema === "browser") {
             if (actionName == "siteTranslatorStatus") {
                 if (data.body.status == "initializing") {
                     console.log(`Initializing ${data.body.translator}`);
@@ -49,18 +46,14 @@ ipcRenderer.on("received-from-browser-ipc", async (_, data) => {
                 id: data.id,
                 result: message,
             });
-        } else if (schema == "webAgent") {
-            internalEventEmitter.emit("web-agent-message", data);
+        } else if (schema === "webAgent") {
+            window.postMessage(data);
         }
 
         console.log(
             `Browser websocket client received message: ${JSON.stringify(data)}`,
         );
     }
-});
-
-ipcRenderer.on("init-site-agent", () => {
-    window.postMessage("setupSiteAgent");
 });
 
 function sendToBrowserAgent(message: any) {
@@ -436,7 +429,10 @@ async function runSiteAction(schemaName: string, action: any) {
     return confirmationMessage;
 }
 
-await ipcRenderer.invoke("init-browser-ipc");
+console.log("Preload: setting up browser IPC");
+
+// await ipcRenderer.invoke("init-browser-ipc");
+ipcRenderer.invoke("init-browser-ipc");
 
 contextBridge.exposeInMainWorld("browserConnect", {
     enableSiteAgent: (translatorName) => {
@@ -457,15 +453,10 @@ contextBridge.exposeInMainWorld("browserConnect", {
     },
 });
 
-contextBridge.exposeInMainWorld("webAgentApi", {
-    onWebAgentMessage: (callback: (message: any) => void) => {
-        internalEventEmitter.on("web-agent-message", callback);
-    },
-    sendWebAgentMessage: (message: any) => {
-        sendToBrowserAgent(message);
-    },
+window.addEventListener("message", (event) => {
+    if (event.data !== undefined && event.data.source === "webAgent") {
+        sendToBrowserAgent(event.data);
+    }
 });
 
-window.onbeforeunload = () => {
-    window.postMessage("disableSiteAgent");
-};
+console.log("Preload: completed");

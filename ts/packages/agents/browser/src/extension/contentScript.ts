@@ -730,9 +730,10 @@ window.addEventListener(
     "message",
     async (event) => {
         if (
-            event.data.source == "preload" &&
-            event.data.target == "contentScript" &&
-            event.data.messageType == "scriptActionRequest"
+            event.data !== undefined &&
+            event.data.source === "preload" &&
+            event.data.target === "contentScript" &&
+            event.data.messageType === "scriptActionRequest"
         ) {
             await handleScriptAction(event.data.body, (response) => {
                 window.top?.postMessage(
