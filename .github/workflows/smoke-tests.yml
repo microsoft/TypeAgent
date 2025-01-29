@@ -93,27 +93,25 @@ jobs:
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_F36C1F2C4B2C49CA8DD5C52FAB98FA30 }}
 
       - name: Get Keys
-        if: ${{ github.event_name != 'merge_group' }}
         run: |
           node tools/scripts/getKeys.mjs --vault build-pipeline-kv
         working-directory: ts
 
       - name: Test CLI - smoke
-        if: ${{ github.event_name != 'merge_group' }}
         run: |
           npm run start:dev 'prompt' 'why is the sky blue'
         working-directory: ts/packages/cli
         continue-on-error: true
 
       - name: Shell Tests - smoke (windows)
-        if: ${{ github.event_name != 'merge_group' && runner.os == 'windows' }}
+        if: ${{ runner.os == 'windows' }}
         timeout-minutes: 60
         run: |
           npx playwright test simple.spec.ts
           rm ../../.env
 
       - name: Shell Tests - smoke (linux)
-        if: ${{ github.event_name != 'merge_group' && runner.os == 'Linux' }}
+        if: ${{ runner.os == 'Linux' }}
         timeout-minutes: 60
         run: |
           Xvfb :99 -screen 0 1600x1200x24 & export DISPLAY=:99
@@ -123,7 +121,7 @@ jobs:
         continue-on-error: true
       
       - name: Live Tests
-        if: ${{ github.event_name != 'merge_group' && runner.os == 'linux' && matrix.version == '22' }}
+        if: ${{ runner.os == 'linux' }}
         timeout-minutes: 60
         run: |
           npm run test:live
