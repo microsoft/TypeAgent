@@ -3,7 +3,14 @@
 
 import { openai } from "aiclient";
 import { ChalkInstance } from "chalk";
-import { ArgDef, askYesNo, InteractiveIo } from "interactive-app";
+import {
+    ArgDef,
+    askYesNo,
+    CommandMetadata,
+    InteractiveIo,
+    NamedArgs,
+    parseNamedArguments,
+} from "interactive-app";
 import {
     conversation,
     ItemIndexingStats,
@@ -173,6 +180,20 @@ export function addMinutesToDate(date: Date, minutes: number): Date {
     const time = date.getTime();
     const offsetMs = minutes * 60 * 1000;
     return new Date(time + offsetMs);
+}
+
+export function parseFreeAndNamedArguments(
+    args: string[],
+    argDefs: CommandMetadata,
+): [string[], NamedArgs] {
+    const namedArgsStartAt = args.findIndex((v) => v.startsWith("--"));
+    if (namedArgsStartAt < 0) {
+        return [args, parseNamedArguments([], argDefs)];
+    }
+    return [
+        args.slice(0, namedArgsStartAt),
+        parseNamedArguments(args.slice(namedArgsStartAt), argDefs),
+    ];
 }
 
 export function createChatUx(

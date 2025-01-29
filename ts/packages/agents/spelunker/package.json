@@ -27,8 +27,10 @@
     "@typeagent/agent-sdk": "workspace:*",
     "aiclient": "workspace:*",
     "better-sqlite3": "11.8.1",
+    "code-processor": "workspace:*",
     "typeagent": "workspace:*",
-    "typechat": "^0.1.1"
+    "typechat": "^0.1.1",
+    "typescript": "^5.4.2"
   },
   "devDependencies": {
     "@types/better-sqlite3": "7.6.11",

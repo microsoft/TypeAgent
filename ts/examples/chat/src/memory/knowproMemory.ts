@@ -21,6 +21,7 @@ import {
     addFileNameSuffixToPath,
     argDestFile,
     argSourceFile,
+    parseFreeAndNamedArguments,
 } from "./common.js";
 import { ensureDir, readJsonFile, writeJsonFile } from "typeagent";
 import path from "path";
@@ -159,8 +160,15 @@ export async function createKnowproCommands(
         context.printer.writePodcastInfo(context.podcast);
     }
 
-    commands.kpSearchTerms.metadata =
-        "Search current knowPro conversation by terms";
+    function searchTermsDef(): CommandMetadata {
+        return {
+            description: "Search current knowPro conversation by terms",
+            options: {
+                maxToDisplay: argNum("Maximum matches to display", 25),
+            },
+        };
+    }
+    commands.kpSearchTerms.metadata = searchTermsDef();
     async function searchTerms(args: string[]): Promise<void> {
         if (args.length === 0) {
             return;
@@ -169,7 +177,11 @@ export async function createKnowproCommands(
         if (!conversation) {
             return;
         }
-        const terms = parseQueryTerms(args); // Todo: De dupe
+        let [termArgs, namedArgs] = parseFreeAndNamedArguments(
+            args,
+            searchTermsDef(),
+        );
+        const terms = parseQueryTerms(termArgs); // Todo: De dupe
         if (conversation.semanticRefIndex && conversation.semanticRefs) {
             context.printer.writeInColor(
                 chalk.cyan,
@@ -180,21 +192,16 @@ export async function createKnowproCommands(
                 conversation,
                 terms,
             );
-            if (!matches.hasMatches) {
+            if (matches === undefined || matches.size === 0) {
                 context.printer.writeLine("No matches");
                 return;
             }
-
-            context.printer.writeListInColor(chalk.green, matches.termMatches, {
-                title: "Matched terms",
-                type: "ol",
-            });
-            for (const match of matches.semanticRefMatches) {
-                context.printer.writeSemanticRef(
-                    conversation.semanticRefs[match.semanticRefIndex],
-                    match.score,
-                );
-            }
+            context.printer.writeLine();
+            context.printer.writeSearchResults(
+                conversation,
+                matches,
+                namedArgs.maxToDisplay,
+            );
         } else {
             ``;
             context.printer.writeError("Conversation is not indexed");
@@ -328,7 +335,7 @@ class KnowProPrinter extends ChatPrinter {
     public writeEntity(
         entity: knowLib.conversation.ConcreteEntity | undefined,
     ) {
-        if (entity) {
+        if (entity !== undefined) {
             this.writeLine(entity.name.toUpperCase());
             this.writeList(entity.type, { type: "csv" });
             if (entity.facets) {
@@ -341,18 +348,35 @@ class KnowProPrinter extends ChatPrinter {
         return this;
     }
 
-    public writeSemanticRef(ref: kp.SemanticRef, score?: number | undefined) {
-        if (score) {
-            this.writeInColor(chalk.greenBright, `[${score}]`);
+    public writeAction(action: knowLib.conversation.Action | undefined) {
+        if (action !== undefined) {
+            this.writeLine(knowLib.conversation.actionToString(action));
         }
-        switch (ref.knowledgeType) {
+    }
+
+    public writeTopic(topic: kp.ITopic | undefined) {
+        if (topic !== undefined) {
+            this.writeLine(topic.text);
+        }
+    }
+
+    public writeSemanticRef(semanticRef: kp.SemanticRef) {
+        switch (semanticRef.knowledgeType) {
             default:
-                this.writeLine(ref.knowledgeType);
+                this.writeLine(semanticRef.knowledgeType);
                 break;
             case "entity":
                 this.writeEntity(
-                    ref.knowledge as knowLib.conversation.ConcreteEntity,
+                    semanticRef.knowledge as knowLib.conversation.ConcreteEntity,
                 );
+                break;
+            case "action":
+                this.writeAction(
+                    semanticRef.knowledge as knowLib.conversation.Action,
+                );
+                break;
+            case "topic":
+                this.writeTopic(semanticRef.knowledge as kp.ITopic);
                 break;
         }
         return this;
@@ -366,6 +390,74 @@ class KnowProPrinter extends ChatPrinter {
             }
         }
         return this;
+    }
+
+    public writeScoredSemanticRefs(
+        semanticRefMatches: kp.ScoredSemanticRef[],
+        semanticRefs: kp.SemanticRef[],
+        maxToDisplay: number,
+    ) {
+        this.writeLine(
+            `Displaying ${maxToDisplay} matches of total ${semanticRefMatches.length}`,
+        );
+        for (let i = 0; i < maxToDisplay; ++i) {
+            const match = semanticRefMatches[i];
+            const semanticRef = semanticRefs[match.semanticRefIndex];
+
+            this.writeInColor(
+                chalk.green,
+                `#${i + 1}: ${semanticRef.knowledgeType} [${match.score}]`,
+            );
+            this.writeSemanticRef(semanticRef);
+            this.writeLine();
+        }
+    }
+
+    public writeSearchResult(
+        conversation: kp.IConversation,
+        result: kp.SearchResult | undefined,
+        maxToDisplay: number,
+    ) {
+        if (result) {
+            this.writeListInColor(chalk.cyanBright, result.termMatches, {
+                title: "Matched terms",
+                type: "ol",
+            });
+            maxToDisplay = Math.min(
+                result.semanticRefMatches.length,
+                maxToDisplay,
+            );
+            this.writeScoredSemanticRefs(
+                result.semanticRefMatches,
+                conversation.semanticRefs!,
+                maxToDisplay,
+            );
+        }
+    }
+
+    public writeSearchResults(
+        conversation: kp.IConversation,
+        results: Map<kp.KnowledgeType, kp.SearchResult>,
+        maxToDisplay: number,
+    ) {
+        // Do entities before actions...
+        this.writeResult(conversation, "entity", results, maxToDisplay);
+        this.writeResult(conversation, "action", results, maxToDisplay);
+        this.writeResult(conversation, "topic", results, maxToDisplay);
+        this.writeResult(conversation, "tag", results, maxToDisplay);
+    }
+
+    private writeResult(
+        conversation: kp.IConversation,
+        type: kp.KnowledgeType,
+        results: Map<kp.KnowledgeType, kp.SearchResult>,
+        maxToDisplay: number,
+    ) {
+        const result = results.get(type);
+        if (result !== undefined) {
+            this.writeTitle(type.toUpperCase());
+            this.writeSearchResult(conversation, result, maxToDisplay);
+        }
     }
 
     public writeConversationInfo(conversation: kp.IConversation) {

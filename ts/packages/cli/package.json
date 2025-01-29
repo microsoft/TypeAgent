@@ -52,7 +52,7 @@
     "aiclient": "workspace:*",
     "chalk": "^5.3.0",
     "common-utils": "workspace:*",
-    "debug": "^4.3.4",
+    "debug": "^4.4.0",
     "default-agent-provider": "workspace:*",
     "dotenv": "^16.3.1",
     "rimraf": "^5.0.5",
@@ -60,7 +60,7 @@
     "typechat": "^0.1.1"
   },
   "devDependencies": {
-    "@types/debug": "^4.1.10",
+    "@types/debug": "^4.1.12",
     "@types/jest": "^29.5.7",
     "@types/node": "^18.18.7",
     "jest": "^29.7.0",

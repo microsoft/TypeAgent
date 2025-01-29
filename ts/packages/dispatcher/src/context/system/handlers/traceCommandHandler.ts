@@ -7,20 +7,25 @@ import { ActionContext, ParsedCommandParams } from "@typeagent/agent-sdk";
 import { CommandHandler } from "@typeagent/agent-sdk/helpers/command";
 import { displaySuccess } from "@typeagent/agent-sdk/helpers/display";
 
-function toNamespace(regexp: RegExp) {
-    return regexp
-        .toString()
-        .substring(2, regexp.toString().length - 2)
-        .replace(/\.\*\?/g, "*");
-}
-
-function getCurrentTraceSettings() {
-    return [
-        ...registerDebug.names.map(toNamespace),
-        ...registerDebug.skips
-            .map(toNamespace)
-            .map((namespace) => "-" + namespace),
-    ];
+if (registerDebug.inspectOpts !== undefined) {
+    const inspectOpts: any = registerDebug.inspectOpts;
+    inspectOpts.maxStringLength = null;
+    inspectOpts.maxArrayLength = null;
+    inspectOpts.depth = null;
+    const formatters = registerDebug.formatters;
+    const newFormatters: any = {
+        o: function (v: any) {
+            const self: any = this;
+            self.inspectOpts = { ...registerDebug.inspectOpts };
+            return formatters.o.call(this, v);
+        },
+        O: function (v: any) {
+            const self: any = this;
+            self.inspectOpts = { ...registerDebug.inspectOpts };
+            return formatters.O.call(this, v);
+        },
+    };
+    registerDebug.formatters = newFormatters;
 }
 
 export class TraceCommandHandler implements CommandHandler {
@@ -47,29 +52,20 @@ export class TraceCommandHandler implements CommandHandler {
         context: ActionContext<CommandHandlerContext>,
         params: ParsedCommandParams<typeof this.parameters>,
     ) {
+        let settings = registerDebug.disable();
         if (params.flags.clear) {
-            registerDebug.disable();
+            settings = "";
             displaySuccess("All trace namespaces cleared", context);
         }
         if (params.args.namespaces !== undefined) {
-            registerDebug.enable(
-                getCurrentTraceSettings()
-                    .concat(params.args.namespaces)
-                    .join(","),
-            );
+            settings = (
+                settings
+                    ? [settings, ...params.args.namespaces]
+                    : params.args.namespaces
+            ).join(",");
+            registerDebug.enable(settings);
         }
 
-        if (registerDebug.inspectOpts === undefined) {
-            registerDebug.inspectOpts = {};
-        }
-
-        (registerDebug.inspectOpts as any).maxStringLength = null;
-        (registerDebug.inspectOpts as any).maxArrayLength = null;
-        (registerDebug.inspectOpts as any).depth = null;
-
-        displaySuccess(
-            `Current trace settings: ${getCurrentTraceSettings().join(",")}`,
-            context,
-        );
+        displaySuccess(`Current trace settings: ${settings}`, context);
     }
 }

@@ -34,7 +34,7 @@
     "@typeagent/agent-sdk": "workspace:*",
     "aiclient": "workspace:*",
     "chalk": "^5.3.0",
-    "debug": "^4.3.4",
+    "debug": "^4.4.0",
     "dotenv": "^16.3.1",
     "exifreader": "^4.23.5",
     "find-config": "^1.0.0",
@@ -43,7 +43,7 @@
     "ws": "^8.17.1"
   },
   "devDependencies": {
-    "@types/debug": "^4.1.10",
+    "@types/debug": "^4.1.12",
     "@types/find-config": "1.0.4",
     "@types/jest": "^29.5.7",
     "@types/node": "^18.18.7",

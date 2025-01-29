@@ -41,7 +41,7 @@
     "chat-agent": "workspace:*",
     "code-agent": "workspace:*",
     "common-utils": "workspace:*",
-    "debug": "^4.3.4",
+    "debug": "^4.4.0",
     "desktop-automation": "workspace:*",
     "email": "workspace:*",
     "exifreader": "4.23.5",
@@ -64,7 +64,7 @@
     "ws": "^8.17.1"
   },
   "devDependencies": {
-    "@types/debug": "^4.1.10",
+    "@types/debug": "^4.1.12",
     "@types/file-size": "^1.0.3",
     "@types/glob": "^8.1.0",
     "@types/jest": "^29.5.7",
