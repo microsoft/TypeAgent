@@ -27,7 +27,7 @@ env:
   NODE_OPTIONS: --max_old_space_size=8192
 
 jobs:
-  build_ts:
+  shell_and_cli:
     environment: development      # required for federated credentials 
     strategy:
       fail-fast: false
