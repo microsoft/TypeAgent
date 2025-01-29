@@ -13,6 +13,7 @@ import {
     SemanticRefIndex,
     Term,
 } from "./dataFormat.js";
+import * as knowLib from "knowledge-processor";
 
 export function isConversationSearchable(conversation: IConversation): boolean {
     return (
@@ -62,17 +63,14 @@ export class SelectTopNExpr<T extends MatchAccumulator>
 }
 
 export class TermsMatchExpr implements IQueryOpExpr<SemanticRefAccumulator> {
-    constructor(
-        public terms: IQueryOpExpr<QueryTerm[]>,
-        public semanticRefIndex?: ITermToSemanticRefIndex,
-    ) {}
+    constructor(public terms: IQueryOpExpr<QueryTerm[]>) {}
 
     public async eval(
         context: QueryEvalContext,
     ): Promise<SemanticRefAccumulator> {
         const matchAccumulator: SemanticRefAccumulator =
             new SemanticRefAccumulator();
-        const index = this.semanticRefIndex ?? context.semanticRefIndex;
+        const index = context.semanticRefIndex;
         const terms = await this.terms.eval(context);
         for (const queryTerm of terms) {
             this.accumulateMatches(index, matchAccumulator, queryTerm);
@@ -105,14 +103,11 @@ export class TermsMatchExpr implements IQueryOpExpr<SemanticRefAccumulator> {
 }
 
 export class ResolveRelatedTermsExpr implements IQueryOpExpr<QueryTerm[]> {
-    constructor(
-        public terms: IQueryOpExpr<QueryTerm[]>,
-        public index?: ITermToRelatedTermsIndex,
-    ) {}
+    constructor(public terms: IQueryOpExpr<QueryTerm[]>) {}
 
     public async eval(context: QueryEvalContext): Promise<QueryTerm[]> {
         const terms = await this.terms.eval(context);
-        const index = this.index ?? context.relatedTermIndex;
+        const index = context.relatedTermIndex;
         if (index !== undefined) {
             for (const queryTerm of terms) {
                 if (
@@ -175,6 +170,113 @@ export class SelectTopNKnowledgeGroupExpr
             accumulator.reduceTopNScoring(this.maxMatches, this.minHitCount);
         }
         return groupsAccumulators;
+    }
+}
+
+export class WhereSemanticRefExpr
+    implements IQueryOpExpr<SemanticRefAccumulator>
+{
+    constructor(
+        public sourceExpr: IQueryOpExpr<SemanticRefAccumulator>,
+        public predicates: IQueryOpPredicate[],
+    ) {}
+
+    public async eval(
+        context: QueryEvalContext,
+    ): Promise<SemanticRefAccumulator> {
+        const accumulator = await this.sourceExpr.eval(context);
+        const filtered = new SemanticRefAccumulator(
+            accumulator.queryTermMatches,
+        );
+        const semanticRefs = context.semanticRefs;
+        filtered.setMatches(
+            accumulator.getMatchesWhere((match) =>
+                this.testOr(semanticRefs, accumulator.queryTermMatches, match),
+            ),
+        );
+        return filtered;
+    }
+
+    private testOr(
+        semanticRefs: SemanticRef[],
+        queryTermMatches: QueryTermAccumulator,
+        match: Match<SemanticRefIndex>,
+    ) {
+        for (let i = 0; i < this.predicates.length; ++i) {
+            const semanticRef = semanticRefs[match.value];
+            if (this.predicates[i].eval(queryTermMatches, semanticRef)) {
+                return true;
+            }
+        }
+        return false;
+    }
+}
+
+export interface IQueryOpPredicate {
+    eval(termMatches: QueryTermAccumulator, semanticRef: SemanticRef): boolean;
+}
+
+export class EntityPredicate implements IQueryOpPredicate {
+    constructor(
+        public type: string | undefined,
+        public name: string | undefined,
+        public facetName: string | undefined,
+    ) {}
+
+    public eval(
+        termMatches: QueryTermAccumulator,
+        semanticRef: SemanticRef,
+    ): boolean {
+        if (semanticRef.knowledgeType !== "entity") {
+            return false;
+        }
+        const entity =
+            semanticRef.knowledge as knowLib.conversation.ConcreteEntity;
+        return (
+            termMatches.matched(entity.type, this.type) &&
+            termMatches.matched(entity.name, this.name) &&
+            this.matchFacet(termMatches, entity, this.facetName)
+        );
+    }
+
+    private matchFacet(
+        termMatches: QueryTermAccumulator,
+        entity: knowLib.conversation.ConcreteEntity,
+        facetName?: string | undefined,
+    ): boolean {
+        if (facetName === undefined || entity.facets === undefined) {
+            return false;
+        }
+        for (const facet of entity.facets) {
+            if (termMatches.matched(facet.name, facetName)) {
+                return true;
+            }
+        }
+        return false;
+    }
+}
+
+export class ActionPredicate implements IQueryOpPredicate {
+    constructor(
+        public subjectEntityName?: string | undefined,
+        public objectEntityName?: string | undefined,
+    ) {}
+
+    public eval(
+        termMatches: QueryTermAccumulator,
+        semanticRef: SemanticRef,
+    ): boolean {
+        if (semanticRef.knowledgeType !== "action") {
+            return false;
+        }
+        const action = semanticRef.knowledge as knowLib.conversation.Action;
+        return (
+            termMatches.matched(
+                action.subjectEntityName,
+                this.subjectEntityName,
+            ) &&
+            termMatches.matched(action.objectEntityName, this.objectEntityName)
+        );
     }
 }
 
@@ -329,7 +431,7 @@ export class MatchAccumulator<T = any> {
 }
 
 export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
-    constructor(public queryTermMatches = new QueryTermMatches()) {
+    constructor(public queryTermMatches = new QueryTermAccumulator()) {
         super();
     }
 
@@ -343,7 +445,7 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
             for (const match of semanticRefs) {
                 this.add(match.semanticRefIndex, match.score + scoreBoost);
             }
-            this.recordQueryTermMatch(term);
+            this.queryTermMatches.add(term);
         }
     }
 
@@ -373,7 +475,7 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
                     this.setMatch(match);
                 }
             }
-            this.recordQueryTermMatch(primaryTerm, relatedTerm);
+            this.queryTermMatches.add(primaryTerm, relatedTerm);
         }
     }
 
@@ -419,14 +521,6 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
         }, 0);
     }
 
-    private recordQueryTermMatch(term: Term, relatedTerm?: Term) {
-        this.queryTermMatches.termMatches.add(term.text);
-        this.queryTermMatches.termAndRelatedMatches.add(term.text);
-        if (relatedTerm !== undefined) {
-            this.queryTermMatches.termAndRelatedMatches.add(term.text);
-        }
-    }
-
     private getMinHitCount(minHitCount?: number): number {
         return minHitCount !== undefined
             ? minHitCount
@@ -434,9 +528,62 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
     }
 }
 
-export class QueryTermMatches {
+export class QueryTermAccumulator {
     constructor(
         public termMatches: Set<string> = new Set<string>(),
-        public termAndRelatedMatches: Set<string> = new Set<string>(),
+        public relatedTermToTerms: Map<string, Set<string>> = new Map<
+            string,
+            Set<string>
+        >(),
     ) {}
+
+    public add(term: Term, relatedTerm?: Term) {
+        this.termMatches.add(term.text);
+        if (relatedTerm !== undefined) {
+            let relatedTermToTerms = this.relatedTermToTerms.get(
+                relatedTerm.text,
+            );
+            if (relatedTermToTerms === undefined) {
+                relatedTermToTerms = new Set<string>();
+                this.relatedTermToTerms.set(
+                    relatedTerm.text,
+                    relatedTermToTerms,
+                );
+            }
+            relatedTermToTerms.add(term.text);
+        }
+    }
+
+    public matched(
+        testText: string | string[] | undefined,
+        expectedText: string | undefined,
+    ): boolean {
+        if (expectedText === undefined) {
+            return true;
+        }
+        if (testText === undefined) {
+            return false;
+        }
+
+        if (Array.isArray(testText)) {
+            for (const text of testText) {
+                if (this.matched(text, expectedText)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        if (testText === expectedText) {
+            return true;
+        }
+
+        // Maybe the test text matched a related term.
+        // If so, the matching related term should have matched on behalf of
+        // of a term === expectedTerm
+        const relatedTermToTerms = this.relatedTermToTerms.get(testText);
+        return relatedTermToTerms !== undefined
+            ? relatedTermToTerms.has(expectedText)
+            : false;
+    }
 }

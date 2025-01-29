@@ -14,6 +14,14 @@ export type SearchResult = {
     semanticRefMatches: ScoredSemanticRef[];
 };
 
+/**
+ * Searches conversation for terms
+ * @param conversation
+ * @param terms
+ * @param maxMatches
+ * @param minHitCount
+ * @returns
+ */
 export async function searchTermsInConversation(
     conversation: IConversation,
     terms: QueryTerm[],
