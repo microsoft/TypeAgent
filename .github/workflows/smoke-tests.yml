@@ -28,6 +28,7 @@ env:
 
 jobs:
   build_ts:
+    environment: development      # used for federated credentials 
     strategy:
       fail-fast: false
       matrix:
