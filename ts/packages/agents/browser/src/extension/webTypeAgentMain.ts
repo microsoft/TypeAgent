@@ -10,6 +10,7 @@ import { createRpc } from "agent-rpc/rpc";
 import { createAgentRpcServer } from "agent-rpc/server";
 import { isWebAgentMessageFromDispatcher } from "../../dist/common/webAgentMessageTypes.mjs";
 import {
+    WebAgentDisconnectMessageFromDispatcher,
     WebAgentRegisterMessage,
     WebAgentRpcMessage,
 } from "../common/webAgentMessageTypes.mjs";
@@ -51,32 +52,20 @@ function ensureDynamicTypeAgentManager(): DynamicTypeAgentManager {
     }
     const messageChannelProvider = createGenericChannelProvider(
         (message: any) => {
-            const rpcMessage = {
+            window.postMessage({
                 source: "webAgent",
                 method: "webAgent/message",
                 params: message,
-            } as WebAgentRpcMessage;
-
-            if (window.webAgentApi) {
-                window.webAgentApi.sendWebAgentMessage(rpcMessage);
-            } else {
-                window.postMessage(rpcMessage);
-            }
+            } as WebAgentRpcMessage);
         },
     );
 
     const registerChannel = createGenericChannel((message: any) => {
-        const rpcMessage = {
+        window.postMessage({
             source: "webAgent",
             method: "webAgent/register",
             params: message,
-        } as WebAgentRegisterMessage;
-
-        if (window.webAgentApi) {
-            window.webAgentApi.sendWebAgentMessage(rpcMessage);
-        } else {
-            window.postMessage(rpcMessage);
-        }
+        } as WebAgentRegisterMessage);
     });
 
     const rpc = createRpc<DynamicTypeAgentManagerInvokeFunctions>(
@@ -123,13 +112,7 @@ function ensureDynamicTypeAgentManager(): DynamicTypeAgentManager {
         }
     };
 
-    if (window.webAgentApi) {
-        window.webAgentApi.onWebAgentMessage((event) => {
-            messageHandler(event);
-        });
-    } else {
-        window.addEventListener("message", messageHandler);
-    }
+    window.addEventListener("message", messageHandler);
 
     return manager;
 }
@@ -140,5 +123,13 @@ global.registerTypeAgent = async (
     agent: AppAgent,
 ): Promise<void> => {
     const manager = ensureDynamicTypeAgentManager();
-    return manager.addTypeAgent(name, manifest, agent);
+    await manager.addTypeAgent(name, manifest, agent);
+
+    window.addEventListener("beforeunload", (event) => {
+        window.postMessage({
+            source: "webAgent",
+            method: "webAgent/disconnect",
+            params: name,
+        });
+    });
 };
