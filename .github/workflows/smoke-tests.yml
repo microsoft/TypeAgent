@@ -8,7 +8,7 @@ name: smoke-tests
 on:
   workflow_dispatch:
   push:
-    branches: ["main", "dev/robgruen/smoke_tests"]
+    branches: ["main"]
   pull_request:
     branches: ["main"]
   merge_group:
