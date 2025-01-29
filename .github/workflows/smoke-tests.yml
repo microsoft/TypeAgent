@@ -75,7 +75,6 @@ jobs:
           pnpm install --frozen-lockfile --strict-peer-dependencies
 
       - name: Install Playwright Browsers
-        if: ${{ (runner.os == 'windows' || runner.os == 'Linux') && matrix.version == '22' }}
         run: pnpm exec playwright install --with-deps
         working-directory: ts/packages/shell
 
@@ -107,14 +106,14 @@ jobs:
         continue-on-error: true
 
       - name: Shell Tests - smoke (windows)
-        if: ${{ github.event_name != 'merge_group' && runner.os == 'windows' && matrix.version == '22' }}
+        if: ${{ github.event_name != 'merge_group' && runner.os == 'windows' }}
         timeout-minutes: 60
         run: |
           npx playwright test simple.spec.ts
           rm ../../.env
 
       - name: Shell Tests - smoke (linux)
-        if: ${{ github.event_name != 'merge_group' && runner.os == 'Linux' && matrix.version == '22' }}
+        if: ${{ github.event_name != 'merge_group' && runner.os == 'Linux' }}
         timeout-minutes: 60
         run: |
           Xvfb :99 -screen 0 1600x1200x24 & export DISPLAY=:99
