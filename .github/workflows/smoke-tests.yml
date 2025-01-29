@@ -28,12 +28,12 @@ env:
 
 jobs:
   shell_and_cli:
-    environment: development      # required for federated credentials 
+    environment: ${{ github.event_name == 'pull_request_target' && 'development-fork' || 'development' }}      # required for federated credentials 
     strategy:
       fail-fast: false
       matrix:
-        #os: ["ubuntu-latest", "windows-latest", "macos-latest"]
-        os: ["ubuntu-latest"]
+        os: ["ubuntu-latest", "windows-latest"]
+        #os: ["ubuntu-latest"]
         version: [20]
 
     runs-on: ${{ matrix.os }}
