@@ -9,7 +9,10 @@ import {
 import { AppAction } from "@typeagent/agent-sdk";
 import { Result, TypeChatJsonTranslator } from "typechat";
 import { getPackageFilePath } from "../utils/getPackageFilePath.js";
-import { getMultipleActionSchemaDef } from "./multipleActionSchema.js";
+import {
+    getMultipleActionSchemaDef,
+    MultipleActionOptions,
+} from "./multipleActionSchema.js";
 import {
     TranslatorSchemaDef,
     composeTranslatorSchemas,
@@ -162,7 +165,7 @@ function getInjectedSchemaDefs(
     provider: ActionConfigProvider,
     activeTranslators: { [key: string]: boolean },
     changeAgentAction: boolean,
-    multipleActions: boolean,
+    multipleActionOptions: MultipleActionOptions,
 ): TranslatorSchemaDef[] {
     // Add all injected schemas
     const injectedActionConfigs = getInjectedActionConfigs(
@@ -192,8 +195,8 @@ function getInjectedSchemaDefs(
     }
 
     // Add multiple action schema
-    const multipleActionSchemaDef = multipleActions
-        ? getMultipleActionSchemaDef(subActionType)
+    const multipleActionSchemaDef = multipleActionOptions
+        ? getMultipleActionSchemaDef(subActionType, multipleActionOptions)
         : undefined;
 
     if (multipleActionSchemaDef) {
@@ -208,7 +211,7 @@ function getTranslatorSchemaDefs(
     provider: ActionConfigProvider,
     activeTranslators: { [key: string]: boolean },
     changeAgentAction: boolean,
-    multipleActions: boolean,
+    multipleActionOptions: MultipleActionOptions,
 ): TranslatorSchemaDef[] {
     const actionConfig = provider.getActionConfig(schemaName);
     return [
@@ -219,7 +222,7 @@ function getTranslatorSchemaDefs(
             provider,
             activeTranslators,
             changeAgentAction,
-            multipleActions,
+            multipleActionOptions,
         ),
     ];
 }
@@ -253,7 +256,7 @@ export function loadAgentJsonTranslator<
     provider: ActionConfigProvider,
     activeTranslators: { [key: string]: boolean } = {},
     changeAgentAction: boolean = false,
-    multipleActions: boolean = false,
+    multipleActionOptions: MultipleActionOptions,
     regenerateSchema: boolean = true,
     model?: string,
     exact: boolean = true,
@@ -266,7 +269,7 @@ export function loadAgentJsonTranslator<
                   provider,
                   activeTranslators,
                   changeAgentAction,
-                  multipleActions,
+                  multipleActionOptions,
               ),
               { model },
               { exact },
@@ -278,7 +281,7 @@ export function loadAgentJsonTranslator<
                   provider,
                   activeTranslators,
                   changeAgentAction,
-                  multipleActions,
+                  multipleActionOptions,
               ),
               { model },
           );
@@ -332,7 +335,7 @@ export function createTypeAgentTranslatorForSelectedActions<
     provider: ActionConfigProvider,
     activeTranslators: { [key: string]: boolean },
     changeAgentAction: boolean,
-    multipleActions: boolean,
+    multipleActionOptions: MultipleActionOptions,
     model?: string,
 ) {
     const translator = createActionJsonTranslatorFromSchemaDef<T>(
@@ -343,7 +346,7 @@ export function createTypeAgentTranslatorForSelectedActions<
             provider,
             activeTranslators,
             changeAgentAction,
-            multipleActions,
+            multipleActionOptions,
         ),
         { model },
     );
@@ -356,7 +359,7 @@ export function getFullSchemaText(
     provider: ActionConfigProvider,
     activeSchemas: string[] = [],
     changeAgentAction: boolean,
-    multipleActions: boolean,
+    multipleActionOptions: MultipleActionOptions,
     generated: boolean,
 ): string {
     const active = Object.fromEntries(
@@ -370,7 +373,7 @@ export function getFullSchemaText(
                 provider,
                 active,
                 changeAgentAction,
-                multipleActions,
+                multipleActionOptions,
             ),
             { exact: true },
         );
@@ -380,7 +383,7 @@ export function getFullSchemaText(
         provider,
         active,
         changeAgentAction,
-        multipleActions,
+        multipleActionOptions,
     );
     return composeTranslatorSchemas("AllActions", schemaDefs);
 }
