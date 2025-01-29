@@ -429,10 +429,7 @@ async function runSiteAction(schemaName: string, action: any) {
     return confirmationMessage;
 }
 
-console.log("Preload: setting up browser IPC");
-
-// await ipcRenderer.invoke("init-browser-ipc");
-ipcRenderer.invoke("init-browser-ipc");
+await ipcRenderer.invoke("init-browser-ipc");
 
 contextBridge.exposeInMainWorld("browserConnect", {
     enableSiteAgent: (translatorName) => {
@@ -458,5 +455,3 @@ window.addEventListener("message", (event) => {
         sendToBrowserAgent(event.data);
     }
 });
-
-console.log("Preload: completed");

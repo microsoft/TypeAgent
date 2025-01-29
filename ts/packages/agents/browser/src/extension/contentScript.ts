@@ -530,11 +530,9 @@ async function awaitPageIncrementalUpdates() {
         detector
             .detect()
             .then(() => {
-                console.log("Page incremental load completed.");
                 resolve("true");
             })
-            .catch((error: Error) => {
-                console.error("Failed to detect page load completion:", error);
+            .catch((_error: Error) => {
                 resolve("false");
             });
     });
