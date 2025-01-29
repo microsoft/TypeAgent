@@ -9,47 +9,21 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { promisify } from "util";
 
-import { FileDocumentation } from "./fileDocSchema.js";
+import {
+    ChunkId,
+    Chunk,
+    ChunkedFile,
+    ChunkerErrorItem,
+} from "./chunkSchema.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const execPromise = promisify(exec);
 
-export type ChunkId = string;
-
-export interface Blob {
-    start: number; // int; 0-based!
-    lines: string[];
-    breadcrumb?: boolean;
-}
-
-export interface Chunk {
-    // Names here must match names in chunker.py.
-    chunkId: ChunkId;
-    treeName: string;
-    codeName: string;
-    blobs: Blob[];
-    parentId: ChunkId;
-    children: ChunkId[];
-    fileName: string; // Set upon receiving end from ChunkedFile.fileName.
-    docs?: FileDocumentation; // Computed later by fileDocumenter.
-}
-
-export interface ChunkedFile {
-    fileName: string;
-    chunks: Chunk[];
-}
-
-export interface ErrorItem {
-    error: string;
-    filename?: string;
-    output?: string;
-}
-
 export async function chunkifyPythonFiles(
     filenames: string[],
-): Promise<(ChunkedFile | ErrorItem)[]> {
+): Promise<(ChunkedFile | ChunkerErrorItem)[]> {
     let output,
         errors,
         success = false;
@@ -77,7 +51,7 @@ export async function chunkifyPythonFiles(
         return [{ error: "No output from chunker script" }];
     }
 
-    const results: (ChunkedFile | ErrorItem)[] = JSON.parse(output);
+    const results: (ChunkedFile | ChunkerErrorItem)[] = JSON.parse(output);
     // TODO: validate that JSON matches our schema.
 
     // Ensure all chunks have a filename.
@@ -95,9 +69,9 @@ const CHUNK_COUNT_LIMIT = 25; // How many chunks at most.
 const FILE_SIZE_LIMIT = 25000; // How many characters at most.
 
 function splitLargeFiles(
-    items: (ChunkedFile | ErrorItem)[],
-): (ChunkedFile | ErrorItem)[] {
-    const results: (ChunkedFile | ErrorItem)[] = [];
+    items: (ChunkedFile | ChunkerErrorItem)[],
+): (ChunkedFile | ChunkerErrorItem)[] {
+    const results: (ChunkedFile | ChunkerErrorItem)[] = [];
     for (const item of items) {
         if (
             "error" in item ||

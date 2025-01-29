@@ -30,13 +30,13 @@
   "dependencies": {
     "@azure/identity": "4.2.1",
     "async": "^3.2.5",
-    "debug": "^4.3.4",
+    "debug": "^4.4.0",
     "telemetry": "workspace:*",
     "typechat": "^0.1.1"
   },
   "devDependencies": {
     "@types/async": "^3.2.24",
-    "@types/debug": "^4.1.10",
+    "@types/debug": "^4.1.12",
     "@types/jest": "^29.5.7",
     "@types/node": "^18.18.7",
     "dotenv": "^16.3.1",
