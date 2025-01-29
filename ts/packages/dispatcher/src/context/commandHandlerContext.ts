@@ -54,7 +54,10 @@ import {
     ConstructionProvider,
 } from "../agentProvider/agentProvider.js";
 import { RequestMetricsManager } from "../utils/metrics.js";
-import { getSchemaNamePrefix } from "../execute/actionHandlers.js";
+import {
+    ActionContextWithClose,
+    getSchemaNamePrefix,
+} from "../execute/actionHandlers.js";
 import { displayError } from "@typeagent/agent-sdk/helpers/display";
 
 import {
@@ -77,11 +80,6 @@ export type SetSettingFunction = (name: string, value: any) => void;
 export interface ClientSettingsProvider {
     set: SetSettingFunction | null;
 }
-
-type ActionContextWithClose = {
-    actionContext: ActionContext<unknown>;
-    closeActionContext: () => void;
-};
 
 // Command Handler Context definition.
 export type CommandHandlerContext = {
@@ -133,7 +131,7 @@ export function getTranslatorForSchema(
         context.agents,
         getActiveTranslators(context),
         config.switch.inline,
-        config.multipleActions,
+        config.multiple,
         config.schema.generation,
         config.model,
         !config.schema.optimize.enabled,
@@ -171,7 +169,7 @@ export async function getTranslatorForSelectedActions(
         context.agents,
         getActiveTranslators(context),
         config.switch.inline,
-        config.multipleActions,
+        config.multiple,
         config.model,
     );
 }
@@ -540,7 +538,7 @@ export async function changeContextConfig(
         translatorChanged ||
         changed.translation?.model !== undefined ||
         changed.translation?.switch?.inline !== undefined ||
-        changed.translation?.multipleActions !== undefined ||
+        changed.translation?.multiple !== undefined ||
         changed.translation?.schema?.generation !== undefined ||
         changed.translation?.schema?.optimize?.enabled !== undefined
     ) {
