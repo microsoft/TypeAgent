@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { createTopNList } from "typeagent";
+import { collections, createTopNList } from "typeagent";
 import {
     IConversation,
     ITermToRelatedTermsIndex,
@@ -233,8 +233,8 @@ export class EntityPredicate implements IQueryOpPredicate {
         const entity =
             semanticRef.knowledge as knowLib.conversation.ConcreteEntity;
         return (
-            termMatches.matched(entity.type, this.type) &&
-            termMatches.matched(entity.name, this.name) &&
+            isPropertyMatch(termMatches, entity.type, this.type) &&
+            isPropertyMatch(termMatches, entity.name, this.name) &&
             this.matchFacet(termMatches, entity, this.facetName)
         );
     }
@@ -248,7 +248,7 @@ export class EntityPredicate implements IQueryOpPredicate {
             return false;
         }
         for (const facet of entity.facets) {
-            if (termMatches.matched(facet.name, facetName)) {
+            if (isPropertyMatch(termMatches, facet.name, facetName)) {
                 return true;
             }
         }
@@ -271,13 +271,29 @@ export class ActionPredicate implements IQueryOpPredicate {
         }
         const action = semanticRef.knowledge as knowLib.conversation.Action;
         return (
-            termMatches.matched(
+            isPropertyMatch(
+                termMatches,
                 action.subjectEntityName,
                 this.subjectEntityName,
             ) &&
-            termMatches.matched(action.objectEntityName, this.objectEntityName)
+            isPropertyMatch(
+                termMatches,
+                action.objectEntityName,
+                this.objectEntityName,
+            )
         );
     }
+}
+
+function isPropertyMatch(
+    termMatches: QueryTermAccumulator,
+    testText: string | string[] | undefined,
+    expectedText: string | undefined,
+) {
+    if (testText !== undefined && expectedText !== undefined) {
+        return termMatches.matched(testText, expectedText);
+    }
+    return testText === undefined && expectedText === undefined;
 }
 
 export interface Match<T = any> {
@@ -544,36 +560,53 @@ export class QueryTermAccumulator {
         }
     }
 
-    public matched(
-        testText: string | string[] | undefined,
-        expectedText: string | undefined,
-    ): boolean {
-        if (expectedText === undefined) {
-            return true;
-        }
-        if (testText === undefined) {
-            return false;
-        }
-
+    public matched(testText: string | string[], expectedText: string): boolean {
         if (Array.isArray(testText)) {
-            for (const text of testText) {
-                if (this.matched(text, expectedText)) {
-                    return true;
+            if (testText.length > 0) {
+                for (const text of testText) {
+                    if (this.matched(text, expectedText)) {
+                        return true;
+                    }
                 }
             }
             return false;
         }
 
-        if (testText === expectedText) {
+        if (
+            this.termMatches.has(testText) &&
+            collections.stringEquals(testText, expectedText, false)
+        ) {
             return true;
         }
 
         // Maybe the test text matched a related term.
-        // If so, the matching related term should have matched on behalf of
-        // of a term === expectedTerm
+        // If so, the matching related term should have matched *on behalf* of
+        // of expectedTerm
         const relatedTermToTerms = this.relatedTermToTerms.get(testText);
         return relatedTermToTerms !== undefined
             ? relatedTermToTerms.has(expectedText)
             : false;
+    }
+
+    public didValueMatch(
+        obj: Record<string, any>,
+        key: string,
+        expectedValue: string,
+    ): boolean {
+        const value = obj[key];
+        if (value === undefined) {
+            return false;
+        }
+        if (Array.isArray(value)) {
+            for (const item of value) {
+                if (this.didValueMatch(item, key, expectedValue)) {
+                    return true;
+                }
+            }
+            return false;
+        } else {
+            const stringValue = value.toString().toLowerCase();
+            return this.matched(stringValue, expectedValue);
+        }
     }
 }
