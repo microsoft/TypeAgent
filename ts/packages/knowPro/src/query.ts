@@ -4,6 +4,7 @@
 import { collections, createTopNList } from "typeagent";
 import {
     IConversation,
+    IMessage,
     ITermToRelatedTermsIndex,
     ITermToSemanticRefIndex,
     KnowledgeType,
@@ -43,6 +44,15 @@ export class QueryEvalContext {
     }
     public get relatedTermIndex(): ITermToRelatedTermsIndex | undefined {
         return this.conversation.relatedTermsIndex;
+    }
+
+    public getSemanticRef(semanticRefIndex: SemanticRefIndex): SemanticRef {
+        return this.semanticRefs[semanticRefIndex];
+    }
+
+    public getMessageForRef(semanticRef: SemanticRef): IMessage {
+        const messageIndex = semanticRef.range.start.messageIndex;
+        return this.conversation.messages[messageIndex];
     }
 }
 
@@ -188,23 +198,24 @@ export class WhereSemanticRefExpr
         const filtered = new SemanticRefAccumulator(
             accumulator.queryTermMatches,
         );
-        const semanticRefs = context.semanticRefs;
         filtered.setMatches(
             accumulator.getMatchesWhere((match) =>
-                this.testOr(semanticRefs, accumulator.queryTermMatches, match),
+                this.testOr(context, accumulator.queryTermMatches, match),
             ),
         );
         return filtered;
     }
 
     private testOr(
-        semanticRefs: SemanticRef[],
+        context: QueryEvalContext,
         queryTermMatches: QueryTermAccumulator,
         match: Match<SemanticRefIndex>,
     ) {
         for (let i = 0; i < this.predicates.length; ++i) {
-            const semanticRef = semanticRefs[match.value];
-            if (this.predicates[i].eval(queryTermMatches, semanticRef)) {
+            const semanticRef = context.getSemanticRef(match.value);
+            if (
+                this.predicates[i].eval(context, queryTermMatches, semanticRef)
+            ) {
                 return true;
             }
         }
@@ -213,7 +224,11 @@ export class WhereSemanticRefExpr
 }
 
 export interface IQueryOpPredicate {
-    eval(termMatches: QueryTermAccumulator, semanticRef: SemanticRef): boolean;
+    eval(
+        context: QueryEvalContext,
+        termMatches: QueryTermAccumulator,
+        semanticRef: SemanticRef,
+    ): boolean;
 }
 
 export class EntityPredicate implements IQueryOpPredicate {
@@ -224,6 +239,7 @@ export class EntityPredicate implements IQueryOpPredicate {
     ) {}
 
     public eval(
+        context: QueryEvalContext,
         termMatches: QueryTermAccumulator,
         semanticRef: SemanticRef,
     ): boolean {
@@ -263,6 +279,7 @@ export class ActionPredicate implements IQueryOpPredicate {
     ) {}
 
     public eval(
+        context: QueryEvalContext,
         termMatches: QueryTermAccumulator,
         semanticRef: SemanticRef,
     ): boolean {
