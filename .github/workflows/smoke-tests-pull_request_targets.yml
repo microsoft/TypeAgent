@@ -43,7 +43,8 @@ jobs:
           git config --global core.autocrlf false
 
       - uses: actions/checkout@v4
-
+          with:
+            ref: ${{ github.event.pull_request.head.sha }}
       - uses: dorny/paths-filter@v3
         id: filter
         with:
