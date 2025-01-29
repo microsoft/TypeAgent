@@ -10,8 +10,13 @@ declare global {
 }
 
 let siteAgent: string = "";
+let siteAgentInitialized = false;
 function setupSiteAgent() {
     if (window.browserConnect) {
+        if (siteAgentInitialized) {
+            return;
+        }
+
         const pageUrl = window.location.href;
         const host = new URL(pageUrl).host;
 
@@ -57,20 +62,19 @@ function setupSiteAgent() {
             siteAgent = "browser.instacart";
             window.browserConnect.enableSiteAgent("browser.instacart");
         }
+
+        siteAgentInitialized = true;
     } else {
         console.log("browserconnect not found by UI events script");
     }
 }
 
-window.addEventListener("message", (event) => {
-    if (event.data === "setupSiteAgent") {
-        setupSiteAgent();
-    }
-    if (
-        event.data === "disableSiteAgent" &&
-        siteAgent &&
-        window.browserConnect
-    ) {
+document.addEventListener("DOMContentLoaded", () => {
+    setupSiteAgent();
+});
+
+window.addEventListener("beforeunload", (event) => {
+    if (siteAgent !== undefined && window.browserConnect !== undefined) {
         window.browserConnect.disableSiteAgent(siteAgent);
     }
 });
