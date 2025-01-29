@@ -429,7 +429,7 @@ async function runSiteAction(schemaName: string, action: any) {
     return confirmationMessage;
 }
 
-await ipcRenderer.invoke("init-browser-ipc");
+ipcRenderer.invoke("init-browser-ipc");
 
 contextBridge.exposeInMainWorld("browserConnect", {
     enableSiteAgent: (translatorName) => {

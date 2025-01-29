@@ -15,7 +15,7 @@
   "scripts": {
     "build": "concurrently npm:typecheck npm:build:electron npm:build:electron:cjs",
     "build:electron": "electron-vite build --config electron.vite.config.mts",
-    "build:electron:cjs": "electron-vite build --config electron.vite-cjs.config.mts",
+    "build:electron:cjs": "electron-vite build --config electron.vite-cjs.config.mts --logLevel error",
     "build:linux": "npm run build && electron-builder --linux --config",
     "build:mac": "npm run build && electron-builder --mac --config",
     "build:win": "npm run build && electron-builder --win --config",
