@@ -2,11 +2,11 @@
 // Licensed under the MIT License.
 
 import { CommandHandlerContext } from "../../commandHandlerContext.js";
-import { translateRequest } from "./requestCommandHandler.js";
 import { ActionContext, ParsedCommandParams } from "@typeagent/agent-sdk";
 import { CommandHandler } from "@typeagent/agent-sdk/helpers/command";
 import { displayResult } from "@typeagent/agent-sdk/helpers/display";
 import { getColorElapsedString } from "common-utils";
+import { translateRequest } from "../../../translation/translateRequest.js";
 
 export class TranslateCommandHandler implements CommandHandler {
     public readonly description = "Translate a request";

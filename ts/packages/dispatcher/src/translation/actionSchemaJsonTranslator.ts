@@ -22,7 +22,10 @@ import {
     createChangeAssistantActionSchema,
     TranslatedAction,
 } from "./agentTranslators.js";
-import { createMultipleActionSchema } from "./multipleActionSchema.js";
+import {
+    createMultipleActionSchema,
+    MultipleActionOptions,
+} from "./multipleActionSchema.js";
 import { ActionConfig } from "./actionConfig.js";
 import { ActionConfigProvider } from "./actionConfigProvider.js";
 
@@ -169,7 +172,7 @@ export function composeActionSchema(
     provider: ActionConfigProvider,
     activeSchemas: { [key: string]: boolean },
     changeAgentAction: boolean,
-    multipleActions: boolean,
+    multipleActionOptions: MultipleActionOptions,
 ) {
     const builder = new ActionSchemaBuilder(provider);
     builder.addActionConfig(provider.getActionConfig(schemaName));
@@ -179,7 +182,7 @@ export function composeActionSchema(
         provider,
         activeSchemas,
         changeAgentAction,
-        multipleActions,
+        multipleActionOptions,
         false,
     );
 }
@@ -190,7 +193,7 @@ export function composeSelectedActionSchema(
     provider: ActionConfigProvider,
     activeSchemas: { [key: string]: boolean },
     changeAgentAction: boolean,
-    multipleActions: boolean,
+    multipleActionOptions: MultipleActionOptions,
 ) {
     const builder = new ActionSchemaBuilder(provider);
     const union = sc.union(definitions.map((definition) => sc.ref(definition)));
@@ -207,7 +210,7 @@ export function composeSelectedActionSchema(
         provider,
         activeSchemas,
         changeAgentAction,
-        multipleActions,
+        multipleActionOptions,
         true,
     );
 }
@@ -218,7 +221,7 @@ function finalizeActionSchemaBuilder(
     provider: ActionConfigProvider,
     activeSchemas: { [key: string]: boolean },
     changeAgentAction: boolean,
-    multipleActions: boolean,
+    multipleActionOptions: MultipleActionOptions,
     partial: boolean,
 ) {
     builder.addActionConfig(
@@ -237,9 +240,16 @@ function finalizeActionSchemaBuilder(
         }
     }
 
-    if (multipleActions) {
+    if (
+        multipleActionOptions === true ||
+        (multipleActionOptions !== false &&
+            multipleActionOptions.enabled === true)
+    ) {
         builder.addTypeDefinition(
-            createMultipleActionSchema(builder.getTypeUnion()),
+            createMultipleActionSchema(
+                builder.getTypeUnion(),
+                multipleActionOptions,
+            ),
         );
     }
     return builder.build();
