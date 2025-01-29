@@ -187,3 +187,17 @@ export function calcEndDateTime(
         parsedDateTime: start.toISOString(),
     };
 }
+
+export function getQueryParamsFromTimeRange(calStartDateTime: CalendarDateTime, calEndDateTime: CalendarDateTime): string | undefined {
+    const startDateTime = parseCalendarDateTime(calStartDateTime);
+    const endDateTime = parseCalendarDateTime(calEndDateTime);
+
+    if (!startDateTime || !endDateTime) {
+        return undefined; // Return undefined if either date couldn't be parsed
+    }
+
+    return `startDateTime=${encodeURIComponent(
+        startDateTime
+    )}&endDateTime=${encodeURIComponent(endDateTime)}`;
+}
+

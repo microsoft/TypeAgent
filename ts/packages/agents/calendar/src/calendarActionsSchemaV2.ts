@@ -73,12 +73,23 @@ export type EventReference = {
     eventid?: string;
 };
 
-export type CalendarAction = AddEventAction;
+export type CalendarAction = 
+    | AddEventAction
+    | FindEventsAction;
 
 // Add an event to the calendar
 export type AddEventAction = {
     actionName: "addEvent";
     parameters: {
         event: Event;
+    };
+};
+
+// Find an event on the calendar
+export type FindEventsAction = {
+    actionName: "findEvents";
+    parameters: {
+        // one or more event properties to use to search for matching events
+        eventReference: EventReference;
     };
 };

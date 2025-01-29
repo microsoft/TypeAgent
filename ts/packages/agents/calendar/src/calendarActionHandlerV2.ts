@@ -4,6 +4,7 @@
 import {
     parseCalendarDateTime,
     calcEndDateTime,
+    getQueryParamsFromTimeRange
 } from "./datetime/calendarDateTimeParser.js";
 import {
     createCalendarGraphClient,
@@ -31,7 +32,7 @@ import {
     ActionContext,
 } from "@typeagent/agent-sdk";
 import {
-    //createActionResultFromTextDisplay,
+    createActionResultFromTextDisplay,
     createActionResultFromHtmlDisplay,
     createActionResultFromError,
 } from "@typeagent/agent-sdk/helpers/action";
@@ -140,7 +141,7 @@ function deleteLocalGraphEventId(
             calendarContext.mapGraphEntity?.delete(localEventId);
         }
     }
-}
+}*/
 
 function getGraphEventId(
     localEventId: string,
@@ -156,7 +157,7 @@ function getGraphEventId(
         }
     }
     return graphEventId;
-}*/
+}
 
 async function updateCalendarContext(
     enable: boolean,
@@ -185,7 +186,7 @@ async function executeCalendarAction(
     return result;
 }
 
-/*function findEventsDisplayHtml(events: any[] | GraphEntity): string {
+function findEventsDisplayHtml(events: any[] | GraphEntity): string {
     if (events) {
         if (Array.isArray(events) && events.length > 0) {
             const eventsCopy = events.map(
@@ -213,7 +214,7 @@ async function executeCalendarAction(
         }
     }
     return "";
-}*/
+}
 
 /*async function getParticipantsToAdd(
     participants: string[] | undefined,
@@ -442,6 +443,131 @@ export async function handleCalendarAction(
             }
             break;
 
+        case "findEvents":
+            debug(chalk.green("Handling FIND_EVENTS action ..."));
+            actionEvent = action.parameters.eventReference as EventReference;
+            console.log(actionEvent);
+
+            if (actionEvent && actionEvent.eventid) {
+                const lastLocalEventId = actionEvent.eventid;
+                const lastGraphEventId = getGraphEventId(
+                    lastLocalEventId ?? "",
+                    calendarContext,
+                );
+                if (lastGraphEventId !== undefined) {
+                    const meeting =
+                        calendarContext.mapGraphEntity?.get(lastLocalEventId);
+                    if (meeting) {
+                        return populateMeetingDetailsFromEvent(
+                            actionEvent?.description!,
+                            meeting,
+                        );
+                    }
+                } else {
+                    // the eventid is coming from the cache, but it's not in the mapGraphEntity
+                    if (actionEvent && actionEvent.description) {
+                        const events = await client.findEventsFromEmbeddings(
+                            actionEvent?.description,
+                        );
+
+                        if (events) {
+                            return populateMeetingDetailsFromEvent(
+                                actionEvent?.description!,
+                                events,
+                            );
+                        }
+                    }
+                }
+            } else if (
+                actionEvent &&
+                (actionEvent.timeRange &&
+                    actionEvent.timeRange?.startDateTime && actionEvent.timeRange?.endDateTime)
+            ) {
+                let findQuery = getQueryParamsFromTimeRange(actionEvent.timeRange?.startDateTime, actionEvent.timeRange?.endDateTime);
+                if (findQuery !== undefined) {
+                    let results: any =
+                        await client.findCalendarEventsByDateRange(findQuery);
+                    return populateMeetingDetailsFromEvent(
+                        actionEvent.description!,
+                        results,
+                    );
+                } else {
+                    const err =
+                        "Please provide a valid date and time range to search for events.";
+                    debug(chalk.bgYellowBright(err));
+                    return createActionResultFromError(err);
+                }
+            } else if (actionEvent && actionEvent.description) {
+                let findResults = await client.findEventsFromEmbeddings(
+                    actionEvent.description,
+                );
+
+                if (findResults?.length === 0) {
+                    findResults = await client.findCalendarEventsBySubject(
+                        actionEvent.description,
+                    );
+                }
+
+                return populateMeetingDetailsFromEvent(
+                    actionEvent.description,
+                    findResults,
+                );
+            } else if (
+                actionEvent &&
+                actionEvent.participants &&
+                actionEvent.participants.length > 0 &&
+                actionEvent.timeRange?.startDateTime && actionEvent.timeRange?.endDateTime
+            ) {
+                let findQuery = getQueryParamsFromTimeRange(actionEvent.timeRange?.startDateTime, actionEvent.timeRange?.endDateTime);
+                if (
+                    actionEvent?.participants?.length > 0 &&
+                    findQuery !== undefined
+                ) {
+                    debug(findQuery);
+                    let results: any =
+                        await client.findCalendarEventsByDateRange(findQuery);
+
+                    if (Array.isArray(results)) {
+                        const findResults = results.filter((result) => {
+                            if (result.attendees) {
+                                const eventAttendees = result.attendees.map(
+                                    (attendee: any) =>
+                                        attendee.emailAddress.name.toLowerCase(),
+                                );
+
+                                return actionEvent?.participants?.some(
+                                    (participant: string) =>
+                                        eventAttendees.some((name: string) =>
+                                            name.includes(
+                                                participant.toLowerCase(),
+                                            ),
+                                        ),
+                                );
+                            }
+                            return false;
+                        });
+
+                        if (findResults.length > 0) {
+                            return populateMeetingDetailsFromEvent(
+                                actionEvent.description!,
+                                findResults,
+                            );
+                        }
+                    }
+                } else {
+                    const err =
+                        "Please provide a valid date and time range to search for events.";
+                    debug(chalk.bgYellowBright(err));
+                    return createActionResultFromError(err);
+                }
+            } else {
+                const err =
+                    "Please provide participant and  valid date and time range to search for events.";
+                debug(chalk.bgYellowBright(err));
+                return createActionResultFromError(err);
+            }
+            break;
+
         default:
             throw new Error(`Unknown action: ${(action as any).actionName}`);
     }
@@ -449,7 +575,7 @@ export async function handleCalendarAction(
     return createActionResultFromError(error);
 }
 
-/*
+
 async function populateMeetingDetailsFromEvent(
     actionName: string,
     events: any[] | GraphEntity,
@@ -470,7 +596,7 @@ async function populateMeetingDetailsFromEvent(
         return result;
     }
 }
-*/
+
 
 async function populateMeetingDetails(
     startDateTime: string,
