@@ -351,7 +351,7 @@ export async function handleCalendarAction(
                     actionEvent.timeRange.startDateTime?.day !== undefined
                 ) {
                     let startDateTime = parseCalendarDateTime(
-                        actionEvent.timeRange.startDateTime,
+                        actionEvent.timeRange.startDateTime, true
                     );
                     if (startDateTime !== undefined) {
                         let endDateTimeRes = calcEndDateTime(
@@ -447,6 +447,11 @@ export async function handleCalendarAction(
             debug(chalk.green("Handling FIND_EVENTS action ..."));
             actionEvent = action.parameters.eventReference as EventReference;
             console.log(actionEvent);
+
+            if(actionEvent && actionEvent.timeRange && actionEvent.timeRange.startDateTime && actionEvent.timeRange.endDateTime) {
+                let findQuery = getQueryParamsFromTimeRange(actionEvent.timeRange?.startDateTime, actionEvent.timeRange?.endDateTime);
+                console.log(findQuery);
+            }
 
             if (actionEvent && actionEvent.eventid) {
                 const lastLocalEventId = actionEvent.eventid;

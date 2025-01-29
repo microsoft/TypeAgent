@@ -1,120 +1,123 @@
 import { CalendarDateTime } from "../calendarActionsSchemaV2.js";
+import { startOfWeek, endOfWeek, endOfMonth } from "date-fns";
 
-export function parseCalendarDateTime(calDateTime: CalendarDateTime): string {
+export function parseCalendarDateTime(
+    calDateTime: CalendarDateTime,
+    fLocaleTime: boolean = true,
+    isStart: boolean = true,
+    useUTC: boolean = false
+): string {
     let date = new Date();
 
-    // Handle Year
     if (calDateTime.year) {
         let year;
-        if (
-            calDateTime.year.startsWith("+") ||
-            calDateTime.year.startsWith("-")
-        ) {
+        if (calDateTime.year.startsWith("+") || calDateTime.year.startsWith("-")) {
             const yearOffset = parseOffset(calDateTime.year.replace("y", ""));
-            year = date.getUTCFullYear() + yearOffset;
+            year = (useUTC ? date.getUTCFullYear() : date.getFullYear()) + yearOffset;
         } else {
             year = parseInt(calDateTime.year, 10);
         }
 
         if (!isNaN(year)) {
-            date.setUTCFullYear(year);
+            useUTC ? date.setUTCFullYear(year) : date.setFullYear(year);
         } else {
             throw new Error("Invalid input: Year could not be parsed.");
         }
     }
 
-    // Handle Week
     if (calDateTime.week) {
         const weekOffset = parseOffset(calDateTime.week.replace("w", ""));
         const daysToAdd = weekOffset * 7; // 1 week = 7 days
-        date.setUTCDate(date.getUTCDate() + daysToAdd);
+        useUTC ? date.setUTCDate(date.getUTCDate() + daysToAdd) : date.setDate(date.getDate() + daysToAdd);
     }
 
-    // Handle Month (Updated)
     if (calDateTime.month) {
-        const currentMonth = date.getUTCMonth();
+        const currentMonth = useUTC ? date.getUTCMonth() : date.getMonth();
 
-        if (
-            calDateTime.month.startsWith("+") ||
-            calDateTime.month.startsWith("-")
-        ) {
+        if (calDateTime.month.startsWith("+") || calDateTime.month.startsWith("-")) {
             const monthOffset = parseOffset(calDateTime.month.replace("M", ""));
             const newMonth = currentMonth + monthOffset;
 
             const yearAdjustment = Math.floor(newMonth / 12);
             const adjustedMonth = ((newMonth % 12) + 12) % 12; // Ensure valid month index
 
-            // Temporarily set to the first day of the month to prevent day overflow
-            date.setUTCDate(1);
-            date.setUTCFullYear(date.getUTCFullYear() + yearAdjustment);
-            date.setUTCMonth(adjustedMonth);
+            useUTC ? date.setUTCDate(1) : date.setDate(1);
+            useUTC ? date.setUTCFullYear(date.getUTCFullYear() + yearAdjustment) : date.setFullYear(date.getFullYear() + yearAdjustment);
+            useUTC ? date.setUTCMonth(adjustedMonth) : date.setMonth(adjustedMonth);
         } else if (isNaN(parseInt(calDateTime.month, 10))) {
             const monthIndex = monthToIndex(calDateTime.month);
             if (monthIndex !== -1) {
-                date.setUTCMonth(monthIndex);
+                useUTC ? date.setUTCMonth(monthIndex) : date.setMonth(monthIndex);
             } else {
-                throw new Error(
-                    "Invalid input: Month name could not be parsed.",
-                );
+                throw new Error("Invalid input: Month name could not be parsed.");
             }
         } else {
             const monthIndex = parseInt(calDateTime.month, 10) - 1;
-            date.setUTCMonth(monthIndex);
+            useUTC ? date.setUTCMonth(monthIndex) : date.setMonth(monthIndex);
         }
     }
 
-    // Handle Day
-    if (calDateTime.day) {
-        if (
-            calDateTime.day.startsWith("+") ||
-            calDateTime.day.startsWith("-")
-        ) {
-            // Calculate relative days
+    if (calDateTime.day !== undefined) {
+        if (calDateTime.day.startsWith("+") || calDateTime.day.startsWith("-")) {
             const dayOffset = parseOffset(calDateTime.day.replace("d", ""));
-            date.setUTCDate(date.getUTCDate() + dayOffset);
+            useUTC ? date.setUTCDate(date.getUTCDate() + dayOffset) : date.setDate(date.getDate() + dayOffset);
         } else if (!isNaN(parseInt(calDateTime.day, 10))) {
-            // Absolute day
-            date.setUTCDate(parseInt(calDateTime.day, 10));
+            useUTC ? date.setUTCDate(parseInt(calDateTime.day, 10)) : date.setDate(parseInt(calDateTime.day, 10));
         } else {
-            // Handle named days like "Monday"
-            const weekdays = [
-                "Sunday",
-                "Monday",
-                "Tuesday",
-                "Wednesday",
-                "Thursday",
-                "Friday",
-                "Saturday",
-            ];
+            const weekdays = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
             const targetDayIndex = weekdays.indexOf(calDateTime.day);
             if (targetDayIndex === -1) {
                 throw new Error("Invalid input: Day name could not be parsed.");
             }
-            const currentDayIndex = date.getUTCDay();
+            const currentDayIndex = useUTC ? date.getUTCDay() : date.getDay();
             const daysUntilTarget = (targetDayIndex - currentDayIndex + 7) % 7;
-            date.setUTCDate(date.getUTCDate() + daysUntilTarget);
+            useUTC ? date.setUTCDate(date.getUTCDate() + daysUntilTarget) : date.setDate(date.getDate() + daysUntilTarget);
+        }
+    } else {
+        if (calDateTime.week) {
+            calDateTime.day = isStart ? "StartOfWeek" : "EndOfWeek";
+            const adjustedDate = isStart
+                ? startOfWeek(date, { weekStartsOn: 1 })
+                : endOfWeek(date, { weekStartsOn: 1 });
+            useUTC ? date.setUTCDate(adjustedDate.getUTCDate()) : date.setDate(adjustedDate.getDate());
+        } else if (calDateTime.month && !calDateTime.day) {
+            date = isStart ? date : endOfMonth(date);
         }
     }
 
-    // Handle HMS
     if (calDateTime.hms) {
         switch (calDateTime.hms.toLowerCase()) {
             case "noon":
-                date.setUTCHours(12, 0, 0, 0);
+                useUTC ? date.setUTCHours(12, 0, 0, 0) : date.setHours(12, 0, 0, 0);
                 break;
             case "midnight":
-                date.setUTCHours(0, 0, 0, 0);
+                useUTC ? date.setUTCHours(0, 0, 0, 0) : date.setHours(0, 0, 0, 0);
                 break;
             default:
-                const [hours, minutes, seconds] = calDateTime.hms
-                    .split(":")
-                    .map(Number);
-                date.setUTCHours(hours || 0, minutes || 0, seconds || 0, 0);
+                const [hours, minutes, seconds] = calDateTime.hms.split(":").map(Number);
+                useUTC
+                    ? date.setUTCHours(hours || 0, minutes || 0, seconds || 0, 0)
+                    : date.setHours(hours || 0, minutes || 0, seconds || 0, 0);
                 break;
         }
+    } else {
+        useUTC
+            ? date.setUTCHours(isStart ? 0 : 23, isStart ? 0 : 59, isStart ? 0 : 59, 999)
+            : date.setHours(isStart ? 0 : 23, isStart ? 0 : 59, isStart ? 0 : 59, 999);
     }
 
-    return date.toISOString();
+    if(fLocaleTime) {
+        return date.toLocaleString();
+    }
+    else {
+        return toISO(date, useUTC);
+    }
+}
+
+function toISO(date: Date, useUTC: boolean): string {
+    return useUTC
+        ? date.toISOString()
+        : new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString();
 }
 
 function monthToIndex(month: string): number {
@@ -154,6 +157,9 @@ export interface DateTimeParseResult {
 export function calcEndDateTime(
     startDateTime: string,
     duration: string,
+    fLocaleTime: boolean = true,
+    useUTC: boolean = false
+    
 ): DateTimeParseResult {
     const errors: string[] = [];
     const result: DateTimeParseResult = { success: false, errors };
@@ -177,27 +183,39 @@ export function calcEndDateTime(
     const minutes = parseInt(match.groups.minutes || "0", 10);
     const seconds = parseInt(match.groups.seconds || "0", 10);
 
-    start.setUTCDate(start.getUTCDate() + days);
-    start.setUTCHours(start.getUTCHours() + hours);
-    start.setUTCMinutes(start.getUTCMinutes() + minutes);
-    start.setUTCSeconds(start.getUTCSeconds() + seconds);
+    useUTC ? start.setUTCDate(start.getUTCDate() + days) : start.setDate(start.getDate() + days);
+    useUTC ? start.setUTCHours(start.getUTCHours() + hours) : start.setHours(start.getHours() + hours);
+    useUTC ? start.setUTCMinutes(start.getUTCMinutes() + minutes) : start.setMinutes(start.getMinutes() + minutes);
+    useUTC ? start.setUTCSeconds(start.getUTCSeconds() + seconds) : start.setSeconds(start.getSeconds() + seconds);
 
     return {
         success: true,
-        parsedDateTime: start.toISOString(),
+        parsedDateTime: fLocaleTime ? start.toLocaleString() : start.toISOString(),
     };
 }
 
 export function getQueryParamsFromTimeRange(calStartDateTime: CalendarDateTime, calEndDateTime: CalendarDateTime): string | undefined {
-    const startDateTime = parseCalendarDateTime(calStartDateTime);
-    const endDateTime = parseCalendarDateTime(calEndDateTime);
+    const startDateTimeStr = parseCalendarDateTime(calStartDateTime);
+    const endDateTimeStr = parseCalendarDateTime(calEndDateTime, false);
 
-    if (!startDateTime || !endDateTime) {
-        return undefined; // Return undefined if either date couldn't be parsed
+    if (!startDateTimeStr || !endDateTimeStr) {
+        return undefined;
     }
 
-    return `startDateTime=${encodeURIComponent(
-        startDateTime
-    )}&endDateTime=${encodeURIComponent(endDateTime)}`;
+    const startDateTime = new Date(startDateTimeStr);
+    const endDateTime = new Date(endDateTimeStr);
+
+    if (isNaN(startDateTime.getTime()) || isNaN(endDateTime.getTime())) {
+        return undefined;
+    }
+
+    const startDateUTC = new Date(
+        startDateTime.getTime() - startDateTime.getTimezoneOffset() * 60000
+    );
+    const endDateUTC = new Date(
+        endDateTime.getTime() - endDateTime.getTimezoneOffset() * 60000
+    );
+
+    return `startDateTime=${startDateUTC.toISOString()}&endDateTime=${endDateUTC.toISOString()}`;
 }
 
