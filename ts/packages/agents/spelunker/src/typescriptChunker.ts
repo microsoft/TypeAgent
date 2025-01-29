@@ -33,24 +33,28 @@ export async function chunkifyTypeScriptFiles(
         // console.log(fileName);
         const baseName = path.basename(fileName);
         const extName = path.extname(fileName);
-        const moduleName = baseName.slice(0, -extName.length || undefined);
+        const codeName = baseName.slice(0, -extName.length || undefined);
         const rootChunk: Chunk = {
             chunkId: generate_id(),
             treeName: "file",
-            codeName: moduleName,
+            codeName,
             blobs: [],
             parentId: "",
             children: [],
             fileName,
-        }
+        };
         const chunks: Chunk[] = [rootChunk];
         const sourceFile: ts.SourceFile = await tsCode.loadSourceFile(fileName);
 
         // TODO: Also do nested functions, and classes, and interfaces, and modules.
         // TODO: For nested things, remove their text from the parent.
-        function getFunctionsAndClasses(): (ts.FunctionDeclaration | ts.ClassDeclaration)[] {
-            return tsCode.getStatements(sourceFile, (s) =>
-                ts.isFunctionDeclaration(s) || ts.isClassDeclaration(s),
+        function getFunctionsAndClasses(): (
+            | ts.FunctionDeclaration
+            | ts.ClassDeclaration
+        )[] {
+            return tsCode.getStatements(
+                sourceFile,
+                (s) => ts.isFunctionDeclaration(s) || ts.isClassDeclaration(s),
             );
         }
 
@@ -73,12 +77,11 @@ export async function chunkifyTypeScriptFiles(
                     chunkId: generate_id(),
                     treeName,
                     codeName,
-                    blobs:
-                        makeBlobs(
-                            sourceFile,
-                            thing.getFullStart(),
-                            thing.getEnd(),
-                        ),
+                    blobs: makeBlobs(
+                        sourceFile,
+                        thing.getFullStart(),
+                        thing.getEnd(),
+                    ),
                     parentId: rootChunk.chunkId,
                     children: [],
                     fileName,
@@ -132,8 +135,9 @@ function makeBlobs(
         lines.pop();
     }
     // console.log(lines.slice(0, 3), "...", lines.slice(-3));
-    if (!lines.length)
+    if (!lines.length) {
         return [];
+    }
     const blob: Blob = {
         start: startLoc.line, // 0-based
         lines,
