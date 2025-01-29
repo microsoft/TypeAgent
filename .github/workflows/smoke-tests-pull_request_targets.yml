@@ -1,0 +1,124 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
+# This workflow runs live/smoke sanity tests
+
+name: smoke-tests
+
+on:
+  workflow_dispatch:
+  pull_request_target:
+    branches: ["main"]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  pull-requests: read
+  contents: read
+  id-token: write
+
+env:
+  NODE_OPTIONS: --max_old_space_size=8192
+
+jobs:
+  shell_and_cli:
+    environment: development-forks      # required for federated credentials 
+    strategy:
+      fail-fast: false
+      matrix:
+        #os: ["ubuntu-latest", "windows-latest", "macos-latest"]
+        os: ["ubuntu-latest"]
+        version: [20]
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - if: runner.os == 'Linux'
+        run: |
+          sudo apt install libsecret-1-0
+
+      - name: Setup Git LF
+        run: |
+          git config --global core.autocrlf false
+
+      - uses: actions/checkout@v4
+
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            ts:
+              - "ts/**"
+              - ".github/workflows/build-ts.yml"
+
+      - uses: pnpm/action-setup@v4
+        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts == 'true' }}
+        name: Install pnpm
+        with:
+          package_json_file: ts/package.json
+
+      - uses: actions/setup-node@v4
+        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts == 'true' }}
+        with:
+          node-version: ${{ matrix.version }}
+          cache: "pnpm"
+          cache-dependency-path: ts/pnpm-lock.yaml
+      - name: Install dependencies
+        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts == 'true' }}
+        working-directory: ts
+        run: |
+          pnpm install --frozen-lockfile --strict-peer-dependencies
+
+      - name: Install Playwright Browsers
+        run: pnpm exec playwright install --with-deps
+        working-directory: ts/packages/shell
+
+      - name: Build
+        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts == 'true' }}
+        working-directory: ts
+        run: |
+          npm run build
+
+      - name: Login to Azure
+        uses: azure/login@v2.2.0
+        with:
+          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_5B0D2D6BA40F4710B45721D2112356DD }}
+          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_39BB903136F14B6EAD8F53A8AB78E3AA }}
+          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_F36C1F2C4B2C49CA8DD5C52FAB98FA30 }}
+
+      - name: Get Keys
+        run: |
+          node tools/scripts/getKeys.mjs --vault build-pipeline-kv
+        working-directory: ts
+
+      - name: Test CLI - smoke
+        run: |
+          npm run start:dev 'prompt' 'why is the sky blue'
+        working-directory: ts/packages/cli
+        continue-on-error: true
+
+      - name: Shell Tests - smoke (windows)
+        if: ${{ runner.os == 'windows' }}
+        timeout-minutes: 60
+        run: |
+          npx playwright test simple.spec.ts
+          rm ../../.env
+
+      - name: Shell Tests - smoke (linux)
+        if: ${{ runner.os == 'Linux' }}
+        timeout-minutes: 60
+        run: |
+          Xvfb :99 -screen 0 1600x1200x24 & export DISPLAY=:99
+          npx playwright test simple.spec.ts
+          rm ../../.env          
+        working-directory: ts/packages/shell
+        continue-on-error: true
+      
+      - name: Live Tests
+        if: ${{ runner.os == 'linux' }}
+        timeout-minutes: 60
+        run: |
+          npm run test:live
+        working-directory: ts
+        continue-on-error: true
