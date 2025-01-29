@@ -12,6 +12,7 @@ import {
     ChunkedFile,
     ChunkerErrorItem,
 } from "./chunkSchema.js";
+import path from "path";
 
 let last_ts = Date.now() * 1000;
 export function generate_id(): ChunkId {
@@ -30,62 +31,85 @@ export async function chunkifyTypeScriptFiles(
     const results: (ChunkedFile | ChunkerErrorItem)[] = [];
     for (const fileName of fileNames) {
         // console.log(fileName);
-        const chunks: Chunk[] = [];
-        const chunkedFile: ChunkedFile = {
+        const baseName = path.basename(fileName);
+        const extName = path.extname(fileName);
+        const codeName = baseName.slice(0, -extName.length || undefined);
+        const rootChunk: Chunk = {
+            chunkId: generate_id(),
+            treeName: "file",
+            codeName,
+            blobs: [],
+            parentId: "",
+            children: [],
             fileName,
-            chunks,
         };
+        const chunks: Chunk[] = [rootChunk];
         const sourceFile: ts.SourceFile = await tsCode.loadSourceFile(fileName);
-        // TODO: Also do nested functions, and classes, and modules.
+
+        // TODO: Also do nested functions, and classes, and interfaces, and modules.
         // TODO: For nested things, remove their text from the parent.
-        const functions: ts.FunctionDeclaration[] =
-            tsCode.getFunctions(sourceFile); // TODO: Also get nested functions.
-        for (const func of functions) {
+        function getFunctionsAndClasses(): (
+            | ts.FunctionDeclaration
+            | ts.ClassDeclaration
+        )[] {
+            return tsCode.getStatements(
+                sourceFile,
+                (s) => ts.isFunctionDeclaration(s) || ts.isClassDeclaration(s),
+            );
+        }
+
+        const things = getFunctionsAndClasses();
+        for (const thing of things) {
+            const treeName = ts.SyntaxKind[thing.kind];
+            const codeName = tsCode.getStatementName(thing) ?? "";
+            // console.log(`  ${treeName}: ${codeName}`);
             try {
                 // console.log(
                 //     "--------------------------------------------------------",
                 // );
-                // console.log(`Name: ${func.name?.escapedText}`);
+                // console.log(`Name: ${thing.name?.escapedText}`);
                 // console.log(
-                //     `Parameters: ${func.parameters.map((p) => p.name?.getFullText(sourceFile))}`,
+                //     `Parameters: ${thing.parameters.map((p) => p.name?.getFullText(sourceFile))}`,
                 // );
-                // console.log(`Return type: ${func.type?.getText(sourceFile)}`);
+                // console.log(`Return type: ${thing.type?.getText(sourceFile)}`);
 
                 const chunk: Chunk = {
                     chunkId: generate_id(),
-                    treeName: "function",
-                    codeName: func.name?.escapedText ?? "",
-                    blobs: [
-                        makeBlob(
-                            sourceFile,
-                            func.getFullStart(),
-                            func.getEnd(),
-                        ),
-                    ],
-                    parentId: "",
+                    treeName,
+                    codeName,
+                    blobs: makeBlobs(
+                        sourceFile,
+                        thing.getFullStart(),
+                        thing.getEnd(),
+                    ),
+                    parentId: rootChunk.chunkId,
                     children: [],
                     fileName,
                 };
                 chunks.push(chunk);
             } catch (e: any) {
                 results.push({
-                    error: `${func.name?.escapedText}: ${e.message}`,
+                    error: `${thing.name?.escapedText}: ${e.message}`,
                     filename: fileName,
                 });
             }
         }
         // console.log("========================================================");
+        const chunkedFile: ChunkedFile = {
+            fileName,
+            chunks,
+        };
         results.push(chunkedFile);
     }
 
     return results;
 }
 
-function makeBlob(
+function makeBlobs(
     sourceFile: ts.SourceFile,
     startPos: number,
     endPos: number,
-): Blob {
+): Blob[] {
     const text = sourceFile.text;
     const lineStarts = sourceFile.getLineStarts(); // TODO: Move to caller?
     let startLoc = sourceFile.getLineAndCharacterOfPosition(startPos);
@@ -106,10 +130,32 @@ function makeBlob(
         const line = text.slice(lineStarts[i], lineStarts[i + 1]);
         lines.push(line);
     }
+    // Trim trailing empty lines.
+    while (lines && !lines[lines.length - 1].trim()) {
+        lines.pop();
+    }
     // console.log(lines.slice(0, 3), "...", lines.slice(-3));
+    if (!lines.length) {
+        return [];
+    }
     const blob: Blob = {
         start: startLoc.line, // 0-based
         lines,
     };
-    return blob;
+    return [blob];
+}
+
+// This is actually sample input for the chunker. :-)
+export class Testing {
+    public static async main() {
+        const fileNames = [
+            "./packages/agents/spelunker/src/typescriptChunker.ts",
+            "./packages/agents/spelunker/src/spelunkerSchema.ts",
+            "./packages/agents/spelunker/src/makeSummarizeSchema.ts",
+            "./packages/codeProcessor/src/tsCode.ts",
+            "./packages/agents/spelunker/src/pythonChunker.ts",
+        ];
+        const results = await chunkifyTypeScriptFiles(fileNames);
+        console.log(JSON.stringify(results, null, 2));
+    }
 }
