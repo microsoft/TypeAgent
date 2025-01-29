@@ -296,13 +296,19 @@ export function sortMatchesByRelevance(matches: Match[]) {
 
 export class MatchAccumulator<T = any> {
     private matches: Map<T, Match<T>>;
+    private maxHitCount: number;
 
     constructor() {
         this.matches = new Map<T, Match<T>>();
+        this.maxHitCount = 0;
     }
 
     public get numMatches(): number {
         return this.matches.size;
+    }
+
+    public get maxHits(): number {
+        return this.maxHitCount;
     }
 
     public getMatch(value: T): Match<T> | undefined {
@@ -311,11 +317,14 @@ export class MatchAccumulator<T = any> {
 
     public setMatch(match: Match<T>): void {
         this.matches.set(match.value, match);
+        if (match.hitCount > this.maxHitCount) {
+            this.maxHitCount = match.hitCount;
+        }
     }
 
     public setMatches(matches: Match<T>[] | IterableIterator<Match<T>>): void {
         for (const match of matches) {
-            this.matches.set(match.value, match);
+            this.setMatch(match);
         }
     }
 
@@ -331,6 +340,9 @@ export class MatchAccumulator<T = any> {
                 hitCount: 1,
             };
             this.matches.set(value, match);
+        }
+        if (match.hitCount > this.maxHitCount) {
+            this.maxHitCount = match.hitCount;
         }
     }
 
@@ -381,32 +393,9 @@ export class MatchAccumulator<T = any> {
         }
     }
 
-    public removeMatchesWhere(predicate: (match: Match<T>) => boolean): void {
-        const valuesToRemove: T[] = [];
-        for (const match of this.getMatchesWhere(predicate)) {
-            valuesToRemove.push(match.value);
-        }
-        this.removeMatches(valuesToRemove);
-    }
-
-    public removeMatches(valuesToRemove: T[]): void {
-        if (valuesToRemove.length > 0) {
-            for (const item of valuesToRemove) {
-                this.matches.delete(item);
-            }
-        }
-    }
-
     public clearMatches(): void {
         this.matches.clear();
-    }
-
-    public mapMatches<M = any>(map: (m: Match<T>) => M): M[] {
-        const items: M[] = [];
-        for (const match of this.matches.values()) {
-            items.push(map(match));
-        }
-        return items;
+        this.maxHitCount = 0;
     }
 
     public reduceTopNScoring(
@@ -524,7 +513,8 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
     private getMinHitCount(minHitCount?: number): number {
         return minHitCount !== undefined
             ? minHitCount
-            : this.queryTermMatches.termMatches.size;
+            : //: this.queryTermMatches.termMatches.size;
+              this.maxHits;
     }
 }
 
