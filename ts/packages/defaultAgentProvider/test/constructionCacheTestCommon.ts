@@ -53,7 +53,7 @@ export async function getImportedCache(
 
 const explainer = getDefaultExplainerName();
 
-const coreDataFiles = [`test/data/**/${explainer}/*.json`];
+const coreDataFiles = [`test/data/explanations/**/${explainer}/*.json`];
 const extendedDataFiles = [`test/repo/explanations/**/${explainer}/*.json`];
 const dataFiles =
     process.env.TEST_EXTENDED_DATA === "1"

@@ -19,9 +19,11 @@
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
     "prettier": "prettier --check . --ignore-path ../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
-    "test": "node --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js --testPathPattern=\".*\\.spec\\.js\"",
-    "test:debug": "node --inspect-brk --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js --testPathPattern=\".*\\.spec\\.js\"",
-    "test:full": "node --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js",
+    "test": "node --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js",
+    "test:live": "node --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js --testPathPattern=\".*\\.test\\.js\"",
+    "test:live:debug": "node --inspect-brk --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js --testPathPattern=\".*\\.test\\.js\"",
+    "test:local": "node --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js --testPathPattern=\".*\\.spec\\.js\"",
+    "test:local:debug": "node --inspect-brk --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js --testPathPattern=\".*\\.spec\\.js\"",
     "tsc": "tsc -b"
   },
   "dependencies": {
@@ -39,7 +41,7 @@
     "chat-agent": "workspace:*",
     "code-agent": "workspace:*",
     "common-utils": "workspace:*",
-    "debug": "^4.3.4",
+    "debug": "^4.4.0",
     "desktop-automation": "workspace:*",
     "email": "workspace:*",
     "exifreader": "4.23.5",
@@ -62,7 +64,7 @@
     "ws": "^8.17.1"
   },
   "devDependencies": {
-    "@types/debug": "^4.1.10",
+    "@types/debug": "^4.1.12",
     "@types/file-size": "^1.0.3",
     "@types/glob": "^8.1.0",
     "@types/jest": "^29.5.7",

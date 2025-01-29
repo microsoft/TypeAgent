@@ -21,11 +21,11 @@
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
     "prettier": "prettier --check . --ignore-path ../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
-    "regen": "node ./bin/run.js data regenerate ../defaultAgentProvider/test/data/**/**/*.json",
+    "regen": "node ./bin/run.js data regenerate ../defaultAgentProvider/test/data/explanations/**/**/*.json",
     "regen:builtin": "node ./bin/run.js data regenerate --builtin v5",
     "start": "node ./bin/run.js",
     "start:dev": "node --loader ts-node/esm --no-warnings=ExperimentalWarning ./bin/dev.js",
-    "stat": "node ./bin/run.js data stat -f ../defaultAgentProvider/test/data/**/**/*.json",
+    "stat": "node ./bin/run.js data stat -f ../defaultAgentProvider/test/data/explanations/**/**/*.json",
     "tsc": "tsc -b"
   },
   "oclif": {
@@ -52,7 +52,7 @@
     "aiclient": "workspace:*",
     "chalk": "^5.3.0",
     "common-utils": "workspace:*",
-    "debug": "^4.3.4",
+    "debug": "^4.4.0",
     "default-agent-provider": "workspace:*",
     "dotenv": "^16.3.1",
     "rimraf": "^5.0.5",
@@ -60,7 +60,7 @@
     "typechat": "^0.1.1"
   },
   "devDependencies": {
-    "@types/debug": "^4.1.10",
+    "@types/debug": "^4.1.12",
     "@types/jest": "^29.5.7",
     "@types/node": "^18.18.7",
     "jest": "^29.7.0",

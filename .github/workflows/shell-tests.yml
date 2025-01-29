@@ -3,14 +3,14 @@
 
 name: Shell Tests - Full Suite
 on:
-  push:
-    branches: [ "main" ]
-   schedule:
-     - cron: "0 0 * * *"  #start of every day
+  #push:
+  #  branches: ["main"]
+  schedule:
+    - cron: "0 0 * * *" #start of every day
 
 permissions:
   id-token: write
-  contents: read    
+  contents: read
 
 # run only one of these at a time
 concurrency:
@@ -51,7 +51,7 @@ jobs:
         with:
           node-version: ${{ matrix.version }}
           cache: "pnpm"
-          cache-dependency-path: ts/pnpm-lock.yaml          
+          cache-dependency-path: ts/pnpm-lock.yaml
       - name: Install dependencies (pnpm)
         working-directory: ts
         run: |
@@ -75,8 +75,8 @@ jobs:
         working-directory: ts
       - name: Test CLI - verify .env & endpoint connectivity
         run: |
-            npm run start:dev 'prompt' 'why is the sky blue'
-        working-directory: ts/packages/cli        
+          npm run start:dev 'prompt' 'why is the sky blue'
+        working-directory: ts/packages/cli
       - name: Shell Tests
         timeout-minutes: 60
         run: |
@@ -89,7 +89,7 @@ jobs:
           name: test-results
           path: ts/packages/shell/test-results/
           overwrite: true
-          retention-days: 30        
+          retention-days: 30
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
         with:

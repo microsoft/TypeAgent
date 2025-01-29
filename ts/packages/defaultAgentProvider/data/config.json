@@ -54,10 +54,15 @@
   "explainers": {
     "v5": {
       "constructions": {
-        "data": ["./data/explainer/v5/data/player/basic.json"],
+        "data": [
+          "./data/explainer/v5/data/player/basic.json"
+        ],
         "file": "./data/explainer/v5/constructions.json"
       }
     }
   },
-  "tests": ["./test/data/**/**/*.json", "./test/repo/explanations/**/**/*.json"]
+  "tests": [
+    "./test/data/explanations/**/**/*.json",
+    "./test/repo/explanations/**/**/*.json"
+  ]
 }

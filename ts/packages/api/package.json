@@ -18,9 +18,9 @@
     "prettier": "prettier --check . --ignore-path ../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
     "start": "node ./dist/index.js",
-    "test": "node --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js --testPathPattern=\".*\\.spec\\.js\"",
-    "test:debug": "node --inspect-brk --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js --testPathPattern=\".*\\.spec\\.js\"",
-    "test:full": "node --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js",
+    "test": "npm run test",
+    "test:local": "node --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js --testPathPattern=\".*\\.spec\\.js\"",
+    "test:local:debug": "node --inspect-brk --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js --testPathPattern=\".*\\.spec\\.js\"",
     "tsc": "tsc -b"
   },
   "dependencies": {
@@ -35,7 +35,7 @@
     "aiclient": "workspace:*",
     "chalk": "^5.3.0",
     "common-utils": "workspace:*",
-    "debug": "^4.3.4",
+    "debug": "^4.4.0",
     "default-agent-provider": "workspace:*",
     "dotenv": "^16.3.1",
     "find-config": "^1.0.0",
@@ -49,7 +49,7 @@
     "ws": "^8.17.1"
   },
   "devDependencies": {
-    "@types/debug": "^4.1.10",
+    "@types/debug": "^4.1.12",
     "@types/find-config": "1.0.4",
     "@types/jest": "^29.5.7",
     "@types/node": "^18.18.7",

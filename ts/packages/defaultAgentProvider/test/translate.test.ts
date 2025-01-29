@@ -5,53 +5,72 @@ import dotenv from "dotenv";
 dotenv.config({ path: new URL("../../../../.env", import.meta.url) });
 
 import { getPackageFilePath } from "../src/utils/getPackageFilePath.js";
-import {
-    readTestData,
-    loadAgentJsonTranslator,
-} from "agent-dispatcher/internal";
-import { createActionConfigProvider } from "agent-dispatcher/internal";
-import { JSONAction } from "agent-cache";
 import { getDefaultAppAgentProviders } from "../src/defaultAgentProviders.js";
-const dataFiles = [
-    "test/data/player/v5/simple.json",
-    "test/data/player/v5/full.json",
-    "test/data/calendar/v5/simple.json",
-    "test/data/calendar/v5/complex.json",
-];
+import fs from "node:fs";
+import { createDispatcher, Dispatcher } from "agent-dispatcher";
 
-const inputs = await Promise.all(
-    dataFiles.map((f) => readTestData(getPackageFilePath(f))),
-);
-const testInput = inputs.flatMap((f) =>
-    f.entries.map<[string, string, JSONAction | JSONAction[]]>((data) => [
-        f.schemaName,
-        data.request,
-        data.action,
-    ]),
-);
+const dataFiles = ["test/data/translate-e2e.json"];
 
-const provider = await createActionConfigProvider(
-    getDefaultAppAgentProviders(undefined),
-);
-describe("translation", () => {
-    it.each(testInput)(
-        "translate [%s] '%s'",
-        async (translatorName, request, action) => {
-            const translator = loadAgentJsonTranslator(
-                translatorName,
-                provider,
+type TranslateTestRequest = {
+    request: string;
+    action: string | string[];
+};
+type TranslateTestEntry = TranslateTestRequest | TranslateTestRequest[];
+type TranslateTestFile = TranslateTestEntry[];
+
+const inputs: TranslateTestEntry[] = (
+    await Promise.all(
+        dataFiles.map<Promise<TranslateTestFile>>(async (f) => {
+            return JSON.parse(
+                await fs.promises.readFile(getPackageFilePath(f), "utf-8"),
             );
-            const result = await translator.translate(request);
-            expect(result.success).toBe(true);
-            if (result.success) {
-                // TODO: check if the action is the same to check if it is stable.
-                // expect(result.data).toMatchObject(action);
-            } else {
-                console.log(
-                    `Translation failed: ${request}\n${result.message}`,
-                );
-            }
-        },
-        30000,
-    );
+        }),
+    )
+).flat();
+
+const repeat = 5;
+const defaultAppAgentProviders = getDefaultAppAgentProviders(undefined);
+
+describe("translation action stability", () => {
+    let dispatchers: Dispatcher[];
+    beforeAll(async () => {
+        const dispatcherP: Promise<Dispatcher>[] = [];
+        for (let i = 0; i < repeat; i++) {
+            dispatcherP.push(
+                createDispatcher("cli test translate", {
+                    appAgentProviders: defaultAppAgentProviders,
+                    actions: null,
+                    commands: { dispatcher: true },
+                    translation: { history: false },
+                    explainer: { enabled: false },
+                    cache: { enabled: false },
+                }),
+            );
+        }
+        dispatchers = await Promise.all(dispatcherP);
+    });
+    it.each(inputs)("translate '$request'", async (test) => {
+        const requests = Array.isArray(test) ? test : [test];
+        await Promise.all(
+            dispatchers.map(async (dispatcher) => {
+                for (const { request, action } of requests) {
+                    const result = await dispatcher.processCommand(request);
+                    expect(result?.actions).toBeDefined();
+
+                    const expected =
+                        typeof action === "string" ? [action] : action;
+                    expect(result?.actions).toHaveLength(expected.length);
+                    for (let i = 0; i < expected.length; i++) {
+                        expect(
+                            `${result?.actions?.[i].translatorName}.${result?.actions?.[i].actionName}`,
+                        ).toBe(expected[i]);
+                    }
+                }
+            }),
+        );
+    });
+    afterAll(async () => {
+        await Promise.all(dispatchers.map((d) => d.close()));
+        dispatchers = [];
+    });
 });
