@@ -7,11 +7,7 @@ name: smoke-tests
 
 on:
   workflow_dispatch:
-  push:
-    branches: ["main", "dev/robgruen/smoke_tests"]
-  pull_request:
-    branches: ["main"]
-  merge_group:
+  pull_request_target:
     branches: ["main"]
 
 concurrency:
@@ -28,7 +24,7 @@ env:
 
 jobs:
   build_ts:
-    environment: development      # required for federated credentials 
+    environment: development-forks      # required for federated credentials 
     strategy:
       fail-fast: false
       matrix:
