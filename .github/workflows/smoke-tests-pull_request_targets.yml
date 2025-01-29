@@ -54,19 +54,16 @@ jobs:
               - ".github/workflows/build-ts.yml"
 
       - uses: pnpm/action-setup@v4
-        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts == 'true' }}
         name: Install pnpm
         with:
           package_json_file: ts/package.json
 
       - uses: actions/setup-node@v4
-        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts == 'true' }}
         with:
           node-version: ${{ matrix.version }}
           cache: "pnpm"
           cache-dependency-path: ts/pnpm-lock.yaml
       - name: Install dependencies
-        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts == 'true' }}
         working-directory: ts
         run: |
           pnpm install --frozen-lockfile --strict-peer-dependencies
@@ -76,7 +73,6 @@ jobs:
         working-directory: ts/packages/shell
 
       - name: Build
-        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts == 'true' }}
         working-directory: ts
         run: |
           npm run build
