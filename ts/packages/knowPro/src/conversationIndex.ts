@@ -26,8 +26,11 @@ function addFacet(
 ) {
     if (facet !== undefined) {
         semanticRefIndex.addTerm(facet.name, refIndex);
-        if (facet.value !== undefined && typeof facet.value === "string") {
-            semanticRefIndex.addTerm(facet.value, refIndex);
+        if (facet.value !== undefined) {
+            semanticRefIndex.addTerm(
+                conversation.knowledgeValueToString(facet.value),
+                refIndex,
+            );
         }
     }
 }
