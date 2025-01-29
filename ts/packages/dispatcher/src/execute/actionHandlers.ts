@@ -37,6 +37,8 @@ import { conversation } from "knowledge-processor";
 import { makeClientIOMessage } from "../context/interactiveIO.js";
 import { UnknownAction } from "../context/dispatcher/schema/dispatcherActionSchema.js";
 import { isUnknownAction } from "../context/dispatcher/dispatcherUtils.js";
+import { isPendingRequestAction } from "../translation/pendingRequest.js";
+import { translatePendingRequestAction } from "../translation/translateRequest.js";
 
 const debugActions = registerDebug("typeagent:dispatcher:actions");
 
@@ -48,13 +50,19 @@ export function getSchemaNamePrefix(
     return `[${config.emojiChar} ${translatorName}] `;
 }
 
+export type ActionContextWithClose = {
+    actionContext: ActionContext<unknown>;
+    actionIndex: number | undefined;
+    closeActionContext: () => void;
+};
+
 function getActionContext(
     appAgentName: string,
     systemContext: CommandHandlerContext,
     requestId: string,
     actionIndex?: number,
     action?: AppAction | string[],
-) {
+): ActionContextWithClose {
     let context = systemContext;
     const sessionContext = context.agents.getSessionContext(appAgentName);
     context.clientIO.setDisplayInfo(
@@ -105,6 +113,7 @@ function getActionContext(
     };
     return {
         actionContext,
+        actionIndex,
         closeActionContext: () => {
             closeContextObject(actionIO);
             closeContextObject(actionContext);
@@ -227,7 +236,11 @@ function getStreamingActionContext(
     const actionContext = systemContext.streamingActionContext;
     systemContext.streamingActionContext = undefined;
 
-    if (actionIndex !== 0 || actionContext === undefined) {
+    if (
+        actionContext === undefined ||
+        actionContext.actionIndex !== actionIndex
+    ) {
+        actionContext?.closeActionContext();
         return undefined;
     }
     // If we are reusing the streaming action context, we need to update the action.
@@ -245,7 +258,7 @@ async function executeAction(
     context: ActionContext<CommandHandlerContext>,
     actionIndex: number,
     entityMap?: Map<string, Entity>,
-): Promise<ActionResult | undefined> {
+): Promise<ActionResult> {
     const translatorName = action.translatorName;
 
     if (translatorName === undefined) {
@@ -478,14 +491,29 @@ export async function executeActions(
     debugActions(`Executing actions: ${JSON.stringify(actions, undefined, 2)}`);
     let actionIndex = 0;
     const entityMap = new Map<string, Entity>();
-    for (const action of actions) {
+    const actionQueue: Action[] = [...actions];
+
+    while (actionQueue.length !== 0) {
+        const action = actionQueue.shift()!;
+        if (isPendingRequestAction(action)) {
+            const translationResult = await translatePendingRequestAction(
+                action,
+                context,
+                actionIndex,
+            );
+            if (!translationResult) {
+                throw new Error("Pending action translation error.");
+            }
+            actionQueue.unshift(...translationResult.requestAction.actions);
+            continue;
+        }
         const result = await executeAction(
             action,
             context,
             actionIndex,
             entityMap,
         );
-        if (result && result.error === undefined) {
+        if (result.error === undefined) {
             if (result.resultEntity && action.resultEntityId) {
                 entityMap.set(action.resultEntityId, result.resultEntity);
             }
@@ -521,6 +549,7 @@ export function startStreamPartialAction(
     translatorName: string,
     actionName: string,
     context: CommandHandlerContext,
+    actionIndex: number,
 ): IncrementalJsonValueCallBack {
     const appAgentName = getAppAgentName(translatorName);
     const appAgent = context.agents.getAppAgent(appAgentName);
@@ -535,7 +564,7 @@ export function startStreamPartialAction(
         appAgentName,
         context,
         context.requestId!,
-        0,
+        actionIndex,
         {
             translatorName,
             actionName,
