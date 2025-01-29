@@ -196,6 +196,7 @@ export async function createKnowproCommands(
                 context.printer.writeLine("No matches");
                 return;
             }
+            context.printer.writeLine();
             context.printer.writeSearchResults(
                 conversation,
                 matches,

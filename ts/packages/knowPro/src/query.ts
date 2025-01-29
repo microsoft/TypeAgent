@@ -7,6 +7,7 @@ import {
     ITermToRelatedTermsIndex,
     ITermToSemanticRefIndex,
     KnowledgeType,
+    QueryTerm,
     ScoredSemanticRef,
     SemanticRef,
     SemanticRefIndex,
@@ -25,14 +26,6 @@ export function isConversationSearchable(conversation: IConversation): boolean {
 export interface IQueryOpExpr<T> {
     eval(context: QueryEvalContext): Promise<T>;
 }
-
-export type QueryTerm = {
-    term: Term;
-    /**
-     * These can be supplied from fuzzy synonym tables and so on
-     */
-    relatedTerms?: Term[] | undefined;
-};
 
 export class QueryEvalContext {
     constructor(private conversation: IConversation) {
@@ -102,6 +95,7 @@ export class TermsMatchExpr implements IQueryOpExpr<SemanticRefAccumulator> {
                 // BUT are scored with the score of the related term
                 matchAccumulator.addRelatedTermMatch(
                     queryTerm.term,
+                    relatedTerm,
                     index.lookupTerm(relatedTerm.text),
                     relatedTerm.score,
                 );
@@ -335,7 +329,7 @@ export class MatchAccumulator<T = any> {
 }
 
 export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
-    constructor(public termMatches: Set<string> = new Set<string>()) {
+    constructor(public queryTermMatches = new QueryTermMatches()) {
         super();
     }
 
@@ -349,17 +343,20 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
             for (const match of semanticRefs) {
                 this.add(match.semanticRefIndex, match.score + scoreBoost);
             }
-            this.recordTermMatch(term.text);
+            this.recordQueryTermMatch(term);
         }
     }
 
     public addRelatedTermMatch(
-        term: Term,
+        primaryTerm: Term,
+        relatedTerm: Term,
         semanticRefs: ScoredSemanticRef[] | undefined,
         scoreBoost?: number,
     ) {
         if (semanticRefs) {
-            scoreBoost ??= term.score ?? 0;
+            // Related term matches count as matches for the queryTerm...
+            // BUT are scored with the score of the related term
+            scoreBoost ??= relatedTerm.score ?? 0;
             for (const semanticRef of semanticRefs) {
                 let score = semanticRef.score + scoreBoost;
                 let match = this.getMatch(semanticRef.semanticRefIndex);
@@ -376,12 +373,8 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
                     this.setMatch(match);
                 }
             }
-            this.recordTermMatch(term.text);
+            this.recordQueryTermMatch(primaryTerm, relatedTerm);
         }
-    }
-
-    public recordTermMatch(term: string) {
-        this.termMatches.add(term);
     }
 
     public override getSortedByScore(
@@ -409,7 +402,7 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
             let group = groups.get(semanticRef.knowledgeType);
             if (group === undefined) {
                 group = new SemanticRefAccumulator();
-                group.termMatches = this.termMatches;
+                group.queryTermMatches = this.queryTermMatches;
                 groups.set(semanticRef.knowledgeType, group);
             }
             group.setMatch(match);
@@ -426,7 +419,24 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
         }, 0);
     }
 
-    private getMinHitCount(minHitCount?: number): number {
-        return minHitCount !== undefined ? minHitCount : this.termMatches.size;
+    private recordQueryTermMatch(term: Term, relatedTerm?: Term) {
+        this.queryTermMatches.termMatches.add(term.text);
+        this.queryTermMatches.termAndRelatedMatches.add(term.text);
+        if (relatedTerm !== undefined) {
+            this.queryTermMatches.termAndRelatedMatches.add(term.text);
+        }
     }
+
+    private getMinHitCount(minHitCount?: number): number {
+        return minHitCount !== undefined
+            ? minHitCount
+            : this.queryTermMatches.termMatches.size;
+    }
+}
+
+export class QueryTermMatches {
+    constructor(
+        public termMatches: Set<string> = new Set<string>(),
+        public termAndRelatedMatches: Set<string> = new Set<string>(),
+    ) {}
 }

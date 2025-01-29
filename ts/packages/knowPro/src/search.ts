@@ -4,6 +4,7 @@
 import {
     IConversation,
     KnowledgeType,
+    QueryTerm,
     ScoredSemanticRef,
 } from "./dataFormat.js";
 import * as q from "./query.js";
@@ -15,7 +16,7 @@ export type SearchResult = {
 
 export async function searchTermsInConversation(
     conversation: IConversation,
-    terms: q.QueryTerm[],
+    terms: QueryTerm[],
     maxMatches?: number,
     minHitCount?: number,
 ): Promise<Map<KnowledgeType, SearchResult> | undefined> {
@@ -41,7 +42,7 @@ export async function searchTermsInConversation(
     for (const [type, accumulator] of evalResults) {
         if (accumulator.numMatches > 0) {
             semanticRefMatches.set(type, {
-                termMatches: accumulator.termMatches,
+                termMatches: accumulator.queryTermMatches.termMatches,
                 semanticRefMatches: accumulator.toScoredSemanticRefs(),
             });
         }
@@ -51,7 +52,7 @@ export async function searchTermsInConversation(
 
 export async function searchTermsInConversationExact(
     conversation: IConversation,
-    terms: q.QueryTerm[],
+    terms: QueryTerm[],
     maxMatches?: number,
     minHitCount?: number,
 ): Promise<SearchResult | undefined> {
@@ -67,7 +68,7 @@ export async function searchTermsInConversationExact(
     );
     const evalResults = await query.eval(context);
     return {
-        termMatches: evalResults.termMatches,
+        termMatches: evalResults.queryTermMatches.termMatches,
         semanticRefMatches: evalResults.toScoredSemanticRefs(),
     };
 }

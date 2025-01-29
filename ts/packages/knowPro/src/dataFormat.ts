@@ -111,6 +111,14 @@ export type Term = {
     score?: number | undefined;
 };
 
+export type QueryTerm = {
+    term: Term;
+    /**
+     * These can be supplied from fuzzy synonym tables and so on
+     */
+    relatedTerms?: Term[] | undefined;
+};
+
 export interface ITermToRelatedTermsIndex {
     lookupTerm(term: string): Promise<Term[] | undefined>;
 }
