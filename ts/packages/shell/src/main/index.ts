@@ -573,7 +573,6 @@ async function initialize() {
     debugShell("Ready", performance.now() - time);
     // Set app user model id for windows
     electronApp.setAppUserModelId("com.electron");
-    app.commandLine.appendSwitch("disable-http-cache");
 
     await initializeSpeech();
 
