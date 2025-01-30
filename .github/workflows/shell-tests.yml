@@ -52,7 +52,7 @@ jobs:
               - "ts/**"
               - ".github/workflows/build-ts.yml"
       
-        - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v4
         name: Install pnpm
         with:
           package_json_file: ts/package.json
