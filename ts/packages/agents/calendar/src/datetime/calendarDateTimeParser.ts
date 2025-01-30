@@ -224,25 +224,18 @@ export function calcEndDateTime(
     }
 
     const durationRegex =
-        /(?:(?<days>[+-]?\d+)d)?\s*(?:(?<hours>[+-]?\d+)h)?\s*(?:(?<minutes>[+-]?\d+)m)?\s*(?:(?<seconds>[+-]?\d+)s)?/g;
-    const matches = [...duration.matchAll(durationRegex)];
+        /^([+-]?[1-9]\d*d)?\s*([+-]?[1-9]\d*h)?\s*([+-]?[1-9]\d*m)?\s*([+-]?[1-9]\d*s)?$/;
 
-    if (matches.length === 0) {
+    const match = duration.match(durationRegex);
+    if (!match) {
         errors.push("Invalid duration format.");
         return result;
     }
 
-    let days = 0,
-        hours = 0,
-        minutes = 0,
-        seconds = 0;
-    matches.forEach(({ groups }) => {
-        if (!groups) return;
-        if (groups.days) days = parseInt(groups.days, 10);
-        if (groups.hours) hours = parseInt(groups.hours, 10);
-        if (groups.minutes) minutes = parseInt(groups.minutes, 10);
-        if (groups.seconds) seconds = parseInt(groups.seconds, 10);
-    });
+    const days = match[1] ? parseInt(match[1], 10) : 0;
+    const hours = match[2] ? parseInt(match[2], 10) : 0;
+    const minutes = match[3] ? parseInt(match[3], 10) : 0;
+    const seconds = match[4] ? parseInt(match[4], 10) : 0;
 
     useUTC
         ? endDate.setUTCDate(endDate.getUTCDate() + days)
