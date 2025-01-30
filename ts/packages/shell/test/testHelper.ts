@@ -137,7 +137,7 @@ export async function exitApplication(page: Page): Promise<void> {
  * @returns The root path to the project containing the playwright configuration
  */
 function getAppPath(): string {
-    return fileURLToPath(new URL("..", import.meta.url));
+    return new URL("..", import.meta.url).toString();
 }
 
 /**
