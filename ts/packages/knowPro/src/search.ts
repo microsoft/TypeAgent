@@ -67,6 +67,17 @@ export async function searchConversationExact(
 }
 
 class SearchQueryBuilder {
+    static reservedPropertyNames = new Set<string>([
+        "name",
+        "type",
+        "topic",
+        "tag",
+        "verb",
+        "subject",
+        "object",
+        "indirectObject ",
+    ]);
+
     constructor(public conversation: IConversation) {}
 
     public compile(
@@ -143,7 +154,10 @@ class SearchQueryBuilder {
         // Ensure that all filter name values are also query terms
         if (filter !== undefined && filter.propertiesToMatch) {
             for (const key of Object.keys(filter.propertiesToMatch)) {
-                if (!termText.has(key)) {
+                if (
+                    !termText.has(key) &&
+                    !SearchQueryBuilder.reservedPropertyNames.has(key)
+                ) {
                     queryTerms.push({ term: { text: key } });
                 }
                 const value = filter.propertiesToMatch[key];
