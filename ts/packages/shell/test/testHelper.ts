@@ -63,7 +63,7 @@ export async function startShell(): Promise<Page> {
             return mainWindow;
         } catch (e) {
             console.warn(
-                `Unable to start electrom application (${process.env["INSTANCE_NAME"]}). Attempt ${retryAttempt} of ${maxRetries}`,
+                `Unable to start electrom application (${process.env["INSTANCE_NAME"]}). Attempt ${retryAttempt} of ${maxRetries}. Error: ${e}`,
             );
             retryAttempt++;
 
