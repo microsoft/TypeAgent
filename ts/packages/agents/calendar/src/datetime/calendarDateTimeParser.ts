@@ -224,8 +224,7 @@ export function calcEndDateTime(
     }
 
     const durationRegex =
-        /^([+-]?[1-9]\d*d)?\s*([+-]?[1-9]\d*h)?\s*([+-]?[1-9]\d*m)?\s*([+-]?[1-9]\d*s)?$/;
-
+        /^([+-]?[1-9]\d*d)(?:\s+|$)?([+-]?[1-9]\d*h)?(?:\s+|$)?([+-]?[1-9]\d*m)?(?:\s+|$)?([+-]?[1-9]\d*s)?$/;
     const match = duration.match(durationRegex);
     if (!match) {
         errors.push("Invalid duration format.");
