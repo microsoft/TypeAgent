@@ -333,11 +333,11 @@ export class WhereSemanticRefExpr
     ) {
         for (let i = 0; i < predicates.length; ++i) {
             const semanticRef = context.getSemanticRef(match.value);
-            if (predicates[i].eval(context, queryTermMatches, semanticRef)) {
-                return true;
+            if (!predicates[i].eval(context, queryTermMatches, semanticRef)) {
+                return false;
             }
         }
-        return false;
+        return true;
     }
 }
 

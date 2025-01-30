@@ -15,6 +15,10 @@ export type SearchResult = {
     semanticRefMatches: ScoredSemanticRef[];
 };
 
+export type SearchFilter = {
+    type?: KnowledgeType;
+    speaker?: string;
+};
 /**
  * Searches conversation for terms
  * @param conversation
@@ -26,7 +30,7 @@ export type SearchResult = {
 export async function searchConversation(
     conversation: IConversation,
     terms: QueryTerm[],
-    type?: KnowledgeType,
+    filter?: SearchFilter,
     maxMatches?: number,
 ): Promise<Map<KnowledgeType, SearchResult> | undefined> {
     if (!q.isConversationSearchable(conversation)) {
@@ -37,7 +41,7 @@ export async function searchConversation(
     const query = createTermSearchQuery(
         conversation,
         terms,
-        type ? [new q.KnowledgeTypePredicate(type)] : undefined,
+        filter,
         maxMatches,
     );
     return toGroupedSearchResults(await query.eval(context));
@@ -69,13 +73,23 @@ export async function searchConversationExact(
 function createTermSearchQuery(
     conversation: IConversation,
     terms: QueryTerm[],
-    wherePredicates?: q.IQuerySemanticRefPredicate[] | undefined,
+    filter?: SearchFilter,
     maxMatches?: number,
     minHitCount?: number,
 ) {
+    let where: q.IQuerySemanticRefPredicate[] | undefined;
+    if (filter !== undefined) {
+        where = [];
+        if (filter.type) {
+            where.push(new q.KnowledgeTypePredicate(filter.type));
+        }
+        if (filter.speaker) {
+            where.push(new q.ActionPredicate(filter.speaker));
+        }
+    }
     const query = new q.SelectTopNKnowledgeGroupExpr(
         new q.GroupByKnowledgeTypeExpr(
-            createTermsMatch(conversation, terms, wherePredicates),
+            createTermsMatch(conversation, terms, where),
         ),
         maxMatches,
         minHitCount,

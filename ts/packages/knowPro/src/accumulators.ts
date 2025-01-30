@@ -327,10 +327,7 @@ export class QueryTermAccumulator {
             return false;
         }
 
-        if (
-            this.termMatches.has(testText) &&
-            collections.stringEquals(testText, expectedText, false)
-        ) {
+        if (collections.stringEquals(testText, expectedText, false)) {
             return true;
         }
 
