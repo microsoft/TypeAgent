@@ -147,7 +147,7 @@ export function getAppPath(): string {
  * @returns The arguments to pass to the electron application
  */
 export function getLaunchArgs(): string[] {
-    const appPath = getAppPath();    
+    const appPath = getAppPath();
     // Ubuntu 24.04+ needs --no-sandbox, see https://github.com/electron/electron/issues/18265
     return os.platform() === "linux" ? [appPath, "--no-sandbox"] : [appPath];
 }
