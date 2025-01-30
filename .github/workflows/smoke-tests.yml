@@ -11,6 +11,8 @@ on:
     branches: ["main"]
   pull_request:
     branches: ["main"]
+  pull_request_target:
+    branches: ["main"]    
   merge_group:
     branches: ["main"]
 
@@ -25,20 +27,22 @@ permissions:
 
 env:
   NODE_OPTIONS: --max_old_space_size=8192
+  DEBUG: pw:browser*
 
 jobs:
   shell_and_cli:
-    environment: development      # required for federated credentials 
+    #environment: ${{ github.event_name == 'pull_request_target' && 'development-fork' || 'development' }}      # required for federated credentials 
+    environment: development-fork
     strategy:
       fail-fast: false
       matrix:
-        #os: ["ubuntu-latest", "windows-latest", "macos-latest"]
-        os: ["ubuntu-latest"]
+        os: ["ubuntu-latest", "windows-latest"]
+        #os: ["ubuntu-latest"]
         version: [20]
 
     runs-on: ${{ matrix.os }}
     steps:
-      - if: runner.os == 'Linux'
+      - if: runner.os == 'Linux'        
         run: |
           sudo apt install libsecret-1-0
 
@@ -46,7 +50,13 @@ jobs:
         run: |
           git config --global core.autocrlf false
 
-      - uses: actions/checkout@v4
+      - if: ${{ github.event_name != 'pull_request_target'}}
+        uses: actions/checkout@v4
+
+      - if: ${{ github.event_name == 'pull_request_target'}}
+        uses: actions/checkout@v4 
+        with:
+            ref: ${{ github.event.pull_request.head.sha }}      
 
       - uses: dorny/paths-filter@v3
         id: filter
@@ -66,6 +76,7 @@ jobs:
           node-version: ${{ matrix.version }}
           cache: "pnpm"
           cache-dependency-path: ts/pnpm-lock.yaml
+
       - name: Install dependencies
         working-directory: ts
         run: |
@@ -102,18 +113,33 @@ jobs:
         if: ${{ runner.os == 'windows' }}
         timeout-minutes: 60
         run: |
-          npx playwright test simple.spec.ts
+          npm run shell:smoke
           rm ../../.env
+        working-directory: ts/packages/shell
+        continue-on-error: true
 
       - name: Shell Tests - smoke (linux)
         if: ${{ runner.os == 'Linux' }}
         timeout-minutes: 60
+        # https://github.com/microsoft/playwright/issues/34251 - sysctl command
         run: |
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 
           Xvfb :99 -screen 0 1600x1200x24 & export DISPLAY=:99
-          npx playwright test simple.spec.ts
+          npm run shell:smoke
           rm ../../.env          
         working-directory: ts/packages/shell
         continue-on-error: true
+
+      # - name: Shell Tests - smoke (linux)
+      #   if: ${{ runner.os == 'Linux' }}
+      #   timeout-minutes: 60
+      #   # https://github.com/microsoft/playwright/issues/34251 - sysctl command
+      #   run: |
+      #     sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 
+      #     xvfb-run --auto-servernum --server-args="-screen 0 16001200x24" -- npm run shell:smoke
+      #     rm ../../.env          
+      #   working-directory: ts/packages/shell
+      #   continue-on-error: true        
       
       - name: Live Tests
         if: ${{ runner.os == 'linux' }}
