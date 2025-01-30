@@ -3,8 +3,8 @@
 
 name: Shell Tests - Full Suite
 on:
-  #push:
-  #  branches: ["main"]
+  push:
+    branches: ["main", "dev/robgruen/electron_tests"]
   schedule:
     - cron: "0 0 * * *" #start of every day
 
