@@ -7,6 +7,7 @@ import {
     KnowledgeType,
     QueryTerm,
     ScoredSemanticRef,
+    Term,
 } from "./dataFormat.js";
 import * as q from "./query.js";
 
@@ -16,7 +17,7 @@ export type SearchResult = {
 };
 
 export type SearchFilter = {
-    type?: KnowledgeType;
+    type?: KnowledgeType | undefined;
     propertiesToMatch?: Record<string, string>;
 };
 /**
@@ -73,15 +74,25 @@ class SearchQueryBuilder {
         filter?: SearchFilter,
         maxMatches?: number,
     ) {
+        this.prepareTerms(terms);
+        this.prepareFilter(filter);
+
+        let select = this.compileSelect(terms, filter);
         const query = new q.SelectTopNKnowledgeGroupExpr(
-            new q.GroupByKnowledgeTypeExpr(this.compileSelect(terms, filter)),
+            new q.GroupByKnowledgeTypeExpr(select),
             maxMatches,
         );
         return query;
     }
 
     private compileSelect(terms: QueryTerm[], filter?: SearchFilter) {
-        let termsMatchExpr = this.compileTermLookup(terms);
+        const queryTerms = new q.QueryTermsExpr(terms);
+        let termsMatchExpr: q.IQueryOpExpr<SemanticRefAccumulator> =
+            new q.TermsMatchExpr(
+                this.conversation.relatedTermsIndex !== undefined
+                    ? new q.ResolveRelatedTermsExpr(queryTerms)
+                    : queryTerms,
+            );
         // Always apply "tag match" scope... all text ranges that matched tags.. are in scope
         termsMatchExpr = new q.ScopeExpr(termsMatchExpr, [
             new q.KnowledgeTypePredicate("tag"),
@@ -94,17 +105,6 @@ class SearchQueryBuilder {
             );
         }
         return termsMatchExpr;
-    }
-
-    private compileTermLookup(
-        terms: QueryTerm[],
-    ): q.IQueryOpExpr<SemanticRefAccumulator> {
-        const queryTerms = new q.QueryTermsExpr(terms);
-        return new q.TermsMatchExpr(
-            this.conversation.relatedTermsIndex !== undefined
-                ? new q.ResolveRelatedTermsExpr(queryTerms)
-                : queryTerms,
-        );
     }
 
     private compileFilter(
@@ -120,6 +120,28 @@ class SearchQueryBuilder {
             );
         }
         return predicates;
+    }
+
+    private prepareTerms(queryTerms: QueryTerm[]): void {
+        queryTerms.forEach((queryTerm) => {
+            this.prepareTerm(queryTerm.term);
+            if (queryTerm.relatedTerms !== undefined) {
+                queryTerm.relatedTerms.forEach((t) => this.prepareTerm(t));
+            }
+        });
+    }
+
+    private prepareTerm(term: Term) {
+        term.text = term.text.toLowerCase();
+    }
+
+    private prepareFilter(filter?: SearchFilter) {
+        if (filter !== undefined && filter.propertiesToMatch) {
+            for (const key of Object.keys(filter.propertiesToMatch)) {
+                filter.propertiesToMatch[key] =
+                    filter.propertiesToMatch[key].toLowerCase();
+            }
+        }
     }
 }
 

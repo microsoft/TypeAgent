@@ -4,8 +4,10 @@
 import {
     IConversation,
     IMessage,
+    ITag,
     ITermToRelatedTermsIndex,
     ITermToSemanticRefIndex,
+    ITopic,
     KnowledgeType,
     QueryTerm,
     SemanticRef,
@@ -413,6 +415,20 @@ export function matchSemanticRefProperty(
                 propertyName,
                 value,
             );
+        case "topic":
+            return matchTopicProperty(
+                termMatches,
+                semanticRef.knowledge as ITopic,
+                propertyName,
+                value,
+            );
+        case "tag":
+            return matchTagProperty(
+                termMatches,
+                semanticRef.knowledge as ITag,
+                propertyName,
+                value,
+            );
     }
     return false;
 }
@@ -477,6 +493,30 @@ export function matchActionProperty(
     return false;
 }
 
+export function matchTopicProperty(
+    termMatches: TermMatchAccumulator,
+    topic: ITopic,
+    propertyName: string,
+    value: string,
+) {
+    if (propertyName !== "topic") {
+        return false;
+    }
+    return matchText(termMatches, value, topic.text);
+}
+
+export function matchTagProperty(
+    termMatches: TermMatchAccumulator,
+    tag: ITag,
+    propertyName: string,
+    value: string,
+) {
+    if (propertyName !== "tag") {
+        return false;
+    }
+    return matchText(termMatches, value, tag.text);
+}
+
 function matchText(
     termMatches: TermMatchAccumulator,
     expected: string,
@@ -485,7 +525,11 @@ function matchText(
     if (actual === undefined) {
         return false;
     }
-    return expected === actual || termMatches.hasRelatedMatch(expected, actual);
+    return (
+        expected === "*" ||
+        expected === actual ||
+        termMatches.hasRelatedMatch(expected, actual)
+    );
 }
 
 function matchTextOneOf(

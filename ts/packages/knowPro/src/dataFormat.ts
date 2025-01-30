@@ -67,7 +67,7 @@ export interface ITopic {
     text: string;
 }
 
-type ITag = ITopic;
+export type ITag = ITopic;
 
 export interface IConversation<TMeta extends IKnowledgeSource = any> {
     nameTag: string;
