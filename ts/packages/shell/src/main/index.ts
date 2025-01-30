@@ -12,6 +12,7 @@ import {
     DevicePermissionHandlerHandlerDetails,
     WebContents,
     BrowserView,
+    session,
 } from "electron";
 import path, { join } from "node:path";
 import { electronApp, optimizer, is } from "@electron-toolkit/utils";
@@ -103,7 +104,7 @@ function setContentSize() {
 const time = performance.now();
 debugShell("Starting...");
 
-function createWindow() {
+async function createWindow() {
     debugShell("Creating window", performance.now() - time);
 
     // Create the browser window.
@@ -130,6 +131,14 @@ function createWindow() {
     });
 
     mainWindow.webContents.setUserAgent(userAgent);
+
+    const browserExtensionPath = join(
+        app.getAppPath(),
+        "../agents/browser/dist/electron",
+    );
+    await session.defaultSession.loadExtension(browserExtensionPath, {
+        allowFileAccess: true,
+    });
 
     chatView = new BrowserView({
         webPreferences: {
@@ -280,7 +289,7 @@ function createWindow() {
         if (!inlineBrowserView && mainWindowSize) {
             inlineBrowserView = new BrowserView({
                 webPreferences: {
-                    preload: join(__dirname, "../preload/webview.mjs"),
+                    preload: join(__dirname, "../preload-cjs/webview.cjs"),
                     sandbox: false,
                 },
             });
@@ -299,9 +308,6 @@ function createWindow() {
         }
 
         inlineBrowserView?.webContents.loadURL(targetUrl.toString());
-        inlineBrowserView?.webContents.on("did-finish-load", () => {
-            inlineBrowserView?.webContents.send("init-site-agent");
-        });
     };
 
     ShellSettings.getinstance().onCloseInlineBrowser = (): void => {
@@ -570,7 +576,7 @@ async function initialize() {
 
     await initializeSpeech();
 
-    const { mainWindow, chatView } = createWindow();
+    const { mainWindow, chatView } = await createWindow();
 
     let settingSummary: string = "";
     function updateSummary(dispatcher: Dispatcher) {
@@ -646,19 +652,12 @@ async function initialize() {
     // see https://github.com/alex8088/electron-toolkit/tree/master/packages/utils
     app.on("browser-window-created", async (_, window) => {
         optimizer.watchWindowShortcuts(window);
-        const browserExtensionPath = join(
-            app.getAppPath(),
-            "../agents/browser/dist/electron",
-        );
-        await window.webContents.session.loadExtension(browserExtensionPath, {
-            allowFileAccess: true,
-        });
     });
 
-    app.on("activate", function () {
+    app.on("activate", async function () {
         // On macOS it's common to re-create a window in the app when the
         // dock icon is clicked and there are no other windows open.
-        if (BrowserWindow.getAllWindows().length === 0) createWindow();
+        if (BrowserWindow.getAllWindows().length === 0) await createWindow();
     });
 
     // On windows, we will spin up a local end point that listens

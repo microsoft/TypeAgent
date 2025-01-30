@@ -9,7 +9,7 @@ export type CodeGeneralActions =
     | ShowKeyboardShortcutsAction;
 
 // Show or open the command palette that allows to search and execute commands
-// Triggger this action only when asked to show/open the command palette explicitly
+// Trigger this action only when asked to show/open the command palette explicitly
 export type ShowCommandPaletteAction = {
     actionName: "showCommandPalette";
 };
@@ -21,7 +21,7 @@ export type GotoFileOrLineOrSymbolAction = {
     actionName: "gotoFileOrLineOrSymbol";
     parameters: {
         goto?: "file" | "line" | "symbol";
-        // file name, line number, or symbol name, don't fill this propert if
+        // file name, line number, or symbol name, don't fill this property if
         // the file name, line number or symbol name is not provided in the user request
         ref?: string;
     };

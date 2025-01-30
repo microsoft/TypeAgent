@@ -13,6 +13,7 @@ import { cloneConfig, mergeConfig } from "./options.js";
 import { TokenCounter, TokenCounterData } from "aiclient";
 import { DispatcherName } from "./interactiveIO.js";
 import { ConstructionProvider } from "../agentProvider/agentProvider.js";
+import { MultipleActionConfig } from "../translation/multipleActionSchema.js";
 
 const debugSession = registerDebug("typeagent:session");
 
@@ -80,7 +81,7 @@ type DispatcherConfig = {
             inline: boolean;
             search: boolean;
         };
-        multipleActions: boolean;
+        multiple: MultipleActionConfig;
         history: boolean;
         schema: {
             generation: boolean;
@@ -137,7 +138,11 @@ const defaultSessionConfig: SessionConfig = {
             inline: true,
             search: true,
         },
-        multipleActions: true,
+        multiple: {
+            enabled: true,
+            result: true,
+            pending: true,
+        },
         history: true,
         schema: {
             generation: true,

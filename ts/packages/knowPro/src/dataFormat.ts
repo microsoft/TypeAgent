@@ -78,9 +78,11 @@ export interface IConversation<TMeta extends IKnowledgeSource = any> {
     relatedTermsIndex?: ITermToRelatedTermsIndex | undefined;
 }
 
+export type MessageIndex = number;
+
 export interface TextLocation {
     // the index of the message
-    messageIndex: number;
+    messageIndex: MessageIndex;
     // the index of the chunk
     chunkIndex?: number;
     // the index of the character within the chunk
@@ -109,6 +111,14 @@ export type Term = {
      * Optional additional score to use when this term matches
      */
     score?: number | undefined;
+};
+
+export type QueryTerm = {
+    term: Term;
+    /**
+     * These can be supplied from fuzzy synonym tables and so on
+     */
+    relatedTerms?: Term[] | undefined;
 };
 
 export interface ITermToRelatedTermsIndex {

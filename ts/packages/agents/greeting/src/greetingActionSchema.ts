@@ -24,6 +24,6 @@ export interface PersonalizedGreetingAction {
 export interface GenericGreeting {
     // The greeting response to the user such as "Top of the morning to ya!" or "Hey, how's it going?" or "What a nice day we're having, what's up!?" or "What are we going to do today?"
     // Be sure to make the greeting relevant to time of day (i.e. don't say good morning in the afternoon).
-    // you can also use greetings such as Namaste/Shalom/Bonjour or smilar.
+    // you can also use greetings such as Namaste/Shalom/Bonjour or similar.
     generatedGreeting: string;
 }
