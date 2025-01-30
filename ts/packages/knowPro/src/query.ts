@@ -314,9 +314,10 @@ export class WhereSemanticRefExpr
         );
         filtered.setMatches(
             accumulator.getMatches((match) =>
-                this.matchPredicatesOr(
+                this.evalPredicates(
                     context,
                     accumulator.queryTermMatches,
+                    this.predicates,
                     match,
                 ),
             ),
@@ -324,22 +325,22 @@ export class WhereSemanticRefExpr
         return filtered;
     }
 
-    private matchPredicatesOr(
+    private evalPredicates(
         context: QueryEvalContext,
         queryTermMatches: QueryTermAccumulator,
+        predicates: IQuerySemanticRefPredicate[],
         match: Match<SemanticRefIndex>,
     ) {
-        for (let i = 0; i < this.predicates.length; ++i) {
+        for (let i = 0; i < predicates.length; ++i) {
             const semanticRef = context.getSemanticRef(match.value);
-            if (
-                this.predicates[i].eval(context, queryTermMatches, semanticRef)
-            ) {
+            if (predicates[i].eval(context, queryTermMatches, semanticRef)) {
                 return true;
             }
         }
         return false;
     }
 }
+
 export interface IQuerySemanticRefPredicate {
     eval(
         context: QueryEvalContext,
@@ -431,19 +432,28 @@ export class ActionPredicate implements IQuerySemanticRefPredicate {
     }
 }
 
-export class ApplyTagScopeExpr implements IQueryOpExpr<SemanticRefAccumulator> {
-    constructor(public sourceExpr: IQueryOpExpr<SemanticRefAccumulator>) {}
+export class ScopeExpr implements IQueryOpExpr<SemanticRefAccumulator> {
+    constructor(
+        public sourceExpr: IQueryOpExpr<SemanticRefAccumulator>,
+        public predicates: IQuerySemanticRefPredicate[],
+    ) {}
 
     public async eval(
         context: QueryEvalContext,
     ): Promise<SemanticRefAccumulator> {
         let accumulator = await this.sourceExpr.eval(context);
         const tagScope = new TextRangeAccumulator();
-        for (const semanticRef of accumulator.getSemanticRefs(
+        for (const inScopeRef of accumulator.getSemanticRefs(
             context.semanticRefs,
-            (sr) => sr.knowledgeType === "tag",
+            (sr) =>
+                this.evalPredicates(
+                    context,
+                    accumulator.queryTermMatches,
+                    this.predicates,
+                    sr,
+                ),
         )) {
-            tagScope.addRange(semanticRef.range);
+            tagScope.addRange(inScopeRef.range);
         }
         if (tagScope.size > 0) {
             accumulator = accumulator.selectInScope(
@@ -452,6 +462,20 @@ export class ApplyTagScopeExpr implements IQueryOpExpr<SemanticRefAccumulator> {
             );
         }
         return Promise.resolve(accumulator);
+    }
+
+    private evalPredicates(
+        context: QueryEvalContext,
+        queryTermMatches: QueryTermAccumulator,
+        predicates: IQuerySemanticRefPredicate[],
+        semanticRef: SemanticRef,
+    ) {
+        for (let i = 0; i < predicates.length; ++i) {
+            if (predicates[i].eval(context, queryTermMatches, semanticRef)) {
+                return true;
+            }
+        }
+        return false;
     }
 }
 

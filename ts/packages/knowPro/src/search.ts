@@ -95,7 +95,9 @@ function createTermsMatch(
                 ? new q.ResolveRelatedTermsExpr(queryTerms)
                 : queryTerms,
         );
-    termsMatchExpr = new q.ApplyTagScopeExpr(termsMatchExpr);
+    termsMatchExpr = new q.ScopeExpr(termsMatchExpr, [
+        new q.KnowledgeTypePredicate("tag"),
+    ]);
     if (wherePredicates !== undefined && wherePredicates.length > 0) {
         termsMatchExpr = new q.WhereSemanticRefExpr(
             termsMatchExpr,
