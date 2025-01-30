@@ -16,7 +16,7 @@ import {
     CalendarAction,
     Event,
     EventReference,
-} from "./calendarActionsSchema.js";
+} from "./calendarActionsSchemaV1.js";
 import {
     getTimeRangeBasedQuery,
     getNWeeksDateRangeISO,
@@ -409,7 +409,7 @@ export async function handleCalendarAction(
                         getTimeZoneName(),
                         participantsToAdd,
                     );
-                    if (eventid != undefined) {
+                    if (eventid !== undefined) {
                         const localId = addCalendarEntity(
                             calendarContext,
                             eventid,
