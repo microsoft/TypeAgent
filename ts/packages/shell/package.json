@@ -25,6 +25,7 @@
     "prettier": "prettier --check . --ignore-path ../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
     "shell:test": "npx playwright test",
+    "shell:smoke": "npx playwright test simple.spec.ts",
     "start": "npm run build:electron:cjs && electron-vite preview",
     "typecheck": "concurrently npm:typecheck:node npm:typecheck:web",
     "typecheck:node": "tsc -p tsconfig.node.json",

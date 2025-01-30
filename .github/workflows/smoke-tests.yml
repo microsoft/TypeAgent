@@ -111,7 +111,7 @@ jobs:
         if: ${{ runner.os == 'windows' }}
         timeout-minutes: 60
         run: |
-          npx playwright test simple.spec.ts
+          npm run shell:smoke
           rm ../../.env
         working-directory: ts/packages/shell
         continue-on-error: true
@@ -121,7 +121,7 @@ jobs:
         timeout-minutes: 60
         run: |
           Xvfb :99 -screen 0 1600x1200x24 & export DISPLAY=:99
-          npx playwright test simple.spec.ts
+          npm run shell:smoke
           rm ../../.env          
         working-directory: ts/packages/shell
         continue-on-error: true
