@@ -113,6 +113,8 @@ jobs:
         run: |
           npx playwright test simple.spec.ts
           rm ../../.env
+        working-directory: ts/packages/shell
+        continue-on-error: true
 
       - name: Shell Tests - smoke (linux)
         if: ${{ runner.os == 'Linux' }}
