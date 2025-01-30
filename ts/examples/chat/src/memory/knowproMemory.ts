@@ -165,6 +165,7 @@ export async function createKnowproCommands(
             description: "Search current knowPro conversation by terms",
             options: {
                 maxToDisplay: argNum("Maximum matches to display", 25),
+                type: arg("Knowledge type"),
             },
         };
     }
@@ -188,9 +189,10 @@ export async function createKnowproCommands(
                 `Searching ${conversation.nameTag}...`,
             );
 
-            const matches = await kp.searchTermsInConversation(
+            const matches = await kp.searchConversation(
                 conversation,
                 terms,
+                namedArgs.type,
             );
             if (matches === undefined || matches.size === 0) {
                 context.printer.writeLine("No matches");

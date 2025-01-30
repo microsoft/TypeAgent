@@ -78,9 +78,11 @@ export interface IConversation<TMeta extends IKnowledgeSource = any> {
     relatedTermsIndex?: ITermToRelatedTermsIndex | undefined;
 }
 
+export type MessageIndex = number;
+
 export interface TextLocation {
     // the index of the message
-    messageIndex: number;
+    messageIndex: MessageIndex;
     // the index of the chunk
     chunkIndex?: number;
     // the index of the character within the chunk
