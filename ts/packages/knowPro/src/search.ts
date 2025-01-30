@@ -74,8 +74,7 @@ class SearchQueryBuilder {
         filter?: SearchFilter,
         maxMatches?: number,
     ) {
-        this.prepareTerms(terms);
-        this.prepareFilter(filter);
+        this.prepareTerms(terms, filter);
 
         let select = this.compileSelect(terms, filter);
         const query = new q.SelectTopNKnowledgeGroupExpr(
@@ -122,13 +121,37 @@ class SearchQueryBuilder {
         return predicates;
     }
 
-    private prepareTerms(queryTerms: QueryTerm[]): void {
-        queryTerms.forEach((queryTerm) => {
+    private prepareTerms(queryTerms: QueryTerm[], filter?: SearchFilter): void {
+        const termText = new Set<string>();
+        let i = 0;
+        // Prepare terms and remove duplicates
+        while (i < queryTerms.length) {
+            const queryTerm = queryTerms[i];
             this.prepareTerm(queryTerm.term);
-            if (queryTerm.relatedTerms !== undefined) {
-                queryTerm.relatedTerms.forEach((t) => this.prepareTerm(t));
+            if (termText.has(queryTerm.term.text)) {
+                // Duplicate
+                queryTerms.splice(i, 1);
+            } else {
+                if (queryTerm.relatedTerms !== undefined) {
+                    queryTerm.relatedTerms.forEach((t) => this.prepareTerm(t));
+                }
+                termText.add(queryTerm.term.text);
+                ++i;
             }
-        });
+        }
+        this.prepareFilter(filter);
+        // Ensure that all filter name values are also query terms
+        if (filter !== undefined && filter.propertiesToMatch) {
+            for (const key of Object.keys(filter.propertiesToMatch)) {
+                if (!termText.has(key)) {
+                    queryTerms.push({ term: { text: key } });
+                }
+                const value = filter.propertiesToMatch[key];
+                if (!termText.has(value)) {
+                    queryTerms.push({ term: { text: value } });
+                }
+            }
+        }
     }
 
     private prepareTerm(term: Term) {
