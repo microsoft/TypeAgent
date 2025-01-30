@@ -23,7 +23,7 @@ test("simple", { tag: "@smoke" }, async ({}, testInfo) => {
     console.log(`Running test '${testInfo.title}`);
 
     const app: ElectronApplication = await electron.launch({
-        args: [getAppPath(), "--no-sandbox"],
+        args: [getAppPath()],
     });
     const mainWindow: Page = await app.firstWindow();
     await mainWindow.bringToFront();
