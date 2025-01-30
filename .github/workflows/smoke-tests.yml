@@ -21,7 +21,6 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  pull-requests: read
   contents: read
   id-token: write
 
