@@ -106,16 +106,18 @@ async function getMainWindow(app: ElectronApplication): Promise<Page> {
     do {
 
         try {
-            await app.windows[app.windows.length - 1].waitForLoadState("domcontentloaded");
+            if (app.windows[app.windows.length - 1] !== undefined) {
+                await app.windows[app.windows.length - 1].waitForLoadState("domcontentloaded");
 
-            return app.windows[app.windows.length - 1];
+                return app.windows[app.windows.length - 1];
+            }
+
+            console.log("waiting...");
+            await new Promise((resolve) => setTimeout(resolve, 1000))
+
         } catch (e) {
             console.log(e);
-           
-            await new Promise((resolve) => setTimeout(resolve, 1000))
         }
-
-        console.log("waiting...");
     } while (app.windows[app.windows.length - 1] === undefined && ++index < 30);
 
     throw "Unable to find window...timeout";
