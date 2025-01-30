@@ -30,8 +30,11 @@ jobs:
     continue-on-error: true
     steps:
       - if: runner.os == 'Linux'
+        # https://github.com/microsoft/playwright/issues/34251 - sysctl command
         run: |
           sudo apt install libsecret-1-0
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 
+
       - name: Setup Git LF
         run: |
           git config --global core.autocrlf false
