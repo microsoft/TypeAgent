@@ -35,6 +35,7 @@ import { handleInstacartAction } from "./instacart/planHandler.mjs";
 
 import { processWebAgentMessage, WebAgentChannels } from "./webTypeAgent.mjs";
 import { isWebAgentMessage } from "../common/webAgentMessageTypes.mjs";
+import { handleSchemaDiscoveryAction } from "./discovery/actionHandler.mjs";
 
 export function instantiate(): AppAgent {
   return {
@@ -209,6 +210,12 @@ async function executeBrowserAction(
         );
 
         // return createActionResult(instacartResult);
+      } else if (action.translatorName === "browser.schemaFinder") {
+        const discoveryResult = await handleSchemaDiscoveryAction(
+          action,
+          context,
+        );
+        return createActionResult(discoveryResult);
       }
 
       await connector?.sendActionToBrowser(action, schemaName);
