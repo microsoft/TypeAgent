@@ -101,9 +101,24 @@ async function getMainWindow(app: ElectronApplication): Promise<Page> {
     }
 
     // since there are only two windows we know that if the first one isn't the right one we can just return the second one
-    await app.windows[app.windows.length - 1].waitForLoadState("domcontentloaded");
-    
-    return app.windows[app.windows.length - 1];
+    let ww = app.windows[app.windows.length - 1];
+    let index = 0; 
+    do {
+
+        try {
+            await app.windows[app.windows.length - 1].waitForLoadState("domcontentloaded");
+
+            return app.windows[app.windows.length - 1];
+        } catch (e) {
+            console.log(e);
+           
+            await new Promise((resolve) => setTimeout(resolve, 1000))
+        }
+
+        console.log("waiting...");
+    } while (app.windows[app.windows.length - 1] === undefined && ++index < 30);
+
+    throw "Unable to find window...timeout";
 }
 
 /**
