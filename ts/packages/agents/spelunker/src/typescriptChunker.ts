@@ -48,17 +48,23 @@ export async function chunkifyTypeScriptFiles(
 
         // TODO: Also do nested functions, and classes, and interfaces, and modules.
         // TODO: For nested things, remove their text from the parent.
-        function getFunctionsAndClasses(): (
+        function getChunkableStatements(): (
             | ts.FunctionDeclaration
             | ts.ClassDeclaration
+            | ts.InterfaceDeclaration
+            | ts.TypeAliasDeclaration
         )[] {
             return tsCode.getStatements(
                 sourceFile,
-                (s) => ts.isFunctionDeclaration(s) || ts.isClassDeclaration(s),
+                (s) =>
+                    ts.isFunctionDeclaration(s) ||
+                    ts.isClassDeclaration(s) ||
+                    ts.isInterfaceDeclaration(s) ||
+                    ts.isTypeAliasDeclaration(s),
             );
         }
 
-        const things = getFunctionsAndClasses();
+        const things = getChunkableStatements();
         for (const thing of things) {
             const treeName = ts.SyntaxKind[thing.kind];
             const codeName = tsCode.getStatementName(thing) ?? "";
