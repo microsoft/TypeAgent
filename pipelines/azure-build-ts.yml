@@ -31,7 +31,7 @@ jobs:
     displayName: "Build TypeScript Project"
     strategy:
       matrix:
-        node_20:
+        node_22:
           nodeVersion: "22"
     steps:
       - checkout: TypeAgent-GH
@@ -70,8 +70,8 @@ jobs:
         workingDirectory: $(workingDirectory)
 
       - script: |
-          npm run test
-        displayName: "Run Tests"
+          npm run test:local
+        displayName: "Run Tests (Local)"
         workingDirectory: $(workingDirectory)
 
       - script: |
