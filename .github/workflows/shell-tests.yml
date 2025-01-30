@@ -80,7 +80,7 @@ jobs:
       - name: Shell Tests
         timeout-minutes: 60
         run: |
-          npx playwright test
+          npm run shell:test
           rm ../../.env
         working-directory: ts/packages/shell
       - uses: actions/upload-artifact@v4
