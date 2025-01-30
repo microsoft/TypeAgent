@@ -200,16 +200,25 @@ async function createWindow() {
 
     mainWindow.on("resize", setContentSize);
 
+    const contentLoadP: Promise<void>[] = [];
     // HMR for renderer base on electron-vite cli.
     // Load the remote URL for development or the local html file for production.
     if (is.dev && process.env["ELECTRON_RENDERER_URL"]) {
-        chatView.webContents.loadURL(process.env["ELECTRON_RENDERER_URL"]);
+        contentLoadP.push(
+            chatView.webContents.loadURL(process.env["ELECTRON_RENDERER_URL"]),
+        );
     } else {
-        chatView.webContents.loadURL(join(__dirname, "../renderer/index.html"));
+        contentLoadP.push(
+            chatView.webContents.loadFile(
+                join(__dirname, "../renderer/index.html"),
+            ),
+        );
     }
 
-    mainWindow.webContents.loadURL(
-        join(__dirname, "../renderer/viewHost.html"),
+    contentLoadP.push(
+        mainWindow.webContents.loadFile(
+            join(__dirname, "../renderer/viewHost.html"),
+        ),
     );
 
     mainWindow.removeMenu();
@@ -340,7 +349,7 @@ async function createWindow() {
         };
     });
 
-    return { mainWindow, chatView };
+    return { mainWindow, chatView, contentLoadP };
 }
 
 /**
@@ -576,7 +585,7 @@ async function initialize() {
 
     await initializeSpeech();
 
-    const { mainWindow, chatView } = await createWindow();
+    const { mainWindow, chatView, contentLoadP } = await createWindow();
 
     let settingSummary: string = "";
     function updateSummary(dispatcher: Dispatcher) {
@@ -599,6 +608,7 @@ async function initialize() {
     const dispatcherP = initializeDispatcher(chatView, updateSummary);
 
     ipcMain.on("dom ready", async () => {
+        debugShell("Showing window", performance.now() - time);
         mainWindow.show();
 
         // Send settings asap
@@ -683,6 +693,7 @@ async function initialize() {
 
         server.listen(pipePath);
     }
+    return Promise.all(contentLoadP);
 }
 
 app.whenReady()
