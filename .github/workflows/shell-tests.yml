@@ -85,7 +85,7 @@ jobs:
         if: ${{ runner.os == 'windows' }}
         timeout-minutes: 60
         run: |
-          npm run shell:smoke
+          npm run shell:test
           rm ../../.env
         working-directory: ts/packages/shell
         continue-on-error: true
@@ -93,12 +93,15 @@ jobs:
       - name: Shell Tests (linux)
         if: ${{ runner.os == 'Linux' }}
         timeout-minutes: 60
+        # https://github.com/microsoft/playwright/issues/34251 - sysctl command
         run: |
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 
           Xvfb :99 -screen 0 1600x1200x24 & export DISPLAY=:99
-          npm run shell:smoke
+          npm run shell:test
           rm ../../.env          
         working-directory: ts/packages/shell
         continue-on-error: true
+
       
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}

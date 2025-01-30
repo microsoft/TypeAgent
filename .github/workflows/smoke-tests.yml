@@ -41,11 +41,9 @@ jobs:
 
     runs-on: ${{ matrix.os }}
     steps:
-      - if: runner.os == 'Linux'
-        # https://github.com/microsoft/playwright/issues/34251 - sysctl command
+      - if: runner.os == 'Linux'        
         run: |
           sudo apt install libsecret-1-0
-          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 
 
       - name: Setup Git LF
         run: |
@@ -122,7 +120,9 @@ jobs:
       - name: Shell Tests - smoke (linux)
         if: ${{ runner.os == 'Linux' }}
         timeout-minutes: 60
+        # https://github.com/microsoft/playwright/issues/34251 - sysctl command
         run: |
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 
           Xvfb :99 -screen 0 1600x1200x24 & export DISPLAY=:99
           npm run shell:smoke
           rm ../../.env          
