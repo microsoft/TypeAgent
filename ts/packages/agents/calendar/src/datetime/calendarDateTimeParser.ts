@@ -217,43 +217,51 @@ export function calcEndDateTime(
     const errors: string[] = [];
     const result: DateTimeParseResult = { success: false, errors };
 
-    const start = new Date(startDateTime);
-    if (isNaN(start.getTime())) {
+    const endDate = new Date(startDateTime);
+    if (isNaN(endDate.getTime())) {
         errors.push("Invalid start datetime format.");
         return result;
     }
 
     const durationRegex =
-        /(?<days>\d+d)?(?<hours>\d+h)?(?<minutes>\d+m)?(?<seconds>\d+s)?/;
-    const match = duration.match(durationRegex);
-    if (!match || !match.groups) {
+        /(?:(?<days>[+-]?\d+)d)?\s*(?:(?<hours>[+-]?\d+)h)?\s*(?:(?<minutes>[+-]?\d+)m)?\s*(?:(?<seconds>[+-]?\d+)s)?/g;
+    const matches = [...duration.matchAll(durationRegex)];
+
+    if (matches.length === 0) {
         errors.push("Invalid duration format.");
         return result;
     }
 
-    const days = parseInt(match.groups.days || "0", 10);
-    const hours = parseInt(match.groups.hours || "0", 10);
-    const minutes = parseInt(match.groups.minutes || "0", 10);
-    const seconds = parseInt(match.groups.seconds || "0", 10);
+    let days = 0,
+        hours = 0,
+        minutes = 0,
+        seconds = 0;
+    matches.forEach(({ groups }) => {
+        if (!groups) return;
+        if (groups.days) days = parseInt(groups.days, 10);
+        if (groups.hours) hours = parseInt(groups.hours, 10);
+        if (groups.minutes) minutes = parseInt(groups.minutes, 10);
+        if (groups.seconds) seconds = parseInt(groups.seconds, 10);
+    });
 
     useUTC
-        ? start.setUTCDate(start.getUTCDate() + days)
-        : start.setDate(start.getDate() + days);
+        ? endDate.setUTCDate(endDate.getUTCDate() + days)
+        : endDate.setDate(endDate.getDate() + days);
     useUTC
-        ? start.setUTCHours(start.getUTCHours() + hours)
-        : start.setHours(start.getHours() + hours);
+        ? endDate.setUTCHours(endDate.getUTCHours() + hours)
+        : endDate.setHours(endDate.getHours() + hours);
     useUTC
-        ? start.setUTCMinutes(start.getUTCMinutes() + minutes)
-        : start.setMinutes(start.getMinutes() + minutes);
+        ? endDate.setUTCMinutes(endDate.getUTCMinutes() + minutes)
+        : endDate.setMinutes(endDate.getMinutes() + minutes);
     useUTC
-        ? start.setUTCSeconds(start.getUTCSeconds() + seconds)
-        : start.setSeconds(start.getSeconds() + seconds);
+        ? endDate.setUTCSeconds(endDate.getUTCSeconds() + seconds)
+        : endDate.setSeconds(endDate.getSeconds() + seconds);
 
     return {
         success: true,
         parsedDateTime: fLocaleTime
-            ? start.toLocaleString()
-            : start.toISOString(),
+            ? endDate.toLocaleString()
+            : endDate.toISOString(),
     };
 }
 
