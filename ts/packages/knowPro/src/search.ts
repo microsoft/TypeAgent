@@ -67,17 +67,6 @@ export async function searchConversationExact(
 }
 
 class SearchQueryBuilder {
-    static reservedPropertyNames = new Set<string>([
-        "name",
-        "type",
-        "topic",
-        "tag",
-        "verb",
-        "subject",
-        "object",
-        "indirectObject ",
-    ]);
-
     constructor(public conversation: IConversation) {}
 
     public compile(
@@ -134,6 +123,7 @@ class SearchQueryBuilder {
 
     private prepareTerms(queryTerms: QueryTerm[], filter?: SearchFilter): void {
         const termText = new Set<string>();
+        termText.add("*");
         let i = 0;
         // Prepare terms and remove duplicates
         while (i < queryTerms.length) {
@@ -180,6 +170,17 @@ class SearchQueryBuilder {
             }
         }
     }
+
+    static reservedPropertyNames = new Set<string>([
+        "name",
+        "type",
+        "topic",
+        "tag",
+        "verb",
+        "subject",
+        "object",
+        "indirectObject ",
+    ]);
 }
 
 function toGroupedSearchResults(

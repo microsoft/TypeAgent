@@ -165,7 +165,7 @@ export async function createKnowproCommands(
             description: "Search current knowPro conversation by terms",
             options: {
                 maxToDisplay: argNum("Maximum matches to display", 25),
-                type: arg("Knowledge type"),
+                ktype: arg("Knowledge type"),
             },
         };
     }
@@ -211,10 +211,10 @@ export async function createKnowproCommands(
     }
 
     function filterFromArgs(namedArgs: NamedArgs) {
-        let filter: kp.SearchFilter = { type: namedArgs.type };
+        let filter: kp.SearchFilter = { type: namedArgs.ktype };
         let argCopy = { ...namedArgs };
         delete argCopy.maxToDisplay;
-        delete argCopy.type;
+        delete argCopy.ktype;
         let keys = Object.keys(argCopy);
         if (keys.length > 0) {
             for (const key of keys) {

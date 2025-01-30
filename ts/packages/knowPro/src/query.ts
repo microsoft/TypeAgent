@@ -527,7 +527,7 @@ function matchText(
     }
     return (
         expected === "*" ||
-        expected === actual ||
+        collections.stringEquals(expected, actual, false) ||
         termMatches.hasRelatedMatch(expected, actual)
     );
 }
