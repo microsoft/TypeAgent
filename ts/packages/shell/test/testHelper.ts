@@ -2,14 +2,11 @@
 // Licensed under the MIT License.
 
 import {
-    _electron,
     _electron as electron,
     ElectronApplication,
     Locator,
     Page,
-    TestDetails,
 } from "@playwright/test";
-import { profile } from "node:console";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
@@ -136,8 +133,13 @@ export async function exitApplication(page: Page): Promise<void> {
  * Gets the shell package path.
  * @returns The root path to the project containing the playwright configuration
  */
-function getAppPath(): string {
-    return new URL("..", import.meta.url).toString();
+export function getAppPath(): string {
+    const packagePath = fileURLToPath(new URL("..", import.meta.url));
+    const appPath = packagePath.endsWith(path.sep)
+        ? packagePath.slice(0, -1)
+        : packagePath;
+
+    return appPath;
 }
 
 /**
@@ -146,7 +148,6 @@ function getAppPath(): string {
  */
 export function getLaunchArgs(): string[] {
     const appPath = getAppPath();
-    console.log(appPath);
     // Ubuntu 24.04+ needs --no-sandbox, see https://github.com/electron/electron/issues/18265
     return os.platform() === "linux" ? [appPath, "--no-sandbox"] : [appPath];
 }
