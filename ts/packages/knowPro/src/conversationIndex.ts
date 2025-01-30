@@ -19,20 +19,17 @@ import { openai } from "aiclient";
 import { Result } from "typechat";
 import { async } from "typeagent";
 
-function addFacet(
-    facet: conversation.Facet | undefined,
-    refIndex: number,
-    semanticRefIndex: ITermToSemanticRefIndex,
-) {
-    if (facet !== undefined) {
-        semanticRefIndex.addTerm(facet.name, refIndex);
-        if (facet.value !== undefined) {
-            semanticRefIndex.addTerm(
-                conversation.knowledgeValueToString(facet.value),
-                refIndex,
-            );
-        }
-    }
+function createKnowledgeModel() {
+    const chatModelSettings = openai.apiSettingsFromEnv(
+        openai.ModelType.Chat,
+        undefined,
+        "GPT_4_O",
+    );
+    chatModelSettings.retryPauseMs = 10000;
+    const chatModel = openai.createJsonChatModel(chatModelSettings, [
+        "chatExtractor",
+    ]);
+    return chatModel;
 }
 
 function textLocationFromLocation(
@@ -52,17 +49,20 @@ function textRangeFromLocation(
     };
 }
 
-function createKnowledgeModel() {
-    const chatModelSettings = openai.apiSettingsFromEnv(
-        openai.ModelType.Chat,
-        undefined,
-        "GPT_4_O",
-    );
-    chatModelSettings.retryPauseMs = 10000;
-    const chatModel = openai.createJsonChatModel(chatModelSettings, [
-        "chatExtractor",
-    ]);
-    return chatModel;
+function addFacet(
+    facet: conversation.Facet | undefined,
+    refIndex: number,
+    semanticRefIndex: ITermToSemanticRefIndex,
+) {
+    if (facet !== undefined) {
+        semanticRefIndex.addTerm(facet.name, refIndex);
+        if (facet.value !== undefined) {
+            semanticRefIndex.addTerm(
+                conversation.knowledgeValueToString(facet.value),
+                refIndex,
+            );
+        }
+    }
 }
 
 export function addEntityToIndex(

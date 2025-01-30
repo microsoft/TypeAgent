@@ -166,7 +166,6 @@ export async function createKnowproCommands(
             options: {
                 maxToDisplay: argNum("Maximum matches to display", 25),
                 type: arg("Knowledge type"),
-                speaker: arg("Speaker"),
             },
         };
     }
@@ -190,10 +189,11 @@ export async function createKnowproCommands(
                 `Searching ${conversation.nameTag}...`,
             );
 
-            const matches = await kp.searchConversation(conversation, terms, {
-                type: namedArgs.type,
-                speaker: namedArgs.speaker,
-            });
+            const matches = await kp.searchConversation(
+                conversation,
+                terms,
+                filterFromArgs(namedArgs),
+            );
             if (matches === undefined || matches.size === 0) {
                 context.printer.writeLine("No matches");
                 return;
@@ -208,6 +208,26 @@ export async function createKnowproCommands(
             ``;
             context.printer.writeError("Conversation is not indexed");
         }
+    }
+
+    function filterFromArgs(namedArgs: NamedArgs) {
+        let filter: kp.SearchFilter = { type: namedArgs.type };
+        let argCopy = { ...namedArgs };
+        delete argCopy.maxToDisplay;
+        delete argCopy.type;
+        let keys = Object.keys(argCopy);
+        if (keys.length > 0) {
+            for (const key of keys) {
+                const value = argCopy[key];
+                if (typeof value === "function") {
+                    delete argCopy[key];
+                }
+            }
+            if (Object.keys(argCopy).length > 0) {
+                filter.propertiesToMatch = argCopy;
+            }
+        }
+        return filter;
     }
 
     function entitiesDef(): CommandMetadata {

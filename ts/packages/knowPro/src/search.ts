@@ -17,7 +17,7 @@ export type SearchResult = {
 
 export type SearchFilter = {
     type?: KnowledgeType;
-    speaker?: string;
+    propertiesToMatch?: Record<string, string>;
 };
 /**
  * Searches conversation for terms
@@ -36,15 +36,10 @@ export async function searchConversation(
     if (!q.isConversationSearchable(conversation)) {
         return undefined;
     }
-
-    const context = new q.QueryEvalContext(conversation);
-    const query = createTermSearchQuery(
-        conversation,
-        terms,
-        filter,
-        maxMatches,
-    );
-    return toGroupedSearchResults(await query.eval(context));
+    const queryBuilder = new SearchQueryBuilder(conversation);
+    const query = queryBuilder.compile(terms, filter, maxMatches);
+    const queryResults = await query.eval(new q.QueryEvalContext(conversation));
+    return toGroupedSearchResults(queryResults);
 }
 
 export async function searchConversationExact(
@@ -70,55 +65,62 @@ export async function searchConversationExact(
     };
 }
 
-function createTermSearchQuery(
-    conversation: IConversation,
-    terms: QueryTerm[],
-    filter?: SearchFilter,
-    maxMatches?: number,
-    minHitCount?: number,
-) {
-    let where: q.IQuerySemanticRefPredicate[] | undefined;
-    if (filter !== undefined) {
-        where = [];
-        if (filter.type) {
-            where.push(new q.KnowledgeTypePredicate(filter.type));
-        }
-        if (filter.speaker) {
-            where.push(new q.ActionPredicate(filter.speaker));
-        }
-    }
-    const query = new q.SelectTopNKnowledgeGroupExpr(
-        new q.GroupByKnowledgeTypeExpr(
-            createTermsMatch(conversation, terms, where),
-        ),
-        maxMatches,
-        minHitCount,
-    );
-    return query;
-}
+class SearchQueryBuilder {
+    constructor(public conversation: IConversation) {}
 
-function createTermsMatch(
-    conversation: IConversation,
-    terms: QueryTerm[],
-    wherePredicates?: q.IQuerySemanticRefPredicate[] | undefined,
-) {
-    const queryTerms = new q.QueryTermsExpr(terms);
-    let termsMatchExpr: q.IQueryOpExpr<SemanticRefAccumulator> =
-        new q.TermsMatchExpr(
-            conversation.relatedTermsIndex !== undefined
+    public compile(
+        terms: QueryTerm[],
+        filter?: SearchFilter,
+        maxMatches?: number,
+    ) {
+        const query = new q.SelectTopNKnowledgeGroupExpr(
+            new q.GroupByKnowledgeTypeExpr(this.compileSelect(terms, filter)),
+            maxMatches,
+        );
+        return query;
+    }
+
+    private compileSelect(terms: QueryTerm[], filter?: SearchFilter) {
+        let termsMatchExpr = this.compileTermLookup(terms);
+        // Always apply "tag match" scope... all text ranges that matched tags.. are in scope
+        termsMatchExpr = new q.ScopeExpr(termsMatchExpr, [
+            new q.KnowledgeTypePredicate("tag"),
+        ]);
+        if (filter !== undefined) {
+            // Where clause
+            termsMatchExpr = new q.WhereSemanticRefExpr(
+                termsMatchExpr,
+                this.compileFilter(filter),
+            );
+        }
+        return termsMatchExpr;
+    }
+
+    private compileTermLookup(
+        terms: QueryTerm[],
+    ): q.IQueryOpExpr<SemanticRefAccumulator> {
+        const queryTerms = new q.QueryTermsExpr(terms);
+        return new q.TermsMatchExpr(
+            this.conversation.relatedTermsIndex !== undefined
                 ? new q.ResolveRelatedTermsExpr(queryTerms)
                 : queryTerms,
         );
-    termsMatchExpr = new q.ScopeExpr(termsMatchExpr, [
-        new q.KnowledgeTypePredicate("tag"),
-    ]);
-    if (wherePredicates !== undefined && wherePredicates.length > 0) {
-        termsMatchExpr = new q.WhereSemanticRefExpr(
-            termsMatchExpr,
-            wherePredicates,
-        );
     }
-    return termsMatchExpr;
+
+    private compileFilter(
+        filter: SearchFilter,
+    ): q.IQuerySemanticRefPredicate[] {
+        let predicates: q.IQuerySemanticRefPredicate[] = [];
+        if (filter.type) {
+            predicates.push(new q.KnowledgeTypePredicate(filter.type));
+        }
+        if (filter.propertiesToMatch) {
+            predicates.push(
+                new q.PropertyMatchPredicate(filter.propertiesToMatch),
+            );
+        }
+        return predicates;
+    }
 }
 
 function toGroupedSearchResults(
