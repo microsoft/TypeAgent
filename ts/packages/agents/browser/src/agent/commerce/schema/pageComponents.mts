@@ -27,7 +27,7 @@ export type ProductDetailsHeroTile = {
 
   storeName?: string;
   // The physical location of the goods, such as the Aisle, Bay or Shelf
-  // Only provide this infomration if it present on the page
+  // Only provide this information if it present on the page
   physicalLocationInStore?: string;
   numberInStock?: string;
 };

@@ -366,7 +366,7 @@ async function getTabAnnotatedScreenshot(downloadImage: boolean) {
             });
 
         const img = await loadImage(dataUrl);
-        // pad image with 5 px all aaround?
+        // pad image with 5 px all around?
         canvas.width = img.width + 10;
         canvas.height = img.height + 10;
 
@@ -497,14 +497,14 @@ async function getTabAnnotatedScreenshot(downloadImage: boolean) {
         return canvas.toDataURL();
     };
 
-    const annoatationResults = await chrome.scripting.executeScript({
+    const annotationResults = await chrome.scripting.executeScript({
         func: annotate,
         target: { tabId: targetTab.id! },
         args: [dataUrl, boundingBoxes],
     });
 
-    if (annoatationResults) {
-        const annotatedScreen = annoatationResults[0];
+    if (annotationResults) {
+        const annotatedScreen = annotationResults[0];
         if (downloadImage) {
             await downloadImageAsFile(
                 targetTab,
@@ -1444,8 +1444,8 @@ chrome.runtime.onMessageExternal.addListener(
         async () => {
             switch (message.type) {
                 case "crosswordAction": {
-                    const respose = await runBrowserAction(message.body);
-                    sendResponse(respose);
+                    const response = await runBrowserAction(message.body);
+                    sendResponse(response);
                     break;
                 }
             }

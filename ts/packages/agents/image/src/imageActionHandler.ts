@@ -149,7 +149,7 @@ async function handlePhotoAction(
                 });
                 result = createCarouselForImages(urls, captions);
 
-                // save the generated image in the session store and add the image to the knoweledge store
+                // save the generated image in the session store and add the image to the knowledge store
                 const id = randomUUID();
                 const fileName = `../generated_images/${id.toString()}.png`;
                 if (

@@ -620,7 +620,7 @@ export async function handleCalendarAction(
 
                 if (eventId && typeof eventId === "string") {
                     // todo: check if the event is in the mapGraphEntity, add it if not
-                    // the event won't be in the context if it's an exisitng event in the calendar
+                    // the event won't be in the context if it's an existing event in the calendar
                     const localId = updateCalendarEntity(
                         calendarContext,
                         eventId,
@@ -629,7 +629,7 @@ export async function handleCalendarAction(
 
                     debug(
                         chalk.bgCyanBright(
-                            `Successfully added pariticipant(s) for (local eventid:${localId}) event:${eventId}`,
+                            `Successfully added participant(s) for (local eventid:${localId}) event:${eventId}`,
                         ),
                     );
 

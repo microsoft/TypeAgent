@@ -283,7 +283,7 @@ async function handleForwardOrReplyAction(
                     if (res) {
                         return "<div>Email forwarded ...</div>";
                     } else {
-                        return "<div>Error encountered when frowarding email!</div>";
+                        return "<div>Error encountered when forwarding email!</div>";
                     }
                 }
             }

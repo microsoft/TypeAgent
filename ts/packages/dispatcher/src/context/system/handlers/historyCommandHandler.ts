@@ -59,7 +59,7 @@ export class HistoryDeleteCommandHandler implements CommandHandler {
 
         if (index < 0 || index >= systemContext.chatHistory.entries.length) {
             throw new Error(
-                `The supplied index (${index}) is outside the range of available indicies (0, ${systemContext.chatHistory.entries.length})`,
+                `The supplied index (${index}) is outside the range of available indices (0, ${systemContext.chatHistory.entries.length})`,
             );
         } else if (isNaN(index)) {
             throw new Error(
