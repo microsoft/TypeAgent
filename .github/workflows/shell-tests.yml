@@ -30,13 +30,10 @@ jobs:
         version: [20]
 
     runs-on: ${{ matrix.os }}
-    continue-on-error: true
     steps:
       - if: runner.os == 'Linux'
-        # https://github.com/microsoft/playwright/issues/34251 - sysctl command
         run: |
           sudo apt install libsecret-1-0
-          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 
 
       - name: Setup Git LF
         run: |
@@ -98,7 +95,7 @@ jobs:
         if: ${{ runner.os == 'windows' }}
         timeout-minutes: 60
         run: |
-          npx playwright test
+          npm run shell:test
           rm ../../.env
         working-directory: ts/packages/shell
         continue-on-error: true
