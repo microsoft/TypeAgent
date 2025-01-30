@@ -12,7 +12,7 @@ on:
   # pull_request:
   #   branches: ["main"]
   pull_request_target:
-    branches: ["main"]    
+    branches: ["main"]
   merge_group:
     branches: ["main"]
 
@@ -31,7 +31,7 @@ env:
 
 jobs:
   shell_and_cli:
-    #environment: ${{ github.event_name == 'pull_request_target' && 'development-fork' || 'development' }}      # required for federated credentials 
+    #environment: ${{ github.event_name == 'pull_request_target' && 'development-fork' || 'development' }}      # required for federated credentials
     environment: development-fork
     strategy:
       fail-fast: false
@@ -42,7 +42,7 @@ jobs:
 
     runs-on: ${{ matrix.os }}
     steps:
-      - if: runner.os == 'Linux'        
+      - if: runner.os == 'Linux'
         run: |
           sudo apt install libsecret-1-0
 
@@ -54,9 +54,9 @@ jobs:
         uses: actions/checkout@v4
 
       - if: ${{ github.event_name == 'pull_request_target'}}
-        uses: actions/checkout@v4 
+        uses: actions/checkout@v4
         with:
-            ref: ${{ github.event.pull_request.head.sha }}      
+          ref: ${{ github.event.pull_request.head.sha }}
 
       - uses: dorny/paths-filter@v3
         id: filter
@@ -114,33 +114,18 @@ jobs:
         timeout-minutes: 60
         run: |
           npm run shell:smoke
-          rm ../../.env
         working-directory: ts/packages/shell
         continue-on-error: true
 
       - name: Shell Tests - smoke (linux)
         if: ${{ runner.os == 'Linux' }}
         timeout-minutes: 60
-        # https://github.com/microsoft/playwright/issues/34251 - sysctl command
         run: |
-          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 
           Xvfb :99 -screen 0 1600x1200x24 & export DISPLAY=:99
           npm run shell:smoke
-          rm ../../.env          
         working-directory: ts/packages/shell
         continue-on-error: true
 
-      # - name: Shell Tests - smoke (linux)
-      #   if: ${{ runner.os == 'Linux' }}
-      #   timeout-minutes: 60
-      #   # https://github.com/microsoft/playwright/issues/34251 - sysctl command
-      #   run: |
-      #     sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 
-      #     xvfb-run --auto-servernum --server-args="-screen 0 16001200x24" -- npm run shell:smoke
-      #     rm ../../.env          
-      #   working-directory: ts/packages/shell
-      #   continue-on-error: true        
-      
       - name: Live Tests
         if: ${{ runner.os == 'linux' }}
         timeout-minutes: 60
@@ -148,3 +133,9 @@ jobs:
           npm run test:live
         working-directory: ts
         continue-on-error: true
+
+      - name: Clean up Keys
+        run: |
+          rm ./.env
+        working-directory: ts
+        if: always()

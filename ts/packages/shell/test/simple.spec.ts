@@ -11,23 +11,24 @@ import test, {
 import {
     exitApplication,
     getAppPath,
+    getLaunchArgs,
     sendUserRequestAndWaitForResponse,
     startShell,
 } from "./testHelper";
-
-test("dummy", async () => {
-    // do nothing
-});
+import { fileURLToPath } from "node:url";
 
 test("simple", { tag: "@smoke" }, async ({}, testInfo) => {
-    console.log(`Running test '${testInfo.title}`);
-
     const app: ElectronApplication = await electron.launch({
-        args: [getAppPath()],
+        args: getLaunchArgs(),
     });
     const mainWindow: Page = await app.firstWindow();
     await mainWindow.bringToFront();
+    expect(fileURLToPath(mainWindow.url())).toContain(getAppPath());
     await app.close();
+});
+
+test("startShell", { tag: "@smoke" }, async ({}) => {
+    await startShell();
 });
 
 test.skip("why is the sky blue?", { tag: "@smoke" }, async ({}, testInfo) => {
