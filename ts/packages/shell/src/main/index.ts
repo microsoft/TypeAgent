@@ -11,8 +11,8 @@ import {
     dialog,
     DevicePermissionHandlerHandlerDetails,
     WebContents,
-    BrowserView,
     session,
+    WebContentsView,
 } from "electron";
 import path, { join } from "node:path";
 import { electronApp, optimizer, is } from "@electron-toolkit/utils";
@@ -60,8 +60,8 @@ process.argv.forEach((arg) => {
 });
 
 let mainWindow: BrowserWindow | null = null;
-let inlineBrowserView: BrowserView | null = null;
-let chatView: BrowserView | null = null;
+let inlineWebContentView: WebContentsView | null = null;
+let chatView: WebContentsView | null = null;
 
 const inlineBrowserSize = 1000;
 const userAgent =
@@ -74,9 +74,9 @@ function setContentSize() {
         let newWidth = newBounds.width;
         let chatWidth = chatView.getBounds().width;
 
-        if (inlineBrowserView) {
+        if (inlineWebContentView) {
             let browserWidth = newWidth - chatWidth;
-            inlineBrowserView?.setBounds({
+            inlineWebContentView?.setBounds({
                 x: chatWidth + 4,
                 y: 0,
                 width: browserWidth,
@@ -140,7 +140,7 @@ async function createWindow() {
         allowFileAccess: true,
     });
 
-    chatView = new BrowserView({
+    chatView = new WebContentsView({
         webPreferences: {
             preload: join(__dirname, "../preload/index.mjs"),
             sandbox: false,
@@ -150,7 +150,7 @@ async function createWindow() {
 
     chatView.webContents.setUserAgent(userAgent);
 
-    // ensure links are openend in a new browser window
+    // ensure links are opened in a new browser window
     chatView.webContents.setWindowOpenHandler((details) => {
         // TODO: add logic for keeping things in the browser window
         shell.openExternal(details.url);
@@ -159,7 +159,7 @@ async function createWindow() {
 
     setContentSize();
 
-    mainWindow.setBrowserView(chatView);
+    mainWindow.contentView.addChildView(chatView);
 
     setupDevicePermissions(mainWindow);
 
@@ -239,8 +239,8 @@ async function createWindow() {
                 height: chatBounds?.height!,
             });
 
-            if (inlineBrowserView) {
-                inlineBrowserView?.setBounds({
+            if (inlineWebContentView) {
+                inlineWebContentView?.setBounds({
                     x: chatBounds!.width + 4,
                     y: 0,
                     width: bounds.width - newWidth - 20,
@@ -295,20 +295,20 @@ async function createWindow() {
     ): void => {
         const mainWindowSize = mainWindow?.getBounds();
 
-        if (!inlineBrowserView && mainWindowSize) {
-            inlineBrowserView = new BrowserView({
+        if (!inlineWebContentView && mainWindowSize) {
+            inlineWebContentView = new WebContentsView({
                 webPreferences: {
                     preload: join(__dirname, "../preload-cjs/webview.cjs"),
                     sandbox: false,
                 },
             });
 
-            inlineBrowserView.webContents.setUserAgent(userAgent);
+            inlineWebContentView.webContents.setUserAgent(userAgent);
 
-            mainWindow?.addBrowserView(inlineBrowserView);
+            mainWindow?.contentView.addChildView(inlineWebContentView);
 
-            setupDevToolsHandlers(inlineBrowserView);
-            setupZoomHandlers(inlineBrowserView);
+            setupDevToolsHandlers(inlineWebContentView);
+            setupZoomHandlers(inlineWebContentView);
 
             mainWindow?.setBounds({
                 width: mainWindowSize.width + inlineBrowserSize,
@@ -316,17 +316,17 @@ async function createWindow() {
             setContentSize();
         }
 
-        inlineBrowserView?.webContents.loadURL(targetUrl.toString());
+        inlineWebContentView?.webContents.loadURL(targetUrl.toString());
     };
 
     ShellSettings.getinstance().onCloseInlineBrowser = (): void => {
         const mainWindowSize = mainWindow?.getBounds();
 
-        if (inlineBrowserView && mainWindowSize) {
-            const browserBounds = inlineBrowserView.getBounds();
-            inlineBrowserView.webContents.close();
-            mainWindow?.removeBrowserView(inlineBrowserView);
-            inlineBrowserView = null;
+        if (inlineWebContentView && mainWindowSize) {
+            const browserBounds = inlineWebContentView.getBounds();
+            inlineWebContentView.webContents.close();
+            mainWindow?.contentView.removeChildView(inlineWebContentView);
+            inlineWebContentView = null;
 
             mainWindow?.setBounds({
                 width: mainWindowSize.width - browserBounds.width,
@@ -342,7 +342,7 @@ async function createWindow() {
         BrowserAgentIpc.getinstance().onMessageReceived = (
             message: WebSocketMessageV2,
         ) => {
-            inlineBrowserView?.webContents.send(
+            inlineWebContentView?.webContents.send(
                 "received-from-browser-ipc",
                 message,
             );
@@ -503,7 +503,7 @@ async function initializeSpeech() {
 }
 
 async function initializeDispatcher(
-    chatView: BrowserView,
+    chatView: WebContentsView,
     updateSummary: (dispatcher: Dispatcher) => void,
 ) {
     const clientIOChannel = createGenericChannel((message: any) => {
@@ -752,15 +752,15 @@ app.on("window-all-closed", () => {
     }
 });
 
-function zoomIn(chatView: BrowserView) {
+function zoomIn(chatView: WebContentsView) {
     setZoomLevel(chatView.webContents.zoomFactor + 0.1, chatView);
 }
 
-function zoomOut(chatView: BrowserView) {
+function zoomOut(chatView: WebContentsView) {
     setZoomLevel(chatView.webContents.zoomFactor - 0.1, chatView);
 }
 
-function setZoomLevel(zoomLevel: number, chatView: BrowserView | null) {
+function setZoomLevel(zoomLevel: number, chatView: WebContentsView | null) {
     if (zoomLevel < 0.1) {
         zoomLevel = 0.1;
     } else if (zoomLevel > 10) {
@@ -773,11 +773,11 @@ function setZoomLevel(zoomLevel: number, chatView: BrowserView | null) {
     updateZoomInTitle(chatView!);
 }
 
-function resetZoom(chatView: BrowserView) {
+function resetZoom(chatView: WebContentsView) {
     setZoomLevel(1, chatView);
 }
 
-function updateZoomInTitle(chatView: BrowserView) {
+function updateZoomInTitle(chatView: WebContentsView) {
     const prevTitle = mainWindow?.getTitle();
     if (prevTitle) {
         let summary = prevTitle.substring(0, prevTitle.indexOf("Zoom: "));
@@ -789,7 +789,7 @@ function updateZoomInTitle(chatView: BrowserView) {
 }
 
 const isMac = process.platform === "darwin";
-function setupZoomHandlers(chatView: BrowserView) {
+function setupZoomHandlers(chatView: WebContentsView) {
     chatView.webContents.on("before-input-event", (_event, input) => {
         if ((isMac ? input.meta : input.control) && input.type === "keyDown") {
             if (
@@ -816,7 +816,7 @@ function setupZoomHandlers(chatView: BrowserView) {
     });
 }
 
-function setupDevToolsHandlers(view: BrowserView) {
+function setupDevToolsHandlers(view: WebContentsView) {
     view.webContents.on("before-input-event", (_event, input) => {
         if (input.type === "keyDown") {
             if (!is.dev) {
