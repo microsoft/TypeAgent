@@ -133,7 +133,7 @@ export async function exitApplication(page: Page): Promise<void> {
  * Gets the shell package path.
  * @returns The root path to the project containing the playwright configuration
  */
-function getAppPath(): string {
+export function getAppPath(): string {
     const packagePath = fileURLToPath(new URL("..", import.meta.url));
     const appPath = packagePath.endsWith(path.sep)
         ? packagePath.slice(0, -1)
