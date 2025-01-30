@@ -10,7 +10,7 @@ import test, {
 } from "@playwright/test";
 import {
     exitApplication,
-    getAppPath,
+    getLaunchArgs,
     sendUserRequestAndWaitForResponse,
     startShell,
 } from "./testHelper";
@@ -21,9 +21,8 @@ test("dummy", async () => {
 
 test("simple", { tag: "@smoke" }, async ({}, testInfo) => {
     console.log(`Running test '${testInfo.title}`);
-
     const app: ElectronApplication = await electron.launch({
-        args: [getAppPath()],
+        args: getLaunchArgs(),
     });
     const mainWindow: Page = await app.firstWindow();
     await mainWindow.bringToFront();

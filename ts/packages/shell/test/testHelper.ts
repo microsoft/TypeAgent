@@ -13,6 +13,7 @@ import { profile } from "node:console";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import { fileURLToPath } from "node:url";
 
 const runningApplications: Map<string, ElectronApplication> = new Map<
     string,
@@ -27,7 +28,7 @@ export async function startShell(): Promise<Page> {
     process.env["INSTANCE_NAME"] =
         `test_${process.env["TEST_WORKER_INDEX"]}_${process.env["TEST_PARALLEL_INDEX"]}`;
 
-    // other related multi-instance varibles that need to be modfied to ensure we can run multiple shell instances
+    // other related multi-instance variables that need to be modified to ensure we can run multiple shell instances
     process.env["PORT"] = (
         9001 + parseInt(process.env["TEST_WORKER_INDEX"]!)
     ).toString();
@@ -50,7 +51,7 @@ export async function startShell(): Promise<Page> {
                 `Starting electron instance '${process.env["INSTANCE_NAME"]}'`,
             );
             const app: ElectronApplication = await electron.launch({
-                args: [getAppPath()],
+                args: getLaunchArgs(),
             });
             runningApplications.set(process.env["INSTANCE_NAME"]!, app);
 
@@ -63,7 +64,7 @@ export async function startShell(): Promise<Page> {
             return mainWindow;
         } catch (e) {
             console.warn(
-                `Unable to start electrom application (${process.env["INSTANCE_NAME"]}). Attempt ${retryAttempt} of ${maxRetries}. Error: ${e}`,
+                `Unable to start electron application (${process.env["INSTANCE_NAME"]}). Attempt ${retryAttempt} of ${maxRetries}. Error: ${e}`,
             );
             retryAttempt++;
 
@@ -79,7 +80,7 @@ export async function startShell(): Promise<Page> {
     } while (retryAttempt <= maxRetries);
 
     throw new Error(
-        `Failed to start electrom app after ${maxRetries} attemps.`,
+        `Failed to start electron app after ${maxRetries} attempts.`,
     );
 }
 
@@ -132,21 +133,28 @@ export async function exitApplication(page: Page): Promise<void> {
 }
 
 /**
- * Gets the correct path based on test context (cmdline vs. VSCode extension)
+ * Gets the shell package path.
  * @returns The root path to the project containing the playwright configuration
  */
-export function getAppPath(): string {
-    if (fs.existsSync("playwright.config.ts")) {
-        return ".";
-    } else {
-        return path.join(".", "packages/shell");
-    }
+function getAppPath(): string {
+    return fileURLToPath(new URL("..", import.meta.url));
+}
+
+/**
+ * Get electron launch arguments
+ * @returns The arguments to pass to the electron application
+ */
+export function getLaunchArgs(): string[] {
+    const appPath = getAppPath();
+    console.log(appPath);
+    // Ubuntu 24.04+ needs --no-sandbox, see https://github.com/electron/electron/issues/18265
+    return os.platform() === "linux" ? [appPath, "--no-sandbox"] : [appPath];
 }
 
 /**
  * Submits a user request to the system via the chat input box.
  * @param prompt The user request/prompt.
- * @param page The maing page from the electron host application.
+ * @param page The main page from the electron host application.
  */
 export async function sendUserRequest(prompt: string, page: Page) {
     const locator: Locator = page.locator("#phraseDiv");
@@ -159,7 +167,7 @@ export async function sendUserRequest(prompt: string, page: Page) {
 /**
  * Submits a user request to the system via the chat input box without waiting.
  * @param prompt The user request/prompt.
- * @param page The maing page from the electron host application.
+ * @param page The main page from the electron host application.
  */
 export async function sendUserRequestFast(prompt: string, page: Page) {
     const locator: Locator = page.locator("#phraseDiv");
@@ -171,7 +179,7 @@ export async function sendUserRequestFast(prompt: string, page: Page) {
 /**
  * Submits a user request to the system via the chat input box and then waits for the agent's response
  * @param prompt The user request/prompt.
- * @param page The maing page from the electron host application.
+ * @param page The main page from the electron host application.
  */
 export async function sendUserRequestAndWaitForResponse(
     prompt: string,
@@ -193,7 +201,7 @@ export async function sendUserRequestAndWaitForResponse(
 
 /**
  * Gets the last agent message from the chat view
- * @param page The maing page from the electron host application.
+ * @param page The main page from the electron host application.
  */
 export async function getLastAgentMessage(page: Page): Promise<string> {
     const locators: Locator[] = await page
@@ -208,7 +216,7 @@ export async function getLastAgentMessage(page: Page): Promise<string> {
  * @param page The page where the chatview is hosted
  * @param timeout The maximum amount of time to wait for the agent message
  * @param expectedMessageCount The expected # of agent messages at this time.
- * @returns When the expected # of messages is reached or the timeout is reached.  Whichever occurrs first.
+ * @returns When the expected # of messages is reached or the timeout is reached.  Whichever occurs first.
  */
 export async function waitForAgentMessage(
     page: Page,
