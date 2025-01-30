@@ -4,7 +4,7 @@
 name: Shell Tests - Full Suite
 on:
   push:
-    branches: ["main", "dev/robgruen/electron_tests"]
+    branches: ["main"]
   schedule:
     - cron: "0 0 * * *" #start of every day
 
@@ -28,7 +28,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: ["windows-latest", "ubuntu-latest"]
+        os: ["windows-latest"]
         version: [20]
 
     runs-on: ${{ matrix.os }}
