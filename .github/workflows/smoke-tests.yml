@@ -11,6 +11,8 @@ on:
     branches: ["main"]
   pull_request:
     branches: ["main"]
+  pull_request_target:
+    branches: ["main"]    
   merge_group:
     branches: ["main"]
 
@@ -47,12 +49,12 @@ jobs:
           git config --global core.autocrlf false
 
       - if: ${{ github.event_name != 'pull_request_target'}}
-        - uses: actions/checkout@v4
+        uses: actions/checkout@v4
 
       - if: ${{ github.event_name == 'pull_request_target'}}
-      -   uses: actions/checkout@v4
-            with:
-              ref: ${{ github.event.pull_request.head.sha }}      
+        uses: actions/checkout@v4 
+        with:
+            ref: ${{ github.event.pull_request.head.sha }}      
 
       - uses: dorny/paths-filter@v3
         id: filter
