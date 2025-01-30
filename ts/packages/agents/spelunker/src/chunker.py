@@ -279,15 +279,13 @@ def chunkify(text: str, filename: str) -> list[Chunk] | ErrorItem:
         return ErrorItem(repr(e), filename)
 
     module_name = os.path.basename(filename)
-    if module_name == "__init__.py":
-        module_name = os.path.basename(os.path.dirname(filename))
-    elif module_name.endswith(".py"):
+    if module_name.endswith(".py"):
         module_name = module_name[:-3]
     chunks = chunker(text, tree, module_name)
 
     # Remove leading and trailing blank lines from blobs,
-    # only keep non-empty chunks.
-    # Need to do this laster because blob lists are mutated above.
+    # only keeping non-empty blobs.
+    # Need to do this last because blob lists are mutated above.
     for chunk in chunks:
         blobs = chunk.blobs
         new_blobs: list[Blob] = []
@@ -322,7 +320,8 @@ def main():
             if isinstance(result, ErrorItem):
                 items.append(result)
             else:
-                chunks = [chunk for chunk in result if chunk.blobs]
+                # Only keep non-empty chunks, and the root node (empty parentId).
+                chunks = [chunk for chunk in result if chunk.blobs or not chunk.parentId]
                 items.append(ChunkedFile(filename, chunks))
 
     print(json.dumps(items, default=custom_json, indent=2))
