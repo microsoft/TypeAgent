@@ -52,7 +52,9 @@ async function executeAction(
         case "add":
             const { a, b } = action.parameters;
             return createActionResult(`The sum of ${a} and ${b} is ${a + b}`);
+        case "random":
+            return createActionResult(`Random number: ${Math.random()}`);
         default:
-            throw new Error(`Unknown action: ${action.actionName}`);
+            throw new Error(`Unknown action: ${(action as any).actionName}`);
     }
 }
