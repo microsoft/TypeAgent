@@ -63,11 +63,12 @@ export async function startShell(): Promise<Page> {
             return mainWindow;
         } catch (e) {
             console.warn(
-                `Unable to start electrom application (${process.env["INSTANCE_NAME"]}). Attempt ${retryAttempt} of ${maxRetries}`,
+                `Unable to start electrom application (${process.env["INSTANCE_NAME"]}). Attempt ${retryAttempt} of ${maxRetries}. Error: ${e}`,
             );
             retryAttempt++;
 
             if (runningApplications.get(process.env["INSTANCE_NAME"])) {
+                console.log(`Closing instance ${process.env["INSTANCE_NAME"]}`);
                 await runningApplications
                     .get(process.env["INSTANCE_NAME"]!)!
                     .close();
@@ -83,21 +84,39 @@ export async function startShell(): Promise<Page> {
 }
 
 async function getMainWindow(app: ElectronApplication): Promise<Page> {
-    const window: Page = await app.firstWindow();
-    await window.waitForLoadState("domcontentloaded");
+    let attempts = 0;
+    do {
+        let windows: Page[] = await app.windows();
 
-    // is this the correct window?
-    if ((await window.title()).length > 0) {
-        return window;
-    }
+        // if we change the # of windows beyond 2 we'll have to update this function to correctly disambiguate which window is the correct one
+        if (windows.length > 2) {
+            console.log(`Found ${app.windows.length} windows.  Expected 2`);
+            throw "Please update this logic to select the correct main window. (testHelper.ts->getMainWindow())";
+        }
 
-    // if we change the # of windows beyond 2 we'll have to update this function to correctly disambiguate which window is the correct one
-    if (app.windows.length > 2) {
-        throw "Please update this logic to select the correct main window. (testHelper.ts->getMainWindow())";
-    }
+        // wait for each window to load and return the one we are interested in
+        for (let i = 0; i < windows.length; i++) {
+            try {
+                if (windows[i] !== undefined) {
+                    await windows[i].waitForLoadState("domcontentloaded");
 
-    // since there are only two windows we know that if the first one isn't the right one we can just return the second one
-    return app.windows[app.windows.length - 1];
+                    // is this the correct window?
+                    const title = await windows[i].title();
+                    if (title.length > 0) {
+                        console.log(`Found window ${title}`);
+                        return windows[i];
+                    }
+                }
+            } catch (e) {
+                console.log(e);
+            }
+        }
+
+        console.log("waiting...");
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+    } while (++attempts < 30);
+
+    throw "Unable to find window...timeout";
 }
 
 /**
