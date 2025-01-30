@@ -775,6 +775,7 @@ async function toggleSiteTranslator(targetTab: chrome.tabs.Tab) {
             if (currentSiteTranslator == "browser.paleoBioDb") {
                 method = "disableSiteTranslator";
                 translatorName = "browser.paleoBioDb";
+                currentSiteTranslator = "";
             }
         }
 
@@ -800,7 +801,7 @@ async function toggleSiteTranslator(targetTab: chrome.tabs.Tab) {
         ) {
             method = "enableSiteTranslator";
             translatorName = "browser.crossword";
-            currentSiteTranslator = "browser.crossword";
+            currentSiteTranslator = translatorName;
             currentCrosswordUrl = targetTab.url;
         }
 
@@ -813,13 +814,20 @@ async function toggleSiteTranslator(targetTab: chrome.tabs.Tab) {
         if (commerceHosts.includes(host)) {
             method = "enableSiteTranslator";
             translatorName = "browser.commerce";
-            currentSiteTranslator = "browser.commerce";
+            currentSiteTranslator = translatorName;
         }
 
         if (host === "instacart.com" || host === "www.instacart.com") {
             method = "enableSiteTranslator";
             translatorName = "browser.instacart";
-            currentSiteTranslator = "browser.instacart";
+            currentSiteTranslator = translatorName;
+        }
+
+        if (translatorName === "") {
+            // default to schemaFinder
+            method = "enableSiteTranslator";
+            translatorName = "browser.schemaFinder";
+            currentSiteTranslator = translatorName;
         }
 
         // trigger translator change
