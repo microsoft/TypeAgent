@@ -110,14 +110,8 @@ export function parseCalendarDateTime(
         return date.toLocaleString();
     }
     else {
-        return toISO(date, useUTC);
+        return date.toISOString();
     }
-}
-
-function toISO(date: Date, useUTC: boolean): string {
-    return useUTC
-        ? date.toISOString()
-        : new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString();
 }
 
 function monthToIndex(month: string): number {
@@ -195,27 +189,13 @@ export function calcEndDateTime(
 }
 
 export function getQueryParamsFromTimeRange(calStartDateTime: CalendarDateTime, calEndDateTime: CalendarDateTime): string | undefined {
-    const startDateTimeStr = parseCalendarDateTime(calStartDateTime);
-    const endDateTimeStr = parseCalendarDateTime(calEndDateTime, false);
+    const startDateTimeStr = parseCalendarDateTime(calStartDateTime, false, true, false);
+    const endDateTimeStr = parseCalendarDateTime(calEndDateTime, false, false, false);
 
     if (!startDateTimeStr || !endDateTimeStr) {
         return undefined;
     }
 
-    const startDateTime = new Date(startDateTimeStr);
-    const endDateTime = new Date(endDateTimeStr);
-
-    if (isNaN(startDateTime.getTime()) || isNaN(endDateTime.getTime())) {
-        return undefined;
-    }
-
-    const startDateUTC = new Date(
-        startDateTime.getTime() - startDateTime.getTimezoneOffset() * 60000
-    );
-    const endDateUTC = new Date(
-        endDateTime.getTime() - endDateTime.getTimezoneOffset() * 60000
-    );
-
-    return `startDateTime=${startDateUTC.toISOString()}&endDateTime=${endDateUTC.toISOString()}`;
+    return `startDateTime=${startDateTimeStr}&endDateTime=${endDateTimeStr}`;
 }
 

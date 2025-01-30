@@ -25,7 +25,7 @@ export type CalendarDateTime = {
     // examples: "10", "-1d", "+3d", "4", "Monday", "StartOfWeek", "EndOfMonth", "EndOfYear"; default is today
     day?: string | SpecialDay;
     // hour, minutes and seconds using 24 hour format; default is now
-    // examples: "-1:00:00" for previous hour, "14:30:00", "Noon", "EndOfDay", "23:45:00" for quarter to midnight, "+2:40:00" for two hours and forty minutes from now
+    // examples: "-1:00:00" for previous hour, "14:30:00", "Noon", "23:59:59" for end of day, "23:45:00" for quarter to midnight, "+2:40:00" for two hours and forty minutes from now
     hms?: string | NamedTime;
 };
 
