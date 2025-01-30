@@ -14,7 +14,7 @@ permissions:
 
 env:
   NODE_OPTIONS: --max_old_space_size=8192
-  DEBUG: pw:browser*
+#  DEBUG: pw:browser*
 
 # run only one of these at a time
 concurrency:
