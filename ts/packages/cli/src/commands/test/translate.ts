@@ -26,12 +26,12 @@ type TestResult = {
 type FailedTestResult = {
     request: string;
     actions?: (FullAction[] | undefined)[];
-    reason?: string;
 };
 
 type TestResultFile = {
     pass: TestResult[];
     fail: FailedTestResult[];
+    skipped?: string[];
 };
 
 function summarizeResult(result: TestResultFile) {
@@ -178,6 +178,9 @@ export default class TestTranslateCommand extends Command {
             }
 
             requests = input.fail.map((entry) => entry.request);
+            if (input.skipped) {
+                requests = requests.concat(input.skipped);
+            }
             if (flags.failed) {
                 output.pass = input.pass;
             } else {
@@ -214,14 +217,14 @@ export default class TestTranslateCommand extends Command {
 
         let countStr = requests.length.toString();
         if (flags.sample !== undefined) {
+            output.skipped = [];
             while (flags.sample < requests.length) {
-                output.fail.push({
-                    request: requests.splice(
+                output.skipped.push(
+                    ...requests.splice(
                         Math.floor(Math.random() * requests.length),
                         1,
-                    )[0],
-                    reason: "skipped",
-                });
+                    ),
+                );
             }
             countStr = `${flags.sample}/${countStr}`;
         }
@@ -348,7 +351,10 @@ export default class TestTranslateCommand extends Command {
         const endTime = performance.now();
         const succeededTotal = processed - noActions - failedTotal;
 
-        const totalData = output.pass.length + output.fail.length;
+        const totalData =
+            output.pass.length +
+            output.fail.length +
+            (output.skipped?.length ?? 0);
         const totalDataStr = totalData.toString();
         const numberLength = totalDataStr.length;
         function printPart(name: string, count: number, total: number) {
@@ -374,6 +380,7 @@ export default class TestTranslateCommand extends Command {
         console.log(`Total          : ${totalDataStr.padStart(numberLength)}`);
         printPart("Passed", output.pass.length, totalData);
         printPart("Failed", output.fail.length, totalData);
+        printPart("Skipped", output.skipped?.length ?? 0, totalData);
         console.log("=".repeat(60));
         console.log(
             `Time: ${getElapsedString(endTime - startTime)}, Average: ${getElapsedString((endTime - startTime) / processed)}`,
