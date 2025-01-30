@@ -4,7 +4,9 @@
 import {
     parseCalendarDateTime,
     calcEndDateTime,
-    getQueryParamsFromTimeRange
+    getDateTimeFromStartDateTime,
+    getStartAndEndDateTimes,
+    getQueryParamsFromTimeRange,
 } from "./datetime/calendarDateTimeParser.js";
 import {
     createCalendarGraphClient,
@@ -12,19 +14,15 @@ import {
     getTimeZoneName,
     GraphEntity,
     getUniqueLocalId,
-    //ErrorResponse,
+    ErrorResponse,
 } from "graph-utils";
 import chalk from "chalk";
 import {
     CalendarAction,
-    //CalendarDateTime,
     Event,
     EventReference,
 } from "./calendarActionsSchemaV2.js";
-/*import {
-    getTimeRangeBasedQuery,
-    getNWeeksDateRangeISO,
-} from "./calendarQueryHelper.js";*/
+import { getNWeeksDateRangeISO } from "./calendarQueryHelper.js";
 import {
     SessionContext,
     AppAction,
@@ -127,7 +125,6 @@ async function initializeCalendarContext() {
     };
 }
 
-/*
 function deleteLocalGraphEventId(
     localEventId: string,
     calendarContext: CalendarActionContext,
@@ -141,7 +138,7 @@ function deleteLocalGraphEventId(
             calendarContext.mapGraphEntity?.delete(localEventId);
         }
     }
-}*/
+}
 
 function getGraphEventId(
     localEventId: string,
@@ -216,7 +213,7 @@ function findEventsDisplayHtml(events: any[] | GraphEntity): string {
     return "";
 }
 
-/*async function getParticipantsToAdd(
+async function getParticipantsToAdd(
     participants: string[] | undefined,
     calendarClient: CalendarClient,
 ): Promise<string[] | undefined> {
@@ -280,7 +277,6 @@ function getLocalEventId(
     return localEventId;
 }
 
-
 function updateCalendarEntity(
     calendarContext: CalendarActionContext,
     eventid: string,
@@ -296,7 +292,7 @@ function updateCalendarEntity(
         }
     }
     return localEventId;
-}*/
+}
 
 function addCalendarEntity(
     calendarContext: CalendarActionContext,
@@ -351,7 +347,8 @@ export async function handleCalendarAction(
                     actionEvent.timeRange.startDateTime?.day !== undefined
                 ) {
                     let startDateTime = parseCalendarDateTime(
-                        actionEvent.timeRange.startDateTime, true
+                        actionEvent.timeRange.startDateTime,
+                        true,
                     );
                     if (startDateTime !== undefined) {
                         let endDateTimeRes = calcEndDateTime(
@@ -446,12 +443,6 @@ export async function handleCalendarAction(
         case "findEvents":
             debug(chalk.green("Handling FIND_EVENTS action ..."));
             actionEvent = action.parameters.eventReference as EventReference;
-            console.log(actionEvent);
-
-            if(actionEvent && actionEvent.timeRange && actionEvent.timeRange.startDateTime && actionEvent.timeRange.endDateTime) {
-                let findQuery = getQueryParamsFromTimeRange(actionEvent.timeRange?.startDateTime, actionEvent.timeRange?.endDateTime);
-                console.log(findQuery);
-            }
 
             if (actionEvent && actionEvent.eventid) {
                 const lastLocalEventId = actionEvent.eventid;
@@ -485,10 +476,15 @@ export async function handleCalendarAction(
                 }
             } else if (
                 actionEvent &&
-                (actionEvent.timeRange &&
-                    actionEvent.timeRange?.startDateTime && actionEvent.timeRange?.endDateTime)
+                actionEvent.participants === undefined &&
+                actionEvent.timeRange &&
+                actionEvent.timeRange?.startDateTime &&
+                actionEvent.timeRange?.endDateTime
             ) {
-                let findQuery = getQueryParamsFromTimeRange(actionEvent.timeRange?.startDateTime, actionEvent.timeRange?.endDateTime);
+                let findQuery = getQueryParamsFromTimeRange(
+                    actionEvent.timeRange?.startDateTime,
+                    actionEvent.timeRange?.endDateTime,
+                );
                 if (findQuery !== undefined) {
                     let results: any =
                         await client.findCalendarEventsByDateRange(findQuery);
@@ -502,28 +498,17 @@ export async function handleCalendarAction(
                     debug(chalk.bgYellowBright(err));
                     return createActionResultFromError(err);
                 }
-            } else if (actionEvent && actionEvent.description) {
-                let findResults = await client.findEventsFromEmbeddings(
-                    actionEvent.description,
-                );
-
-                if (findResults?.length === 0) {
-                    findResults = await client.findCalendarEventsBySubject(
-                        actionEvent.description,
-                    );
-                }
-
-                return populateMeetingDetailsFromEvent(
-                    actionEvent.description,
-                    findResults,
-                );
             } else if (
                 actionEvent &&
                 actionEvent.participants &&
                 actionEvent.participants.length > 0 &&
-                actionEvent.timeRange?.startDateTime && actionEvent.timeRange?.endDateTime
+                actionEvent.timeRange?.startDateTime &&
+                actionEvent.timeRange?.endDateTime
             ) {
-                let findQuery = getQueryParamsFromTimeRange(actionEvent.timeRange?.startDateTime, actionEvent.timeRange?.endDateTime);
+                let findQuery = getQueryParamsFromTimeRange(
+                    actionEvent.timeRange?.startDateTime,
+                    actionEvent.timeRange?.endDateTime,
+                );
                 if (
                     actionEvent?.participants?.length > 0 &&
                     findQuery !== undefined
@@ -557,6 +542,10 @@ export async function handleCalendarAction(
                                 actionEvent.description!,
                                 findResults,
                             );
+                        } else {
+                            return createActionResultFromTextDisplay(
+                                "Looks like you do not have any meetings with the participant(s) in the given date range.",
+                            );
                         }
                     }
                 } else {
@@ -565,6 +554,21 @@ export async function handleCalendarAction(
                     debug(chalk.bgYellowBright(err));
                     return createActionResultFromError(err);
                 }
+            } else if (actionEvent && actionEvent.description) {
+                let findResults = await client.findEventsFromEmbeddings(
+                    actionEvent.description,
+                );
+
+                if (findResults?.length === 0) {
+                    findResults = await client.findCalendarEventsBySubject(
+                        actionEvent.description,
+                    );
+                }
+
+                return populateMeetingDetailsFromEvent(
+                    actionEvent.description,
+                    findResults,
+                );
             } else {
                 const err =
                     "Please provide participant and  valid date and time range to search for events.";
@@ -572,14 +576,213 @@ export async function handleCalendarAction(
                 return createActionResultFromError(err);
             }
             break;
+        case "addParticipants":
+            debug(chalk.green("Handling ADD_PARTICIPANTS action ..."));
+            actionEvent = action.parameters.eventReference;
+            let participantsToAdd = action.parameters.participants;
+            if (
+                actionEvent != undefined &&
+                actionEvent.description != undefined
+            ) {
+                let dateInfo: any = undefined;
 
+                if (
+                    actionEvent.timeRange !== undefined &&
+                    actionEvent.timeRange.startDateTime !== undefined
+                ) {
+                    if (actionEvent.timeRange.endDateTime !== undefined) {
+                        dateInfo = getStartAndEndDateTimes(
+                            actionEvent.timeRange.startDateTime,
+                            actionEvent.timeRange.endDateTime,
+                        );
+                    } else {
+                        if (actionEvent.timeRange.duration !== undefined) {
+                            dateInfo = getDateTimeFromStartDateTime(
+                                actionEvent.timeRange.startDateTime,
+                                "1h",
+                            );
+                        } else {
+                            let { startDateTime, endDateTime } =
+                                getNWeeksDateRangeISO(2);
+                            dateInfo = {
+                                startDate: startDateTime,
+                                endDate: endDateTime,
+                            };
+                        }
+                    }
+                } else {
+                    let { startDateTime, endDateTime } =
+                        getNWeeksDateRangeISO(2);
+
+                    dateInfo = {
+                        startDate: startDateTime,
+                        endDate: endDateTime,
+                    };
+                }
+
+                let eventId = await addParticipantsToMeeting(
+                    actionEvent.participants,
+                    participantsToAdd,
+                    actionEvent.description ?? "** Generated Event **",
+                    dateInfo,
+                    client,
+                );
+
+                if (eventId && typeof eventId === "string") {
+                    // todo: check if the event is in the mapGraphEntity, add it if not
+                    // the event won't be in the context if it's an exisitng event in the calendar
+                    const localId = updateCalendarEntity(
+                        calendarContext,
+                        eventId,
+                        participantsToAdd,
+                    );
+
+                    debug(
+                        chalk.bgCyanBright(
+                            `Successfully added pariticipant(s) for (local eventid:${localId}) event:${eventId}`,
+                        ),
+                    );
+
+                    const displayText = await populateMeetingDetailsMin(
+                        "Meeting was updated",
+                        actionEvent.description,
+                        eventId,
+                    );
+                    debug(displayText);
+
+                    let result = createActionResultFromHtmlDisplay(displayText);
+                    if (result && localId) {
+                        result.entities = [
+                            {
+                                name: `${actionEvent.description}`,
+                                type: ["event"],
+                                additionalEntityText: localId,
+                                uniqueId: localId,
+                            },
+                        ];
+                    }
+                    return result;
+                } else {
+                    debug(
+                        chalk.bgRedBright(
+                            "Failed to add the event, please try again!",
+                        ),
+                    );
+                    return createActionResultFromError(
+                        "Failed to add the event, please try again!",
+                    );
+                }
+            } else {
+                if (actionEvent?.eventid) {
+                    const lastLocalEventId = actionEvent?.eventid;
+                    const lastGraphEventId = getGraphEventId(
+                        lastLocalEventId ?? "",
+                        calendarContext,
+                    );
+
+                    if (lastLocalEventId !== undefined) {
+                        const meeting =
+                            calendarContext.mapGraphEntity?.get(
+                                lastLocalEventId,
+                            );
+                        if (meeting) {
+                            let participantsToAdd =
+                                action.parameters.participants;
+                            let participantsInMeeting = meeting.participants;
+
+                            let emailAddrsInMeeting: string[] | undefined =
+                                await getParticipantsToAdd(
+                                    participantsInMeeting,
+                                    client,
+                                );
+
+                            let emailAddrsToAdd: string[] | undefined =
+                                await getParticipantsToAdd(
+                                    participantsToAdd,
+                                    client,
+                                );
+
+                            if (
+                                lastGraphEventId &&
+                                emailAddrsToAdd &&
+                                emailAddrsToAdd.length > 0
+                            ) {
+                                let eventId =
+                                    await client.addParticipantsToExistingMeeting(
+                                        lastGraphEventId,
+                                        emailAddrsInMeeting,
+                                        emailAddrsToAdd,
+                                    );
+
+                                // add the new participants to the mapGraphEntity
+                                if (eventId && typeof eventId === "string") {
+                                    meeting.participants?.push(
+                                        ...emailAddrsToAdd,
+                                    );
+                                    calendarContext.mapGraphEntity?.set(
+                                        lastLocalEventId,
+                                        meeting,
+                                    );
+                                    debug(
+                                        chalk.bgCyanBright(
+                                            `Successfully added the participants to the (local eventid:${lastLocalEventId}) event:${eventId}`,
+                                        ),
+                                    );
+                                    const displayText =
+                                        await populateMeetingDetailsMin(
+                                            "Meeting was updated",
+                                            meeting.subject,
+                                            eventId,
+                                        );
+                                    debug(displayText);
+
+                                    let result =
+                                        createActionResultFromHtmlDisplay(
+                                            displayText,
+                                        );
+
+                                    result.entities = [
+                                        {
+                                            name: `${meeting.subject}`,
+                                            type: ["event"],
+                                            additionalEntityText:
+                                                lastLocalEventId,
+                                            uniqueId: lastLocalEventId,
+                                        },
+                                    ];
+                                    return result;
+                                } else {
+                                    // Could happen because the calendar event was deleted
+                                    // and clear the entity from the context
+
+                                    let err = eventId as ErrorResponse;
+                                    if (err.code === "ErrorItemNotFound") {
+                                        deleteLocalGraphEventId(
+                                            lastLocalEventId,
+                                            calendarContext,
+                                        );
+
+                                        return createActionResultFromError(
+                                            "Looks like the event was deleted, please try again!",
+                                        );
+                                    } else {
+                                        return createActionResultFromError(
+                                            "Failed to add the participants to the event, please try again!",
+                                        );
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            break;
         default:
             throw new Error(`Unknown action: ${(action as any).actionName}`);
     }
 
     return createActionResultFromError(error);
 }
-
 
 async function populateMeetingDetailsFromEvent(
     actionName: string,
@@ -602,7 +805,6 @@ async function populateMeetingDetailsFromEvent(
     }
 }
 
-
 async function populateMeetingDetails(
     startDateTime: string,
     endDateTime: string,
@@ -618,7 +820,6 @@ async function populateMeetingDetails(
     return meetingDetailsHTML;
 }
 
-/*
 async function populateMeetingDetailsMin(
     header: string,
     description: string,
@@ -630,4 +831,4 @@ async function populateMeetingDetailsMin(
         `<h4>${header}<br>${description}</h4></a><div style="font-size: 12px;">` +
         "</div></div>";
     return meetingDetailsHTML;
-}*/
+}

@@ -33,7 +33,7 @@ export type CalendarDateTime = {
 // Please don't use the context or history to fill this value.
 export type EventTimeRange = {
     // start and end are always used unless the query is for the entire calendar date time range
-    // the start of the time range for the query
+    // the start of the time range for the query. examples: "today", "tomorrow", "yesterday", "next Monday", "last week", "in 3 days", "first Monday in July"
     startDateTime?: CalendarDateTime;
     // the end of the time range for the query, inclusive; if start is present end will also be present
     endDateTime?: CalendarDateTime;
@@ -73,9 +73,10 @@ export type EventReference = {
     eventid?: string;
 };
 
-export type CalendarAction = 
+export type CalendarAction =
     | AddEventAction
-    | FindEventsAction;
+    | FindEventsAction
+    | AddParticipantsAction;
 
 // Add an event to the calendar
 export type AddEventAction = {
@@ -91,5 +92,16 @@ export type FindEventsAction = {
     parameters: {
         // one or more event properties to use to search for matching events
         eventReference: EventReference;
+    };
+};
+
+// Add participants to an event on the calendar
+export type AddParticipantsAction = {
+    actionName: "addParticipants";
+    parameters: {
+        // calendar event to be augmented; if not specified assume last event discussed
+        eventReference?: EventReference;
+        // new participants (one or more)
+        participants: string[];
     };
 };
