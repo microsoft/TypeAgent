@@ -7,9 +7,9 @@ name: build-ts
 
 on:
   # Manual approval of forked environments is required
-  pull_request_target:
-    branches:
-      - main
+  # pull_request_target:
+  #   branches:
+  #     - main
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -113,7 +113,7 @@ jobs:
         run: |
           Xvfb :99 -screen 0 1600x1200x24 & export DISPLAY=:99
           npx playwright test simple.spec.ts
-          rm ../../.env          
+          rm ../../.env
         working-directory: ts/packages/shell
         continue-on-error: true
       - name: Live Tests
