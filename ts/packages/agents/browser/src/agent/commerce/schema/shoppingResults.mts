@@ -27,7 +27,7 @@ export type PurchaseResults = {
 };
 
 // This is a generated summary of the shopping results.
-// The message should be concise and friendly. Make sure to communicate any items that were unavalable or out of stock.
+// The message should be concise and friendly. Make sure to communicate any items that were unavailable or out of stock.
 export type PurchaseSummary = {
   formattedMessage: string;
 };

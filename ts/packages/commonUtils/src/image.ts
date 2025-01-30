@@ -36,7 +36,7 @@ export function extractRelevantExifTags(exifTags: ExifReader.Tags) {
 }
 
 /**
- * Dowloads the supplied uri and saves it to local session storage
+ * Downloads the supplied uri and saves it to local session storage
  * @param uri The uri of the image to download
  * @param fileName The name of the file to save the image locally as (including relative path)
  */

@@ -95,7 +95,7 @@ export async function awaitPageLoad() {
 
 export async function getTabHTMLFragments(
     fullSize: boolean,
-    extactText: boolean,
+    extractText: boolean,
 ) {
     let htmlFragments: any[] = [];
     let htmlPromises: Promise<any>[] = [];
@@ -145,7 +145,7 @@ export async function getTabHTMLFragments(
         const frameHTML = htmlResults[i];
         if (frameHTML) {
             let frameText = "";
-            if (extactText) {
+            if (extractText) {
                 frameText = await sendScriptAction(
                     {
                         type: "get_page_text",
