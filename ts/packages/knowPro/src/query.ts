@@ -19,6 +19,7 @@ import {
     MatchAccumulator,
     QueryTermAccumulator,
     SemanticRefAccumulator,
+    TextRangeAccumulator,
 } from "./accumulators.js";
 import { collections, dateTime } from "typeagent";
 
@@ -312,10 +313,11 @@ export class WhereSemanticRefExpr
             accumulator.queryTermMatches,
         );
         filtered.setMatches(
-            accumulator.getMatchesWhere((match) =>
-                this.matchPredicatesOr(
+            accumulator.getMatches((match) =>
+                this.evalPredicates(
                     context,
                     accumulator.queryTermMatches,
+                    this.predicates,
                     match,
                 ),
             ),
@@ -323,22 +325,22 @@ export class WhereSemanticRefExpr
         return filtered;
     }
 
-    private matchPredicatesOr(
+    private evalPredicates(
         context: QueryEvalContext,
         queryTermMatches: QueryTermAccumulator,
+        predicates: IQuerySemanticRefPredicate[],
         match: Match<SemanticRefIndex>,
     ) {
-        for (let i = 0; i < this.predicates.length; ++i) {
+        for (let i = 0; i < predicates.length; ++i) {
             const semanticRef = context.getSemanticRef(match.value);
-            if (
-                this.predicates[i].eval(context, queryTermMatches, semanticRef)
-            ) {
-                return true;
+            if (!predicates[i].eval(context, queryTermMatches, semanticRef)) {
+                return false;
             }
         }
-        return false;
+        return true;
     }
 }
+
 export interface IQuerySemanticRefPredicate {
     eval(
         context: QueryEvalContext,
@@ -430,15 +432,52 @@ export class ActionPredicate implements IQuerySemanticRefPredicate {
     }
 }
 
-export class ScopeExpr implements IQueryOpExpr<void> {
-    constructor(public predicates: IQueryScopePredicate[]) {}
+export class ScopeExpr implements IQueryOpExpr<SemanticRefAccumulator> {
+    constructor(
+        public sourceExpr: IQueryOpExpr<SemanticRefAccumulator>,
+        public predicates: IQuerySemanticRefPredicate[],
+    ) {}
 
-    public eval(context: QueryEvalContext): Promise<void> {
-        return Promise.resolve();
+    public async eval(
+        context: QueryEvalContext,
+    ): Promise<SemanticRefAccumulator> {
+        let accumulator = await this.sourceExpr.eval(context);
+        const tagScope = new TextRangeAccumulator();
+        for (const inScopeRef of accumulator.getSemanticRefs(
+            context.semanticRefs,
+            (sr) =>
+                this.evalPredicates(
+                    context,
+                    accumulator.queryTermMatches,
+                    this.predicates,
+                    sr,
+                ),
+        )) {
+            tagScope.addRange(inScopeRef.range);
+        }
+        if (tagScope.size > 0) {
+            accumulator = accumulator.selectInScope(
+                context.semanticRefs,
+                tagScope,
+            );
+        }
+        return Promise.resolve(accumulator);
+    }
+
+    private evalPredicates(
+        context: QueryEvalContext,
+        queryTermMatches: QueryTermAccumulator,
+        predicates: IQuerySemanticRefPredicate[],
+        semanticRef: SemanticRef,
+    ) {
+        for (let i = 0; i < predicates.length; ++i) {
+            if (predicates[i].eval(context, queryTermMatches, semanticRef)) {
+                return true;
+            }
+        }
+        return false;
     }
 }
-
-export interface IQueryScopePredicate {}
 
 function isPropertyMatch(
     termMatches: QueryTermAccumulator,
