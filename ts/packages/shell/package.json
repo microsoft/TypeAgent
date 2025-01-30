@@ -24,6 +24,7 @@
     "postinstall": "cross-env \"npm_execpath=\" electron-builder install-app-deps",
     "prettier": "prettier --check . --ignore-path ../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
+    "shell:smoke": "npx playwright test simple.spec.ts",
     "shell:test": "npx playwright test",
     "start": "npm run build:electron:cjs && electron-vite preview",
     "typecheck": "concurrently npm:typecheck:node npm:typecheck:web",

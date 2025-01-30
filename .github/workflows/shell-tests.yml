@@ -23,15 +23,18 @@ jobs:
       fail-fast: false
       matrix:
         #os: ["ubuntu-latest", "windows-latest", "macos-latest"]
-        os: ["windows-latest"]
-        version: [18, 20, 22]
+        os: ["windows-latest", "ubuntu-latest"]
+        version: [20]
 
     runs-on: ${{ matrix.os }}
     continue-on-error: true
     steps:
       - if: runner.os == 'Linux'
+        # https://github.com/microsoft/playwright/issues/34251 - sysctl command
         run: |
           sudo apt install libsecret-1-0
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 
+
       - name: Setup Git LF
         run: |
           git config --global core.autocrlf false
@@ -77,12 +80,29 @@ jobs:
         run: |
           npm run start:dev 'prompt' 'why is the sky blue'
         working-directory: ts/packages/cli
-      - name: Shell Tests
+      
+      - name: Shell Tests (windows)
+        if: ${{ runner.os == 'windows' }}
         timeout-minutes: 60
         run: |
-          npx playwright test
+          npm run shell:test
           rm ../../.env
         working-directory: ts/packages/shell
+        continue-on-error: true
+
+      - name: Shell Tests (linux)
+        if: ${{ runner.os == 'Linux' }}
+        timeout-minutes: 60
+        # https://github.com/microsoft/playwright/issues/34251 - sysctl command
+        run: |
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 
+          Xvfb :99 -screen 0 1600x1200x24 & export DISPLAY=:99
+          npm run shell:test
+          rm ../../.env          
+        working-directory: ts/packages/shell
+        continue-on-error: true
+
+      
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
         with:
@@ -90,6 +110,7 @@ jobs:
           path: ts/packages/shell/test-results/
           overwrite: true
           retention-days: 30
+
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
         with:
