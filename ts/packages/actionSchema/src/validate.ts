@@ -147,7 +147,7 @@ function validateObject(
             ignoreExtraneous?.includes(actualField) !== true
         ) {
             const fullName = name ? `${name}.${actualField}` : actualField;
-            throw new Error(`Extraneous property ${fullName}`);
+            throw new Error(`Extraneous property '${fullName}'`);
         }
     }
 }
