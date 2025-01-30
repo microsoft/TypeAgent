@@ -9,8 +9,8 @@ on:
   workflow_dispatch:
   push:
     branches: ["main"]
-  pull_request:
-    branches: ["main"]
+  # pull_request:
+  #   branches: ["main"]
   pull_request_target:
     branches: ["main"]    
   merge_group:
@@ -31,7 +31,8 @@ env:
 
 jobs:
   shell_and_cli:
-    environment: ${{ github.event_name == 'pull_request_target' && 'development-fork' || 'development' }}      # required for federated credentials 
+    #environment: ${{ github.event_name == 'pull_request_target' && 'development-fork' || 'development' }}      # required for federated credentials 
+    environment: development-fork
     strategy:
       fail-fast: false
       matrix:
