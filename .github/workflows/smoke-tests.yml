@@ -21,6 +21,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
+  pull-requests: read
   contents: read
   id-token: write
 
@@ -116,17 +117,30 @@ jobs:
         working-directory: ts/packages/shell
         continue-on-error: true
 
+      # - name: Shell Tests - smoke (linux)
+      #   if: ${{ runner.os == 'Linux' }}
+      #   timeout-minutes: 60
+      #   # https://github.com/microsoft/playwright/issues/34251 - sysctl command
+      #   run: |
+      #     sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 
+      #     Xvfb :99 -screen 0 1600x1200x24 & export DISPLAY=:99
+      #     npm run shell:smoke
+      #     rm ../../.env          
+      #   working-directory: ts/packages/shell
+      #   continue-on-error: true
+
       - name: Shell Tests - smoke (linux)
         if: ${{ runner.os == 'Linux' }}
         timeout-minutes: 60
         # https://github.com/microsoft/playwright/issues/34251 - sysctl command
         run: |
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 
-          Xvfb :99 -screen 0 1600x1200x24 & export DISPLAY=:99
-          npm run shell:smoke
+          xvfb-run --auto-servernum --server-args="-screen 0 16001200x24" -- npm run shell:smoke
           rm ../../.env          
         working-directory: ts/packages/shell
-        continue-on-error: true
+        continue-on-error: true        
+
+        #xvfb-run --auto-servernum --server-args="-screen 0 1280x960x24" -- npx playwright test
       
       - name: Live Tests
         if: ${{ runner.os == 'linux' }}
