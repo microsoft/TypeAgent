@@ -98,7 +98,7 @@ jobs:
         if: ${{ runner.os == 'windows' }}
         timeout-minutes: 60
         run: |
-          npm run shell:test
+          npx playwright test
           rm ../../.env
         working-directory: ts/packages/shell
         continue-on-error: true
