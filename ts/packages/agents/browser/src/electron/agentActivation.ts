@@ -22,7 +22,7 @@ function setupSiteAgent() {
 
         if (host === "paleobiodb.org" || host === "www.paleobiodb.org") {
             siteAgent = "browser.paleoBioDb";
-            window.browserConnect.enableSiteAgent("browser.paleoBioDb");
+            window.browserConnect.enableSiteAgent(siteAgent);
         }
 
         if (
@@ -44,7 +44,7 @@ function setupSiteAgent() {
             )
         ) {
             siteAgent = "browser.crossword";
-            window.browserConnect.enableSiteAgent("browser.crossword");
+            window.browserConnect.enableSiteAgent(siteAgent);
         }
 
         const commerceHosts = [
@@ -55,12 +55,18 @@ function setupSiteAgent() {
 
         if (commerceHosts.includes(host)) {
             siteAgent = "browser.commerce";
-            window.browserConnect.enableSiteAgent("browser.commerce");
+            window.browserConnect.enableSiteAgent(siteAgent);
         }
 
         if (host === "instacart.com" || host === "www.instacart.com") {
             siteAgent = "browser.instacart";
-            window.browserConnect.enableSiteAgent("browser.instacart");
+            window.browserConnect.enableSiteAgent(siteAgent);
+        }
+
+        if (siteAgent === "") {
+            // default to schemaFinder
+            siteAgent = "browser.schemaFinder";
+            window.browserConnect.enableSiteAgent(siteAgent);
         }
 
         siteAgentInitialized = true;

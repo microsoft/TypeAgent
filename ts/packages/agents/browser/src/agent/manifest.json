@@ -43,6 +43,15 @@
         "schemaFile": "./instacart/schema/userActions.mts",
         "schemaType": "InstacartActions"
       }
+    },
+    "schemaFinder": {
+      "defaultEnabled": false,
+      "transient": true,
+      "schema": {
+        "description": "This helps users to inspect a page and find the possible actions they can take on it.",
+        "schemaFile": "./discovery/schema/discoveryActions.mts",
+        "schemaType": "SchemaDiscoveryActions"
+      }
     }
   }
 }
