@@ -84,7 +84,7 @@ export async function startShell(): Promise<Page> {
 }
 
 async function getMainWindow(app: ElectronApplication): Promise<Page> {
-    const window: Page = await app.firstWindow();
+    const window: Page = await app.firstWindow({ timeout: 30000});
     await window.waitForLoadState("domcontentloaded");
 
     // is this the correct window?
@@ -101,6 +101,8 @@ async function getMainWindow(app: ElectronApplication): Promise<Page> {
     }
 
     // since there are only two windows we know that if the first one isn't the right one we can just return the second one
+    await app.windows[app.windows.length - 1].waitForLoadState("domcontentloaded");
+    
     return app.windows[app.windows.length - 1];
 }
 
