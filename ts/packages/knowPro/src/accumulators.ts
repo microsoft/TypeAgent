@@ -117,15 +117,11 @@ export class MatchAccumulator<T = any> {
         }
     }
 
-    public getMatches(): IterableIterator<Match<T>> {
-        return this.matches.values();
-    }
-
-    public *getMatchesWhere(
-        predicate: (match: Match<T>) => boolean,
+    public *getMatches(
+        predicate?: (match: Match<T>) => boolean,
     ): IterableIterator<Match<T>> {
         for (const match of this.matches.values()) {
-            if (predicate(match)) {
+            if (predicate === undefined || predicate(match)) {
                 yield match;
             }
         }
@@ -165,7 +161,7 @@ export class MatchAccumulator<T = any> {
         minHitCount: number | undefined,
     ): IterableIterator<Match<T>> {
         return minHitCount !== undefined && minHitCount > 0
-            ? this.getMatchesWhere((m) => m.hitCount >= minHitCount)
+            ? this.getMatches((m) => m.hitCount >= minHitCount)
             : this.matches.values();
     }
 }
@@ -235,6 +231,17 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
         );
     }
 
+    public *getSemanticRefs(
+        semanticRefs: SemanticRef[],
+        predicate?: (semanticRef: SemanticRef) => boolean,
+    ) {
+        for (const match of this.getMatches()) {
+            const semanticRef = semanticRefs[match.value];
+            if (predicate === undefined || predicate(semanticRef))
+                yield semanticRef;
+        }
+    }
+
     public groupMatchesByKnowledgeType(
         semanticRefs: SemanticRef[],
     ): Map<KnowledgeType, SemanticRefAccumulator> {
@@ -250,6 +257,19 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
             group.setMatch(match);
         }
         return groups;
+    }
+
+    public selectInScope(
+        semanticRefs: SemanticRef[],
+        scope: TextRangeAccumulator,
+    ) {
+        const accumulator = new SemanticRefAccumulator(this.queryTermMatches);
+        for (const match of this.getMatches()) {
+            if (scope.isInRange(semanticRefs[match.value].range)) {
+                accumulator.setMatch(match);
+            }
+        }
+        return accumulator;
     }
 
     public toScoredSemanticRefs(): ScoredSemanticRef[] {
@@ -348,13 +368,14 @@ export class QueryTermAccumulator {
 
 export class TextRangeAccumulator {
     constructor(
-        public rangesForMessage: Map<MessageIndex, TextRange[]> = new Map<
-            MessageIndex,
-            TextRange[]
-        >(),
+        private rangesForMessage = new Map<MessageIndex, TextRange[]>(),
     ) {}
 
-    public addTextRange(textRange: TextRange) {
+    public get size() {
+        return this.rangesForMessage.size;
+    }
+
+    public addRange(textRange: TextRange) {
         const messageIndex = textRange.start.messageIndex;
         let textRanges = this.rangesForMessage.get(messageIndex);
         if (textRanges === undefined) {

@@ -73,6 +73,21 @@ function createTermSearchQuery(
     maxMatches?: number,
     minHitCount?: number,
 ) {
+    const query = new q.SelectTopNKnowledgeGroupExpr(
+        new q.GroupByKnowledgeTypeExpr(
+            createTermsMatch(conversation, terms, wherePredicates),
+        ),
+        maxMatches,
+        minHitCount,
+    );
+    return query;
+}
+
+function createTermsMatch(
+    conversation: IConversation,
+    terms: QueryTerm[],
+    wherePredicates?: q.IQuerySemanticRefPredicate[] | undefined,
+) {
     const queryTerms = new q.QueryTermsExpr(terms);
     let termsMatchExpr: q.IQueryOpExpr<SemanticRefAccumulator> =
         new q.TermsMatchExpr(
@@ -80,18 +95,14 @@ function createTermSearchQuery(
                 ? new q.ResolveRelatedTermsExpr(queryTerms)
                 : queryTerms,
         );
+    termsMatchExpr = new q.ApplyTagScopeExpr(termsMatchExpr);
     if (wherePredicates !== undefined && wherePredicates.length > 0) {
         termsMatchExpr = new q.WhereSemanticRefExpr(
             termsMatchExpr,
             wherePredicates,
         );
     }
-    const query = new q.SelectTopNKnowledgeGroupExpr(
-        new q.GroupByKnowledgeTypeExpr(termsMatchExpr),
-        maxMatches,
-        minHitCount,
-    );
-    return query;
+    return termsMatchExpr;
 }
 
 function toGroupedSearchResults(

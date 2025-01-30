@@ -19,6 +19,7 @@ import {
     MatchAccumulator,
     QueryTermAccumulator,
     SemanticRefAccumulator,
+    TextRangeAccumulator,
 } from "./accumulators.js";
 import { collections, dateTime } from "typeagent";
 
@@ -312,7 +313,7 @@ export class WhereSemanticRefExpr
             accumulator.queryTermMatches,
         );
         filtered.setMatches(
-            accumulator.getMatchesWhere((match) =>
+            accumulator.getMatches((match) =>
                 this.matchPredicatesOr(
                     context,
                     accumulator.queryTermMatches,
@@ -430,15 +431,29 @@ export class ActionPredicate implements IQuerySemanticRefPredicate {
     }
 }
 
-export class ScopeExpr implements IQueryOpExpr<void> {
-    constructor(public predicates: IQueryScopePredicate[]) {}
+export class ApplyTagScopeExpr implements IQueryOpExpr<SemanticRefAccumulator> {
+    constructor(public sourceExpr: IQueryOpExpr<SemanticRefAccumulator>) {}
 
-    public eval(context: QueryEvalContext): Promise<void> {
-        return Promise.resolve();
+    public async eval(
+        context: QueryEvalContext,
+    ): Promise<SemanticRefAccumulator> {
+        let accumulator = await this.sourceExpr.eval(context);
+        const tagScope = new TextRangeAccumulator();
+        for (const semanticRef of accumulator.getSemanticRefs(
+            context.semanticRefs,
+            (sr) => sr.knowledgeType === "tag",
+        )) {
+            tagScope.addRange(semanticRef.range);
+        }
+        if (tagScope.size > 0) {
+            accumulator = accumulator.selectInScope(
+                context.semanticRefs,
+                tagScope,
+            );
+        }
+        return Promise.resolve(accumulator);
     }
 }
-
-export interface IQueryScopePredicate {}
 
 function isPropertyMatch(
     termMatches: QueryTermAccumulator,
