@@ -278,7 +278,7 @@ export async function handleInstacartAction(
           name: targetStore?.name,
           type: ["store"],
         });
-        // TODO: persist preferrences
+        // TODO: persist preferences
       })
       .execute();
   }

@@ -543,7 +543,7 @@ class ConfigTranslationNumberOfInitialActionsCommandHandler
     ) {
         const count = params.args.count;
         if (count < 0) {
-            throw new Error("Count must be positive interger");
+            throw new Error("Count must be positive integer");
         }
         await changeContextConfig(
             {
@@ -627,15 +627,38 @@ const configTranslationCommandHandlers: CommandHandlerTable = {
             );
         }),
         model: new ConfigModelSetCommandHandler("translation"),
-        multi: getToggleHandlerTable(
-            "multiple action translation",
-            async (context, enable: boolean) => {
-                await changeContextConfig(
-                    { translation: { multipleActions: enable } },
-                    context,
-                );
+        multi: {
+            description: "multiple actions",
+            commands: {
+                ...getToggleCommandHandlers(
+                    "multiple action translation",
+                    async (context, enable: boolean) => {
+                        await changeContextConfig(
+                            { translation: { multiple: { enabled: enable } } },
+                            context,
+                        );
+                    },
+                ),
+                result: getToggleHandlerTable(
+                    "result id in multiple action",
+                    async (context, enable: boolean) => {
+                        await changeContextConfig(
+                            { translation: { multiple: { result: enable } } },
+                            context,
+                        );
+                    },
+                ),
+                pending: getToggleHandlerTable(
+                    "pending request in multiple action",
+                    async (context, enable: boolean) => {
+                        await changeContextConfig(
+                            { translation: { multiple: { pending: enable } } },
+                            context,
+                        );
+                    },
+                ),
             },
-        ),
+        },
         switch: {
             description: "auto switch schemas",
             commands: {
@@ -944,7 +967,7 @@ export function getConfigCommandHandlers(): CommandHandlerTable {
                                 defaultSubCommand: "on",
                                 commands: {
                                     ...getToggleCommandHandlers(
-                                        "all expanation reference filters",
+                                        "all explanation reference filters",
                                         async (context, enable) => {
                                             await changeContextConfig(
                                                 {

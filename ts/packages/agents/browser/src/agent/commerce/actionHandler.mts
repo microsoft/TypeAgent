@@ -106,7 +106,7 @@ export async function handleCommerceAction(
     await searchForProduct(action.parameters.productName);
     await selectSearchResult(action.parameters.productName);
 
-    // wait for delay-loaded items to settle aeven after pageLoad is declared
+    // wait for delay-loaded items to settle even after pageLoad is declared
     await new Promise((r) => setTimeout(r, 1000));
 
     const targetProduct = (await getComponentFromPage(
