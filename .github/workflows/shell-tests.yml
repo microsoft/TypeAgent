@@ -14,9 +14,9 @@ permissions:
 
 env:
   NODE_OPTIONS: --max_old_space_size=8192
-#  DEBUG: pw:browser*
-#  ELECTRON_ENABLE_LOGGING: true
-  DEBUG: typeagent:*
+#  DEBUG: pw:browser*                       # PlayWright debug messages
+#  ELECTRON_ENABLE_LOGGING: true            # Electron debug messages
+#  DEBUG: typeagent:*                       # TypeAgent debug messages
 
 # run only one of these at a time
 concurrency:
@@ -28,7 +28,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: ["windows-latest"]
+        os: ["windows-latest", "ubuntu-latest"]
         version: [20]
 
     runs-on: ${{ matrix.os }}

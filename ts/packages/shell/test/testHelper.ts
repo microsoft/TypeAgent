@@ -84,22 +84,6 @@ export async function startShell(): Promise<Page> {
 }
 
 async function getMainWindow(app: ElectronApplication): Promise<Page> {
-    // const window: Page = await app.firstWindow({ timeout: 30000});
-    // await window.waitForLoadState("domcontentloaded");
-
-    // // is this the correct window?
-    // const title = await window.title();
-    // if (title.length > 0) {
-    //     console.log(`Found window ${title}`);
-    //     return window;
-    // }
-
-    // // if we change the # of windows beyond 2 we'll have to update this function to correctly disambiguate which window is the correct one
-    // if (app.windows.length > 2) {
-    //     console.log(`Found ${app.windows.length} windows.  Expected 2`);
-    //     throw "Please update this logic to select the correct main window. (testHelper.ts->getMainWindow())";
-    // }
-
     let attempts = 0; 
     do {
 
