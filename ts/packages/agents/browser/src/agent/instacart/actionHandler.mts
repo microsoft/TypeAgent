@@ -135,7 +135,7 @@ export async function handleInstacartAction(
     );
     await ui.followLink(targetStore?.detailsLinkCssSelector);
 
-    // TODO: persist preferrences
+    // TODO: persist preferences
   }
 
   async function handleFindRecipe(action: any) {

@@ -103,7 +103,7 @@ export async function runDesktopActions(
                     file = file.substring(3);
                 } else {
                     confirmationMessage =
-                        "Failed to dowload the requested image.";
+                        "Failed to download the requested image.";
                     break;
                 }
             }

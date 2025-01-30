@@ -543,7 +543,7 @@ class ConfigTranslationNumberOfInitialActionsCommandHandler
     ) {
         const count = params.args.count;
         if (count < 0) {
-            throw new Error("Count must be positive interger");
+            throw new Error("Count must be positive integer");
         }
         await changeContextConfig(
             {
@@ -967,7 +967,7 @@ export function getConfigCommandHandlers(): CommandHandlerTable {
                                 defaultSubCommand: "on",
                                 commands: {
                                     ...getToggleCommandHandlers(
-                                        "all expanation reference filters",
+                                        "all explanation reference filters",
                                         async (context, enable) => {
                                             await changeContextConfig(
                                                 {

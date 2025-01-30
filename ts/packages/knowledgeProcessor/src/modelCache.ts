@@ -19,13 +19,12 @@ export function createEmbeddingCache(
     model: TextEmbeddingModel,
     cacheSize: number,
 ): TextEmbeddingModelWithCache {
-    const maxBatchSize = 1;
     const cache: collections.Cache<string, number[]> =
         collections.createLRUCache(cacheSize);
     const modelWithCache: TextEmbeddingModelWithCache = {
         cache,
         generateEmbedding,
-        maxBatchSize,
+        maxBatchSize: model.maxBatchSize,
     };
     if (model.generateEmbeddingBatch) {
         modelWithCache.generateEmbeddingBatch = generateEmbeddingBatch;

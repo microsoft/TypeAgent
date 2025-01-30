@@ -106,17 +106,17 @@ async function searchArtistSorted(artistName: string, context: IClientContext) {
 }
 
 async function getAlbumsByIds(service: SpotifyService, ids: string[]) {
-    const ablums: SpotifyApi.AlbumObjectFull[] = [];
+    const albums: SpotifyApi.AlbumObjectFull[] = [];
     for (let i = 0; i < ids.length; i += 20) {
         const result = await getAlbums(service, ids.slice(i, i + 20));
         if (result === undefined || result.albums.length === 0) {
             // skip id not found?
             continue;
         }
-        ablums.push(...result.albums);
+        albums.push(...result.albums);
     }
 
-    return ablums.length === 0 ? undefined : ablums;
+    return albums.length === 0 ? undefined : albums;
 }
 async function searchAlbumSorted(
     albumName: string,
@@ -129,20 +129,20 @@ async function searchAlbumSorted(
     if (albums === undefined) {
         return undefined;
     }
-    const fullAblums = await getAlbumsByIds(
+    const fullAlbums = await getAlbumsByIds(
         context.service,
         albums.map((a) => a.id),
     );
-    if (fullAblums === undefined) {
+    if (fullAlbums === undefined) {
         debugError("Unable to resolve to full albums");
         return undefined;
     }
 
-    if (fullAblums.length === 1) {
-        return fullAblums;
+    if (fullAlbums.length === 1) {
+        return fullAlbums;
     }
 
-    return fullAblums.sort((a, b) => {
+    return fullAlbums.sort((a, b) => {
         if (context.userData !== undefined) {
             const compKnown = compareKnownAlbums(context.userData.data, a, b);
             if (compKnown !== 0) {
@@ -365,7 +365,7 @@ export async function findAlbums(
     return albums;
 }
 
-async function expandMovmentTracks(
+async function expandMovementTracks(
     originalQuery: SpotifyQuery,
     tracks: SpotifyApi.TrackObjectFull[],
     quantity: number = 50,
@@ -435,7 +435,7 @@ async function sortAndExpandMovement(
 
     if (trackName && !equivalentNames(result[0].name, trackName)) {
         // Expand movements if it is not an exact match
-        result = await expandMovmentTracks(query, result, quantity, context);
+        result = await expandMovementTracks(query, result, quantity, context);
     }
 
     dumpTracks(result, userData);

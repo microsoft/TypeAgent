@@ -18,6 +18,7 @@ import {
     ITextEmbeddingDataItem,
     ITextEmbeddingData,
 } from "./dataFormat.js";
+import { createEmbeddingCache } from "knowledge-processor";
 
 export async function buildTermSemanticIndex(
     settings: SemanticIndexSettings,
@@ -166,7 +167,7 @@ export type SemanticIndexSettings = {
 
 export function createSemanticIndexSettings(): SemanticIndexSettings {
     return {
-        embeddingModel: openai.createEmbeddingModel(),
+        embeddingModel: createEmbeddingCache(openai.createEmbeddingModel(), 64),
         minScore: 0.8,
         retryMaxAttempts: 2,
         retryPauseMs: 2000,

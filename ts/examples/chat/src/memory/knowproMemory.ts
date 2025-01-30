@@ -166,6 +166,7 @@ export async function createKnowproCommands(
             options: {
                 maxToDisplay: argNum("Maximum matches to display", 25),
                 type: arg("Knowledge type"),
+                speaker: arg("Speaker"),
             },
         };
     }
@@ -189,11 +190,10 @@ export async function createKnowproCommands(
                 `Searching ${conversation.nameTag}...`,
             );
 
-            const matches = await kp.searchConversation(
-                conversation,
-                terms,
-                namedArgs.type,
-            );
+            const matches = await kp.searchConversation(conversation, terms, {
+                type: namedArgs.type,
+                speaker: namedArgs.speaker,
+            });
             if (matches === undefined || matches.size === 0) {
                 context.printer.writeLine("No matches");
                 return;
