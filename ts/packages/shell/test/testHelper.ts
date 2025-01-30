@@ -2,14 +2,11 @@
 // Licensed under the MIT License.
 
 import {
-    _electron,
     _electron as electron,
     ElectronApplication,
     Locator,
     Page,
-    TestDetails,
 } from "@playwright/test";
-import { profile } from "node:console";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
@@ -138,11 +135,11 @@ export async function exitApplication(page: Page): Promise<void> {
  */
 function getAppPath(): string {
     const packagePath = fileURLToPath(new URL("..", import.meta.url));
-    const appPath = packagePath.endsWith("/")
+    const appPath = packagePath.endsWith(path.sep)
         ? packagePath.slice(0, -1)
         : packagePath;
 
-    return appPath.includes(":") ? `file://${appPath}` : appPath;
+    return appPath;
 }
 
 /**
