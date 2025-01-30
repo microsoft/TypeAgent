@@ -84,9 +84,8 @@ export async function startShell(): Promise<Page> {
 }
 
 async function getMainWindow(app: ElectronApplication): Promise<Page> {
-    let attempts = 0; 
+    let attempts = 0;
     do {
-
         let windows: Page[] = await app.windows();
 
         // if we change the # of windows beyond 2 we'll have to update this function to correctly disambiguate which window is the correct one
@@ -96,26 +95,25 @@ async function getMainWindow(app: ElectronApplication): Promise<Page> {
         }
 
         // wait for each window to load and return the one we are interested in
-        for(let i = 0; i < windows.length; i++) {
+        for (let i = 0; i < windows.length; i++) {
             try {
                 if (windows[i] !== undefined) {
                     await windows[i].waitForLoadState("domcontentloaded");
-    
+
                     // is this the correct window?
                     const title = await windows[i].title();
                     if (title.length > 0) {
                         console.log(`Found window ${title}`);
                         return windows[i];
                     }
-                }    
+                }
             } catch (e) {
                 console.log(e);
-            }    
+            }
         }
 
         console.log("waiting...");
-        await new Promise((resolve) => setTimeout(resolve, 1000))
-        
+        await new Promise((resolve) => setTimeout(resolve, 1000));
     } while (++attempts < 30);
 
     throw "Unable to find window...timeout";
