@@ -15,7 +15,8 @@ export class KnowProPrinter extends ChatPrinter {
         const prevColor = this.setForeColor(chalk.cyan);
         try {
             this.writeNameValue("Timestamp", message.timestamp);
-            this.writeJson(message.metadata);
+            this.writeList(message.tags, { type: "csv", title: "Tags" });
+            this.write("Metadata: ").writeJson(message.metadata);
         } finally {
             this.setForeColor(prevColor);
         }
@@ -23,6 +24,7 @@ export class KnowProPrinter extends ChatPrinter {
             this.write(chunk);
         }
         this.writeLine();
+        return this;
     }
 
     public writeEntity(
@@ -45,12 +47,21 @@ export class KnowProPrinter extends ChatPrinter {
         if (action !== undefined) {
             this.writeLine(knowLib.conversation.actionToString(action));
         }
+        return this;
     }
 
     public writeTopic(topic: kp.ITopic | undefined) {
         if (topic !== undefined) {
             this.writeLine(topic.text);
         }
+        return this;
+    }
+
+    public writeTag(tag: kp.ITag | undefined) {
+        if (tag !== undefined) {
+            this.writeLine(tag.text);
+        }
+        return this;
     }
 
     public writeSemanticRef(semanticRef: kp.SemanticRef) {
@@ -104,6 +115,7 @@ export class KnowProPrinter extends ChatPrinter {
             this.writeSemanticRef(semanticRef);
             this.writeLine();
         }
+        return this;
     }
 
     public writeSearchResult(
@@ -126,6 +138,7 @@ export class KnowProPrinter extends ChatPrinter {
                 maxToDisplay,
             );
         }
+        return this;
     }
 
     public writeSearchResults(
@@ -138,6 +151,7 @@ export class KnowProPrinter extends ChatPrinter {
         this.writeResult(conversation, "action", results, maxToDisplay);
         this.writeResult(conversation, "topic", results, maxToDisplay);
         this.writeResult(conversation, "tag", results, maxToDisplay);
+        return this;
     }
 
     private writeResult(
@@ -151,6 +165,7 @@ export class KnowProPrinter extends ChatPrinter {
             this.writeTitle(type.toUpperCase());
             this.writeSearchResult(conversation, result, maxToDisplay);
         }
+        return this;
     }
 
     public writeConversationInfo(conversation: kp.IConversation) {
@@ -165,6 +180,7 @@ export class KnowProPrinter extends ChatPrinter {
             type: "csv",
             title: "Participants",
         });
+        return this;
     }
 
     public writeIndexingResults(
@@ -185,6 +201,7 @@ export class KnowProPrinter extends ChatPrinter {
                 }
             }
         }
+        return this;
     }
 }
 

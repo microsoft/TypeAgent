@@ -78,8 +78,9 @@ export class ConsoleWriter {
         return this;
     }
 
-    public writeJson(obj: any, indented: boolean = true): void {
+    public writeJson(obj: any, indented: boolean = true): ConsoleWriter {
         this.writeLine(indented ? this.jsonString(obj) : JSON.stringify(obj));
+        return this;
     }
 
     public jsonString(obj: any): string {
@@ -89,9 +90,9 @@ export class ConsoleWriter {
     public writeList(
         list?: string | string[] | (string | undefined)[] | Set<string>,
         options?: ListOptions,
-    ): void {
+    ): ConsoleWriter {
         if (!list) {
-            return;
+            return this;
         }
         const isInline =
             options && (options.type === "plain" || options.type === "csv");
@@ -104,13 +105,10 @@ export class ConsoleWriter {
         }
         if (typeof list === "string") {
             this.writeLine(this.listItemToString(1, list, options));
-            return;
+            return this;
         }
         if (list instanceof Set) {
             list = [...list.values()];
-        }
-        if (list.length === 0) {
-            return;
         }
         if (isInline) {
             const sep = options.type === "plain" ? " " : ", ";
@@ -129,15 +127,17 @@ export class ConsoleWriter {
                 }
             }
         }
+        return this;
     }
 
-    public writeTable(table: string[][]): void {
+    public writeTable(table: string[][]): ConsoleWriter {
         if (table.length === 0) {
-            return;
+            return this;
         }
         for (let i = 0; i < table.length; ++i) {
             this.writeList(table[i]);
         }
+        return this;
     }
 
     public writeNameValue(
@@ -145,7 +145,7 @@ export class ConsoleWriter {
         value: any,
         paddedNameLength?: number,
         indent?: string,
-    ): void {
+    ): ConsoleWriter {
         if (indent) {
             this.write(indent);
         }
@@ -154,6 +154,7 @@ export class ConsoleWriter {
         }
         const line = `${paddedNameLength ? name.padEnd(paddedNameLength) : name}  ${value}`;
         this.writeLine(line);
+        return this;
     }
 
     public writeRecord<T = string>(
@@ -182,8 +183,9 @@ export class ConsoleWriter {
         return maxLength;
     }
 
-    public writeLink(url: string): void {
+    public writeLink(url: string): ConsoleWriter {
         this.writeLine(pathToFileURL(url).toString());
+        return this;
     }
 
     private listItemToString(
