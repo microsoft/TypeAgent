@@ -8,6 +8,7 @@ import {
     ChatModelWithStreaming,
     ImageModel,
     ImageGeneration,
+    JsonSchema,
 } from "./models";
 import { callApi, callJsonApi, FetchThrottler } from "./restClient";
 import { getEnvSetting } from "./common";
@@ -416,8 +417,30 @@ function createAzureOpenAIChatModel(
     };
     return model;
 
+    function getParams(
+        messages: PromptSection[],
+        jsonSchema?: JsonSchema,
+        additionalParams?: any,
+    ) {
+        const params: any = {
+            ...defaultParams,
+            messages,
+            ...completionSettings,
+            ...additionalParams,
+        };
+        if (jsonSchema !== undefined) {
+            if (params.response_format?.type === "json_object") {
+                params.response_format = {
+                    type: "json_schema",
+                    json_schema: jsonSchema,
+                };
+            }
+        }
+        return params;
+    }
     async function complete(
         prompt: string | PromptSection[],
+        jsonSchema?: JsonSchema,
     ): Promise<Result<string>> {
         verifyPromptLength(settings, prompt);
 
@@ -426,17 +449,12 @@ function createAzureOpenAIChatModel(
             return headerResult;
         }
 
-        const messages =
+        const messages: PromptSection[] =
             typeof prompt === "string"
                 ? [{ role: "user", content: prompt }]
                 : prompt;
 
-        const params = {
-            ...defaultParams,
-            messages: messages,
-            ...completionSettings,
-        };
-
+        const params: any = getParams(messages, jsonSchema);
         const result = await callJsonApi(
             headerResult.data,
             settings.endpoint,
@@ -478,6 +496,7 @@ function createAzureOpenAIChatModel(
 
     async function completeStream(
         prompt: string | PromptSection[],
+        jsonSchema?: JsonSchema,
     ): Promise<Result<AsyncIterableIterator<string>>> {
         verifyPromptLength(settings, prompt);
 
@@ -505,13 +524,10 @@ function createAzureOpenAIChatModel(
             }
         });
 
-        const params = {
-            ...defaultParams,
-            messages: messages,
+        const params = getParams(messages, jsonSchema, {
             stream: true,
             stream_options: { include_usage: true && !historyIncludesImages },
-            ...completionSettings,
-        };
+        });
         const result = await callApi(
             headerResult.data,
             settings.endpoint,

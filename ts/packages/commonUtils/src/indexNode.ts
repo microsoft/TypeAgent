@@ -11,7 +11,8 @@ export {
     composeTranslatorSchemas,
     enableJsonTranslatorStreaming,
     TypeChatJsonTranslatorWithStreaming,
-    createJsonTranslatorWithValidator,
+    createJsonTranslatorWithValidator as createTypeAgentJsonTranslator,
+    TypeAgentJsonValidator,
     JsonTranslatorOptions,
 } from "./jsonTranslator.js";
 export { IncrementalJsonValueCallBack } from "./incrementalJsonParser.js";

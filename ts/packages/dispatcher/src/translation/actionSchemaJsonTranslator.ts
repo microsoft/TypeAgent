@@ -12,10 +12,12 @@ import {
     ActionSchemaUnion,
     ActionSchemaGroup,
     GenerateSchemaOptions,
+    generateActionJsonSchema,
 } from "action-schema";
 import {
-    createJsonTranslatorWithValidator,
+    createTypeAgentJsonTranslator,
     JsonTranslatorOptions,
+    TypeAgentJsonValidator,
 } from "common-utils";
 import {
     getInjectedActionConfigs,
@@ -32,11 +34,15 @@ import { ActionConfigProvider } from "./actionConfigProvider.js";
 function createActionSchemaJsonValidator<T extends TranslatedAction>(
     actionSchemaGroup: ActionSchemaGroup,
     generateOptions?: GenerateSchemaOptions,
-): TypeChatJsonValidator<T> {
+): TypeAgentJsonValidator<T> {
     const schema = generateActionSchema(actionSchemaGroup, generateOptions);
+    const jsonSchema = generateOptions?.jsonSchema
+        ? generateActionJsonSchema(actionSchemaGroup)
+        : undefined;
     return {
         getSchemaText: () => schema,
         getTypeName: () => actionSchemaGroup.entry.name,
+        getJsonSchema: () => jsonSchema,
         validate(jsonObject: object): Result<T> {
             const value: any = jsonObject;
             if (value.actionName === undefined) {
@@ -72,7 +78,7 @@ export function createActionJsonTranslatorFromSchemaDef<
         generateOptions,
     );
 
-    return createJsonTranslatorWithValidator(
+    return createTypeAgentJsonTranslator(
         typeName.toLowerCase(),
         validator,
         options,

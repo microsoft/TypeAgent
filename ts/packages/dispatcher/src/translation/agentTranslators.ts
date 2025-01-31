@@ -4,7 +4,7 @@
 import {
     CachedImageWithDetails,
     createJsonTranslatorFromSchemaDef,
-    createJsonTranslatorWithValidator,
+    createTypeAgentJsonTranslator,
     enableJsonTranslatorStreaming,
     JsonTranslatorOptions,
 } from "common-utils";
@@ -263,6 +263,7 @@ export function loadAgentJsonTranslator<
     regenerateSchema: boolean = true,
     model?: string,
     exact: boolean = true,
+    jsonSchema: boolean = false,
 ): TypeAgentTranslator<T> {
     const options = { model };
     const translator = regenerateSchema
@@ -276,7 +277,7 @@ export function loadAgentJsonTranslator<
                   multipleActionOptions,
               ),
               options,
-              { exact },
+              { exact, jsonSchema },
           )
         : createJsonTranslatorFromSchemaDef<T>(
               "AllActions",
@@ -309,7 +310,7 @@ function createTypeAgentTranslator<
 
     // Create another translator so that we can have a different
     // debug/token count tag
-    const altTranslator = createJsonTranslatorWithValidator(
+    const altTranslator = createTypeAgentJsonTranslator(
         "check",
         translator.validator,
         options,

@@ -104,6 +104,7 @@ function generateTypeDefinition(
 export type GenerateSchemaOptions = {
     strict?: boolean; // default true
     exact?: boolean; // default false
+    jsonSchema?: boolean; // default false
 };
 
 export function generateSchemaTypeDefinition(
@@ -161,4 +162,8 @@ export function generateActionSchema(
         options,
         actionSchemaGroup.order,
     );
+}
+
+export function generateActionJsonSchema(actionSchemaGroup: ActionSchemaGroup) {
+    return undefined;
 }

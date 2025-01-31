@@ -18,6 +18,7 @@ export {
     GenerateSchemaOptions,
     generateActionSchema,
     generateSchemaTypeDefinition,
+    generateActionJsonSchema,
 } from "./generator.js";
 export { validateAction } from "./validate.js";
 export { getParameterType, getParameterNames } from "./utils.js";
