@@ -83,6 +83,19 @@ export class MatchAccumulator<T = any> {
         }
     }
 
+    public union(other: MatchAccumulator<T>): void {
+        for (const matchFrom of other.matches.values()) {
+            const matchTo = this.matches.get(matchFrom.value);
+            if (matchTo !== undefined) {
+                // Existing
+                matchTo.hitCount += matchFrom.hitCount;
+                matchTo.score += matchFrom.score;
+            } else {
+                this.matches.set(matchFrom.value, matchFrom);
+            }
+        }
+    }
+
     public getSortedByScore(minHitCount?: number): Match<T>[] {
         if (this.matches.size === 0) {
             return [];
