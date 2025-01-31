@@ -10,7 +10,6 @@ import {
     success,
     TypeChatJsonTranslator,
     TypeChatJsonValidator,
-    TypeChatLanguageModel,
 } from "typechat";
 import { createTypeScriptJsonValidator } from "typechat/ts";
 import { TypeChatConstraintsValidator } from "./constraints.js";
@@ -231,7 +230,7 @@ async function attachAttachments(
 export type JsonTranslatorOptions<T extends object> = {
     constraintsValidator?: TypeChatConstraintsValidator<T> | undefined; // Optional
     instructions?: PromptSection[] | undefined; // Instructions before the per request preamble
-    model?: string | TypeChatLanguageModel | undefined; // optional
+    model?: string | undefined; // optional
 };
 
 /**
@@ -266,17 +265,14 @@ export function createJsonTranslatorWithValidator<T extends object>(
     validator: TypeChatJsonValidator<T>,
     options?: JsonTranslatorOptions<T>,
 ) {
-    let model = options?.model;
-    if (typeof model !== "object") {
-        model = ai.createChatModel(
-            model,
-            {
-                response_format: { type: "json_object" },
-            },
-            undefined,
-            ["translator", name],
-        );
-    }
+    const model = ai.createChatModel(
+        options?.model,
+        {
+            response_format: { type: "json_object" },
+        },
+        undefined,
+        ["translate", name],
+    );
 
     const debugPrompt = registerDebug(`typeagent:translate:${name}:prompt`);
     const debugResult = registerDebug(`typeagent:translate:${name}:result`);

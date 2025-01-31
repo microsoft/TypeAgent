@@ -4,7 +4,9 @@
 import {
     CachedImageWithDetails,
     createJsonTranslatorFromSchemaDef,
+    createJsonTranslatorWithValidator,
     enableJsonTranslatorStreaming,
+    JsonTranslatorOptions,
 } from "common-utils";
 import { AppAction } from "@typeagent/agent-sdk";
 import { Result, TypeChatJsonTranslator } from "typechat";
@@ -234,6 +236,7 @@ export type TypeAgentTranslator<T = object> = {
         attachments?: CachedImageWithDetails[],
         cb?: IncrementalJsonValueCallBack,
     ) => Promise<Result<T>>;
+    checkTranslate: (request: string) => Promise<Result<T>>;
 };
 
 // TranslatedAction are actions returned from the LLM without the translator name
@@ -261,6 +264,7 @@ export function loadAgentJsonTranslator<
     model?: string,
     exact: boolean = true,
 ): TypeAgentTranslator<T> {
+    const options = { model };
     const translator = regenerateSchema
         ? createActionJsonTranslatorFromSchemaDef<T>(
               "AllActions",
@@ -271,7 +275,7 @@ export function loadAgentJsonTranslator<
                   changeAgentAction,
                   multipleActionOptions,
               ),
-              { model },
+              options,
               { exact },
           )
         : createJsonTranslatorFromSchemaDef<T>(
@@ -283,15 +287,18 @@ export function loadAgentJsonTranslator<
                   changeAgentAction,
                   multipleActionOptions,
               ),
-              { model },
+              options,
           );
 
-    return createTypeAgentTranslator(translator);
+    return createTypeAgentTranslator(translator, options);
 }
 
 function createTypeAgentTranslator<
     T extends TranslatedAction = TranslatedAction,
->(translator: TypeChatJsonTranslator<T>): TypeAgentTranslator<T> {
+>(
+    translator: TypeChatJsonTranslator<T>,
+    options: JsonTranslatorOptions<T>,
+): TypeAgentTranslator<T> {
     const streamingTranslator = enableJsonTranslatorStreaming(translator);
 
     // the request prompt is already expanded by the override replacement below
@@ -300,6 +307,16 @@ function createTypeAgentTranslator<
         return request;
     };
 
+    // Create another translator so that we can have a different
+    // debug/token count tag
+    const altTranslator = createJsonTranslatorWithValidator(
+        "check",
+        translator.validator,
+        options,
+    );
+    altTranslator.createRequestPrompt = (request: string) => {
+        return request;
+    };
     const typeAgentTranslator = {
         translate: async (
             request: string,
@@ -322,6 +339,17 @@ function createTypeAgentTranslator<
                 attachments,
             );
         },
+        // No streaming, no history, no attachments.
+        checkTranslate: async (request: string) => {
+            const requestPrompt = createTypeAgentRequestPrompt(
+                altTranslator,
+                request,
+                undefined,
+                undefined,
+                false,
+            );
+            return altTranslator.translate(requestPrompt);
+        },
     };
 
     return typeAgentTranslator;
@@ -338,6 +366,7 @@ export function createTypeAgentTranslatorForSelectedActions<
     multipleActionOptions: MultipleActionOptions,
     model?: string,
 ) {
+    const options = { model };
     const translator = createActionJsonTranslatorFromSchemaDef<T>(
         "AllActions",
         composeSelectedActionSchema(
@@ -348,9 +377,9 @@ export function createTypeAgentTranslatorForSelectedActions<
             changeAgentAction,
             multipleActionOptions,
         ),
-        { model },
+        options,
     );
-    return createTypeAgentTranslator<T>(translator);
+    return createTypeAgentTranslator<T>(translator, options);
 }
 
 // For CLI, replicate the behavior of loadAgentJsonTranslator to get the schema

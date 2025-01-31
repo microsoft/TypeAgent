@@ -59,7 +59,7 @@ async function canTranslateWithoutContext(
     try {
         const translations = new Map<string, TranslatedAction>();
         for (const [translatorName, translator] of usedTranslators) {
-            const result = await translator.translate(request);
+            const result = await translator.checkTranslate(request);
             if (!result.success) {
                 throw new Error("Failed to translate without history context");
             }
