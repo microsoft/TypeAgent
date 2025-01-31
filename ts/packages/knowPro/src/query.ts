@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import {
+    DateRange,
     IConversation,
     IMessage,
     ITag,
@@ -23,7 +24,7 @@ import {
     SemanticRefAccumulator,
     TextRangeAccumulator,
 } from "./accumulators.js";
-import { collections, dateTime } from "typeagent";
+import { collections } from "typeagent";
 
 export function isConversationSearchable(conversation: IConversation): boolean {
     return (
@@ -62,21 +63,6 @@ export function timestampRangeForConversation(
     return undefined;
 }
 
-/**
- * Assumes messages are in timestamp order.
- * @param conversation
- */
-export function getMessagesInDateRange(
-    conversation: IConversation,
-    dateRange: DateRange,
-): IMessage[] {
-    return collections.getInRange(
-        conversation.messages,
-        dateTime.timestampString(dateRange.start),
-        dateRange.end ? dateTime.timestampString(dateRange.end) : undefined,
-        (x, y) => x.localeCompare(y),
-    );
-}
 /**
  * Returns:
  *  0 if locations are equal
@@ -117,11 +103,6 @@ export function isInTextRange(
     );
     return cmpStart <= 0 && cmpEnd <= 0;
 }
-
-export type DateRange = {
-    start: Date;
-    end?: Date | undefined;
-};
 
 export function compareDates(x: Date, y: Date): number {
     return x.getTime() - y.getTime();

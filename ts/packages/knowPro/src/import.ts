@@ -26,6 +26,7 @@ import {
     SemanticIndexSettings,
     TermSemanticIndex,
 } from "./termIndex.js";
+import { TimestampToMessageIndex } from "./timestampIndex.js";
 
 // metadata for podcast messages
 export class PodcastMessageMeta implements IKnowledgeSource {
@@ -122,6 +123,7 @@ export class Podcast implements IConversation<PodcastMessageMeta> {
         public semanticRefs: SemanticRef[] = [],
         public semanticRefIndex: ConversationIndex | undefined = undefined,
         public relatedTermsIndex: TermSemanticIndex | undefined = undefined,
+        public timestampIndex: TimestampToMessageIndex | undefined = undefined,
     ) {
         this.settings = createPodcastSettings();
     }
@@ -177,6 +179,7 @@ export class Podcast implements IConversation<PodcastMessageMeta> {
     ): Promise<ConversationIndexingResult> {
         const result = await buildConversationIndex(this, progressCallback);
         this.addMetadataToIndex();
+        this.buildTimestampIndex();
         return result;
     }
 
@@ -196,6 +199,10 @@ export class Podcast implements IConversation<PodcastMessageMeta> {
                 progressCallback,
             );
         }
+    }
+
+    public buildTimestampIndex(): void {
+        this.timestampIndex = new TimestampToMessageIndex(this.messages);
     }
 
     public serialize(): PodcastData {
@@ -221,6 +228,7 @@ export class Podcast implements IConversation<PodcastMessageMeta> {
                 data.relatedTermIndexData,
             );
         }
+        this.buildTimestampIndex();
     }
 }
 
@@ -231,6 +239,8 @@ export interface PodcastData extends IConversationData<PodcastMessage> {
 export async function importPodcast(
     transcriptFilePath: string,
     podcastName?: string,
+    startDate?: Date,
+    lengthMinutes: number = 60,
 ): Promise<Podcast> {
     const transcriptText = await readAllText(transcriptFilePath);
     podcastName ??= getFileName(transcriptFilePath);
@@ -276,7 +286,8 @@ export async function importPodcast(
     }
     assignMessageListeners(msgs, participants);
     const pod = new Podcast(podcastName, msgs, [podcastName]);
-    // TODO: add timestamps and more tags
+    pod.generateTimestamps(startDate, lengthMinutes);
+    // TODO: add more tags
     // list all the books
     // what did K say about Children of Time?
     return pod;
