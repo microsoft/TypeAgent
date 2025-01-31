@@ -3,6 +3,7 @@
 
 import { SemanticRefAccumulator } from "./accumulators.js";
 import {
+    DateRange,
     IConversation,
     KnowledgeType,
     QueryTerm,
@@ -19,6 +20,7 @@ export type SearchResult = {
 export type SearchFilter = {
     type?: KnowledgeType | undefined;
     propertiesToMatch?: Record<string, string>;
+    dateRange?: DateRange;
 };
 /**
  * Searches conversation for terms
@@ -93,9 +95,7 @@ class SearchQueryBuilder {
                     : queryTerms,
             );
         // Always apply "tag match" scope... all text ranges that matched tags.. are in scope
-        termsMatchExpr = new q.ScopeExpr(termsMatchExpr, [
-            new q.KnowledgeTypePredicate("tag"),
-        ]);
+        termsMatchExpr = this.compileScope(termsMatchExpr, filter?.dateRange);
         if (filter !== undefined) {
             // Where clause
             termsMatchExpr = new q.WhereSemanticRefExpr(
@@ -103,6 +103,19 @@ class SearchQueryBuilder {
                 this.compileFilter(filter),
             );
         }
+        return termsMatchExpr;
+    }
+
+    private compileScope(
+        termsMatchExpr: q.IQueryOpExpr<SemanticRefAccumulator>,
+        dateRange?: DateRange,
+    ): q.IQueryOpExpr<SemanticRefAccumulator> {
+        // Always apply "tag match" scope... all text ranges that matched tags.. are in scope
+        termsMatchExpr = new q.ScopeExpr(
+            termsMatchExpr,
+            [new q.KnowledgeTypePredicate("tag")],
+            dateRange ? new q.TimestampScopeExpr(dateRange) : undefined,
+        );
         return termsMatchExpr;
     }
 

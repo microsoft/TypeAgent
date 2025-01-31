@@ -146,5 +146,5 @@ export type DateRange = {
 };
 
 export interface ITimestampToMessageIndex {
-    getMessagesInDateRange(dateRange: DateRange): MessageIndex[];
+    getTextRange(dateRange: DateRange): TextRange[];
 }

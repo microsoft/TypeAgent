@@ -7,25 +7,31 @@ import {
     IMessage,
     ITimestampToMessageIndex,
     MessageIndex,
+    TextRange,
 } from "./dataFormat.js";
 
 export class TimestampToMessageIndex implements ITimestampToMessageIndex {
-    private messageIndex: Timestamped<MessageIndex>[];
+    private messageIndex: TimestampedTextRange[];
     constructor(messages: IMessage[]) {
         this.messageIndex = [];
         for (let i = 0; i < messages.length; ++i) {
             this.addMessage(messages[i], i);
         }
-        this.messageIndex.sort(compareTimestamped);
+        this.messageIndex.sort(compareTimestampedRange);
     }
 
-    public getMessagesInDateRange(dateRange: DateRange): MessageIndex[] {
-        return collections.getInRange(
+    public getTextRange(dateRange: DateRange): TextRange[] {
+        const startAt = dateTime.timestampString(dateRange.start);
+        const stopAt = dateRange.end
+            ? dateTime.timestampString(dateRange.end)
+            : undefined;
+        const ranges: TimestampedTextRange[] = collections.getInRange(
             this.messageIndex,
-            dateTime.timestampString(dateRange.start),
-            dateRange.end ? dateTime.timestampString(dateRange.end) : undefined,
-            compareTimestamped,
+            startAt,
+            stopAt,
+            compareTimestampedRange,
         );
+        return ranges.map((r) => r.range);
     }
 
     private addMessage(
@@ -38,35 +44,38 @@ export class TimestampToMessageIndex implements ITimestampToMessageIndex {
         }
         const date = new Date(message.timestamp);
         // This string is formatted to be searchable
-        const entry: Timestamped<MessageIndex> = makeTimestamped(
-            date,
-            messageIndex,
-        );
+        const entry = this.makeTimestamped(date, messageIndex);
         if (inOrder) {
             collections.insertIntoSorted(
                 this.messageIndex,
                 entry,
-                compareTimestamped,
+                compareTimestampedRange,
             );
         } else {
             this.messageIndex.push(entry);
         }
         return true;
     }
+
+    private makeTimestamped(
+        timestamp: Date,
+        messageIndex: MessageIndex,
+    ): TimestampedTextRange {
+        return {
+            range: { start: { messageIndex } },
+            timestamp: dateTime.timestampString(timestamp, false),
+        };
+    }
 }
 
-type Timestamped<T = any> = {
+type TimestampedTextRange = {
     timestamp: string;
-    value: T;
+    range: TextRange;
 };
 
-function compareTimestamped(x: Timestamped, y: Timestamped) {
+function compareTimestampedRange(
+    x: TimestampedTextRange,
+    y: TimestampedTextRange,
+) {
     return x.timestamp.localeCompare(y.timestamp);
-}
-
-function makeTimestamped(timestamp: Date, value: any): Timestamped {
-    return {
-        value,
-        timestamp: dateTime.timestampString(timestamp, false),
-    };
 }
