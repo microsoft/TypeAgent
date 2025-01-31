@@ -83,7 +83,7 @@ export function compareTextLocation(x: TextLocation, y: TextLocation): number {
     return (x.charIndex ?? 0) - (y.charIndex ?? 0);
 }
 
-const MaxTextLocation: TextLocation = {
+export const MaxTextLocation: TextLocation = {
     messageIndex: Number.MAX_SAFE_INTEGER,
     chunkIndex: Number.MAX_SAFE_INTEGER,
     charIndex: Number.MAX_SAFE_INTEGER,
@@ -578,7 +578,7 @@ export class TimestampScopeExpr implements IQueryOpExpr<TextRange[]> {
         const index = context.conversation.timestampIndex;
         let textRanges: TextRange[] | undefined;
         if (index !== undefined) {
-            textRanges = index.getTextRange(this.dateRange);
+            textRanges = index.lookupRange(this.dateRange);
         }
         return Promise.resolve(textRanges ?? []);
     }

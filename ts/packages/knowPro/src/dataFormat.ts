@@ -76,7 +76,7 @@ export interface IConversation<TMeta extends IKnowledgeSource = any> {
     semanticRefIndex?: ITermToSemanticRefIndex | undefined;
     semanticRefs: SemanticRef[] | undefined;
     relatedTermsIndex?: ITermToRelatedTermsIndex | undefined;
-    timestampIndex?: ITimestampToMessageIndex | undefined;
+    timestampIndex?: ITimestampToTextRangeIndex | undefined;
 }
 
 export type MessageIndex = number;
@@ -145,6 +145,6 @@ export type DateRange = {
     end?: Date | undefined;
 };
 
-export interface ITimestampToMessageIndex {
-    getTextRange(dateRange: DateRange): TextRange[];
+export interface ITimestampToTextRangeIndex {
+    lookupRange(dateRange: DateRange): TextRange[];
 }

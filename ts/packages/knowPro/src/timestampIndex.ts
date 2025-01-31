@@ -5,28 +5,40 @@ import { collections, dateTime } from "typeagent";
 import {
     DateRange,
     IMessage,
-    ITimestampToMessageIndex,
+    ITimestampToTextRangeIndex,
     MessageIndex,
     TextRange,
 } from "./dataFormat.js";
 
-export class TimestampToMessageIndex implements ITimestampToMessageIndex {
-    private messageIndex: TimestampedTextRange[];
+/**
+ * An index of timestamp => TextRanges
+ * TextRanges need not be contiguous.
+ */
+export class TimestampToTextRangeIndex implements ITimestampToTextRangeIndex {
+    // Maintains ranges sorted by timestamp
+    private ranges: TimestampedTextRange[];
+
     constructor(messages: IMessage[]) {
-        this.messageIndex = [];
+        this.ranges = [];
         for (let i = 0; i < messages.length; ++i) {
             this.addMessage(messages[i], i);
         }
-        this.messageIndex.sort(compareTimestampedRange);
+        this.ranges.sort(compareTimestampedRange);
     }
 
-    public getTextRange(dateRange: DateRange): TextRange[] {
+    /**
+     * Looks up text ranges in given date range.
+     * Text ranges need not be contiguous
+     * @param dateRange
+     * @returns
+     */
+    public lookupRange(dateRange: DateRange): TextRange[] {
         const startAt = dateTime.timestampString(dateRange.start);
         const stopAt = dateRange.end
             ? dateTime.timestampString(dateRange.end)
             : undefined;
         const ranges: TimestampedTextRange[] = collections.getInRange(
-            this.messageIndex,
+            this.ranges,
             startAt,
             stopAt,
             compareTimestampedRange,
@@ -47,12 +59,12 @@ export class TimestampToMessageIndex implements ITimestampToMessageIndex {
         const entry = this.makeTimestamped(date, messageIndex);
         if (inOrder) {
             collections.insertIntoSorted(
-                this.messageIndex,
+                this.ranges,
                 entry,
                 compareTimestampedRange,
             );
         } else {
-            this.messageIndex.push(entry);
+            this.ranges.push(entry);
         }
         return true;
     }
