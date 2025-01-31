@@ -36,7 +36,9 @@ export async function chunkifyTypeScriptFiles(
         const baseName = path.basename(fileName);
         const extName = path.extname(fileName);
         const codeName = baseName.slice(0, -extName.length || undefined);
-        const blobs: Blob[] = [{ start: 0, lines: sourceFile.text.match(/.*(?:\r?\n|$)/g) || [] }];
+        const blobs: Blob[] = [
+            { start: 0, lines: sourceFile.text.match(/.*(?:\r?\n|$)/g) || [] },
+        ];
         const rootChunk: Chunk = {
             chunkId: generate_id(),
             treeName: "file",
@@ -110,10 +112,20 @@ function spliceBlobs(parentChunk: Chunk, childChunk: Chunk): void {
     assert(childBlobs.length === 1, "Child chunk must have exactly one blob");
     const parentBlob = parentBlobs[parentBlobs.length - 1];
     const childBlob = childBlobs[0];
-    assert(childBlob.start >= parentBlob.start, "Child blob must start after parent blob");
-    assert(childBlob.start + childBlob.lines.length <= parentBlob.start + parentBlob.lines.length, "Child blob must end before parent blob");
+    assert(
+        childBlob.start >= parentBlob.start,
+        "Child blob must start after parent blob",
+    );
+    assert(
+        childBlob.start + childBlob.lines.length <=
+            parentBlob.start + parentBlob.lines.length,
+        "Child blob must end before parent blob",
+    );
 
-    const linesBefore = parentBlob.lines.slice(0, childBlob.start - parentBlob.start);
+    const linesBefore = parentBlob.lines.slice(
+        0,
+        childBlob.start - parentBlob.start,
+    );
     const startBefore = parentBlob.start;
     while (linesBefore.length && !linesBefore[linesBefore.length - 1].trim()) {
         linesBefore.pop();
