@@ -206,7 +206,7 @@ export class TermsMatchExpr implements IQueryOpExpr<SemanticRefAccumulator> {
         matchAccumulator: SemanticRefAccumulator,
         queryTerm: QueryTerm,
     ): void {
-        const termMatches = new SemanticRefAccumulator(); // Future: pool these
+        const termMatches = matchAccumulator; // new SemanticRefAccumulator(); // Future: pool these
         termMatches.addTermMatch(
             queryTerm.term,
             index.lookupTerm(queryTerm.term.text),
@@ -223,7 +223,7 @@ export class TermsMatchExpr implements IQueryOpExpr<SemanticRefAccumulator> {
                 );
             }
         }
-        matchAccumulator.union(termMatches);
+        //matchAccumulator.union(termMatches);
     }
 }
 

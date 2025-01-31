@@ -90,8 +90,11 @@ export class MatchAccumulator<T = any> {
                 // Existing
                 matchTo.hitCount += matchFrom.hitCount;
                 matchTo.score += matchFrom.score;
+                if (matchTo.hitCount > this.maxHitCount) {
+                    this.maxHitCount = matchTo.hitCount;
+                }
             } else {
-                this.matches.set(matchFrom.value, matchFrom);
+                this.setMatch(matchFrom);
             }
         }
     }
