@@ -172,14 +172,37 @@ export function argChunkSize(defaultValue?: number | undefined): ArgDef {
     };
 }
 
-export function argToDate(value: string | undefined): Date | undefined {
-    return value ? dateTime.stringToDate(value) : undefined;
+export function recordFromArgs(
+    args: NamedArgs,
+    metadata?: CommandMetadata,
+): Record<string, string> {
+    const record: Record<string, string> = {};
+    const keys = Object.keys(args);
+    for (const key of keys) {
+        const value = args[key];
+        if (typeof value !== "function") {
+            record[key] = value;
+        }
+    }
+    if (metadata !== undefined) {
+        if (metadata.args) {
+            removeKeysFromRecord(record, Object.keys(metadata.args));
+        }
+        if (metadata.options) {
+            removeKeysFromRecord(record, Object.keys(metadata.options));
+        }
+    }
+    return record;
 }
 
-export function addMinutesToDate(date: Date, minutes: number): Date {
-    const time = date.getTime();
-    const offsetMs = minutes * 60 * 1000;
-    return new Date(time + offsetMs);
+function removeKeysFromRecord(record: Record<string, string>, keys: string[]) {
+    for (const key of keys) {
+        delete record[key];
+    }
+}
+
+export function argToDate(value: string | undefined): Date | undefined {
+    return value ? dateTime.stringToDate(value) : undefined;
 }
 
 export function parseFreeAndNamedArguments(

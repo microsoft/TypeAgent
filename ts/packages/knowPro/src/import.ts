@@ -10,7 +10,7 @@ import {
     ITextEmbeddingData,
 } from "./dataFormat.js";
 import { conversation, split } from "knowledge-processor";
-import { collections, getFileName, readAllText } from "typeagent";
+import { collections, dateTime, getFileName, readAllText } from "typeagent";
 import {
     ConversationIndex,
     addActionToIndex,
@@ -26,6 +26,7 @@ import {
     SemanticIndexSettings,
     TermSemanticIndex,
 } from "./termIndex.js";
+import { TimestampToMessageIndex } from "./timestampIndex.js";
 
 // metadata for podcast messages
 export class PodcastMessageMeta implements IKnowledgeSource {
@@ -122,6 +123,7 @@ export class Podcast implements IConversation<PodcastMessageMeta> {
         public semanticRefs: SemanticRef[] = [],
         public semanticRefIndex: ConversationIndex | undefined = undefined,
         public relatedTermsIndex: TermSemanticIndex | undefined = undefined,
+        public timestampIndex: TimestampToMessageIndex | undefined = undefined,
     ) {
         this.settings = createPodcastSettings();
     }
@@ -159,28 +161,14 @@ export class Podcast implements IConversation<PodcastMessageMeta> {
         }
     }
 
-    generateTimestamps() {
+    public generateTimestamps(startDate?: Date, lengthMinutes: number = 60) {
         // generate a random date within the last 10 years
-        const date = new Date();
-        const startHour = 14;
-        date.setFullYear(date.getFullYear() - Math.floor(Math.random() * 10));
-        date.setMonth(Math.floor(Math.random() * 12));
-        date.setDate(Math.floor(Math.random() * 28));
-        const seconds = 3600;
-        let cumulativeLength = 0;
-        const cumulativeLengths = this.messages.map((msg) => {
-            const msgCum = cumulativeLength;
-            cumulativeLength += msg.textChunks[0].length;
-            return msgCum;
-        });
-        for (let i = 0; i < this.messages.length; i++) {
-            const lengthPct = cumulativeLengths[i] / cumulativeLength;
-            const msgSeconds = lengthPct * seconds;
-            const minutes = Math.floor((msgSeconds % 3600) / 60);
-            const secs = Math.floor(msgSeconds % 60);
-            const timestamp = `${date.toISOString()}T${startHour}:${minutes}:${secs}`;
-            this.messages[i].timestamp = timestamp;
-        }
+        startDate ??= randomDate();
+        timestampMessages(
+            this.messages,
+            startDate,
+            dateTime.addMinutesToDate(startDate, lengthMinutes),
+        );
     }
 
     public async buildIndex(
@@ -191,6 +179,7 @@ export class Podcast implements IConversation<PodcastMessageMeta> {
     ): Promise<ConversationIndexingResult> {
         const result = await buildConversationIndex(this, progressCallback);
         this.addMetadataToIndex();
+        this.buildTimestampIndex();
         return result;
     }
 
@@ -210,6 +199,10 @@ export class Podcast implements IConversation<PodcastMessageMeta> {
                 progressCallback,
             );
         }
+    }
+
+    public buildTimestampIndex(): void {
+        this.timestampIndex = new TimestampToMessageIndex(this.messages);
     }
 
     public serialize(): PodcastData {
@@ -235,6 +228,7 @@ export class Podcast implements IConversation<PodcastMessageMeta> {
                 data.relatedTermIndexData,
             );
         }
+        this.buildTimestampIndex();
     }
 }
 
@@ -245,6 +239,8 @@ export interface PodcastData extends IConversationData<PodcastMessage> {
 export async function importPodcast(
     transcriptFilePath: string,
     podcastName?: string,
+    startDate?: Date,
+    lengthMinutes: number = 60,
 ): Promise<Podcast> {
     const transcriptText = await readAllText(transcriptFilePath);
     podcastName ??= getFileName(transcriptFilePath);
@@ -290,8 +286,56 @@ export async function importPodcast(
     }
     assignMessageListeners(msgs, participants);
     const pod = new Podcast(podcastName, msgs, [podcastName]);
-    // TODO: add timestamps and more tags
+    pod.generateTimestamps(startDate, lengthMinutes);
+    // TODO: add more tags
     // list all the books
     // what did K say about Children of Time?
     return pod;
+}
+
+/**
+ * Text (such as a transcript) can be collected over a time range.
+ * This text can be partitioned into blocks. However, timestamps for individual blocks are not available.
+ * Assigns individual timestamps to blocks proportional to their lengths.
+ * @param turns Transcript turns to assign timestamps to
+ * @param startDate starting
+ * @param endDate
+ */
+export function timestampMessages(
+    messages: IMessage[],
+    startDate: Date,
+    endDate: Date,
+): void {
+    let startTicks = startDate.getTime();
+    const ticksLength = endDate.getTime() - startTicks;
+    if (ticksLength <= 0) {
+        throw new Error(`${startDate} is not < ${endDate}`);
+    }
+    let messageLengths = messages.map((m) => messageLength(m));
+    const textLength: number = messageLengths.reduce(
+        (total: number, l) => total + l,
+        0,
+    );
+    const ticksPerChar = ticksLength / textLength;
+    for (let i = 0; i < messages.length; ++i) {
+        messages[i].timestamp = new Date(startTicks).toISOString();
+        // Now, we will 'elapse' time .. proportional to length of the text
+        // This assumes that each speaker speaks equally fast...
+        startTicks += ticksPerChar * messageLengths[i];
+    }
+
+    function messageLength(message: IMessage): number {
+        return message.textChunks.reduce(
+            (total: number, chunk) => total + chunk.length,
+            0,
+        );
+    }
+}
+
+function randomDate(startHour = 14) {
+    const date = new Date();
+    date.setFullYear(date.getFullYear() - Math.floor(Math.random() * 10));
+    date.setMonth(Math.floor(Math.random() * 12));
+    date.setDate(Math.floor(Math.random() * 28));
+    return date;
 }

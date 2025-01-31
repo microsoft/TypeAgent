@@ -144,19 +144,6 @@ export class MatchAccumulator<T = any> {
         return topN.length;
     }
 
-    public union(other: MatchAccumulator<T>): void {
-        for (const matchFrom of other.matches.values()) {
-            const matchTo = this.matches.get(matchFrom.value);
-            if (matchTo !== undefined) {
-                // Existing
-                matchTo.hitCount += matchFrom.hitCount;
-                matchTo.score += matchFrom.score;
-            } else {
-                this.matches.set(matchFrom.value, matchFrom);
-            }
-        }
-    }
-
     private matchesWithMinHitCount(
         minHitCount: number | undefined,
     ): IterableIterator<Match<T>> {
@@ -282,10 +269,8 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
     }
 
     private getMinHitCount(minHitCount?: number): number {
-        return minHitCount !== undefined
-            ? minHitCount
-            : //: this.queryTermMatches.termMatches.size;
-              this.maxHits;
+        return minHitCount !== undefined ? minHitCount : this.maxHits;
+        //: this.queryTermMatches.termMatches.size;
     }
 }
 
@@ -344,6 +329,12 @@ export class TextRangeAccumulator {
         }
         // Future: Merge ranges
         textRanges.push(textRange);
+    }
+
+    public addRanges(textRanges: TextRange[]) {
+        for (const range of textRanges) {
+            this.addRange(range);
+        }
     }
 
     public isInRange(textRange: TextRange): boolean {

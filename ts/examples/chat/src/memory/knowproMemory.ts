@@ -16,16 +16,18 @@ import {
 import { ChatContext } from "./chatMemory.js";
 import { ChatModel } from "aiclient";
 import fs from "fs";
-import { ChatPrinter } from "../chatPrinter.js";
 import {
     addFileNameSuffixToPath,
     argDestFile,
     argSourceFile,
+    argToDate,
     parseFreeAndNamedArguments,
+    recordFromArgs,
 } from "./common.js";
-import { ensureDir, readJsonFile, writeJsonFile } from "typeagent";
+import { dateTime, ensureDir, readJsonFile, writeJsonFile } from "typeagent";
 import path from "path";
 import chalk from "chalk";
+import { KnowProPrinter } from "./knowproPrinter.js";
 
 type KnowProContext = {
     knowledgeModel: ChatModel;
@@ -46,16 +48,39 @@ export async function createKnowproCommands(
     };
     await ensureDir(context.basePath);
 
+    commands.kpPodcastMessages = showMessages;
     commands.kpPodcastImport = podcastImport;
+    commands.kpPodcastTimestamp = podcastTimestamp;
     commands.kpPodcastSave = podcastSave;
     commands.kpPodcastLoad = podcastLoad;
     commands.kpSearchTerms = searchTerms;
-    commands.kpSearchEntities = searchEntities;
+    commands.kpEntities = entities;
     commands.kpPodcastBuildIndex = podcastBuildIndex;
 
     /*----------------
      * COMMANDS
      *---------------*/
+    function showMessagesDef(): CommandMetadata {
+        return {
+            description: "Show all messages",
+            options: {
+                maxMessages: argNum("Maximum messages to display"),
+            },
+        };
+    }
+    commands.kpPodcastMessages.metadata = "Show all messages";
+    async function showMessages(args: string[]) {
+        const conversation = ensureConversationLoaded();
+        if (!conversation) {
+            return;
+        }
+        const namedArgs = parseNamedArguments(args, showMessagesDef());
+        const messages =
+            namedArgs.maxMessages > 0
+                ? conversation.messages.slice(0, namedArgs.maxMessages)
+                : conversation.messages;
+        messages.forEach((m) => context.printer.writeMessage(m));
+    }
 
     function podcastImportDef(): CommandMetadata {
         return {
@@ -95,6 +120,29 @@ export async function createKnowproCommands(
             namedArgs.indexFilePath,
         );
         await podcastSave(namedArgs);
+    }
+
+    function podcastTimestampDef(): CommandMetadata {
+        return {
+            description: "Set timestamps",
+            args: {
+                startAt: arg("Start date and time"),
+            },
+            options: {
+                length: argNum("Length of the podcast in minutes", 60),
+            },
+        };
+    }
+    commands.kpPodcastTimestamp.metadata = podcastTimestampDef();
+    async function podcastTimestamp(args: string[]) {
+        const conversation = ensureConversationLoaded();
+        if (!conversation) {
+            return;
+        }
+        const namedArgs = parseNamedArguments(args, podcastTimestampDef());
+        const startAt = argToDate(namedArgs.startAt)!;
+        const endAt = dateTime.addMinutesToDate(startAt, namedArgs.length);
+        kp.timestampMessages(conversation.messages, startAt, endAt);
     }
 
     function podcastSaveDef(): CommandMetadata {
@@ -160,14 +208,22 @@ export async function createKnowproCommands(
         context.printer.writePodcastInfo(context.podcast);
     }
 
-    function searchTermsDef(): CommandMetadata {
-        return {
-            description: "Search current knowPro conversation by terms",
+    function searchTermsDef(
+        description?: string,
+        kType?: kp.KnowledgeType,
+    ): CommandMetadata {
+        const meta: CommandMetadata = {
+            description:
+                description ?? "Search current knowPro conversation by terms",
             options: {
                 maxToDisplay: argNum("Maximum matches to display", 25),
-                ktype: arg("Knowledge type"),
             },
         };
+        if (kType === undefined) {
+            meta.options!.ktype = arg("Knowledge type");
+        }
+
+        return meta;
     }
     commands.kpSearchTerms.metadata = searchTermsDef();
     async function searchTerms(args: string[]): Promise<void> {
@@ -178,11 +234,12 @@ export async function createKnowproCommands(
         if (!conversation) {
             return;
         }
+        const commandDef = searchTermsDef();
         let [termArgs, namedArgs] = parseFreeAndNamedArguments(
             args,
-            searchTermsDef(),
+            commandDef,
         );
-        const terms = parseQueryTerms(termArgs); // Todo: De dupe
+        const terms = parseQueryTerms(termArgs);
         if (conversation.semanticRefIndex && conversation.semanticRefs) {
             context.printer.writeInColor(
                 chalk.cyan,
@@ -192,7 +249,7 @@ export async function createKnowproCommands(
             const matches = await kp.searchConversation(
                 conversation,
                 terms,
-                filterFromArgs(namedArgs),
+                filterFromArgs(namedArgs, commandDef),
             );
             if (matches === undefined || matches.size === 0) {
                 context.printer.writeLine("No matches");
@@ -210,47 +267,37 @@ export async function createKnowproCommands(
         }
     }
 
-    function filterFromArgs(namedArgs: NamedArgs) {
-        let filter: kp.SearchFilter = { type: namedArgs.ktype };
-        let argCopy = { ...namedArgs };
-        delete argCopy.maxToDisplay;
-        delete argCopy.ktype;
-        let keys = Object.keys(argCopy);
-        if (keys.length > 0) {
-            for (const key of keys) {
-                const value = argCopy[key];
-                if (typeof value === "function") {
-                    delete argCopy[key];
-                }
-            }
-            if (Object.keys(argCopy).length > 0) {
-                filter.propertiesToMatch = argCopy;
-            }
-        }
+    function filterFromArgs(namedArgs: NamedArgs, metadata: CommandMetadata) {
+        let filter: kp.SearchFilter = {
+            type: namedArgs.ktype,
+            propertiesToMatch: recordFromArgs(namedArgs, metadata),
+        };
         return filter;
     }
 
     function entitiesDef(): CommandMetadata {
-        return {
-            description: "Display entities in current conversation",
-        };
+        return searchTermsDef(
+            "Search entities in current conversation",
+            "entity",
+        );
     }
-    commands.kpSearchEntities.metadata = entitiesDef();
-    async function searchEntities(args: string[]): Promise<void> {
+    commands.kpEntities.metadata = entitiesDef();
+    async function entities(args: string[]): Promise<void> {
         const conversation = ensureConversationLoaded();
         if (!conversation) {
             return;
         }
         if (args.length > 0) {
+            args.push("--ktype");
+            args.push("entity");
+            await searchTerms(args);
         } else {
-            //
-            // Display all entities
-            //
-            const matches = filterSemanticRefsByType(
-                conversation.semanticRefs,
-                "entity",
-            );
-            context.printer.writeSemanticRefs(matches);
+            if (conversation.semanticRefs !== undefined) {
+                const entities = conversation.semanticRefs?.filter(
+                    (sr) => sr.knowledgeType === "entity",
+                );
+                context.printer.writeSemanticRefs(entities);
+            }
         }
     }
 
@@ -347,201 +394,6 @@ export async function createKnowproCommands(
     function podcastNameToFilePath(podcastName: string): string {
         return path.join(context.basePath, podcastName + IndexFileSuffix);
     }
-}
-
-class KnowProPrinter extends ChatPrinter {
-    constructor() {
-        super();
-    }
-
-    public writeEntity(
-        entity: knowLib.conversation.ConcreteEntity | undefined,
-    ) {
-        if (entity !== undefined) {
-            this.writeLine(entity.name.toUpperCase());
-            this.writeList(entity.type, { type: "csv" });
-            if (entity.facets) {
-                const facetList = entity.facets.map((f) =>
-                    knowLib.conversation.facetToString(f),
-                );
-                this.writeList(facetList, { type: "ul" });
-            }
-        }
-        return this;
-    }
-
-    public writeAction(action: knowLib.conversation.Action | undefined) {
-        if (action !== undefined) {
-            this.writeLine(knowLib.conversation.actionToString(action));
-        }
-    }
-
-    public writeTopic(topic: kp.ITopic | undefined) {
-        if (topic !== undefined) {
-            this.writeLine(topic.text);
-        }
-    }
-
-    public writeSemanticRef(semanticRef: kp.SemanticRef) {
-        switch (semanticRef.knowledgeType) {
-            default:
-                this.writeLine(semanticRef.knowledgeType);
-                break;
-            case "entity":
-                this.writeEntity(
-                    semanticRef.knowledge as knowLib.conversation.ConcreteEntity,
-                );
-                break;
-            case "action":
-                this.writeAction(
-                    semanticRef.knowledge as knowLib.conversation.Action,
-                );
-                break;
-            case "topic":
-                this.writeTopic(semanticRef.knowledge as kp.ITopic);
-                break;
-        }
-        return this;
-    }
-
-    public writeSemanticRefs(refs: kp.SemanticRef[] | undefined) {
-        if (refs && refs.length > 0) {
-            for (const ref of refs) {
-                this.writeSemanticRef(ref);
-                this.writeLine();
-            }
-        }
-        return this;
-    }
-
-    public writeScoredSemanticRefs(
-        semanticRefMatches: kp.ScoredSemanticRef[],
-        semanticRefs: kp.SemanticRef[],
-        maxToDisplay: number,
-    ) {
-        this.writeLine(
-            `Displaying ${maxToDisplay} matches of total ${semanticRefMatches.length}`,
-        );
-        for (let i = 0; i < maxToDisplay; ++i) {
-            const match = semanticRefMatches[i];
-            const semanticRef = semanticRefs[match.semanticRefIndex];
-
-            this.writeInColor(
-                chalk.green,
-                `#${i + 1}: ${semanticRef.knowledgeType} [${match.score}]`,
-            );
-            this.writeSemanticRef(semanticRef);
-            this.writeLine();
-        }
-    }
-
-    public writeSearchResult(
-        conversation: kp.IConversation,
-        result: kp.SearchResult | undefined,
-        maxToDisplay: number,
-    ) {
-        if (result) {
-            this.writeListInColor(chalk.cyanBright, result.termMatches, {
-                title: "Matched terms",
-                type: "ol",
-            });
-            maxToDisplay = Math.min(
-                result.semanticRefMatches.length,
-                maxToDisplay,
-            );
-            this.writeScoredSemanticRefs(
-                result.semanticRefMatches,
-                conversation.semanticRefs!,
-                maxToDisplay,
-            );
-        }
-    }
-
-    public writeSearchResults(
-        conversation: kp.IConversation,
-        results: Map<kp.KnowledgeType, kp.SearchResult>,
-        maxToDisplay: number,
-    ) {
-        // Do entities before actions...
-        this.writeResult(conversation, "entity", results, maxToDisplay);
-        this.writeResult(conversation, "action", results, maxToDisplay);
-        this.writeResult(conversation, "topic", results, maxToDisplay);
-        this.writeResult(conversation, "tag", results, maxToDisplay);
-    }
-
-    private writeResult(
-        conversation: kp.IConversation,
-        type: kp.KnowledgeType,
-        results: Map<kp.KnowledgeType, kp.SearchResult>,
-        maxToDisplay: number,
-    ) {
-        const result = results.get(type);
-        if (result !== undefined) {
-            this.writeTitle(type.toUpperCase());
-            this.writeSearchResult(conversation, result, maxToDisplay);
-        }
-    }
-
-    public writeConversationInfo(conversation: kp.IConversation) {
-        this.writeTitle(conversation.nameTag);
-        this.writeLine(`${conversation.messages.length} messages`);
-        return this;
-    }
-
-    public writePodcastInfo(podcast: kp.Podcast) {
-        this.writeConversationInfo(podcast);
-        this.writeList(getPodcastParticipants(podcast), {
-            type: "csv",
-            title: "Participants",
-        });
-    }
-
-    public writeIndexingResults(
-        results: kp.ConversationIndexingResult,
-        verbose = false,
-    ) {
-        if (results.failedMessages.length > 0) {
-            this.writeError(
-                `Errors for ${results.failedMessages.length} messages`,
-            );
-            if (verbose) {
-                for (const failedMessage of results.failedMessages) {
-                    this.writeInColor(
-                        chalk.cyan,
-                        failedMessage.message.textChunks[0],
-                    );
-                    this.writeError(failedMessage.error);
-                }
-            }
-        }
-    }
-}
-
-export function filterSemanticRefsByType(
-    semanticRefs: kp.SemanticRef[] | undefined,
-    type: string,
-): kp.SemanticRef[] {
-    const matches: kp.SemanticRef[] = [];
-    if (semanticRefs) {
-        for (const ref of semanticRefs) {
-            if (ref.knowledgeType === type) {
-                matches.push(ref);
-            }
-        }
-    }
-    return matches;
-}
-
-export function getPodcastParticipants(podcast: kp.Podcast) {
-    const participants = new Set<string>();
-    for (let message of podcast.messages) {
-        const meta = message.metadata;
-        if (meta.speaker) {
-            participants.add(meta.speaker);
-        }
-        meta.listeners.forEach((l) => participants.add(l));
-    }
-    return [...participants.values()];
 }
 
 export function parseQueryTerms(args: string[]): kp.QueryTerm[] {
