@@ -206,7 +206,8 @@ export class TermsMatchExpr implements IQueryOpExpr<SemanticRefAccumulator> {
         matchAccumulator: SemanticRefAccumulator,
         queryTerm: QueryTerm,
     ): void {
-        matchAccumulator.addTermMatch(
+        const termMatches = new SemanticRefAccumulator(); // Future: pool these
+        termMatches.addTermMatch(
             queryTerm.term,
             index.lookupTerm(queryTerm.term.text),
         );
@@ -214,7 +215,7 @@ export class TermsMatchExpr implements IQueryOpExpr<SemanticRefAccumulator> {
             for (const relatedTerm of queryTerm.relatedTerms) {
                 // Related term matches count as matches for the queryTerm...
                 // BUT are scored with the score of the related term
-                matchAccumulator.addRelatedTermMatch(
+                termMatches.addRelatedTermMatch(
                     queryTerm.term,
                     relatedTerm,
                     index.lookupTerm(relatedTerm.text),
@@ -222,6 +223,7 @@ export class TermsMatchExpr implements IQueryOpExpr<SemanticRefAccumulator> {
                 );
             }
         }
+        matchAccumulator.union(termMatches);
     }
 }
 
