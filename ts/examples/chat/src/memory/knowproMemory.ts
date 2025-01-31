@@ -20,10 +20,11 @@ import {
     addFileNameSuffixToPath,
     argDestFile,
     argSourceFile,
+    argToDate,
     parseFreeAndNamedArguments,
     recordFromArgs,
 } from "./common.js";
-import { ensureDir, readJsonFile, writeJsonFile } from "typeagent";
+import { dateTime, ensureDir, readJsonFile, writeJsonFile } from "typeagent";
 import path from "path";
 import chalk from "chalk";
 import { KnowProPrinter } from "./knowproPrinter.js";
@@ -47,8 +48,9 @@ export async function createKnowproCommands(
     };
     await ensureDir(context.basePath);
 
-    commands.kpShowMessages = showMessages;
+    commands.kpPodcastMessages = showMessages;
     commands.kpPodcastImport = podcastImport;
+    commands.kpPodcastTimestamp = podcastTimestamp;
     commands.kpPodcastSave = podcastSave;
     commands.kpPodcastLoad = podcastLoad;
     commands.kpSearchTerms = searchTerms;
@@ -66,7 +68,7 @@ export async function createKnowproCommands(
             },
         };
     }
-    commands.kpShowMessages.metadata = "Show all messages";
+    commands.kpPodcastMessages.metadata = "Show all messages";
     async function showMessages(args: string[]) {
         const conversation = ensureConversationLoaded();
         if (!conversation) {
@@ -118,6 +120,29 @@ export async function createKnowproCommands(
             namedArgs.indexFilePath,
         );
         await podcastSave(namedArgs);
+    }
+
+    function podcastTimestampDef(): CommandMetadata {
+        return {
+            description: "Set timestamps",
+            args: {
+                startAt: arg("Start date and time"),
+            },
+            options: {
+                length: argNum("Length of the podcast in minutes", 60),
+            },
+        };
+    }
+    commands.kpPodcastTimestamp.metadata = podcastTimestampDef();
+    async function podcastTimestamp(args: string[]) {
+        const conversation = ensureConversationLoaded();
+        if (!conversation) {
+            return;
+        }
+        const namedArgs = parseNamedArguments(args, podcastTimestampDef());
+        const startAt = argToDate(namedArgs.startAt)!;
+        const endAt = dateTime.addMinutesToDate(startAt, namedArgs.length);
+        kp.timestampMessages(conversation.messages, startAt, endAt);
     }
 
     function podcastSaveDef(): CommandMetadata {

@@ -205,12 +205,6 @@ export function argToDate(value: string | undefined): Date | undefined {
     return value ? dateTime.stringToDate(value) : undefined;
 }
 
-export function addMinutesToDate(date: Date, minutes: number): Date {
-    const time = date.getTime();
-    const offsetMs = minutes * 60 * 1000;
-    return new Date(time + offsetMs);
-}
-
 export function parseFreeAndNamedArguments(
     args: string[],
     argDefs: CommandMetadata,
