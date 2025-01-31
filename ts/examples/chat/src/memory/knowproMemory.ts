@@ -218,7 +218,6 @@ export async function createKnowproCommands(
             propertiesToMatch: recordFromArgs(namedArgs, metadata),
         };
         return filter;
-        return filter;
     }
 
     function entitiesDef(): CommandMetadata {
