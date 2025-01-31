@@ -4,8 +4,10 @@
 import {
     IConversation,
     IMessage,
+    ITag,
     ITermToRelatedTermsIndex,
     ITermToSemanticRefIndex,
+    ITopic,
     KnowledgeType,
     QueryTerm,
     SemanticRef,
@@ -17,7 +19,7 @@ import * as knowLib from "knowledge-processor";
 import {
     Match,
     MatchAccumulator,
-    QueryTermAccumulator,
+    TermMatchAccumulator,
     SemanticRefAccumulator,
     TextRangeAccumulator,
 } from "./accumulators.js";
@@ -327,7 +329,7 @@ export class WhereSemanticRefExpr
 
     private evalPredicates(
         context: QueryEvalContext,
-        queryTermMatches: QueryTermAccumulator,
+        queryTermMatches: TermMatchAccumulator,
         predicates: IQuerySemanticRefPredicate[],
         match: Match<SemanticRefIndex>,
     ) {
@@ -344,7 +346,7 @@ export class WhereSemanticRefExpr
 export interface IQuerySemanticRefPredicate {
     eval(
         context: QueryEvalContext,
-        termMatches: QueryTermAccumulator,
+        termMatches: TermMatchAccumulator,
         semanticRef: SemanticRef,
     ): boolean;
 }
@@ -354,87 +356,201 @@ export class KnowledgeTypePredicate implements IQuerySemanticRefPredicate {
 
     public eval(
         context: QueryEvalContext,
-        termMatches: QueryTermAccumulator,
+        termMatches: TermMatchAccumulator,
         semanticRef: SemanticRef,
     ): boolean {
         return semanticRef.knowledgeType === this.type;
     }
 }
 
-export class EntityPredicate implements IQuerySemanticRefPredicate {
+export class PropertyMatchPredicate implements IQuerySemanticRefPredicate {
     constructor(
-        public type: string | undefined,
-        public name: string | undefined,
-        public facetName: string | undefined,
+        public nameValues: Record<string, string>,
+        public matchAll: boolean = true,
     ) {}
 
     public eval(
         context: QueryEvalContext,
-        termMatches: QueryTermAccumulator,
+        termMatches: TermMatchAccumulator,
         semanticRef: SemanticRef,
     ): boolean {
-        if (semanticRef.knowledgeType !== "entity") {
-            return false;
-        }
-        const entity =
-            semanticRef.knowledge as knowLib.conversation.ConcreteEntity;
-        return (
-            isPropertyMatch(termMatches, entity.type, this.type) &&
-            isPropertyMatch(termMatches, entity.name, this.name) &&
-            this.matchFacet(termMatches, entity, this.facetName)
-        );
-    }
-
-    private matchFacet(
-        termMatches: QueryTermAccumulator,
-        entity: knowLib.conversation.ConcreteEntity,
-        facetName?: string | undefined,
-    ): boolean {
-        if (facetName === undefined || entity.facets === undefined) {
-            return false;
-        }
-        for (const facet of entity.facets) {
-            if (isPropertyMatch(termMatches, facet.name, facetName)) {
-                return true;
+        for (const name of Object.keys(this.nameValues)) {
+            const value = this.nameValues[name];
+            if (
+                !matchSemanticRefProperty(
+                    termMatches,
+                    semanticRef,
+                    name,
+                    value,
+                ) &&
+                this.matchAll
+            ) {
+                return false;
             }
         }
-        return false;
+        return true;
     }
 }
 
-export class ActionPredicate implements IQuerySemanticRefPredicate {
-    constructor(
-        public subjectEntityName?: string | undefined,
-        public objectEntityName?: string | undefined,
-    ) {}
-
-    public eval(
-        context: QueryEvalContext,
-        termMatches: QueryTermAccumulator,
-        semanticRef: SemanticRef,
-    ): boolean {
-        if (semanticRef.knowledgeType !== "action") {
-            return false;
-        }
-        const action = semanticRef.knowledge as knowLib.conversation.Action;
-        return (
-            isPropertyMatch(
+export function matchSemanticRefProperty(
+    termMatches: TermMatchAccumulator,
+    semanticRef: SemanticRef,
+    propertyName: string,
+    value: string,
+) {
+    switch (semanticRef.knowledgeType) {
+        default:
+            break;
+        case "entity":
+            return matchEntityProperty(
                 termMatches,
-                action.subjectEntityName,
-                this.subjectEntityName,
-            ) &&
-            isPropertyMatch(
+                semanticRef.knowledge as knowLib.conversation.ConcreteEntity,
+                propertyName,
+                value,
+            );
+        case "action":
+            return matchActionProperty(
                 termMatches,
-                action.objectEntityName,
-                this.objectEntityName,
-            )
-        );
+                semanticRef.knowledge as knowLib.conversation.Action,
+                propertyName,
+                value,
+            );
+        case "topic":
+            return matchTopicProperty(
+                termMatches,
+                semanticRef.knowledge as ITopic,
+                propertyName,
+                value,
+            );
+        case "tag":
+            return matchTagProperty(
+                termMatches,
+                semanticRef.knowledge as ITag,
+                propertyName,
+                value,
+            );
     }
+    return false;
+}
+
+export function matchEntityProperty(
+    termMatches: TermMatchAccumulator,
+    entity: knowLib.conversation.ConcreteEntity,
+    propertyName: string,
+    value: string,
+) {
+    if (propertyName === "name") {
+        return matchText(termMatches, value, entity.name);
+    } else if (propertyName === "type") {
+        return matchTextOneOf(termMatches, value, entity.type);
+    } else if (entity.facets !== undefined) {
+        // try facets
+        for (const facet of entity.facets) {
+            if (
+                matchText(termMatches, propertyName, facet.name) &&
+                matchText(
+                    termMatches,
+                    value,
+                    knowLib.conversation.knowledgeValueToString(facet.value),
+                )
+            ) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+export type ActionPropertyName =
+    | "verb"
+    | "subject"
+    | "object"
+    | "indirectObject"
+    | string;
+
+export function matchActionProperty(
+    termMatches: TermMatchAccumulator,
+    action: knowLib.conversation.Action,
+    propertyName: ActionPropertyName,
+    value: string,
+): boolean {
+    switch (propertyName) {
+        default:
+            break;
+        case "verb":
+            return matchTextOneOf(termMatches, value, action.verbs);
+        case "subject":
+            return matchText(termMatches, value, action.subjectEntityName);
+        case "object":
+            return matchText(termMatches, value, action.objectEntityName);
+        case "indirectObject":
+            return matchText(
+                termMatches,
+                value,
+                action.indirectObjectEntityName,
+            );
+    }
+    return false;
+}
+
+export function matchTopicProperty(
+    termMatches: TermMatchAccumulator,
+    topic: ITopic,
+    propertyName: string,
+    value: string,
+) {
+    if (propertyName !== "topic") {
+        return false;
+    }
+    return matchText(termMatches, value, topic.text);
+}
+
+export function matchTagProperty(
+    termMatches: TermMatchAccumulator,
+    tag: ITag,
+    propertyName: string,
+    value: string,
+) {
+    if (propertyName !== "tag") {
+        return false;
+    }
+    return matchText(termMatches, value, tag.text);
+}
+
+function matchText(
+    termMatches: TermMatchAccumulator,
+    expected: string,
+    actual: string | undefined,
+): boolean {
+    if (actual === undefined) {
+        return false;
+    }
+    return (
+        expected === "*" ||
+        collections.stringEquals(expected, actual, false) ||
+        termMatches.hasRelatedMatch(expected, actual)
+    );
+}
+
+function matchTextOneOf(
+    termMatches: TermMatchAccumulator,
+    expected: string,
+    actual: string[] | undefined,
+) {
+    if (actual !== undefined) {
+        for (const text of actual) {
+            if (matchText(termMatches, expected, text)) {
+                return true;
+            }
+        }
+    }
+    return true;
 }
 
 export class ScopeExpr implements IQueryOpExpr<SemanticRefAccumulator> {
     constructor(
         public sourceExpr: IQueryOpExpr<SemanticRefAccumulator>,
+        // Predicates that identity what is in scope
         public predicates: IQuerySemanticRefPredicate[],
     ) {}
 
@@ -466,7 +582,7 @@ export class ScopeExpr implements IQueryOpExpr<SemanticRefAccumulator> {
 
     private evalPredicates(
         context: QueryEvalContext,
-        queryTermMatches: QueryTermAccumulator,
+        queryTermMatches: TermMatchAccumulator,
         predicates: IQuerySemanticRefPredicate[],
         semanticRef: SemanticRef,
     ) {
@@ -477,15 +593,4 @@ export class ScopeExpr implements IQueryOpExpr<SemanticRefAccumulator> {
         }
         return false;
     }
-}
-
-function isPropertyMatch(
-    termMatches: QueryTermAccumulator,
-    testText: string | string[] | undefined,
-    expectedText: string | undefined,
-) {
-    if (testText !== undefined && expectedText !== undefined) {
-        return termMatches.matched(testText, expectedText);
-    }
-    return testText === undefined && expectedText === undefined;
 }

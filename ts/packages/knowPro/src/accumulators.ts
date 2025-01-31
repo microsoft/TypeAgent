@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { collections, createTopNList } from "typeagent";
+import { createTopNList } from "typeagent";
 import {
     IMessage,
     KnowledgeType,
@@ -167,7 +167,7 @@ export class MatchAccumulator<T = any> {
 }
 
 export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
-    constructor(public queryTermMatches = new QueryTermAccumulator()) {
+    constructor(public queryTermMatches = new TermMatchAccumulator()) {
         super();
     }
 
@@ -289,77 +289,41 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
     }
 }
 
-export class QueryTermAccumulator {
+export class TermMatchAccumulator {
     constructor(
         public termMatches: Set<string> = new Set<string>(),
-        public relatedTermToTerms: Map<string, Set<string>> = new Map<
+        // Related terms work 'on behalf' of a primary term
+        // For each related term, we track the primary terms it matched on behalf of
+        public relatedTermMatchedFor: Map<string, Set<string>> = new Map<
             string,
             Set<string>
         >(),
     ) {}
 
-    public add(term: Term, relatedTerm?: Term) {
-        this.termMatches.add(term.text);
+    public add(primaryTerm: Term, relatedTerm?: Term) {
+        this.termMatches.add(primaryTerm.text);
         if (relatedTerm !== undefined) {
-            let relatedTermToTerms = this.relatedTermToTerms.get(
-                relatedTerm.text,
-            );
-            if (relatedTermToTerms === undefined) {
-                relatedTermToTerms = new Set<string>();
-                this.relatedTermToTerms.set(
-                    relatedTerm.text,
-                    relatedTermToTerms,
-                );
+            // Related term matched on behalf of term
+            let primaryTerms = this.relatedTermMatchedFor.get(relatedTerm.text);
+            if (primaryTerms === undefined) {
+                primaryTerms = new Set<string>();
+                this.relatedTermMatchedFor.set(relatedTerm.text, primaryTerms);
             }
-            relatedTermToTerms.add(term.text);
+            // Track that this related term matched on behalf of term
+            primaryTerms.add(primaryTerm.text);
         }
     }
 
-    public matched(testText: string | string[], expectedText: string): boolean {
-        if (Array.isArray(testText)) {
-            if (testText.length > 0) {
-                for (const text of testText) {
-                    if (this.matched(text, expectedText)) {
-                        return true;
-                    }
-                }
-            }
-            return false;
-        }
-
-        if (collections.stringEquals(testText, expectedText, false)) {
+    public has(text: string, includeRelated: boolean = true): boolean {
+        if (this.termMatches.has(text)) {
             return true;
         }
-
-        // Maybe the test text matched a related term.
-        // If so, the matching related term should have matched *on behalf* of
-        // of expectedTerm
-        const relatedTermToTerms = this.relatedTermToTerms.get(testText);
-        return relatedTermToTerms !== undefined
-            ? relatedTermToTerms.has(expectedText)
-            : false;
+        return includeRelated ? this.relatedTermMatchedFor.has(text) : false;
     }
 
-    public didValueMatch(
-        obj: Record<string, any>,
-        key: string,
-        expectedValue: string,
-    ): boolean {
-        const value = obj[key];
-        if (value === undefined) {
-            return false;
-        }
-        if (Array.isArray(value)) {
-            for (const item of value) {
-                if (this.didValueMatch(item, key, expectedValue)) {
-                    return true;
-                }
-            }
-            return false;
-        } else {
-            const stringValue = value.toString().toLowerCase();
-            return this.matched(stringValue, expectedValue);
-        }
+    public hasRelatedMatch(primaryTerm: string, relatedTerm: string): boolean {
+        let primaryTerms = this.relatedTermMatchedFor.get(relatedTerm);
+        return primaryTerms?.has(primaryTerm) ?? false;
     }
 }
 
@@ -378,6 +342,7 @@ export class TextRangeAccumulator {
         if (textRanges === undefined) {
             textRanges = [textRange];
         }
+        // Future: Merge ranges
         textRanges.push(textRange);
     }
 
