@@ -26,7 +26,7 @@ import {
     SemanticIndexSettings,
     TermSemanticIndex,
 } from "./termIndex.js";
-import { TimestampToMessageIndex } from "./timestampIndex.js";
+import { TimestampToTextRangeIndex } from "./timestampIndex.js";
 
 // metadata for podcast messages
 export class PodcastMessageMeta implements IKnowledgeSource {
@@ -123,7 +123,9 @@ export class Podcast implements IConversation<PodcastMessageMeta> {
         public semanticRefs: SemanticRef[] = [],
         public semanticRefIndex: ConversationIndex | undefined = undefined,
         public relatedTermsIndex: TermSemanticIndex | undefined = undefined,
-        public timestampIndex: TimestampToMessageIndex | undefined = undefined,
+        public timestampIndex:
+            | TimestampToTextRangeIndex
+            | undefined = undefined,
     ) {
         this.settings = createPodcastSettings();
     }
@@ -202,7 +204,7 @@ export class Podcast implements IConversation<PodcastMessageMeta> {
     }
 
     public buildTimestampIndex(): void {
-        this.timestampIndex = new TimestampToMessageIndex(this.messages);
+        this.timestampIndex = new TimestampToTextRangeIndex(this.messages);
     }
 
     public serialize(): PodcastData {

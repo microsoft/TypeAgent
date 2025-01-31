@@ -5,33 +5,46 @@ import { collections, dateTime } from "typeagent";
 import {
     DateRange,
     IMessage,
-    ITimestampToMessageIndex,
+    ITimestampToTextRangeIndex,
     MessageIndex,
-    TextRange,
+    TimestampedTextRange,
 } from "./dataFormat.js";
+import { textRangeForMessage } from "./query.js";
 
-export class TimestampToMessageIndex implements ITimestampToMessageIndex {
-    private messageIndex: TimestampedTextRange[];
+/**
+ * An index of timestamp => TextRanges.
+ * * Timestamps must be unique.
+ * *TextRanges need not be contiguous.
+ */
+export class TimestampToTextRangeIndex implements ITimestampToTextRangeIndex {
+    // Maintains ranges sorted by timestamp
+    private ranges: TimestampedTextRange[];
+
     constructor(messages: IMessage[]) {
-        this.messageIndex = [];
+        this.ranges = [];
         for (let i = 0; i < messages.length; ++i) {
             this.addMessage(messages[i], i);
         }
-        this.messageIndex.sort(compareTimestampedRange);
+        this.ranges.sort(this.compareTimestampedRange);
     }
 
-    public getTextRange(dateRange: DateRange): TextRange[] {
+    /**
+     * Looks up text ranges in given date range.
+     * Text ranges need not be contiguous
+     * @param dateRange
+     * @returns
+     */
+    public lookupRange(dateRange: DateRange): TimestampedTextRange[] {
         const startAt = dateTime.timestampString(dateRange.start);
         const stopAt = dateRange.end
             ? dateTime.timestampString(dateRange.end)
             : undefined;
-        const ranges: TimestampedTextRange[] = collections.getInRange(
-            this.messageIndex,
+        return collections.getInRange(
+            this.ranges,
             startAt,
             stopAt,
-            compareTimestampedRange,
+            this.compareTimestampedRange,
         );
-        return ranges.map((r) => r.range);
     }
 
     private addMessage(
@@ -42,40 +55,28 @@ export class TimestampToMessageIndex implements ITimestampToMessageIndex {
         if (!message.timestamp) {
             return false;
         }
-        const date = new Date(message.timestamp);
-        // This string is formatted to be searchable
-        const entry = this.makeTimestamped(date, messageIndex);
+        const timestampDate = new Date(message.timestamp);
+        const entry: TimestampedTextRange = {
+            range: textRangeForMessage(message, messageIndex),
+            // This string is formatted to be lexically sortable
+            timestamp: dateTime.timestampString(timestampDate, false),
+        };
         if (inOrder) {
             collections.insertIntoSorted(
-                this.messageIndex,
+                this.ranges,
                 entry,
-                compareTimestampedRange,
+                this.compareTimestampedRange,
             );
         } else {
-            this.messageIndex.push(entry);
+            this.ranges.push(entry);
         }
         return true;
     }
 
-    private makeTimestamped(
-        timestamp: Date,
-        messageIndex: MessageIndex,
-    ): TimestampedTextRange {
-        return {
-            range: { start: { messageIndex } },
-            timestamp: dateTime.timestampString(timestamp, false),
-        };
+    private compareTimestampedRange(
+        x: TimestampedTextRange,
+        y: TimestampedTextRange,
+    ) {
+        return x.timestamp.localeCompare(y.timestamp);
     }
-}
-
-type TimestampedTextRange = {
-    timestamp: string;
-    range: TextRange;
-};
-
-function compareTimestampedRange(
-    x: TimestampedTextRange,
-    y: TimestampedTextRange,
-) {
-    return x.timestamp.localeCompare(y.timestamp);
 }

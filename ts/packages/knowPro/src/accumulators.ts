@@ -1,11 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { createTopNList } from "typeagent";
+import { collections, createTopNList } from "typeagent";
 import {
     IMessage,
     KnowledgeType,
-    MessageIndex,
     ScoredSemanticRef,
     SemanticRef,
     SemanticRefIndex,
@@ -81,6 +80,19 @@ export class MatchAccumulator<T = any> {
         }
         if (match.hitCount > this.maxHitCount) {
             this.maxHitCount = match.hitCount;
+        }
+    }
+
+    public union(other: MatchAccumulator<T>): void {
+        for (const matchFrom of other.matches.values()) {
+            const matchTo = this.matches.get(matchFrom.value);
+            if (matchTo !== undefined) {
+                // Existing
+                matchTo.hitCount += matchFrom.hitCount;
+                matchTo.score += matchFrom.score;
+            } else {
+                this.matches.set(matchFrom.value, matchFrom);
+            }
         }
     }
 
@@ -313,22 +325,18 @@ export class TermMatchAccumulator {
 }
 
 export class TextRangeAccumulator {
-    constructor(
-        private rangesForMessage = new Map<MessageIndex, TextRange[]>(),
-    ) {}
+    // Maintains ranges sorted by message index
+    private ranges: TextRange[] = [];
+
+    constructor() {}
 
     public get size() {
-        return this.rangesForMessage.size;
+        return this.ranges.length;
     }
 
     public addRange(textRange: TextRange) {
-        const messageIndex = textRange.start.messageIndex;
-        let textRanges = this.rangesForMessage.get(messageIndex);
-        if (textRanges === undefined) {
-            textRanges = [textRange];
-        }
-        // Future: Merge ranges
-        textRanges.push(textRange);
+        // Future: merge ranges
+        collections.insertIntoSorted(this.ranges, textRange, this.comparer);
     }
 
     public addRanges(textRanges: TextRange[]) {
@@ -337,16 +345,30 @@ export class TextRangeAccumulator {
         }
     }
 
-    public isInRange(textRange: TextRange): boolean {
-        const textRanges = this.rangesForMessage.get(
-            textRange.start.messageIndex,
+    public isInRange(rangeToMatch: TextRange): boolean {
+        let i = collections.binarySearchFirst(
+            this.ranges,
+            rangeToMatch,
+            this.comparer,
         );
-        if (textRanges === undefined) {
+        if (i < 0) {
             return false;
         }
-        return textRanges.some((outerRange) =>
-            isInTextRange(outerRange, textRange),
-        );
+        for (; i < this.ranges.length; ++i) {
+            const range = this.ranges[i];
+            if (range.start.messageIndex > rangeToMatch.start.messageIndex) {
+                // We are at a range whose start is > rangeToMatch. Stop
+                break;
+            }
+            if (isInTextRange(range, rangeToMatch)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private comparer(x: TextRange, y: TextRange): number {
+        return x.start.messageIndex - y.start.messageIndex;
     }
 }
 
