@@ -7,12 +7,14 @@ import {
     IMessage,
     ITimestampToTextRangeIndex,
     MessageIndex,
-    TextRange,
+    TimestampedTextRange,
 } from "./dataFormat.js";
+import { textRangeForMessage } from "./query.js";
 
 /**
- * An index of timestamp => TextRanges
- * TextRanges need not be contiguous.
+ * An index of timestamp => TextRanges.
+ * * Timestamps must be unique.
+ * *TextRanges need not be contiguous.
  */
 export class TimestampToTextRangeIndex implements ITimestampToTextRangeIndex {
     // Maintains ranges sorted by timestamp
@@ -23,7 +25,7 @@ export class TimestampToTextRangeIndex implements ITimestampToTextRangeIndex {
         for (let i = 0; i < messages.length; ++i) {
             this.addMessage(messages[i], i);
         }
-        this.ranges.sort(compareTimestampedRange);
+        this.ranges.sort(this.compareTimestampedRange);
     }
 
     /**
@@ -32,18 +34,17 @@ export class TimestampToTextRangeIndex implements ITimestampToTextRangeIndex {
      * @param dateRange
      * @returns
      */
-    public lookupRange(dateRange: DateRange): TextRange[] {
+    public lookupRange(dateRange: DateRange): TimestampedTextRange[] {
         const startAt = dateTime.timestampString(dateRange.start);
         const stopAt = dateRange.end
             ? dateTime.timestampString(dateRange.end)
             : undefined;
-        const ranges: TimestampedTextRange[] = collections.getInRange(
+        return collections.getInRange(
             this.ranges,
             startAt,
             stopAt,
-            compareTimestampedRange,
+            this.compareTimestampedRange,
         );
-        return ranges.map((r) => r.range);
     }
 
     private addMessage(
@@ -54,14 +55,17 @@ export class TimestampToTextRangeIndex implements ITimestampToTextRangeIndex {
         if (!message.timestamp) {
             return false;
         }
-        const date = new Date(message.timestamp);
-        // This string is formatted to be searchable
-        const entry = this.makeTimestamped(date, messageIndex);
+        const timestampDate = new Date(message.timestamp);
+        const entry: TimestampedTextRange = {
+            range: textRangeForMessage(message, messageIndex),
+            // This string is formatted to be lexically sortable
+            timestamp: dateTime.timestampString(timestampDate, false),
+        };
         if (inOrder) {
             collections.insertIntoSorted(
                 this.ranges,
                 entry,
-                compareTimestampedRange,
+                this.compareTimestampedRange,
             );
         } else {
             this.ranges.push(entry);
@@ -69,25 +73,10 @@ export class TimestampToTextRangeIndex implements ITimestampToTextRangeIndex {
         return true;
     }
 
-    private makeTimestamped(
-        timestamp: Date,
-        messageIndex: MessageIndex,
-    ): TimestampedTextRange {
-        return {
-            range: { start: { messageIndex } },
-            timestamp: dateTime.timestampString(timestamp, false),
-        };
+    private compareTimestampedRange(
+        x: TimestampedTextRange,
+        y: TimestampedTextRange,
+    ) {
+        return x.timestamp.localeCompare(y.timestamp);
     }
-}
-
-type TimestampedTextRange = {
-    timestamp: string;
-    range: TextRange;
-};
-
-function compareTimestampedRange(
-    x: TimestampedTextRange,
-    y: TimestampedTextRange,
-) {
-    return x.timestamp.localeCompare(y.timestamp);
 }

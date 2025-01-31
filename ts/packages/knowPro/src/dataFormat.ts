@@ -145,6 +145,11 @@ export type DateRange = {
     end?: Date | undefined;
 };
 
+export type TimestampedTextRange = {
+    timestamp: string;
+    range: TextRange;
+};
+
 export interface ITimestampToTextRangeIndex {
-    lookupRange(dateRange: DateRange): TextRange[];
+    lookupRange(dateRange: DateRange): TimestampedTextRange[];
 }

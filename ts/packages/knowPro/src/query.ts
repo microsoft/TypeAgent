@@ -14,6 +14,7 @@ import {
     SemanticRefIndex,
     TextLocation,
     TextRange,
+    TimestampedTextRange,
 } from "./dataFormat.js";
 import * as knowLib from "knowledge-processor";
 import {
@@ -114,6 +115,33 @@ export function isDateInRange(outerRange: DateRange, date: Date): boolean {
     let cmpEnd =
         outerRange.end !== undefined ? compareDates(date, outerRange.end) : -1;
     return cmpStart <= 0 && cmpEnd <= 0;
+}
+
+export function messageLength(message: IMessage): number {
+    let length = 0;
+    for (const chunk of message.textChunks) {
+        length += chunk.length;
+    }
+    return length;
+}
+
+export function textRangeForMessage(
+    message: IMessage,
+    messageIndex: number,
+): TextRange {
+    let start: TextLocation = {
+        messageIndex,
+        chunkIndex: 0,
+        charIndex: 0,
+    };
+    // End is EXCLUSIVE. Since entire message is range, the end is messageIndex + 1
+    let end: TextLocation = {
+        messageIndex: messageIndex + 1,
+    };
+    return {
+        start,
+        end,
+    };
 }
 
 // Query eval expressions
@@ -521,20 +549,32 @@ export class ScopeExpr implements IQueryOpExpr<SemanticRefAccumulator> {
         public sourceExpr: IQueryOpExpr<SemanticRefAccumulator>,
         // Predicates that look at matched semantic refs to determine what is in scope
         public predicates: IQuerySemanticRefPredicate[],
-        public scopeExpr: IQueryOpExpr<TextRange[]> | undefined = undefined,
+        public timeScopeExpr:
+            | IQueryOpExpr<TimestampedTextRange[]>
+            | undefined = undefined,
     ) {}
 
     public async eval(
         context: QueryEvalContext,
     ): Promise<SemanticRefAccumulator> {
         let accumulator = await this.sourceExpr.eval(context);
+        // Scope => text ranges in scope
         const scope = new TextRangeAccumulator();
-        if (this.scopeExpr !== undefined) {
-            const timeRanges = await this.scopeExpr.eval(context);
-            if (timeRanges !== undefined) {
-                scope.addRanges(timeRanges);
+
+        // If we are scoping the conversation by time range, then collect
+        // text ranges in the given time range
+        if (this.timeScopeExpr) {
+            const timeRanges = await this.timeScopeExpr.eval(context);
+            if (timeRanges) {
+                for (const timeRange of timeRanges) {
+                    scope.addRange(timeRange.range);
+                }
             }
         }
+
+        // Inspect all accumulated semantic refs using predicates.
+        // E.g. only look at ranges matching actions where X is a subject and Y an object
+        // The text ranges for matching refs give us the text ranges in scope
         for (const inScopeRef of accumulator.getSemanticRefs(
             context.conversation.semanticRefs!,
             (sr) =>
@@ -548,6 +588,7 @@ export class ScopeExpr implements IQueryOpExpr<SemanticRefAccumulator> {
             scope.addRange(inScopeRef.range);
         }
         if (scope.size > 0) {
+            // Select only those semantic refs that are in scope
             accumulator = accumulator.selectInScope(
                 context.conversation.semanticRefs!,
                 scope,
@@ -571,15 +612,17 @@ export class ScopeExpr implements IQueryOpExpr<SemanticRefAccumulator> {
     }
 }
 
-export class TimestampScopeExpr implements IQueryOpExpr<TextRange[]> {
+export class TimestampScopeExpr
+    implements IQueryOpExpr<TimestampedTextRange[]>
+{
     constructor(public dateRange: DateRange) {}
 
-    public eval(context: QueryEvalContext): Promise<TextRange[]> {
+    public eval(context: QueryEvalContext): Promise<TimestampedTextRange[]> {
         const index = context.conversation.timestampIndex;
-        let textRanges: TextRange[] | undefined;
+        let ranges: TimestampedTextRange[] | undefined;
         if (index !== undefined) {
-            textRanges = index.lookupRange(this.dateRange);
+            ranges = index.lookupRange(this.dateRange);
         }
-        return Promise.resolve(textRanges ?? []);
+        return Promise.resolve(ranges ?? []);
     }
 }
