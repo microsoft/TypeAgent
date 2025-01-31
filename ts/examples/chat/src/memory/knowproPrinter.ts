@@ -11,6 +11,20 @@ export class KnowProPrinter extends ChatPrinter {
         super();
     }
 
+    public writeMessage(message: kp.IMessage) {
+        const prevColor = this.setForeColor(chalk.cyan);
+        try {
+            this.writeNameValue("Timestamp", message.timestamp);
+            this.writeJson(message.metadata);
+        } finally {
+            this.setForeColor(prevColor);
+        }
+        for (const chunk of message.textChunks) {
+            this.write(chunk);
+        }
+        this.writeLine();
+    }
+
     public writeEntity(
         entity: knowLib.conversation.ConcreteEntity | undefined,
     ) {

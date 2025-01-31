@@ -47,16 +47,38 @@ export async function createKnowproCommands(
     };
     await ensureDir(context.basePath);
 
+    commands.kpShowMessages = showMessages;
     commands.kpPodcastImport = podcastImport;
     commands.kpPodcastSave = podcastSave;
     commands.kpPodcastLoad = podcastLoad;
     commands.kpSearchTerms = searchTerms;
-    commands.kpSearchEntities = searchEntities;
+    commands.kpEntities = entities;
     commands.kpPodcastBuildIndex = podcastBuildIndex;
 
     /*----------------
      * COMMANDS
      *---------------*/
+    function showMessagesDef(): CommandMetadata {
+        return {
+            description: "Show all messages",
+            options: {
+                maxMessages: argNum("Maximum messages to display"),
+            },
+        };
+    }
+    commands.kpShowMessages.metadata = "Show all messages";
+    async function showMessages(args: string[]) {
+        const conversation = ensureConversationLoaded();
+        if (!conversation) {
+            return;
+        }
+        const namedArgs = parseNamedArguments(args, showMessagesDef());
+        const messages =
+            namedArgs.maxMessages > 0
+                ? conversation.messages.slice(0, namedArgs.maxMessages)
+                : conversation.messages;
+        messages.forEach((m) => context.printer.writeMessage(m));
+    }
 
     function podcastImportDef(): CommandMetadata {
         return {
@@ -161,14 +183,22 @@ export async function createKnowproCommands(
         context.printer.writePodcastInfo(context.podcast);
     }
 
-    function searchTermsDef(): CommandMetadata {
-        return {
-            description: "Search current knowPro conversation by terms",
+    function searchTermsDef(
+        description?: string,
+        kType?: kp.KnowledgeType,
+    ): CommandMetadata {
+        const meta: CommandMetadata = {
+            description:
+                description ?? "Search current knowPro conversation by terms",
             options: {
                 maxToDisplay: argNum("Maximum matches to display", 25),
-                ktype: arg("Knowledge type"),
             },
         };
+        if (kType === undefined) {
+            meta.options!.ktype = arg("Knowledge type");
+        }
+
+        return meta;
     }
     commands.kpSearchTerms.metadata = searchTermsDef();
     async function searchTerms(args: string[]): Promise<void> {
@@ -184,7 +214,7 @@ export async function createKnowproCommands(
             args,
             commandDef,
         );
-        const terms = parseQueryTerms(termArgs); // Todo: De dupe
+        const terms = parseQueryTerms(termArgs);
         if (conversation.semanticRefIndex && conversation.semanticRefs) {
             context.printer.writeInColor(
                 chalk.cyan,
@@ -221,26 +251,28 @@ export async function createKnowproCommands(
     }
 
     function entitiesDef(): CommandMetadata {
-        return {
-            description: "Display entities in current conversation",
-        };
+        return searchTermsDef(
+            "Search entities in current conversation",
+            "entity",
+        );
     }
-    commands.kpSearchEntities.metadata = entitiesDef();
-    async function searchEntities(args: string[]): Promise<void> {
+    commands.kpEntities.metadata = entitiesDef();
+    async function entities(args: string[]): Promise<void> {
         const conversation = ensureConversationLoaded();
         if (!conversation) {
             return;
         }
         if (args.length > 0) {
+            args.push("--ktype");
+            args.push("entity");
+            await searchTerms(args);
         } else {
-            //
-            // Display all entities
-            //
-            const matches = filterSemanticRefsByType(
-                conversation.semanticRefs,
-                "entity",
-            );
-            context.printer.writeSemanticRefs(matches);
+            if (conversation.semanticRefs !== undefined) {
+                const entities = conversation.semanticRefs?.filter(
+                    (sr) => sr.knowledgeType === "entity",
+                );
+                context.printer.writeSemanticRefs(entities);
+            }
         }
     }
 
@@ -337,21 +369,6 @@ export async function createKnowproCommands(
     function podcastNameToFilePath(podcastName: string): string {
         return path.join(context.basePath, podcastName + IndexFileSuffix);
     }
-}
-
-export function filterSemanticRefsByType(
-    semanticRefs: kp.SemanticRef[] | undefined,
-    type: string,
-): kp.SemanticRef[] {
-    const matches: kp.SemanticRef[] = [];
-    if (semanticRefs) {
-        for (const ref of semanticRefs) {
-            if (ref.knowledgeType === type) {
-                matches.push(ref);
-            }
-        }
-    }
-    return matches;
 }
 
 export function parseQueryTerms(args: string[]): kp.QueryTerm[] {
