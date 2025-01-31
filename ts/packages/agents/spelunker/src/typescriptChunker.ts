@@ -31,20 +31,22 @@ export async function chunkifyTypeScriptFiles(
     const results: (ChunkedFile | ChunkerErrorItem)[] = [];
     for (const fileName of fileNames) {
         // console.log(fileName);
+        const sourceFile: ts.SourceFile = await tsCode.loadSourceFile(fileName);
+
         const baseName = path.basename(fileName);
         const extName = path.extname(fileName);
         const codeName = baseName.slice(0, -extName.length || undefined);
+        const blobs: Blob[] = [{ start: 0, lines: sourceFile.text.match(/.*(?:\r?\n|$)/g) || [] }];
         const rootChunk: Chunk = {
             chunkId: generate_id(),
             treeName: "file",
             codeName,
-            blobs: [],
+            blobs,
             parentId: "",
             children: [],
             fileName,
         };
         const chunks: Chunk[] = [rootChunk];
-        const sourceFile: ts.SourceFile = await tsCode.loadSourceFile(fileName);
         chunks.push(...recursivelyChunkify(sourceFile, rootChunk));
         const chunkedFile: ChunkedFile = {
             fileName,
@@ -81,7 +83,7 @@ export async function chunkifyTypeScriptFiles(
                         children: [],
                         fileName,
                     };
-                    // TODO: Remove chunk.blobs from parentChunk.blobs.
+                    spliceBlobs(parentChunk, chunk);
                     chunks.push(chunk);
                     recursivelyChunkify(childNode, chunk);
                 } else {
@@ -93,6 +95,45 @@ export async function chunkifyTypeScriptFiles(
     }
 
     return results;
+}
+
+function assert(condition: boolean, message: string): asserts condition {
+    if (!condition) {
+        throw new Error(`Assertion failed: ${message}`);
+    }
+}
+
+function spliceBlobs(parentChunk: Chunk, childChunk: Chunk): void {
+    const parentBlobs = parentChunk.blobs;
+    const childBlobs = childChunk.blobs;
+    assert(parentBlobs.length > 0, "Parent chunk must have at least one blob");
+    assert(childBlobs.length === 1, "Child chunk must have exactly one blob");
+    const parentBlob = parentBlobs[parentBlobs.length - 1];
+    const childBlob = childBlobs[0];
+    assert(childBlob.start >= parentBlob.start, "Child blob must start after parent blob");
+    assert(childBlob.start + childBlob.lines.length <= parentBlob.start + parentBlob.lines.length, "Child blob must end before parent blob");
+
+    const linesBefore = parentBlob.lines.slice(0, childBlob.start - parentBlob.start);
+    const startBefore = parentBlob.start;
+    while (linesBefore.length && !linesBefore[linesBefore.length - 1].trim()) {
+        linesBefore.pop();
+    }
+
+    let startAfter = childBlob.start + childBlob.lines.length;
+    const linesAfter = parentBlob.lines.slice(startAfter - parentBlob.start);
+    while (linesAfter.length && !linesAfter[0].trim()) {
+        linesAfter.shift();
+        startAfter++;
+    }
+
+    const blobs: Blob[] = [];
+    if (linesBefore.length) {
+        blobs.push({ start: startBefore, lines: linesBefore });
+    }
+    if (linesAfter.length) {
+        blobs.push({ start: startAfter, lines: linesAfter });
+    }
+    parentChunk.blobs.splice(-1, 1, ...blobs);
 }
 
 function makeBlobs(
