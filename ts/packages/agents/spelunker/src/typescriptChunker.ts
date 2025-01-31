@@ -45,67 +45,51 @@ export async function chunkifyTypeScriptFiles(
         };
         const chunks: Chunk[] = [rootChunk];
         const sourceFile: ts.SourceFile = await tsCode.loadSourceFile(fileName);
-
-        // TODO: Also do nested functions, and classes, and interfaces, and modules.
-        // TODO: For nested things, remove their text from the parent.
-        function getChunkableStatements(): (
-            | ts.FunctionDeclaration
-            | ts.ClassDeclaration
-            | ts.InterfaceDeclaration
-            | ts.TypeAliasDeclaration
-        )[] {
-            return tsCode.getStatements(
-                sourceFile,
-                (s) =>
-                    ts.isFunctionDeclaration(s) ||
-                    ts.isClassDeclaration(s) ||
-                    ts.isInterfaceDeclaration(s) ||
-                    ts.isTypeAliasDeclaration(s),
-            );
-        }
-
-        const things = getChunkableStatements();
-        for (const thing of things) {
-            const treeName = ts.SyntaxKind[thing.kind];
-            const codeName = tsCode.getStatementName(thing) ?? "";
-            // console.log(`  ${treeName}: ${codeName}`);
-            try {
-                // console.log(
-                //     "--------------------------------------------------------",
-                // );
-                // console.log(`Name: ${thing.name?.escapedText}`);
-                // console.log(
-                //     `Parameters: ${thing.parameters.map((p) => p.name?.getFullText(sourceFile))}`,
-                // );
-                // console.log(`Return type: ${thing.type?.getText(sourceFile)}`);
-
-                const chunk: Chunk = {
-                    chunkId: generate_id(),
-                    treeName,
-                    codeName,
-                    blobs: makeBlobs(
-                        sourceFile,
-                        thing.getFullStart(),
-                        thing.getEnd(),
-                    ),
-                    parentId: rootChunk.chunkId,
-                    children: [],
-                    fileName,
-                };
-                chunks.push(chunk);
-            } catch (e: any) {
-                results.push({
-                    error: `${thing.name?.escapedText}: ${e.message}`,
-                    filename: fileName,
-                });
-            }
-        }
-        // console.log("========================================================");
+        chunks.push(...recursivelyChunkify(sourceFile, rootChunk));
         const chunkedFile: ChunkedFile = {
             fileName,
             chunks,
         };
         results.push(chunkedFile);
+
+        function recursivelyChunkify(
+            parentNode: ts.Node,
+            parentChunk: Chunk,
+        ): Chunk[] {
+            const chunks: Chunk[] = [];
+            for (const childNode of parentNode.getChildren(sourceFile)) {
+                if (
+                    ts.isInterfaceDeclaration(childNode) ||
+                    ts.isTypeAliasDeclaration(childNode) ||
+                    ts.isFunctionDeclaration(childNode) ||
+                    ts.isClassDeclaration(childNode)
+                ) {
+                    // console.log(
+                    //     ts.SyntaxKind[childNode.kind],
+                    //     tsCode.getStatementName(childNode),
+                    // );
+                    const chunk: Chunk = {
+                        chunkId: generate_id(),
+                        treeName: ts.SyntaxKind[childNode.kind],
+                        codeName: tsCode.getStatementName(childNode) ?? "",
+                        blobs: makeBlobs(
+                            sourceFile,
+                            childNode.getFullStart(),
+                            childNode.getEnd(),
+                        ),
+                        parentId: parentChunk.chunkId,
+                        children: [],
+                        fileName,
+                    };
+                    // TODO: Remove chunk.blobs from parentChunk.blobs.
+                    chunks.push(chunk);
+                    recursivelyChunkify(childNode, chunk);
+                } else {
+                    recursivelyChunkify(childNode, parentChunk);
+                }
+            }
+            return chunks;
+        }
     }
 
     return results;
