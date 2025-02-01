@@ -13,40 +13,37 @@ import {
 } from "typeagent";
 import {
     Term,
-    ITermToRelatedTermsIndex,
-    ITextSemanticIndex,
+    ITermEmbeddingIndex,
     ITextEmbeddingDataItem,
     ITextEmbeddingData,
 } from "./dataFormat.js";
 import { createEmbeddingCache } from "knowledge-processor";
 
-export async function buildTermSemanticIndex(
-    settings: SemanticIndexSettings,
+export async function buildTermEmbeddingIndex(
+    settings: TextEmbeddingIndexSettings,
     terms: string[],
     batchSize: number,
     progressCallback?: (
         terms: string[],
         batch: collections.Slice<string>,
     ) => boolean,
-): Promise<TermSemanticIndex> {
-    const termIndex = new TermSemanticIndex(settings);
+): Promise<ITermEmbeddingIndex> {
+    const termIndex = new TermEmbeddingIndex(settings);
     for (const slice of collections.slices(terms, batchSize)) {
         if (progressCallback && !progressCallback(terms, slice)) {
             break;
         }
-        await termIndex.push(slice.value);
+        await termIndex.add(slice.value);
     }
     return termIndex;
 }
 
-export class TermSemanticIndex
-    implements ITermToRelatedTermsIndex, ITextSemanticIndex
-{
+export class TermEmbeddingIndex implements ITermEmbeddingIndex {
     private termText: string[];
     private termEmbeddings: NormalizedEmbedding[];
 
     constructor(
-        public settings: SemanticIndexSettings,
+        public settings: TextEmbeddingIndexSettings,
         data?: ITextEmbeddingData,
     ) {
         this.termText = [];
@@ -56,27 +53,22 @@ export class TermSemanticIndex
         }
     }
 
-    public async push(terms: string | string[]): Promise<void> {
+    public async add(terms: string | string[]): Promise<void> {
         if (Array.isArray(terms)) {
             const embeddings = await generateTextEmbeddingsWithRetry(
                 this.settings.embeddingModel,
                 terms,
             );
             for (let i = 0; i < terms.length; ++i) {
-                this.pushTermEmbedding(terms[i], embeddings[i]);
+                this.addTermEmbedding(terms[i], embeddings[i]);
             }
         } else {
             const embedding = await generateEmbedding(
                 this.settings.embeddingModel,
                 terms,
             );
-            this.pushTermEmbedding(terms, embedding);
+            this.addTermEmbedding(terms, embedding);
         }
-    }
-
-    public pushTermEmbedding(term: string, embedding: NormalizedEmbedding) {
-        this.termText.push(term);
-        this.termEmbeddings.push(embedding);
     }
 
     public async lookupTerm(term: string): Promise<Term[] | undefined> {
@@ -119,7 +111,7 @@ export class TermSemanticIndex
     public deserialize(data: ITextEmbeddingData): void {
         if (data.embeddingData !== undefined) {
             for (const item of data.embeddingData) {
-                this.pushTermEmbedding(
+                this.addTermEmbedding(
                     item.text,
                     new Float32Array(item.embedding),
                 );
@@ -140,6 +132,11 @@ export class TermSemanticIndex
         };
     }
 
+    private addTermEmbedding(term: string, embedding: NormalizedEmbedding) {
+        this.termText.push(term);
+        this.termEmbeddings.push(embedding);
+    }
+
     private indexesOfNearestTerms(
         other: NormalizedEmbedding,
         minScore?: number,
@@ -157,7 +154,7 @@ export class TermSemanticIndex
     }
 }
 
-export type SemanticIndexSettings = {
+export type TextEmbeddingIndexSettings = {
     embeddingModel: TextEmbeddingModel;
     minScore: number;
     maxMatches?: number | undefined;
@@ -165,7 +162,7 @@ export type SemanticIndexSettings = {
     retryPauseMs?: number;
 };
 
-export function createSemanticIndexSettings(): SemanticIndexSettings {
+export function createSemanticIndexSettings(): TextEmbeddingIndexSettings {
     return {
         embeddingModel: createEmbeddingCache(openai.createEmbeddingModel(), 64),
         minScore: 0.8,

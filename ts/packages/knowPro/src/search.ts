@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { SemanticRefAccumulator } from "./accumulators.js";
+import { SemanticRefAccumulator } from "./collections.js";
 import {
     DateRange,
     IConversation,

@@ -22,8 +22,8 @@ import {
     MatchAccumulator,
     TermMatchAccumulator,
     SemanticRefAccumulator,
-    TextRangeAccumulator,
-} from "./accumulators.js";
+    TextRangeCollection,
+} from "./collections.js";
 import { collections } from "typeagent";
 
 export function isConversationSearchable(conversation: IConversation): boolean {
@@ -561,7 +561,7 @@ export class ScopeExpr implements IQueryOpExpr<SemanticRefAccumulator> {
     ): Promise<SemanticRefAccumulator> {
         let accumulator = await this.sourceExpr.eval(context);
         // Scope => text ranges in scope
-        const scope = new TextRangeAccumulator();
+        const scope = new TextRangeCollection();
 
         // If we are scoping the conversation by time range, then collect
         // text ranges in the given time range

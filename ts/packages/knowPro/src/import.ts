@@ -8,6 +8,7 @@ import {
     SemanticRef,
     IConversationData,
     ITextEmbeddingData,
+    ITermEmbeddingIndex,
 } from "./dataFormat.js";
 import { conversation, split } from "knowledge-processor";
 import { collections, dateTime, getFileName, readAllText } from "typeagent";
@@ -21,10 +22,10 @@ import {
 } from "./conversationIndex.js";
 import { Result } from "typechat";
 import {
-    buildTermSemanticIndex,
+    buildTermEmbeddingIndex,
     createSemanticIndexSettings,
-    SemanticIndexSettings,
-    TermSemanticIndex,
+    TextEmbeddingIndexSettings,
+    TermEmbeddingIndex,
 } from "./termIndex.js";
 import { TimestampToTextRangeIndex } from "./timestampIndex.js";
 
@@ -105,7 +106,7 @@ export class PodcastMessage implements IMessage<PodcastMessageMeta> {
 }
 
 export type PodcastSettings = {
-    relatedTermIndexSettings: SemanticIndexSettings;
+    relatedTermIndexSettings: TextEmbeddingIndexSettings;
 };
 
 export function createPodcastSettings(): PodcastSettings {
@@ -122,7 +123,7 @@ export class Podcast implements IConversation<PodcastMessageMeta> {
         public tags: string[] = [],
         public semanticRefs: SemanticRef[] = [],
         public semanticRefIndex: ConversationIndex | undefined = undefined,
-        public relatedTermsIndex: TermSemanticIndex | undefined = undefined,
+        public relatedTermsIndex: ITermEmbeddingIndex | undefined = undefined,
         public timestampIndex:
             | TimestampToTextRangeIndex
             | undefined = undefined,
@@ -194,7 +195,7 @@ export class Podcast implements IConversation<PodcastMessageMeta> {
     ): Promise<void> {
         if (this.settings.relatedTermIndexSettings && this.semanticRefIndex) {
             const allTerms = this.semanticRefIndex?.getTerms();
-            this.relatedTermsIndex = await buildTermSemanticIndex(
+            this.relatedTermsIndex = await buildTermEmbeddingIndex(
                 this.settings.relatedTermIndexSettings,
                 allTerms,
                 batchSize,
@@ -225,7 +226,7 @@ export class Podcast implements IConversation<PodcastMessageMeta> {
             );
         }
         if (data.relatedTermIndexData) {
-            this.relatedTermsIndex = new TermSemanticIndex(
+            this.relatedTermsIndex = new TermEmbeddingIndex(
                 this.settings.relatedTermIndexSettings,
                 data.relatedTermIndexData,
             );

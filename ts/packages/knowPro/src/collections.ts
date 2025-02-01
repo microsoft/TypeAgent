@@ -83,7 +83,7 @@ export class MatchAccumulator<T = any> {
         }
     }
 
-    public union(other: MatchAccumulator<T>): void {
+    public addUnion(other: MatchAccumulator<T>): void {
         for (const matchFrom of other.matches.values()) {
             const matchTo = this.matches.get(matchFrom.value);
             if (matchTo !== undefined) {
@@ -263,7 +263,7 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
 
     public selectInScope(
         semanticRefs: SemanticRef[],
-        scope: TextRangeAccumulator,
+        scope: TextRangeCollection,
     ) {
         const accumulator = new SemanticRefAccumulator(this.queryTermMatches);
         for (const match of this.getMatches()) {
@@ -288,6 +288,8 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
         //: this.queryTermMatches.termMatches.size;
     }
 }
+
+export class MessageAccumulator extends MatchAccumulator<IMessage> {}
 
 export class TermMatchAccumulator {
     constructor(
@@ -314,6 +316,10 @@ export class TermMatchAccumulator {
         }
     }
 
+    public addUnion(other: TermMatchAccumulator) {
+        unionInPlace(this.termMatches, other.termMatches);
+    }
+
     public has(text: string, includeRelated: boolean = true): boolean {
         if (this.termMatches.has(text)) {
             return true;
@@ -327,7 +333,7 @@ export class TermMatchAccumulator {
     }
 }
 
-export class TextRangeAccumulator {
+export class TextRangeCollection {
     // Maintains ranges sorted by message index
     private ranges: TextRange[] = [];
 
@@ -375,4 +381,35 @@ export class TextRangeAccumulator {
     }
 }
 
-export class MessageAccumulator extends MatchAccumulator<IMessage> {}
+/**
+ * Return a new set that is the union of two sets
+ * @param x
+ * @param y
+ * @returns
+ */
+export function unionSet<T = any>(x: Set<T>, y: Set<T>): Set<T> {
+    let from: Set<T>;
+    let to: Set<T>;
+    if (x.size > y.size) {
+        from = y;
+        to = x;
+    } else {
+        from = x;
+        to = y;
+    }
+    const union = new Set(to);
+    if (from.size > 0) {
+        for (const value of from.values()) {
+            union.add(value);
+        }
+    }
+    return union;
+}
+
+export function unionInPlace<T = any>(set: Set<T>, other: Set<T>): void {
+    if (other.size > 0) {
+        for (const value of other.values()) {
+            set.add(value);
+        }
+    }
+}

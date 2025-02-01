@@ -126,7 +126,7 @@ export interface ITermToRelatedTermsIndex {
     lookupTerm(term: string): Promise<Term[] | undefined>;
 }
 
-export interface ITextSemanticIndex {
+export interface ITermEmbeddingIndex extends ITermToRelatedTermsIndex {
     serialize(): ITextEmbeddingData;
     deserialize(data: ITextEmbeddingData): void;
 }
