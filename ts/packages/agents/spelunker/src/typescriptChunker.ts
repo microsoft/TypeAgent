@@ -72,10 +72,12 @@ export async function chunkifyTypeScriptFiles(
                     //     ts.SyntaxKind[childNode.kind],
                     //     tsCode.getStatementName(childNode),
                     // );
-                    const chunk: Chunk = {
+                    const treeName = ts.SyntaxKind[childNode.kind];
+                    const codeName = tsCode.getStatementName(childNode) ?? "";
+                    const childChunk: Chunk = {
                         chunkId: generate_id(),
-                        treeName: ts.SyntaxKind[childNode.kind],
-                        codeName: tsCode.getStatementName(childNode) ?? "",
+                        treeName,
+                        codeName,
                         blobs: makeBlobs(
                             sourceFile,
                             childNode.getFullStart(),
@@ -85,11 +87,11 @@ export async function chunkifyTypeScriptFiles(
                         children: [],
                         fileName,
                     };
-                    spliceBlobs(parentChunk, chunk);
-                    chunks.push(chunk);
-                    recursivelyChunkify(childNode, chunk);
+                    spliceBlobs(parentChunk, childChunk);
+                    chunks.push(childChunk);
+                    chunks.push(...recursivelyChunkify(childNode, childChunk));
                 } else {
-                    recursivelyChunkify(childNode, parentChunk);
+                    chunks.push(...recursivelyChunkify(childNode, parentChunk));
                 }
             }
             return chunks;
@@ -142,10 +144,32 @@ function spliceBlobs(parentChunk: Chunk, childChunk: Chunk): void {
     if (linesBefore.length) {
         blobs.push({ start: startBefore, lines: linesBefore });
     }
+    const sig: string = signature(childChunk);
+    // console.log("signature", sig);
+    if (sig) {
+        blobs.push({ start: childBlob.start, lines: [sig], breadcrumb: true });
+    }
     if (linesAfter.length) {
         blobs.push({ start: startAfter, lines: linesAfter });
     }
     parentChunk.blobs.splice(-1, 1, ...blobs);
+}
+
+function signature(chunk: Chunk): string {
+    const firstLine = chunk.blobs[0]?.lines[0] ?? "";
+    const indent = firstLine.match(/^(\s*)/)?.[0] || "";
+
+    switch (chunk.treeName) {
+        case "InterfaceDeclaration":
+            return `${indent}interface ${chunk.codeName} ...`;
+        case "TypeAliasDeclaration":
+            return `${indent}type ${chunk.codeName} ...`;
+        case "FunctionDeclaration":
+            return `${indent}function ${chunk.codeName} ...`;
+        case "ClassDeclaration":
+            return `${indent}class ${chunk.codeName} ...`;
+    }
+    return "";
 }
 
 function makeBlobs(
