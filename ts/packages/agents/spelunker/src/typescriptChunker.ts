@@ -72,10 +72,12 @@ export async function chunkifyTypeScriptFiles(
                     //     ts.SyntaxKind[childNode.kind],
                     //     tsCode.getStatementName(childNode),
                     // );
-                    const chunk: Chunk = {
+                    const treeName = ts.SyntaxKind[childNode.kind];
+                    const codeName = tsCode.getStatementName(childNode) ?? "";
+                    const childChunk: Chunk = {
                         chunkId: generate_id(),
-                        treeName: ts.SyntaxKind[childNode.kind],
-                        codeName: tsCode.getStatementName(childNode) ?? "",
+                        treeName,
+                        codeName,
                         blobs: makeBlobs(
                             sourceFile,
                             childNode.getFullStart(),
@@ -85,11 +87,11 @@ export async function chunkifyTypeScriptFiles(
                         children: [],
                         fileName,
                     };
-                    spliceBlobs(parentChunk, chunk);
-                    chunks.push(chunk);
-                    recursivelyChunkify(childNode, chunk);
+                    spliceBlobs(parentChunk, childChunk);
+                    chunks.push(childChunk);
+                    chunks.push(...recursivelyChunkify(childNode, childChunk));
                 } else {
-                    recursivelyChunkify(childNode, parentChunk);
+                    chunks.push(...recursivelyChunkify(childNode, parentChunk));
                 }
             }
             return chunks;
@@ -154,15 +156,18 @@ function spliceBlobs(parentChunk: Chunk, childChunk: Chunk): void {
 }
 
 function signature(chunk: Chunk): string {
+    const firstLine = chunk.blobs[0]?.lines[0] ?? "";
+    const indent = firstLine.match(/^(\s*)/)?.[0] || "";
+
     switch (chunk.treeName) {
         case "InterfaceDeclaration":
-            return `interface ${chunk.codeName} ...`;
+            return `${indent}interface ${chunk.codeName} ...`;
         case "TypeAliasDeclaration":
-            return `type ${chunk.codeName} ...`;
+            return `${indent}type ${chunk.codeName} ...`;
         case "FunctionDeclaration":
-            return `function ${chunk.codeName} ...`;
+            return `${indent}function ${chunk.codeName} ...`;
         case "ClassDeclaration":
-            return `class ${chunk.codeName} ...`;
+            return `${indent}class ${chunk.codeName} ...`;
     }
     return "";
 }
