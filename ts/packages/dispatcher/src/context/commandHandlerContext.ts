@@ -132,9 +132,10 @@ export function getTranslatorForSchema(
         getActiveTranslators(context),
         config.switch.inline,
         config.multiple,
-        config.schema.generation,
+        config.schema.generation.enabled,
         config.model,
         !config.schema.optimize.enabled,
+        config.schema.generation.jsonSchema,
     );
     context.translatorCache.set(translatorName, newTranslator);
     return newTranslator;

@@ -3,6 +3,8 @@
 
 import { PromptSection, Result, TypeChatLanguageModel } from "typechat";
 
+export type JsonSchema = any;
+
 /**
  * Translation settings for Chat models
  */
@@ -11,6 +13,7 @@ export type CompletionSettings = {
     temperature?: number;
     max_tokens?: number;
     response_format?: { type: "json_object" };
+
     // Use fixed seed parameter to improve determinism
     //https://cookbook.openai.com/examples/reproducible_outputs_with_the_seed_parameter
     seed?: number;
@@ -22,12 +25,16 @@ export type CompletionSettings = {
 export interface ChatModel extends TypeChatLanguageModel {
     completionSettings: CompletionSettings;
     completionCallback?: ((request: any, response: any) => void) | undefined;
-    complete(prompt: string | PromptSection[]): Promise<Result<string>>;
+    complete(
+        prompt: string | PromptSection[],
+        jsonSchema?: JsonSchema,
+    ): Promise<Result<string>>;
 }
 
 export interface ChatModelWithStreaming extends ChatModel {
     completeStream(
         prompt: string | PromptSection[],
+        jsonSchema?: JsonSchema,
     ): Promise<Result<AsyncIterableIterator<string>>>;
 }
 

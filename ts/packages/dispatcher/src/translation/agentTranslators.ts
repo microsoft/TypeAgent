@@ -263,6 +263,7 @@ export function loadAgentJsonTranslator<
     regenerateSchema: boolean = true,
     model?: string,
     exact: boolean = true,
+    jsonSchema: boolean = false,
 ): TypeAgentTranslator<T> {
     const options = { model };
     const translator = regenerateSchema
@@ -276,7 +277,7 @@ export function loadAgentJsonTranslator<
                   multipleActionOptions,
               ),
               options,
-              { exact },
+              { exact, jsonSchema },
           )
         : createJsonTranslatorFromSchemaDef<T>(
               "AllActions",

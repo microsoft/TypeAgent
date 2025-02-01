@@ -14,7 +14,7 @@ import {
 import { createTypeScriptJsonValidator } from "typechat/ts";
 import { TypeChatConstraintsValidator } from "./constraints.js";
 import registerDebug from "debug";
-import { openai as ai } from "aiclient";
+import { openai as ai, JsonSchema } from "aiclient";
 import {
     createIncrementalJsonParser,
     IncrementalJsonParser,
@@ -260,9 +260,17 @@ export function createJsonTranslatorFromSchemaDef<T extends object>(
     );
 }
 
+export interface TypeAgentJsonValidator<T extends object>
+    extends TypeChatJsonValidator<T> {
+    getSchemaText: () => string;
+    getTypeName: () => string;
+    validate(jsonObject: object): Result<T>;
+    getJsonSchema?: () => JsonSchema | undefined;
+}
+
 export function createJsonTranslatorWithValidator<T extends object>(
     name: string,
-    validator: TypeChatJsonValidator<T>,
+    validator: TypeAgentJsonValidator<T>,
     options?: JsonTranslatorOptions<T>,
 ) {
     const model = ai.createChatModel(
@@ -275,18 +283,29 @@ export function createJsonTranslatorWithValidator<T extends object>(
     );
 
     const debugPrompt = registerDebug(`typeagent:translate:${name}:prompt`);
+    const debugJsonSchema = registerDebug(
+        `typeagent:translate:${name}:jsonschema`,
+    );
     const debugResult = registerDebug(`typeagent:translate:${name}:result`);
     const complete = model.complete.bind(model);
     model.complete = async (prompt: string | PromptSection[]) => {
         debugPrompt(prompt);
-        return complete(prompt);
+        const jsonSchema = validator.getJsonSchema?.();
+        if (jsonSchema !== undefined) {
+            debugJsonSchema(jsonSchema);
+        }
+        return complete(prompt, jsonSchema);
     };
 
     if (ai.supportsStreaming(model)) {
         const completeStream = model.completeStream.bind(model);
         model.completeStream = async (prompt: string | PromptSection[]) => {
             debugPrompt(prompt);
-            return completeStream(prompt);
+            const jsonSchema = validator.getJsonSchema?.();
+            if (jsonSchema !== undefined) {
+                debugJsonSchema(jsonSchema);
+            }
+            return completeStream(prompt, jsonSchema);
         };
     }
 

@@ -748,21 +748,45 @@ const configTranslationCommandHandlers: CommandHandlerTable = {
         schema: {
             description: "Action schema configuration",
             commands: {
-                generation: getToggleHandlerTable(
-                    "generated action schema",
-                    async (context, enable: boolean) => {
-                        await changeContextConfig(
-                            {
-                                translation: {
-                                    schema: {
-                                        generation: enable,
+                generation: {
+                    description: "Generated action schema",
+                    commands: {
+                        ...getToggleCommandHandlers(
+                            "generated action schema",
+                            async (context, enable: boolean) => {
+                                await changeContextConfig(
+                                    {
+                                        translation: {
+                                            schema: {
+                                                generation: {
+                                                    enabled: enable,
+                                                },
+                                            },
+                                        },
                                     },
-                                },
+                                    context,
+                                );
                             },
-                            context,
-                        );
+                        ),
+                        json: getToggleHandlerTable(
+                            "use generate json schema if model supports it",
+                            async (context, enable: boolean) => {
+                                await changeContextConfig(
+                                    {
+                                        translation: {
+                                            schema: {
+                                                generation: {
+                                                    jsonSchema: enable,
+                                                },
+                                            },
+                                        },
+                                    },
+                                    context,
+                                );
+                            },
+                        ),
                     },
-                ),
+                },
                 optimize: {
                     description: "Optimize schema",
                     commands: {
