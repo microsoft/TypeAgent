@@ -55,7 +55,7 @@ function createQueryContext(): QueryContext {
         "AnswerSpecs",
     );
     const miniModel = openai.createChatModel(
-        "GPT_4_0_MINI",
+        undefined, // "GPT_4_O_MINI" is slower than default model?!
         undefined,
         undefined,
         ["spelunkerMini"],
