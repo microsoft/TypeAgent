@@ -11,12 +11,9 @@ import {
 export function wrapTypeWithJsonSchema(
     type: ActionSchemaEntryTypeDefinition,
 ): SchemaTypeDefinition {
-    return sc.type(
-        "AllActions",
-        sc.obj({ response: type.type }),
-        undefined,
-        true,
-    );
+    // The root of a Json schema is always an object
+    // place the root type definition with an object with a response field of the type.
+    return sc.type(type.name, sc.obj({ response: type.type }), undefined, true);
 }
 
 type JsonSchemaObject = {
@@ -120,6 +117,7 @@ function generateJsonSchemaType(
                 $ref: `#/$defs/${type.name}`,
             };
         case "undefined": {
+            // Note: undefined is presented by null in JSON schema
             return { type: "null" };
         }
         default:
