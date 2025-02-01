@@ -142,10 +142,29 @@ function spliceBlobs(parentChunk: Chunk, childChunk: Chunk): void {
     if (linesBefore.length) {
         blobs.push({ start: startBefore, lines: linesBefore });
     }
+    const sig: string = signature(childChunk);
+    // console.log("signature", sig);
+    if (sig) {
+        blobs.push({ start: childBlob.start, lines: [sig], breadcrumb: true });
+    }
     if (linesAfter.length) {
         blobs.push({ start: startAfter, lines: linesAfter });
     }
     parentChunk.blobs.splice(-1, 1, ...blobs);
+}
+
+function signature(chunk: Chunk): string {
+    switch (chunk.treeName) {
+        case "InterfaceDeclaration":
+            return `interface ${chunk.codeName} ...`;
+        case "TypeAliasDeclaration":
+            return `type ${chunk.codeName} ...`;
+        case "FunctionDeclaration":
+            return `function ${chunk.codeName} ...`;
+        case "ClassDeclaration":
+            return `class ${chunk.codeName} ...`;
+    }
+    return "";
 }
 
 function makeBlobs(
