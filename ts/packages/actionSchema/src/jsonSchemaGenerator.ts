@@ -150,7 +150,6 @@ function generateJsonSchemaTypeDefinition(
         } while (pending.length > 0);
         schema.schema.$defs = $defs;
     }
-    console.log(JSON.stringify(schema, undefined, 2));
     return schema;
 }
 

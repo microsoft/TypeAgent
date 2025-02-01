@@ -283,18 +283,29 @@ export function createJsonTranslatorWithValidator<T extends object>(
     );
 
     const debugPrompt = registerDebug(`typeagent:translate:${name}:prompt`);
+    const debugJsonSchema = registerDebug(
+        `typeagent:translate:${name}:jsonschema`,
+    );
     const debugResult = registerDebug(`typeagent:translate:${name}:result`);
     const complete = model.complete.bind(model);
     model.complete = async (prompt: string | PromptSection[]) => {
         debugPrompt(prompt);
-        return complete(prompt, validator.getJsonSchema?.());
+        const jsonSchema = validator.getJsonSchema?.();
+        if (jsonSchema !== undefined) {
+            debugJsonSchema(jsonSchema);
+        }
+        return complete(prompt, jsonSchema);
     };
 
     if (ai.supportsStreaming(model)) {
         const completeStream = model.completeStream.bind(model);
         model.completeStream = async (prompt: string | PromptSection[]) => {
             debugPrompt(prompt);
-            return completeStream(prompt, validator.getJsonSchema?.());
+            const jsonSchema = validator.getJsonSchema?.();
+            if (jsonSchema !== undefined) {
+                debugJsonSchema(jsonSchema);
+            }
+            return completeStream(prompt, jsonSchema);
         };
     }
 
