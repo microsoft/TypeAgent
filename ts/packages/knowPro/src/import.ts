@@ -9,6 +9,8 @@ import {
     IConversationData,
     ITextEmbeddingData,
     ITermEmbeddingIndex,
+    ITimestampToTextRangeIndex,
+    IPropertyToSemanticRefIndex,
 } from "./dataFormat.js";
 import { conversation, split } from "knowledge-processor";
 import { collections, dateTime, getFileName, readAllText } from "typeagent";
@@ -26,8 +28,9 @@ import {
     createSemanticIndexSettings,
     TextEmbeddingIndexSettings,
     TermEmbeddingIndex,
-} from "./termIndex.js";
+} from "./relatedTermsIndex.js";
 import { TimestampToTextRangeIndex } from "./timestampIndex.js";
+import { addPropertiesToIndex, PropertyIndex } from "./propertyIndex.js";
 
 // metadata for podcast messages
 export class PodcastMessageMeta implements IKnowledgeSource {
@@ -125,7 +128,10 @@ export class Podcast implements IConversation<PodcastMessageMeta> {
         public semanticRefIndex: ConversationIndex | undefined = undefined,
         public relatedTermsIndex: ITermEmbeddingIndex | undefined = undefined,
         public timestampIndex:
-            | TimestampToTextRangeIndex
+            | ITimestampToTextRangeIndex
+            | undefined = undefined,
+        public propertyToSemanticRefIndex:
+            | IPropertyToSemanticRefIndex
             | undefined = undefined,
     ) {
         this.settings = createPodcastSettings();
@@ -182,8 +188,19 @@ export class Podcast implements IConversation<PodcastMessageMeta> {
     ): Promise<ConversationIndexingResult> {
         const result = await buildConversationIndex(this, progressCallback);
         this.addMetadataToIndex();
+        this.buildPropertyIndex();
         this.buildTimestampIndex();
         return result;
+    }
+
+    public buildPropertyIndex() {
+        if (this.semanticRefs && this.semanticRefs.length > 0) {
+            this.propertyToSemanticRefIndex = new PropertyIndex();
+            addPropertiesToIndex(
+                this.semanticRefs,
+                this.propertyToSemanticRefIndex,
+            );
+        }
     }
 
     public async buildRelatedTermsIndex(
@@ -231,6 +248,7 @@ export class Podcast implements IConversation<PodcastMessageMeta> {
                 data.relatedTermIndexData,
             );
         }
+        this.buildPropertyIndex();
         this.buildTimestampIndex();
     }
 }

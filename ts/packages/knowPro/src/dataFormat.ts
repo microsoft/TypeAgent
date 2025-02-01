@@ -43,11 +43,20 @@ export interface ITermToSemanticRefIndex {
     getTerms(): string[];
     addTerm(
         term: string,
-        semanticRefIndex: SemanticRefIndex,
-        strength?: number,
+        semanticRefIndex: SemanticRefIndex | ScoredSemanticRef,
     ): void;
     removeTerm(term: string, semanticRefIndex: SemanticRefIndex): void;
     lookupTerm(term: string): ScoredSemanticRef[] | undefined;
+}
+
+export interface IPropertyToSemanticRefIndex {
+    getValues(): string[];
+    addProperty(
+        propertyName: string,
+        value: string,
+        semanticRefIndex: SemanticRefIndex | ScoredSemanticRef,
+    ): void;
+    lookupProperty(propertyName: string, value: string): void;
 }
 
 export type KnowledgeType = "entity" | "action" | "topic" | "tag";
