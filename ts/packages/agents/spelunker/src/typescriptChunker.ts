@@ -218,7 +218,7 @@ export class Testing {
         const fileNames = [
             "./packages/agents/spelunker/src/typescriptChunker.ts",
             "./packages/agents/spelunker/src/spelunkerSchema.ts",
-            "./packages/agents/spelunker/src/makeSummarizeSchema.ts",
+            "./packages/agents/spelunker/src/summarizerSchema.ts",
             "./packages/codeProcessor/src/tsCode.ts",
             "./packages/agents/spelunker/src/pythonChunker.ts",
         ];

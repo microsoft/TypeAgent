@@ -17,12 +17,12 @@ import {
 import { createActionResultFromError } from "@typeagent/agent-sdk/helpers/action";
 import { loadSchema } from "typeagent";
 
-import { AnswerSpecs } from "./makeAnswerSchema.js";
-import { ChunkDescription, SelectorSpecs } from "./makeSelectorSchema.js";
+import { OracleSpecs } from "./oracleSchema.js";
+import { ChunkDescription, SelectorSpecs } from "./selectorSchema.js";
 import { SpelunkerContext } from "./spelunkerActionHandler.js";
 import { Blob, Chunk, ChunkedFile, ChunkerErrorItem } from "./chunkSchema.js";
 import { chunkifyPythonFiles } from "./pythonChunker.js";
-import { SummarizeSpecs } from "./makeSummarizeSchema.js";
+import { SummarizerSpecs } from "./summarizerSchema.js";
 import { createRequire } from "module";
 import { chunkifyTypeScriptFiles } from "./typescriptChunker.js";
 
@@ -39,20 +39,20 @@ function console_log(...rest: any[]): void {
 
 export interface QueryContext {
     chatModel: ChatModel;
-    answerMaker: TypeChatJsonTranslator<AnswerSpecs>;
+    oracle: TypeChatJsonTranslator<OracleSpecs>;
     miniModel: ChatModel;
     chunkSelector: TypeChatJsonTranslator<SelectorSpecs>;
-    chunkSummarizer: TypeChatJsonTranslator<SummarizeSpecs>;
+    chunkSummarizer: TypeChatJsonTranslator<SummarizerSpecs>;
     databaseLocation: string;
     database: sqlite.Database | undefined;
 }
 
 function createQueryContext(): QueryContext {
     const chatModel = openai.createChatModelDefault("spelunkerChat");
-    const answerMaker = createTranslator<AnswerSpecs>(
+    const oracle = createTranslator<OracleSpecs>(
         chatModel,
-        "makeAnswerSchema.ts",
-        "AnswerSpecs",
+        "oracleSchema.ts",
+        "OracleSpecs",
     );
     const miniModel = openai.createChatModel(
         undefined, // "GPT_4_O_MINI" is slower than default model?!
@@ -62,13 +62,13 @@ function createQueryContext(): QueryContext {
     );
     const chunkSelector = createTranslator<SelectorSpecs>(
         miniModel,
-        "makeSelectorSchema.ts",
+        "selectorSchema.ts",
         "SelectorSpecs",
     );
-    const chunkSummarizer = createTranslator<SummarizeSpecs>(
+    const chunkSummarizer = createTranslator<SummarizerSpecs>(
         miniModel,
-        "makeSummarizeSchema.ts",
-        "SummarizeSpecs",
+        "summarizerSchema.ts",
+        "SummarizerSpecs",
     );
     const databaseFolder = path.join(
         process.env.HOME ?? "/",
@@ -85,7 +85,7 @@ function createQueryContext(): QueryContext {
     const database = undefined;
     return {
         chatModel,
-        answerMaker,
+        oracle,
         miniModel,
         chunkSelector,
         chunkSummarizer,
@@ -159,7 +159,7 @@ export async function searchCode(
     const preppedChunks: Chunk[] = chunkDescs
         .map((chunkDesc) => prepChunk(chunkDesc, allChunks))
         .filter(Boolean) as Chunk[];
-    // TODO: Prompt engineering; more efficient preparation of summaries and chunks
+    // TODO: Prompt engineering
     const prompt = `\
         Please answer the user question using the given context and summaries.
 
@@ -176,9 +176,8 @@ export async function searchCode(
     // console_log(`[${prompt.slice(0, 1000)}]`);
 
     // 5. Send prompt to smart, code-savvy LLM.
-    console_log(`[Step 5: Ask the smart LLM]`);
-    const wrappedResult =
-        await context.queryContext!.answerMaker.translate(prompt);
+    console_log(`[Step 5: Ask the oracle]`);
+    const wrappedResult = await context.queryContext!.oracle.translate(prompt);
     if (!wrappedResult.success) {
         console_log(`  [It's a failure: ${wrappedResult.message}]`);
         return createActionResultFromError(
