@@ -36,7 +36,8 @@ function createActionSchemaJsonValidator<T extends TranslatedAction>(
     generateOptions?: GenerateSchemaOptions,
 ): TypeAgentJsonValidator<T> {
     const schema = generateActionSchema(actionSchemaGroup, generateOptions);
-    const jsonSchema = generateOptions?.jsonSchema
+    const generateJsonSchema = generateOptions?.jsonSchema ?? false;
+    const jsonSchema = generateJsonSchema
         ? generateActionJsonSchema(actionSchemaGroup)
         : undefined;
     return {
@@ -44,7 +45,10 @@ function createActionSchemaJsonValidator<T extends TranslatedAction>(
         getTypeName: () => actionSchemaGroup.entry.name,
         getJsonSchema: () => jsonSchema,
         validate(jsonObject: object): Result<T> {
-            const value: any = jsonObject;
+            const value: any = generateJsonSchema
+                ? (jsonObject as any).response
+                : jsonObject;
+
             if (value.actionName === undefined) {
                 return error("Missing actionName property");
             }
@@ -57,6 +61,7 @@ function createActionSchemaJsonValidator<T extends TranslatedAction>(
 
             try {
                 validateAction(actionSchema, value);
+                // Return the unwrapped value with generateJsonSchema as the translated result
                 return success(value);
             } catch (e: any) {
                 return error(e.message);

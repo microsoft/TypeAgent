@@ -247,6 +247,7 @@ export async function fetchWithRetry(
             if (result === undefined) {
                 throw new Error("fetch: No response");
             }
+            debugHeader(result.status, result.statusText);
             debugHeader(result.headers);
             if (result.status === 200) {
                 return success(result);
@@ -256,7 +257,10 @@ export async function fetchWithRetry(
                 retryCount >= retryMaxAttempts
             ) {
                 return error(`fetch error: ${await getErrorMessage(result)}`);
+            } else if (debugHeader.enabled) {
+                debugHeader(await getErrorMessage(result));
             }
+
             // See if the service tells how long to wait to retry
             const pauseMs = getRetryAfterMs(result, retryPauseMs);
             await sleep(pauseMs);

@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { wrapTypeWithJsonSchema } from "./jsonSchemaGenerator.js";
 import {
     SchemaType,
     SchemaObjectFields,
@@ -158,12 +159,10 @@ export function generateActionSchema(
     options?: GenerateSchemaOptions,
 ): string {
     return generateSchemaTypeDefinition(
-        actionSchemaGroup.entry,
+        options?.jsonSchema
+            ? wrapTypeWithJsonSchema(actionSchemaGroup.entry)
+            : actionSchemaGroup.entry,
         options,
         actionSchemaGroup.order,
     );
-}
-
-export function generateActionJsonSchema(actionSchemaGroup: ActionSchemaGroup) {
-    return undefined;
 }

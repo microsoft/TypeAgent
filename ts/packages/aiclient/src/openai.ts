@@ -398,7 +398,11 @@ function createAzureOpenAIChatModel(
     completionSettings ??= {};
     completionSettings.n ??= 1;
     completionSettings.temperature ??= 0;
-    if (!settings.supportsResponseFormat) {
+
+    const disableResponseFormat =
+        !settings.supportsResponseFormat &&
+        completionSettings.response_format !== undefined;
+    if (disableResponseFormat) {
         // Remove it even if user specify it.
         delete completionSettings.response_format;
     }
@@ -429,6 +433,11 @@ function createAzureOpenAIChatModel(
             ...additionalParams,
         };
         if (jsonSchema !== undefined) {
+            if (disableResponseFormat) {
+                throw new Error(
+                    `Json schema not supported by model '${settings.modelName}'`,
+                );
+            }
             if (params.response_format?.type === "json_object") {
                 params.response_format = {
                     type: "json_schema",
