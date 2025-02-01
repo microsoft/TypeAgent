@@ -11,7 +11,7 @@ export {
     composeTranslatorSchemas,
     enableJsonTranslatorStreaming,
     TypeChatJsonTranslatorWithStreaming,
-    createJsonTranslatorWithValidator as createTypeAgentJsonTranslator,
+    createJsonTranslatorWithValidator,
     TypeAgentJsonValidator,
     JsonTranslatorOptions,
 } from "./jsonTranslator.js";

@@ -4,7 +4,7 @@
 import {
     CachedImageWithDetails,
     createJsonTranslatorFromSchemaDef,
-    createTypeAgentJsonTranslator,
+    createJsonTranslatorWithValidator,
     enableJsonTranslatorStreaming,
     JsonTranslatorOptions,
 } from "common-utils";
@@ -310,7 +310,7 @@ function createTypeAgentTranslator<
 
     // Create another translator so that we can have a different
     // debug/token count tag
-    const altTranslator = createTypeAgentJsonTranslator(
+    const altTranslator = createJsonTranslatorWithValidator(
         "check",
         translator.validator,
         options,

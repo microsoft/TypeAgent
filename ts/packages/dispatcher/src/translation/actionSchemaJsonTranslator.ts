@@ -15,7 +15,7 @@ import {
     generateActionJsonSchema,
 } from "action-schema";
 import {
-    createTypeAgentJsonTranslator,
+    createJsonTranslatorWithValidator,
     JsonTranslatorOptions,
     TypeAgentJsonValidator,
 } from "common-utils";
@@ -83,7 +83,7 @@ export function createActionJsonTranslatorFromSchemaDef<
         generateOptions,
     );
 
-    return createTypeAgentJsonTranslator(
+    return createJsonTranslatorWithValidator(
         typeName.toLowerCase(),
         validator,
         options,
