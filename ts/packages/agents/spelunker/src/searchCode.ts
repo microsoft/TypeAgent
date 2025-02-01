@@ -326,11 +326,11 @@ async function selectRelevantChunks(
     const prompt = `\
     Please select up to 30 chunks that are relevant to the user question.
     Consider carefully how relevant each chunk is to the user question.
-    Provide a relevance scsore between 0 and 1 (float).
+    Provide a relevance score between 0 and 1 (float).
     Report only the chunk ID and relevance for each selected chunk.
-    Omit irrelevant chunks. It's fine to select fewer than 30.
+    Omit irrelevant or empty chunks. It's fine to select fewer than 30.
 
-    User question: "{input}"
+    User question: "${input}"
 
     Chunks:
     ${prepareChunks(chunks)}
