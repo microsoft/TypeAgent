@@ -126,12 +126,15 @@ export async function searchCode(
             .prepare(`SELECT * FROM blobs WHERE chunkId = ?`)
             .all(chunkRow.chunkId);
         for (const blob of blobRows) {
-            blob.lines = blob.lines.match(/.*(?:\r?\n|$)/g) ?? [];
+            blob.lines = blob.lines.split("\n");
             while (
                 blob.lines.length &&
                 !blob.lines[blob.lines.length - 1].trim()
             ) {
                 blob.lines.pop();
+            }
+            for (let i = 0; i < blob.lines.length; i++) {
+                blob.lines[i] = blob.lines[i] + "\n";
             }
         }
         const childRows: any[] = db
