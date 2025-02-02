@@ -13,7 +13,6 @@ import {
     getAppPath,
     sendUserRequestAndWaitForCompletion,
     getLaunchArgs,
-    sendUserRequestAndWaitForResponse,
     startShell,
 } from "./testHelper";
 import { fileURLToPath } from "node:url";
@@ -26,10 +25,6 @@ test("simple", { tag: "@smoke" }, async ({}, testInfo) => {
     await mainWindow.bringToFront();
     expect(fileURLToPath(mainWindow.url())).toContain(getAppPath());
     await app.close();
-});
-
-test("startShell", { tag: "@smoke" }, async ({}) => {
-    await startShell();
 });
 
 test("startShell", { tag: "@smoke" }, async ({}) => {
@@ -51,7 +46,7 @@ test("why is the sky blue?", { tag: "@smoke" }, async ({}, testInfo) => {
     expect(
         msg.toLowerCase(),
         "Chat agent didn't respond with the expected message.",
-    ).toContain("scattering.");
+    ).toContain("scattering");
 
     // close the application
     await exitApplication(mainWindow);
