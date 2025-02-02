@@ -36,9 +36,16 @@ export async function chunkifyTypeScriptFiles(
         const baseName = path.basename(fileName);
         const extName = path.extname(fileName);
         const codeName = baseName.slice(0, -extName.length || undefined);
-        const blobs: Blob[] = [
-            { start: 0, lines: sourceFile.text.match(/.*(?:\r?\n|$)/g) || [] },
-        ];
+        const blob: Blob = {
+            start: 0,
+            lines: sourceFile.text.match(/.*(?:\r?\n|$)/g) || [],
+        };
+        while (blob.lines.length && !blob.lines[0].trim()) {
+            blob.lines.shift();
+            blob.start++;
+        }
+        const blobs: Blob[] = [blob];
+        const lineNo = blobs.length ? blobs[0].start + 1 : 1;
         const rootChunk: Chunk = {
             chunkId: generate_id(),
             treeName: "file",
@@ -47,6 +54,7 @@ export async function chunkifyTypeScriptFiles(
             parentId: "",
             children: [],
             fileName,
+            lineNo,
         };
         const chunks: Chunk[] = [rootChunk];
         chunks.push(...recursivelyChunkify(sourceFile, rootChunk));
@@ -74,18 +82,21 @@ export async function chunkifyTypeScriptFiles(
                     // );
                     const treeName = ts.SyntaxKind[childNode.kind];
                     const codeName = tsCode.getStatementName(childNode) ?? "";
+                    const blobs = makeBlobs(
+                        sourceFile,
+                        childNode.getFullStart(),
+                        childNode.getEnd(),
+                    );
+                    const lineNo = blobs.length ? blobs[0].start + 1 : 1;
                     const childChunk: Chunk = {
                         chunkId: generate_id(),
                         treeName,
                         codeName,
-                        blobs: makeBlobs(
-                            sourceFile,
-                            childNode.getFullStart(),
-                            childNode.getEnd(),
-                        ),
+                        blobs,
                         parentId: parentChunk.chunkId,
                         children: [],
                         fileName,
+                        lineNo,
                     };
                     spliceBlobs(parentChunk, childChunk);
                     chunks.push(childChunk);
@@ -218,7 +229,7 @@ export class Testing {
         const fileNames = [
             "./packages/agents/spelunker/src/typescriptChunker.ts",
             "./packages/agents/spelunker/src/spelunkerSchema.ts",
-            "./packages/agents/spelunker/src/makeSummarizeSchema.ts",
+            "./packages/agents/spelunker/src/summarizerSchema.ts",
             "./packages/codeProcessor/src/tsCode.ts",
             "./packages/agents/spelunker/src/pythonChunker.ts",
         ];

@@ -11,6 +11,6 @@ export type Summary = {
 };
 
 // Produce a brief summary for each chunk.
-export type SummarizeSpecs = {
+export type SummarizerSpecs = {
     summaries: Summary[]; // A summary for every chunk
 };
