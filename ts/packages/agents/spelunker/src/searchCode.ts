@@ -81,7 +81,7 @@ function createQueryContext(): QueryContext {
         mode: 0o700,
     };
     fs.mkdirSync(databaseFolder, mkdirOptions);
-    const databaseLocation = path.join(databaseFolder, "codeSearchdatabase.db");
+    const databaseLocation = path.join(databaseFolder, "codeSearchDatabase.db");
     const database = undefined;
     return {
         chatModel,
@@ -125,6 +125,15 @@ export async function searchCode(
         const blobRows: any[] = db
             .prepare(`SELECT * FROM blobs WHERE chunkId = ?`)
             .all(chunkRow.chunkId);
+        for (const blob of blobRows) {
+            blob.lines = blob.lines.match(/.*(?:\r?\n|$)/g) ?? [];
+            while (
+                blob.lines.length &&
+                !blob.lines[blob.lines.length - 1].trim()
+            ) {
+                blob.lines.pop();
+            }
+        }
         const childRows: any[] = db
             .prepare(`SELECT * FROM chunks WHERE parentId = ?`)
             .all(chunkRow.chunkId);
@@ -136,6 +145,7 @@ export async function searchCode(
             parentId: chunkRow.parentId,
             children: childRows.map((row) => row.chunkId),
             fileName: chunkRow.fileName,
+            lineNo: chunkRow.lineNo,
         };
         allChunks.push(chunk);
     }
@@ -347,7 +357,43 @@ async function selectRelevantChunks(
 
 function prepareChunks(chunks: Chunk[]): string {
     // TODO: Format the chunks more efficiently
-    return JSON.stringify(chunks, undefined, 2);
+    // return JSON.stringify(chunks, undefined, 2);
+    chunks.sort(
+        // Sort by file name and chunk ID (should order by line number)
+        (a, b) => {
+            let cmp = a.fileName.localeCompare(b.fileName);
+            if (!cmp) {
+                cmp = a.chunkId.localeCompare(b.chunkId);
+            }
+            return cmp;
+        },
+    );
+    const output: string[] = [];
+    function put(line: string): void {
+        // console_log(line.trimEnd());
+        output.push(line);
+    }
+    let lastFn = "";
+    let lineNo = 0;
+    for (const chunk of chunks) {
+        if (chunk.fileName !== lastFn) {
+            lastFn = chunk.fileName;
+            lineNo = 0;
+            put("\n");
+            put(`** file=${chunk.fileName}\n`);
+        }
+        put(
+            `* chunkId=${chunk.chunkId} kind=${chunk.treeName} name=${chunk.codeName}\n`,
+        );
+        for (const blob of chunk.blobs) {
+            lineNo = blob.start;
+            for (const line of blob.lines) {
+                lineNo += 1;
+                put(`${lineNo} ${line}`);
+            }
+        }
+    }
+    return output.join("");
 }
 
 function prepareSummaries(db: sqlite.Database): string {
@@ -462,7 +508,7 @@ async function loadDatabase(
         `SELECT COUNT(*) FROM Chunks WHERE fileName = ?`,
     );
     const prepInsertChunks = db.prepare(
-        `INSERT OR REPLACE INTO Chunks (chunkId, treeName, codeName, parentId, fileName) VALUES (?, ?, ?, ?, ?)`,
+        `INSERT OR REPLACE INTO Chunks (chunkId, treeName, codeName, parentId, fileName, lineNo) VALUES (?, ?, ?, ?, ?, ?)`,
     );
     const prepInsertBlobs = db.prepare(
         `INSERT INTO Blobs (chunkId, start, lines, breadcrumb) VALUES (?, ?, ?, ?)`,
@@ -577,6 +623,9 @@ async function loadDatabase(
             if (!chunk.fileName) {
                 throw new Error(`Chunk ${chunk.chunkId} has no fileName`);
             }
+            if (!chunk.lineNo) {
+                throw new Error(`Chunk ${chunk.fileName} has no lineNo`);
+            }
             allChunks.push(chunk);
             prepInsertChunks.run(
                 chunk.chunkId,
@@ -584,6 +633,7 @@ async function loadDatabase(
                 chunk.codeName,
                 chunk.parentId || null,
                 chunk.fileName,
+                chunk.lineNo,
             );
             for (const blob of chunk.blobs) {
                 prepInsertBlobs.run(
@@ -619,7 +669,8 @@ CREATE TABLE IF NOT EXISTS Chunks (
     treeName TEXT NOT NULL,
     codeName TEXT NOT NULL,
     parentId TEXT KEY REFERENCES chunks(chunkId), -- May be null
-    fileName TEXT KEY REFERENCES files(fileName) NOT NULL
+    fileName TEXT KEY REFERENCES files(fileName) NOT NULL,
+    lineNo INTEGER NOT NULL -- 1-based
 );
 CREATE TABLE IF NOT EXISTS Blobs (
     chunkId TEXT KEY REFERENCES chunks(chunkId) NOT NULL,
