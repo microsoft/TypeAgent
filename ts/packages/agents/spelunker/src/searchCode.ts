@@ -356,8 +356,6 @@ async function selectRelevantChunks(
 }
 
 function prepareChunks(chunks: Chunk[]): string {
-    // TODO: Format the chunks more efficiently
-    // return JSON.stringify(chunks, undefined, 2);
     chunks.sort(
         // Sort by file name and chunk ID (should order by line number)
         (a, b) => {
@@ -550,17 +548,6 @@ async function loadDatabase(
                 size: stat.size,
             });
         }
-        if (!filesToDo.includes(file)) {
-            // If there are no chunks, also add to filesToDo
-            // TODO: Zero chunks is not reliable, empty files haalso ve zero chunks
-            const count: number = (prepCountChunks.get(file) as any)[
-                "COUNT(*)"
-            ];
-            if (!count) {
-                // console_log(`  [Need to update ${file} (no chunks)]`);
-                filesToDo.push(file);
-            }
-        }
     }
     const filesToDelete: string[] = [...filesInDb.keys()].filter(
         (file) => !files.includes(file),
@@ -619,13 +606,6 @@ async function loadDatabase(
         prepDeleteBlobs.run(chunkedFile.fileName);
         prepDeleteChunks.run(chunkedFile.fileName);
         for (const chunk of chunkedFile.chunks) {
-            // TODO: Assuming this never throws, just remove this
-            if (!chunk.fileName) {
-                throw new Error(`Chunk ${chunk.chunkId} has no fileName`);
-            }
-            if (!chunk.lineNo) {
-                throw new Error(`Chunk ${chunk.fileName} has no lineNo`);
-            }
             allChunks.push(chunk);
             prepInsertChunks.run(
                 chunk.chunkId,
