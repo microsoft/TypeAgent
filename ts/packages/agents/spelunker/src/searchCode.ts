@@ -502,9 +502,6 @@ async function loadDatabase(
     const prepSelectAllFiles = db.prepare(
         `SELECT fileName, mtime, size FROM Files`,
     );
-    const prepCountChunks = db.prepare(
-        `SELECT COUNT(*) FROM Chunks WHERE fileName = ?`,
-    );
     const prepInsertChunks = db.prepare(
         `INSERT OR REPLACE INTO Chunks (chunkId, treeName, codeName, parentId, fileName, lineNo) VALUES (?, ?, ?, ?, ?, ?)`,
     );
