@@ -226,8 +226,11 @@ class ActionCommandHandler implements CommandHandler {
         const action: AppAction = {
             translatorName,
             actionName,
-            parameters: params.flags.parameters,
         };
+
+        if (params.flags.parameters !== undefined) {
+            action.parameters = params.flags.parameters;
+        }
 
         validateAction(actionSchema, action, true);
 

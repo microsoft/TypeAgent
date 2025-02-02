@@ -31,78 +31,156 @@ export async function chunkifyTypeScriptFiles(
     const results: (ChunkedFile | ChunkerErrorItem)[] = [];
     for (const fileName of fileNames) {
         // console.log(fileName);
+        const sourceFile: ts.SourceFile = await tsCode.loadSourceFile(fileName);
+
         const baseName = path.basename(fileName);
         const extName = path.extname(fileName);
         const codeName = baseName.slice(0, -extName.length || undefined);
+        const blob: Blob = {
+            start: 0,
+            lines: sourceFile.text.match(/.*(?:\r?\n|$)/g) || [],
+        };
+        while (blob.lines.length && !blob.lines[0].trim()) {
+            blob.lines.shift();
+            blob.start++;
+        }
+        const blobs: Blob[] = [blob];
+        const lineNo = blobs.length ? blobs[0].start + 1 : 1;
         const rootChunk: Chunk = {
             chunkId: generate_id(),
             treeName: "file",
             codeName,
-            blobs: [],
+            blobs,
             parentId: "",
             children: [],
             fileName,
+            lineNo,
         };
         const chunks: Chunk[] = [rootChunk];
-        const sourceFile: ts.SourceFile = await tsCode.loadSourceFile(fileName);
-
-        // TODO: Also do nested functions, and classes, and interfaces, and modules.
-        // TODO: For nested things, remove their text from the parent.
-        function getFunctionsAndClasses(): (
-            | ts.FunctionDeclaration
-            | ts.ClassDeclaration
-        )[] {
-            return tsCode.getStatements(
-                sourceFile,
-                (s) => ts.isFunctionDeclaration(s) || ts.isClassDeclaration(s),
-            );
-        }
-
-        const things = getFunctionsAndClasses();
-        for (const thing of things) {
-            const treeName = ts.SyntaxKind[thing.kind];
-            const codeName = tsCode.getStatementName(thing) ?? "";
-            // console.log(`  ${treeName}: ${codeName}`);
-            try {
-                // console.log(
-                //     "--------------------------------------------------------",
-                // );
-                // console.log(`Name: ${thing.name?.escapedText}`);
-                // console.log(
-                //     `Parameters: ${thing.parameters.map((p) => p.name?.getFullText(sourceFile))}`,
-                // );
-                // console.log(`Return type: ${thing.type?.getText(sourceFile)}`);
-
-                const chunk: Chunk = {
-                    chunkId: generate_id(),
-                    treeName,
-                    codeName,
-                    blobs: makeBlobs(
-                        sourceFile,
-                        thing.getFullStart(),
-                        thing.getEnd(),
-                    ),
-                    parentId: rootChunk.chunkId,
-                    children: [],
-                    fileName,
-                };
-                chunks.push(chunk);
-            } catch (e: any) {
-                results.push({
-                    error: `${thing.name?.escapedText}: ${e.message}`,
-                    filename: fileName,
-                });
-            }
-        }
-        // console.log("========================================================");
+        chunks.push(...recursivelyChunkify(sourceFile, rootChunk));
         const chunkedFile: ChunkedFile = {
             fileName,
             chunks,
         };
         results.push(chunkedFile);
+
+        function recursivelyChunkify(
+            parentNode: ts.Node,
+            parentChunk: Chunk,
+        ): Chunk[] {
+            const chunks: Chunk[] = [];
+            for (const childNode of parentNode.getChildren(sourceFile)) {
+                if (
+                    ts.isInterfaceDeclaration(childNode) ||
+                    ts.isTypeAliasDeclaration(childNode) ||
+                    ts.isFunctionDeclaration(childNode) ||
+                    ts.isClassDeclaration(childNode)
+                ) {
+                    // console.log(
+                    //     ts.SyntaxKind[childNode.kind],
+                    //     tsCode.getStatementName(childNode),
+                    // );
+                    const treeName = ts.SyntaxKind[childNode.kind];
+                    const codeName = tsCode.getStatementName(childNode) ?? "";
+                    const blobs = makeBlobs(
+                        sourceFile,
+                        childNode.getFullStart(),
+                        childNode.getEnd(),
+                    );
+                    const lineNo = blobs.length ? blobs[0].start + 1 : 1;
+                    const childChunk: Chunk = {
+                        chunkId: generate_id(),
+                        treeName,
+                        codeName,
+                        blobs,
+                        parentId: parentChunk.chunkId,
+                        children: [],
+                        fileName,
+                        lineNo,
+                    };
+                    spliceBlobs(parentChunk, childChunk);
+                    chunks.push(childChunk);
+                    chunks.push(...recursivelyChunkify(childNode, childChunk));
+                } else {
+                    chunks.push(...recursivelyChunkify(childNode, parentChunk));
+                }
+            }
+            return chunks;
+        }
     }
 
     return results;
+}
+
+function assert(condition: boolean, message: string): asserts condition {
+    if (!condition) {
+        throw new Error(`Assertion failed: ${message}`);
+    }
+}
+
+function spliceBlobs(parentChunk: Chunk, childChunk: Chunk): void {
+    const parentBlobs = parentChunk.blobs;
+    const childBlobs = childChunk.blobs;
+    assert(parentBlobs.length > 0, "Parent chunk must have at least one blob");
+    assert(childBlobs.length === 1, "Child chunk must have exactly one blob");
+    const parentBlob = parentBlobs[parentBlobs.length - 1];
+    const childBlob = childBlobs[0];
+    assert(
+        childBlob.start >= parentBlob.start,
+        "Child blob must start after parent blob",
+    );
+    assert(
+        childBlob.start + childBlob.lines.length <=
+            parentBlob.start + parentBlob.lines.length,
+        "Child blob must end before parent blob",
+    );
+
+    const linesBefore = parentBlob.lines.slice(
+        0,
+        childBlob.start - parentBlob.start,
+    );
+    const startBefore = parentBlob.start;
+    while (linesBefore.length && !linesBefore[linesBefore.length - 1].trim()) {
+        linesBefore.pop();
+    }
+
+    let startAfter = childBlob.start + childBlob.lines.length;
+    const linesAfter = parentBlob.lines.slice(startAfter - parentBlob.start);
+    while (linesAfter.length && !linesAfter[0].trim()) {
+        linesAfter.shift();
+        startAfter++;
+    }
+
+    const blobs: Blob[] = [];
+    if (linesBefore.length) {
+        blobs.push({ start: startBefore, lines: linesBefore });
+    }
+    const sig: string = signature(childChunk);
+    // console.log("signature", sig);
+    if (sig) {
+        blobs.push({ start: childBlob.start, lines: [sig], breadcrumb: true });
+    }
+    if (linesAfter.length) {
+        blobs.push({ start: startAfter, lines: linesAfter });
+    }
+    parentChunk.blobs.splice(-1, 1, ...blobs);
+}
+
+function signature(chunk: Chunk): string {
+    const firstLine = chunk.blobs[0]?.lines[0] ?? "";
+    const indent = firstLine.match(/^(\s*)/)?.[0] || "";
+
+    switch (chunk.treeName) {
+        case "InterfaceDeclaration":
+            return `${indent}interface ${chunk.codeName} ...`;
+        case "TypeAliasDeclaration":
+            return `${indent}type ${chunk.codeName} ...`;
+        case "FunctionDeclaration":
+            return `${indent}function ${chunk.codeName} ...`;
+        case "ClassDeclaration":
+            return `${indent}class ${chunk.codeName} ...`;
+    }
+    return "";
 }
 
 function makeBlobs(
@@ -151,7 +229,7 @@ export class Testing {
         const fileNames = [
             "./packages/agents/spelunker/src/typescriptChunker.ts",
             "./packages/agents/spelunker/src/spelunkerSchema.ts",
-            "./packages/agents/spelunker/src/makeSummarizeSchema.ts",
+            "./packages/agents/spelunker/src/summarizerSchema.ts",
             "./packages/codeProcessor/src/tsCode.ts",
             "./packages/agents/spelunker/src/pythonChunker.ts",
         ];

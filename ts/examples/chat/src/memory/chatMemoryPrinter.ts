@@ -19,8 +19,9 @@ export class ChatMemoryPrinter extends ChatPrinter {
         super(io);
     }
 
-    public writeLink(filePath: string): void {
+    public writeLink(filePath: string) {
         this.writeInColor(chalk.cyan, pathToFileURL(filePath).toString());
+        return this;
     }
 
     public writeBlocks(

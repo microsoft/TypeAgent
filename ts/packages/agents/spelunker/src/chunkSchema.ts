@@ -20,6 +20,7 @@ export interface Chunk {
     parentId: ChunkId;
     children: ChunkId[];
     fileName: string; // Set upon receiving end from ChunkedFile.fileName.
+    lineNo: number; // 1-based, calculated from first blob.
     docs?: FileDocumentation; // Computed later by fileDocumenter.
 }
 

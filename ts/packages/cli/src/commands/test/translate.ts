@@ -23,9 +23,15 @@ type TestResult = {
     actions: (FullAction[] | undefined)[];
 };
 
+type FailedTestResult = {
+    request: string;
+    actions?: (FullAction[] | undefined)[];
+};
+
 type TestResultFile = {
     pass: TestResult[];
-    fail: TestResult[];
+    fail: FailedTestResult[];
+    skipped?: string[];
 };
 
 function summarizeResult(result: TestResultFile) {
@@ -46,6 +52,9 @@ function summarizeResult(result: TestResultFile) {
 
     let inconsistent = new Map<string | undefined, number>();
     for (const entry of result.fail) {
+        if (entry.actions === undefined) {
+            continue;
+        }
         const actionNames = entry.actions.map((actions) =>
             actions
                 ?.map((a) => a.translatorName + "." + a.actionName)
@@ -76,6 +85,7 @@ const schemaNames = getSchemaNamesForActionConfigProvider(
     await createActionConfigProvider(defaultAppAgentProviders),
 );
 
+const defaultRepeat = 5;
 export default class TestTranslateCommand extends Command {
     static args = {
         files: Args.string({
@@ -97,20 +107,28 @@ export default class TestTranslateCommand extends Command {
         }),
         repeat: Flags.integer({
             char: "r",
-            description:
-                "Repeat the test for the specified number of times (default to 1)",
+            description: `Repeat the test for the specified number of times (default to ${defaultRepeat})`,
         }),
         output: Flags.string({
             char: "o",
             description: "Output test result file",
+            required: true,
         }),
-        rerun: Flags.string({
-            char: "R",
-            description: "Rerun failed tests from the test result file",
+        failed: Flags.boolean({
+            char: "f",
+            description:
+                "Copy pass test data and rerun only failed tests from the test result file",
+        }),
+        input: Flags.string({
+            char: "i",
+            description: "Input test result file to get requests from",
         }),
         summarize: Flags.string({
-            char: "s",
             description: "Summarize test result file",
+        }),
+        sample: Flags.integer({
+            char: "s",
+            description: "number of sample to run",
         }),
     };
     async run(): Promise<void> {
@@ -133,33 +151,49 @@ export default class TestTranslateCommand extends Command {
         const output: TestResultFile = { pass: [], fail: [] };
         let requests: string[];
         let repeat: number;
-        if (flags.rerun) {
+        if (flags.input) {
             if (argv.length !== 0) {
                 throw new Error(
-                    "No files should be specified when rerunning failed tests",
+                    "No files should be specified when using --input flags",
                 );
             }
 
-            const rerun: TestResultFile = JSON.parse(
-                fs.readFileSync(flags.rerun, "utf-8"),
+            const input: TestResultFile = JSON.parse(
+                fs.readFileSync(flags.input, "utf-8"),
             );
 
-            if (rerun.pass.length === 0 && rerun.fail.length === 0) {
+            if (input.pass.length === 0 && input.fail.length === 0) {
                 throw new Error("Result file is empty. No tests to rerun.");
             }
 
-            repeat =
-                rerun.pass.length !== 0
-                    ? rerun.pass[0].actions.length
-                    : rerun.fail[0].actions.length;
+            if (input.pass.length !== 0) {
+                repeat = input.pass[0].actions.length;
+            } else {
+                const e = input.fail.find((e) => e.actions !== undefined);
+                if (e === undefined) {
+                    repeat = flags.repeat ?? defaultRepeat;
+                } else {
+                    repeat = e?.actions!.length;
+                }
+            }
 
-            output.pass = rerun.pass;
-            requests = rerun.fail.map((entry) => entry.request);
+            requests = input.fail.map((entry) => entry.request);
+            if (input.skipped) {
+                requests = requests.concat(input.skipped);
+            }
+            if (flags.failed) {
+                output.pass = input.pass;
+            } else {
+                requests = input.pass
+                    .map((entry) => entry.request)
+                    .concat(requests);
+            }
+
             if (flags.repeat !== undefined && flags.repeat !== repeat) {
                 throw new Error("Specified repeat doesn't match result file");
             }
         } else {
-            repeat = flags.repeat ?? 1;
+            repeat = flags.repeat ?? defaultRepeat;
             const files =
                 argv.length > 0
                     ? (argv as string[])
@@ -181,6 +215,22 @@ export default class TestTranslateCommand extends Command {
                 .map((entry) => entry.request);
         }
 
+        let countStr = requests.length.toString();
+        if (flags.sample !== undefined) {
+            output.skipped = [];
+            while (flags.sample < requests.length) {
+                output.skipped.push(
+                    ...requests.splice(
+                        Math.floor(Math.random() * requests.length),
+                        1,
+                    ),
+                );
+            }
+            countStr = `${flags.sample}/${countStr}`;
+        }
+        if (flags.failed && flags.input !== undefined) {
+            countStr = `${countStr} failed`;
+        }
         const schemas = flags.translator
             ? Object.fromEntries(flags.translator.map((name) => [name, true]))
             : undefined;
@@ -197,7 +247,7 @@ export default class TestTranslateCommand extends Command {
         }
         const concurrency = flags.concurrency ?? 4;
         console.log(
-            `Starting ${requests.length} tests (concurrency: ${concurrency}, repeat: ${repeat})`,
+            `Starting ${countStr} tests (concurrency: ${concurrency}, repeat: ${repeat})`,
         );
         const startTime = performance.now();
 
@@ -301,20 +351,37 @@ export default class TestTranslateCommand extends Command {
         const endTime = performance.now();
         const succeededTotal = processed - noActions - failedTotal;
 
-        function printPart(name: string, count: number) {
+        const totalData =
+            output.pass.length +
+            output.fail.length +
+            (output.skipped?.length ?? 0);
+        const totalDataStr = totalData.toString();
+        const numberLength = totalDataStr.length;
+        function printPart(name: string, count: number, total: number) {
             if (count > 0) {
                 console.log(
-                    `${name.padEnd(15)}: ${count.toString().padStart(3)} (${((count / processed) * 100).toFixed(2)}%)`,
+                    `${name.padEnd(15)}: ${count.toString().padStart(numberLength)} (${((count / total) * 100).toFixed(2)}%)`,
                 );
             }
         }
+        console.log("=".repeat(60));
+        console.log(`Stability (repeat: ${repeat})`);
+        console.log("=".repeat(60));
+        console.log("Current Run:");
         console.log(
-            `Stability (repeat: ${repeat})\nTotal          : ${processed}`,
+            `Total          : ${processed.toString().padStart(numberLength)}`,
         );
-        printPart("Passed", succeededTotal);
-        printPart("Failed", failedTotal);
-        printPart("No Actions", noActions);
+        printPart("Passed", succeededTotal, processed);
+        printPart("Failed", failedTotal, processed);
+        printPart("No Actions", noActions, processed);
 
+        console.log("=".repeat(60));
+        console.log("All Data:");
+        console.log(`Total          : ${totalDataStr.padStart(numberLength)}`);
+        printPart("Passed", output.pass.length, totalData);
+        printPart("Failed", output.fail.length, totalData);
+        printPart("Skipped", output.skipped?.length ?? 0, totalData);
+        console.log("=".repeat(60));
         console.log(
             `Time: ${getElapsedString(endTime - startTime)}, Average: ${getElapsedString((endTime - startTime) / processed)}`,
         );

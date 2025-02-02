@@ -60,6 +60,12 @@ describe("dispatcher", () => {
                 expect(output[1].message).toBe("The sum of 1 and 2 is 3");
             });
 
+            it("action command no parameters", async () => {
+                await dispatcher.processCommand("@action test random");
+
+                expect(output).toHaveLength(2);
+                expect(output[1].message).toMatch(/Random number: [0-9.]+/);
+            });
             const errorCommands = [
                 {
                     name: "Empty Command",

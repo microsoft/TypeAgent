@@ -5,7 +5,6 @@ import { collections, createTopNList } from "typeagent";
 import {
     IMessage,
     KnowledgeType,
-    MessageIndex,
     ScoredSemanticRef,
     SemanticRef,
     SemanticRefIndex,
@@ -84,6 +83,22 @@ export class MatchAccumulator<T = any> {
         }
     }
 
+    public union(other: MatchAccumulator<T>): void {
+        for (const matchFrom of other.matches.values()) {
+            const matchTo = this.matches.get(matchFrom.value);
+            if (matchTo !== undefined) {
+                // Existing
+                matchTo.hitCount += matchFrom.hitCount;
+                matchTo.score += matchFrom.score;
+                if (matchTo.hitCount > this.maxHitCount) {
+                    this.maxHitCount = matchTo.hitCount;
+                }
+            } else {
+                this.setMatch(matchFrom);
+            }
+        }
+    }
+
     public getSortedByScore(minHitCount?: number): Match<T>[] {
         if (this.matches.size === 0) {
             return [];
@@ -144,19 +159,6 @@ export class MatchAccumulator<T = any> {
         return topN.length;
     }
 
-    public union(other: MatchAccumulator<T>): void {
-        for (const matchFrom of other.matches.values()) {
-            const matchTo = this.matches.get(matchFrom.value);
-            if (matchTo !== undefined) {
-                // Existing
-                matchTo.hitCount += matchFrom.hitCount;
-                matchTo.score += matchFrom.score;
-            } else {
-                this.matches.set(matchFrom.value, matchFrom);
-            }
-        }
-    }
-
     private matchesWithMinHitCount(
         minHitCount: number | undefined,
     ): IterableIterator<Match<T>> {
@@ -167,7 +169,7 @@ export class MatchAccumulator<T = any> {
 }
 
 export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
-    constructor(public queryTermMatches = new QueryTermAccumulator()) {
+    constructor(public queryTermMatches = new TermMatchAccumulator()) {
         super();
     }
 
@@ -282,115 +284,94 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
     }
 
     private getMinHitCount(minHitCount?: number): number {
-        return minHitCount !== undefined
-            ? minHitCount
-            : //: this.queryTermMatches.termMatches.size;
-              this.maxHits;
+        return minHitCount !== undefined ? minHitCount : this.maxHits;
+        //: this.queryTermMatches.termMatches.size;
     }
 }
 
-export class QueryTermAccumulator {
+export class TermMatchAccumulator {
     constructor(
         public termMatches: Set<string> = new Set<string>(),
-        public relatedTermToTerms: Map<string, Set<string>> = new Map<
+        // Related terms work 'on behalf' of a primary term
+        // For each related term, we track the primary terms it matched on behalf of
+        public relatedTermMatchedFor: Map<string, Set<string>> = new Map<
             string,
             Set<string>
         >(),
     ) {}
 
-    public add(term: Term, relatedTerm?: Term) {
-        this.termMatches.add(term.text);
+    public add(primaryTerm: Term, relatedTerm?: Term) {
+        this.termMatches.add(primaryTerm.text);
         if (relatedTerm !== undefined) {
-            let relatedTermToTerms = this.relatedTermToTerms.get(
-                relatedTerm.text,
-            );
-            if (relatedTermToTerms === undefined) {
-                relatedTermToTerms = new Set<string>();
-                this.relatedTermToTerms.set(
-                    relatedTerm.text,
-                    relatedTermToTerms,
-                );
+            // Related term matched on behalf of term
+            let primaryTerms = this.relatedTermMatchedFor.get(relatedTerm.text);
+            if (primaryTerms === undefined) {
+                primaryTerms = new Set<string>();
+                this.relatedTermMatchedFor.set(relatedTerm.text, primaryTerms);
             }
-            relatedTermToTerms.add(term.text);
+            // Track that this related term matched on behalf of term
+            primaryTerms.add(primaryTerm.text);
         }
     }
 
-    public matched(testText: string | string[], expectedText: string): boolean {
-        if (Array.isArray(testText)) {
-            if (testText.length > 0) {
-                for (const text of testText) {
-                    if (this.matched(text, expectedText)) {
-                        return true;
-                    }
-                }
-            }
-            return false;
-        }
-
-        if (collections.stringEquals(testText, expectedText, false)) {
+    public has(text: string, includeRelated: boolean = true): boolean {
+        if (this.termMatches.has(text)) {
             return true;
         }
-
-        // Maybe the test text matched a related term.
-        // If so, the matching related term should have matched *on behalf* of
-        // of expectedTerm
-        const relatedTermToTerms = this.relatedTermToTerms.get(testText);
-        return relatedTermToTerms !== undefined
-            ? relatedTermToTerms.has(expectedText)
-            : false;
+        return includeRelated ? this.relatedTermMatchedFor.has(text) : false;
     }
 
-    public didValueMatch(
-        obj: Record<string, any>,
-        key: string,
-        expectedValue: string,
-    ): boolean {
-        const value = obj[key];
-        if (value === undefined) {
-            return false;
-        }
-        if (Array.isArray(value)) {
-            for (const item of value) {
-                if (this.didValueMatch(item, key, expectedValue)) {
-                    return true;
-                }
-            }
-            return false;
-        } else {
-            const stringValue = value.toString().toLowerCase();
-            return this.matched(stringValue, expectedValue);
-        }
+    public hasRelatedMatch(primaryTerm: string, relatedTerm: string): boolean {
+        let primaryTerms = this.relatedTermMatchedFor.get(relatedTerm);
+        return primaryTerms?.has(primaryTerm) ?? false;
     }
 }
 
 export class TextRangeAccumulator {
-    constructor(
-        private rangesForMessage = new Map<MessageIndex, TextRange[]>(),
-    ) {}
+    // Maintains ranges sorted by message index
+    private ranges: TextRange[] = [];
+
+    constructor() {}
 
     public get size() {
-        return this.rangesForMessage.size;
+        return this.ranges.length;
     }
 
     public addRange(textRange: TextRange) {
-        const messageIndex = textRange.start.messageIndex;
-        let textRanges = this.rangesForMessage.get(messageIndex);
-        if (textRanges === undefined) {
-            textRanges = [textRange];
-        }
-        textRanges.push(textRange);
+        // Future: merge ranges
+        collections.insertIntoSorted(this.ranges, textRange, this.comparer);
     }
 
-    public isInRange(textRange: TextRange): boolean {
-        const textRanges = this.rangesForMessage.get(
-            textRange.start.messageIndex,
+    public addRanges(textRanges: TextRange[]) {
+        for (const range of textRanges) {
+            this.addRange(range);
+        }
+    }
+
+    public isInRange(rangeToMatch: TextRange): boolean {
+        let i = collections.binarySearchFirst(
+            this.ranges,
+            rangeToMatch,
+            this.comparer,
         );
-        if (textRanges === undefined) {
+        if (i < 0) {
             return false;
         }
-        return textRanges.some((outerRange) =>
-            isInTextRange(outerRange, textRange),
-        );
+        for (; i < this.ranges.length; ++i) {
+            const range = this.ranges[i];
+            if (range.start.messageIndex > rangeToMatch.start.messageIndex) {
+                // We are at a range whose start is > rangeToMatch. Stop
+                break;
+            }
+            if (isInTextRange(range, rangeToMatch)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private comparer(x: TextRange, y: TextRange): number {
+        return x.start.messageIndex - y.start.messageIndex;
     }
 }
 

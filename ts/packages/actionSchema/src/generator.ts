@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { wrapTypeWithJsonSchema } from "./jsonSchemaGenerator.js";
 import {
     SchemaType,
     SchemaObjectFields,
@@ -14,6 +15,7 @@ function generateSchemaType(
     type: SchemaType,
     pending: SchemaTypeDefinition[],
     indent: number,
+    jsonSchema: boolean,
     strict: boolean,
     paren: boolean = false,
 ): string {
@@ -25,17 +27,20 @@ function generateSchemaType(
                 type.fields,
                 pending,
                 indent + 1,
+                jsonSchema,
                 strict,
             );
             return `{\n${lines.join("\n")}\n${"    ".repeat(indent)}}`;
         case "array":
-            return `${generateSchemaType(type.elementType, pending, indent, strict, true)}[]`;
+            return `${generateSchemaType(type.elementType, pending, indent, jsonSchema, strict, true)}[]`;
         case "string-union":
             const stringUnion = type.typeEnum.map((v) => `"${v}"`).join(" | ");
             return paren ? `(${stringUnion})` : stringUnion;
         case "type-union":
             const typeUnion = type.types
-                .map((t) => generateSchemaType(t, pending, indent, strict))
+                .map((t) =>
+                    generateSchemaType(t, pending, indent, jsonSchema, strict),
+                )
                 .join(" | ");
             return paren ? `(${typeUnion})` : typeUnion;
         case "type-reference":
@@ -45,7 +50,12 @@ function generateSchemaType(
                 throw new Error(`Unresolved type reference: ${type.name}`);
             }
             return type.name;
-
+        case "undefined":
+            if (jsonSchema) {
+                // When jsonSchema is enabled, emit "null" for optional fields to match the json schema.
+                // translator will convert it to "undefined" because of stripNulls is enabled
+                return "null";
+            }
         default:
             return type.type;
     }
@@ -68,14 +78,21 @@ function generateSchemaObjectFields(
     fields: SchemaObjectFields,
     pending: SchemaTypeDefinition[],
     indent: number,
+    jsonSchema: boolean,
     strict: boolean,
 ) {
     const indentStr = "    ".repeat(indent);
     for (const [key, field] of Object.entries(fields)) {
         generateComments(lines, field.comments, indentStr);
-        const optional = field.optional ? "?" : "";
+        const optional = field.optional && !jsonSchema ? "?" : "";
+
+        // When jsonSchema is enabled, emit "null" for optional fields to match the json schema.
+        // translator will convert it to "undefined" because of stripNulls is enabled
+        const jsonSchemaOptional =
+            field.optional && jsonSchema ? " | null" : "";
+
         lines.push(
-            `${indentStr}${key}${optional}: ${generateSchemaType(field.type, pending, indent, strict)};${field.trailingComments ? ` //${field.trailingComments.join(" ")}` : ""}`,
+            `${indentStr}${key}${optional}: ${generateSchemaType(field.type, pending, indent, jsonSchema, strict)}${jsonSchemaOptional};${field.trailingComments ? ` //${field.trailingComments.join(" ")}` : ""}`,
         );
     }
 }
@@ -84,6 +101,7 @@ function generateTypeDefinition(
     lines: string[],
     definition: SchemaTypeDefinition,
     pending: SchemaTypeDefinition[],
+    jsonSchema: boolean,
     strict: boolean,
     exact: boolean,
 ) {
@@ -93,6 +111,7 @@ function generateTypeDefinition(
         definition.type,
         pending,
         0,
+        jsonSchema,
         strict,
     );
     const line = definition.alias
@@ -104,6 +123,7 @@ function generateTypeDefinition(
 export type GenerateSchemaOptions = {
     strict?: boolean; // default true
     exact?: boolean; // default false
+    jsonSchema?: boolean; // default false
 };
 
 export function generateSchemaTypeDefinition(
@@ -111,6 +131,7 @@ export function generateSchemaTypeDefinition(
     options?: GenerateSchemaOptions,
     order?: Map<string, number>,
 ) {
+    const jsonSchema = options?.jsonSchema ?? false;
     const strict = options?.strict ?? true;
     const exact = options?.exact ?? false;
     const emitted = new Map<
@@ -129,7 +150,14 @@ export function generateSchemaTypeDefinition(
                 emitOrder: emitted.size,
             });
             const dep: SchemaTypeDefinition[] = [];
-            generateTypeDefinition(lines, definition, dep, strict, exact);
+            generateTypeDefinition(
+                lines,
+                definition,
+                dep,
+                jsonSchema,
+                strict,
+                exact,
+            );
 
             // Generate the dependencies first to be close to the usage
             pending.unshift(...dep);
@@ -157,7 +185,9 @@ export function generateActionSchema(
     options?: GenerateSchemaOptions,
 ): string {
     return generateSchemaTypeDefinition(
-        actionSchemaGroup.entry,
+        options?.jsonSchema
+            ? wrapTypeWithJsonSchema(actionSchemaGroup.entry)
+            : actionSchemaGroup.entry,
         options,
         actionSchemaGroup.order,
     );
