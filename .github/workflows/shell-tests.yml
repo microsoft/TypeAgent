@@ -98,7 +98,6 @@ jobs:
         timeout-minutes: 60
         run: |
           npm run shell:test
-          rm ../../.env
         working-directory: ts/packages/shell
         continue-on-error: true
 
@@ -110,7 +109,6 @@ jobs:
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 
           Xvfb :99 -screen 0 1600x1200x24 & export DISPLAY=:99
           npm run shell:test
-          rm ../../.env
         working-directory: ts/packages/shell
         continue-on-error: true
 
@@ -129,3 +127,9 @@ jobs:
           path: ts/packages/shell/playwright-report/
           overwrite: true
           retention-days: 30
+
+      - name: Clean up Keys
+        run: |
+          rm ./.env
+        working-directory: ts
+        if: always()          
