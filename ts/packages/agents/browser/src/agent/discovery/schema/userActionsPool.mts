@@ -96,9 +96,8 @@ export type NavigateToOtherPage = {
   parameters: {
     pageType: string;
     linkCssSelector: string;
-  }
+  };
 };
-
 
 export type UserPageActions =
   | AddToCartAction
@@ -114,7 +113,6 @@ export type UserPageActions =
   | NavigateToRecipePage
   | NavigateToShoppingCartPage
   | NavigateToStorePage;
-
 
 export type UserActionsList = {
   actions: UserPageActions[];

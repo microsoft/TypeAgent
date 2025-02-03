@@ -286,7 +286,6 @@ export class SchemaDiscoveryAgent<T extends object> {
             `,
       });
     }
-    
 
     const promptSections = [
       ...prefixSection,
@@ -324,7 +323,6 @@ export class SchemaDiscoveryAgent<T extends object> {
     fragments?: HtmlFragments[],
     screenshot?: string,
   ) {
-
     const packageRoot = path.join("..", "..", "..");
     const resultsSchema = await fs.promises.readFile(
       fileURLToPath(

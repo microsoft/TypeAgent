@@ -33,7 +33,6 @@ export type CommercePageTypes =
   | PastOrderPage
   | UnknownPage;
 
-
 export type CrosswordPage = {
   description: "The page showing a crossword puzzle";
 };

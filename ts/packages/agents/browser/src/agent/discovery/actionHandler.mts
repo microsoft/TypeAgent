@@ -27,7 +27,6 @@ export async function handleSchemaDiscoveryAction(
     case "summarizePage":
       await handleGetPageSummary(action);
       break;
-
   }
 
   async function handleFindUserActions(action: any) {
@@ -54,7 +53,7 @@ export async function handleSchemaDiscoveryAction(
       undefined,
       htmlFragments,
       screenshot,
-      pageSummary
+      pageSummary,
     );
 
     if (!response.success) {
@@ -73,10 +72,7 @@ export async function handleSchemaDiscoveryAction(
     const htmlFragments = await browser.getHtmlFragments();
     const timerName = `Summarizing page`;
     console.time(timerName);
-    const response = await agent.getPageSummary(
-      undefined,
-      htmlFragments,
-    );
+    const response = await agent.getPageSummary(undefined, htmlFragments);
 
     if (!response.success) {
       console.error("Attempt to get page summary failed");
@@ -85,12 +81,9 @@ export async function handleSchemaDiscoveryAction(
     }
 
     console.timeEnd(timerName);
-    message =
-      "Page summary: \n" + JSON.stringify(response.data, null, 2);
+    message = "Page summary: \n" + JSON.stringify(response.data, null, 2);
     return response.data;
   }
 
   return message;
 }
-
-
