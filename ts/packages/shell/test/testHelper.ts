@@ -4,6 +4,7 @@
 import {
     _electron as electron,
     ElectronApplication,
+    expect,
     Locator,
     Page,
 } from "@playwright/test";
@@ -334,6 +335,9 @@ export async function waitForAgentMessage(
     );
 }
 
+/**
+ * Deletes test profiles from agent storage
+ */
 export function deleteTestProfiles() {
     const profileDir = path.join(os.homedir(), ".typeagent", "profiles");
 
@@ -349,4 +353,48 @@ export function deleteTestProfiles() {
             }
         });
     }
+}
+
+export type TestCallback = () => void;
+
+/**
+ * Encapsulates the supplied method within a startup and shutdown of teh
+ * shell.  Test code executes between them.
+ */
+export async function runTestCalback(callback: TestCallback): Promise<void> { 
+    // launch the app
+    const mainWindow: Page = await startShell();
+
+    // run the supplied function
+    callback();
+
+    // close the application
+    await exitApplication(mainWindow);
+}
+
+/**
+ * Encapsulates the supplied method within a startup and shutdown of teh
+ * shell.  Test code executes between them.
+ */
+export async function testUserRequest(userRequests: string[], expectedResponses: string[]): Promise<void> {
+    // launch the app
+    const mainWindow: Page = await startShell();
+
+    // issue the supplied requests and check their responses
+    for (let i = 0; i < userRequests.length; i++) {
+        const msg = await sendUserRequestAndWaitForCompletion(
+            userRequests[i],
+            mainWindow,
+        1  
+        );
+
+        // verify expected result
+        expect(
+            msg.toLowerCase(),
+            `Chat agent didn't respond with the expected message. Request: '${userRequests[i]}', Response: '${expectedResponses[i]}'`,
+        ).toBe(expectedResponses[i]);
+    }
+
+    // close the application
+    exitApplication(mainWindow);
 }
