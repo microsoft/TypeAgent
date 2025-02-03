@@ -175,8 +175,8 @@ export async function sendUserRequest(prompt: string, page: Page) {
  */
 export async function sendUserRequestFast(prompt: string, page: Page) {
     const locator: Locator = page.locator("#phraseDiv");
-    await locator.waitFor({ timeout: 120000, state: "visible" });
-    await locator.fill(prompt, { timeout: 30000 });
+    await locator.waitFor({ timeout: 5000, state: "visible" });
+    await locator.fill(prompt, { timeout: 5000 });
     page.keyboard.down("Enter");
 }
 
@@ -195,7 +195,7 @@ export async function sendUserRequestAndWaitForResponse(
     page: Page,
 ): Promise<string> {
     const locators: Locator[] = await page
-        .locator(".chat-message-agent-text")
+        .locator(".chat-message-agent .chat-message-content")
         .all();
 
     // send the user request
@@ -220,7 +220,7 @@ export async function sendUserRequestAndWaitForResponse(
 export async function sendUserRequestAndWaitForCompletion(prompt: string, page: Page, expectedNumberOfAgentMessages: number = 1): Promise<string> {
     // TODO: implement
     const locators: Locator[] = await page
-    .locator(".chat-message-agent-text")
+    .locator(".chat-message-agent .chat-message-content")
     .all();
 
     // send the user request
@@ -239,7 +239,7 @@ export async function sendUserRequestAndWaitForCompletion(prompt: string, page: 
  */
 export async function getLastAgentMessageText(page: Page): Promise<string> {
     const locators: Locator[] = await page
-        .locator(".chat-message-agent-text")
+        .locator(".chat-message-agent .chat-message-content")
         .all();
 
     return locators[0].innerText();
@@ -264,21 +264,16 @@ export async function getLastAgentMessage(page: Page): Promise<Locator> {
  */
 export async function isMessageCompleted(msg: Locator): Promise<boolean> {
     // Agent message is complete once the metrics have been reported
-
-    let timeWaited = 0;
-
-    do {
-        try {
-            const details: Locator = await msg.locator(".metrics-details", { hasText: "Total" });
-            
-            if (await details.count() > 0) {
-                return true;
-            }
-
-        } catch (e) {
-            // not found
+    try {
+        const details: Locator = await msg.locator(".metrics-details", { hasText: "Total" });
+        
+        if (await details.count() > 0) {
+            return true;
         }
-    } while (timeWaited < 30000);
+
+    } catch (e) {
+        // not found
+    }
 
     return false;
 }
@@ -377,6 +372,11 @@ export async function runTestCalback(callback: TestCallback): Promise<void> {
  * shell.  Test code executes between them.
  */
 export async function testUserRequest(userRequests: string[], expectedResponses: string[]): Promise<void> {
+
+    if (userRequests.length != expectedResponses.length) {
+        throw new Error("Request/Response count mismatch!");
+    }
+
     // launch the app
     const mainWindow: Page = await startShell();
 
@@ -390,11 +390,11 @@ export async function testUserRequest(userRequests: string[], expectedResponses:
 
         // verify expected result
         expect(
-            msg.toLowerCase(),
+            msg,
             `Chat agent didn't respond with the expected message. Request: '${userRequests[i]}', Response: '${expectedResponses[i]}'`,
         ).toBe(expectedResponses[i]);
     }
 
     // close the application
-    exitApplication(mainWindow);
+    await exitApplication(mainWindow);
 }
