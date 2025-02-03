@@ -217,12 +217,10 @@ export async function sendUserRequestAndWaitForResponse(
  *
  * @param prompt The user request/prompt.
  * @param page The page hosting the user shell
- * @param expectedNumberOfAgentMessages The number of expected agent messages to wait for/receive
  */
 export async function sendUserRequestAndWaitForCompletion(
     prompt: string,
     page: Page,
-    expectedNumberOfAgentMessages: number = 1,
 ): Promise<string> {
     // TODO: implement
     const locators: Locator[] = await page
@@ -248,7 +246,7 @@ export async function getLastAgentMessageText(page: Page): Promise<string> {
         .locator(".chat-message-agent .chat-message-content")
         .all();
 
-    return locators[0].innerText();
+    return await locators[0].innerText();
 }
 
 /**
@@ -311,15 +309,15 @@ export async function waitForAgentMessage(
     let originalAgentMessageCount = locators.length;
     let messageCount = originalAgentMessageCount;
 
-    if (
-        expectedMessageCount == messageCount &&
-        (!waitForMessageCompletion ||
-            (await isMessageCompleted(await getLastAgentMessage(page))))
-    ) {
-        return;
-    }
-
     do {
+        if (
+            expectedMessageCount == messageCount &&
+            (!waitForMessageCompletion ||
+                (await isMessageCompleted(await getLastAgentMessage(page))))
+        ) {
+            return;
+        }
+        
         await page.waitForTimeout(1000);
         timeWaited += 1000;
 

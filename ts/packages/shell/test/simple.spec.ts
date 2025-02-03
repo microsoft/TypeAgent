@@ -40,7 +40,6 @@ test("why is the sky blue?", { tag: "@smoke" }, async ({}, testInfo) => {
     const msg = await sendUserRequestAndWaitForCompletion(
         `why is the sky blue?`,
         mainWindow,
-        1,
     );
 
     expect(
