@@ -9,8 +9,6 @@ on:
   workflow_dispatch:
   push:
     branches: ["main"]
-  # pull_request:
-  #   branches: ["main"]
   pull_request_target:
     branches: ["main"]
   merge_group:
@@ -27,7 +25,9 @@ permissions:
 
 env:
   NODE_OPTIONS: --max_old_space_size=8192
-  DEBUG: pw:browser*
+  #  DEBUG: pw:browser*                       # PlayWright debug messages
+  #  ELECTRON_ENABLE_LOGGING: true            # Electron debug messages
+  #  DEBUG: typeagent:*                       # TypeAgent debug messages
 
 jobs:
   shell_and_cli:
@@ -37,7 +37,6 @@ jobs:
       fail-fast: false
       matrix:
         os: ["ubuntu-latest", "windows-latest"]
-        #os: ["ubuntu-latest"]
         version: [20]
 
     runs-on: ${{ matrix.os }}
