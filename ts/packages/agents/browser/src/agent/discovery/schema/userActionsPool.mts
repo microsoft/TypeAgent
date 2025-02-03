@@ -28,6 +28,7 @@ export type SearchForProductAction = {
   };
 };
 
+// This allows users to select individual results on the search results page.
 export type SelectSearchResult = {
   actionName: "selectSearchResult";
   parameters: {
@@ -38,41 +39,66 @@ export type SelectSearchResult = {
 
 export type NavigateToHomePage = {
   actionName: "navigateToHomePage";
+  parameters: {
+    linkCssSelector: string;
+  };
 };
 
 // Follow a link to view  a store landing page
 export type NavigateToStorePage = {
   actionName: "navigateToStorePage";
+  parameters: {
+    linkCssSelector: string;
+  };
 };
 
 // Follow a link to view  a product details page
 export type NavigateToProductPage = {
   actionName: "navigateToProductPage";
+  parameters: {
+    linkCssSelector: string;
+  };
 };
 
-// Follow a link to view  a recipe details page
+// Follow a link to view  a recipe details page. This link is typically named "Recipe" or "Recipes"
 export type NavigateToRecipePage = {
   actionName: "navigateToRecipePage";
+  parameters: {
+    linkCssSelector: string;
+  };
 };
 
 export type NavigateToListPage = {
   actionName: "navigateToListPage";
+  parameters: {
+    linkCssSelector: string;
+  };
 };
 
+// Navigate to the "Buy it again" page. This page may also be called Past Orders.
 export type NavigateToBuyItAgainPage = {
   actionName: "navigateToBuyItAgainPage";
+  parameters: {
+    linkCssSelector: string;
+  };
 };
 
+// This link opens the shopping cart. Its usually indicated by a cart or bag icon.
 export type NavigateToShoppingCartPage = {
   actionName: "navigateToShoppingCartPage";
+  parameters: {
+    linkCssSelector: string;
+  };
 };
 
 export type NavigateToOtherPage = {
   actionName: "navigateToOtherPage";
   parameters: {
     pageType: string;
-  };
+    linkCssSelector: string;
+  }
 };
+
 
 export type UserPageActions =
   | AddToCartAction
@@ -88,6 +114,7 @@ export type UserPageActions =
   | NavigateToRecipePage
   | NavigateToShoppingCartPage
   | NavigateToStorePage;
+
 
 export type UserActionsList = {
   actions: UserPageActions[];
