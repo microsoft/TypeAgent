@@ -60,7 +60,7 @@ class RequestCommandHandler implements CommandHandler {
                     [],
                 );
             }
-            if (typeof result.error == "string") {
+            if (typeof result.error === "string") {
                 actionContext.actionIO.appendDisplay({
                     type: "text",
                     content: result.error,
@@ -161,7 +161,7 @@ async function handleSpelunkerAction(
     switch (action.actionName) {
         case "searchCode": {
             const question = action.parameters.question.trim();
-            if (typeof question == "string" && question) {
+            if (typeof question === "string" && question) {
                 return await searchCode(
                     context.agentContext,
                     question,
@@ -203,7 +203,7 @@ async function handleSpelunkerAction(
 }
 
 function expandHome(pathname: string): string {
-    if (pathname[0] != "~") return pathname;
+    if (pathname[0] !== "~") return pathname;
     return process.env.HOME + pathname.substring(1);
 }
 
@@ -238,7 +238,13 @@ function handleFocus(
     }
     const spelunkerContext: SpelunkerContext = sessionContext.agentContext;
     const words = question.split(/\s+/);
-    if (words[0] != ".focus") {
+    if (words[0] === ".exit") {
+        return createActionResult(`To exit Spelunker, use '@config request dispatcher'`);
+    }
+    if (words[0] === ".") {
+        return createActionResult("?"); // Joke for ed users
+    }
+    if (words[0] !== ".focus") {
         const text = `Unknown '.' command (${words[0]}) -- try .focus`;
         return createActionResult(text);
     }
