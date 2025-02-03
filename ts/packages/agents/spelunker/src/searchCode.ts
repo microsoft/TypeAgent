@@ -126,12 +126,15 @@ export async function searchCode(
             .prepare(`SELECT * FROM blobs WHERE chunkId = ?`)
             .all(chunkRow.chunkId);
         for (const blob of blobRows) {
-            blob.lines = blob.lines.match(/.*(?:\r?\n|$)/g) ?? [];
+            blob.lines = blob.lines.split("\n");
             while (
                 blob.lines.length &&
                 !blob.lines[blob.lines.length - 1].trim()
             ) {
                 blob.lines.pop();
+            }
+            for (let i = 0; i < blob.lines.length; i++) {
+                blob.lines[i] = blob.lines[i] + "\n";
             }
         }
         const childRows: any[] = db
@@ -395,10 +398,20 @@ function prepareChunks(chunks: Chunk[]): string {
 }
 
 function prepareSummaries(db: sqlite.Database): string {
+    const languageCommentMap: { [key: string]: string } = {
+        python: "#",
+        typescript: "//",
+    };
     const selectAllSummaries = db.prepare(`SELECT * FROM Summaries`);
     const summaryRows: any[] = selectAllSummaries.all();
-    // TODO: format as code: # <summary> / <signature>
-    return JSON.stringify(summaryRows, undefined, 2);
+    const lines: string[] = [];
+    for (const summaryRow of summaryRows) {
+        const comment = languageCommentMap[summaryRow.language] ?? "#";
+        lines.push("");
+        lines.push(`${comment} ${summaryRow.summary}`);
+        lines.push(summaryRow.signature);
+    }
+    return lines.join("\n");
 }
 
 function createTranslator<T extends object>(
@@ -657,8 +670,8 @@ CREATE TABLE IF NOT EXISTS Blobs (
 );
 CREATE TABLE IF NOT EXISTS Summaries (
     chunkId TEXT PRIMARY KEY REFERENCES chunks(chunkId),
+    language TEXT, -- "python", "typescript", etc.
     summary TEXT,
-    shortName TEXT,
     signature TEXT
 )
 `;
@@ -750,7 +763,7 @@ async function summarizeChunkSlice(
     // Enter them into the database
     const db = context.queryContext!.database!;
     const prepInsertSummary = db.prepare(`
-        INSERT OR REPLACE INTO Summaries (chunkId, summary, signature) VALUES (?, ?, ?)
+        INSERT OR REPLACE INTO Summaries (chunkId, language, summary, signature) VALUES (?, ?, ?, ?)
     `);
     let errors = 0;
     for (const summary of summarizeSpecs.summaries) {
@@ -758,6 +771,7 @@ async function summarizeChunkSlice(
         try {
             prepInsertSummary.run(
                 summary.chunkId,
+                summary.language,
                 summary.summary,
                 summary.signature,
             );
