@@ -317,7 +317,7 @@ export async function waitForAgentMessage(
         ) {
             return;
         }
-        
+
         await page.waitForTimeout(1000);
         timeWaited += 1000;
 
