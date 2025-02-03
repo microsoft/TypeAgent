@@ -2,10 +2,7 @@
 // Licensed under the MIT License.
 import { ActionContext, ParsedCommandParams } from "@typeagent/agent-sdk";
 import { CommandHandler } from "@typeagent/agent-sdk/helpers/command";
-import {
-    displayResult,
-    displayStatus,
-} from "@typeagent/agent-sdk/helpers/display";
+import { displayResult } from "@typeagent/agent-sdk/helpers/display";
 import { CommandHandlerContext } from "../../commandHandlerContext.js";
 import { RequestAction, printProcessRequestActionResult } from "agent-cache";
 import { createLimiter, getElapsedString } from "common-utils";

@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { error, Result, success, TypeChatJsonValidator } from "typechat";
+import { error, Result, success } from "typechat";
 import {
     ActionSchemaFile,
     generateActionSchema,

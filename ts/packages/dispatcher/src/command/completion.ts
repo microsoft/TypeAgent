@@ -1,7 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import registerDebug from "debug";
 import { CommandHandlerContext } from "../context/commandHandlerContext.js";
 
 import {
@@ -28,8 +27,6 @@ export type CommandCompletionResult = {
     prefix: string; // the prefix for completion match
     completions: string[]; // All the partial completions available after partial (and space if true)
 };
-
-const debugPartialError = registerDebug("typeagent:dispatcher:partial:error");
 
 // Determine the command to resolve for partial completion
 // If there is a trailing space, then it will just be the input (minus the @)

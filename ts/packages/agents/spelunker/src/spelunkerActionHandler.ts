@@ -48,12 +48,18 @@ class RequestCommandHandler implements CommandHandler {
         params: ParsedCommandParams<ParameterDefinitions>,
     ): Promise<void> {
         if (typeof params.args?.question === "string") {
-            const result: ActionResult = await searchCode(
-                actionContext.sessionContext.agentContext,
-                params.args.question,
-                [],
-                [],
-            );
+            let result: ActionResult;
+            const question = params.args.question.trim();
+            if (question.startsWith(".")) {
+                result = handleFocus(actionContext.sessionContext, question);
+            } else {
+                result = await searchCode(
+                    actionContext.sessionContext.agentContext,
+                    question,
+                    [],
+                    [],
+                );
+            }
             if (typeof result.error == "string") {
                 actionContext.actionIO.appendDisplay({
                     type: "text",
@@ -154,13 +160,11 @@ async function handleSpelunkerAction(
 ): Promise<ActionResult> {
     switch (action.actionName) {
         case "searchCode": {
-            if (
-                typeof action.parameters.question == "string" &&
-                action.parameters.question.trim()
-            ) {
+            const question = action.parameters.question.trim();
+            if (typeof question == "string" && question) {
                 return await searchCode(
                     context.agentContext,
-                    action.parameters.question,
+                    question,
                     action.parameters.entityUniqueIds,
                     entities,
                 );
@@ -222,4 +226,39 @@ function focusReport(
         ),
     ];
     return createActionResult(literalText, undefined, entities);
+}
+
+function handleFocus(
+    sessionContext: SessionContext<SpelunkerContext>,
+    question: string,
+): ActionResult {
+    question = question.trim();
+    if (!question.startsWith(".")) {
+        throw new Error("handleFocus requires a question starting with '.'");
+    }
+    const spelunkerContext: SpelunkerContext = sessionContext.agentContext;
+    const words = question.split(/\s+/);
+    if (words[0] != ".focus") {
+        const text = `Unknown '.' command (${words[0]}) -- try .focus`;
+        return createActionResult(text);
+    }
+    if (words.length < 2) {
+        return focusReport(
+            sessionContext.agentContext,
+            "Focus is empty",
+            "Focus is",
+        );
+    }
+    spelunkerContext.focusFolders = [
+        ...words
+            .slice(1)
+            .map((folder) => path.resolve(expandHome(folder)))
+            .filter((f) => fs.existsSync(f) && fs.statSync(f).isDirectory()),
+    ];
+    saveContext(sessionContext);
+    return focusReport(
+        sessionContext.agentContext,
+        "Focus cleared",
+        "Focus set to",
+    );
 }
