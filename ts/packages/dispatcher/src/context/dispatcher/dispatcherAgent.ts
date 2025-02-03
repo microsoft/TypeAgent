@@ -10,16 +10,12 @@ import { TranslateCommandHandler } from "./handlers/translateCommandHandler.js";
 import { ExplainCommandHandler } from "./handlers/explainCommandHandler.js";
 import {
     ActionContext,
-    AppAction,
     AppAgent,
     AppAgentManifest,
 } from "@typeagent/agent-sdk";
 import { CommandHandlerContext } from "../commandHandlerContext.js";
 import { createActionResultNoDisplay } from "@typeagent/agent-sdk/helpers/action";
-import {
-    DispatcherActions,
-    UnknownAction,
-} from "./schema/dispatcherActionSchema.js";
+import { DispatcherActions } from "./schema/dispatcherActionSchema.js";
 import { ClarifyRequestAction } from "./schema/clarifyActionSchema.js";
 
 const dispatcherHandlers: CommandHandlerTable = {

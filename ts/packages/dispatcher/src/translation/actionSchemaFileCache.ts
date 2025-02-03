@@ -194,8 +194,6 @@ export function getActionSchema(
 export function createSchemaInfoProvider(
     provider: ActionConfigProvider,
 ): SchemaInfoProvider {
-    const hashCache = new Map<string, string>();
-
     const getActionSchemaFile = (schemaName: string) => {
         return provider.getActionSchemaFileForConfig(
             provider.getActionConfig(schemaName),

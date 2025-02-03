@@ -2,7 +2,6 @@
 // Licensed under the MIT License.
 
 import { WebSocket, WebSocketServer } from "ws";
-import { WebSocketMessageV2 } from "common-utils";
 import registerDebug from "debug";
 import { IncomingMessage } from "node:http";
 

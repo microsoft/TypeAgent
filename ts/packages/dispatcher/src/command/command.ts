@@ -8,7 +8,7 @@ import {
     DispatcherName,
     makeClientIOMessage,
 } from "../context/interactiveIO.js";
-import { FullAction, getDefaultExplainerName } from "agent-cache";
+import { getDefaultExplainerName } from "agent-cache";
 import { CommandHandlerContext } from "../context/commandHandlerContext.js";
 
 import {
@@ -18,7 +18,6 @@ import {
 } from "@typeagent/agent-sdk";
 import { executeCommand } from "../execute/actionHandlers.js";
 import { isCommandDescriptorTable } from "@typeagent/agent-sdk/helpers/command";
-import { RequestMetrics } from "../utils/metrics.js";
 import { parseParams } from "./parameters.js";
 import { getHandlerTableUsage, getUsage } from "./commandHelp.js";
 import { CommandResult } from "../dispatcher.js";

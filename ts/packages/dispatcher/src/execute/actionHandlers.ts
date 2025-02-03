@@ -126,7 +126,7 @@ function getActionContext(
 
 function closeContextObject(o: any) {
     const descriptors = Object.getOwnPropertyDescriptors(o);
-    for (const [name, desc] of Object.entries(descriptors)) {
+    for (const [name] of Object.entries(descriptors)) {
         // TODO: Note this doesn't prevent the function continue to be call if is saved.
         Object.defineProperty(o, name, {
             get: () => {
