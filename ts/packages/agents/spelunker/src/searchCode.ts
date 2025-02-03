@@ -168,7 +168,7 @@ export async function searchCode(
     }
 
     // 4. Construct a prompt from those chunks.
-    console_log(`[Step 4: Construct a prompt for the smart LLM]`);
+    console_log(`[Step 4: Construct a prompt for the oracle]`);
     const preppedChunks: Chunk[] = chunkDescs
         .map((chunkDesc) => prepChunk(chunkDesc, allChunks))
         .filter(Boolean) as Chunk[];
