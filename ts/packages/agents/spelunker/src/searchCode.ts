@@ -176,16 +176,13 @@ export async function searchCode(
         .map((chunkDesc) => prepChunk(chunkDesc, allChunks))
         .filter(Boolean) as Chunk[];
     // TODO: Prompt engineering
+    // TODO: Include summaries in the prompt
     const prompt = `\
-        Please answer the user question using the given context and summaries.
+        Please answer the user question using the given context.
 
-        Summaries of all chunks in the code base:
+        User question: "${input}"
 
-        ${prepareSummaries(db)}
-
-        Context:
-
-        ${prepareChunks(preppedChunks)}
+        Context: ${prepareChunks(preppedChunks)}
 
         User question: "${input}"
         `;
@@ -401,7 +398,8 @@ function prepareChunks(chunks: Chunk[]): string {
     return output.join("");
 }
 
-function prepareSummaries(db: sqlite.Database): string {
+// TODO: Remove export once we're using summaries again.
+export function prepareSummaries(db: sqlite.Database): string {
     const languageCommentMap: { [key: string]: string } = {
         python: "#",
         typescript: "//",
@@ -651,10 +649,14 @@ async function loadDatabase(
         `  [Chunked ${allChunkedFiles.length} files into ${allChunks.length} chunks]`,
     );
 
-    // 1c. Use a fast model to summarize all chunks.
-    if (allChunks.length) {
-        await summarizeChunks(context, allChunks);
-    }
+    // Let's see how things go without summaries.
+    // They are slow and don't fit in the oracle's buffer.
+    // TODO: Restore this feature.
+
+    // // 1c. Use a fast model to summarize all chunks.
+    // if (allChunks.length) {
+    //     await summarizeChunks(context, allChunks);
+    // }
 
     return db;
 }
@@ -726,7 +728,7 @@ function createDatabase(context: SpelunkerContext): sqlite.Database {
     return db;
 }
 
-async function summarizeChunks(
+export async function summarizeChunks(
     context: SpelunkerContext,
     chunks: Chunk[],
 ): Promise<void> {
