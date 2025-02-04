@@ -7,16 +7,10 @@ export type FindPageComponents = {
 
 export type FindUserActions = {
   actionName: "findUserActions";
-  parameters: {
-    allowDuplicates?: boolean;
-  };
 };
 
 export type SummarizePage = {
   actionName: "summarizePage";
-  parameters: {
-    allowDuplicates?: boolean;
-  };
 };
 
 export type SaveUserActions = {
