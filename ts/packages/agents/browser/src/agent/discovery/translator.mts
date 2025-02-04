@@ -79,17 +79,18 @@ function getScreenshotPromptSection(
         url: screenshot,
       },
     });
-  }
-  if (fragments) {
-    const textFragments = fragments.map((a) => a.text);
-    screenshotSection.push({
-      type: "text",
-      text: `Here is the text content of the page
+
+    if (fragments) {
+      const textFragments = fragments.map((a) => a.text);
+      screenshotSection.push({
+        type: "text",
+        text: `Here is the text content of the page
             '''
             ${textFragments}
             '''            
             `,
-    });
+      });
+    }
   }
   return screenshotSection;
 }
@@ -176,7 +177,6 @@ export class SchemaDiscoveryAgent<T extends object> {
       requestSection.push({
         type: "text",
         text: `
-               
             Here is  user request
             '''
             ${userRequest}
@@ -266,7 +266,6 @@ export class SchemaDiscoveryAgent<T extends object> {
       requestSection.push({
         type: "text",
         text: `
-               
             Here is  user request
             '''
             ${userRequest}
@@ -366,7 +365,74 @@ export class SchemaDiscoveryAgent<T extends object> {
         type: "text",
         text: `
         Examine the layout information provided and determine the content of the page and the actions users can take on it.
-        Once you have this list, a SINGLE "PageDescription" response using the typescript schema below.
+        Once you have this list, a SINGLE "${bootstrapTranslator.validator.getTypeName()}" response using the typescript schema below.
+                
+        '''
+        ${bootstrapTranslator.validator.getSchemaText()}
+        '''
+        `,
+      },
+      ...requestSection,
+      {
+        type: "text",
+        text: `
+        The following is the COMPLETE JSON response object with 2 spaces of indentation and no properties with the value undefined:            
+        `,
+      },
+    ];
+
+    const response = await bootstrapTranslator.translate("", [
+      { role: "user", content: JSON.stringify(promptSections) },
+    ]);
+    return response;
+  }
+
+  async getPageLayout(
+    userRequest?: string,
+    fragments?: HtmlFragments[],
+    screenshot?: string,
+  ) {
+    const packageRoot = path.join("..", "..", "..");
+    const resultsSchema = await fs.promises.readFile(
+      fileURLToPath(
+        new URL(
+          path.join(packageRoot, "./src/agent/discovery/schema/PageLayout.mts"),
+          import.meta.url,
+        ),
+      ),
+      "utf8",
+    );
+
+    const bootstrapTranslator = this.getBootstrapTranslator(
+      "PageLayout",
+      resultsSchema,
+    );
+
+    const screenshotSection = getScreenshotPromptSection(screenshot, fragments);
+    const htmlSection = getHtmlPromptSection(fragments);
+    const prefixSection = getBootstrapPrefixPromptSection();
+    let requestSection = [];
+    if (userRequest) {
+      requestSection.push({
+        type: "text",
+        text: `
+               
+            Here is  user request
+            '''
+            ${userRequest}
+            '''
+            `,
+      });
+    }
+    const promptSections = [
+      ...prefixSection,
+      ...screenshotSection,
+      ...htmlSection,
+      {
+        type: "text",
+        text: `
+        Examine the layout information provided and determine the content of the page and the actions users can take on it.
+        Once you have this list, a SINGLE "${bootstrapTranslator.validator.getTypeName()}" response using the typescript schema below.
                 
         '''
         ${bootstrapTranslator.validator.getSchemaText()}

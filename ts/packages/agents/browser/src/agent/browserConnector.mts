@@ -80,13 +80,17 @@ export class BrowserConnector {
     return [];
   }
 
-  async getFilteredHtmlFragments(inputHtmlFragments: any[]) {
+  async getFilteredHtmlFragments(
+    inputHtmlFragments: any[],
+    cssSelectorsToKeep: string[],
+  ) {
     let htmlFragments: any[] = [];
     const timeoutPromise = new Promise((f) => setTimeout(f, 5000));
     const filterAction = {
       actionName: "getFilteredHTMLFragments",
       parameters: {
         fragments: inputHtmlFragments,
+        cssSelectorsToKeep: cssSelectorsToKeep,
       },
     };
 

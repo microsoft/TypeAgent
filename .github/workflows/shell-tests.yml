@@ -28,7 +28,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: ["windows-latest"]
+        os: ["windows-latest", "ubuntu-latest"]
         version: [20]
 
     runs-on: ${{ matrix.os }}
@@ -98,19 +98,15 @@ jobs:
         timeout-minutes: 60
         run: |
           npm run shell:test
-          rm ../../.env
         working-directory: ts/packages/shell
         continue-on-error: true
 
       - name: Shell Tests (linux)
         if: ${{ runner.os == 'Linux' }}
         timeout-minutes: 60
-        # https://github.com/microsoft/playwright/issues/34251 - sysctl command
         run: |
-          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 
           Xvfb :99 -screen 0 1600x1200x24 & export DISPLAY=:99
           npm run shell:test
-          rm ../../.env
         working-directory: ts/packages/shell
         continue-on-error: true
 
@@ -129,3 +125,9 @@ jobs:
           path: ts/packages/shell/playwright-report/
           overwrite: true
           retention-days: 30
+
+      - name: Clean up Keys
+        run: |
+          rm ./.env
+        working-directory: ts
+        if: always()          

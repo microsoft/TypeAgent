@@ -730,6 +730,7 @@ async function getTabHTMLFragmentsBySize(
 async function getFilteredHTMLFragments(
     targetTab: chrome.tabs.Tab,
     inputHtmlFragments: any[],
+    cssSelectorsToKeep: string[],
 ) {
     let htmlFragments: any[] = [];
 
@@ -740,10 +741,7 @@ async function getFilteredHTMLFragments(
                 {
                     type: "get_filtered_html_fragments",
                     inputHtml: inputHtmlFragments[i].content,
-                    cssSelectors: [
-                        inputHtmlFragments[i].cssSelectorAcross,
-                        inputHtmlFragments[i].cssSelectorDown,
-                    ].join(", "),
+                    cssSelectors: cssSelectorsToKeep.join(", "),
                     frameId: inputHtmlFragments[i].frameId,
                 },
                 { frameId: inputHtmlFragments[i].frameId },
@@ -1165,6 +1163,7 @@ async function runBrowserAction(action: any) {
             responseObject = await getFilteredHTMLFragments(
                 targetTab,
                 action.parameters.fragments,
+                action.parameters.cssSelectorsToKeep,
             );
             break;
         }

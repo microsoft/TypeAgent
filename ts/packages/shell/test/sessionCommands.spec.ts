@@ -12,7 +12,7 @@ import {
     getAppPath,
     getLastAgentMessage,
     sendUserRequest,
-    sendUserRequestAndWaitForResponse,
+    sendUserRequestAndWaitForCompletion,
     startShell,
     waitForAgentMessage,
 } from "./testHelper";
@@ -29,20 +29,20 @@ test.describe("@session Commands", () => {
         const mainWindow: Page = await startShell();
 
         // get the session count
-        let msg = await sendUserRequestAndWaitForResponse(
+        let msg = await sendUserRequestAndWaitForCompletion(
             `@session list`,
             mainWindow,
         );
 
         const sessions: string[] = msg.split("\n");
 
-        msg = await sendUserRequestAndWaitForResponse(
+        msg = await sendUserRequestAndWaitForCompletion(
             `@session new`,
             mainWindow,
         );
         expect(msg.toLowerCase()).toContain("new session created: ");
 
-        msg = await sendUserRequestAndWaitForResponse(
+        msg = await sendUserRequestAndWaitForCompletion(
             `@session list`,
             mainWindow,
         );
@@ -52,7 +52,7 @@ test.describe("@session Commands", () => {
             sessions.length + 1,
         );
 
-        msg = await sendUserRequestAndWaitForResponse(`@history`, mainWindow);
+        msg = await sendUserRequestAndWaitForCompletion(`@history`, mainWindow);
         expect(msg.length, "History NOT cleared!").toBe(0);
 
         // close the application
@@ -66,14 +66,14 @@ test.describe("@session Commands", () => {
         const mainWindow: Page = await startShell();
 
         // create a new session so we have at least two
-        let msg = await sendUserRequestAndWaitForResponse(
+        let msg = await sendUserRequestAndWaitForCompletion(
             `@session new`,
             mainWindow,
         );
         expect(msg.toLowerCase()).toContain("new session created: ");
 
         // get the session count
-        msg = await sendUserRequestAndWaitForResponse(
+        msg = await sendUserRequestAndWaitForCompletion(
             `@session list`,
             mainWindow,
         );
@@ -82,7 +82,7 @@ test.describe("@session Commands", () => {
         const sessionName: string = sessions[sessions.length - 1];
 
         // issue delete session command
-        msg = await sendUserRequestAndWaitForResponse(
+        msg = await sendUserRequestAndWaitForCompletion(
             `@session delete ${sessions[0]}`,
             mainWindow,
         );
@@ -92,7 +92,7 @@ test.describe("@session Commands", () => {
         await mainWindow.locator(".choice-button", { hasText: "No" }).click();
 
         // verify session not deleted
-        msg = await sendUserRequestAndWaitForResponse(
+        msg = await sendUserRequestAndWaitForCompletion(
             `@session list`,
             mainWindow,
         );
@@ -102,7 +102,7 @@ test.describe("@session Commands", () => {
         );
 
         // reissue delete session command
-        msg = await sendUserRequestAndWaitForResponse(
+        msg = await sendUserRequestAndWaitForCompletion(
             `@session delete ${sessions[0]}`,
             mainWindow,
         );
@@ -112,7 +112,7 @@ test.describe("@session Commands", () => {
         await mainWindow.locator(".choice-button", { hasText: "Yes" }).click();
 
         // get new session count
-        msg = await sendUserRequestAndWaitForResponse(
+        msg = await sendUserRequestAndWaitForCompletion(
             `@session list`,
             mainWindow,
         );
@@ -122,7 +122,7 @@ test.describe("@session Commands", () => {
         );
 
         // get session info
-        msg = await sendUserRequestAndWaitForResponse(
+        msg = await sendUserRequestAndWaitForCompletion(
             `@session info`,
             mainWindow,
         );
@@ -140,14 +140,14 @@ test.describe("@session Commands", () => {
         const mainWindow: Page = await startShell();
 
         // reset
-        let msg = await sendUserRequestAndWaitForResponse(
+        let msg = await sendUserRequestAndWaitForCompletion(
             `@session reset`,
             mainWindow,
         );
         expect(msg).toContain("Session settings revert to default.");
 
         // issue clear session command
-        msg = await sendUserRequestAndWaitForResponse(
+        msg = await sendUserRequestAndWaitForCompletion(
             `@session clear`,
             mainWindow,
         );
@@ -167,21 +167,21 @@ test.describe("@session Commands", () => {
         const mainWindow: Page = await startShell();
 
         // create a new session
-        let msg = await sendUserRequestAndWaitForResponse(
+        let msg = await sendUserRequestAndWaitForCompletion(
             `@session new`,
             mainWindow,
         );
         expect(msg.toLowerCase()).toContain("new session created: ");
 
         // get the session list
-        msg = await sendUserRequestAndWaitForResponse(
+        msg = await sendUserRequestAndWaitForCompletion(
             `@session list`,
             mainWindow,
         );
         const sessions: string[] = msg.split("\n");
 
         // open the earlier session
-        msg = await sendUserRequestAndWaitForResponse(
+        msg = await sendUserRequestAndWaitForCompletion(
             `@session open ${sessions[0]}`,
             mainWindow,
         );

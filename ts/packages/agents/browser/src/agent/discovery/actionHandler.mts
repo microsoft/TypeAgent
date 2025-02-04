@@ -27,6 +27,9 @@ export async function handleSchemaDiscoveryAction(
     case "summarizePage":
       await handleGetPageSummary(action);
       break;
+    case "findPageComponents":
+      await handleGetPageComponents(action);
+      break;
   }
 
   async function handleFindUserActions(action: any) {
@@ -82,6 +85,24 @@ export async function handleSchemaDiscoveryAction(
 
     console.timeEnd(timerName);
     message = "Page summary: \n" + JSON.stringify(response.data, null, 2);
+    return response.data;
+  }
+
+  async function handleGetPageComponents(action: any) {
+    const htmlFragments = await browser.getHtmlFragments();
+    const timerName = `Getting page layout`;
+    console.time(timerName);
+    const response = await agent.getPageLayout(undefined, htmlFragments);
+
+    if (!response.success) {
+      console.error("Attempt to get page layout failed");
+      console.error(response.message);
+      return;
+    }
+
+    console.timeEnd(timerName);
+    message = "Page layout: \n" + JSON.stringify(response.data, null, 2);
+
     return response.data;
   }
 
