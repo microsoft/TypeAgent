@@ -17,12 +17,12 @@ import {
 import { createActionResultFromError } from "@typeagent/agent-sdk/helpers/action";
 import { loadSchema } from "typeagent";
 
-import { AnswerSpecs } from "./makeAnswerSchema.js";
-import { ChunkDescription, SelectorSpecs } from "./makeSelectorSchema.js";
+import { OracleSpecs } from "./oracleSchema.js";
+import { ChunkDescription, SelectorSpecs } from "./selectorSchema.js";
 import { SpelunkerContext } from "./spelunkerActionHandler.js";
 import { Blob, Chunk, ChunkedFile, ChunkerErrorItem } from "./chunkSchema.js";
 import { chunkifyPythonFiles } from "./pythonChunker.js";
-import { SummarizeSpecs } from "./makeSummarizeSchema.js";
+import { SummarizerSpecs } from "./summarizerSchema.js";
 import { createRequire } from "module";
 import { chunkifyTypeScriptFiles } from "./typescriptChunker.js";
 
@@ -39,36 +39,36 @@ function console_log(...rest: any[]): void {
 
 export interface QueryContext {
     chatModel: ChatModel;
-    answerMaker: TypeChatJsonTranslator<AnswerSpecs>;
+    oracle: TypeChatJsonTranslator<OracleSpecs>;
     miniModel: ChatModel;
     chunkSelector: TypeChatJsonTranslator<SelectorSpecs>;
-    chunkSummarizer: TypeChatJsonTranslator<SummarizeSpecs>;
+    chunkSummarizer: TypeChatJsonTranslator<SummarizerSpecs>;
     databaseLocation: string;
     database: sqlite.Database | undefined;
 }
 
 function createQueryContext(): QueryContext {
     const chatModel = openai.createChatModelDefault("spelunkerChat");
-    const answerMaker = createTranslator<AnswerSpecs>(
+    const oracle = createTranslator<OracleSpecs>(
         chatModel,
-        "makeAnswerSchema.ts",
-        "AnswerSpecs",
+        "oracleSchema.ts",
+        "OracleSpecs",
     );
     const miniModel = openai.createChatModel(
-        "GPT_4_0_MINI",
+        undefined, // "GPT_4_O_MINI" is slower than default model?!
         undefined,
         undefined,
         ["spelunkerMini"],
     );
     const chunkSelector = createTranslator<SelectorSpecs>(
         miniModel,
-        "makeSelectorSchema.ts",
+        "selectorSchema.ts",
         "SelectorSpecs",
     );
-    const chunkSummarizer = createTranslator<SummarizeSpecs>(
+    const chunkSummarizer = createTranslator<SummarizerSpecs>(
         miniModel,
-        "makeSummarizeSchema.ts",
-        "SummarizeSpecs",
+        "summarizerSchema.ts",
+        "SummarizerSpecs",
     );
     const databaseFolder = path.join(
         process.env.HOME ?? "/",
@@ -81,11 +81,11 @@ function createQueryContext(): QueryContext {
         mode: 0o700,
     };
     fs.mkdirSync(databaseFolder, mkdirOptions);
-    const databaseLocation = path.join(databaseFolder, "codeSearchdatabase.db");
+    const databaseLocation = path.join(databaseFolder, "codeSearchDatabase.db");
     const database = undefined;
     return {
         chatModel,
-        answerMaker,
+        oracle,
         miniModel,
         chunkSelector,
         chunkSummarizer,
@@ -125,6 +125,18 @@ export async function searchCode(
         const blobRows: any[] = db
             .prepare(`SELECT * FROM blobs WHERE chunkId = ?`)
             .all(chunkRow.chunkId);
+        for (const blob of blobRows) {
+            blob.lines = blob.lines.split("\n");
+            while (
+                blob.lines.length &&
+                !blob.lines[blob.lines.length - 1].trim()
+            ) {
+                blob.lines.pop();
+            }
+            for (let i = 0; i < blob.lines.length; i++) {
+                blob.lines[i] = blob.lines[i] + "\n";
+            }
+        }
         const childRows: any[] = db
             .prepare(`SELECT * FROM chunks WHERE parentId = ?`)
             .all(chunkRow.chunkId);
@@ -136,6 +148,7 @@ export async function searchCode(
             parentId: chunkRow.parentId,
             children: childRows.map((row) => row.chunkId),
             fileName: chunkRow.fileName,
+            lineNo: chunkRow.lineNo,
         };
         allChunks.push(chunk);
     }
@@ -155,11 +168,11 @@ export async function searchCode(
     }
 
     // 4. Construct a prompt from those chunks.
-    console_log(`[Step 4: Construct a prompt for the smart LLM]`);
+    console_log(`[Step 4: Construct a prompt for the oracle]`);
     const preppedChunks: Chunk[] = chunkDescs
         .map((chunkDesc) => prepChunk(chunkDesc, allChunks))
         .filter(Boolean) as Chunk[];
-    // TODO: Prompt engineering; more efficient preparation of summaries and chunks
+    // TODO: Prompt engineering
     const prompt = `\
         Please answer the user question using the given context and summaries.
 
@@ -176,9 +189,8 @@ export async function searchCode(
     // console_log(`[${prompt.slice(0, 1000)}]`);
 
     // 5. Send prompt to smart, code-savvy LLM.
-    console_log(`[Step 5: Ask the smart LLM]`);
-    const wrappedResult =
-        await context.queryContext!.answerMaker.translate(prompt);
+    console_log(`[Step 5: Ask the oracle]`);
+    const wrappedResult = await context.queryContext!.oracle.translate(prompt);
     if (!wrappedResult.success) {
         console_log(`  [It's a failure: ${wrappedResult.message}]`);
         return createActionResultFromError(
@@ -326,11 +338,11 @@ async function selectRelevantChunks(
     const prompt = `\
     Please select up to 30 chunks that are relevant to the user question.
     Consider carefully how relevant each chunk is to the user question.
-    Provide a relevance scsore between 0 and 1 (float).
+    Provide a relevance score between 0 and 1 (float).
     Report only the chunk ID and relevance for each selected chunk.
-    Omit irrelevant chunks. It's fine to select fewer than 30.
+    Omit irrelevant or empty chunks. It's fine to select fewer than 30.
 
-    User question: "{input}"
+    User question: "${input}"
 
     Chunks:
     ${prepareChunks(chunks)}
@@ -347,15 +359,59 @@ async function selectRelevantChunks(
 }
 
 function prepareChunks(chunks: Chunk[]): string {
-    // TODO: Format the chunks more efficiently
-    return JSON.stringify(chunks, undefined, 2);
+    chunks.sort(
+        // Sort by file name and chunk ID (should order by line number)
+        (a, b) => {
+            let cmp = a.fileName.localeCompare(b.fileName);
+            if (!cmp) {
+                cmp = a.chunkId.localeCompare(b.chunkId);
+            }
+            return cmp;
+        },
+    );
+    const output: string[] = [];
+    function put(line: string): void {
+        // console_log(line.trimEnd());
+        output.push(line);
+    }
+    let lastFn = "";
+    let lineNo = 0;
+    for (const chunk of chunks) {
+        if (chunk.fileName !== lastFn) {
+            lastFn = chunk.fileName;
+            lineNo = 0;
+            put("\n");
+            put(`** file=${chunk.fileName}\n`);
+        }
+        put(
+            `* chunkId=${chunk.chunkId} kind=${chunk.treeName} name=${chunk.codeName}\n`,
+        );
+        for (const blob of chunk.blobs) {
+            lineNo = blob.start;
+            for (const line of blob.lines) {
+                lineNo += 1;
+                put(`${lineNo} ${line}`);
+            }
+        }
+    }
+    return output.join("");
 }
 
 function prepareSummaries(db: sqlite.Database): string {
+    const languageCommentMap: { [key: string]: string } = {
+        python: "#",
+        typescript: "//",
+    };
     const selectAllSummaries = db.prepare(`SELECT * FROM Summaries`);
     const summaryRows: any[] = selectAllSummaries.all();
-    // TODO: format as code: # <summary> / <signature>
-    return JSON.stringify(summaryRows, undefined, 2);
+    const lines: string[] = [];
+    for (const summaryRow of summaryRows) {
+        const comment = languageCommentMap[summaryRow.language] ?? "#";
+        lines.push("");
+        lines.push(`${comment} ${summaryRow.summary}`);
+        lines.push(summaryRow.signature);
+    }
+    return lines.join("\n");
 }
 
 function createTranslator<T extends object>(
@@ -459,11 +515,8 @@ async function loadDatabase(
     const prepSelectAllFiles = db.prepare(
         `SELECT fileName, mtime, size FROM Files`,
     );
-    const prepCountChunks = db.prepare(
-        `SELECT COUNT(*) FROM Chunks WHERE fileName = ?`,
-    );
     const prepInsertChunks = db.prepare(
-        `INSERT OR REPLACE INTO Chunks (chunkId, treeName, codeName, parentId, fileName) VALUES (?, ?, ?, ?, ?)`,
+        `INSERT OR REPLACE INTO Chunks (chunkId, treeName, codeName, parentId, fileName, lineNo) VALUES (?, ?, ?, ?, ?, ?)`,
     );
     const prepInsertBlobs = db.prepare(
         `INSERT INTO Blobs (chunkId, start, lines, breadcrumb) VALUES (?, ?, ?, ?)`,
@@ -504,17 +557,6 @@ async function loadDatabase(
                 mtime: stat.mtimeMs * 0.001,
                 size: stat.size,
             });
-        }
-        if (!filesToDo.includes(file)) {
-            // If there are no chunks, also add to filesToDo
-            // TODO: Zero chunks is not reliable, empty files haalso ve zero chunks
-            const count: number = (prepCountChunks.get(file) as any)[
-                "COUNT(*)"
-            ];
-            if (!count) {
-                // console_log(`  [Need to update ${file} (no chunks)]`);
-                filesToDo.push(file);
-            }
         }
     }
     const filesToDelete: string[] = [...filesInDb.keys()].filter(
@@ -574,10 +616,6 @@ async function loadDatabase(
         prepDeleteBlobs.run(chunkedFile.fileName);
         prepDeleteChunks.run(chunkedFile.fileName);
         for (const chunk of chunkedFile.chunks) {
-            // TODO: Assuming this never throws, just remove this
-            if (!chunk.fileName) {
-                throw new Error(`Chunk ${chunk.chunkId} has no fileName`);
-            }
             allChunks.push(chunk);
             prepInsertChunks.run(
                 chunk.chunkId,
@@ -585,6 +623,7 @@ async function loadDatabase(
                 chunk.codeName,
                 chunk.parentId || null,
                 chunk.fileName,
+                chunk.lineNo,
             );
             for (const blob of chunk.blobs) {
                 prepInsertBlobs.run(
@@ -620,7 +659,8 @@ CREATE TABLE IF NOT EXISTS Chunks (
     treeName TEXT NOT NULL,
     codeName TEXT NOT NULL,
     parentId TEXT KEY REFERENCES chunks(chunkId), -- May be null
-    fileName TEXT KEY REFERENCES files(fileName) NOT NULL
+    fileName TEXT KEY REFERENCES files(fileName) NOT NULL,
+    lineNo INTEGER NOT NULL -- 1-based
 );
 CREATE TABLE IF NOT EXISTS Blobs (
     chunkId TEXT KEY REFERENCES chunks(chunkId) NOT NULL,
@@ -630,8 +670,8 @@ CREATE TABLE IF NOT EXISTS Blobs (
 );
 CREATE TABLE IF NOT EXISTS Summaries (
     chunkId TEXT PRIMARY KEY REFERENCES chunks(chunkId),
+    language TEXT, -- "python", "typescript", etc.
     summary TEXT,
-    shortName TEXT,
     signature TEXT
 )
 `;
@@ -723,7 +763,7 @@ async function summarizeChunkSlice(
     // Enter them into the database
     const db = context.queryContext!.database!;
     const prepInsertSummary = db.prepare(`
-        INSERT OR REPLACE INTO Summaries (chunkId, summary, signature) VALUES (?, ?, ?)
+        INSERT OR REPLACE INTO Summaries (chunkId, language, summary, signature) VALUES (?, ?, ?, ?)
     `);
     let errors = 0;
     for (const summary of summarizeSpecs.summaries) {
@@ -731,6 +771,7 @@ async function summarizeChunkSlice(
         try {
             prepInsertSummary.run(
                 summary.chunkId,
+                summary.language,
                 summary.summary,
                 summary.signature,
             );

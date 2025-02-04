@@ -59,6 +59,9 @@ export async function chunkifyPythonFiles(
         if (!("error" in result)) {
             for (const chunk of result.chunks) {
                 chunk.fileName = result.fileName;
+                chunk.lineNo = chunk.blobs.length
+                    ? chunk.blobs[0].start + 1
+                    : 1;
             }
         }
     }

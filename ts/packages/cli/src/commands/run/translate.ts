@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { Args, Command, Flags } from "@oclif/core";
-import { createDispatcher } from "agent-dispatcher";
+import { ClientIO, createDispatcher } from "agent-dispatcher";
 import { getDefaultAppAgentProviders } from "default-agent-provider";
 import { getChatModelNames } from "aiclient";
 import {
@@ -10,6 +10,7 @@ import {
     getInstanceDir,
     getSchemaNamesForActionConfigProvider,
 } from "agent-dispatcher/internal";
+import { withConsoleClientIO } from "agent-dispatcher/helpers/console";
 
 const modelNames = await getChatModelNames();
 const defaultAppAgentProviders = getDefaultAppAgentProviders(getInstanceDir());
@@ -32,9 +33,17 @@ export default class TranslateCommand extends Command {
             options: schemaNames,
             multiple: true,
         }),
+        multiple: Flags.boolean({
+            description: "Include multiple action schema",
+            allowNo: true,
+        }),
         model: Flags.string({
             description: "Translation model to use",
             options: modelNames,
+        }),
+        jsonSchema: Flags.boolean({
+            description: "Output JSON schema",
+            allowNo: true,
         }),
     };
 
@@ -49,19 +58,29 @@ export default class TranslateCommand extends Command {
             ? Object.fromEntries(flags.translator.map((name) => [name, true]))
             : undefined;
 
-        const dispatcher = await createDispatcher("cli run translate", {
-            appAgentProviders: defaultAppAgentProviders,
-            schemas,
-            actions: null,
-            commands: { dispatcher: true },
-            translation: { model: flags.model },
-            cache: { enabled: false },
-            persist: true,
-            dblogging: true,
+        await withConsoleClientIO(async (clientIO: ClientIO) => {
+            const dispatcher = await createDispatcher("cli run translate", {
+                appAgentProviders: defaultAppAgentProviders,
+                schemas,
+                actions: null,
+                commands: { dispatcher: true },
+                translation: {
+                    model: flags.model,
+                    multiple: { enabled: flags.multiple },
+                    schema: { generation: { jsonSchema: flags.jsonSchema } },
+                },
+                cache: { enabled: false },
+                clientIO,
+                persist: true,
+                dblogging: true,
+            });
+            try {
+                await dispatcher.processCommand(
+                    `@dispatcher translate ${args.request}`,
+                );
+            } finally {
+                await dispatcher.close();
+            }
         });
-        await dispatcher.processCommand(
-            `@dispatcher translate ${args.request}`,
-        );
-        await dispatcher.close();
     }
 }

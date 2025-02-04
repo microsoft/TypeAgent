@@ -45,6 +45,7 @@ steps:
       # workspace-concurrency 0 means use use the CPU core count. This is better than the default (4) for larger agents.
       script: |
         echo "Using node $(node --version)"
+        npm install -g corepack@0.31.0
         sudo corepack enable
         echo "Using pnpm $(pnpm -v)"
         pnpm config set store-dir ${{ parameters.pnpmStorePath }}

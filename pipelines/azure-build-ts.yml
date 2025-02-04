@@ -38,15 +38,15 @@ jobs:
         displayName: "Checkout TypeAgent Repository"
         path: "typeagent"
 
-      - template: include-install-pnpm.yml
-        parameters:
-          buildDirectory: $(Build.SourcesDirectory)/ts
-
       - task: UseNode@1
         displayName: "Setup Node.js"
         inputs:
           version: $(nodeVersion)
           checkLatest: true
+
+      - template: include-install-pnpm.yml
+        parameters:
+          buildDirectory: $(Build.SourcesDirectory)/ts
 
       - script: |
           pnpm install --frozen-lockfile --strict-peer-dependencies

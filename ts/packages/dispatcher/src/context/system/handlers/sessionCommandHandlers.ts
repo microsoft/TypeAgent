@@ -28,9 +28,7 @@ import {
     displaySuccess,
     displayWarn,
 } from "@typeagent/agent-sdk/helpers/display";
-import { getToggleHandlerTable } from "../../../command/handlerUtils.js";
 import { askYesNoWithContext } from "../../interactiveIO.js";
-import path from "node:path";
 
 class SessionNewCommandHandler implements CommandHandler {
     public readonly description = "Create a new empty session";

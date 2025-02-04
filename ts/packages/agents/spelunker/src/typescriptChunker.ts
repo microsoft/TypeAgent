@@ -31,20 +31,32 @@ export async function chunkifyTypeScriptFiles(
     const results: (ChunkedFile | ChunkerErrorItem)[] = [];
     for (const fileName of fileNames) {
         // console.log(fileName);
+        const sourceFile: ts.SourceFile = await tsCode.loadSourceFile(fileName);
+
         const baseName = path.basename(fileName);
         const extName = path.extname(fileName);
         const codeName = baseName.slice(0, -extName.length || undefined);
+        const blob: Blob = {
+            start: 0,
+            lines: sourceFile.text.match(/.*(?:\r?\n|$)/g) || [],
+        };
+        while (blob.lines.length && !blob.lines[0].trim()) {
+            blob.lines.shift();
+            blob.start++;
+        }
+        const blobs: Blob[] = [blob];
+        const lineNo = blobs.length ? blobs[0].start + 1 : 1;
         const rootChunk: Chunk = {
             chunkId: generate_id(),
             treeName: "file",
             codeName,
-            blobs: [],
+            blobs,
             parentId: "",
             children: [],
             fileName,
+            lineNo,
         };
         const chunks: Chunk[] = [rootChunk];
-        const sourceFile: ts.SourceFile = await tsCode.loadSourceFile(fileName);
         chunks.push(...recursivelyChunkify(sourceFile, rootChunk));
         const chunkedFile: ChunkedFile = {
             fileName,
@@ -68,24 +80,29 @@ export async function chunkifyTypeScriptFiles(
                     //     ts.SyntaxKind[childNode.kind],
                     //     tsCode.getStatementName(childNode),
                     // );
-                    const chunk: Chunk = {
+                    const treeName = ts.SyntaxKind[childNode.kind];
+                    const codeName = tsCode.getStatementName(childNode) ?? "";
+                    const blobs = makeBlobs(
+                        sourceFile,
+                        childNode.getFullStart(),
+                        childNode.getEnd(),
+                    );
+                    const lineNo = blobs.length ? blobs[0].start + 1 : 1;
+                    const childChunk: Chunk = {
                         chunkId: generate_id(),
-                        treeName: ts.SyntaxKind[childNode.kind],
-                        codeName: tsCode.getStatementName(childNode) ?? "",
-                        blobs: makeBlobs(
-                            sourceFile,
-                            childNode.getFullStart(),
-                            childNode.getEnd(),
-                        ),
+                        treeName,
+                        codeName,
+                        blobs,
                         parentId: parentChunk.chunkId,
                         children: [],
                         fileName,
+                        lineNo,
                     };
-                    // TODO: Remove chunk.blobs from parentChunk.blobs.
-                    chunks.push(chunk);
-                    recursivelyChunkify(childNode, chunk);
+                    spliceBlobs(parentChunk, childChunk);
+                    chunks.push(childChunk);
+                    chunks.push(...recursivelyChunkify(childNode, childChunk));
                 } else {
-                    recursivelyChunkify(childNode, parentChunk);
+                    chunks.push(...recursivelyChunkify(childNode, parentChunk));
                 }
             }
             return chunks;
@@ -93,6 +110,77 @@ export async function chunkifyTypeScriptFiles(
     }
 
     return results;
+}
+
+function assert(condition: boolean, message: string): asserts condition {
+    if (!condition) {
+        throw new Error(`Assertion failed: ${message}`);
+    }
+}
+
+function spliceBlobs(parentChunk: Chunk, childChunk: Chunk): void {
+    const parentBlobs = parentChunk.blobs;
+    const childBlobs = childChunk.blobs;
+    assert(parentBlobs.length > 0, "Parent chunk must have at least one blob");
+    assert(childBlobs.length === 1, "Child chunk must have exactly one blob");
+    const parentBlob = parentBlobs[parentBlobs.length - 1];
+    const childBlob = childBlobs[0];
+    assert(
+        childBlob.start >= parentBlob.start,
+        "Child blob must start after parent blob",
+    );
+    assert(
+        childBlob.start + childBlob.lines.length <=
+            parentBlob.start + parentBlob.lines.length,
+        "Child blob must end before parent blob",
+    );
+
+    const linesBefore = parentBlob.lines.slice(
+        0,
+        childBlob.start - parentBlob.start,
+    );
+    const startBefore = parentBlob.start;
+    while (linesBefore.length && !linesBefore[linesBefore.length - 1].trim()) {
+        linesBefore.pop();
+    }
+
+    let startAfter = childBlob.start + childBlob.lines.length;
+    const linesAfter = parentBlob.lines.slice(startAfter - parentBlob.start);
+    while (linesAfter.length && !linesAfter[0].trim()) {
+        linesAfter.shift();
+        startAfter++;
+    }
+
+    const blobs: Blob[] = [];
+    if (linesBefore.length) {
+        blobs.push({ start: startBefore, lines: linesBefore });
+    }
+    const sig: string = signature(childChunk);
+    // console.log("signature", sig);
+    if (sig) {
+        blobs.push({ start: childBlob.start, lines: [sig], breadcrumb: true });
+    }
+    if (linesAfter.length) {
+        blobs.push({ start: startAfter, lines: linesAfter });
+    }
+    parentChunk.blobs.splice(-1, 1, ...blobs);
+}
+
+function signature(chunk: Chunk): string {
+    const firstLine = chunk.blobs[0]?.lines[0] ?? "";
+    const indent = firstLine.match(/^(\s*)/)?.[0] || "";
+
+    switch (chunk.treeName) {
+        case "InterfaceDeclaration":
+            return `${indent}interface ${chunk.codeName} ...`;
+        case "TypeAliasDeclaration":
+            return `${indent}type ${chunk.codeName} ...`;
+        case "FunctionDeclaration":
+            return `${indent}function ${chunk.codeName} ...`;
+        case "ClassDeclaration":
+            return `${indent}class ${chunk.codeName} ...`;
+    }
+    return "";
 }
 
 function makeBlobs(
@@ -104,6 +192,19 @@ function makeBlobs(
     const lineStarts = sourceFile.getLineStarts(); // TODO: Move to caller?
     let startLoc = sourceFile.getLineAndCharacterOfPosition(startPos);
     const endLoc = sourceFile.getLineAndCharacterOfPosition(endPos);
+    if (startLoc.character) {
+        // Adjust start: if in the middle of a line, move to start of next line.
+        // This is still a heuristic that will fail e.g. with `; function ...`.
+        // But we don't want to support that; a more likely scenario is:
+        // ```
+        // type A = ...; // comment
+        // function ...
+        // ```
+        // Here getFullStart() points to the start of the comment on A,
+        // but we must start at the function.
+        startPos = lineStarts[startLoc.line + 1];
+        startLoc = sourceFile.getLineAndCharacterOfPosition(startPos);
+    }
     // console.log(
     //     `Start and end: ${startPos}=${startLoc.line + 1}:${startLoc.character}, ` +
     //         `${endPos}=${endLoc.line + 1}:${endLoc.character}`,
@@ -141,7 +242,7 @@ export class Testing {
         const fileNames = [
             "./packages/agents/spelunker/src/typescriptChunker.ts",
             "./packages/agents/spelunker/src/spelunkerSchema.ts",
-            "./packages/agents/spelunker/src/makeSummarizeSchema.ts",
+            "./packages/agents/spelunker/src/summarizerSchema.ts",
             "./packages/codeProcessor/src/tsCode.ts",
             "./packages/agents/spelunker/src/pythonChunker.ts",
         ];

@@ -79,17 +79,18 @@ function getScreenshotPromptSection(
         url: screenshot,
       },
     });
-  }
-  if (fragments) {
-    const textFragments = fragments.map((a) => a.text);
-    screenshotSection.push({
-      type: "text",
-      text: `Here is the text content of the page
+
+    if (fragments) {
+      const textFragments = fragments.map((a) => a.text);
+      screenshotSection.push({
+        type: "text",
+        text: `Here is the text content of the page
             '''
             ${textFragments}
             '''            
             `,
-    });
+      });
+    }
   }
   return screenshotSection;
 }
@@ -176,7 +177,6 @@ export class SchemaDiscoveryAgent<T extends object> {
       requestSection.push({
         type: "text",
         text: `
-               
             Here is  user request
             '''
             ${userRequest}
@@ -250,11 +250,95 @@ export class SchemaDiscoveryAgent<T extends object> {
     userRequest?: string,
     fragments?: HtmlFragments[],
     screenshot?: string,
+    pageSummary?: string,
   ) {
     // prompt - present html, optional screenshot and list of candidate actions
     const bootstrapTranslator = this.getBootstrapTranslator(
       "UserActionsList",
       this.userActionsPoolSchema,
+    );
+
+    const screenshotSection = getScreenshotPromptSection(screenshot, fragments);
+    const htmlSection = getHtmlPromptSection(fragments);
+    const prefixSection = getBootstrapPrefixPromptSection();
+    let requestSection = [];
+    if (userRequest) {
+      requestSection.push({
+        type: "text",
+        text: `
+            Here is  user request
+            '''
+            ${userRequest}
+            '''
+            `,
+      });
+    }
+    if (pageSummary) {
+      requestSection.push({
+        type: "text",
+        text: `
+               
+            Here is a previously-generated summary of the page
+            '''
+            ${pageSummary}
+            '''
+            `,
+      });
+    }
+
+    const promptSections = [
+      ...prefixSection,
+      ...screenshotSection,
+      ...htmlSection,
+      {
+        type: "text",
+        text: `
+        Examine the layout information provided and determine the set of possible UserPageActions users can take on the page.
+        Once you have this list, a SINGLE "${bootstrapTranslator.validator.getTypeName()}" response using the typescript schema below.
+        If there are multiple UserPageActions of the same type, only return the first one in the output object.
+        
+        '''
+        ${bootstrapTranslator.validator.getSchemaText()}
+        '''
+        `,
+      },
+      ...requestSection,
+      {
+        type: "text",
+        text: `
+        The following is the COMPLETE JSON response object with 2 spaces of indentation and no properties with the value undefined:            
+        `,
+      },
+    ];
+
+    const response = await bootstrapTranslator.translate("", [
+      { role: "user", content: JSON.stringify(promptSections) },
+    ]);
+    return response;
+  }
+
+  async getPageSummary(
+    userRequest?: string,
+    fragments?: HtmlFragments[],
+    screenshot?: string,
+  ) {
+    const packageRoot = path.join("..", "..", "..");
+    const resultsSchema = await fs.promises.readFile(
+      fileURLToPath(
+        new URL(
+          path.join(
+            packageRoot,
+            "./src/agent/discovery/schema/pageSummary.mts",
+          ),
+          import.meta.url,
+        ),
+      ),
+      "utf8",
+    );
+
+    const bootstrapTranslator = this.getBootstrapTranslator(
+      "PageDescription",
+      resultsSchema,
     );
 
     const screenshotSection = getScreenshotPromptSection(screenshot, fragments);
@@ -280,10 +364,76 @@ export class SchemaDiscoveryAgent<T extends object> {
       {
         type: "text",
         text: `
-        Examine the layout information provided and determine the set of possible UserPageActions users can take on the page.
+        Examine the layout information provided and determine the content of the page and the actions users can take on it.
         Once you have this list, a SINGLE "${bootstrapTranslator.validator.getTypeName()}" response using the typescript schema below.
-        If there are multiple UserPageActions of the same type, only return the first one in the output object.
-        
+                
+        '''
+        ${bootstrapTranslator.validator.getSchemaText()}
+        '''
+        `,
+      },
+      ...requestSection,
+      {
+        type: "text",
+        text: `
+        The following is the COMPLETE JSON response object with 2 spaces of indentation and no properties with the value undefined:            
+        `,
+      },
+    ];
+
+    const response = await bootstrapTranslator.translate("", [
+      { role: "user", content: JSON.stringify(promptSections) },
+    ]);
+    return response;
+  }
+
+  async getPageLayout(
+    userRequest?: string,
+    fragments?: HtmlFragments[],
+    screenshot?: string,
+  ) {
+    const packageRoot = path.join("..", "..", "..");
+    const resultsSchema = await fs.promises.readFile(
+      fileURLToPath(
+        new URL(
+          path.join(packageRoot, "./src/agent/discovery/schema/PageLayout.mts"),
+          import.meta.url,
+        ),
+      ),
+      "utf8",
+    );
+
+    const bootstrapTranslator = this.getBootstrapTranslator(
+      "PageLayout",
+      resultsSchema,
+    );
+
+    const screenshotSection = getScreenshotPromptSection(screenshot, fragments);
+    const htmlSection = getHtmlPromptSection(fragments);
+    const prefixSection = getBootstrapPrefixPromptSection();
+    let requestSection = [];
+    if (userRequest) {
+      requestSection.push({
+        type: "text",
+        text: `
+               
+            Here is  user request
+            '''
+            ${userRequest}
+            '''
+            `,
+      });
+    }
+    const promptSections = [
+      ...prefixSection,
+      ...screenshotSection,
+      ...htmlSection,
+      {
+        type: "text",
+        text: `
+        Examine the layout information provided and determine the content of the page and the actions users can take on it.
+        Once you have this list, a SINGLE "${bootstrapTranslator.validator.getTypeName()}" response using the typescript schema below.
+                
         '''
         ${bootstrapTranslator.validator.getSchemaText()}
         '''

@@ -12,8 +12,6 @@ import {
     displayError,
     displayResult,
 } from "@typeagent/agent-sdk/helpers/display";
-import dotenv from "dotenv";
-import { Action } from "agent-cache";
 
 export class EnvCommandHandler implements CommandHandlerNoParams {
     public readonly description =

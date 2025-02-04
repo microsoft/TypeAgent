@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { error, Result, success, TypeChatJsonValidator } from "typechat";
+import { error, Result, success } from "typechat";
 import {
     ActionSchemaFile,
     generateActionSchema,
@@ -12,10 +12,12 @@ import {
     ActionSchemaUnion,
     ActionSchemaGroup,
     GenerateSchemaOptions,
+    generateActionJsonSchema,
 } from "action-schema";
 import {
     createJsonTranslatorWithValidator,
     JsonTranslatorOptions,
+    TypeAgentJsonValidator,
 } from "common-utils";
 import {
     getInjectedActionConfigs,
@@ -32,13 +34,21 @@ import { ActionConfigProvider } from "./actionConfigProvider.js";
 function createActionSchemaJsonValidator<T extends TranslatedAction>(
     actionSchemaGroup: ActionSchemaGroup,
     generateOptions?: GenerateSchemaOptions,
-): TypeChatJsonValidator<T> {
+): TypeAgentJsonValidator<T> {
     const schema = generateActionSchema(actionSchemaGroup, generateOptions);
+    const generateJsonSchema = generateOptions?.jsonSchema ?? false;
+    const jsonSchema = generateJsonSchema
+        ? generateActionJsonSchema(actionSchemaGroup)
+        : undefined;
     return {
         getSchemaText: () => schema,
         getTypeName: () => actionSchemaGroup.entry.name,
+        getJsonSchema: () => jsonSchema,
         validate(jsonObject: object): Result<T> {
-            const value: any = jsonObject;
+            const value: any = generateJsonSchema
+                ? (jsonObject as any).response
+                : jsonObject;
+
             if (value.actionName === undefined) {
                 return error("Missing actionName property");
             }
@@ -51,6 +61,7 @@ function createActionSchemaJsonValidator<T extends TranslatedAction>(
 
             try {
                 validateAction(actionSchema, value);
+                // Return the unwrapped value with generateJsonSchema as the translated result
                 return success(value);
             } catch (e: any) {
                 return error(e.message);

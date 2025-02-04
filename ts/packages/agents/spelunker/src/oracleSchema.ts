@@ -5,7 +5,7 @@
 export type ChunkId = string;
 
 // Answer to the original question.
-export type AnswerSpecs = {
+export type OracleSpecs = {
     question: string; // Original question (e.g. "How can items be related")
     answer: string; // Answer to the question. It is readable and complete, with suitable formatting (line breaks, bullet points etc)
 

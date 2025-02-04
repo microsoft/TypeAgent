@@ -12,6 +12,7 @@ export {
     enableJsonTranslatorStreaming,
     TypeChatJsonTranslatorWithStreaming,
     createJsonTranslatorWithValidator,
+    TypeAgentJsonValidator,
     JsonTranslatorOptions,
 } from "./jsonTranslator.js";
 export { IncrementalJsonValueCallBack } from "./incrementalJsonParser.js";

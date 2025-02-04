@@ -84,7 +84,10 @@ type DispatcherConfig = {
         multiple: MultipleActionConfig;
         history: boolean;
         schema: {
-            generation: boolean;
+            generation: {
+                enabled: boolean;
+                jsonSchema: boolean;
+            };
             optimize: {
                 enabled: boolean;
                 numInitialActions: number; // 0 means no limit
@@ -145,7 +148,10 @@ const defaultSessionConfig: SessionConfig = {
         },
         history: true,
         schema: {
-            generation: true,
+            generation: {
+                enabled: true,
+                jsonSchema: false,
+            },
             optimize: {
                 enabled: false,
                 numInitialActions: 5,

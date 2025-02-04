@@ -24,16 +24,39 @@ export async function handleSchemaDiscoveryAction(
     case "findUserActions":
       await handleFindUserActions(action);
       break;
+    case "summarizePage":
+      await handleGetPageSummary(action);
+      break;
+    case "findPageComponents":
+      await handleGetPageComponents(action);
+      break;
   }
 
   async function handleFindUserActions(action: any) {
     const htmlFragments = await browser.getHtmlFragments();
+    // const screenshot = await browser.getCurrentPageScreenshot();
+    const screenshot = "";
+    let pageSummary = "";
+
+    const summaryResponse = await agent.getPageSummary(
+      undefined,
+      htmlFragments,
+      screenshot,
+    );
+
+    if (summaryResponse.success) {
+      pageSummary =
+        "Page summary: \n" + JSON.stringify(summaryResponse.data, null, 2);
+    }
+
     const timerName = `Analyzing page actions`;
     console.time(timerName);
+
     const response = await agent.getCandidateUserActions(
       undefined,
       htmlFragments,
-      undefined,
+      screenshot,
+      pageSummary,
     );
 
     if (!response.success) {
@@ -45,6 +68,41 @@ export async function handleSchemaDiscoveryAction(
     console.timeEnd(timerName);
     message =
       "Possible user actions: \n" + JSON.stringify(response.data, null, 2);
+    return response.data;
+  }
+
+  async function handleGetPageSummary(action: any) {
+    const htmlFragments = await browser.getHtmlFragments();
+    const timerName = `Summarizing page`;
+    console.time(timerName);
+    const response = await agent.getPageSummary(undefined, htmlFragments);
+
+    if (!response.success) {
+      console.error("Attempt to get page summary failed");
+      console.error(response.message);
+      return;
+    }
+
+    console.timeEnd(timerName);
+    message = "Page summary: \n" + JSON.stringify(response.data, null, 2);
+    return response.data;
+  }
+
+  async function handleGetPageComponents(action: any) {
+    const htmlFragments = await browser.getHtmlFragments();
+    const timerName = `Getting page layout`;
+    console.time(timerName);
+    const response = await agent.getPageLayout(undefined, htmlFragments);
+
+    if (!response.success) {
+      console.error("Attempt to get page layout failed");
+      console.error(response.message);
+      return;
+    }
+
+    console.timeEnd(timerName);
+    message = "Page layout: \n" + JSON.stringify(response.data, null, 2);
+
     return response.data;
   }
 

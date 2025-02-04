@@ -3,7 +3,7 @@
 
 import { processCommandNoLock } from "../../../command/command.js";
 import { CommandHandlerContext } from "../../commandHandlerContext.js";
-import { ConfigAction, ToggleAgent } from "../schema/configActionSchema.js";
+import { ConfigAction } from "../schema/configActionSchema.js";
 import { AppAction, ActionContext } from "@typeagent/agent-sdk";
 
 export async function executeConfigAction(
@@ -19,7 +19,6 @@ export async function executeConfigAction(
             );
             break;
         case "toggleAgent":
-            const agentAction = configAction as ToggleAgent;
             const cmdParam: string = configAction.parameters.enable
                 ? ``
                 : `--off`;
