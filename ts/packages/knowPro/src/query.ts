@@ -453,7 +453,7 @@ export class MatchQualifiedSearchTermExpr extends QueryOpExpr<
                     facetSearchTerm.facetValue,
                 );
                 if (valueMatches.size > 0) {
-                    facetMatches = facetMatches.intersect(valueMatches);
+                    facetMatches.addUnion(valueMatches);
                 }
             }
 
