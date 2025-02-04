@@ -80,13 +80,13 @@ export async function searchConversation(
         return undefined;
     }
     const queryBuilder = new SearchQueryBuilder(conversation);
-    const query = queryBuilder.compile(
+    const query = await queryBuilder.compile(
         searchTerms,
         propertyTerms,
         filter,
         maxMatches,
     );
-    const queryResults = await query.eval(new q.QueryEvalContext(conversation));
+    const queryResults = query.eval(new q.QueryEvalContext(conversation));
     return toGroupedSearchResults(queryResults);
 }
 
@@ -95,13 +95,20 @@ class SearchQueryBuilder {
 
     constructor(public conversation: IConversation) {}
 
-    public compile(
+    public async compile(
         terms: SearchTerm[],
         propertyTerms?: Record<string, string>,
         filter?: SearchFilter,
         maxMatches?: number,
     ) {
         let selectExpr = this.compileSelect(terms, propertyTerms, filter);
+        // Resolve related terms for all search terms, as needed
+        if (this.conversation.termToRelatedTermsIndex) {
+            await resolveRelatedTerms(
+                this.conversation.termToRelatedTermsIndex,
+                this.allSearchTerms,
+            );
+        }
         this.prepareSearchTerms(this.allSearchTerms);
         const query = new q.SelectTopNKnowledgeGroupExpr(
             new q.GroupByKnowledgeTypeExpr(selectExpr),
@@ -184,13 +191,7 @@ class SearchQueryBuilder {
         return predicates;
     }
 
-    private async prepareSearchTerms(searchTerms: SearchTerm[]): Promise<void> {
-        if (this.conversation.termToRelatedTermsIndex) {
-            await resolveRelatedTerms(
-                this.conversation.termToRelatedTermsIndex,
-                searchTerms,
-            );
-        }
+    private prepareSearchTerms(searchTerms: SearchTerm[]): void {
         for (const searchTerm of searchTerms) {
             this.prepareTerm(searchTerm.term);
             if (searchTerm.relatedTerms) {

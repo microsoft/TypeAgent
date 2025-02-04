@@ -105,11 +105,13 @@ export class TermToRelatedTermsIndex implements ITermToRelatedTermsIndex {
         return this.termAliases.lookupTerm(termText);
     }
 
-    public lookupTermFuzzy(termText: string): Promise<Term[] | undefined> {
+    public async lookupTermFuzzy(
+        termText: string,
+    ): Promise<Term[] | undefined> {
         if (this.termEmbeddingsIndex) {
-            return this.termEmbeddingsIndex.lookupTermsFuzzy(termText);
+            return await this.termEmbeddingsIndex.lookupTermsFuzzy(termText);
         }
-        return Promise.resolve(undefined);
+        return undefined;
     }
 
     public serialize(): ITermsToRelatedTermsIndexData {
@@ -294,10 +296,13 @@ export type TextEmbeddingIndexSettings = {
     retryPauseMs?: number;
 };
 
-export function createTextEmbeddingIndexSettings(): TextEmbeddingIndexSettings {
+export function createTextEmbeddingIndexSettings(
+    maxMatches = 100,
+    minScore = 0.8,
+): TextEmbeddingIndexSettings {
     return {
         embeddingModel: createEmbeddingCache(openai.createEmbeddingModel(), 64),
-        minScore: 0.8,
+        minScore,
         retryMaxAttempts: 2,
         retryPauseMs: 2000,
     };
