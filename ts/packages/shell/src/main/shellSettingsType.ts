@@ -23,6 +23,7 @@ export type ShellSettingsType = {
     partialCompletion: boolean;
     disallowedDisplayType: DisplayType[];
     darkMode: boolean;
+    chatHistory: boolean;
 };
 
 export const defaultSettings: ShellSettingsType = {
@@ -38,4 +39,5 @@ export const defaultSettings: ShellSettingsType = {
     partialCompletion: true,
     disallowedDisplayType: [],
     darkMode: false,
+    chatHistory: true
 };

@@ -72,6 +72,7 @@ export interface ClientAPI {
             settings: ShellSettings,
         ) => void,
     ): void;
+    onChatHistory(callback: (e: Electron.IpcRendererEvent, chatHistory: string) => void): void;
     registerClientIO(clientIO: ClientIO);
 }
 

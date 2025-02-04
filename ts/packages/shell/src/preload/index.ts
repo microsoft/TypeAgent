@@ -43,6 +43,9 @@ const api: ClientAPI = {
     onSettingsChanged(callback) {
         ipcRenderer.on("settings-changed", callback);
     },
+    onChatHistory(callback) {
+        ipcRenderer.on("chat-history", callback);
+    },
     registerClientIO: (clientIO: ClientIO) => {
         if (clientIORegistered) {
             throw new Error("ClientIO already registered");

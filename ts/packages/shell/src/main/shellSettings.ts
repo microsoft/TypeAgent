@@ -44,6 +44,7 @@ export class ShellSettings
     public onOpenInlineBrowser: ((targetUrl: URL) => void) | null;
     public onCloseInlineBrowser: EmptyFunction | null;
     public darkMode: boolean;
+    public chatHistory: boolean;
 
     public get width(): number {
         return this.size[0] ?? defaultSettings.size[0];
@@ -91,6 +92,7 @@ export class ShellSettings
         this.onOpenInlineBrowser = null;
         this.onCloseInlineBrowser = null;
         this.darkMode = settings.darkMode;
+        this.chatHistory = settings.chatHistory;
     }
 
     public static get filePath(): string {

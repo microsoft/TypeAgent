@@ -269,6 +269,10 @@ function addEvents(
 
         settingsView.shellSettings = value;
     });
+    api.onChatHistory((_, history: string) => {
+        // TODO: rehydrate these into the UI
+        console.log(history);
+    });
 }
 
 function showNotifications(
@@ -425,7 +429,40 @@ document.addEventListener("DOMContentLoaded", async function () {
         }
     }
 
+    watchForDOMChanges(chatView.getScollContainer());
+
     if ((window as any).electron) {
         (window as any).electron.ipcRenderer.send("dom ready");
     }
 });
+
+function watchForDOMChanges(element: HTMLDivElement) {
+
+    // ignore attribute changes but wach for 
+    const config = { attributes: false, childList: true, subtree: true };
+
+    // timeout
+    let idleCounter: number = 0;
+
+    // observer callback
+    const observer = new MutationObserver(() => {
+
+        // increment the idle counter
+        idleCounter++;
+
+        // decrement the idle counter
+        setTimeout(() => {
+            if (--idleCounter == 0) {
+                // last one notifies main process 
+                if ((window as any).electron) {
+                    (window as any).electron.ipcRenderer.send("dom changed", element.innerHTML);
+                }
+            }
+        }, 3000);
+    });
+
+    // start observing
+    observer.observe(element!, config);
+
+    // observer.disconnect();    
+}
