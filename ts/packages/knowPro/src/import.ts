@@ -7,8 +7,6 @@ import {
     IKnowledgeSource,
     SemanticRef,
     IConversationData,
-    ITextEmbeddingData,
-    ITermEmbeddingIndex,
     ITimestampToTextRangeIndex,
     IPropertyToSemanticRefIndex,
 } from "./dataFormat.js";
@@ -24,10 +22,9 @@ import {
 } from "./conversationIndex.js";
 import { Result } from "typechat";
 import {
-    buildTermEmbeddingIndex,
-    createSemanticIndexSettings,
-    TextEmbeddingIndexSettings,
-    TermEmbeddingIndex,
+    createTextEmbeddingIndexSettings,
+    TermToRelatedTermsIndex,
+    TermsToRelatedTermIndexSettings,
 } from "./relatedTermsIndex.js";
 import { TimestampToTextRangeIndex } from "./timestampIndex.js";
 import { addPropertiesToIndex, PropertyIndex } from "./propertyIndex.js";
@@ -109,12 +106,14 @@ export class PodcastMessage implements IMessage<PodcastMessageMeta> {
 }
 
 export type PodcastSettings = {
-    relatedTermIndexSettings: TextEmbeddingIndexSettings;
+    relatedTermIndexSettings: TermsToRelatedTermIndexSettings;
 };
 
 export function createPodcastSettings(): PodcastSettings {
     return {
-        relatedTermIndexSettings: createSemanticIndexSettings(),
+        relatedTermIndexSettings: {
+            embeddingIndexSettings: createTextEmbeddingIndexSettings(),
+        },
     };
 }
 
@@ -126,7 +125,9 @@ export class Podcast implements IConversation<PodcastMessageMeta> {
         public tags: string[] = [],
         public semanticRefs: SemanticRef[] = [],
         public semanticRefIndex: ConversationIndex | undefined = undefined,
-        public relatedTermsIndex: ITermEmbeddingIndex | undefined = undefined,
+        public termToRelatedTermsIndex:
+            | TermToRelatedTermsIndex
+            | undefined = undefined,
         public timestampIndex:
             | ITimestampToTextRangeIndex
             | undefined = undefined,
@@ -210,10 +211,12 @@ export class Podcast implements IConversation<PodcastMessageMeta> {
             batch: collections.Slice<string>,
         ) => boolean,
     ): Promise<void> {
-        if (this.settings.relatedTermIndexSettings && this.semanticRefIndex) {
-            const allTerms = this.semanticRefIndex?.getTerms();
-            this.relatedTermsIndex = await buildTermEmbeddingIndex(
+        if (this.semanticRefIndex) {
+            this.termToRelatedTermsIndex = new TermToRelatedTermsIndex(
                 this.settings.relatedTermIndexSettings,
+            );
+            const allTerms = this.semanticRefIndex?.getTerms();
+            await this.termToRelatedTermsIndex.buildEmbeddingsIndex(
                 allTerms,
                 batchSize,
                 progressCallback,
@@ -232,7 +235,7 @@ export class Podcast implements IConversation<PodcastMessageMeta> {
             tags: this.tags,
             semanticRefs: this.semanticRefs,
             semanticIndexData: this.semanticRefIndex?.serialize(),
-            relatedTermIndexData: this.relatedTermsIndex?.serialize(),
+            relatedTermsIndexData: this.termToRelatedTermsIndex?.serialize(),
         };
     }
 
@@ -242,10 +245,12 @@ export class Podcast implements IConversation<PodcastMessageMeta> {
                 data.semanticIndexData,
             );
         }
-        if (data.relatedTermIndexData) {
-            this.relatedTermsIndex = new TermEmbeddingIndex(
+        if (data.relatedTermsIndexData) {
+            this.termToRelatedTermsIndex = new TermToRelatedTermsIndex(
                 this.settings.relatedTermIndexSettings,
-                data.relatedTermIndexData,
+            );
+            this.termToRelatedTermsIndex.deserialize(
+                data.relatedTermsIndexData,
             );
         }
         this.buildPropertyIndex();
@@ -253,9 +258,7 @@ export class Podcast implements IConversation<PodcastMessageMeta> {
     }
 }
 
-export interface PodcastData extends IConversationData<PodcastMessage> {
-    relatedTermIndexData?: ITextEmbeddingData | undefined;
-}
+export interface PodcastData extends IConversationData<PodcastMessage> {}
 
 export async function importPodcast(
     transcriptFilePath: string,

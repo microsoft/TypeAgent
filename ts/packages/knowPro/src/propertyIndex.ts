@@ -9,6 +9,17 @@ import {
 } from "./dataFormat.js";
 import { conversation } from "knowledge-processor";
 
+export enum PropertyNames {
+    EntityName = "name",
+    EntityType = "type",
+    FacetName = "facet.name",
+    FacetValue = "facet.value",
+    Verb = "verb",
+    Subject = "subject",
+    Object = "object",
+    IndirectObject = "indirectObject",
+}
+
 function addFacet(
     facet: conversation.Facet | undefined,
     propertyIndex: IPropertyToSemanticRefIndex,
@@ -16,13 +27,13 @@ function addFacet(
 ) {
     if (facet !== undefined) {
         propertyIndex.addProperty(
-            "entity.facet.name",
+            PropertyNames.FacetName,
             facet.name,
             semanticRefIndex,
         );
         if (facet.value !== undefined) {
             propertyIndex.addProperty(
-                "entity.facet",
+                PropertyNames.FacetValue,
                 conversation.knowledgeValueToString(facet.value),
                 semanticRefIndex,
             );
@@ -35,9 +46,17 @@ export function addEntityPropertiesToIndex(
     propertyIndex: IPropertyToSemanticRefIndex,
     semanticRefIndex: SemanticRefIndex,
 ) {
-    propertyIndex.addProperty("entity.name", entity.name, semanticRefIndex);
+    propertyIndex.addProperty(
+        PropertyNames.EntityName,
+        entity.name,
+        semanticRefIndex,
+    );
     for (const type of entity.type) {
-        propertyIndex.addProperty("entity.type", type, semanticRefIndex);
+        propertyIndex.addProperty(
+            PropertyNames.EntityType,
+            type,
+            semanticRefIndex,
+        );
     }
     // add every facet name as a separate term
     if (entity.facets && entity.facets.length > 0) {
@@ -53,27 +72,27 @@ export function addActionPropertiesToIndex(
     semanticRefIndex: SemanticRefIndex,
 ) {
     propertyIndex.addProperty(
-        "action.verb",
+        PropertyNames.Verb,
         action.verbs.join(" "),
         semanticRefIndex,
     );
     if (action.subjectEntityName !== "none") {
         propertyIndex.addProperty(
-            "action.subject",
+            PropertyNames.Subject,
             action.subjectEntityName,
             semanticRefIndex,
         );
     }
     if (action.objectEntityName !== "none") {
         propertyIndex.addProperty(
-            "action.object",
+            PropertyNames.Object,
             action.objectEntityName,
             semanticRefIndex,
         );
     }
     if (action.indirectObjectEntityName !== "none") {
         propertyIndex.addProperty(
-            "action.indirectObject",
+            PropertyNames.IndirectObject,
             action.indirectObjectEntityName,
             semanticRefIndex,
         );
@@ -131,7 +150,7 @@ export class PropertyIndex implements IPropertyToSemanticRefIndex {
         value: string,
         semanticRefIndex: SemanticRefIndex | ScoredSemanticRef,
     ): void {
-        let term = this.propertyTerm(propertyName, value);
+        let term = this.toPropertyTerm(propertyName, value);
         if (typeof semanticRefIndex === "number") {
             semanticRefIndex = {
                 semanticRefIndex: semanticRefIndex,
@@ -150,7 +169,7 @@ export class PropertyIndex implements IPropertyToSemanticRefIndex {
         propertyName: string,
         value: string,
     ): ScoredSemanticRef[] | undefined {
-        const term = this.propertyTerm(propertyName, value);
+        const term = this.toPropertyTerm(propertyName, value);
         return this.map.get(this.prepareTerm(term)) ?? [];
     }
 
@@ -163,8 +182,8 @@ export class PropertyIndex implements IPropertyToSemanticRefIndex {
     }
 
     PropertyDelimiter = "@@";
-    private propertyTerm(name: string, value: string) {
-        return `${name}${this.PropertyDelimiter}${value}`;
+    private toPropertyTerm(name: string, value: string) {
+        return `prop.${name}${this.PropertyDelimiter}${value}`;
     }
 
     private splitPropertyTerm(term: string): [string, string] {

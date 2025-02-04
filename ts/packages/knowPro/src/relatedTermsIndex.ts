@@ -15,9 +15,121 @@ import {
     Term,
     ITermEmbeddingIndex,
     ITextEmbeddingDataItem,
-    ITextEmbeddingData,
+    ITextEmbeddingIndexData,
+    ITermsToRelatedTermsDataItem,
+    ITermToRelatedTermsData,
+    ITermToRelatedTermsIndex,
+    ITermsToRelatedTermsIndexData,
 } from "./dataFormat.js";
 import { createEmbeddingCache } from "knowledge-processor";
+
+export class TermToRelatedTermsMap {
+    public map: collections.MultiMap<string, Term> = new collections.MultiMap();
+
+    constructor() {}
+
+    public addRelatedTerm(termText: string, relatedTerm: Term | Term[]) {
+        if (Array.isArray(relatedTerm)) {
+            for (const related of relatedTerm) {
+                this.map.addUnique(
+                    termText,
+                    related,
+                    (x, y) => x.text === y.text,
+                );
+            }
+        } else {
+            this.map.addUnique(
+                termText,
+                relatedTerm,
+                (x, y) => x.text === y.text,
+            );
+        }
+    }
+
+    public lookupTerm(term: string): Term[] | undefined {
+        return this.map.get(term);
+    }
+
+    public serialize(): ITermToRelatedTermsData {
+        const relatedTerms: ITermsToRelatedTermsDataItem[] = [];
+        for (const [key, value] of this.map) {
+            relatedTerms.push({ termText: key, relatedTerms: value });
+        }
+        return { relatedTerms };
+    }
+
+    public deserialize(data?: ITermToRelatedTermsData): void {
+        if (data) {
+            if (data.relatedTerms) {
+                for (const dataItem of data.relatedTerms) {
+                    this.map.set(dataItem.termText, dataItem.relatedTerms);
+                }
+            }
+        }
+    }
+}
+
+export type TermsToRelatedTermIndexSettings = {
+    embeddingIndexSettings: TextEmbeddingIndexSettings;
+};
+
+export class TermToRelatedTermsIndex implements ITermToRelatedTermsIndex {
+    public termAliases: TermToRelatedTermsMap;
+    public termEmbeddingsIndex: ITermEmbeddingIndex | undefined;
+
+    constructor(public settings: TermsToRelatedTermIndexSettings) {
+        this.termAliases = new TermToRelatedTermsMap();
+    }
+
+    public lookupTerm(termText: string): Term[] | undefined {
+        return this.termAliases.lookupTerm(termText);
+    }
+
+    public lookupTermsFuzzy(termText: string): Promise<Term[] | undefined> {
+        if (this.termEmbeddingsIndex) {
+            return this.termEmbeddingsIndex.lookupTermsFuzzy(termText);
+        }
+        return Promise.resolve(undefined);
+    }
+
+    public serialize(): ITermsToRelatedTermsIndexData {
+        return {
+            relatedTermsData: this.termAliases.serialize(),
+            textEmbeddingData: this.termEmbeddingsIndex?.serialize(),
+        };
+    }
+
+    public deserialize(data?: ITermsToRelatedTermsIndexData): void {
+        if (data) {
+            if (data.relatedTermsData) {
+                this.termAliases = new TermToRelatedTermsMap();
+                this.termAliases.deserialize(data.relatedTermsData);
+            }
+            if (data.textEmbeddingData) {
+                this.termEmbeddingsIndex = new TermEmbeddingIndex(
+                    this.settings.embeddingIndexSettings,
+                );
+                this.termEmbeddingsIndex.deserialize(data.textEmbeddingData);
+            }
+        }
+    }
+
+    public async buildEmbeddingsIndex(
+        terms: string[],
+        batchSize: number = 8,
+        progressCallback?: (
+            terms: string[],
+            batch: collections.Slice<string>,
+        ) => boolean,
+    ): Promise<void> {
+        this.termEmbeddingsIndex = await buildTermEmbeddingIndex(
+            this.settings.embeddingIndexSettings,
+            terms,
+            batchSize,
+            progressCallback,
+        );
+    }
+}
 
 export async function buildTermEmbeddingIndex(
     settings: TextEmbeddingIndexSettings,
@@ -44,7 +156,7 @@ export class TermEmbeddingIndex implements ITermEmbeddingIndex {
 
     constructor(
         public settings: TextEmbeddingIndexSettings,
-        data?: ITextEmbeddingData,
+        data?: ITextEmbeddingIndexData,
     ) {
         this.termText = [];
         this.termEmbeddings = [];
@@ -71,30 +183,30 @@ export class TermEmbeddingIndex implements ITermEmbeddingIndex {
         }
     }
 
-    public async lookupTerm(term: string): Promise<Term[] | undefined> {
+    public async lookupTermsFuzzy(
+        term: string,
+        maxMatches?: number,
+        minScore?: number,
+    ): Promise<Term[] | undefined> {
         const termEmbedding = await generateEmbedding(
             this.settings.embeddingModel,
             term,
         );
-        if (
-            this.settings.maxMatches !== undefined &&
-            this.settings.maxMatches > 0
-        ) {
+        maxMatches ??= this.settings.maxMatches;
+        minScore ??= this.settings.minScore;
+        if (maxMatches && maxMatches > 0) {
             const matches = indexesOfNearest(
                 this.termEmbeddings,
                 termEmbedding,
-                this.settings.maxMatches,
+                maxMatches,
                 SimilarityType.Dot,
-                this.settings.minScore,
+                minScore,
             );
             return matches.map((m) => {
                 return { text: this.termText[m.item], score: m.score };
             });
         } else {
-            return this.indexesOfNearestTerms(
-                termEmbedding,
-                this.settings.minScore,
-            );
+            return this.indexesOfNearestTerms(termEmbedding, minScore);
         }
     }
 
@@ -108,7 +220,7 @@ export class TermEmbeddingIndex implements ITermEmbeddingIndex {
         return false;
     }
 
-    public deserialize(data: ITextEmbeddingData): void {
+    public deserialize(data: ITextEmbeddingIndexData): void {
         if (data.embeddingData !== undefined) {
             for (const item of data.embeddingData) {
                 this.addTermEmbedding(
@@ -119,7 +231,7 @@ export class TermEmbeddingIndex implements ITermEmbeddingIndex {
         }
     }
 
-    public serialize(): ITextEmbeddingData {
+    public serialize(): ITextEmbeddingIndexData {
         const embeddingData: ITextEmbeddingDataItem[] = [];
         for (let i = 0; i < this.termText.length; ++i) {
             embeddingData.push({
@@ -162,7 +274,7 @@ export type TextEmbeddingIndexSettings = {
     retryPauseMs?: number;
 };
 
-export function createSemanticIndexSettings(): TextEmbeddingIndexSettings {
+export function createTextEmbeddingIndexSettings(): TextEmbeddingIndexSettings {
     return {
         embeddingModel: createEmbeddingCache(openai.createEmbeddingModel(), 64),
         minScore: 0.8,

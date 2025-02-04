@@ -135,7 +135,7 @@ export function createGraph<TNode, TEdge, TNodeId = number>(
             toValue: GraphEdge<TEdge, TNodeId>,
         ) => boolean,
     ): void {
-        graphEdges.pushUnique(fromNodeId, { toNodeId, value }, comparer);
+        graphEdges.addUnique(fromNodeId, { toNodeId, value }, comparer);
     }
 
     function getEdges(
