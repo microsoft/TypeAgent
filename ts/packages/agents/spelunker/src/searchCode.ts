@@ -351,8 +351,15 @@ async function selectRelevantChunks(
     `;
     // console_log(prompt);
     const result = await retryTranslateOn429(() => selector.translate(prompt));
-    if (!result) return [];
-    else return result.chunks;
+    if (!result) {
+        const chunkSummary = chunks
+            .map((c) => `${path.basename(c.fileName)}:${c.codeName}`)
+            .join(", ");
+        console_log(`  [Failed to select chunks for ${chunkSummary}]`);
+        return [];
+    } else {
+        return result.chunks;
+    }
 }
 
 function prepareChunks(chunks: Chunk[]): string {
@@ -402,7 +409,7 @@ function prepareSummaries(db: sqlite.Database): string {
     const selectAllSummaries = db.prepare(`SELECT * FROM Summaries`);
     const summaryRows: any[] = selectAllSummaries.all();
     if (summaryRows.length > 100) {
-        console_log("Too many summary rows, skipping summaries from prompt");
+        console_log(`  [Over 100 summary rows, skipping summaries in prompt]`);
         return "";
     }
     const lines: string[] = [];
@@ -426,46 +433,48 @@ function createTranslator<T extends object>(
     return translator;
 }
 
-/**
- * Recursively gathers all .py and .ts files under a given directory synchronously.
- *
- * @param dir - The directory to search within.
- * @returns An array of absolute paths to .py files.
- *
- * (First version written by ChatGPT)
- */
-const supportedExtensions = [".py", ".ts"];
-const skipDirectories = ["node_modules", ".git", "dist"];
-function getAllSourceFilesSync(dir: string): string[] {
-    let results: string[] = [];
+export interface FileMtimeSize {
+    file: string;
+    mtime: number;
+    size: number;
+}
+
+// Recursively gather all .py and .ts files under a given directory.
+function getAllSourceFiles(dir: string): FileMtimeSize[] {
+    const supportedExtensions = [".py", ".ts"];
+    const skipDirectories = ["node_modules", ".git", "dist"];
+
+    let results: FileMtimeSize[] = [];
 
     // Resolve the directory to an absolute path
     const absoluteDir = path.isAbsolute(dir) ? dir : path.resolve(dir);
 
     // Read the contents of the directory
-    const list = fs.readdirSync(absoluteDir);
+    const files = fs.readdirSync(absoluteDir);
 
-    list.forEach((file) => {
+    for (const file of files) {
         const filePath = path.join(absoluteDir, file);
-        const stat = fs.statSync(filePath);
+        const lstat = fs.lstatSync(filePath);
+        if (!lstat || lstat.isSymbolicLink()) {
+            // Skip symlinks and files that failed to stat
+            continue;
+        }
 
-        if (
-            stat &&
-            !stat.isSymbolicLink() &&
-            stat.isDirectory() &&
-            !skipDirectories.includes(file)
-        ) {
+        if (lstat.isDirectory() && !skipDirectories.includes(file)) {
             // Recursively search in subdirectories
-            results = results.concat(getAllSourceFilesSync(filePath));
+            results = results.concat(getAllSourceFiles(filePath));
         } else if (
-            stat &&
-            stat.isFile() &&
+            lstat.isFile() &&
             supportedExtensions.includes(path.extname(file))
         ) {
-            // If it's a supported file type, add to the results
-            results.push(filePath);
+            // It's a supported file type, add to the results
+            results.push({
+                file: filePath,
+                mtime: lstat.mtimeMs / 1000,
+                size: lstat.size,
+            });
         }
-    });
+    }
 
     return results;
 }
@@ -526,42 +535,43 @@ async function loadDatabase(
     // 1a. Find all source files in the focus directories (locally, using a recursive walk).
     // TODO: Factor into simpler functions
     console_log(`[Step 1a: Find source files (of supported languages)]`);
-    const files: string[] = []; // TODO: Include mtime and size, since we do a stat anyways
+    const files: FileMtimeSize[] = [];
     for (let i = 0; i < context.focusFolders.length; i++) {
-        files.push(...getAllSourceFilesSync(context.focusFolders[i]));
+        files.push(...getAllSourceFiles(context.focusFolders[i]));
     }
 
     // Compare files found and files in the database.
     const filesToDo: string[] = [];
-    const filesInDb: Map<string, { mtime: number; size: number }> = new Map();
+    const filesInDb: Map<string, FileMtimeSize> = new Map();
     const fileRows: any[] = prepSelectAllFiles.all();
     for (const fileRow of fileRows) {
         filesInDb.set(fileRow.fileName, {
+            file: fileRow.fileName,
             mtime: fileRow.mtime,
             size: fileRow.size,
         });
     }
     for (const file of files) {
-        // TODO: Error handling
-        const stat = fs.statSync(file);
-        const dbStat = filesInDb.get(file);
+        const dbStat = filesInDb.get(file.file);
         if (
             !dbStat ||
-            dbStat.mtime !== stat.mtimeMs * 0.001 ||
-            dbStat.size !== stat.size
+            dbStat.mtime !== file.mtime ||
+            dbStat.size !== file.size
         ) {
             // console_log(`  [Need to update ${file} (mtime/size mismatch)]`);
-            filesToDo.push(file);
+            filesToDo.push(file.file);
             // TODO: Make this insert part of the transaction for this file
-            prepInsertFiles.run(file, stat.mtimeMs * 0.001, stat.size);
-            filesInDb.set(file, {
-                mtime: stat.mtimeMs * 0.001,
-                size: stat.size,
+            prepInsertFiles.run(file.file, file.mtime, file.size);
+            filesInDb.set(file.file, {
+                file: file.file,
+                mtime: file.mtime,
+                size: file.size,
             });
         }
     }
+    const filesSet: Set<string> = new Set(files.map((file) => file.file));
     const filesToDelete: string[] = [...filesInDb.keys()].filter(
-        (file) => !files.includes(file),
+        (file) => !filesSet.has(file),
     );
     if (filesToDelete.length) {
         console_log(`  [Deleting ${filesToDelete.length} files from database]`);
@@ -753,7 +763,13 @@ async function summarizeChunkSlice(
     const result = await retryTranslateOn429(() =>
         summarizer.translate(prompt),
     );
-    if (!result) return;
+    if (!result) {
+        const chunkSummary = chunks
+            .map((c) => `${path.basename(c.fileName)}:${c.codeName}`)
+            .join(", ");
+        console_log(`  [Failed to summarize chunks for ${chunkSummary}]`);
+        return;
+    }
 
     const summarizeSpecs = result;
     // console_log(`  [Received ${result.summaries.length} summaries]`);
@@ -785,7 +801,7 @@ async function summarizeChunkSlice(
 async function retryTranslateOn429<T>(
     translate: () => Promise<Result<T>>,
     retries: number = 3,
-    delay: number = 5000,
+    defaultDelay: number = 5000,
 ): Promise<T | undefined> {
     let wrappedResult: Result<T>;
     do {
@@ -797,9 +813,18 @@ async function retryTranslateOn429<T>(
                 retries > 0 &&
                 wrappedResult.message.includes("fetch error: 429:")
             ) {
-                console_log(
-                    `  [Retry translating on 429 error: sleep ${delay} ms]`,
+                let delay = defaultDelay;
+                const msec = wrappedResult.message.match(
+                    /after (\d+) milliseconds/,
                 );
+                if (msec) {
+                    delay = parseInt(msec[1]) ?? defaultDelay;
+                } else {
+                    console_log(
+                        `  [Couldn't find msec in '${wrappedResult.message}'`,
+                    );
+                }
+                console_log(`  [Retry on 429 error: sleep ${delay} ms]`);
                 await new Promise((resolve) => setTimeout(resolve, delay));
                 continue;
             }
