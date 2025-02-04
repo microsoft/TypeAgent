@@ -212,6 +212,9 @@ export class MessageContainer {
         this.div = div;
 
         this.updateSource();
+
+        // Don't show initialize without any messages.
+        this.hide();
     }
 
     public getMessage() {

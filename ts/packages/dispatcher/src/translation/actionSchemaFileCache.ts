@@ -31,7 +31,7 @@ function hashStrings(...str: string[]) {
     return hash.digest("base64");
 }
 
-const ActionSchemaFileCacheVersion = 1;
+const ActionSchemaFileCacheVersion = 2;
 type ActionSchemaFileCacheJSON = {
     version: number;
     entries: [string, ActionSchemaFileJSON][];
