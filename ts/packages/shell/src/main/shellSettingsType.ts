@@ -39,5 +39,5 @@ export const defaultSettings: ShellSettingsType = {
     partialCompletion: true,
     disallowedDisplayType: [],
     darkMode: false,
-    chatHistory: true
+    chatHistory: true,
 };

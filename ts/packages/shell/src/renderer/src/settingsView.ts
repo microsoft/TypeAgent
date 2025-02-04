@@ -302,9 +302,13 @@ export class SettingsView {
             this._shellSettings.darkMode ? "Light mode" : "Dark mode",
         );
 
-        this.saveChatHistoryCheckBox = this.addCheckbox("Save Chat History", () => {
-            this._shellSettings.chatHistory = this.saveChatHistoryCheckBox.checked;
-        });        
+        this.saveChatHistoryCheckBox = this.addCheckbox(
+            "Save Chat History",
+            () => {
+                this._shellSettings.chatHistory =
+                    this.saveChatHistoryCheckBox.checked;
+            },
+        );
     }
 
     getContainer() {

@@ -60,7 +60,10 @@ process.argv.forEach((arg) => {
 });
 
 export function runningTests(): boolean {
-    return process.env["INSTANCE_NAME"] !== undefined && process.env["INSTANCE_NAME"].startsWith("test_") === true;
+    return (
+        process.env["INSTANCE_NAME"] !== undefined &&
+        process.env["INSTANCE_NAME"].startsWith("test_") === true
+    );
 }
 
 let mainWindow: BrowserWindow | null = null;
@@ -619,11 +622,20 @@ async function initialize() {
         ShellSettings.getinstance().onSettingsChanged!();
 
         // Load chat history if enabled
-        const chatHistory: string = path.join(getInstanceDir(), "chat_history.html")
-        if (ShellSettings.getinstance().chatHistory && existsSync(chatHistory)) {
+        const chatHistory: string = path.join(
+            getInstanceDir(),
+            "chat_history.html",
+        );
+        if (
+            ShellSettings.getinstance().chatHistory &&
+            existsSync(chatHistory)
+        ) {
             chatView?.webContents.send(
                 "chat-history",
-                readFileSync(path.join(getInstanceDir(), "chat_history.html"), "utf-8"),
+                readFileSync(
+                    path.join(getInstanceDir(), "chat_history.html"),
+                    "utf-8",
+                ),
             );
         }
 
@@ -640,19 +652,16 @@ async function initialize() {
         // send the agent greeting if it's turned on
         if (ShellSettings.getinstance().agentGreeting) {
             dispatcher.processCommand("@greeting", "agent-0", []);
-        }        
+        }
     });
 
     // Store the chat history whenever the DOM changes
     // this let's us rehydrate the chat when reopening the shell
-    ipcMain.on("dom changed", async(_event, html) => {
+    ipcMain.on("dom changed", async (_event, html) => {
         // store the modified DOM contents
         const file: string = path.join(getInstanceDir(), "chat_history.html");
 
-        debugShell(
-            `Saving chat history to '${file}'.`,
-            performance.now(),
-        );
+        debugShell(`Saving chat history to '${file}'.`, performance.now());
 
         try {
             writeFileSync(file, html);
@@ -660,7 +669,7 @@ async function initialize() {
             debugShell(
                 `Unable to save history to '${file}'. Error: ${e}`,
                 performance.now(),
-            );  
+            );
         }
     });
 
@@ -710,8 +719,7 @@ async function initialize() {
     // On windows, we will spin up a local end point that listens
     // for pen events which will trigger speech reco
     // Don't spin this up during testing
-    if (
-        process.platform == "win32" && !runningTests()) {
+    if (process.platform == "win32" && !runningTests()) {
         const pipePath = path.join("\\\\.\\pipe\\TypeAgent", "speech");
         const server = net.createServer((stream) => {
             stream.on("data", (c) => {

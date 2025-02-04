@@ -276,20 +276,28 @@ function addEvents(
 
             // add the separator
             if (history.length > 0) {
-
                 // don't add a separator if there's already one there
-                if (!chatView.getScollContainer().children[0].classList.contains("chat-separator")) {
-                    let separator: HTMLDivElement = document.createElement("div");
+                if (
+                    !chatView
+                        .getScollContainer()
+                        .children[0].classList.contains("chat-separator")
+                ) {
+                    let separator: HTMLDivElement =
+                        document.createElement("div");
                     separator.classList.add("chat-separator");
-                    separator.innerHTML = "<div class=\"chat-separator-line\"></div><div class=\"chat-separator-text\">previously</div><div class=\"chat-separator-line\"></div>"
-    
+                    separator.innerHTML =
+                        '<div class="chat-separator-line"></div><div class="chat-separator-text">previously</div><div class="chat-separator-line"></div>';
+
                     chatView.getScollContainer().prepend(separator);
                 }
 
                 // make all old messages "inactive" and set the context for each separator
                 let lastSeparatorText: HTMLDivElement | null;
-                for(let i = 0; i < chatView.getScollContainer().children.length; i++) {
-
+                for (
+                    let i = 0;
+                    i < chatView.getScollContainer().children.length;
+                    i++
+                ) {
                     // gray out this item
                     const div = chatView.getScollContainer().children[i];
                     div.classList.add("history");
@@ -297,17 +305,22 @@ function addEvents(
                     // is this a separator?
                     const separator = div.querySelector(".chat-separator-text");
                     if (separator != null) {
-                        lastSeparatorText = div.querySelector(".chat-separator-text");
+                        lastSeparatorText = div.querySelector(
+                            ".chat-separator-text",
+                        );
                     }
 
                     // get the timestamp for this chat bubble (if applicable)
-                    const span: HTMLSpanElement | null = div.querySelector(".timestring");
+                    const span: HTMLSpanElement | null =
+                        div.querySelector(".timestring");
 
                     if (span !== null) {
-                        const timeStamp: Date = new Date(span.attributes["data"].value);
-                        lastSeparatorText!.innerText = getDateDifferenceDescription(new Date(), timeStamp);
+                        const timeStamp: Date = new Date(
+                            span.attributes["data"].value,
+                        );
+                        lastSeparatorText!.innerText =
+                            getDateDifferenceDescription(new Date(), timeStamp);
                     }
-
                 }
             }
         }
@@ -476,8 +489,7 @@ document.addEventListener("DOMContentLoaded", async function () {
 });
 
 function watchForDOMChanges(element: HTMLDivElement) {
-
-    // ignore attribute changes but wach for 
+    // ignore attribute changes but wach for
     const config = { attributes: false, childList: true, subtree: true };
 
     // timeout
@@ -485,16 +497,18 @@ function watchForDOMChanges(element: HTMLDivElement) {
 
     // observer callback
     const observer = new MutationObserver(() => {
-
         // increment the idle counter
         idleCounter++;
 
         // decrement the idle counter
         setTimeout(() => {
             if (--idleCounter == 0) {
-                // last one notifies main process 
+                // last one notifies main process
                 if ((window as any).electron) {
-                    (window as any).electron.ipcRenderer.send("dom changed", element.innerHTML);
+                    (window as any).electron.ipcRenderer.send(
+                        "dom changed",
+                        element.innerHTML,
+                    );
                 }
             }
         }, 3000);
@@ -503,7 +517,7 @@ function watchForDOMChanges(element: HTMLDivElement) {
     // start observing
     observer.observe(element!, config);
 
-    // observer.disconnect();    
+    // observer.disconnect();
 }
 
 function getDateDifferenceDescription(date1: Date, date2: Date): string {
@@ -516,11 +530,11 @@ function getDateDifferenceDescription(date1: Date, date2: Date): string {
     const diffYears = Math.floor(diff / (1000 * 60 * 60 * 24 * 365));
 
     if (diffMinutes < 1) {
-        return "just now"
+        return "just now";
     } else if (diffMinutes < 15) {
         return "a few minutes ago";
     } else if (diffMinutes < 60) {
-        return "under an hour ago"    
+        return "under an hour ago";
     } else if (diffHours < 2) {
         return "an hour ago";
     } else if (diffDays < 1) {
@@ -528,7 +542,7 @@ function getDateDifferenceDescription(date1: Date, date2: Date): string {
     } else if (diffDays < 2) {
         return "yesterday";
     } else if (diffDays < 7) {
-        return date1.toLocaleDateString('en-US', { weekday: 'long' });
+        return date1.toLocaleDateString("en-US", { weekday: "long" });
     } else if (diffWeeks < 2) {
         return "last week";
     } else if (diffMonths < 2) {
@@ -536,6 +550,6 @@ function getDateDifferenceDescription(date1: Date, date2: Date): string {
     } else if (diffYears < 2) {
         return "last year";
     } else {
-        return date1.toLocaleDateString('en-US', { weekday: 'long' });
+        return date1.toLocaleDateString("en-US", { weekday: "long" });
     }
 }
