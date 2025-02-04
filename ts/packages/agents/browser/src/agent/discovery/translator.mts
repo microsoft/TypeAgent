@@ -85,12 +85,6 @@ function getScreenshotPromptSection(
       screenshotSection.push({
         type: "text",
         text: `Here is the text content of the page
-
-    if (fragments) {
-      const textFragments = fragments.map((a) => a.text);
-      screenshotSection.push({
-        type: "text",
-        text: `Here is the text content of the page
             '''
             ${textFragments}
             '''            
