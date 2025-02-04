@@ -249,7 +249,8 @@ export async function createKnowproCommands(
             const matches = await kp.searchConversation(
                 conversation,
                 terms,
-                filterFromArgs(namedArgs, commandDef),
+                recordFromArgs(namedArgs, commandDef),
+                filterFromArgs(namedArgs),
             );
             if (matches === undefined || matches.size === 0) {
                 context.printer.writeLine("No matches");
@@ -267,10 +268,9 @@ export async function createKnowproCommands(
         }
     }
 
-    function filterFromArgs(namedArgs: NamedArgs, metadata: CommandMetadata) {
+    function filterFromArgs(namedArgs: NamedArgs) {
         let filter: kp.SearchFilter = {
             type: namedArgs.ktype,
-            propertiesToMatch: recordFromArgs(namedArgs, metadata),
         };
         return filter;
     }
@@ -396,8 +396,8 @@ export async function createKnowproCommands(
     }
 }
 
-export function parseQueryTerms(args: string[]): kp.QueryTerm[] {
-    const queryTerms: kp.QueryTerm[] = [];
+export function parseQueryTerms(args: string[]): kp.SearchTerm[] {
+    const queryTerms: kp.SearchTerm[] = [];
     for (const arg of args) {
         let allTermStrings = knowLib.split(arg, ";", {
             trim: true,
@@ -405,7 +405,7 @@ export function parseQueryTerms(args: string[]): kp.QueryTerm[] {
         });
         if (allTermStrings.length > 0) {
             allTermStrings = allTermStrings.map((t) => t.toLowerCase());
-            const queryTerm: kp.QueryTerm = {
+            const queryTerm: kp.SearchTerm = {
                 term: { text: allTermStrings[0] },
             };
             if (allTermStrings.length > 0) {

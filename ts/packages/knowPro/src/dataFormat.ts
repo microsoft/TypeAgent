@@ -43,24 +43,37 @@ export interface ITermToSemanticRefIndex {
     getTerms(): string[];
     addTerm(
         term: string,
-        semanticRefIndex: SemanticRefIndex,
-        strength?: number,
+        semanticRefIndex: SemanticRefIndex | ScoredSemanticRef,
     ): void;
     removeTerm(term: string, semanticRefIndex: SemanticRefIndex): void;
     lookupTerm(term: string): ScoredSemanticRef[] | undefined;
 }
 
+export interface IPropertyToSemanticRefIndex {
+    getValues(): string[];
+    addProperty(
+        propertyName: string,
+        value: string,
+        semanticRefIndex: SemanticRefIndex | ScoredSemanticRef,
+    ): void;
+    lookupProperty(
+        propertyName: string,
+        value: string,
+    ): ScoredSemanticRef[] | undefined;
+}
+
 export type KnowledgeType = "entity" | "action" | "topic" | "tag";
+export type Knowledge =
+    | conversation.ConcreteEntity
+    | conversation.Action
+    | ITopic
+    | ITag;
 
 export interface SemanticRef {
     semanticRefIndex: SemanticRefIndex;
     range: TextRange;
     knowledgeType: KnowledgeType;
-    knowledge:
-        | conversation.ConcreteEntity
-        | conversation.Action
-        | ITopic
-        | ITag;
+    knowledge: Knowledge;
 }
 
 export interface ITopic {
@@ -73,9 +86,10 @@ export interface IConversation<TMeta extends IKnowledgeSource = any> {
     nameTag: string;
     tags: string[];
     messages: IMessage<TMeta>[];
-    semanticRefIndex?: ITermToSemanticRefIndex | undefined;
     semanticRefs: SemanticRef[] | undefined;
-    relatedTermsIndex?: ITermToRelatedTermsIndex | undefined;
+    semanticRefIndex?: ITermToSemanticRefIndex | undefined;
+    propertyToSemanticRefIndex: IPropertyToSemanticRefIndex | undefined;
+    termToRelatedTermsIndex?: ITermToRelatedTermsIndex | undefined;
     timestampIndex?: ITimestampToTextRangeIndex | undefined;
 }
 
@@ -104,6 +118,7 @@ export interface IConversationData<TMessage> {
     tags: string[];
     semanticRefs: SemanticRef[];
     semanticIndexData?: ITermToSemanticRefIndexData | undefined;
+    relatedTermsIndexData?: ITermsToRelatedTermsIndexData | undefined;
 }
 
 export type Term = {
@@ -114,24 +129,39 @@ export type Term = {
     score?: number | undefined;
 };
 
-export type QueryTerm = {
-    term: Term;
-    /**
-     * These can be supplied from fuzzy synonym tables and so on
-     */
-    relatedTerms?: Term[] | undefined;
-};
-
 export interface ITermToRelatedTermsIndex {
-    lookupTerm(term: string): Promise<Term[] | undefined>;
+    lookupTerm(termText: string): Term[] | undefined;
+    lookupTermFuzzy(termText: string): Promise<Term[] | undefined>;
+    serialize(): ITermsToRelatedTermsIndexData;
+    deserialize(data?: ITermsToRelatedTermsIndexData): void;
 }
 
-export interface ITextSemanticIndex {
-    serialize(): ITextEmbeddingData;
-    deserialize(data: ITextEmbeddingData): void;
+export interface ITermsToRelatedTermsIndexData {
+    relatedTermsData?: ITermToRelatedTermsData | undefined;
+    textEmbeddingData?: ITextEmbeddingIndexData | undefined;
 }
 
-export interface ITextEmbeddingData {
+export interface ITermToRelatedTermsData {
+    relatedTerms?: ITermsToRelatedTermsDataItem[] | undefined;
+}
+
+export interface ITermsToRelatedTermsDataItem {
+    termText: string;
+    relatedTerms: Term[];
+}
+
+export interface ITermEmbeddingIndex {
+    lookupTermsFuzzy(
+        term: string,
+        maxMatches?: number,
+        minScore?: number,
+    ): Promise<Term[] | undefined>;
+    serialize(): ITextEmbeddingIndexData;
+    deserialize(data: ITextEmbeddingIndexData): void;
+}
+
+export interface ITextEmbeddingIndexData {
+    modelName?: string | undefined;
     embeddingData?: ITextEmbeddingDataItem[] | undefined;
 }
 
