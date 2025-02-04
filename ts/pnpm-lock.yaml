@@ -148,6 +148,58 @@ importers:
         specifier: ^5.4.2
         version: 5.4.3
 
+  examples/docuProc:
+    dependencies:
+      aiclient:
+        specifier: workspace:*
+        version: link:../../packages/aiclient
+      chalk:
+        specifier: ^5.3.0
+        version: 5.3.0
+      code-processor:
+        specifier: workspace:*
+        version: link:../../packages/codeProcessor
+      dotenv:
+        specifier: ^16.3.1
+        version: 16.3.1
+      fast-xml-parser:
+        specifier: 4.5.1
+        version: 4.5.1
+      interactive-app:
+        specifier: workspace:*
+        version: link:../../packages/interactiveApp
+      knowledge-processor:
+        specifier: workspace:*
+        version: link:../../packages/knowledgeProcessor
+      memory-providers:
+        specifier: workspace:*
+        version: link:../memoryProviders
+      pdf-parse:
+        specifier: 1.1.1
+        version: 1.1.1
+      typeagent:
+        specifier: workspace:*
+        version: link:../../packages/typeagent
+      typechat:
+        specifier: ^0.1.1
+        version: 0.1.1(typescript@5.4.3)(zod@3.23.8)
+      typescript:
+        specifier: ^5.4.2
+        version: 5.4.3
+    devDependencies:
+      '@types/node':
+        specifier: ^18.18.7
+        version: 18.18.7
+      '@types/pdf-parse':
+        specifier: ^1.1.4
+        version: 1.1.4
+      copyfiles:
+        specifier: ^2.4.1
+        version: 2.4.1
+      rimraf:
+        specifier: ^5.0.5
+        version: 5.0.5
+
   examples/memoryProviders:
     dependencies:
       '@elastic/elasticsearch':
@@ -4293,6 +4345,9 @@ packages:
   '@types/node@20.8.9':
     resolution: {integrity: sha512-UzykFsT3FhHb1h7yD4CA4YhBHq545JC0YnEz41xkipN88eKQtL6rSgocL5tbAP6Ola9Izm/Aw4Ora8He4x0BHg==}
 
+  '@types/pdf-parse@1.1.4':
+    resolution: {integrity: sha512-+gbBHbNCVGGYw1S9lAIIvrHW47UYOhMIFUsJcMkMrzy1Jf0vulBN3XQIjPgnoOXveMuHnF3b57fXROnY/Or7eg==}
+
   '@types/plist@3.0.5':
     resolution: {integrity: sha512-E6OCaRmAe4WDmWNsL/9RMqdkkzDCY1etutkflWk4c+AcjDU07Pcz1fQwTX0TQz+Pxqn9i4L1TU3UFpjnrcDgxA==}
 
@@ -5471,6 +5526,14 @@ packages:
       supports-color:
         optional: true
 
+  debug@3.2.7:
+    resolution: {integrity: sha512-CFjzYYAi4ThfiQvizrFQevTTXHtnCqWfe7x1AhgEscTz6ZbLbfoLRLPugTQyBth6f8ZERVUSyWHFD/7Wu4t1XQ==}
+    peerDependencies:
+      supports-color: '*'
+    peerDependenciesMeta:
+      supports-color:
+        optional: true
+
   debug@4.4.0:
     resolution: {integrity: sha512-6WTZ/IxCY/T6BALoZHaE4ctp9xm+Z5kY/pzYaCHRFeyVhojxlrm+46y68HA6hr0TcwEssoxNiDEUJQjfPZ/RYA==}
     engines: {node: '>=6.0'}
@@ -5976,8 +6039,8 @@ packages:
     resolution: {integrity: sha512-xkjOecfnKGkSsOwtZ5Pz7Us/T6mrbPQrq0nh+aCO5V9nk5NLWmasAHumTKjiPJPWANe+kAZ84Jc8ooJkzZ88Sw==}
     hasBin: true
 
-  fast-xml-parser@4.5.0:
-    resolution: {integrity: sha512-/PlTQCI96+fZMAOLMZK4CWG1ItCbfZ/0jx7UIJFChPNrx7tcEgerUgWbeieCM9MfHInUDyK8DWYZ+YrywDJuTg==}
+  fast-xml-parser@4.5.1:
+    resolution: {integrity: sha512-y655CeyUQ+jj7KBbYMc4FG01V8ZQqjN+gDYGJ50RtfsUB8iG9AmwmwoAgeKLJdmueKKMrH1RJ7yXHTSoczdv5w==}
     hasBin: true
 
   fastest-levenshtein@1.0.16:
@@ -7432,6 +7495,9 @@ packages:
   node-cleanup@2.1.2:
     resolution: {integrity: sha512-qN8v/s2PAJwGUtr1/hYTpNKlD6Y9rc4p8KSmJXyGdYGZsDGKXrGThikLFP9OCHFeLeEpQzPwiAtdIvBLqm//Hw==}
 
+  node-ensure@0.0.0:
+    resolution: {integrity: sha512-DRI60hzo2oKN1ma0ckc6nQWlHU69RH6xN0sjQTjMpChPfTYvKZdcQFfdYK2RWbJcKyUizSIy/l8OTGxMAM1QDw==}
+
   node-fetch@2.7.0:
     resolution: {integrity: sha512-c4FRfUm/dbcWZ7U+1Wq0AwCyFL+3nt2bEw05wfxSz+DWpWsitgmSgYmy2dQdWyKC1694ELPqMs/YzUSNozLt8A==}
     engines: {node: 4.x || >=6.0.0}
@@ -7771,6 +7837,10 @@ packages:
   pbkdf2@3.1.2:
     resolution: {integrity: sha512-iuh7L6jA7JEGu2WxDwtQP1ddOpaJNC4KlDEFfdQajSGgGPNi4OyDc2R7QnbY2bR9QjBVGwgvTdNJZoE7RaxUMA==}
     engines: {node: '>=0.12'}
+
+  pdf-parse@1.1.1:
+    resolution: {integrity: sha512-v6ZJ/efsBpGrGGknjtq9J/oC8tZWq0KWL5vQrk2GlzLEQPUDB1ex+13Rmidl1neNN358Jn9EHZw5y07FFtaC7A==}
+    engines: {node: '>=6.8.1'}
 
   peberminta@0.9.0:
     resolution: {integrity: sha512-XIxfHpEuSJbITd1H3EeQwpcZbTLHc+VVr8ANI9t5sit565tsI4/xK3KWTUFE2e6QiangUkh3B0jihzmGnNrRsQ==}
@@ -9883,7 +9953,7 @@ snapshots:
 
   '@azure/core-xml@1.4.4':
     dependencies:
-      fast-xml-parser: 4.5.0
+      fast-xml-parser: 4.5.1
       tslib: 2.6.2
 
   '@azure/identity-cache-persistence@1.1.1':
@@ -11953,6 +12023,8 @@ snapshots:
     dependencies:
       undici-types: 5.26.5
 
+  '@types/pdf-parse@1.1.4': {}
+
   '@types/plist@3.0.5':
     dependencies:
       '@types/node': 18.18.7
@@ -13486,6 +13558,10 @@ snapshots:
     dependencies:
       ms: 2.0.0
 
+  debug@3.2.7:
+    dependencies:
+      ms: 2.1.3
+
   debug@4.4.0(supports-color@8.1.1):
     dependencies:
       ms: 2.1.3
@@ -14090,7 +14166,7 @@ snapshots:
     dependencies:
       strnum: 1.0.5
 
-  fast-xml-parser@4.5.0:
+  fast-xml-parser@4.5.1:
     dependencies:
       strnum: 1.0.5
 
@@ -15850,6 +15926,8 @@ snapshots:
 
   node-cleanup@2.1.2: {}
 
+  node-ensure@0.0.0: {}
+
   node-fetch@2.7.0:
     dependencies:
       whatwg-url: 5.0.0
@@ -16145,6 +16223,13 @@ snapshots:
       ripemd160: 2.0.2
       safe-buffer: 5.2.1
       sha.js: 2.4.11
+
+  pdf-parse@1.1.1:
+    dependencies:
+      debug: 3.2.7
+      node-ensure: 0.0.0
+    transitivePeerDependencies:
+      - supports-color
 
   peberminta@0.9.0: {}
 
