@@ -74,12 +74,14 @@ export async function resolveRelatedTerms(
     relatedTermsIndex: ITermToRelatedTermsIndex,
     searchTerms: SearchTerm[],
 ): Promise<void> {
-    // Resolve any hardcoded mappings
     for (const searchTerm of searchTerms) {
         const termText = searchTerm.term.text;
+        // Resolve any specific term to related term mappings
         if (!searchTerm.relatedTerms || searchTerm.relatedTerms.length === 0) {
             searchTerm.relatedTerms = relatedTermsIndex.lookupTerm(termText);
         }
+        // If no hard-coded mappings, lookup any fuzzy related terms
+        // Future: do this in batch
         if (!searchTerm.relatedTerms || searchTerm.relatedTerms.length === 0) {
             searchTerm.relatedTerms =
                 await relatedTermsIndex.lookupTermFuzzy(termText);

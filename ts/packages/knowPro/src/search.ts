@@ -185,9 +185,9 @@ class SearchQueryBuilder {
     }
 
     private async prepareSearchTerms(searchTerms: SearchTerm[]): Promise<void> {
-        if (this.conversation.relatedTermsIndex) {
+        if (this.conversation.termToRelatedTermsIndex) {
             await resolveRelatedTerms(
-                this.conversation.relatedTermsIndex,
+                this.conversation.termToRelatedTermsIndex,
                 searchTerms,
             );
         }

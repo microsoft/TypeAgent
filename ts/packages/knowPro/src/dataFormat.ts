@@ -89,7 +89,7 @@ export interface IConversation<TMeta extends IKnowledgeSource = any> {
     semanticRefs: SemanticRef[] | undefined;
     semanticRefIndex?: ITermToSemanticRefIndex | undefined;
     propertyToSemanticRefIndex: IPropertyToSemanticRefIndex | undefined;
-    relatedTermsIndex?: ITermToRelatedTermsIndex | undefined;
+    termToRelatedTermsIndex?: ITermToRelatedTermsIndex | undefined;
     timestampIndex?: ITimestampToTextRangeIndex | undefined;
 }
 
