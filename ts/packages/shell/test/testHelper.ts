@@ -4,6 +4,7 @@
 import {
     _electron as electron,
     ElectronApplication,
+    expect,
     Locator,
     Page,
 } from "@playwright/test";
@@ -20,7 +21,9 @@ const runningApplications: Map<string, ElectronApplication> = new Map<
 /**
  * Starts the electron app and returns the main page after the greeting agent message has been posted.
  */
-export async function startShell(): Promise<Page> {
+export async function startShell(
+    waitForAgentGreeting: boolean = true,
+): Promise<Page> {
     // this is needed to isolate these tests session from other concurrently running tests
     process.env["INSTANCE_NAME"] =
         `test_${process.env["TEST_WORKER_INDEX"]}_${process.env["TEST_PARALLEL_INDEX"]}`;
@@ -56,12 +59,14 @@ export async function startShell(): Promise<Page> {
             const mainWindow: Page = await getMainWindow(app);
 
             // wait for agent greeting
-            await waitForAgentMessage(mainWindow, 30000, 1);
+            if (waitForAgentGreeting) {
+                await waitForAgentMessage(mainWindow, 30000, 1, true, ["..."]);
+            }
 
             return mainWindow;
         } catch (e) {
             console.warn(
-                `Unable to start electron application (${process.env["INSTANCE_NAME"]}). Attempt ${retryAttempt} of ${maxRetries}. Error: ${e}`,
+                `Unable to start electrom application (${process.env["INSTANCE_NAME"]}). Attempt ${retryAttempt} of ${maxRetries}. Error: ${e}`,
             );
             retryAttempt++;
 
@@ -172,13 +177,18 @@ export async function sendUserRequest(prompt: string, page: Page) {
  */
 export async function sendUserRequestFast(prompt: string, page: Page) {
     const locator: Locator = page.locator("#phraseDiv");
-    await locator.waitFor({ timeout: 120000, state: "visible" });
-    await locator.fill(prompt, { timeout: 30000 });
+    await locator.waitFor({ timeout: 5000, state: "visible" });
+    await locator.fill(prompt, { timeout: 5000 });
     page.keyboard.down("Enter");
 }
 
 /**
- * Submits a user request to the system via the chat input box and then waits for the agent's response
+ * Submits a user request to the system via the chat input box and then waits for the first available response
+ * NOTE: If your expected response changes or you invoke multi-action flow you should be calling
+ *   sendUserRequestAndAwaitSpecificResponse() instead of this call
+ *
+ * Remarks: Use this method when calling @commands...agent calls should use aforementioned function.
+ *
  * @param prompt The user request/prompt.
  * @param page The main page from the electron host application.
  */
@@ -187,7 +197,7 @@ export async function sendUserRequestAndWaitForResponse(
     page: Page,
 ): Promise<string> {
     const locators: Locator[] = await page
-        .locator(".chat-message-agent-text")
+        .locator(".chat-message-agent .chat-message-content")
         .all();
 
     // send the user request
@@ -197,19 +207,80 @@ export async function sendUserRequestAndWaitForResponse(
     await waitForAgentMessage(page, 30000, locators.length + 1);
 
     // return the response
-    return await getLastAgentMessage(page);
+    return await getLastAgentMessageText(page);
+}
+
+/**
+ * Submits a user request and awaits for completion of the response.
+ *
+ * Remarks: Call this function when expecting an agent action response.
+ *
+ * @param prompt The user request/prompt.
+ * @param page The page hosting the user shell
+ */
+export async function sendUserRequestAndWaitForCompletion(
+    prompt: string,
+    page: Page,
+): Promise<string> {
+    // TODO: implement
+    const locators: Locator[] = await page
+        .locator(".chat-message-agent .chat-message-content")
+        .all();
+
+    // send the user request
+    await sendUserRequest(prompt, page);
+
+    // wait for agent response
+    await waitForAgentMessage(page, 30000, locators.length + 1, true);
+
+    // return the response
+    return await getLastAgentMessageText(page);
 }
 
 /**
  * Gets the last agent message from the chat view
  * @param page The main page from the electron host application.
  */
-export async function getLastAgentMessage(page: Page): Promise<string> {
+export async function getLastAgentMessageText(page: Page): Promise<string> {
     const locators: Locator[] = await page
-        .locator(".chat-message-agent-text")
+        .locator(".chat-message-agent .chat-message-content")
         .all();
 
-    return locators[0].innerText();
+    return await locators[0].innerText();
+}
+
+/**
+ * Gets the last agent message from the chat view
+ * @param page The maing page from the electron host application.
+ */
+export async function getLastAgentMessage(page: Page): Promise<Locator> {
+    const locators: Locator[] = await page
+        .locator(".chat-message-container-agent")
+        .all();
+
+    return locators[0];
+}
+
+/**
+ * Determines if the supplied agent message/action has been completed
+ *
+ * @param msg The agent message to check for completion
+ */
+export async function isMessageCompleted(msg: Locator): Promise<boolean> {
+    // Agent message is complete once the metrics have been reported
+    try {
+        const details: Locator = await msg.locator(".metrics-details", {
+            hasText: "Total",
+        });
+
+        if ((await details.count()) > 0) {
+            return true;
+        }
+    } catch (e) {
+        // not found
+    }
+
+    return false;
 }
 
 /**
@@ -217,36 +288,59 @@ export async function getLastAgentMessage(page: Page): Promise<string> {
  * @param page The page where the chatview is hosted
  * @param timeout The maximum amount of time to wait for the agent message
  * @param expectedMessageCount The expected # of agent messages at this time.
- * @returns When the expected # of messages is reached or the timeout is reached.  Whichever occurs first.
+ * @param waitForMessageCompletion A flag indicating if we should block util the message is completed.
+ * @param ignore A list of messges that this method will consider noise and will reject as false positivies
+ *          i.e. [".."] and this method will ignore agent messages that are "..." and will continue waiting.
+ *          This is useful when an agent sends status messages.
+ *
+ * @returns When the expected # of messages is reached or the timeout is reached.  Whichever occurrs first.
  */
 export async function waitForAgentMessage(
     page: Page,
     timeout: number,
-    expectedMessageCount?: number | undefined,
+    expectedMessageCount: number,
+    waitForMessageCompletion: boolean = false,
+    ignore: string[] = [],
 ): Promise<void> {
     let timeWaited = 0;
     let locators: Locator[] = await page
-        .locator(".chat-message-agent-text")
+        .locator(".chat-message-container-agent")
         .all();
     let originalAgentMessageCount = locators.length;
     let messageCount = originalAgentMessageCount;
 
-    if (expectedMessageCount == messageCount) {
-        return;
-    }
-
     do {
+        if (
+            expectedMessageCount == messageCount &&
+            (!waitForMessageCompletion ||
+                (await isMessageCompleted(await getLastAgentMessage(page))))
+        ) {
+            return;
+        }
+
         await page.waitForTimeout(1000);
         timeWaited += 1000;
 
-        locators = await page.locator(".chat-message-agent-text").all();
+        locators = await page.locator(".chat-message-container-agent").all();
         messageCount = locators.length;
+
+        // is this message ignorable?
+        if (locators.length > 0) {
+            const lastMessage = await getLastAgentMessageText(page);
+            if (ignore.indexOf(lastMessage) > -1) {
+                console.log(`Ignore agent message '${lastMessage}'`);
+                messageCount = originalAgentMessageCount;
+            }
+        }
     } while (
         timeWaited <= timeout &&
         messageCount == originalAgentMessageCount
     );
 }
 
+/**
+ * Deletes test profiles from agent storage
+ */
 export function deleteTestProfiles() {
     const profileDir = path.join(os.homedir(), ".typeagent", "profiles");
 
@@ -262,4 +356,55 @@ export function deleteTestProfiles() {
             }
         });
     }
+}
+
+export type TestCallback = () => void;
+
+/**
+ * Encapsulates the supplied method within a startup and shutdown of teh
+ * shell.  Test code executes between them.
+ */
+export async function runTestCalback(callback: TestCallback): Promise<void> {
+    // launch the app
+    const mainWindow: Page = await startShell();
+
+    // run the supplied function
+    callback();
+
+    // close the application
+    await exitApplication(mainWindow);
+}
+
+/**
+ * Encapsulates the supplied method within a startup and shutdown of teh
+ * shell.  Test code executes between them.
+ */
+export async function testUserRequest(
+    userRequests: string[],
+    expectedResponses: string[],
+): Promise<void> {
+    if (userRequests.length != expectedResponses.length) {
+        throw new Error("Request/Response count mismatch!");
+    }
+
+    // launch the app
+    const mainWindow: Page = await startShell();
+
+    // issue the supplied requests and check their responses
+    for (let i = 0; i < userRequests.length; i++) {
+        const msg = await sendUserRequestAndWaitForCompletion(
+            userRequests[i],
+            mainWindow,
+            1,
+        );
+
+        // verify expected result
+        expect(
+            msg,
+            `Chat agent didn't respond with the expected message. Request: '${userRequests[i]}', Response: '${expectedResponses[i]}'`,
+        ).toBe(expectedResponses[i]);
+    }
+
+    // close the application
+    await exitApplication(mainWindow);
 }

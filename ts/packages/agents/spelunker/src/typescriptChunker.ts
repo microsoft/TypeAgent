@@ -192,6 +192,19 @@ function makeBlobs(
     const lineStarts = sourceFile.getLineStarts(); // TODO: Move to caller?
     let startLoc = sourceFile.getLineAndCharacterOfPosition(startPos);
     const endLoc = sourceFile.getLineAndCharacterOfPosition(endPos);
+    if (startLoc.character) {
+        // Adjust start: if in the middle of a line, move to start of next line.
+        // This is still a heuristic that will fail e.g. with `; function ...`.
+        // But we don't want to support that; a more likely scenario is:
+        // ```
+        // type A = ...; // comment
+        // function ...
+        // ```
+        // Here getFullStart() points to the start of the comment on A,
+        // but we must start at the function.
+        startPos = lineStarts[startLoc.line + 1];
+        startLoc = sourceFile.getLineAndCharacterOfPosition(startPos);
+    }
     // console.log(
     //     `Start and end: ${startPos}=${startLoc.line + 1}:${startLoc.character}, ` +
     //         `${endPos}=${endLoc.line + 1}:${endLoc.character}`,

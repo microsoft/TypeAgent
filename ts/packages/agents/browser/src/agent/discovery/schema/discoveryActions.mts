@@ -7,9 +7,6 @@ export type FindPageComponents = {
 
 export type FindUserActions = {
   actionName: "findUserActions";
-  parameters: {
-    allowDuplicates?: boolean;
-  };
 };
 
 export type SummarizePage = {

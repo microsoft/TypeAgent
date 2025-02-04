@@ -46,6 +46,7 @@ export class HTMLReducer {
         "nocontent",
         "noscript",
         "template",
+        "img",
     ];
 
     mediaElementSelectors: string[] = [
@@ -68,6 +69,10 @@ export class HTMLReducer {
         "clickid",
         "fetchpriority",
         "srcset",
+        "aria-busy",
+        "aria-haspopup",
+        "aria-autocomplete",
+        "href",
     ];
 
     attribsToReplace: Set<string> = new Set(["href", "src"]);
