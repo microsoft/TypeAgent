@@ -94,6 +94,7 @@ export class SettingsView {
         return this._shellSettings;
     }
     private devUICheckBox: HTMLInputElement;
+    private saveChatHistoryCheckBox: HTMLInputElement;
 
     public set shellSettings(value: ShellSettingsType) {
         this._shellSettings = value;
@@ -102,6 +103,7 @@ export class SettingsView {
         this.intellisenseCheckBox.checked = value.partialCompletion;
         this.agentGreetingCheckBox.checked = value.agentGreeting;
         this.devUICheckBox.checked = !value.devUI;
+        this.saveChatHistoryCheckBox.checked = value.chatHistory;
         this.updateFromSettings();
     }
 
@@ -298,6 +300,14 @@ export class SettingsView {
                 this.updateFromSettings();
             },
             this._shellSettings.darkMode ? "Light mode" : "Dark mode",
+        );
+
+        this.saveChatHistoryCheckBox = this.addCheckbox(
+            "Save Chat History",
+            () => {
+                this._shellSettings.chatHistory =
+                    this.saveChatHistoryCheckBox.checked;
+            },
         );
     }
 

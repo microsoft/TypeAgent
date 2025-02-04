@@ -552,6 +552,9 @@ export class ChatView {
     getMessageElm() {
         return this.topDiv;
     }
+    getScollContainer() {
+        return this.messageDiv;
+    }
 
     async showInputText(message: string) {
         const input = this.inputContainer.querySelector(

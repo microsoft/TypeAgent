@@ -232,29 +232,12 @@ export class TypeAgentServer {
             const debounceCount: number =
                 this.fileWriteDebouncer.get(fileName)!!;
             if (debounceCount == 0) {
-                // blob storage specific starts here
-                /*
-                const blobServiceClient = new BlobServiceClient(
-                    this.accountURL,
-                    new DefaultAzureCredential(),
-                );
-
-                const containerClient: ContainerClient =
-                    blobServiceClient.getContainerClient(this.containerName!!);
-
-                let blobName = fileName.replace(getUserDataDir(), "");
-
-                // Create blob client from container client
-                const blockBlobClient: BlockBlobClient =
-                    containerClient.getBlockBlobClient(blobName!!);
-                */
-
                 try {
                     const localPath: string = path.join(
                         getUserDataDir(),
                         fileName,
                     );
-                    // await blockBlobClient.uploadFile(localPath);
+
                     if (!this.storageProvider) {
                         console.log(
                             `Failed to upload ${fileName} to provider, no storage provider found`,
@@ -262,7 +245,6 @@ export class TypeAgentServer {
                         return;
                     }
                     await this.storageProvider.uploadFile(localPath, fileName);
-                    // console.log(`Done uploading ${fileName} to ${blobName}`);
                 } catch (e) {
                     console.log(e);
                 }
