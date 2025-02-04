@@ -11,8 +11,8 @@ import test, {
 import {
     exitApplication,
     getAppPath,
+    sendUserRequestAndWaitForCompletion,
     getLaunchArgs,
-    sendUserRequestAndWaitForResponse,
     startShell,
 } from "./testHelper";
 import { fileURLToPath } from "node:url";
@@ -31,13 +31,13 @@ test("startShell", { tag: "@smoke" }, async ({}) => {
     await startShell();
 });
 
-test.skip("why is the sky blue?", { tag: "@smoke" }, async ({}, testInfo) => {
+test("why is the sky blue?", { tag: "@smoke" }, async ({}, testInfo) => {
     console.log(`Running test '${testInfo.title}`);
 
     // launch the app
     const mainWindow: Page = await startShell();
 
-    const msg = await sendUserRequestAndWaitForResponse(
+    const msg = await sendUserRequestAndWaitForCompletion(
         `why is the sky blue?`,
         mainWindow,
     );
@@ -45,7 +45,7 @@ test.skip("why is the sky blue?", { tag: "@smoke" }, async ({}, testInfo) => {
     expect(
         msg.toLowerCase(),
         "Chat agent didn't respond with the expected message.",
-    ).toContain("raleigh scattering.");
+    ).toContain("scattering");
 
     // close the application
     await exitApplication(mainWindow);
