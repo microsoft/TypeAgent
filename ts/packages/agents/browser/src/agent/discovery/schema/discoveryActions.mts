@@ -9,6 +9,10 @@ export type FindUserActions = {
   actionName: "findUserActions";
 };
 
+export type GetPageType = {
+  actionName: "getPageType";
+};
+
 export type SummarizePage = {
   actionName: "summarizePage";
 };
@@ -33,6 +37,7 @@ export type AddUserAction = {
 export type SchemaDiscoveryActions =
   | FindPageComponents
   | FindUserActions
+  | GetPageType
   | SummarizePage
   | SaveUserActions
   | AddUserAction;
