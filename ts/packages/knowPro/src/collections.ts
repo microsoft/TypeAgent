@@ -182,7 +182,10 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
 
     public addSearchTermMatch(
         searchTerm: Term,
-        semanticRefs: ScoredSemanticRef[] | undefined,
+        semanticRefs:
+            | ScoredSemanticRef[]
+            | IterableIterator<ScoredSemanticRef>
+            | undefined,
         scoreBoost?: number,
     ) {
         if (semanticRefs) {
@@ -197,7 +200,10 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
     public addRelatedTermMatch(
         searchTerm: Term,
         relatedTerm: Term,
-        semanticRefs: ScoredSemanticRef[] | undefined,
+        semanticRefs:
+            | ScoredSemanticRef[]
+            | IterableIterator<ScoredSemanticRef>
+            | undefined,
         scoreBoost?: number,
     ) {
         if (semanticRefs) {

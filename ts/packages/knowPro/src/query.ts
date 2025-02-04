@@ -8,6 +8,7 @@ import {
     IPropertyToSemanticRefIndex,
     ITermToSemanticRefIndex,
     KnowledgeType,
+    ScoredSemanticRef,
     SemanticRef,
     SemanticRefIndex,
     Term,
@@ -148,16 +149,19 @@ export function textRangeForMessage(
     };
 }
 
-export function lookupSearchTermInIndex(
+export function lookupSearchTermInSemanticRefIndex(
     semanticRefIndex: ITermToSemanticRefIndex,
     searchTerm: SearchTerm,
+    predicate?: (scoredRef: ScoredSemanticRef) => boolean,
     matchAccumulator?: SemanticRefAccumulator,
 ): SemanticRefAccumulator {
     matchAccumulator ??= new SemanticRefAccumulator();
     // Lookup search term
     matchAccumulator.addSearchTermMatch(
         searchTerm.term,
-        semanticRefIndex.lookupTerm(searchTerm.term.text),
+        predicate
+            ? lookupAndFilter(semanticRefIndex, searchTerm.term.text, predicate)
+            : semanticRefIndex.lookupTerm(searchTerm.term.text),
     );
     // And any related terms
     if (searchTerm.relatedTerms && searchTerm.relatedTerms.length > 0) {
@@ -167,12 +171,33 @@ export function lookupSearchTermInIndex(
             matchAccumulator.addRelatedTermMatch(
                 searchTerm.term,
                 relatedTerm,
-                semanticRefIndex.lookupTerm(relatedTerm.text),
+                predicate
+                    ? lookupAndFilter(
+                          semanticRefIndex,
+                          relatedTerm.text,
+                          predicate,
+                      )
+                    : semanticRefIndex.lookupTerm(relatedTerm.text),
                 relatedTerm.score,
             );
         }
     }
     return matchAccumulator;
+
+    function* lookupAndFilter(
+        semanticRefIndex: ITermToSemanticRefIndex,
+        text: string,
+        predicate: (scoredRef: ScoredSemanticRef) => boolean,
+    ) {
+        const scoredRefs = semanticRefIndex.lookupTerm(text);
+        if (scoredRefs) {
+            for (const scoredRef of scoredRefs) {
+                if (predicate(scoredRef)) {
+                    yield scoredRef;
+                }
+            }
+        }
+    }
 }
 
 export function lookupSearchTermInPropertyIndex(
@@ -277,6 +302,14 @@ export class QueryEvalContext {
         }
     }
 
+    public get semanticRefIndex() {
+        return this.conversation.semanticRefIndex!;
+    }
+
+    public get propertyIndex() {
+        return this.conversation.propertyToSemanticRefIndex;
+    }
+
     public getSemanticRef(semanticRefIndex: SemanticRefIndex): SemanticRef {
         return this.conversation.semanticRefs![semanticRefIndex];
     }
@@ -338,23 +371,17 @@ export class MatchSearchTermExpr extends QueryOpExpr<SemanticRefAccumulator> {
     }
 
     public override eval(context: QueryEvalContext): SemanticRefAccumulator {
-        const matchAccumulator = new SemanticRefAccumulator();
-        const semanticRefIndex = context.conversation.semanticRefIndex;
-        if (semanticRefIndex) {
-            lookupSearchTermInIndex(
-                semanticRefIndex,
-                this.searchTerm,
-                matchAccumulator,
-            );
-        }
-        return matchAccumulator;
+        return lookupSearchTermInSemanticRefIndex(
+            context.semanticRefIndex,
+            this.searchTerm,
+        );
     }
 }
 
 export class MatchQualifiedSearchTermExpr extends QueryOpExpr<
     SemanticRefAccumulator | undefined
 > {
-    constructor(public searchTerm: QualifiedSearchTerm) {
+    constructor(public qualifiedSearchTerm: QualifiedSearchTerm) {
         super();
     }
 
@@ -365,23 +392,45 @@ export class MatchQualifiedSearchTermExpr extends QueryOpExpr<
             return undefined;
         }
         let matches: SemanticRefAccumulator | undefined;
-        if (this.searchTerm.type === "property") {
-            matches = this.matchProperty(context, this.searchTerm);
+        if (this.qualifiedSearchTerm.type === "property") {
+            matches = this.matchProperty(context, this.qualifiedSearchTerm);
         } else {
-            matches = this.matchFacet(context, this.searchTerm);
+            matches = this.matchFacet(context, this.qualifiedSearchTerm);
         }
         return matches;
     }
 
     private matchProperty(
         context: QueryEvalContext,
-        searchTerm: PropertySearchTerm,
+        propertySearchTerm: PropertySearchTerm,
     ): SemanticRefAccumulator | undefined {
-        const propertyIndex = context.conversation.propertyToSemanticRefIndex!;
-        return lookupSearchTermInPropertyIndex(
-            propertyIndex,
-            searchTerm.propertyName,
+        if (propertySearchTerm.propertyName === "tag") {
+            return this.matchTag(context, propertySearchTerm);
+        }
+        const propertyIndex = context.propertyIndex;
+        if (propertyIndex) {
+            return lookupSearchTermInPropertyIndex(
+                propertyIndex,
+                propertySearchTerm.propertyName,
+                propertySearchTerm.propertyValue,
+            );
+        }
+        return undefined;
+    }
+
+    private matchTag(
+        context: QueryEvalContext,
+        searchTerm: PropertySearchTerm,
+    ) {
+        return lookupSearchTermInSemanticRefIndex(
+            context.semanticRefIndex,
             searchTerm.propertyValue,
+            (scoredRef) => {
+                return (
+                    context.getSemanticRef(scoredRef.semanticRefIndex)
+                        .knowledgeType === "tag"
+                );
+            },
         );
     }
 
@@ -389,28 +438,31 @@ export class MatchQualifiedSearchTermExpr extends QueryOpExpr<
         context: QueryEvalContext,
         facetSearchTerm: FacetSearchTerm,
     ): SemanticRefAccumulator | undefined {
-        const propertyIndex = context.conversation.propertyToSemanticRefIndex!;
-        let facetMatches = lookupSearchTermInPropertyIndex(
-            propertyIndex,
-            PropertyNames.FacetName,
-            facetSearchTerm.facetName,
-        );
-        if (
-            facetMatches.size > 0 &&
-            facetSearchTerm.facetValue &&
-            !isSearchTermWildcard(facetSearchTerm.facetValue)
-        ) {
-            let valueMatches = lookupSearchTermInPropertyIndex(
+        const propertyIndex = context.propertyIndex;
+        if (propertyIndex) {
+            let facetMatches = lookupSearchTermInPropertyIndex(
                 propertyIndex,
-                PropertyNames.FacetValue,
-                facetSearchTerm.facetValue,
+                PropertyNames.FacetName,
+                facetSearchTerm.facetName,
             );
-            if (valueMatches.size > 0) {
-                facetMatches = facetMatches.intersect(valueMatches);
+            if (
+                facetMatches.size > 0 &&
+                facetSearchTerm.facetValue &&
+                !isSearchTermWildcard(facetSearchTerm.facetValue)
+            ) {
+                let valueMatches = lookupSearchTermInPropertyIndex(
+                    propertyIndex,
+                    PropertyNames.FacetValue,
+                    facetSearchTerm.facetValue,
+                );
+                if (valueMatches.size > 0) {
+                    facetMatches = facetMatches.intersect(valueMatches);
+                }
             }
-        }
 
-        return facetMatches;
+            return facetMatches;
+        }
+        return undefined;
     }
 }
 

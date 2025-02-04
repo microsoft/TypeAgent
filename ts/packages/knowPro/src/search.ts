@@ -9,7 +9,6 @@ import {
     ScoredSemanticRef,
     Term,
 } from "./dataFormat.js";
-import { PropertyNames } from "./propertyIndex.js";
 import * as q from "./query.js";
 import { resolveRelatedTerms } from "./relatedTermsIndex.js";
 
@@ -32,30 +31,26 @@ export function createSearchTerm(text: string, score?: number): SearchTerm {
 
 export type QualifiedSearchTerm = PropertySearchTerm | FacetSearchTerm;
 
-export type KnowledgePropertyNames =
+export type KnowledgePropertyName =
     | "name"
     | "type"
     | "verb"
     | "subject"
     | "object"
-    | "indirectObject";
+    | "indirectObject"
+    | "tag";
 
-export interface PropertySearchTerm {
+export type PropertySearchTerm = {
     type: "property";
-    propertyName: KnowledgePropertyNames;
+    propertyName: KnowledgePropertyName;
     propertyValue: SearchTerm;
-}
+};
 
-export interface FacetSearchTerm {
+export type FacetSearchTerm = {
     type: "facet";
     facetName: SearchTerm;
     facetValue: SearchTerm;
-}
-
-export interface TagSearchTerm {
-    type: "tag";
-    tagValue: SearchTerm;
-}
+};
 
 export type SearchResult = {
     termMatches: Set<string>;
@@ -157,31 +152,9 @@ class SearchQueryBuilder {
         for (const propertyName of Object.keys(properties)) {
             const propertyValue = properties[propertyName];
             let matchExpr: q.MatchQualifiedSearchTermExpr | undefined;
-            let qualifiedTerm: QualifiedSearchTerm | undefined;
-            switch (propertyName) {
-                default:
-                    qualifiedTerm = {
-                        type: "facet",
-                        facetName: createSearchTerm(propertyName),
-                        facetValue: createSearchTerm(propertyValue),
-                    };
-                    this.allSearchTerms.push(qualifiedTerm.facetName);
-                    this.allSearchTerms.push(qualifiedTerm.facetValue);
-                    break;
-                case PropertyNames.EntityName:
-                case PropertyNames.EntityType:
-                case PropertyNames.Verb:
-                case PropertyNames.Subject:
-                case PropertyNames.Object:
-                case PropertyNames.IndirectObject:
-                    qualifiedTerm = {
-                        type: "property",
-                        propertyName: propertyName as KnowledgePropertyNames,
-                        propertyValue: createSearchTerm(propertyValue),
-                    };
-                    this.allSearchTerms.push(qualifiedTerm.propertyValue);
-                    break;
-            }
+            const [qualifiedTerm, searchTermsCreated] =
+                qualifiedSearchTermFromKeyValue(propertyName, propertyValue);
+            this.allSearchTerms.push(...searchTermsCreated);
             matchExpr = new q.MatchQualifiedSearchTermExpr(qualifiedTerm);
             matchExpressions.push(matchExpr);
         }
@@ -229,6 +202,40 @@ class SearchQueryBuilder {
     private prepareTerm(term: Term) {
         term.text = term.text.toLowerCase();
     }
+}
+
+export function qualifiedSearchTermFromKeyValue(
+    key: string,
+    value: string,
+): [QualifiedSearchTerm, SearchTerm[]] {
+    let qualifiedSearchTerm: QualifiedSearchTerm | undefined;
+    const searchTermsCreated: SearchTerm[] = [];
+    switch (key) {
+        default:
+            qualifiedSearchTerm = {
+                type: "facet",
+                facetName: createSearchTerm(key),
+                facetValue: createSearchTerm(value),
+            };
+            searchTermsCreated.push(qualifiedSearchTerm.facetName);
+            searchTermsCreated.push(qualifiedSearchTerm.facetValue);
+            break;
+        case "name":
+        case "type":
+        case "verb":
+        case "subject":
+        case "object":
+        case "indirectObject":
+        case "tag":
+            qualifiedSearchTerm = {
+                type: "property",
+                propertyName: key as KnowledgePropertyName,
+                propertyValue: createSearchTerm(value),
+            };
+            searchTermsCreated.push(qualifiedSearchTerm.propertyValue);
+            break;
+    }
+    return [qualifiedSearchTerm, searchTermsCreated];
 }
 
 function toGroupedSearchResults(
