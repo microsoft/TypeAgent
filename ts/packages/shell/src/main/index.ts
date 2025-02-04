@@ -678,6 +678,7 @@ async function initialize() {
         ShellSettings.getinstance().partialCompletion =
             settings.partialCompletion;
         ShellSettings.getinstance().darkMode = settings.darkMode;
+        ShellSettings.getinstance().chatHistory = settings.chatHistory;
 
         // write the settings to disk
         ShellSettings.getinstance().save();

@@ -270,8 +270,47 @@ function addEvents(
         settingsView.shellSettings = value;
     });
     api.onChatHistory((_, history: string) => {
-        // TODO: rehydrate these into the UI
-        console.log(history);
+        if (settingsView.shellSettings.chatHistory) {
+            // load the history
+            chatView.getScollContainer().innerHTML = history;
+
+            // add the separator
+            if (history.length > 0) {
+
+                // don't add a separator if there's already one there
+                if (!chatView.getScollContainer().children[0].classList.contains("chat-separator")) {
+                    let separator: HTMLDivElement = document.createElement("div");
+                    separator.classList.add("chat-separator");
+                    separator.innerHTML = "<div class=\"chat-separator-line\"></div><div class=\"chat-separator-text\">previously</div><div class=\"chat-separator-line\"></div>"
+    
+                    chatView.getScollContainer().prepend(separator);
+                }
+
+                // make all old messages "inactive" and set the context for each separator
+                let lastSeparatorText: HTMLDivElement | null;
+                for(let i = 0; i < chatView.getScollContainer().children.length; i++) {
+
+                    // gray out this item
+                    const div = chatView.getScollContainer().children[i];
+                    div.classList.add("history");
+
+                    // is this a separator?
+                    const separator = div.querySelector(".chat-separator-text");
+                    if (separator != null) {
+                        lastSeparatorText = div.querySelector(".chat-separator-text");
+                    }
+
+                    // get the timestamp for this chat bubble (if applicable)
+                    const span: HTMLSpanElement | null = div.querySelector(".timestring");
+
+                    if (span !== null) {
+                        const timeStamp: Date = new Date(span.attributes["data"].value);
+                        lastSeparatorText!.innerText = getDateDifferenceDescription(new Date(), timeStamp);
+                    }
+
+                }
+            }
+        }
     });
 }
 
@@ -465,4 +504,38 @@ function watchForDOMChanges(element: HTMLDivElement) {
     observer.observe(element!, config);
 
     // observer.disconnect();    
+}
+
+function getDateDifferenceDescription(date1: Date, date2: Date): string {
+    const diff = Math.abs(date1.getTime() - date2.getTime());
+    const diffMinutes = Math.floor(diff / (1000 * 60));
+    const diffHours = Math.floor(diff / (1000 * 60 * 60));
+    const diffDays = Math.floor(diff / (1000 * 60 * 60 * 24));
+    const diffWeeks = Math.floor(diff / (1000 * 60 * 60 * 24 * 7));
+    const diffMonths = Math.floor(diff / (1000 * 60 * 60 * 24 * 30));
+    const diffYears = Math.floor(diff / (1000 * 60 * 60 * 24 * 365));
+
+    if (diffMinutes < 1) {
+        return "just now"
+    } else if (diffMinutes < 15) {
+        return "a few minutes ago";
+    } else if (diffMinutes < 60) {
+        return "under an hour ago"    
+    } else if (diffHours < 2) {
+        return "an hour ago";
+    } else if (diffDays < 1) {
+        return "earlier today";
+    } else if (diffDays < 2) {
+        return "yesterday";
+    } else if (diffDays < 7) {
+        return date1.toLocaleDateString('en-US', { weekday: 'long' });
+    } else if (diffWeeks < 2) {
+        return "last week";
+    } else if (diffMonths < 2) {
+        return "last month";
+    } else if (diffYears < 2) {
+        return "last year";
+    } else {
+        return date1.toLocaleDateString('en-US', { weekday: 'long' });
+    }
 }
