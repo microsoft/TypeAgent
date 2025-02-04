@@ -344,24 +344,21 @@ export class SelectTopNExpr<T extends MatchAccumulator> extends QueryOpExpr<T> {
 
 export type QueryTermExpr = MatchSearchTermExpr | MatchQualifiedSearchTermExpr;
 
-export class MatchTermsExpr extends QueryOpExpr<SemanticRefAccumulator> {
+export class GetSearchMatchesExpr extends QueryOpExpr<SemanticRefAccumulator> {
     constructor(public searchTermExpressions: QueryTermExpr[]) {
         super();
     }
 
     public override eval(context: QueryEvalContext): SemanticRefAccumulator {
-        const matchAccumulator: SemanticRefAccumulator =
-            new SemanticRefAccumulator();
-        const index = context.conversation.semanticRefIndex;
-        if (index !== undefined) {
-            for (const matchExpr of this.searchTermExpressions) {
-                const matches = matchExpr.eval(context);
-                if (matches && matches.size > 0) {
-                    matchAccumulator.addUnion(matches);
-                }
+        const allMatches: SemanticRefAccumulator = new SemanticRefAccumulator();
+
+        for (const matchExpr of this.searchTermExpressions) {
+            const termMatches = matchExpr.eval(context);
+            if (termMatches && termMatches.size > 0) {
+                allMatches.addUnion(termMatches);
             }
         }
-        return matchAccumulator;
+        return allMatches;
     }
 }
 

@@ -127,7 +127,7 @@ class SearchQueryBuilder {
             matchTermsExpr.push(...this.compilePropertyTerms(propertyTerms));
         }
         let selectExpr: q.IQueryOpExpr<SemanticRefAccumulator> =
-            new q.MatchTermsExpr(matchTermsExpr);
+            new q.GetSearchMatchesExpr(matchTermsExpr);
         // Always apply "tag match" scope... all text ranges that matched tags.. are in scope
         selectExpr = this.compileScope(selectExpr, filter?.dateRange);
         if (filter !== undefined) {
