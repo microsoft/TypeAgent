@@ -131,7 +131,7 @@ export type Term = {
 
 export interface ITermToRelatedTermsIndex {
     lookupTerm(termText: string): Term[] | undefined;
-    lookupTermsFuzzy(termText: string): Promise<Term[] | undefined>;
+    lookupTermFuzzy(termText: string): Promise<Term[] | undefined>;
     serialize(): ITermsToRelatedTermsIndexData;
     deserialize(data?: ITermsToRelatedTermsIndexData): void;
 }

@@ -293,16 +293,16 @@ export class QueryOpExpr<T = void> implements IQueryOpExpr<T> {
     }
 }
 
-export class SelectTopNExpr<T extends MatchAccumulator>
-    implements IQueryOpExpr<T>
-{
+export class SelectTopNExpr<T extends MatchAccumulator> extends QueryOpExpr<T> {
     constructor(
         public sourceExpr: IQueryOpExpr<T>,
         public maxMatches: number | undefined = undefined,
         public minHitCount: number | undefined = undefined,
-    ) {}
+    ) {
+        super();
+    }
 
-    public eval(context: QueryEvalContext): T {
+    public override eval(context: QueryEvalContext): T {
         const matches = this.sourceExpr.eval(context);
         matches.selectTopNScoring(this.maxMatches, this.minHitCount);
         return matches;
@@ -316,7 +316,7 @@ export class MatchTermsExpr extends QueryOpExpr<SemanticRefAccumulator> {
         super();
     }
 
-    public eval(context: QueryEvalContext): SemanticRefAccumulator {
+    public override eval(context: QueryEvalContext): SemanticRefAccumulator {
         const matchAccumulator: SemanticRefAccumulator =
             new SemanticRefAccumulator();
         const index = context.conversation.semanticRefIndex;
@@ -337,7 +337,7 @@ export class MatchSearchTermExpr extends QueryOpExpr<SemanticRefAccumulator> {
         super();
     }
 
-    public eval(context: QueryEvalContext): SemanticRefAccumulator {
+    public override eval(context: QueryEvalContext): SemanticRefAccumulator {
         const matchAccumulator = new SemanticRefAccumulator();
         const semanticRefIndex = context.conversation.semanticRefIndex;
         if (semanticRefIndex) {
@@ -358,7 +358,9 @@ export class MatchQualifiedSearchTermExpr extends QueryOpExpr<
         super();
     }
 
-    public eval(context: QueryEvalContext): SemanticRefAccumulator | undefined {
+    public override eval(
+        context: QueryEvalContext,
+    ): SemanticRefAccumulator | undefined {
         if (!context.conversation.propertyToSemanticRefIndex) {
             return undefined;
         }
@@ -412,12 +414,14 @@ export class MatchQualifiedSearchTermExpr extends QueryOpExpr<
     }
 }
 
-export class GroupByKnowledgeTypeExpr
-    implements IQueryOpExpr<Map<KnowledgeType, SemanticRefAccumulator>>
-{
-    constructor(public matches: IQueryOpExpr<SemanticRefAccumulator>) {}
+export class GroupByKnowledgeTypeExpr extends QueryOpExpr<
+    Map<KnowledgeType, SemanticRefAccumulator>
+> {
+    constructor(public matches: IQueryOpExpr<SemanticRefAccumulator>) {
+        super();
+    }
 
-    public eval(
+    public override eval(
         context: QueryEvalContext,
     ): Map<KnowledgeType, SemanticRefAccumulator> {
         const semanticRefMatches = this.matches.eval(context);
@@ -427,18 +431,20 @@ export class GroupByKnowledgeTypeExpr
     }
 }
 
-export class SelectTopNKnowledgeGroupExpr
-    implements IQueryOpExpr<Map<KnowledgeType, SemanticRefAccumulator>>
-{
+export class SelectTopNKnowledgeGroupExpr extends QueryOpExpr<
+    Map<KnowledgeType, SemanticRefAccumulator>
+> {
     constructor(
         public sourceExpr: IQueryOpExpr<
             Map<KnowledgeType, SemanticRefAccumulator>
         >,
         public maxMatches: number | undefined = undefined,
         public minHitCount: number | undefined = undefined,
-    ) {}
+    ) {
+        super();
+    }
 
-    public eval(
+    public override eval(
         context: QueryEvalContext,
     ): Map<KnowledgeType, SemanticRefAccumulator> {
         const groupsAccumulators = this.sourceExpr.eval(context);
@@ -449,15 +455,15 @@ export class SelectTopNKnowledgeGroupExpr
     }
 }
 
-export class WhereSemanticRefExpr
-    implements IQueryOpExpr<SemanticRefAccumulator>
-{
+export class WhereSemanticRefExpr extends QueryOpExpr<SemanticRefAccumulator> {
     constructor(
         public sourceExpr: IQueryOpExpr<SemanticRefAccumulator>,
         public predicates: IQuerySemanticRefPredicate[],
-    ) {}
+    ) {
+        super();
+    }
 
-    public eval(context: QueryEvalContext): SemanticRefAccumulator {
+    public override eval(context: QueryEvalContext): SemanticRefAccumulator {
         const accumulator = this.sourceExpr.eval(context);
         const filtered = new SemanticRefAccumulator(
             accumulator.searchTermMatches,
@@ -505,7 +511,7 @@ export class PropertyMatchPredicate implements IQuerySemanticRefPredicate {
     }
 }
 
-export class ScopeExpr implements IQueryOpExpr<SemanticRefAccumulator> {
+export class ScopeExpr extends QueryOpExpr<SemanticRefAccumulator> {
     constructor(
         public sourceExpr: IQueryOpExpr<SemanticRefAccumulator>,
         // Predicates that look at matched semantic refs to determine what is in scope
@@ -513,9 +519,11 @@ export class ScopeExpr implements IQueryOpExpr<SemanticRefAccumulator> {
         public timeScopeExpr:
             | IQueryOpExpr<TimestampedTextRange[]>
             | undefined = undefined,
-    ) {}
+    ) {
+        super();
+    }
 
-    public eval(context: QueryEvalContext): SemanticRefAccumulator {
+    public override eval(context: QueryEvalContext): SemanticRefAccumulator {
         let accumulator = this.sourceExpr.eval(context);
         // Scope => text ranges in scope
         const scope = new TextRangeCollection();
@@ -564,12 +572,12 @@ export class ScopeExpr implements IQueryOpExpr<SemanticRefAccumulator> {
     }
 }
 
-export class TimestampScopeExpr
-    implements IQueryOpExpr<TimestampedTextRange[]>
-{
-    constructor(public dateRange: DateRange) {}
+export class TimestampScopeExpr extends QueryOpExpr<TimestampedTextRange[]> {
+    constructor(public dateRange: DateRange) {
+        super();
+    }
 
-    public eval(context: QueryEvalContext): TimestampedTextRange[] {
+    public override eval(context: QueryEvalContext): TimestampedTextRange[] {
         const index = context.conversation.timestampIndex;
         let ranges: TimestampedTextRange[] | undefined;
         if (index !== undefined) {

@@ -22,6 +22,7 @@ import {
     ITermsToRelatedTermsIndexData,
 } from "./dataFormat.js";
 import { createEmbeddingCache } from "knowledge-processor";
+import { SearchTerm } from "./search.js";
 
 export class TermToRelatedTermsMap {
     public map: collections.MultiMap<string, Term> = new collections.MultiMap();
@@ -69,6 +70,23 @@ export class TermToRelatedTermsMap {
     }
 }
 
+export async function resolveRelatedTerms(
+    relatedTermsIndex: ITermToRelatedTermsIndex,
+    searchTerms: SearchTerm[],
+): Promise<void> {
+    // Resolve any hardcoded mappings
+    for (const searchTerm of searchTerms) {
+        const termText = searchTerm.term.text;
+        if (!searchTerm.relatedTerms || searchTerm.relatedTerms.length === 0) {
+            searchTerm.relatedTerms = relatedTermsIndex.lookupTerm(termText);
+        }
+        if (!searchTerm.relatedTerms || searchTerm.relatedTerms.length === 0) {
+            searchTerm.relatedTerms =
+                await relatedTermsIndex.lookupTermFuzzy(termText);
+        }
+    }
+}
+
 export type TermsToRelatedTermIndexSettings = {
     embeddingIndexSettings: TextEmbeddingIndexSettings;
 };
@@ -85,7 +103,7 @@ export class TermToRelatedTermsIndex implements ITermToRelatedTermsIndex {
         return this.termAliases.lookupTerm(termText);
     }
 
-    public lookupTermsFuzzy(termText: string): Promise<Term[] | undefined> {
+    public lookupTermFuzzy(termText: string): Promise<Term[] | undefined> {
         if (this.termEmbeddingsIndex) {
             return this.termEmbeddingsIndex.lookupTermsFuzzy(termText);
         }

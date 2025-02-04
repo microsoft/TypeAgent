@@ -11,6 +11,7 @@ import {
 } from "./dataFormat.js";
 import { PropertyNames } from "./propertyIndex.js";
 import * as q from "./query.js";
+import { resolveRelatedTerms } from "./relatedTermsIndex.js";
 
 export type SearchTerm = {
     term: Term;
@@ -95,6 +96,8 @@ export async function searchConversation(
 }
 
 class SearchQueryBuilder {
+    private allSearchTerms: SearchTerm[] = [];
+
     constructor(public conversation: IConversation) {}
 
     public compile(
@@ -103,11 +106,10 @@ class SearchQueryBuilder {
         filter?: SearchFilter,
         maxMatches?: number,
     ) {
-        this.prepareTerms(terms, filter);
-
-        let select = this.compileSelect(terms, propertyTerms, filter);
+        let selectExpr = this.compileSelect(terms, propertyTerms, filter);
+        this.prepareSearchTerms(this.allSearchTerms);
         const query = new q.SelectTopNKnowledgeGroupExpr(
-            new q.GroupByKnowledgeTypeExpr(select),
+            new q.GroupByKnowledgeTypeExpr(selectExpr),
             maxMatches,
         );
         return query;
@@ -142,6 +144,7 @@ class SearchQueryBuilder {
         const matchExpressions: q.MatchSearchTermExpr[] = [];
         for (const searchTerm of searchTerms) {
             matchExpressions.push(new q.MatchSearchTermExpr(searchTerm));
+            this.allSearchTerms.push(searchTerm);
         }
         return matchExpressions;
     }
@@ -154,14 +157,16 @@ class SearchQueryBuilder {
         for (const propertyName of Object.keys(properties)) {
             const propertyValue = properties[propertyName];
             let matchExpr: q.MatchQualifiedSearchTermExpr | undefined;
-            let searchTerm: QualifiedSearchTerm | undefined;
+            let qualifiedTerm: QualifiedSearchTerm | undefined;
             switch (propertyName) {
                 default:
-                    searchTerm = {
+                    qualifiedTerm = {
                         type: "facet",
                         facetName: createSearchTerm(propertyName),
                         facetValue: createSearchTerm(propertyValue),
                     };
+                    this.allSearchTerms.push(qualifiedTerm.facetName);
+                    this.allSearchTerms.push(qualifiedTerm.facetValue);
                     break;
                 case PropertyNames.EntityName:
                 case PropertyNames.EntityType:
@@ -169,14 +174,15 @@ class SearchQueryBuilder {
                 case PropertyNames.Subject:
                 case PropertyNames.Object:
                 case PropertyNames.IndirectObject:
-                    searchTerm = {
+                    qualifiedTerm = {
                         type: "property",
                         propertyName: propertyName as KnowledgePropertyNames,
                         propertyValue: createSearchTerm(propertyValue),
                     };
+                    this.allSearchTerms.push(qualifiedTerm.propertyValue);
                     break;
             }
-            matchExpr = new q.MatchQualifiedSearchTermExpr(searchTerm);
+            matchExpr = new q.MatchQualifiedSearchTermExpr(qualifiedTerm);
             matchExpressions.push(matchExpr);
         }
         return matchExpressions;
@@ -205,26 +211,17 @@ class SearchQueryBuilder {
         return predicates;
     }
 
-    private prepareTerms(
-        queryTerms: SearchTerm[],
-        filter?: SearchFilter,
-    ): void {
-        const termText = new Set<string>();
-        termText.add("*");
-        let i = 0;
-        // Prepare terms and remove duplicates
-        while (i < queryTerms.length) {
-            const queryTerm = queryTerms[i];
-            this.prepareTerm(queryTerm.term);
-            if (termText.has(queryTerm.term.text)) {
-                // Duplicate
-                queryTerms.splice(i, 1);
-            } else {
-                if (queryTerm.relatedTerms !== undefined) {
-                    queryTerm.relatedTerms.forEach((t) => this.prepareTerm(t));
-                }
-                termText.add(queryTerm.term.text);
-                ++i;
+    private async prepareSearchTerms(searchTerms: SearchTerm[]): Promise<void> {
+        if (this.conversation.relatedTermsIndex) {
+            await resolveRelatedTerms(
+                this.conversation.relatedTermsIndex,
+                searchTerms,
+            );
+        }
+        for (const searchTerm of searchTerms) {
+            this.prepareTerm(searchTerm.term);
+            if (searchTerm.relatedTerms) {
+                searchTerm.relatedTerms.forEach((st) => this.prepareTerm(st));
             }
         }
     }
