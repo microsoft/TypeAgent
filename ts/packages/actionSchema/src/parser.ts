@@ -506,8 +506,18 @@ class ActionParser {
         };
     }
 
-    private parseTypeUnionType(node: ts.UnionTypeNode): SchemaTypeUnion {
+    private parseTypeUnionType(
+        node: ts.UnionTypeNode,
+    ): SchemaTypeUnion | SchemaTypeStringUnion {
         const types = node.types.map((type) => this.parseType(type));
+        if (types.every((type) => type.type === "string-union")) {
+            return {
+                type: "string-union",
+                typeEnum: types
+                    .map((type) => (type as SchemaTypeStringUnion).typeEnum)
+                    .flat(),
+            };
+        }
         return {
             type: "type-union",
             types,
