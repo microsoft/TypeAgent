@@ -3,12 +3,16 @@
 
 import * as fs from "fs";
 import * as path from "path";
+import { createRequire } from "module";
 
 import Database, * as sqlite from "better-sqlite3";
 
-import { ChatModel, openai } from "aiclient";
-import { createJsonTranslator, TypeChatJsonTranslator } from "typechat";
+import { createJsonTranslator, Result, TypeChatJsonTranslator } from "typechat";
 import { createTypeScriptJsonValidator } from "typechat/ts";
+
+import { ChatModel, openai } from "aiclient";
+import { createLimiter } from "common-utils";
+
 import {
     ActionResult,
     ActionResultSuccess,
@@ -17,13 +21,12 @@ import {
 import { createActionResultFromError } from "@typeagent/agent-sdk/helpers/action";
 import { loadSchema } from "typeagent";
 
+import { Blob, Chunk, ChunkedFile, ChunkerErrorItem } from "./chunkSchema.js";
 import { OracleSpecs } from "./oracleSchema.js";
+import { chunkifyPythonFiles } from "./pythonChunker.js";
 import { ChunkDescription, SelectorSpecs } from "./selectorSchema.js";
 import { SpelunkerContext } from "./spelunkerActionHandler.js";
-import { Blob, Chunk, ChunkedFile, ChunkerErrorItem } from "./chunkSchema.js";
-import { chunkifyPythonFiles } from "./pythonChunker.js";
 import { SummarizerSpecs } from "./summarizerSchema.js";
-import { createRequire } from "module";
 import { chunkifyTypeScriptFiles } from "./typescriptChunker.js";
 
 let epoch: number = 0;
@@ -263,23 +266,22 @@ async function selectChunks(
 ): Promise<ChunkDescription[]> {
     console_log(`  [Starting chunk selection ...]`);
     const promises: Promise<ChunkDescription[]>[] = [];
-    // TODO: Throttle if too many concurrent calls (e.g. > AZURE_OPENAI_MAX_CONCURRENCY)
     const maxConcurrency =
         parseInt(process.env.AZURE_OPENAI_MAX_CONCURRENCY ?? "0") ?? 40;
-    const chunksPerJob =
-        chunks.length / maxConcurrency < 5
-            ? 5
-            : Math.ceil(chunks.length / maxConcurrency);
+    const limiter = createLimiter(maxConcurrency);
+    const chunksPerJob = 30;
     const numJobs = Math.ceil(chunks.length / chunksPerJob);
     console_log(
         `  [maxConcurrency = ${maxConcurrency}, chunksPerJob = ${chunksPerJob}, numJobs = ${numJobs}]`,
     );
     for (let i = 0; i < chunks.length; i += chunksPerJob) {
         const slice = chunks.slice(i, i + chunksPerJob);
-        const p = selectRelevantChunks(
-            context.queryContext!.chunkSelector,
-            slice,
-            input,
+        const p = limiter(() =>
+            selectRelevantChunks(
+                context.queryContext!.chunkSelector,
+                slice,
+                input,
+            ),
         );
         promises.push(p);
     }
@@ -348,14 +350,9 @@ async function selectRelevantChunks(
     ${prepareChunks(chunks)}
     `;
     // console_log(prompt);
-    const wrappedResult = await selector.translate(prompt);
-    // console_log(wrappedResult);
-    if (!wrappedResult.success) {
-        console_log(`[Error selecting chunks: ${wrappedResult.message}]`);
-        return [];
-    }
-    const result = wrappedResult.data;
-    return result.chunks;
+    const result = await retryTranslateOn429(() => selector.translate(prompt));
+    if (!result) return [];
+    else return result.chunks;
 }
 
 function prepareChunks(chunks: Chunk[]): string {
@@ -404,6 +401,10 @@ function prepareSummaries(db: sqlite.Database): string {
     };
     const selectAllSummaries = db.prepare(`SELECT * FROM Summaries`);
     const summaryRows: any[] = selectAllSummaries.all();
+    if (summaryRows.length > 100) {
+        console_log("Too many summary rows, skipping summaries from prompt");
+        return "";
+    }
     const lines: string[] = [];
     for (const summaryRow of summaryRows) {
         const comment = languageCommentMap[summaryRow.language] ?? "#";
@@ -472,8 +473,8 @@ function getAllSourceFilesSync(dir: string): string[] {
 // Should be in actionHelpers.ts
 function createActionResultFromMarkdownDisplay(
     literalText: string,
-    entities: Entity[],
-    resultEntity: Entity,
+    entities: Entity[] = [],
+    resultEntity?: Entity,
 ): ActionResultSuccess {
     return {
         literalText,
@@ -522,7 +523,7 @@ async function loadDatabase(
         `INSERT INTO Blobs (chunkId, start, lines, breadcrumb) VALUES (?, ?, ?, ?)`,
     );
 
-    // 1a. Find all source files in the focus directories (locally, using a subprocess).
+    // 1a. Find all source files in the focus directories (locally, using a recursive walk).
     // TODO: Factor into simpler functions
     console_log(`[Step 1a: Find source files (of supported languages)]`);
     const files: string[] = []; // TODO: Include mtime and size, since we do a stat anyways
@@ -658,18 +659,18 @@ CREATE TABLE IF NOT EXISTS Chunks (
     chunkId TEXT PRIMARY KEY,
     treeName TEXT NOT NULL,
     codeName TEXT NOT NULL,
-    parentId TEXT KEY REFERENCES chunks(chunkId), -- May be null
+    parentId TEXT KEY REFERENCES Chunks(chunkId), -- May be null
     fileName TEXT KEY REFERENCES files(fileName) NOT NULL,
     lineNo INTEGER NOT NULL -- 1-based
 );
 CREATE TABLE IF NOT EXISTS Blobs (
-    chunkId TEXT KEY REFERENCES chunks(chunkId) NOT NULL,
+    chunkId TEXT KEY REFERENCES Chunks(chunkId) NOT NULL,
     start INTEGER NOT NULL, -- 0-based
     lines TEXT NOT NULL,
     breadcrumb BOOLEAN NOT NULL -- Values: 0 or 1
 );
 CREATE TABLE IF NOT EXISTS Summaries (
-    chunkId TEXT PRIMARY KEY REFERENCES chunks(chunkId),
+    chunkId TEXT PRIMARY KEY REFERENCES Chunks(chunkId),
     language TEXT, -- "python", "typescript", etc.
     summary TEXT,
     signature TEXT
@@ -724,15 +725,12 @@ async function summarizeChunks(
     );
     const maxConcurrency =
         parseInt(process.env.AZURE_OPENAI_MAX_CONCURRENCY ?? "0") ?? 40;
-    let chunksPerJob = Math.ceil(chunks.length / maxConcurrency);
-    if (chunksPerJob < 5) {
-        chunksPerJob = 5;
-    }
-    // TODO: Use a semaphore to limit parallelism
+    let chunksPerJob = 30;
+    const limiter = createLimiter(maxConcurrency);
     const promises: Promise<void>[] = [];
     for (let i = 0; i < chunks.length; i += chunksPerJob) {
         const slice = chunks.slice(i, i + chunksPerJob);
-        promises.push(summarizeChunkSlice(context, slice));
+        promises.push(limiter(() => summarizeChunkSlice(context, slice)));
     }
     await Promise.all(promises);
 }
@@ -752,13 +750,12 @@ async function summarizeChunkSlice(
     ${prepareChunks(chunks)}
     `;
     // console_log(prompt);
-    const wrappedResult = await summarizer.translate(prompt);
-    // console_log(wrappedResult);
-    if (!wrappedResult.success) {
-        console_log(`  [Error summarizing chunks: ${wrappedResult.message}]`);
-        return;
-    }
-    const summarizeSpecs = wrappedResult.data;
+    const result = await retryTranslateOn429(() =>
+        summarizer.translate(prompt),
+    );
+    if (!result) return;
+
+    const summarizeSpecs = result;
     // console_log(`  [Received ${result.summaries.length} summaries]`);
     // Enter them into the database
     const db = context.queryContext!.database!;
@@ -776,9 +773,39 @@ async function summarizeChunkSlice(
                 summary.signature,
             );
         } catch (error) {
+            console_log(
+                `*** Db error for INSERT INTO Summaries ${JSON.stringify(summary)}: ${error}`,
+            );
             errors += 1;
-            // console_log(`*** Error for ${JSON.stringify(summary)}: ${error}`);
         }
     }
     if (errors) console_log(`  [${errors} errors]`);
+}
+
+async function retryTranslateOn429<T>(
+    translate: () => Promise<Result<T>>,
+    retries: number = 3,
+    delay: number = 5000,
+): Promise<T | undefined> {
+    let wrappedResult: Result<T>;
+    do {
+        retries--;
+        wrappedResult = await translate();
+        // console_log(wrappedResult);
+        if (!wrappedResult.success) {
+            if (
+                retries > 0 &&
+                wrappedResult.message.includes("fetch error: 429:")
+            ) {
+                console_log(
+                    `  [Retry translating on 429 error: sleep ${delay} ms]`,
+                );
+                await new Promise((resolve) => setTimeout(resolve, delay));
+                continue;
+            }
+            console_log(`  [Error translating: ${wrappedResult.message}]`);
+            return undefined;
+        }
+    } while (!wrappedResult.success);
+    return wrappedResult.data;
 }

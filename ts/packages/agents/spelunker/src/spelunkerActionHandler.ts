@@ -239,7 +239,9 @@ function handleFocus(
     const spelunkerContext: SpelunkerContext = sessionContext.agentContext;
     const words = question.split(/\s+/);
     if (words[0] === ".exit") {
-        return createActionResult(`To exit Spelunker, use '@config request dispatcher'`);
+        return createActionResult(
+            `To exit Spelunker, use '@config request dispatcher'`,
+        );
     }
     if (words[0] === ".") {
         return createActionResult("?"); // Joke for ed users
