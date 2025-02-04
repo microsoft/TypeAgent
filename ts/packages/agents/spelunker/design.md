@@ -27,7 +27,7 @@ Questions about the focused code base are answered roughly as follows:
 
 - Prompt engineering (borrow from John Lam?)
 - Evaluation of selection process (does the model do a good enough job?)
-- Scaling. It takes 60-80 seconds to select from ~5000 chunks.
+- Scaling. It takes 60-80 seconds to select from ~4000 chunks.
 - Do we need a "global index" (of summaries) like John Lam's ask.py?
   How to make that scale?
 

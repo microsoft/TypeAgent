@@ -72,7 +72,7 @@ export async function chunkifyTypeScriptFiles(
             for (const childNode of parentNode.getChildren(sourceFile)) {
                 if (
                     ts.isInterfaceDeclaration(childNode) ||
-                    ts.isTypeAliasDeclaration(childNode) ||
+                    // ts.isTypeAliasDeclaration(childNode) || // These are too small and numerous
                     ts.isFunctionDeclaration(childNode) ||
                     ts.isClassDeclaration(childNode)
                 ) {
