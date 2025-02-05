@@ -483,12 +483,12 @@ async function canExecute(
     return true;
 }
 
-function getStringValues(params: any) {
+function getStringValues(params: unknown) {
     const values: string[] = [];
-    const pending: object[] = [params];
+    const pending: unknown[] = [params];
     while (pending.length > 0) {
         const current = pending.pop()!;
-        if (typeof current === "object") {
+        if (typeof current === "object" && current !== null) {
             for (const value of Object.values(current)) {
                 pending.push(value);
             }
