@@ -71,7 +71,7 @@ export class ChatView {
     chatInput: ChatInput;
     private partialCompletion: PartialCompletion | undefined;
 
-    private commandBackStack: (string | null)[] = [];
+    private commandBackStack: string[] = [];
     private commandBackStackIndex = 0;
 
     private hideMetrics = true;
@@ -109,8 +109,9 @@ export class ChatView {
                 // history
                 if (!ev.altKey && !ev.ctrlKey) {
                     if (ev.key == "ArrowUp" || ev.key == "ArrowDown") {
-                        const currentContent =
-                            this.chatInput.textarea.getTextEntry().textContent;
+                        const currentContent: string =
+                            this.chatInput.textarea.getTextEntry().innerHTML ??
+                            "";
 
                         if (
                             this.commandBackStack.length === 0 ||
@@ -118,16 +119,22 @@ export class ChatView {
                                 this.commandBackStackIndex
                             ] !== currentContent
                         ) {
-                            const messages = this.messageDiv.querySelectorAll(
-                                ".chat-message-user:not(.chat-message-hidden) .chat-message-content",
-                            );
+                            const messages: NodeListOf<Element> =
+                                this.messageDiv.querySelectorAll(
+                                    ".chat-message-container-user:not(.chat-message-hidden) .chat-message-content",
+                                );
                             this.commandBackStack = Array.from(messages).map(
-                                (m) => m.textContent,
+                                (m: Element) =>
+                                    m.firstElementChild?.innerHTML.replace(
+                                        'class="chat-input-image"',
+                                        'class="chat-input-dropImage"',
+                                    ) ?? "",
                             );
 
                             this.commandBackStack.unshift(currentContent);
                             this.commandBackStackIndex = 0;
                         }
+
                         if (
                             ev.key == "ArrowUp" &&
                             this.commandBackStackIndex <
@@ -143,7 +150,8 @@ export class ChatView {
 
                         const content =
                             this.commandBackStack[this.commandBackStackIndex];
-                        this.chatInput.textarea.setContent(content);
+                        this.chatInput.textarea.getTextEntry().innerHTML =
+                            content;
 
                         return false;
                     }
