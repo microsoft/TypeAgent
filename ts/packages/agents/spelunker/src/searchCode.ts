@@ -101,13 +101,13 @@ function createQueryContext(): QueryContext {
 export async function searchCode(
     context: SpelunkerContext,
     input: string,
-    entityUniqueIds: string[],
-    inputEntities: Entity[],
+    paramEntities: Entity[], // From action.parameters.entities: MyEntity[]
+    inputEntities: Entity[], // Passed to executeAction (as Map<string, Entity>)
 ): Promise<ActionResult> {
     epoch = 0; // Reset logging clock
-    console_log(
-        `[searchCode question='${input}', entityUniqueIds=${JSON.stringify(entityUniqueIds)}, entities=${JSON.stringify(inputEntities)}]`,
-    );
+    console_log(`[searchCode question='${input}']`);
+    console.log(`  [paramEntities=${JSON.stringify(paramEntities)}]`);
+    console.log(`  [inputEntities=${JSON.stringify(inputEntities)}]`);
 
     // 0. Check if the focus is set.
     if (!context.focusFolders.length) {
@@ -157,14 +157,16 @@ export async function searchCode(
     }
     console_log(`  [Loaded ${allChunks.length} chunks]`);
 
-    // 3. Ask a fast LLM for the most relevant chunks, rank them, and keep tthe best 30.
+    // 3. Ask a fast LLM for the most relevant chunks, rank them, and keep the best N.
     // This is done concurrently for real-time speed.
     console_log(`[Step 3: Select 30 most relevant chunks]`);
     const chunkDescs: ChunkDescription[] = await selectChunks(
         context,
         allChunks,
         input,
+        paramEntities,
         inputEntities,
+        50,
     );
     if (!chunkDescs.length) {
         throw new Error("No chunks selected");
@@ -239,7 +241,7 @@ export async function searchCode(
     };
     return createActionResultFromMarkdownDisplay(
         answer,
-        entities,
+        paramEntities,
         resultEntity,
     );
 }
@@ -259,7 +261,9 @@ async function selectChunks(
     context: SpelunkerContext,
     chunks: Chunk[],
     input: string,
+    paramEntities: Entity[],
     inputEntities: Entity[],
+    keep: number,
 ): Promise<ChunkDescription[]> {
     console_log(`  [Starting chunk selection ...]`);
     const promises: Promise<ChunkDescription[]>[] = [];
@@ -295,7 +299,7 @@ async function selectChunks(
     // Give valid input entities a relevance boost to 2.0
     let boostCount = 0;
     let newCount = 0;
-    for (const entity of inputEntities) {
+    for (const entity of [...paramEntities, ...inputEntities]) {
         if (entity.type.includes("code") && entity.uniqueId) {
             const chunkDesc = allChunkDescs.find(
                 (c) => c.chunkId === entity.uniqueId,
@@ -322,7 +326,7 @@ async function selectChunks(
     }
     allChunkDescs.sort((a, b) => b.relevance - a.relevance);
     // console_log(`  [${allChunks.map((c) => (c.relevance)).join(", ")}]`);
-    allChunkDescs.splice(30);
+    allChunkDescs.splice(keep);
     console_log(`  [Keeping ${allChunkDescs.length} chunks]`);
     // console_log(`  [${allChunks.map((c) => [c.chunkId, c.relevance])}]`);
     return allChunkDescs;
@@ -738,6 +742,10 @@ export async function summarizeChunks(
     const maxConcurrency =
         parseInt(process.env.AZURE_OPENAI_MAX_CONCURRENCY ?? "0") ?? 40;
     let chunksPerJob = 30;
+    let numJobs = Math.ceil(chunks.length / chunksPerJob);
+    console_log(
+        `  [maxConcurrency = ${maxConcurrency}, chunksPerJob = ${chunksPerJob}, numJobs = ${numJobs}]`,
+    );
     const limiter = createLimiter(maxConcurrency);
     const promises: Promise<void>[] = [];
     for (let i = 0; i < chunks.length; i += chunksPerJob) {
