@@ -2,19 +2,19 @@
 // Licensed under the MIT License.
 
 export type AddToCartAction = {
-  actionName: "addToCartAction";
+  actionName: "AddToCartAction";
   parameters: {
     productName: string;
   };
 };
 
 export type FindNearbyStoreAction = {
-  actionName: "findNearbyStoreAction";
+  actionName: "FindNearbyStoreAction";
 };
 
 // Use this action for user queries such as "where is product X in the store"
 export type GetLocationInStore = {
-  actionName: "getLocationInStore";
+  actionName: "GetLocationInStore";
   parameters: {
     productName: string;
   };
@@ -22,7 +22,7 @@ export type GetLocationInStore = {
 
 // IMPORTANT: Use this action when the user query involves search for products on an e-commerce store, such as "aaa batteries"
 export type SearchForProductAction = {
-  actionName: "searchForProductAction";
+  actionName: "SearchForProductAction";
   parameters: {
     productName: string;
   };
@@ -30,7 +30,7 @@ export type SearchForProductAction = {
 
 // This allows users to select individual results on the search results page.
 export type SelectSearchResult = {
-  actionName: "selectSearchResult";
+  actionName: "SelectSearchResult";
   parameters: {
     position: number;
     productName?: string;
@@ -38,7 +38,7 @@ export type SelectSearchResult = {
 };
 
 export type NavigateToHomePage = {
-  actionName: "navigateToHomePage";
+  actionName: "NavigateToHomePage";
   parameters: {
     linkCssSelector: string;
   };
@@ -46,7 +46,7 @@ export type NavigateToHomePage = {
 
 // Follow a link to view  a store landing page
 export type NavigateToStorePage = {
-  actionName: "navigateToStorePage";
+  actionName: "NavigateToStorePage";
   parameters: {
     linkCssSelector: string;
   };
@@ -54,7 +54,7 @@ export type NavigateToStorePage = {
 
 // Follow a link to view  a product details page
 export type NavigateToProductPage = {
-  actionName: "navigateToProductPage";
+  actionName: "NavigateToProductPage";
   parameters: {
     linkCssSelector: string;
   };
@@ -62,14 +62,14 @@ export type NavigateToProductPage = {
 
 // Follow a link to view  a recipe details page. This link is typically named "Recipe" or "Recipes"
 export type NavigateToRecipePage = {
-  actionName: "navigateToRecipePage";
+  actionName: "NavigateToRecipePage";
   parameters: {
     linkCssSelector: string;
   };
 };
 
 export type NavigateToListPage = {
-  actionName: "navigateToListPage";
+  actionName: "NavigateToListPage";
   parameters: {
     linkCssSelector: string;
   };
@@ -77,7 +77,7 @@ export type NavigateToListPage = {
 
 // Navigate to the "Buy it again" page. This page may also be called Past Orders.
 export type NavigateToBuyItAgainPage = {
-  actionName: "navigateToBuyItAgainPage";
+  actionName: "NavigateToBuyItAgainPage";
   parameters: {
     linkCssSelector: string;
   };
@@ -85,14 +85,14 @@ export type NavigateToBuyItAgainPage = {
 
 // This link opens the shopping cart. Its usually indicated by a cart or bag icon.
 export type NavigateToShoppingCartPage = {
-  actionName: "navigateToShoppingCartPage";
+  actionName: "NavigateToShoppingCartPage";
   parameters: {
     linkCssSelector: string;
   };
 };
 
 export type NavigateToOtherPage = {
-  actionName: "navigateToOtherPage";
+  actionName: "NavigateToOtherPage";
   parameters: {
     pageType: string;
     linkCssSelector: string;
