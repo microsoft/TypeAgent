@@ -12,10 +12,9 @@ export class KnowProPrinter extends ChatPrinter {
     }
 
     public writeDateRange(dateTime: kp.DateRange) {
+        this.writeLine(`Started: ${dateTime.start}`);
         if (dateTime.end) {
-            this.writeLine(`${dateTime.start} - ${dateTime.end}`);
-        } else {
-            this.writeLine(`${dateTime.start}`);
+            this.writeLine(`Ended: ${dateTime.end}`);
         }
     }
 
