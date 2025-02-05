@@ -10,8 +10,6 @@ import {
     ProcessRequestActionResult,
     ExplanationOptions,
     equalNormalizedParamObject,
-    PromptEntity,
-    normalizeParamString,
 } from "agent-cache";
 
 import {
@@ -276,18 +274,6 @@ async function requestExplain(
     }
 }
 
-function getEntityMap(requestAction: RequestAction) {
-    return requestAction.history
-        ? new Map<string, PromptEntity>(
-              requestAction.history.entities.map(
-                  (entity) =>
-                      // LLM like to correct/change casing.  Normalize entity name for look up.
-                      [normalizeParamString(entity.name), entity] as const,
-              ),
-          )
-        : undefined;
-}
-
 export class RequestCommandHandler implements CommandHandler {
     public readonly description = "Translate and explain a request";
     public readonly parameters = {
@@ -391,8 +377,8 @@ export class RequestCommandHandler implements CommandHandler {
 
             await executeActions(
                 requestAction.actions,
+                requestAction.history?.entities,
                 context,
-                getEntityMap(requestAction),
             );
             if (canUseCacheMatch) {
                 await requestExplain(
