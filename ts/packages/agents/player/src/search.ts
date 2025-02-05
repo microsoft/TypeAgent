@@ -110,7 +110,7 @@ async function getArtistFromEntity(
 async function searchArtistSorted(
     artistName: string,
     context: IClientContext,
-    entityMap?: Map<string, Entity>,
+    entityMap: Map<string, Entity> | undefined,
 ): Promise<SpotifyApi.ArtistObjectFull[] | undefined> {
     if (entityMap) {
         const artist = await getArtistFromEntity(
@@ -164,9 +164,9 @@ async function getAlbumsByIds(service: SpotifyService, ids: string[]) {
 async function getAlbumFromEntity(
     albumName: string,
     context: IClientContext,
-    entityMap: Map<string, Entity>,
+    entityMap: Map<string, Entity> | undefined,
 ) {
-    const entity = entityMap.get(albumName);
+    const entity = entityMap?.get(albumName);
     if (
         entity !== undefined &&
         entity.type.includes("album") &&
@@ -182,7 +182,7 @@ async function searchAlbumSorted(
     albumName: string,
     artists: SpotifyApi.ArtistObjectFull[] | undefined,
     context: IClientContext,
-    entityMap: Map<string, Entity>,
+    entityMap: Map<string, Entity> | undefined,
 ) {
     const albumFromEntity = await getAlbumFromEntity(
         albumName,
@@ -333,7 +333,7 @@ async function searchAlbumsWithTrackArtists(
     albumName: string,
     artists: SpotifyApi.ArtistObjectFull[],
     context: IClientContext,
-    entityMap: Map<string, Entity>,
+    entityMap: Map<string, Entity> | undefined,
 ) {
     // Try again without artist, as the artist on the album might not match the one in the tracks.
     let albums = await searchAlbumSorted(
@@ -361,7 +361,7 @@ export async function findArtistTracksWithGenre(
     artistName: string,
     genre: string,
     context: IClientContext,
-    entityMap: Map<string, Entity>,
+    entityMap: Map<string, Entity> | undefined,
 ) {
     const artists = await searchArtistSorted(artistName, context, entityMap);
     if (artists === undefined) {
@@ -395,7 +395,7 @@ export async function findArtistTracksWithGenre(
 export async function findArtistTopTracks(
     artistName: string,
     context: IClientContext,
-    entityMap: Map<string, Entity>,
+    entityMap: Map<string, Entity> | undefined,
 ): Promise<SpotifyApi.TrackObjectFull[]> {
     const artists = await searchArtistSorted(artistName, context, entityMap);
     if (artists === undefined) {
@@ -416,7 +416,7 @@ export async function findAlbums(
     albumName: string,
     artistNames: string[] | undefined,
     context: IClientContext,
-    entityMap: Map<string, Entity>,
+    entityMap: Map<string, Entity> | undefined,
 ): Promise<SpotifyApi.AlbumObjectFull[]> {
     let albums: SpotifyApi.AlbumObjectFull[] | undefined;
     if (artistNames !== undefined) {
@@ -585,12 +585,12 @@ function filterByArtists<
     return result.length === 0 ? undefined : result;
 }
 
-async function getTrackFromEntity(
+export async function getTrackFromEntity(
     trackName: string,
     context: IClientContext,
-    entityMap: Map<string, Entity>,
+    entityMap: Map<string, Entity> | undefined,
 ) {
-    const entity = entityMap.get(trackName);
+    const entity = entityMap?.get(trackName);
     if (
         entity !== undefined &&
         entity.type.includes("track") &&
@@ -606,7 +606,7 @@ export async function findTracks(
     context: IClientContext,
     trackName: string,
     artistNames: string[] | undefined,
-    entityMap: Map<string, Entity>,
+    entityMap: Map<string, Entity> | undefined,
     quantity: number = 0,
 ): Promise<SpotifyApi.TrackObjectFull[]> {
     // try search for the most likely artist names.

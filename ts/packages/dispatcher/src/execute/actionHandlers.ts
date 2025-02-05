@@ -526,7 +526,7 @@ function getActionEntityMap(
             }
         }
     }
-    return entityMap;
+    return entityMap.size === 0 ? undefined : entityMap;
 }
 
 export async function executeActions(

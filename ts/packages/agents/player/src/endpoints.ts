@@ -593,7 +593,7 @@ export async function getTrack(
         },
     };
 
-    const albumUrl = `https://api.spotify.com/v1/track/${encodeURIComponent(id)}`;
+    const albumUrl = `https://api.spotify.com/v1/tracks/${encodeURIComponent(id)}`;
     try {
         const spotifyResult = await axios.get(albumUrl, config);
         return spotifyResult.data as SpotifyApi.SingleTrackResponse;
