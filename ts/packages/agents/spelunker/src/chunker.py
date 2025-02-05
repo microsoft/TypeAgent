@@ -31,6 +31,9 @@ import sys
 from typing import Any, Iterator
 
 
+IdType = str
+
+
 @dataclass
 class Blob:
     """A sequence of text lines plus some metadata."""
@@ -47,9 +50,6 @@ class Blob:
         if self.breadcrumb:
             result["breadcrumb"] = self.breadcrumb
         return result
-
-
-IdType = str
 
 
 @dataclass
