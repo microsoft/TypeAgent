@@ -10,6 +10,8 @@ import {
     ProcessRequestActionResult,
     ExplanationOptions,
     equalNormalizedParamObject,
+    PromptEntity,
+    normalizeParamString,
 } from "agent-cache";
 
 import {
@@ -40,7 +42,6 @@ import {
     translateRequest,
 } from "../../../translation/translateRequest.js";
 import { matchRequest } from "../../../translation/matchRequest.js";
-
 const debugExplain = registerDebug("typeagent:explain");
 
 async function canTranslateWithoutContext(
@@ -275,6 +276,18 @@ async function requestExplain(
     }
 }
 
+function getEntityMap(requestAction: RequestAction) {
+    return requestAction.history
+        ? new Map<string, PromptEntity>(
+              requestAction.history.entities.map(
+                  (entity) =>
+                      // LLM like to correct/change casing.  Normalize entity name for look up.
+                      [normalizeParamString(entity.name), entity] as const,
+              ),
+          )
+        : undefined;
+}
+
 export class RequestCommandHandler implements CommandHandler {
     public readonly description = "Translate and explain a request";
     public readonly parameters = {
@@ -330,10 +343,8 @@ export class RequestCommandHandler implements CommandHandler {
                 : undefined;
 
             // prefetch entities here
-            systemContext.chatHistory.addEntry(
+            systemContext.chatHistory.addUserEntry(
                 request,
-                [],
-                "user",
                 systemContext.requestId,
                 cachedAttachments,
             );
@@ -377,7 +388,12 @@ export class RequestCommandHandler implements CommandHandler {
                     timestamp: new Date(),
                 });
             }
-            await executeActions(requestAction.actions, context);
+
+            await executeActions(
+                requestAction.actions,
+                context,
+                getEntityMap(requestAction),
+            );
             if (canUseCacheMatch) {
                 await requestExplain(
                     requestAction,

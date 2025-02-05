@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { Action, Actions, FullAction } from "agent-cache";
+import { Action, Actions, FullAction, normalizeParamString } from "agent-cache";
 import { CommandHandlerContext } from "../context/commandHandlerContext.js";
 import registerDebug from "debug";
 import { getAppAgentName } from "../translation/agentTranslators.js";
@@ -29,12 +29,15 @@ import {
     displayStatus,
     displayWarn,
 } from "@typeagent/agent-sdk/helpers/display";
-import { MatchResult } from "agent-cache";
+import { MatchResult, PromptEntity } from "agent-cache";
 import { getStorage } from "./storageImpl.js";
 import { IncrementalJsonValueCallBack } from "common-utils";
 import { ProfileNames } from "../utils/profileNames.js";
 import { conversation } from "knowledge-processor";
-import { makeClientIOMessage } from "../context/interactiveIO.js";
+import {
+    DispatcherName,
+    makeClientIOMessage,
+} from "../context/interactiveIO.js";
 import { UnknownAction } from "../context/dispatcher/schema/dispatcherActionSchema.js";
 import { isUnknownAction } from "../context/dispatcher/dispatcherUtils.js";
 import { isPendingRequestAction } from "../translation/pendingRequest.js";
@@ -278,6 +281,16 @@ async function executeAction(
         );
     }
 
+    if (debugActions.enabled) {
+        debugActions(
+            `Executing action: ${JSON.stringify(action, undefined, 2)}`,
+        );
+        if (entityMap) {
+            debugActions(
+                `Entity map: ${JSON.stringify(Array.from(entityMap?.entries()), undefined, 2)}`,
+            );
+        }
+    }
     // Reuse the same streaming action context if one is available.
     const fullAction = action.toFullAction();
     const { actionContext, closeActionContext } =
@@ -345,11 +358,10 @@ async function executeAction(
 
     if (result.error !== undefined) {
         displayError(result.error, actionContext);
-        systemContext.chatHistory.addEntry(
+        systemContext.chatHistory.addAssistantEntry(
             `Action ${action.fullActionName} failed: ${result.error}`,
-            [],
-            "assistant",
             systemContext.requestId,
+            appAgentName,
         );
     } else {
         if (result.displayContent !== undefined) {
@@ -368,14 +380,13 @@ async function executeAction(
         if (result.resultEntity) {
             combinedEntities.push(result.resultEntity);
         }
-        systemContext.chatHistory.addEntry(
+        systemContext.chatHistory.addAssistantEntry(
             result.literalText
                 ? result.literalText
                 : `Action ${action.fullActionName} completed.`,
-            combinedEntities,
-            "assistant",
             systemContext.requestId,
-            undefined,
+            appAgentName,
+            combinedEntities,
             result.additionalInstructions,
         );
     }
@@ -411,11 +422,10 @@ async function canExecute(
             `Unable to determine ${actions.action === undefined ? "one or more actions in" : "action for"} the request.`,
             ...unknownRequests.map((s) => `- ${s}`),
         ];
-        systemContext.chatHistory.addEntry(
+        systemContext.chatHistory.addAssistantEntry(
             lines.join("\n"),
-            [],
-            "assistant",
             systemContext.requestId,
+            DispatcherName,
         );
 
         const config = systemContext.session.getConfig();
@@ -460,11 +470,10 @@ async function canExecute(
 
     if (disabled.size > 0) {
         const message = `Not executed. Action disabled for ${Array.from(disabled.values()).join(", ")}`;
-        systemContext.chatHistory.addEntry(
+        systemContext.chatHistory.addAssistantEntry(
             message,
-            [],
-            "assistant",
             systemContext.requestId,
+            DispatcherName,
         );
 
         displayWarn(message, context);
@@ -474,9 +483,56 @@ async function canExecute(
     return true;
 }
 
+function getStringValues(params: any) {
+    const values: string[] = [];
+    const pending: object[] = [params];
+    while (pending.length > 0) {
+        const current = pending.pop()!;
+        for (const value of Object.values(current)) {
+            if (typeof value === "object") {
+                pending.push(value);
+            } else if (typeof value === "function") {
+                throw new Error("Function is not supported as an action value");
+            } else if (typeof value === "string") {
+                values.push(value);
+            }
+        }
+    }
+    return values;
+}
+
+function getActionEntityMap(
+    action: Action,
+    resultEntityMap: Map<string, PromptEntity>,
+    chatHistoryEntityMap?: Map<string, PromptEntity>,
+) {
+    const entityMap = new Map<string, Entity>();
+    const actionStringValues = getStringValues(action.parameters);
+    const appAgentName = getAppAgentName(action.translatorName);
+    for (const value of actionStringValues) {
+        // LLM like to correct/change casing.  Normalize for look up.
+        const normalizedValue = normalizeParamString(value);
+
+        // If there is a conflict between the result entity name and the
+        // chat history entity name, the result entity will be used.
+        const entity =
+            resultEntityMap.get(normalizedValue) ??
+            chatHistoryEntityMap?.get(normalizedValue);
+        if (entity) {
+            // Only use the entity if it was created by the same app agent.
+            if (entity.sourceAppAgentName === appAgentName) {
+                // Use the value in the action for the agent to look up. No need to normalize
+                entityMap.set(value, entity);
+            }
+        }
+    }
+    return entityMap;
+}
+
 export async function executeActions(
     actions: Actions,
     context: ActionContext<CommandHandlerContext>,
+    chatHistoryEntityMap?: Map<string, PromptEntity>,
 ) {
     const systemContext = context.sessionContext.agentContext;
     if (systemContext.commandResult === undefined) {
@@ -490,7 +546,7 @@ export async function executeActions(
     }
     debugActions(`Executing actions: ${JSON.stringify(actions, undefined, 2)}`);
     let actionIndex = 0;
-    const entityMap = new Map<string, Entity>();
+    const resultEntityMap = new Map<string, PromptEntity>();
     const actionQueue: Action[] = [...actions];
 
     while (actionQueue.length !== 0) {
@@ -507,6 +563,11 @@ export async function executeActions(
             actionQueue.unshift(...translationResult.requestAction.actions);
             continue;
         }
+        const entityMap = getActionEntityMap(
+            action,
+            resultEntityMap,
+            chatHistoryEntityMap,
+        );
         const result = await executeAction(
             action,
             context,
@@ -515,7 +576,15 @@ export async function executeActions(
         );
         if (result.error === undefined) {
             if (result.resultEntity && action.resultEntityId) {
-                entityMap.set(action.resultEntityId, result.resultEntity);
+                resultEntityMap.set(
+                    normalizeParamString(action.resultEntityId),
+                    {
+                        ...result.resultEntity,
+                        sourceAppAgentName: getAppAgentName(
+                            action.translatorName,
+                        ),
+                    },
+                );
             }
         }
         actionIndex++;
