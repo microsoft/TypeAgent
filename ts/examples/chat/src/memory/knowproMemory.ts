@@ -22,7 +22,7 @@ import {
     argSourceFile,
     argToDate,
     parseFreeAndNamedArguments,
-    recordFromArgs,
+    keyValuesFromNamedArgs,
 } from "./common.js";
 import { dateTime, ensureDir, readJsonFile, writeJsonFile } from "typeagent";
 import path from "path";
@@ -217,6 +217,8 @@ export async function createKnowproCommands(
                 description ?? "Search current knowPro conversation by terms",
             options: {
                 maxToDisplay: argNum("Maximum matches to display", 25),
+                startMinute: argNum("Starting at minute."),
+                endMinute: argNum("Ending minute."),
             },
         };
         if (kType === undefined) {
@@ -249,8 +251,8 @@ export async function createKnowproCommands(
             const matches = await kp.searchConversation(
                 conversation,
                 terms,
-                recordFromArgs(namedArgs, commandDef),
-                filterFromArgs(namedArgs),
+                keyValuesFromNamedArgs(namedArgs, commandDef),
+                filterFromNamedArgs(namedArgs),
             );
             if (matches === undefined || matches.size === 0) {
                 context.printer.writeLine("No matches");
@@ -268,10 +270,25 @@ export async function createKnowproCommands(
         }
     }
 
-    function filterFromArgs(namedArgs: NamedArgs) {
+    function filterFromNamedArgs(namedArgs: NamedArgs) {
         let filter: kp.SearchFilter = {
             type: namedArgs.ktype,
         };
+        const dateRange = kp.getTimeRangeForConversation(context.podcast!);
+        if (dateRange && namedArgs.startMinute >= 0) {
+            filter.dateRange = {
+                start: dateTime.addMinutesToDate(
+                    dateRange.start,
+                    namedArgs.startMinute,
+                ),
+            };
+            if (namedArgs.endMinute) {
+                filter.dateRange.end = dateTime.addMinutesToDate(
+                    dateRange.start,
+                    namedArgs.endMinute,
+                );
+            }
+        }
         return filter;
     }
 

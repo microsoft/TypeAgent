@@ -11,6 +11,14 @@ export class KnowProPrinter extends ChatPrinter {
         super();
     }
 
+    public writeDateRange(dateTime: kp.DateRange) {
+        if (dateTime.end) {
+            this.writeLine(`${dateTime.start} - ${dateTime.end}`);
+        } else {
+            this.writeLine(`${dateTime.start}`);
+        }
+    }
+
     public writeMessage(message: kp.IMessage) {
         const prevColor = this.setForeColor(chalk.cyan);
         try {
@@ -170,6 +178,11 @@ export class KnowProPrinter extends ChatPrinter {
 
     public writeConversationInfo(conversation: kp.IConversation) {
         this.writeTitle(conversation.nameTag);
+        const timeRange = kp.getTimeRangeForConversation(conversation);
+        if (timeRange) {
+            this.write("Time range: ");
+            this.writeDateRange(timeRange);
+        }
         this.writeLine(`${conversation.messages.length} messages`);
         return this;
     }

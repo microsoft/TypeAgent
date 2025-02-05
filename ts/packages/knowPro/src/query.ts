@@ -315,6 +315,10 @@ export class QueryEvalContext {
         return this.conversation.semanticRefIndex!;
     }
 
+    public get semanticRefs() {
+        return this.conversation.semanticRefs!;
+    }
+
     public get propertyIndex() {
         return this.conversation.propertyToSemanticRefIndex;
     }
@@ -396,7 +400,7 @@ export class MatchConstrainedSearchTermExpr extends QueryOpExpr<
     public override eval(
         context: QueryEvalContext,
     ): SemanticRefAccumulator | undefined {
-        if (!context.conversation.propertyToSemanticRefIndex) {
+        if (!context.propertyIndex) {
             return undefined;
         }
         let matches: SemanticRefAccumulator | undefined;
@@ -485,9 +489,7 @@ export class GroupByKnowledgeTypeExpr extends QueryOpExpr<
         context: QueryEvalContext,
     ): Map<KnowledgeType, SemanticRefAccumulator> {
         const semanticRefMatches = this.matches.eval(context);
-        return semanticRefMatches.groupMatchesByType(
-            context.conversation.semanticRefs!,
-        );
+        return semanticRefMatches.groupMatchesByType(context.semanticRefs);
     }
 }
 
@@ -663,17 +665,14 @@ export class ScopeExpr extends QueryOpExpr<SemanticRefAccumulator> {
         // E.g. only look at ranges matching actions where X is a subject and Y an object
         // The text ranges for matching refs give us the text ranges in scope
         for (const inScopeRef of accumulator.getSemanticRefs(
-            context.conversation.semanticRefs!,
+            context.semanticRefs,
             (sr) => this.evalPredicates(context, this.predicates!, sr),
         )) {
             scope.addRange(inScopeRef.range);
         }
         if (scope.size > 0) {
             // Select only those semantic refs that are in scope
-            accumulator = accumulator.getInScope(
-                context.conversation.semanticRefs!,
-                scope,
-            );
+            accumulator = accumulator.getInScope(context.semanticRefs, scope);
         }
         return accumulator;
     }

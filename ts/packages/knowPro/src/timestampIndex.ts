@@ -35,15 +35,16 @@ export class TimestampToTextRangeIndex implements ITimestampToTextRangeIndex {
      * @returns
      */
     public lookupRange(dateRange: DateRange): TimestampedTextRange[] {
-        const startAt = dateTime.timestampString(dateRange.start);
+        const startAt = this.dateToTimestamp(dateRange.start);
         const stopAt = dateRange.end
-            ? dateTime.timestampString(dateRange.end)
+            ? this.dateToTimestamp(dateRange.end)
             : undefined;
         return collections.getInRange(
             this.ranges,
             startAt,
             stopAt,
-            this.compareTimestampedRange,
+            (x: TimestampedTextRange, y: string) =>
+                x.timestamp.localeCompare(y),
         );
     }
 
@@ -59,7 +60,7 @@ export class TimestampToTextRangeIndex implements ITimestampToTextRangeIndex {
         const entry: TimestampedTextRange = {
             range: textRangeForMessage(message, messageIndex),
             // This string is formatted to be lexically sortable
-            timestamp: dateTime.timestampString(timestampDate, false),
+            timestamp: this.dateToTimestamp(timestampDate),
         };
         if (inOrder) {
             collections.insertIntoSorted(
@@ -78,5 +79,9 @@ export class TimestampToTextRangeIndex implements ITimestampToTextRangeIndex {
         y: TimestampedTextRange,
     ) {
         return x.timestamp.localeCompare(y.timestamp);
+    }
+
+    private dateToTimestamp(date: Date) {
+        return dateTime.timestampString(date, false);
     }
 }
