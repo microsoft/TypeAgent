@@ -693,12 +693,29 @@ async function initialize() {
         ShellSettings.getinstance().save();
     });
 
+    ipcMain.on("open-image-file", async () => {
+        // TODO: imeplement
+        const result = await dialog.showOpenDialog(mainWindow);
+        if (result && !result.canceled) {
+            let paths = result.filePaths;
+            if (paths && paths.length > 0) {
+                const content = readFileSync(paths[0], "utf-8").toString();
+                console.log(content);
+                return content;
+            }
+        }
+
+        return null;
+    
+    });
+
     ipcMain.on(
         "send-to-browser-ipc",
         async (_event, data: WebSocketMessageV2) => {
             await BrowserAgentIpc.getinstance().send(data);
         },
     );
+
     globalShortcut.register("Alt+Right", () => {
         chatView.webContents.send("send-demo-event", "Alt+Right");
     });
