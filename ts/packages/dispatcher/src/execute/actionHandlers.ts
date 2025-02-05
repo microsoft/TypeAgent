@@ -488,14 +488,14 @@ function getStringValues(params: any) {
     const pending: object[] = [params];
     while (pending.length > 0) {
         const current = pending.pop()!;
-        for (const value of Object.values(current)) {
-            if (typeof value === "object") {
+        if (typeof current === "object") {
+            for (const value of Object.values(current)) {
                 pending.push(value);
-            } else if (typeof value === "function") {
-                throw new Error("Function is not supported as an action value");
-            } else if (typeof value === "string") {
-                values.push(value);
             }
+        } else if (typeof current === "function") {
+            throw new Error("Function is not supported as an action value");
+        } else if (typeof current === "string") {
+            values.push(current);
         }
     }
     return values;
