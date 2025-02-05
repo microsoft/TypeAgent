@@ -232,6 +232,7 @@ class ActionCommandHandler implements CommandHandler {
 
         return executeActions(
             Actions.fromFullActions([action as FullAction]),
+            undefined,
             context,
         );
     }

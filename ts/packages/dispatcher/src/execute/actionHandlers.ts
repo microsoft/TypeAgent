@@ -504,7 +504,7 @@ function getStringValues(params: unknown) {
 function getActionEntityMap(
     action: Action,
     resultEntityMap: Map<string, PromptEntity>,
-    chatHistoryEntityMap?: Map<string, PromptEntity>,
+    promptEntityMap: Map<string, PromptEntity> | undefined,
 ) {
     const entityMap = new Map<string, Entity>();
     const actionStringValues = getStringValues(action.parameters);
@@ -517,7 +517,7 @@ function getActionEntityMap(
         // chat history entity name, the result entity will be used.
         const entity =
             resultEntityMap.get(normalizedValue) ??
-            chatHistoryEntityMap?.get(normalizedValue);
+            promptEntityMap?.get(normalizedValue);
         if (entity) {
             // Only use the entity if it was created by the same app agent.
             if (entity.sourceAppAgentName === appAgentName) {
@@ -529,10 +529,34 @@ function getActionEntityMap(
     return entityMap.size === 0 ? undefined : entityMap;
 }
 
+type PendingAction = {
+    action: Action;
+    promptEntityMap: Map<string, PromptEntity> | undefined;
+};
+
+function toPendingActions(
+    actions: Actions,
+    entities: PromptEntity[] | undefined,
+) {
+    const promptEntityMap = entities
+        ? new Map<string, PromptEntity>(
+              entities.map(
+                  (entity) =>
+                      // LLM like to correct/change casing.  Normalize entity name for look up.
+                      [normalizeParamString(entity.name), entity] as const,
+              ),
+          )
+        : undefined;
+    return Array.from(actions).map((action) => ({
+        action,
+        promptEntityMap,
+    }));
+}
+
 export async function executeActions(
     actions: Actions,
+    entities: PromptEntity[] | undefined,
     context: ActionContext<CommandHandlerContext>,
-    chatHistoryEntityMap?: Map<string, PromptEntity>,
 ) {
     const systemContext = context.sessionContext.agentContext;
     if (systemContext.commandResult === undefined) {
@@ -547,10 +571,10 @@ export async function executeActions(
     debugActions(`Executing actions: ${JSON.stringify(actions, undefined, 2)}`);
     let actionIndex = 0;
     const resultEntityMap = new Map<string, PromptEntity>();
-    const actionQueue: Action[] = [...actions];
+    const actionQueue: PendingAction[] = toPendingActions(actions, entities);
 
     while (actionQueue.length !== 0) {
-        const action = actionQueue.shift()!;
+        const { action, promptEntityMap } = actionQueue.shift()!;
         if (isPendingRequestAction(action)) {
             const translationResult = await translatePendingRequestAction(
                 action,
@@ -560,19 +584,20 @@ export async function executeActions(
             if (!translationResult) {
                 throw new Error("Pending action translation error.");
             }
-            actionQueue.unshift(...translationResult.requestAction.actions);
+
+            actionQueue.unshift(
+                ...toPendingActions(
+                    translationResult.requestAction.actions,
+                    translationResult.requestAction.history?.entities,
+                ),
+            );
             continue;
         }
-        const entityMap = getActionEntityMap(
-            action,
-            resultEntityMap,
-            chatHistoryEntityMap,
-        );
         const result = await executeAction(
             action,
             context,
             actionIndex,
-            entityMap,
+            getActionEntityMap(action, resultEntityMap, promptEntityMap),
         );
         if (result.error === undefined) {
             if (result.resultEntity && action.resultEntityId) {
