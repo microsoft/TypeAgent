@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import DOMPurify from "dompurify";
 import { _arrayBufferToBase64 } from "./chatView";
 import {
     iconMicrophone,
@@ -56,12 +57,13 @@ export class ExpandableTextarea {
         this.textEntry.addEventListener("input", () => {
             if (this.entryHandlers.onChange !== undefined) {
                 this.entryHandlers.onChange(this);
-            }
-
+            }            
+        });
+        this.textEntry.onchange = () => {
             if (sendButton !== undefined) {
                 sendButton.disabled = this.textEntry.innerHTML.length == 0;
             }
-        });
+        }
         this.textEntry.onwheel = (event) => {
             if (this.entryHandlers.onMouseWheel !== undefined) {
                 this.entryHandlers.onMouseWheel(this, event);
@@ -80,12 +82,14 @@ export class ExpandableTextarea {
 
         // Set the cursor to the end of the text
         const r = document.createRange();
-        r.setEnd(this.textEntry.childNodes[0], content?.length ?? 0);
-        r.collapse(false);
-        const s = document.getSelection();
-        if (s) {
-            s.removeAllRanges();
-            s.addRange(r);
+        if (this.textEntry.childNodes.length > 0) {
+            r.setEnd(this.textEntry.childNodes[0], content?.length ?? 0);
+            r.collapse(false);
+            const s = document.getSelection();
+            if (s) {
+                s.removeAllRanges();
+                s.addRange(r);
+            }
         }
     }
 
@@ -187,6 +191,12 @@ export class ChatInput {
             this.sendButton,
         );
 
+        this.textarea.getTextEntry().onpaste = (e: ClipboardEvent) => {
+            if (e.clipboardData !== null) {
+                this.getTextFromDataTransfer(e.clipboardData);
+            }
+        }
+
         this.textarea.getTextEntry().ondragenter = (e: DragEvent) => {
             if (!this.dragEnabled) {
                 return;
@@ -201,7 +211,7 @@ export class ChatInput {
 
             console.log("enter " + this.dragTemp);
 
-            this.textarea.getTextEntry().innerText = "Drop image files here...";
+            this.textarea.getTextEntry().innerText = "Drop image files or text here...";
             this.textarea.getTextEntry().classList.add("chat-input-drag");
         };
 
@@ -237,8 +247,8 @@ export class ChatInput {
 
             this.dragTemp = undefined;
 
-            if (e.dataTransfer != null && e.dataTransfer.files.length > 0) {
-                this.loadImageFile(e.dataTransfer.files[0]);
+            if (e.dataTransfer != null) {
+                this.getTextFromDataTransfer(e.dataTransfer);
             }
 
             e.preventDefault();
@@ -377,5 +387,37 @@ export class ChatInput {
 
     public focus() {
         this.textarea.focus();
+    }
+
+    /**
+     * Takes dataTransfer and gets a plain text representation from the data there
+     * and loads it into the input box
+     * 
+     * @param dataTransfer The dataTransfer object from drag/drop/paste events
+     */
+    public getTextFromDataTransfer(dataTransfer: DataTransfer) {
+        if (dataTransfer.files.length > 0) {
+            this.loadImageFile(dataTransfer.files[0]);
+        } else if (dataTransfer.items.length > 0) {
+            let index: number = dataTransfer.types.indexOf("text/plain");
+            let plainText: boolean = true;
+            if (index === -1) {
+                index = dataTransfer.types.indexOf("text/html");                        
+                plainText = false;
+            } 
+
+            if (index === -1) {
+                this.textarea.getTextEntry().innerText = `Unsupported drag/drop data type '${dataTransfer.types.join(", ")}'`;
+            } else {
+                dataTransfer.items[index].getAsString((s) => { 
+                    if (plainText) {
+                        this.textarea.getTextEntry().innerText = s;
+                    } else {
+                        // strip out all HTML from supplied input
+                        this.textarea.getTextEntry().innerText += DOMPurify.sanitize(s, { ALLOWED_TAGS: [] });
+                    }
+                });
+            }        
+        }
     }
 }
