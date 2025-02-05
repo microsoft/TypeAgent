@@ -7,7 +7,8 @@ import {
     IKnowledgeSource,
     SemanticRef,
     IConversationData,
-    ITextEmbeddingData,
+    ITimestampToTextRangeIndex,
+    IPropertyToSemanticRefIndex,
 } from "./dataFormat.js";
 import { conversation, split } from "knowledge-processor";
 import { collections, dateTime, getFileName, readAllText } from "typeagent";
@@ -21,12 +22,12 @@ import {
 } from "./conversationIndex.js";
 import { Result } from "typechat";
 import {
-    buildTermSemanticIndex,
-    createSemanticIndexSettings,
-    SemanticIndexSettings,
-    TermSemanticIndex,
-} from "./termIndex.js";
+    createTextEmbeddingIndexSettings,
+    TermToRelatedTermsIndex,
+    TermsToRelatedTermIndexSettings,
+} from "./relatedTermsIndex.js";
 import { TimestampToTextRangeIndex } from "./timestampIndex.js";
+import { addPropertiesToIndex, PropertyIndex } from "./propertyIndex.js";
 
 // metadata for podcast messages
 export class PodcastMessageMeta implements IKnowledgeSource {
@@ -105,12 +106,14 @@ export class PodcastMessage implements IMessage<PodcastMessageMeta> {
 }
 
 export type PodcastSettings = {
-    relatedTermIndexSettings: SemanticIndexSettings;
+    relatedTermIndexSettings: TermsToRelatedTermIndexSettings;
 };
 
 export function createPodcastSettings(): PodcastSettings {
     return {
-        relatedTermIndexSettings: createSemanticIndexSettings(),
+        relatedTermIndexSettings: {
+            embeddingIndexSettings: createTextEmbeddingIndexSettings(),
+        },
     };
 }
 
@@ -122,9 +125,14 @@ export class Podcast implements IConversation<PodcastMessageMeta> {
         public tags: string[] = [],
         public semanticRefs: SemanticRef[] = [],
         public semanticRefIndex: ConversationIndex | undefined = undefined,
-        public relatedTermsIndex: TermSemanticIndex | undefined = undefined,
+        public termToRelatedTermsIndex:
+            | TermToRelatedTermsIndex
+            | undefined = undefined,
         public timestampIndex:
-            | TimestampToTextRangeIndex
+            | ITimestampToTextRangeIndex
+            | undefined = undefined,
+        public propertyToSemanticRefIndex:
+            | IPropertyToSemanticRefIndex
             | undefined = undefined,
     ) {
         this.settings = createPodcastSettings();
@@ -181,8 +189,19 @@ export class Podcast implements IConversation<PodcastMessageMeta> {
     ): Promise<ConversationIndexingResult> {
         const result = await buildConversationIndex(this, progressCallback);
         this.addMetadataToIndex();
+        this.buildPropertyIndex();
         this.buildTimestampIndex();
         return result;
+    }
+
+    public buildPropertyIndex() {
+        if (this.semanticRefs && this.semanticRefs.length > 0) {
+            this.propertyToSemanticRefIndex = new PropertyIndex();
+            addPropertiesToIndex(
+                this.semanticRefs,
+                this.propertyToSemanticRefIndex,
+            );
+        }
     }
 
     public async buildRelatedTermsIndex(
@@ -192,10 +211,12 @@ export class Podcast implements IConversation<PodcastMessageMeta> {
             batch: collections.Slice<string>,
         ) => boolean,
     ): Promise<void> {
-        if (this.settings.relatedTermIndexSettings && this.semanticRefIndex) {
-            const allTerms = this.semanticRefIndex?.getTerms();
-            this.relatedTermsIndex = await buildTermSemanticIndex(
+        if (this.semanticRefIndex) {
+            this.termToRelatedTermsIndex = new TermToRelatedTermsIndex(
                 this.settings.relatedTermIndexSettings,
+            );
+            const allTerms = this.semanticRefIndex?.getTerms();
+            await this.termToRelatedTermsIndex.buildEmbeddingsIndex(
                 allTerms,
                 batchSize,
                 progressCallback,
@@ -214,7 +235,7 @@ export class Podcast implements IConversation<PodcastMessageMeta> {
             tags: this.tags,
             semanticRefs: this.semanticRefs,
             semanticIndexData: this.semanticRefIndex?.serialize(),
-            relatedTermIndexData: this.relatedTermsIndex?.serialize(),
+            relatedTermsIndexData: this.termToRelatedTermsIndex?.serialize(),
         };
     }
 
@@ -224,19 +245,20 @@ export class Podcast implements IConversation<PodcastMessageMeta> {
                 data.semanticIndexData,
             );
         }
-        if (data.relatedTermIndexData) {
-            this.relatedTermsIndex = new TermSemanticIndex(
+        if (data.relatedTermsIndexData) {
+            this.termToRelatedTermsIndex = new TermToRelatedTermsIndex(
                 this.settings.relatedTermIndexSettings,
-                data.relatedTermIndexData,
+            );
+            this.termToRelatedTermsIndex.deserialize(
+                data.relatedTermsIndexData,
             );
         }
+        this.buildPropertyIndex();
         this.buildTimestampIndex();
     }
 }
 
-export interface PodcastData extends IConversationData<PodcastMessage> {
-    relatedTermIndexData?: ITextEmbeddingData | undefined;
-}
+export interface PodcastData extends IConversationData<PodcastMessage> {}
 
 export async function importPodcast(
     transcriptFilePath: string,
