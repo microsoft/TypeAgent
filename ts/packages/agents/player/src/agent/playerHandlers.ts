@@ -54,7 +54,7 @@ async function initializePlayerContext() {
 async function executePlayerAction(
     action: PlayerAction,
     context: ActionContext<PlayerActionContext>,
-    entityMap: Map<string, Entity>,
+    entityMap?: Map<string, Entity>,
 ) {
     if (context.sessionContext.agentContext.spotify) {
         return handleCall(
