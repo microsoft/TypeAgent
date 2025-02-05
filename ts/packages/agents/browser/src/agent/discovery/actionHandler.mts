@@ -5,6 +5,16 @@ import { ActionContext } from "@typeagent/agent-sdk";
 import { BrowserActionContext } from "../actionHandler.mjs";
 import { BrowserConnector } from "../browserConnector.mjs";
 import { createDiscoveryPageTranslator } from "./translator.mjs";
+import {
+  ActionSchemaTypeDefinition,
+  generateActionSchema,
+  parseActionSchemaSource,
+} from "action-schema";
+import { ActionSchemaCreator as sc } from "action-schema";
+import path from "path";
+import fs from "fs";
+import { fileURLToPath } from "url";
+import { UserActionsList } from "./schema/userActionsPool.mjs";
 
 export async function handleSchemaDiscoveryAction(
   action: any,
@@ -69,9 +79,59 @@ export async function handleSchemaDiscoveryAction(
     }
 
     console.timeEnd(timerName);
+
     message =
       "Possible user actions: \n" + JSON.stringify(response.data, null, 2);
+
+    const selected = response.data as UserActionsList;
+    const actionNames = [
+      ...new Set(selected.actions.map((action) => action.actionName)),
+    ];
+
+    const schema = await getDynamicSchema(actionNames);
+    message += `\n =========== \n Discovered actions schema: \n ${schema} `;
+
     return response.data;
+  }
+
+  async function getDynamicSchema(actionNames: string[]) {
+    const packageRoot = path.join("..", "..", "..");
+
+    const userActionsPoolSchema = await fs.promises.readFile(
+      fileURLToPath(
+        new URL(
+          path.join(
+            packageRoot,
+            "./src/agent/discovery/schema/userActionsPool.mts",
+          ),
+          import.meta.url,
+        ),
+      ),
+      "utf8",
+    );
+    const parsed = parseActionSchemaSource(
+      userActionsPoolSchema,
+      "dynamicUserActions",
+      "",
+      "UserPageActions",
+    );
+
+    let typeDefinitions: ActionSchemaTypeDefinition[] = [];
+    actionNames.forEach((name) => {
+      if (parsed.actionSchemas.has(name)) {
+        typeDefinitions.push(parsed.actionSchemas.get(name)!);
+      }
+    });
+
+    const union = sc.union(
+      typeDefinitions.map((definition) => sc.ref(definition)),
+    );
+    const entry = sc.type("DynamicUserPageActions", union);
+    const actionSchemas = new Map<string, ActionSchemaTypeDefinition>();
+    const order = new Map<string, number>();
+    const schema = await generateActionSchema({ entry, actionSchemas, order });
+
+    return schema;
   }
 
   async function handleGetPageSummary(action: any) {
