@@ -23,6 +23,11 @@ Questions about the focused code base are answered roughly as follows:
    with the request to answer the user question using those chunks as context.
 6. Construct a result from the answer and the chunks used to come up with it.
 
+## How easy is it to target other languages?
+
+- Need a chunker for each language; the rest is the same.
+- Chunking TypeScript was, realistically, a week's work.
+
 ## TO DO
 
 - Prompt engineering (borrow from John Lam?)
@@ -30,7 +35,3 @@ Questions about the focused code base are answered roughly as follows:
 - Scaling. It takes 60-80 seconds to select from ~4000 chunks.
 - Do we need a "global index" (of summaries) like John Lam's ask.py?
   How to make that scale?
-
-- How easy is it to target other languages?
-  - Need a chunker for each language; the rest is the same.
-  - Chunking TypeScript was, realistically, a week's work.
