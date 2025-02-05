@@ -13,9 +13,13 @@ import * as q from "./query.js";
 import { resolveRelatedTerms } from "./relatedTermsIndex.js";
 
 export type SearchTerm = {
+    /**
+     * Term being searched for
+     */
     term: Term;
     /**
-     * These can be supplied from fuzzy synonym tables and so on
+     * Additional terms related to term.
+     * These can be supplied from synonym tables and so on
      */
     relatedTerms?: Term[] | undefined;
 };
@@ -29,7 +33,12 @@ export function createSearchTerm(text: string, score?: number): SearchTerm {
     };
 }
 
-export type QualifiedSearchTerm = PropertySearchTerm | FacetSearchTerm;
+/**
+ * A ConstrainedSearchTerm restricts the semantic refs it matches by using:
+ * - a restricting propertyName or facetName
+ * - a property / facet value
+ */
+export type ConstrainedSearchTerm = PropertySearchTerm | FacetSearchTerm;
 
 export type KnowledgePropertyName =
     | "name"
@@ -91,6 +100,8 @@ export async function searchConversation(
 }
 
 class SearchQueryBuilder {
+    // All SearchTerms injected which compiling the 'select' portion of the query
+    // We will them expand these search terms by also including related terms
     private allSearchTerms: SearchTerm[] = [];
 
     constructor(public conversation: IConversation) {}
@@ -102,7 +113,12 @@ class SearchQueryBuilder {
         maxMatches?: number,
     ) {
         let selectExpr = this.compileSelect(terms, propertyTerms, filter);
-        // Resolve related terms for all search terms, as needed
+        const query = new q.SelectTopNKnowledgeGroupExpr(
+            new q.GroupByKnowledgeTypeExpr(selectExpr),
+            maxMatches,
+        );
+
+        // Also Resolve related terms (where needed) for all search terms injected while building the index
         if (this.conversation.termToRelatedTermsIndex) {
             await resolveRelatedTerms(
                 this.conversation.termToRelatedTermsIndex,
@@ -110,10 +126,6 @@ class SearchQueryBuilder {
             );
         }
         this.prepareSearchTerms(this.allSearchTerms);
-        const query = new q.SelectTopNKnowledgeGroupExpr(
-            new q.GroupByKnowledgeTypeExpr(selectExpr),
-            maxMatches,
-        );
         return query;
     }
 
@@ -153,16 +165,16 @@ class SearchQueryBuilder {
 
     private compilePropertyTerms(
         properties: Record<string, string>,
-    ): q.MatchQualifiedSearchTermExpr[] {
-        const matchExpressions: q.MatchQualifiedSearchTermExpr[] = [];
+    ): q.MatchConstrainedSearchTermExpr[] {
+        const matchExpressions: q.MatchConstrainedSearchTermExpr[] = [];
 
         for (const propertyName of Object.keys(properties)) {
             const propertyValue = properties[propertyName];
-            let matchExpr: q.MatchQualifiedSearchTermExpr | undefined;
+            let matchExpr: q.MatchConstrainedSearchTermExpr | undefined;
             const [qualifiedTerm, searchTermsCreated] =
-                qualifiedSearchTermFromKeyValue(propertyName, propertyValue);
+                constrainedSearchTermFromKeyValue(propertyName, propertyValue);
             this.allSearchTerms.push(...searchTermsCreated);
-            matchExpr = new q.MatchQualifiedSearchTermExpr(qualifiedTerm);
+            matchExpr = new q.MatchConstrainedSearchTermExpr(qualifiedTerm);
             matchExpressions.push(matchExpr);
         }
         return matchExpressions;
@@ -205,11 +217,11 @@ class SearchQueryBuilder {
     }
 }
 
-export function qualifiedSearchTermFromKeyValue(
+export function constrainedSearchTermFromKeyValue(
     key: string,
     value: string,
-): [QualifiedSearchTerm, SearchTerm[]] {
-    let qualifiedSearchTerm: QualifiedSearchTerm | undefined;
+): [ConstrainedSearchTerm, SearchTerm[]] {
+    let qualifiedSearchTerm: ConstrainedSearchTerm | undefined;
     const searchTermsCreated: SearchTerm[] = [];
     switch (key) {
         default:

@@ -8,6 +8,7 @@ export type {
     ParamValueType,
     ParamObjectType,
     HistoryContext,
+    PromptEntity,
 } from "./explanation/requestAction.js";
 
 export type { ConstructionStore } from "./cache/store.js";

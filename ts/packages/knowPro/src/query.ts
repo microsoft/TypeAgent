@@ -19,7 +19,7 @@ import {
 import {
     PropertySearchTerm,
     FacetSearchTerm,
-    QualifiedSearchTerm,
+    ConstrainedSearchTerm,
     SearchTerm,
 } from "./search.js";
 import {
@@ -30,6 +30,7 @@ import {
 } from "./collections.js";
 import { TermToRelatedTermsMap } from "./relatedTermsIndex.js";
 import { PropertyNames } from "./propertyIndex.js";
+import { conversation } from "knowledge-processor";
 
 export function isConversationSearchable(conversation: IConversation): boolean {
     return (
@@ -102,6 +103,9 @@ export function isInTextRange(
     // outer start must be <= inner start
     // inner end must be < outerEnd (which is exclusive)
     let cmpStart = compareTextLocation(outerRange.start, innerRange.start);
+    if (outerRange.end === undefined && innerRange.end === undefined) {
+        return cmpStart <= 0;
+    }
     let cmpEnd = compareTextLocation(
         innerRange.end ?? MaxTextLocation,
         outerRange.end ?? MaxTextLocation,
@@ -130,34 +134,23 @@ export function messageLength(message: IMessage): number {
     return length;
 }
 
-export function textRangeForMessage(
-    message: IMessage,
-    messageIndex: number,
-): TextRange {
-    let start: TextLocation = {
-        messageIndex,
-        chunkIndex: 0,
-        charIndex: 0,
-    };
-    // End is EXCLUSIVE. Since entire message is range, the end is messageIndex + 1
-    let end: TextLocation = {
-        messageIndex: messageIndex + 1,
-    };
-    return {
-        start,
-        end,
-    };
-}
-
-export function lookupSearchTermInSemanticRefIndex(
+/**
+ * Look
+ * @param semanticRefIndex
+ * @param searchTerm
+ * @param predicate
+ * @param matches
+ * @returns
+ */
+export function lookupSearchTermInIndex(
     semanticRefIndex: ITermToSemanticRefIndex,
     searchTerm: SearchTerm,
     predicate?: (scoredRef: ScoredSemanticRef) => boolean,
-    matchAccumulator?: SemanticRefAccumulator,
+    matches?: SemanticRefAccumulator,
 ): SemanticRefAccumulator {
-    matchAccumulator ??= new SemanticRefAccumulator();
+    matches ??= new SemanticRefAccumulator();
     // Lookup search term
-    matchAccumulator.addSearchTermMatch(
+    matches.addSearchTermMatch(
         searchTerm.term,
         predicate
             ? lookupAndFilter(semanticRefIndex, searchTerm.term.text, predicate)
@@ -168,7 +161,7 @@ export function lookupSearchTermInSemanticRefIndex(
         for (const relatedTerm of searchTerm.relatedTerms) {
             // Related term matches count as matches for the queryTerm...
             // BUT are scored with the score of the related term
-            matchAccumulator.addRelatedTermMatch(
+            matches.addRelatedTermMatch(
                 searchTerm.term,
                 relatedTerm,
                 predicate
@@ -182,7 +175,7 @@ export function lookupSearchTermInSemanticRefIndex(
             );
         }
     }
-    return matchAccumulator;
+    return matches;
 
     function* lookupAndFilter(
         semanticRefIndex: ITermToSemanticRefIndex,
@@ -262,7 +255,7 @@ export function getMatchingTermForText(
  * @param searchTerm
  * @param text
  */
-export function searchTermEqualsText(
+export function searchTermMatchesText(
     searchTerm: SearchTerm,
     text: string | undefined,
 ): boolean {
@@ -272,13 +265,13 @@ export function searchTermEqualsText(
     return false;
 }
 
-export function searchTermEqualsOneOfText(
+export function searchTermMatchesOneOfText(
     searchTerm: SearchTerm,
     texts: string[] | undefined,
 ): boolean {
     if (texts) {
         for (const text of texts) {
-            if (searchTermEqualsText(searchTerm, text)) {
+            if (searchTermMatchesText(searchTerm, text)) {
                 return true;
             }
         }
@@ -304,6 +297,10 @@ export class QueryEvalContext {
 
     public get semanticRefIndex() {
         return this.conversation.semanticRefIndex!;
+    }
+
+    public get semanticRefs() {
+        return this.conversation.semanticRefs!;
     }
 
     public get propertyIndex() {
@@ -342,7 +339,9 @@ export class SelectTopNExpr<T extends MatchAccumulator> extends QueryOpExpr<T> {
     }
 }
 
-export type QueryTermExpr = MatchSearchTermExpr | MatchQualifiedSearchTermExpr;
+export type QueryTermExpr =
+    | MatchSearchTermExpr
+    | MatchConstrainedSearchTermExpr;
 
 export class GetSearchMatchesExpr extends QueryOpExpr<SemanticRefAccumulator> {
     constructor(public searchTermExpressions: QueryTermExpr[]) {
@@ -368,24 +367,24 @@ export class MatchSearchTermExpr extends QueryOpExpr<SemanticRefAccumulator> {
     }
 
     public override eval(context: QueryEvalContext): SemanticRefAccumulator {
-        return lookupSearchTermInSemanticRefIndex(
+        return lookupSearchTermInIndex(
             context.semanticRefIndex,
             this.searchTerm,
         );
     }
 }
 
-export class MatchQualifiedSearchTermExpr extends QueryOpExpr<
+export class MatchConstrainedSearchTermExpr extends QueryOpExpr<
     SemanticRefAccumulator | undefined
 > {
-    constructor(public qualifiedSearchTerm: QualifiedSearchTerm) {
+    constructor(public qualifiedSearchTerm: ConstrainedSearchTerm) {
         super();
     }
 
     public override eval(
         context: QueryEvalContext,
     ): SemanticRefAccumulator | undefined {
-        if (!context.conversation.propertyToSemanticRefIndex) {
+        if (!context.propertyIndex) {
             return undefined;
         }
         let matches: SemanticRefAccumulator | undefined;
@@ -419,7 +418,7 @@ export class MatchQualifiedSearchTermExpr extends QueryOpExpr<
         context: QueryEvalContext,
         searchTerm: PropertySearchTerm,
     ) {
-        return lookupSearchTermInSemanticRefIndex(
+        return lookupSearchTermInIndex(
             context.semanticRefIndex,
             searchTerm.propertyValue,
             (scoredRef) => {
@@ -474,9 +473,7 @@ export class GroupByKnowledgeTypeExpr extends QueryOpExpr<
         context: QueryEvalContext,
     ): Map<KnowledgeType, SemanticRefAccumulator> {
         const semanticRefMatches = this.matches.eval(context);
-        return semanticRefMatches.groupMatchesByType(
-            context.conversation.semanticRefs!,
-        );
+        return semanticRefMatches.groupMatchesByType(context.semanticRefs);
     }
 }
 
@@ -556,8 +553,68 @@ export class PropertyMatchPredicate implements IQuerySemanticRefPredicate {
     constructor(public searchTerm: PropertySearchTerm) {}
 
     public eval(context: QueryEvalContext, semanticRef: SemanticRef): boolean {
+        return (
+            searchTermMatchesEntity(this.searchTerm, semanticRef) ||
+            searchTermMatchesAction(this.searchTerm, semanticRef)
+        );
+    }
+}
+
+export function searchTermMatchesEntity(
+    searchTerm: PropertySearchTerm,
+    semanticRef: SemanticRef,
+) {
+    if (semanticRef.knowledgeType !== "entity") {
         return false;
     }
+    const entity = semanticRef.knowledge as conversation.ConcreteEntity;
+    switch (searchTerm.propertyName) {
+        default:
+            break;
+        case "type":
+            return searchTermMatchesOneOfText(
+                searchTerm.propertyValue,
+                entity.type,
+            );
+        case "name":
+            return searchTermMatchesText(searchTerm.propertyValue, entity.name);
+    }
+    return false;
+}
+
+export function searchTermMatchesAction(
+    searchTerm: PropertySearchTerm,
+    semanticRef: SemanticRef,
+): boolean {
+    if (semanticRef.knowledgeType !== "action") {
+        return false;
+    }
+    const action = semanticRef.knowledge as conversation.Action;
+    switch (searchTerm.propertyName) {
+        default:
+            break;
+        case "verb":
+            return searchTermMatchesOneOfText(
+                searchTerm.propertyValue,
+                action.verbs,
+            );
+        case "subject":
+            return searchTermMatchesText(
+                searchTerm.propertyValue,
+                action.subjectEntityName,
+            );
+        case "object":
+            return searchTermMatchesText(
+                searchTerm.propertyValue,
+                action.objectEntityName,
+            );
+        case "indirectObject":
+            return searchTermMatchesText(
+                searchTerm.propertyValue,
+                action.indirectObjectEntityName,
+            );
+    }
+    return false;
 }
 
 export class ScopeExpr extends QueryOpExpr<SemanticRefAccumulator> {
@@ -592,17 +649,14 @@ export class ScopeExpr extends QueryOpExpr<SemanticRefAccumulator> {
         // E.g. only look at ranges matching actions where X is a subject and Y an object
         // The text ranges for matching refs give us the text ranges in scope
         for (const inScopeRef of accumulator.getSemanticRefs(
-            context.conversation.semanticRefs!,
+            context.semanticRefs,
             (sr) => this.evalPredicates(context, this.predicates!, sr),
         )) {
             scope.addRange(inScopeRef.range);
         }
         if (scope.size > 0) {
             // Select only those semantic refs that are in scope
-            accumulator = accumulator.getInScope(
-                context.conversation.semanticRefs!,
-                scope,
-            );
+            accumulator = accumulator.getInScope(context.semanticRefs, scope);
         }
         return accumulator;
     }

@@ -88,6 +88,7 @@ import {
     findArtistTracksWithGenre,
     findTracks,
     findTracksWithGenre,
+    getTrackFromEntity,
 } from "./search.js";
 import { toTrackObjectFull } from "./spotifyUtils.js";
 
@@ -234,18 +235,21 @@ async function htmlTrackNames(
                 actionResult.entities.push({
                     name: track.name,
                     type: ["track", "song"],
+                    uniqueId: track.id,
                 });
                 // make an entity for each artist
                 for (const artist of track.artists) {
                     actionResult.entities.push({
                         name: artist.name,
                         type: ["artist"],
+                        uniqueId: artist.id,
                     });
                 }
                 // make an entity for the album
                 actionResult.entities.push({
                     name: track.album.name,
                     type: ["album"],
+                    uniqueId: track.album.id,
                 });
                 entCount++;
             }
@@ -286,18 +290,21 @@ async function htmlTrackNames(
         actionResult.entities.push({
             name: track.name,
             type: ["track", "song"],
+            uniqueId: track.id,
         });
         // make an entity for each artist
         for (const artist of track.artists) {
             actionResult.entities.push({
                 name: artist.name,
                 type: ["artist"],
+                uniqueId: artist.id,
             });
         }
         // make an entity for the album
         actionResult.entities.push({
             name: track.album.name,
             type: ["album"],
+            uniqueId: track.album.id,
         });
         const litArtistsPrefix =
             track.artists.length > 1 ? "artists: " : "artist ";
@@ -462,14 +469,16 @@ async function playRandomAction(
 async function playTrackAction(
     clientContext: IClientContext,
     action: PlayTrackAction,
+    entityMap: Map<string, Entity> | undefined,
 ): Promise<ActionResult> {
     if (action.parameters.albumName) {
-        return playTrackWithAlbum(clientContext, action);
+        return playTrackWithAlbum(clientContext, action, entityMap);
     }
     const tracks = await findTracks(
         clientContext,
         action.parameters.trackName,
         action.parameters.artists,
+        entityMap,
         3,
     );
 
@@ -480,17 +489,62 @@ async function playTrackAction(
     return playTrackCollection(collection, clientContext);
 }
 
+function isTrackMatch(
+    track: SpotifyApi.TrackObjectFull,
+    albumName: string,
+    artists?: string[],
+) {
+    if (!track.album.name.toLowerCase().includes(albumName.toLowerCase())) {
+        return false;
+    }
+    if (artists === undefined) {
+        return true;
+    }
+    return artists.every((artist) =>
+        track.album.artists.some((albumArtist) =>
+            equivalentNames(artist, albumArtist.name),
+        ),
+    );
+}
+
 async function playTrackWithAlbum(
     clientContext: IClientContext,
     action: PlayTrackAction,
+    entityMap: Map<string, Entity> | undefined,
 ): Promise<ActionResult> {
+    const albumName = action.parameters.albumName!;
+    const trackName = action.parameters.trackName;
+    const trackFromEntity = await getTrackFromEntity(
+        trackName,
+        clientContext,
+        entityMap,
+    );
+    if (trackFromEntity !== undefined) {
+        if (
+            isTrackMatch(trackFromEntity, albumName, action.parameters.artists)
+        ) {
+            return playTrackCollection(
+                new TrackCollection([trackFromEntity]),
+                clientContext,
+            );
+        }
+    }
     const albums = await findAlbums(
-        action.parameters.albumName!,
+        albumName,
         action.parameters.artists,
         clientContext,
+        entityMap,
     );
 
-    const trackName = action.parameters.trackName;
+    if (trackFromEntity !== undefined) {
+        if (albums.some((album) => album.id === trackFromEntity.album.id)) {
+            return playTrackCollection(
+                new TrackCollection([trackFromEntity]),
+                clientContext,
+            );
+        }
+    }
+
     for (const album of albums) {
         const track = album.tracks.items.find(
             // TODO: Might want to use fuzzy matching here.
@@ -538,11 +592,13 @@ async function playFromCurrentTrackListAction(
 async function playAlbumAction(
     clientContext: IClientContext,
     action: PlayAlbumAction,
+    entityMap: Map<string, Entity> | undefined,
 ): Promise<ActionResult> {
     const albums = await findAlbums(
         action.parameters.albumName,
         action.parameters.artists,
         clientContext,
+        entityMap,
     );
 
     const album = albums[0];
@@ -576,17 +632,19 @@ async function playAlbumAction(
 async function playArtistAction(
     clientContext: IClientContext,
     action: PlayArtistAction,
+    entityMap: Map<string, Entity> | undefined,
 ): Promise<ActionResult> {
     const tracks = await (action.parameters.genre
         ? findArtistTracksWithGenre(
               action.parameters.artist,
               action.parameters.genre,
               clientContext,
+              entityMap,
           )
         : findArtistTopTracks(
               action.parameters.artist,
-
               clientContext,
+              entityMap,
           ));
 
     const quantity = action.parameters.quantity ?? 0;
@@ -724,20 +782,20 @@ export async function handleCall(
     action: PlayerAction,
     clientContext: IClientContext,
     actionIO: ActionIO,
-    entityMap: Map<string, Entity>,
+    entityMap: Map<string, Entity> | undefined,
 ): Promise<ActionResult> {
     clientContext.entityMap = entityMap;
     switch (action.actionName) {
         case "playRandom":
             return playRandomAction(clientContext, action);
         case "playTrack":
-            return playTrackAction(clientContext, action);
+            return playTrackAction(clientContext, action, entityMap);
         case "playFromCurrentTrackList":
             return playFromCurrentTrackListAction(clientContext, action);
         case "playAlbum":
-            return playAlbumAction(clientContext, action);
+            return playAlbumAction(clientContext, action, entityMap);
         case "playArtist":
-            return playArtistAction(clientContext, action);
+            return playArtistAction(clientContext, action, entityMap);
         case "playGenre":
             return playGenreAction(clientContext, action);
         case "status": {

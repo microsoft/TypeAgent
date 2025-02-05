@@ -673,6 +673,9 @@ importers:
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../../agentSdk
+      action-schema:
+        specifier: workspace:*
+        version: link:../../actionSchema
       agent-rpc:
         specifier: workspace:*
         version: link:../../agentRpc
