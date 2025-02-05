@@ -5,6 +5,7 @@ import dotenv from "dotenv";
 import {
     downloadArxivPaper,
     fetchArxivPapers,
+    extractTextChunksFromPdf,
     printArxivPaperParsedData,
 } from "./docuProc.js";
 
@@ -15,7 +16,7 @@ console.log("Lets start processing your documents ...");
 const papers: any[] | undefined = await fetchArxivPapers({
     searchTerm: "transformer",
     searchField: "title",
-    maxResults: 3,
+    maxResults: 1,
 });
 if (papers !== undefined && papers.length > 0) {
     console.log(`Found ${papers.length} papers`);
@@ -25,7 +26,11 @@ if (papers !== undefined && papers.length > 0) {
     printArxivPaperParsedData(papers);
     papers.forEach(async (paper) => {
         try {
-            await downloadArxivPaper(paper);
+            const pdfFilePath: string | undefined =
+                await downloadArxivPaper(paper);
+            if (pdfFilePath !== undefined) {
+                await extractTextChunksFromPdf(pdfFilePath);
+            }
         } catch (error) {
             console.error("Error downloading paper:", error);
         }

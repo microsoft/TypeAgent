@@ -23,6 +23,7 @@
   },
   "dependencies": {
     "aiclient": "workspace:*",
+    "canvas": "^3.1.0",
     "chalk": "^5.3.0",
     "code-processor": "workspace:*",
     "dotenv": "^16.3.1",
@@ -30,14 +31,13 @@
     "interactive-app": "workspace:*",
     "knowledge-processor": "workspace:*",
     "memory-providers": "workspace:*",
-    "pdf-parse": "1.1.1",
+    "pdfjs-dist": "^4.10.38",
     "typeagent": "workspace:*",
     "typechat": "^0.1.1",
     "typescript": "^5.4.2"
   },
   "devDependencies": {
     "@types/node": "^18.18.7",
-    "@types/pdf-parse": "^1.1.4",
     "copyfiles": "^2.4.1",
     "rimraf": "^5.0.5"
   },

@@ -7,6 +7,8 @@ import { fetchWithRetry } from "aiclient";
 import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "url";
+import { getDocument, OPS } from "pdfjs-dist/legacy/build/pdf.mjs";
+import { createCanvas } from "canvas";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -27,6 +29,13 @@ interface ArxivPaper {
     comment?: string;
     published: string;
     journal_ref?: string;
+}
+
+interface PdfChunk {
+    page: number;
+    chunkIndex: number;
+    text: string;
+    imageRefs?: string[];
 }
 
 export async function fetchArxivPapers(
@@ -51,7 +60,7 @@ export async function fetchArxivPapers(
     const queryParams = new URLSearchParams({
         search_query: `${searchPrefix}${query.searchTerm}`,
         start: String(query.start ?? 0),
-        max_results: String(query.maxResults ?? 5),
+        max_results: String(query.maxResults ?? 3),
         sortBy: query.sortBy ?? "relevance",
         sortOrder: query.sortOrder ?? "descending",
     });
@@ -121,6 +130,17 @@ export function printArxivPaperParsedData(papers: ArxivPaper[]) {
     });
 }
 
+export async function createFolderIfNotExists(
+    folderPath: string,
+): Promise<void> {
+    try {
+        await fs.promises.mkdir(folderPath, { recursive: true });
+        console.log(`Folder '${folderPath}' is ready.`);
+    } catch (error) {
+        console.error("Error creating folder:", error);
+    }
+}
+
 export function getValidFilename(paperId: string): string {
     return paperId.replace(/\//g, "__");
 }
@@ -134,7 +154,9 @@ function getPdfUrlFromId(id: string): { paperId: string; downloadUrl: string } {
     return { paperId: `${pid}`, downloadUrl: `https://arxiv.org/pdf/${pid}` };
 }
 
-export async function downloadArxivPaper(paper: ArxivPaper) {
+export async function downloadArxivPaper(
+    paper: ArxivPaper,
+): Promise<string | undefined> {
     const arxivInfo = getPdfUrlFromId(paper.id);
 
     const outputDir = path.join(__dirname, "papers");
@@ -168,6 +190,255 @@ export async function downloadArxivPaper(paper: ArxivPaper) {
         return filePath;
     } catch (error) {
         console.error("Error downloading paper:", error);
-        return null;
+        return undefined;
     }
+}
+
+export async function extractTextChunksFromPdf(
+    pdfPath: string,
+    chunkSize: number = 4096,
+): Promise<void> {
+    try {
+        let outputDir = path.join(__dirname, "papers");
+        const folderName = path.parse(pdfPath).name;
+
+        outputDir = path.join(outputDir, folderName);
+        const pagesDir = path.join(outputDir, "pages");
+
+        createFolderIfNotExists(folderName);
+        createFolderIfNotExists(pagesDir);
+
+        const data = new Uint8Array(fs.readFileSync(pdfPath));
+        const loadingTask = getDocument({ data });
+        const pdfDocument = await loadingTask.promise;
+
+        let chunkIndex = 0;
+        for (let pageNum = 1; pageNum <= pdfDocument.numPages; pageNum++) {
+            const page = await pdfDocument.getPage(pageNum);
+            const textContent = await page.getTextContent();
+            //const operatorList = await page.getOperatorList();
+
+            let currentText = "";
+            const imageRefs: string[] = [];
+
+            // Chunk text
+            for (const item of textContent.items) {
+                if ("str" in item) {
+                    currentText += item.str + " ";
+
+                    if (currentText.length >= chunkSize) {
+                        // Save the current chunk as a JSON file
+                        const chunk: PdfChunk = {
+                            page: pageNum,
+                            chunkIndex,
+                            text: currentText,
+                            imageRefs: imageRefs,
+                        };
+
+                        const chunkFilename = `p_${pageNum}_c_${chunkIndex}.json`;
+                        fs.writeFileSync(
+                            path.join(pagesDir, chunkFilename),
+                            JSON.stringify(chunk, null, 2),
+                        );
+                        chunkIndex++;
+                        currentText = "";
+                    }
+                }
+            }
+
+            // If any leftover text remains, store it as the last chunk
+            if (currentText.length > 0) {
+                const chunk: PdfChunk = {
+                    page: pageNum,
+                    chunkIndex,
+                    text: currentText,
+                    imageRefs,
+                };
+                const chunkFilename = `p_${pageNum}_c_${chunkIndex}.json`;
+                fs.writeFileSync(
+                    path.join(pagesDir, chunkFilename),
+                    JSON.stringify(chunk, null, 2),
+                );
+            }
+        }
+    } catch (error) {
+        console.error("Error extracting text and images:", error);
+    }
+}
+
+export async function extractTextAndImages(
+    pdfPath: string,
+    chunkSize: number = 4096,
+) {
+    try {
+        let outputDir = path.join(__dirname, "papers");
+        const folderName = path.parse(pdfPath).name;
+        outputDir = path.join(outputDir, folderName);
+
+        // Ensure folder exists
+        if (!fs.existsSync(outputDir))
+            fs.mkdirSync(outputDir, { recursive: true });
+        if (!fs.existsSync(path.join(outputDir, "images")))
+            fs.mkdirSync(path.join(outputDir, "images"));
+
+        const data = new Uint8Array(fs.readFileSync(pdfPath));
+        const loadingTask = getDocument({ data });
+        const pdfDocument = await loadingTask.promise;
+
+        console.log("PDF loaded");
+        let chunks: PdfChunk[] = [];
+        let currentText = "";
+        let chunkIndex = 0;
+
+        // Process each page of the PDF
+        for (let pageNum = 1; pageNum <= pdfDocument.numPages; pageNum++) {
+            const page = await pdfDocument.getPage(pageNum);
+            const textContent = await page.getTextContent();
+            const operatorList = await page.getOperatorList();
+            const imageRefs: string[] = [];
+
+            // Extract text
+            for (const item of textContent.items) {
+                if ("str" in item) {
+                    currentText += item.str + " ";
+                    if (currentText.length >= chunkSize) {
+                        chunks.push({
+                            text: currentText,
+                            page: pageNum,
+                            chunkIndex,
+                            imageRefs,
+                        });
+                        currentText = "";
+                        chunkIndex++;
+                    }
+                }
+            }
+
+            extractImagesFromPage(operatorList, page, pageNum, outputDir);
+        }
+
+        if (currentText.length > 0) {
+            chunks.push({
+                text: currentText,
+                page: pdfDocument.numPages,
+                chunkIndex,
+                imageRefs: [],
+            });
+        }
+
+        return chunks;
+    } catch (error) {
+        console.error("Error extracting text and images:", error);
+        return [];
+    }
+}
+
+export async function extractImagesFromPage(
+    operatorList: any,
+    page: any,
+    pageNum: number,
+    outputDir: string,
+): Promise<string[]> {
+    const imageRefs: string[] = [];
+    const viewport = page.getViewport({ scale: 1.0 });
+    const scaleFactor = viewport.width / page.getViewport({ scale: 1.0 }).width;
+
+    for (let i = 0; i < operatorList.fnArray.length; i++) {
+        if (operatorList.fnArray[i] === OPS.paintImageXObject) {
+            const imageName = operatorList.argsArray[i][0];
+
+            try {
+                const image = await new Promise<any>((resolve, reject) => {
+                    page.objs.get(imageName, (img: any) => {
+                        if (img) resolve(img);
+                        else reject(new Error(`Image ${imageName} not ready`));
+                    });
+                });
+
+                if (image) {
+                    const { width, height, data } = image;
+
+                    const scaledWidth = width * scaleFactor;
+                    const scaledHeight = height * scaleFactor;
+
+                    const canvas = createCanvas(scaledWidth, scaledHeight);
+                    const ctx = canvas.getContext("2d");
+
+                   const imageData = ctx.createImageData(
+                        scaledWidth,
+                        scaledHeight,
+                    );
+                    imageData.data.set(new Uint8ClampedArray(data));
+                    ctx.putImageData(imageData, 0, 0);
+
+                    // Save as PNG
+                    const imageFilename = `image_p${pageNum}_${i}.png`;
+                    const imagePath = path.join(
+                        outputDir,
+                        "images",
+                        imageFilename,
+                    );
+                    fs.writeFileSync(imagePath, canvas.toBuffer("image/png"));
+
+                    imageRefs.push(imageFilename);
+                }
+            } catch (err: any) {
+                console.warn(
+                    `Skipping unresolved image ${imageName} on page ${pageNum}: ${err.message}`,
+                );
+            }
+        }
+    }
+
+    return imageRefs;
+}
+
+export async function extractImagesFromPageV1(
+    operatorList: any,
+    page: any,
+    pageNum: number,
+    outputDir: string,
+): Promise<string[]> {
+    const imageRefs: string[] = [];
+
+    for (let i = 0; i < operatorList.fnArray.length; i++) {
+        if (operatorList.fnArray[i] === OPS.paintImageXObject) {
+            const imageName = operatorList.argsArray[i][0];
+
+            try {
+                const image = await new Promise<any>((resolve, reject) => {
+                    page.objs.get(imageName, (img: any) => {
+                        if (img) resolve(img);
+                        else reject(new Error(`Image ${imageName} not ready`));
+                    });
+                });
+
+                if (image) {
+                    const { width, height, data } = image;
+                    const canvas = createCanvas(width, height);
+                    const ctx = canvas.getContext("2d");
+
+                    const imageData = ctx.createImageData(width, height);
+                    imageData.data.set(new Uint8ClampedArray(data));
+                    ctx.putImageData(imageData, 0, 0);
+
+                    const imageFilename = `image_p${pageNum}_${i}.png`;
+                    const imagePath = path.join(
+                        outputDir,
+                        "images",
+                        imageFilename,
+                    );
+                    fs.writeFileSync(imagePath, canvas.toBuffer("image/png"));
+
+                    imageRefs.push(imageFilename);
+                }
+            } catch (err: any) {
+                console.warn(
+                    `Skipping unresolved image ${imageName} on page ${pageNum}: ${err.message}`,
+                );
+            }
+        }
+    }
+
+    return imageRefs;
 }
