@@ -1,7 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { Action, Actions, FullAction, normalizeParamString } from "agent-cache";
+import {
+    Action,
+    actionsToFullActions,
+    FullAction,
+    normalizeParamString,
+} from "agent-cache";
 import { CommandHandlerContext } from "../context/commandHandlerContext.js";
 import registerDebug from "debug";
 import { getAppAgentName } from "../translation/agentTranslators.js";
@@ -396,7 +401,7 @@ async function executeAction(
 }
 
 async function canExecute(
-    actions: Actions,
+    actions: Action[],
     context: ActionContext<CommandHandlerContext>,
 ): Promise<boolean> {
     const systemContext = context.sessionContext.agentContext;
@@ -419,7 +424,7 @@ async function canExecute(
             (action) => action.parameters.request,
         );
         const lines = [
-            `Unable to determine ${actions.action === undefined ? "one or more actions in" : "action for"} the request.`,
+            `Unable to determine ${actions.length > 1 ? "one or more actions in" : "action for"} the request.`,
             ...unknownRequests.map((s) => `- ${s}`),
         ];
         systemContext.chatHistory.addAssistantEntry(
@@ -535,7 +540,7 @@ type PendingAction = {
 };
 
 function toPendingActions(
-    actions: Actions,
+    actions: Action[],
     entities: PromptEntity[] | undefined,
 ) {
     const promptEntityMap = entities
@@ -554,15 +559,17 @@ function toPendingActions(
 }
 
 export async function executeActions(
-    actions: Actions,
+    actions: Action[],
     entities: PromptEntity[] | undefined,
     context: ActionContext<CommandHandlerContext>,
 ) {
     const systemContext = context.sessionContext.agentContext;
     if (systemContext.commandResult === undefined) {
-        systemContext.commandResult = { actions: actions.toFullActions() };
+        systemContext.commandResult = {
+            actions: actionsToFullActions(actions),
+        };
     } else {
-        systemContext.commandResult.actions = actions.toFullActions();
+        systemContext.commandResult.actions = actionsToFullActions(actions);
     }
 
     if (!(await canExecute(actions, context))) {

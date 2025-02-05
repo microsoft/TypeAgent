@@ -125,6 +125,7 @@ export class Action {
     }
 }
 
+/*
 export class Actions {
     constructor(private readonly actions: Action | Action[]) {}
 
@@ -208,6 +209,7 @@ export class Actions {
         );
     }
 }
+*/
 
 const format =
     "'<request> => translator.action(<parameters>)' or '<request> => [ translator.action1(<parameters1>), translator.action2(<parameters2>), ... ]'";
@@ -277,17 +279,53 @@ function parseActions(actionStr: string) {
     return actions;
 }
 
+function parseActionsString(actions: string): Action[] {
+    return actions[0] === "[" ? parseActions(actions) : [parseAction(actions)];
+}
+
+function actionsToString(actions: Action[]): string {
+    return actions.length !== 1
+        ? `[${actions.join(",")}]`
+        : actions[0].toString();
+}
+
+export function actionsFromJson(actions: JSONAction | JSONAction[]): Action[] {
+    return Array.isArray(actions)
+        ? actions.map((a) => Action.fromJSONObject(a))
+        : [Action.fromJSONObject(actions)];
+}
+
+export function actionsToJson(actions: Action[]): JSONAction | JSONAction[] {
+    return actions.length !== 1
+        ? actions.map((a) => a.toJSON())
+        : actions[0].toJSON();
+}
+
+export function actionsFromFullActions(fullActions: FullAction[]): Action[] {
+    return fullActions.map((a) => Action.fromFullAction(a));
+}
+
+export function actionsToFullActions(actions: Action[]): FullAction[] {
+    return actions.map((a) => a.toFullAction());
+}
+
+export function getTranslationNamesForActions(actions: Action[]): string[] {
+    return Array.from(
+        new Set(actions.map((a) => a.translatorNameString)),
+    ).sort();
+}
+
 export class RequestAction {
     public static readonly Separator = " => ";
 
     constructor(
         public readonly request: string,
-        public readonly actions: Actions,
+        public readonly actions: Action[],
         public readonly history?: HistoryContext,
     ) {}
 
     public toString() {
-        return `${this.request}${RequestAction.Separator}${this.actions}`;
+        return `${this.request}${RequestAction.Separator}${actionsToString(this.actions)}`;
     }
 
     public toPromptString() {
@@ -306,7 +344,7 @@ export class RequestAction {
         const separator = trimmed.indexOf(RequestAction.Separator);
         if (separator === -1) {
             throw new Error(
-                `'=>' not found. Input must be in the form of ${format}`,
+                `'${RequestAction.Separator}' not found. Input must be in the form of ${format}`,
             );
         }
         const request = trimmed.substring(0, separator).trim();
@@ -314,7 +352,7 @@ export class RequestAction {
             .substring(separator + RequestAction.Separator.length)
             .trim();
 
-        return new RequestAction(request, Actions.fromString(actions));
+        return new RequestAction(request, parseActionsString(actions));
     }
 
     public static create(
@@ -322,6 +360,10 @@ export class RequestAction {
         actions: Action | Action[],
         history?: HistoryContext,
     ) {
-        return new RequestAction(request, new Actions(actions), history);
+        return new RequestAction(
+            request,
+            Array.isArray(actions) ? actions : [actions],
+            history,
+        );
     }
 }

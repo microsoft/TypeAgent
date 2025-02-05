@@ -3,6 +3,7 @@
 
 import { QueueObject, queue } from "async";
 import {
+    getTranslationNamesForActions,
     normalizeParamString,
     RequestAction,
 } from "../explanation/requestAction.js";
@@ -111,7 +112,7 @@ export class ExplainWorkQueue {
             const startTime = performance.now();
             const actions = requestAction.actions;
             const explainer = this.getExplainerForTranslator(
-                actions.translatorNames,
+                getTranslationNamesForActions(actions),
                 model,
             );
             const explainerConfig = {

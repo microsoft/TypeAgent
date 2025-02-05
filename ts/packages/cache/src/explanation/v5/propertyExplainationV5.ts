@@ -10,7 +10,11 @@ import {
     EntityProperty,
 } from "./propertyExplanationSchemaV5WithContext.js";
 import { getPackageFilePath } from "../../utils/getPackageFilePath.js";
-import { normalizeParamString, RequestAction } from "../requestAction.js";
+import {
+    actionsToJson,
+    normalizeParamString,
+    RequestAction,
+} from "../requestAction.js";
 import {
     getActionDescription,
     getExactStringRequirementMessage,
@@ -81,7 +85,7 @@ function validatePropertyExplanation(
 ): string[] | undefined {
     const corrections: string[] = [];
     const propertyNameSet = new Set<string>();
-    const actionProps = requestAction.actions.toJSON();
+    const actionProps = actionsToJson(requestAction.actions);
     for (const prop of actionExplanation.properties) {
         if (propertyNameSet.has(prop.name)) {
             corrections.push(

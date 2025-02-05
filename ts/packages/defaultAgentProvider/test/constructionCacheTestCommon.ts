@@ -14,7 +14,6 @@ import {
     createSchemaInfoProvider,
 } from "agent-dispatcher/internal";
 import {
-    Actions,
     AgentCache,
     JSONAction,
     ParamValueType,
@@ -23,6 +22,9 @@ import {
     createActionProps,
     normalizeParamValue,
     normalizeParamString,
+    actionsFromJson,
+    actionsToJson,
+    Action,
 } from "agent-cache";
 import { glob } from "glob";
 import { fileURLToPath } from "node:url";
@@ -72,7 +74,7 @@ const testInput = inputs.flatMap(([f]) =>
     f.entries.map<[string, string, RequestAction, object, string[]]>((data) => [
         f.schemaName,
         f.explainerName,
-        new RequestAction(data.request, Actions.fromJSON(data.action)),
+        new RequestAction(data.request, actionsFromJson(data.action)),
         data.explanation,
         data.tags ?? [],
     ]),
@@ -144,8 +146,8 @@ function normalizeParams(action: JSONAction) {
     }
 }
 
-function normalizeActions(actions: Actions) {
-    const actionJSON = actions.toJSON();
+function normalizeActions(actions: Action[]) {
+    const actionJSON = actionsToJson(actions);
 
     if (Array.isArray(actionJSON)) {
         actionJSON.forEach(normalizeParams);
@@ -156,7 +158,7 @@ function normalizeActions(actions: Actions) {
 }
 
 function expandActions(
-    actions: Actions,
+    actions: Action[],
     conflictValues?: [string, ParamValueType[]][],
 ) {
     const actionJSON = normalizeActions(actions);

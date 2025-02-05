@@ -2,7 +2,11 @@
 // Licensed under the MIT License.
 
 import { PromptSection } from "typechat";
-import { normalizeParamString, RequestAction } from "../requestAction.js";
+import {
+    actionsToJson,
+    normalizeParamString,
+    RequestAction,
+} from "../requestAction.js";
 import { PropertyExplanation } from "./propertyExplanationSchemaV5WithContext.js";
 import { form } from "./explanationV5.js";
 import {
@@ -94,7 +98,7 @@ function validateSubPhraseExplanationV5(
     // Verify parameter names
 
     const corrections: string[] = result ? [result] : [];
-    const actionProps = requestAction.actions.toJSON();
+    const actionProps = actionsToJson(requestAction.actions);
     const propertyToSubPhrase = new Map<string, SubPhrase[]>();
     for (const phrase of explanation.subPhrases) {
         // check if the parameter name is valid

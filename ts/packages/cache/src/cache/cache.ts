@@ -4,7 +4,10 @@
 import { DeepPartialUndefined } from "common-utils";
 import * as Telemetry from "telemetry";
 import { ExplanationData } from "../explanation/explanationData.js";
-import { RequestAction } from "../explanation/requestAction.js";
+import {
+    getTranslationNamesForActions,
+    RequestAction,
+} from "../explanation/requestAction.js";
 import {
     SchemaInfoProvider,
     doCacheAction,
@@ -169,7 +172,7 @@ export class AgentCache {
                     message = `Explainer '${this.explainerName}' doesn't support constructions.`;
                 } else {
                     const namespaceKeys = this.getNamespaceKeys(
-                        actions.translatorNames,
+                        getTranslationNamesForActions(actions),
                     );
                     const result = await store.addConstruction(
                         namespaceKeys,

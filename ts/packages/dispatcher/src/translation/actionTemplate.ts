@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { Action, Actions } from "agent-cache";
+import { Action } from "agent-cache";
 import { getActionSchema } from "./actionSchemaFileCache.js";
 import { CommandHandlerContext } from "../context/commandHandlerContext.js";
 import {
@@ -157,7 +157,7 @@ function toTemplate(
 
 export function getActionTemplateEditConfig(
     context: CommandHandlerContext,
-    actions: Actions,
+    actions: Action[],
     preface: string,
     editPreface: string,
 ): TemplateEditConfig {

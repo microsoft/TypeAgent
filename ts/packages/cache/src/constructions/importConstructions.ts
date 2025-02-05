@@ -3,7 +3,11 @@
 
 import { SchemaInfoProvider } from "../explanation/schemaInfoProvider.js";
 import { Construction } from "./constructions.js";
-import { Actions, RequestAction } from "../explanation/requestAction.js";
+import {
+    actionsFromJson,
+    getTranslationNamesForActions,
+    RequestAction,
+} from "../explanation/requestAction.js";
 import {
     ConstructionFactory,
     GenericExplainer,
@@ -62,7 +66,7 @@ function createConstructions(
     for (const entry of data.entries) {
         const requestAction = new RequestAction(
             entry.request,
-            Actions.fromJSON(entry.action),
+            actionsFromJson(entry.action),
         );
 
         try {
@@ -76,7 +80,7 @@ function createConstructions(
             }
             const explanation = entry.explanation;
             const namespaceKeys = getSchemaNamespaceKeys(
-                actions.translatorNames,
+                getTranslationNamesForActions(actions),
                 schemaInfoProvider,
             );
             const construction = createConstruction(

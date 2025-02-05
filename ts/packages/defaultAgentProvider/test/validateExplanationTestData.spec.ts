@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { getPackageFilePath } from "../src/utils/getPackageFilePath.js";
-import { Actions, RequestAction } from "agent-cache";
+import { actionsFromJson, RequestAction } from "agent-cache";
 import { getCacheFactory, readTestData } from "agent-dispatcher/internal";
 import { glob } from "glob";
 
@@ -16,7 +16,7 @@ const testInput = inputs.flatMap((f) =>
     f.entries.map<[string, string, RequestAction, any]>((data) => [
         f.schemaName,
         f.explainerName,
-        new RequestAction(data.request, Actions.fromJSON(data.action)),
+        new RequestAction(data.request, actionsFromJson(data.action)),
         data.explanation,
     ]),
 );

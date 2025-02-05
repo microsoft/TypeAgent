@@ -30,7 +30,6 @@ import {
 } from "./propertyExplanationSchemaV5WithContext.js";
 import {
     Action,
-    Actions,
     normalizeParamString,
     RequestAction,
 } from "../requestAction.js";
@@ -231,7 +230,7 @@ interface ParameterVariationResult {
 
 function getPropertyInfo(
     propertyName: string,
-    actions: Actions,
+    actions: Action[],
 ): { action: Action; parameterName?: string; actionIndex: number | undefined } {
     const parts = propertyName.split(".");
     let firstPart = parts.shift();
@@ -239,13 +238,13 @@ function getPropertyInfo(
         throw new Error(`Invalid property name '${propertyName}'`);
     }
 
-    let action = actions.action;
+    let action: Action | undefined;
     let actionIndex: number | undefined;
-    if (action === undefined) {
+    if (actions.length > 1) {
         // Multiple actions
         actionIndex = parseInt(firstPart);
         if (!isNaN(actionIndex) && actionIndex.toString() === firstPart) {
-            action = actions.get(actionIndex);
+            action = actions[actionIndex];
         }
         if (action === undefined) {
             throw new Error(
@@ -253,6 +252,8 @@ function getPropertyInfo(
             );
         }
         firstPart = parts.shift();
+    } else {
+        action = actions[0];
     }
     if (firstPart === "fullActionName" && parts.length === 0) {
         return { action, actionIndex };
@@ -265,7 +266,7 @@ function getPropertyInfo(
 
 function getPropertySpec(
     propertyName: string,
-    actions: Actions,
+    actions: Action[],
     schemaInfoProvider?: SchemaInfoProvider,
 ): ParamSpec | undefined {
     const { action, parameterName } = getPropertyInfo(propertyName, actions);
@@ -278,7 +279,7 @@ function getPropertySpec(
 
 function getPropertyTransformInfo(
     propertyName: string,
-    actions: Actions,
+    actions: Action[],
     schemaInfoProvider?: SchemaInfoProvider,
 ): TransformInfo {
     const { action, parameterName, actionIndex } = getPropertyInfo(
@@ -418,7 +419,7 @@ function collectAltParamMatches(
 
 function getParserForPropertyValue(
     propertyValue: PropertyValue,
-    actions: Actions,
+    actions: Action[],
     schemaInfoProvider?: SchemaInfoProvider,
 ) {
     if (propertyValue.propertySubPhrases.length !== 1) {

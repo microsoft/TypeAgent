@@ -3,7 +3,12 @@
 
 import { ActionContext } from "@typeagent/agent-sdk";
 import { displayInfo } from "@typeagent/agent-sdk/helpers/display";
-import { Actions, FullAction, RequestAction } from "agent-cache";
+import {
+    Action,
+    actionsFromFullActions,
+    FullAction,
+    RequestAction,
+} from "agent-cache";
 import chalk from "chalk";
 import { getColorElapsedString } from "common-utils";
 import { getActionTemplateEditConfig } from "./actionTemplate.js";
@@ -47,7 +52,7 @@ export async function confirmTranslation(
     context: ActionContext<CommandHandlerContext>,
 ): Promise<{
     requestAction: RequestAction | undefined | null;
-    replacedAction?: Actions;
+    replacedAction?: Action[];
 }> {
     const actions = requestAction.actions;
     const systemContext = context.sessionContext.agentContext;
@@ -87,7 +92,7 @@ export async function confirmTranslation(
         ? {
               requestAction: new RequestAction(
                   requestAction.request,
-                  Actions.fromFullActions(newActions),
+                  actionsFromFullActions(newActions),
                   requestAction.history,
               ),
               replacedAction: actions,
