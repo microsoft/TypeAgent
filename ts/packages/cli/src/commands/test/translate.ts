@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { Args, Command, Flags } from "@oclif/core";
-import { actionsFromJson, actionsToFullActions, FullAction } from "agent-cache";
+import { fromJsonActions, toFullActions, FullAction } from "agent-cache";
 import { createDispatcher } from "agent-dispatcher";
 import {
     readTestData,
@@ -209,9 +209,7 @@ export default class TestTranslateCommand extends Command {
                 .flatMap((input) =>
                     input.data.entries.map((e) => ({
                         request: e.request,
-                        actions: actionsToFullActions(
-                            actionsFromJson(e.action),
-                        ),
+                        actions: toFullActions(fromJsonActions(e.action)),
                     })),
                 )
                 .map((entry) => entry.request);

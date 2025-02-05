@@ -4,7 +4,7 @@
 import {
     RequestAction,
     HistoryContext,
-    actionsToJson,
+    toJsonActions,
 } from "./requestAction.js";
 import {
     GenericExplanationResult,
@@ -38,7 +38,7 @@ function getContextPart(history?: HistoryContext) {
 
 export function getActionDescription(requestAction: RequestAction) {
     const actions = requestAction.actions;
-    const leafPropertyNames = getLeafNames(actionsToJson(actions));
+    const leafPropertyNames = getLeafNames(toJsonActions(actions));
     let propertyPart = "";
     if (leafPropertyNames.length > 0) {
         propertyPart = `The property name${

@@ -11,7 +11,7 @@ import {
 } from "./propertyExplanationSchemaV5WithContext.js";
 import { getPackageFilePath } from "../../utils/getPackageFilePath.js";
 import {
-    actionsToJson,
+    toJsonActions,
     normalizeParamString,
     RequestAction,
 } from "../requestAction.js";
@@ -85,7 +85,7 @@ function validatePropertyExplanation(
 ): string[] | undefined {
     const corrections: string[] = [];
     const propertyNameSet = new Set<string>();
-    const actionProps = actionsToJson(requestAction.actions);
+    const actionProps = toJsonActions(requestAction.actions);
     for (const prop of actionExplanation.properties) {
         if (propertyNameSet.has(prop.name)) {
             corrections.push(

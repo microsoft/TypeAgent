@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { Action } from "agent-cache";
+import { ExecutableAction } from "agent-cache";
 import { getActionSchema } from "./actionSchemaFileCache.js";
 import { CommandHandlerContext } from "../context/commandHandlerContext.js";
 import {
@@ -114,17 +114,17 @@ function toTemplateType(type: ActionParamType): TemplateType | undefined {
 function toTemplate(
     context: CommandHandlerContext,
     translators: string[],
-    action: Action,
+    action: ExecutableAction,
 ) {
     const actionSchemaFile = context.agents.tryGetActionSchemaFile(
-        action.translatorName,
+        action.action.translatorName,
     );
     if (actionSchemaFile === undefined) {
         return getDefaultActionTemplate(translators);
     }
     const template = getDefaultActionTemplate(
         translators,
-        action.translatorName,
+        action.action.translatorName,
     );
     const actionSchemas = actionSchemaFile.actionSchemas;
     const actionName: TemplateFieldStringUnion = {
@@ -136,11 +136,11 @@ function toTemplate(
         type: actionName,
     };
 
-    const actionSchema = actionSchemas.get(action.actionName);
+    const actionSchema = actionSchemas.get(action.action.actionName);
     if (actionSchema === undefined) {
         return template;
     }
-    actionName.discriminator = action.actionName;
+    actionName.discriminator = action.action.actionName;
 
     const parameterType = actionSchema.type.fields.parameters?.type;
     if (parameterType) {
@@ -157,7 +157,7 @@ function toTemplate(
 
 export function getActionTemplateEditConfig(
     context: CommandHandlerContext,
-    actions: Action[],
+    actions: ExecutableAction[],
     preface: string,
     editPreface: string,
 ): TemplateEditConfig {
@@ -167,7 +167,7 @@ export function getActionTemplateEditConfig(
     for (const action of actions) {
         templateData.push({
             schema: toTemplate(context, translators, action),
-            data: action.toFullAction(),
+            data: action.action,
         });
     }
 

@@ -15,10 +15,11 @@ import {
     CorrectionRecord,
     ExplanationDataEntry,
     GenericExplanationResult,
-    Action,
+    ExecutableAction,
     HistoryContext,
     ExplanationData,
-    actionsToJson,
+    toJsonActions,
+    createExecutableAction,
 } from "agent-cache";
 import { getElapsedString, createLimiter, Limiter } from "common-utils";
 import { getCacheFactory } from "../cacheFactory.js";
@@ -126,7 +127,7 @@ export type GenerateTestDataResult = {
 
 type Pending = {
     request: string;
-    actions: Action[] | undefined;
+    actions: ExecutableAction[] | undefined;
     history: HistoryContext | undefined;
     tags: string[] | undefined;
 };
@@ -244,7 +245,7 @@ async function saveTestDataFile(
             Array.from(pending.values()).map((e) => {
                 return {
                     request: e.request,
-                    action: e.actions ? actionsToJson(e.actions) : undefined,
+                    action: e.actions ? toJsonActions(e.actions) : undefined,
                     message: "Not processed",
                 };
             }),
@@ -342,7 +343,7 @@ function getGenerateTestDataFn(
     const safeExplain = getSafeExplainFn([schemaName], explainerName, model);
     return async (
         request: string,
-        actions: Action[] | undefined,
+        actions: ExecutableAction[] | undefined,
         history: HistoryContext | undefined,
         tags: string[] | undefined,
     ): Promise<AddResult> => {
@@ -366,7 +367,7 @@ function getGenerateTestDataFn(
             const translatedAction = result.data as TranslatedAction;
 
             if (isMultipleAction(translatedAction)) {
-                const newActions: Action[] = [];
+                const newActions: ExecutableAction[] = [];
                 for (const e of translatedAction.parameters.requests) {
                     if (isPendingRequest(e)) {
                         return toFailedResult({
@@ -376,7 +377,7 @@ function getGenerateTestDataFn(
                         });
                     }
                     newActions.push(
-                        new Action(
+                        createExecutableAction(
                             schemaName,
                             e.action.actionName,
                             e.action.parameters,
@@ -386,7 +387,7 @@ function getGenerateTestDataFn(
                 actions = newActions;
             } else {
                 actions = [
-                    new Action(
+                    createExecutableAction(
                         schemaName,
                         translatedAction.actionName,
                         translatedAction.parameters,
@@ -396,8 +397,8 @@ function getGenerateTestDataFn(
         }
 
         const requestAction = RequestAction.create(request, actions, history);
-        for (const a of requestAction.actions) {
-            if (a.actionName === "unknown") {
+        for (const { action } of requestAction.actions) {
+            if (action.actionName === "unknown") {
                 return toFailedResult({
                     request,
                     message: "Failed translation: Unknown action",
@@ -411,7 +412,7 @@ function getGenerateTestDataFn(
         if (!explanation.success) {
             return toFailedResult({
                 request,
-                action: actionsToJson(requestAction.actions),
+                action: toJsonActions(requestAction.actions),
                 message: `Failed Explanation: ${explanation.message}`,
                 corrections: explanation.corrections,
                 tags,
@@ -423,7 +424,7 @@ function getGenerateTestDataFn(
             elapsedMs: performance.now() - startTime,
             entry: {
                 request,
-                action: actionsToJson(requestAction.actions),
+                action: toJsonActions(requestAction.actions),
                 explanation: explanation.data,
                 corrections: explanation.corrections,
                 tags,

@@ -25,7 +25,7 @@ function checkExplainableValues(
     const normalizedRequest = normalizeParamString(requestAction.request);
     const pending: unknown[] = [];
 
-    for (const action of requestAction.actions) {
+    for (const { action } of requestAction.actions) {
         pending.push(action.parameters);
     }
 

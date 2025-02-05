@@ -5,7 +5,7 @@ import {
     RequestAction,
     ParamValueType,
     HistoryContext,
-    actionsFromJson,
+    fromJsonActions,
 } from "../explanation/requestAction.js";
 import { MatchConfig, matchParts } from "./constructionMatch.js";
 import {
@@ -126,7 +126,7 @@ export class Construction {
                 construction: this,
                 match: new RequestAction(
                     request,
-                    actionsFromJson(actionProps),
+                    fromJsonActions(actionProps),
                     config.history,
                 ),
                 conflictValues: matchedValues.conflictValues,

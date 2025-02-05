@@ -3,7 +3,7 @@
 
 import { PromptSection } from "typechat";
 import {
-    actionsToJson,
+    toJsonActions,
     normalizeParamString,
     RequestAction,
 } from "../requestAction.js";
@@ -98,7 +98,7 @@ function validateSubPhraseExplanationV5(
     // Verify parameter names
 
     const corrections: string[] = result ? [result] : [];
-    const actionProps = actionsToJson(requestAction.actions);
+    const actionProps = toJsonActions(requestAction.actions);
     const propertyToSubPhrase = new Map<string, SubPhrase[]>();
     for (const phrase of explanation.subPhrases) {
         // check if the parameter name is valid

@@ -15,6 +15,7 @@ import {
     ClientAction,
     AppAgentManifest,
     Entity,
+    AppAction,
 } from "@typeagent/agent-sdk";
 import {
     AgentCallFunctions,
@@ -311,7 +312,7 @@ export async function createAgentRpcClient(
             });
         },
         executeAction(
-            action: any,
+            action: AppAction,
             context: ActionContext<ShimContext>,
             entityMap: Map<string, Entity>,
         ) {
@@ -324,7 +325,7 @@ export async function createAgentRpcClient(
             );
         },
         validateWildcardMatch(
-            action: any,
+            action: AppAction,
             context: SessionContext<ShimContext>,
         ) {
             return rpc.invoke("validateWildcardMatch", {

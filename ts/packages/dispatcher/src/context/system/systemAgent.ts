@@ -51,7 +51,7 @@ import {
     getSystemTemplateSchema,
 } from "../../translation/actionTemplate.js";
 import { getTokenCommandHandlers } from "./handlers/tokenCommandHandler.js";
-import { actionsFromFullActions, FullAction } from "agent-cache";
+import { toExecutableActions, FullAction } from "agent-cache";
 import { getActionSchema } from "../../translation/actionSchemaFileCache.js";
 import { executeActions } from "../../execute/actionHandlers.js";
 import { getObjectProperty } from "common-utils";
@@ -231,7 +231,7 @@ class ActionCommandHandler implements CommandHandler {
         validateAction(actionSchema, action, true);
 
         return executeActions(
-            actionsFromFullActions([action as FullAction]),
+            toExecutableActions([action as FullAction]),
             undefined,
             context,
         );

@@ -3,7 +3,7 @@
 
 import { Args, Command, Flags } from "@oclif/core";
 import chalk from "chalk";
-import { RequestAction, actionsFromJson } from "agent-cache";
+import { RequestAction, fromJsonActions } from "agent-cache";
 import {
     createActionConfigProvider,
     getCacheFactory,
@@ -17,7 +17,7 @@ import { ClientIO, createDispatcher } from "agent-dispatcher";
 // Default test case, that include multiple phrase action name (out of order) and implicit parameters (context)
 const testRequest = new RequestAction(
     "do some player blah",
-    actionsFromJson({
+    fromJsonActions({
         fullActionName: "player.do",
         parameters: {
             value: "blah",

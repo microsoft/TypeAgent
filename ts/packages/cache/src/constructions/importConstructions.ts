@@ -4,7 +4,7 @@
 import { SchemaInfoProvider } from "../explanation/schemaInfoProvider.js";
 import { Construction } from "./constructions.js";
 import {
-    actionsFromJson,
+    fromJsonActions,
     getTranslationNamesForActions,
     RequestAction,
 } from "../explanation/requestAction.js";
@@ -66,12 +66,12 @@ function createConstructions(
     for (const entry of data.entries) {
         const requestAction = new RequestAction(
             entry.request,
-            actionsFromJson(entry.action),
+            fromJsonActions(entry.action),
         );
 
         try {
             const actions = requestAction.actions;
-            for (const action of actions) {
+            for (const { action } of actions) {
                 if (!dataSchemaNames.has(action.translatorName)) {
                     throw new Error(
                         `Schema name '${action.translatorName}' not found in data header`,

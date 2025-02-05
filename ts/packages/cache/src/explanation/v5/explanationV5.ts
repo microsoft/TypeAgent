@@ -29,7 +29,8 @@ import {
     PropertyExplanation,
 } from "./propertyExplanationSchemaV5WithContext.js";
 import {
-    Action,
+    ExecutableAction,
+    FullAction,
     normalizeParamString,
     RequestAction,
 } from "../requestAction.js";
@@ -230,21 +231,25 @@ interface ParameterVariationResult {
 
 function getPropertyInfo(
     propertyName: string,
-    actions: Action[],
-): { action: Action; parameterName?: string; actionIndex: number | undefined } {
+    actions: ExecutableAction[],
+): {
+    action: FullAction;
+    parameterName?: string;
+    actionIndex: number | undefined;
+} {
     const parts = propertyName.split(".");
     let firstPart = parts.shift();
     if (firstPart === undefined) {
         throw new Error(`Invalid property name '${propertyName}'`);
     }
 
-    let action: Action | undefined;
+    let action: FullAction | undefined;
     let actionIndex: number | undefined;
     if (actions.length > 1) {
         // Multiple actions
         actionIndex = parseInt(firstPart);
         if (!isNaN(actionIndex) && actionIndex.toString() === firstPart) {
-            action = actions[actionIndex];
+            action = actions[actionIndex].action;
         }
         if (action === undefined) {
             throw new Error(
@@ -253,7 +258,7 @@ function getPropertyInfo(
         }
         firstPart = parts.shift();
     } else {
-        action = actions[0];
+        action = actions[0].action;
     }
     if (firstPart === "fullActionName" && parts.length === 0) {
         return { action, actionIndex };
@@ -266,7 +271,7 @@ function getPropertyInfo(
 
 function getPropertySpec(
     propertyName: string,
-    actions: Action[],
+    actions: ExecutableAction[],
     schemaInfoProvider?: SchemaInfoProvider,
 ): ParamSpec | undefined {
     const { action, parameterName } = getPropertyInfo(propertyName, actions);
@@ -279,7 +284,7 @@ function getPropertySpec(
 
 function getPropertyTransformInfo(
     propertyName: string,
-    actions: Action[],
+    actions: ExecutableAction[],
     schemaInfoProvider?: SchemaInfoProvider,
 ): TransformInfo {
     const { action, parameterName, actionIndex } = getPropertyInfo(
@@ -419,7 +424,7 @@ function collectAltParamMatches(
 
 function getParserForPropertyValue(
     propertyValue: PropertyValue,
-    actions: Action[],
+    actions: ExecutableAction[],
     schemaInfoProvider?: SchemaInfoProvider,
 ) {
     if (propertyValue.propertySubPhrases.length !== 1) {

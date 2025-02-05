@@ -5,6 +5,7 @@ import { DeepPartialUndefined } from "common-utils";
 import * as Telemetry from "telemetry";
 import { ExplanationData } from "../explanation/explanationData.js";
 import {
+    getFullActionName,
     getTranslationNamesForActions,
     RequestAction,
 } from "../explanation/requestAction.js";
@@ -134,7 +135,7 @@ export class AgentCache {
 
                     if (!cacheAction) {
                         return getFailedResult(
-                            `Caching disabled in schema config for action '${action.fullActionName}'`,
+                            `Caching disabled in schema config for action '${getFullActionName(action)}'`,
                         );
                     }
                 }

@@ -10,7 +10,7 @@ import {
     ProcessRequestActionResult,
     ExplanationOptions,
     equalNormalizedParamObject,
-    actionsToFullActions,
+    toFullActions,
 } from "agent-cache";
 
 import {
@@ -53,9 +53,7 @@ async function canTranslateWithoutContext(
     }
 
     // Do the retranslation check, which will also check the action.
-    const oldActions: FullAction[] = actionsToFullActions(
-        requestAction.actions,
-    );
+    const oldActions: FullAction[] = toFullActions(requestAction.actions);
     const newActions: (FullAction | undefined)[] = [];
     const request = requestAction.request;
     try {
@@ -77,7 +75,7 @@ async function canTranslateWithoutContext(
         }
 
         let index = 0;
-        for (const action of requestAction.actions) {
+        for (const { action } of requestAction.actions) {
             const translatorName = action.translatorName;
             const newTranslatedActions = translations.get(translatorName)!;
             let newAction: TranslatedAction;
@@ -175,7 +173,7 @@ function getExplainerOptions(
 
     const usedTranslators = new Map<string, TypeAgentTranslator<object>>();
     const actions = requestAction.actions;
-    for (const action of actions) {
+    for (const { action } of actions) {
         if (isUnknownAction(action)) {
             // can't explain unknown actions
             return undefined;

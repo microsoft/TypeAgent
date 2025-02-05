@@ -33,16 +33,18 @@ export type { SchemaInfoProvider } from "./explanation/schemaInfoProvider.js";
 
 // Functionalities
 export {
-    Action,
+    ExecutableAction,
     RequestAction,
     normalizeParamValue,
     normalizeParamString,
     equalNormalizedParamValue,
     equalNormalizedParamObject,
-    actionsFromFullActions,
-    actionsToFullActions,
-    actionsToJson,
-    actionsFromJson,
+    toJsonActions,
+    fromJsonActions,
+    getFullActionName,
+    createExecutableAction,
+    toExecutableActions,
+    toFullActions,
 } from "./explanation/requestAction.js";
 export { AgentCacheFactory, getDefaultExplainerName } from "./cache/factory.js";
 export { MatchResult } from "./constructions/constructions.js";
