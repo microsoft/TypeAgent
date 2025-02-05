@@ -364,7 +364,7 @@ export async function extractImagesFromPage(
                     const canvas = createCanvas(scaledWidth, scaledHeight);
                     const ctx = canvas.getContext("2d");
 
-                   const imageData = ctx.createImageData(
+                    const imageData = ctx.createImageData(
                         scaledWidth,
                         scaledHeight,
                     );
