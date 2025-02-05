@@ -830,7 +830,7 @@ async function retryTranslateOn429<T>(
                 await new Promise((resolve) => setTimeout(resolve, delay));
                 continue;
             }
-            console_log(`  [Error translating: ${wrappedResult.message}]`);
+            console_log(`  [${wrappedResult.message}]`);
             return undefined;
         }
     } while (!wrappedResult.success);
