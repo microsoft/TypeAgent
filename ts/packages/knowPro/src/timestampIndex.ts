@@ -9,7 +9,7 @@ import {
     MessageIndex,
     TimestampedTextRange,
 } from "./dataFormat.js";
-import { textRangeForMessage } from "./query.js";
+import { textRangeFromLocation } from "./conversationIndex.js";
 
 /**
  * An index of timestamp => TextRanges.
@@ -58,7 +58,7 @@ export class TimestampToTextRangeIndex implements ITimestampToTextRangeIndex {
         }
         const timestampDate = new Date(message.timestamp);
         const entry: TimestampedTextRange = {
-            range: textRangeForMessage(message, messageIndex),
+            range: textRangeFromLocation(messageIndex),
             // This string is formatted to be lexically sortable
             timestamp: this.dateToTimestamp(timestampDate),
         };

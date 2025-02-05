@@ -363,6 +363,7 @@ export class MessageAccumulator extends MatchAccumulator<IMessage> {}
 export class TextRangeCollection {
     // Maintains ranges sorted by message index
     private ranges: TextRange[] = [];
+    private sorted: boolean = false;
 
     constructor() {}
 
@@ -372,7 +373,9 @@ export class TextRangeCollection {
 
     public addRange(textRange: TextRange) {
         // Future: merge ranges
-        collections.insertIntoSorted(this.ranges, textRange, this.comparer);
+        //collections.insertIntoSorted(this.ranges, textRange, this.comparer);
+        this.ranges.push(textRange);
+        this.sorted = false;
     }
 
     public addRanges(textRanges: TextRange[]) {
@@ -382,6 +385,8 @@ export class TextRangeCollection {
     }
 
     public isInRange(rangeToMatch: TextRange): boolean {
+        this.ensureSorted();
+
         let i = collections.binarySearchFirst(
             this.ranges,
             rangeToMatch,
@@ -401,6 +406,13 @@ export class TextRangeCollection {
             }
         }
         return false;
+    }
+
+    private ensureSorted() {
+        if (!this.sorted) {
+            this.ranges.sort(this.comparer);
+            this.sorted = true;
+        }
     }
 
     private comparer(x: TextRange, y: TextRange): number {

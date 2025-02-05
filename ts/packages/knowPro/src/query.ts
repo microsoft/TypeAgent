@@ -103,6 +103,9 @@ export function isInTextRange(
     // outer start must be <= inner start
     // inner end must be < outerEnd (which is exclusive)
     let cmpStart = compareTextLocation(outerRange.start, innerRange.start);
+    if (outerRange.end === undefined && innerRange.end === undefined) {
+        return cmpStart <= 0;
+    }
     let cmpEnd = compareTextLocation(
         innerRange.end ?? MaxTextLocation,
         outerRange.end ?? MaxTextLocation,
@@ -129,25 +132,6 @@ export function messageLength(message: IMessage): number {
         length += chunk.length;
     }
     return length;
-}
-
-export function textRangeForMessage(
-    message: IMessage,
-    messageIndex: number,
-): TextRange {
-    let start: TextLocation = {
-        messageIndex,
-        chunkIndex: 0,
-        charIndex: 0,
-    };
-    // End is EXCLUSIVE. Since entire message is range, the end is messageIndex + 1
-    let end: TextLocation = {
-        messageIndex: messageIndex + 1,
-    };
-    return {
-        start,
-        end,
-    };
 }
 
 /**
