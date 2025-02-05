@@ -585,10 +585,11 @@ export async function executeActions(
                 throw new Error("Pending action translation error.");
             }
 
+            const requestAction = translationResult.requestAction;
             actionQueue.unshift(
                 ...toPendingActions(
-                    translationResult.requestAction.actions,
-                    translationResult.requestAction.history?.entities,
+                    requestAction.actions,
+                    requestAction.history?.entities,
                 ),
             );
             continue;
