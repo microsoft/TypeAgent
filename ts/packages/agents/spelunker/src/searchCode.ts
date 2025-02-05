@@ -639,7 +639,7 @@ async function loadDatabase(
                     chunk.chunkId,
                     blob.start,
                     blob.lines.map((line) => line.trimEnd()).join("\n"),
-                    blob.breadcrumb ? 1 : 0,
+                    blob.breadcrumb,
                 );
             }
         }
@@ -679,7 +679,7 @@ CREATE TABLE IF NOT EXISTS Blobs (
     chunkId TEXT KEY REFERENCES Chunks(chunkId) NOT NULL,
     start INTEGER NOT NULL, -- 0-based
     lines TEXT NOT NULL,
-    breadcrumb BOOLEAN NOT NULL -- Values: 0 or 1
+    breadcrumb TEXT -- Chunk ID or empty string or NULL
 );
 CREATE TABLE IF NOT EXISTS Summaries (
     chunkId TEXT PRIMARY KEY REFERENCES Chunks(chunkId),

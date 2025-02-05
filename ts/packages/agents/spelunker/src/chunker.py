@@ -37,7 +37,7 @@ class Blob:
 
     start: int  # 0-based!
     lines: list[str]
-    breadcrumb: bool = False  # True to ignore on reconstruction
+    breadcrumb: IdType | None = None  # Chunk id if breadcrumb
 
     def to_dict(self) -> dict[str, object]:
         result: dict[str, Any] = {
@@ -45,7 +45,7 @@ class Blob:
             "lines": self.lines,
         }
         if self.breadcrumb:
-            result["breadcrumb"] = True
+            result["breadcrumb"] = self.breadcrumb
         return result
 
 
@@ -240,6 +240,7 @@ def create_chunks_recursively(
             parent.children.append(node_id)
 
             # Split last parent.blobs[-1] into two, leaving a gap for the new Chunk
+            # and put a breadcrumb blob in between.
             parent_blob: Blob = parent.blobs.pop()
             parent_start: int = parent_blob.start
             parent_end: int = parent_blob.start + len(parent_blob.lines)
@@ -250,7 +251,7 @@ def create_chunks_recursively(
                 parent.blobs.append(Blob(parent_start, lines[parent_start:first_start]))
                 summary = summarize_chunk(chunk, node)
                 if summary:
-                    parent.blobs.append(Blob(first_start, summary, breadcrumb=True))
+                    parent.blobs.append(Blob(first_start, summary, breadcrumb=node_id))
                 parent.blobs.append(Blob(last_end, lines[last_end:parent_end]))
 
     return chunks
