@@ -57,13 +57,13 @@ export class ExpandableTextarea {
         this.textEntry.addEventListener("input", () => {
             if (this.entryHandlers.onChange !== undefined) {
                 this.entryHandlers.onChange(this);
-            }            
+            }
         });
         this.textEntry.onchange = () => {
             if (sendButton !== undefined) {
                 sendButton.disabled = this.textEntry.innerHTML.length == 0;
             }
-        }
+        };
         this.textEntry.onwheel = (event) => {
             if (this.entryHandlers.onMouseWheel !== undefined) {
                 this.entryHandlers.onMouseWheel(this, event);
@@ -195,7 +195,7 @@ export class ChatInput {
             if (e.clipboardData !== null) {
                 this.getTextFromDataTransfer(e.clipboardData);
             }
-        }
+        };
 
         this.textarea.getTextEntry().ondragenter = (e: DragEvent) => {
             if (!this.dragEnabled) {
@@ -211,7 +211,8 @@ export class ChatInput {
 
             console.log("enter " + this.dragTemp);
 
-            this.textarea.getTextEntry().innerText = "Drop image files or text here...";
+            this.textarea.getTextEntry().innerText =
+                "Drop image files or text here...";
             this.textarea.getTextEntry().classList.add("chat-input-drag");
         };
 
@@ -392,7 +393,7 @@ export class ChatInput {
     /**
      * Takes dataTransfer and gets a plain text representation from the data there
      * and loads it into the input box
-     * 
+     *
      * @param dataTransfer The dataTransfer object from drag/drop/paste events
      */
     public getTextFromDataTransfer(dataTransfer: DataTransfer) {
@@ -402,22 +403,23 @@ export class ChatInput {
             let index: number = dataTransfer.types.indexOf("text/plain");
             let plainText: boolean = true;
             if (index === -1) {
-                index = dataTransfer.types.indexOf("text/html");                        
+                index = dataTransfer.types.indexOf("text/html");
                 plainText = false;
-            } 
+            }
 
             if (index === -1) {
                 this.textarea.getTextEntry().innerText = `Unsupported drag/drop data type '${dataTransfer.types.join(", ")}'`;
             } else {
-                dataTransfer.items[index].getAsString((s) => { 
+                dataTransfer.items[index].getAsString((s) => {
                     if (plainText) {
                         this.textarea.getTextEntry().innerText = s;
                     } else {
                         // strip out all HTML from supplied input
-                        this.textarea.getTextEntry().innerText += DOMPurify.sanitize(s, { ALLOWED_TAGS: [] });
+                        this.textarea.getTextEntry().innerText +=
+                            DOMPurify.sanitize(s, { ALLOWED_TAGS: [] });
                     }
                 });
-            }        
+            }
         }
     }
 }
