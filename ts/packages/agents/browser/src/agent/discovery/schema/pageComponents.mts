@@ -53,3 +53,9 @@ export type LocationInStore = {
   physicalLocationInStore: string;
   numberInStock?: string;
 };
+
+export type NavigationLink = {
+  // CSS Selector for the link
+  title: string;
+  linkCssSelector: string;
+};

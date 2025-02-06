@@ -9,11 +9,14 @@ import {
   ProductDetailsHeroTile,
   ProductTile,
   SearchInput,
+  ShoppingCartButton,
+  ShoppingCartDetails,
   StoreLocation,
 } from "./schema/pageComponents.mjs";
+import { ShoppingActions } from "./schema/userActions.mjs";
 
 export async function handleCommerceAction(
-  action: any,
+  action: ShoppingActions,
   context: ActionContext<BrowserActionContext>,
 ) {
   let message = "OK";
@@ -31,6 +34,9 @@ export async function handleCommerceAction(
       await searchForProduct(action.parameters.productName);
       break;
     case "selectSearchResult":
+      if (action.parameters.productName === undefined) {
+        throw new Error("Missing product name");
+      }
       await selectSearchResult(action.parameters.productName);
       break;
     case "addToCartAction":
@@ -41,6 +47,9 @@ export async function handleCommerceAction(
       break;
     case "findNearbyStoreAction":
       await handleFindNearbyStore(action);
+      break;
+    case "viewShoppingCartAction":
+      await handleViewShoppingCart(action);
       break;
   }
 
@@ -60,13 +69,21 @@ export async function handleCommerceAction(
     );
 
     if (!response.success) {
-      console.error("Attempt to get product tilefailed");
+      console.error(`Attempt to get ${componentType} failed`);
       console.error(response.message);
       return;
     }
 
     console.timeEnd(timerName);
     return response.data;
+  }
+
+  async function followLink(linkSelector: string | undefined) {
+    if (!linkSelector) return;
+
+    await browser.clickOn(linkSelector);
+    await browser.awaitPageInteraction();
+    await browser.awaitPageLoad();
   }
 
   async function searchForProduct(productName: string) {
@@ -132,6 +149,20 @@ export async function handleCommerceAction(
     if (storeInfo.locationName) {
       message = `Nearest store is ${storeInfo.locationName} (${storeInfo.zipCode})`;
     }
+  }
+
+  async function handleViewShoppingCart(action: any) {
+    const cartButton = (await getComponentFromPage(
+      "ShoppingCartButton",
+    )) as ShoppingCartButton;
+    console.log(cartButton);
+
+    await followLink(cartButton?.detailsLinkCssSelector);
+
+    const cartDetails = (await getComponentFromPage(
+      "ShoppingCartDetails",
+    )) as ShoppingCartDetails;
+    console.log(cartDetails);
   }
 
   return message;

@@ -231,7 +231,24 @@ export class SchemaDiscoveryAgent<T extends object> {
     fragments?: HtmlFragments[],
     screenshot?: string,
   ) {
-    const bootstrapTranslator = this.getBootstrapTranslator(componentTypeName);
+    const packageRoot = path.join("..", "..", "..");
+    const componentsSchema = await fs.promises.readFile(
+      fileURLToPath(
+        new URL(
+          path.join(
+            packageRoot,
+            "./src/agent/discovery/schema/pageComponents.mts",
+          ),
+          import.meta.url,
+        ),
+      ),
+      "utf8",
+    );
+
+    const bootstrapTranslator = this.getBootstrapTranslator(
+      componentTypeName,
+      componentsSchema,
+    );
 
     const promptSections = this.getCssSelectorForElementPrompt(
       bootstrapTranslator,

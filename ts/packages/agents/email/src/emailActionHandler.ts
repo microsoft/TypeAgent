@@ -10,7 +10,12 @@ import {
 } from "./emailActionsSchema.js";
 import { generateNotes } from "typeagent";
 import { openai } from "aiclient";
-import { ActionContext, AppAgent, SessionContext } from "@typeagent/agent-sdk";
+import {
+    ActionContext,
+    AppAgent,
+    SessionContext,
+    TypeAgentAction,
+} from "@typeagent/agent-sdk";
 import { createActionResultFromHtmlDisplay } from "@typeagent/agent-sdk/helpers/action";
 import {
     CommandHandlerNoParams,
@@ -99,7 +104,7 @@ async function updateEmailContext(
 }
 
 async function executeEmailAction(
-    action: EmailAction,
+    action: TypeAgentAction<EmailAction>,
     context: ActionContext<EmailActionContext>,
 ) {
     const { mailClient } = context.sessionContext.agentContext;

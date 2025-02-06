@@ -53,3 +53,19 @@ export type LocationInStore = {
   physicalLocationInStore: string;
   numberInStock?: string;
 };
+
+// The shopping cart button on the page
+export type ShoppingCartButton = {
+  label: string;
+  detailsLinkCssSelector: string;
+};
+
+export type ShoppingCartDetails = {
+  storeName: string;
+  deliveryInformation: string;
+  totalAmount: string;
+
+  productsInCart?: ProductTile[];
+
+  relatedProducts?: ProductTile[];
+};

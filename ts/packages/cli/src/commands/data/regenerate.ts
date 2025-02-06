@@ -20,7 +20,8 @@ import {
     getAppAgentName,
 } from "agent-dispatcher/internal";
 import {
-    Actions,
+    ExecutableAction,
+    fromJsonActions,
     getDefaultExplainerName,
     HistoryContext,
     printImportConstructionResult,
@@ -39,9 +40,9 @@ const provider = await createActionConfigProvider(
 );
 const schemaInfoProvider = createSchemaInfoProvider(provider);
 
-function toEntities(actions: Actions): PromptEntity[] {
+function toEntities(actions: ExecutableAction[]): PromptEntity[] {
     const entities: PromptEntity[] = [];
-    for (const action of actions) {
+    for (const { action } of actions) {
         if (action.parameters === undefined) {
             continue;
         }
@@ -459,7 +460,7 @@ export default class ExplanationDataRegenerateCommand extends Command {
                         if (e.action === undefined) {
                             return undefined;
                         }
-                        const entities = toEntities(Actions.fromJSON(e.action));
+                        const entities = toEntities(fromJsonActions(e.action));
                         if (entities.length === 0) {
                             return undefined;
                         }
@@ -469,7 +470,7 @@ export default class ExplanationDataRegenerateCommand extends Command {
                     const requestAction = e.action
                         ? new RequestAction(
                               e.request,
-                              Actions.fromJSON(e.action),
+                              fromJsonActions(e.action),
                               history,
                           )
                         : undefined;
