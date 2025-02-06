@@ -172,7 +172,7 @@ export function argChunkSize(defaultValue?: number | undefined): ArgDef {
     };
 }
 
-export function recordFromArgs(
+export function keyValuesFromNamedArgs(
     args: NamedArgs,
     metadata?: CommandMetadata,
 ): Record<string, string> {

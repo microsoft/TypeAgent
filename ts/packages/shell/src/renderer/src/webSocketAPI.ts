@@ -62,6 +62,10 @@ export const webapi: ClientAPI = {
         // TODO: figure out solution for mobile
         fnMap.set("settings-changed", callback);
     },
+    onChatHistory(callback) {
+        // TODO: implement proper message rehydration on mobile
+        fnMap.set("chat-history", callback);
+    },
     registerClientIO(clientIO: ClientIO) {
         if (clientIORegistered) {
             throw new Error("ClientIO already registered");

@@ -30,6 +30,8 @@ function createTimestampDiv(timestamp: Date, className: string) {
 
     const dateSpan = document.createElement("span");
     dateSpan.className = "timestring";
+    dateSpan.setAttribute("data", timestamp.toString());
+
     timeStampDiv.appendChild(dateSpan); // time string
 
     dateSpan.innerText = "- " + timestamp.toLocaleTimeString();
@@ -210,6 +212,9 @@ export class MessageContainer {
         this.div = div;
 
         this.updateSource();
+
+        // Don't show initialize without any messages.
+        this.hide();
     }
 
     public getMessage() {

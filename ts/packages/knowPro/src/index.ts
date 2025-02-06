@@ -3,7 +3,8 @@
 
 export * from "./import.js";
 export * from "./dataFormat.js";
+export * from "./conversation.js";
 export * from "./conversationIndex.js";
-export * from "./termIndex.js";
+export * from "./relatedTermsIndex.js";
 export * from "./search.js";
 //export * from "./query.js";

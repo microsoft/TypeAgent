@@ -453,4 +453,85 @@ export class SchemaDiscoveryAgent<T extends object> {
     ]);
     return response;
   }
+
+  async getPageType(
+    userRequest?: string,
+    fragments?: HtmlFragments[],
+    screenshot?: string,
+    pageSummary?: string,
+  ) {
+    const packageRoot = path.join("..", "..", "..");
+    const resultsSchema = await fs.promises.readFile(
+      fileURLToPath(
+        new URL(
+          path.join(packageRoot, "./src/agent/discovery/schema/pageTypes.mts"),
+          import.meta.url,
+        ),
+      ),
+      "utf8",
+    );
+
+    const bootstrapTranslator = this.getBootstrapTranslator(
+      "KnownPageTypes",
+      resultsSchema,
+    );
+
+    const screenshotSection = getScreenshotPromptSection(screenshot, fragments);
+    const htmlSection = getHtmlPromptSection(fragments);
+    const prefixSection = getBootstrapPrefixPromptSection();
+    let requestSection = [];
+    if (userRequest) {
+      requestSection.push({
+        type: "text",
+        text: `
+               
+            Here is  user request
+            '''
+            ${userRequest}
+            '''
+            `,
+      });
+    }
+    if (pageSummary) {
+      requestSection.push({
+        type: "text",
+        text: `
+               
+            Here is a previously-generated summary of the page
+            '''
+            ${pageSummary}
+            '''
+            `,
+      });
+    }
+
+    const promptSections = [
+      ...prefixSection,
+      ...screenshotSection,
+      ...htmlSection,
+      {
+        type: "text",
+        text: `
+        Examine the layout information provided and determine the content of the page and the actions users can take on it.
+        Once you have this list, a SINGLE "${bootstrapTranslator.validator.getTypeName()}" response using the typescript schema below.
+                
+        '''
+        ${bootstrapTranslator.validator.getSchemaText()}
+        '''
+        `,
+      },
+      ...requestSection,
+      {
+        type: "text",
+        text: `
+        The following is the COMPLETE JSON response object with 2 spaces of indentation and no properties with the value undefined:            
+        `,
+      },
+    ];
+
+    const response = await bootstrapTranslator.translate("", [
+      { role: "user", content: JSON.stringify(promptSections) },
+    ]);
+    return response;
+  }
 }

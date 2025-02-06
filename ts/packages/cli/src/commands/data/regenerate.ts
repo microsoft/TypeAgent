@@ -17,17 +17,18 @@ import {
     createActionConfigProvider,
     createSchemaInfoProvider,
     getInstanceDir,
+    getAppAgentName,
 } from "agent-dispatcher/internal";
 import {
     Actions,
     getDefaultExplainerName,
     HistoryContext,
     printImportConstructionResult,
+    PromptEntity,
     RequestAction,
 } from "agent-cache";
 import { createLimiter, getElapsedString } from "common-utils";
 import { getChatModelMaxConcurrency, getChatModelNames } from "aiclient";
-import { Entity } from "@typeagent/agent-sdk";
 import {
     getDefaultAppAgentProviders,
     getDefaultConstructionProvider,
@@ -38,8 +39,8 @@ const provider = await createActionConfigProvider(
 );
 const schemaInfoProvider = createSchemaInfoProvider(provider);
 
-function toEntities(actions: Actions): Entity[] {
-    const entities: Entity[] = [];
+function toEntities(actions: Actions): PromptEntity[] {
+    const entities: PromptEntity[] = [];
     for (const action of actions) {
         if (action.parameters === undefined) {
             continue;
@@ -49,6 +50,7 @@ function toEntities(actions: Actions): Entity[] {
                 entities.push({
                     name: value,
                     type: [key],
+                    sourceAppAgentName: getAppAgentName(action.translatorName),
                 });
             }
         }

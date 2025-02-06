@@ -40,7 +40,6 @@ import {
     translateRequest,
 } from "../../../translation/translateRequest.js";
 import { matchRequest } from "../../../translation/matchRequest.js";
-
 const debugExplain = registerDebug("typeagent:explain");
 
 async function canTranslateWithoutContext(
@@ -330,10 +329,8 @@ export class RequestCommandHandler implements CommandHandler {
                 : undefined;
 
             // prefetch entities here
-            systemContext.chatHistory.addEntry(
+            systemContext.chatHistory.addUserEntry(
                 request,
-                [],
-                "user",
                 systemContext.requestId,
                 cachedAttachments,
             );
@@ -377,7 +374,12 @@ export class RequestCommandHandler implements CommandHandler {
                     timestamp: new Date(),
                 });
             }
-            await executeActions(requestAction.actions, context);
+
+            await executeActions(
+                requestAction.actions,
+                requestAction.history?.entities,
+                context,
+            );
             if (canUseCacheMatch) {
                 await requestExplain(
                     requestAction,

@@ -17,7 +17,7 @@ export class MultiMap<K, V> extends Map<K, V[]> {
      * @param value
      * @returns
      */
-    public push(key: K, value: V): this {
+    public add(key: K, value: V): this {
         let values = super.get(key);
         if (values === undefined) {
             values = [value];
@@ -34,7 +34,7 @@ export class MultiMap<K, V> extends Map<K, V[]> {
      * @param value
      * @returns
      */
-    public pushUnique(
+    public addUnique(
         key: K,
         value: V,
         comparer?: (value: V, other: V) => boolean,

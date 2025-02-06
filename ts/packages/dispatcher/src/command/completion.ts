@@ -70,10 +70,18 @@ function getPendingFlag(
     }
     const lastToken = params.tokens[params.tokens.length - 1];
     const resolvedFlag = resolveFlag(flags, lastToken);
-    return resolvedFlag !== undefined &&
-        getFlagType(resolvedFlag[1]) !== "boolean"
-        ? `--${resolvedFlag[0]}` // use the full flag name in case it was a short flag
-        : undefined;
+    if (resolvedFlag === undefined) {
+        return undefined;
+    }
+    const type = getFlagType(resolvedFlag[1]);
+    if (type === "boolean") {
+        return undefined;
+    }
+    if (type === "json") {
+        return `${lastToken}`;
+    }
+
+    return `--${resolvedFlag[0]}`; // use the full flag name in case it was a short flag
 }
 
 async function getCommandParameterCompletion(

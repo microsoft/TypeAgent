@@ -4,6 +4,7 @@
 import { collections, createTopNList } from "typeagent";
 import {
     IMessage,
+    Knowledge,
     KnowledgeType,
     ScoredSemanticRef,
     SemanticRef,
@@ -17,6 +18,7 @@ export interface Match<T = any> {
     value: T;
     score: number;
     hitCount: number;
+    exactMatch: boolean;
 }
 
 /**
@@ -36,7 +38,7 @@ export class MatchAccumulator<T = any> {
         this.maxHitCount = 0;
     }
 
-    public get numMatches(): number {
+    public get size(): number {
         return this.matches.size;
     }
 
@@ -59,22 +61,34 @@ export class MatchAccumulator<T = any> {
         }
     }
 
-    public setMatches(matches: Match<T>[] | IterableIterator<Match<T>>): void {
+    public setMatches(
+        matches: Match<T>[] | IterableIterator<Match<T>>,
+        clear = false,
+    ): void {
+        if (clear) {
+            this.clearMatches();
+        }
         for (const match of matches) {
             this.setMatch(match);
         }
     }
 
-    public add(value: T, score: number): void {
+    public add(value: T, score: number, isNewMatchExact: boolean): void {
         let match = this.matches.get(value);
-        if (match !== undefined) {
-            match.hitCount += 1;
+        if (match) {
+            // Increment the existing match
+            if (isNewMatchExact) {
+                match.hitCount += 1;
+                match.exactMatch = true;
+            }
             match.score += score;
         } else {
+            // New match
             match = {
                 value,
                 score,
                 hitCount: 1,
+                exactMatch: isNewMatchExact,
             };
             this.matches.set(value, match);
         }
@@ -83,18 +97,21 @@ export class MatchAccumulator<T = any> {
         }
     }
 
-    public union(other: MatchAccumulator<T>): void {
-        for (const matchFrom of other.matches.values()) {
-            const matchTo = this.matches.get(matchFrom.value);
-            if (matchTo !== undefined) {
-                // Existing
-                matchTo.hitCount += matchFrom.hitCount;
-                matchTo.score += matchFrom.score;
-                if (matchTo.hitCount > this.maxHitCount) {
-                    this.maxHitCount = matchTo.hitCount;
+    public addUnion(other: MatchAccumulator<T>): void {
+        for (const otherMatch of other.matches.values()) {
+            const existingMatch = this.matches.get(otherMatch.value);
+            if (existingMatch) {
+                if (otherMatch.exactMatch) {
+                    existingMatch.hitCount += otherMatch.hitCount;
+                } else if (existingMatch.hitCount < otherMatch.hitCount) {
+                    existingMatch.hitCount = otherMatch.hitCount;
+                }
+                existingMatch.score += otherMatch.score;
+                if (existingMatch.hitCount > this.maxHitCount) {
+                    this.maxHitCount = existingMatch.hitCount;
                 }
             } else {
-                this.setMatch(matchFrom);
+                this.setMatch(otherMatch);
             }
         }
     }
@@ -147,14 +164,13 @@ export class MatchAccumulator<T = any> {
         this.maxHitCount = 0;
     }
 
-    public reduceTopNScoring(
+    public selectTopNScoring(
         maxMatches?: number,
         minHitCount?: number,
     ): number {
         const topN = this.getTopNScoring(maxMatches, minHitCount);
-        this.clearMatches();
         if (topN.length > 0) {
-            this.setMatches(topN);
+            this.setMatches(topN, true);
         }
         return topN.length;
     }
@@ -168,29 +184,41 @@ export class MatchAccumulator<T = any> {
     }
 }
 
+export type KnowledgePredicate<T extends Knowledge> = (knowledge: T) => boolean;
+
 export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
-    constructor(public queryTermMatches = new TermMatchAccumulator()) {
+    constructor(public searchTermMatches = new Set<string>()) {
         super();
     }
 
-    public addTermMatch(
-        term: Term,
-        semanticRefs: ScoredSemanticRef[] | undefined,
+    public addSearchTermMatch(
+        searchTerm: Term,
+        semanticRefs:
+            | ScoredSemanticRef[]
+            | IterableIterator<ScoredSemanticRef>
+            | undefined,
         scoreBoost?: number,
     ) {
         if (semanticRefs) {
-            scoreBoost ??= term.score ?? 0;
+            scoreBoost ??= searchTerm.score ?? 0;
             for (const match of semanticRefs) {
-                this.add(match.semanticRefIndex, match.score + scoreBoost);
+                this.add(
+                    match.semanticRefIndex,
+                    match.score + scoreBoost,
+                    true,
+                );
             }
-            this.queryTermMatches.add(term);
+            this.searchTermMatches.add(searchTerm.text);
         }
     }
 
     public addRelatedTermMatch(
-        primaryTerm: Term,
+        searchTerm: Term,
         relatedTerm: Term,
-        semanticRefs: ScoredSemanticRef[] | undefined,
+        semanticRefs:
+            | ScoredSemanticRef[]
+            | IterableIterator<ScoredSemanticRef>
+            | undefined,
         scoreBoost?: number,
     ) {
         if (semanticRefs) {
@@ -209,12 +237,18 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
                         value: semanticRef.semanticRefIndex,
                         score,
                         hitCount: 1,
+                        exactMatch: false,
                     };
                     this.setMatch(match);
                 }
             }
-            this.queryTermMatches.add(primaryTerm, relatedTerm);
+            this.searchTermMatches.add(searchTerm.text);
         }
+    }
+
+    public addUnion(other: SemanticRefAccumulator): void {
+        super.addUnion(other);
+        unionInPlace(this.searchTermMatches, other.searchTermMatches);
     }
 
     public override getSortedByScore(
@@ -244,7 +278,24 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
         }
     }
 
-    public groupMatchesByKnowledgeType(
+    public *getMatchesOfType<T extends Knowledge>(
+        semanticRefs: SemanticRef[],
+        knowledgeType: KnowledgeType,
+        predicate?: KnowledgePredicate<T>,
+    ): IterableIterator<Match<SemanticRefIndex>> {
+        for (const match of this.getMatches()) {
+            const semanticRef = semanticRefs[match.value];
+            if (semanticRef.knowledgeType === knowledgeType) {
+                if (
+                    predicate === undefined ||
+                    predicate(semanticRef.knowledge as T)
+                )
+                    yield match;
+            }
+        }
+    }
+
+    public groupMatchesByType(
         semanticRefs: SemanticRef[],
     ): Map<KnowledgeType, SemanticRefAccumulator> {
         const groups = new Map<KnowledgeType, SemanticRefAccumulator>();
@@ -253,7 +304,7 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
             let group = groups.get(semanticRef.knowledgeType);
             if (group === undefined) {
                 group = new SemanticRefAccumulator();
-                group.queryTermMatches = this.queryTermMatches;
+                group.searchTermMatches = this.searchTermMatches;
                 groups.set(semanticRef.knowledgeType, group);
             }
             group.setMatch(match);
@@ -261,17 +312,35 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
         return groups;
     }
 
-    public selectInScope(
-        semanticRefs: SemanticRef[],
-        scope: TextRangeAccumulator,
-    ) {
-        const accumulator = new SemanticRefAccumulator(this.queryTermMatches);
+    public getInScope(semanticRefs: SemanticRef[], scope: TextRangeCollection) {
+        const accumulator = new SemanticRefAccumulator(this.searchTermMatches);
         for (const match of this.getMatches()) {
             if (scope.isInRange(semanticRefs[match.value].range)) {
                 accumulator.setMatch(match);
             }
         }
         return accumulator;
+    }
+
+    public selectKnowledge<T extends Knowledge>(
+        semanticRefs: SemanticRef[],
+        knowledgeType: KnowledgeType,
+        predicate?: KnowledgePredicate<T> | undefined,
+    ): void {
+        if (predicate) {
+            const selectedMatches = [
+                ...this.getMatchesOfType<T>(
+                    semanticRefs,
+                    knowledgeType,
+                    predicate,
+                ),
+            ];
+            if (selectedMatches.length > 0) {
+                this.setMatches(selectedMatches);
+                return;
+            }
+        }
+        this.clearMatches();
     }
 
     public toScoredSemanticRefs(): ScoredSemanticRef[] {
@@ -289,47 +358,12 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
     }
 }
 
-export class TermMatchAccumulator {
-    constructor(
-        public termMatches: Set<string> = new Set<string>(),
-        // Related terms work 'on behalf' of a primary term
-        // For each related term, we track the primary terms it matched on behalf of
-        public relatedTermMatchedFor: Map<string, Set<string>> = new Map<
-            string,
-            Set<string>
-        >(),
-    ) {}
+export class MessageAccumulator extends MatchAccumulator<IMessage> {}
 
-    public add(primaryTerm: Term, relatedTerm?: Term) {
-        this.termMatches.add(primaryTerm.text);
-        if (relatedTerm !== undefined) {
-            // Related term matched on behalf of term
-            let primaryTerms = this.relatedTermMatchedFor.get(relatedTerm.text);
-            if (primaryTerms === undefined) {
-                primaryTerms = new Set<string>();
-                this.relatedTermMatchedFor.set(relatedTerm.text, primaryTerms);
-            }
-            // Track that this related term matched on behalf of term
-            primaryTerms.add(primaryTerm.text);
-        }
-    }
-
-    public has(text: string, includeRelated: boolean = true): boolean {
-        if (this.termMatches.has(text)) {
-            return true;
-        }
-        return includeRelated ? this.relatedTermMatchedFor.has(text) : false;
-    }
-
-    public hasRelatedMatch(primaryTerm: string, relatedTerm: string): boolean {
-        let primaryTerms = this.relatedTermMatchedFor.get(relatedTerm);
-        return primaryTerms?.has(primaryTerm) ?? false;
-    }
-}
-
-export class TextRangeAccumulator {
+export class TextRangeCollection {
     // Maintains ranges sorted by message index
     private ranges: TextRange[] = [];
+    private sorted: boolean = false;
 
     constructor() {}
 
@@ -339,7 +373,9 @@ export class TextRangeAccumulator {
 
     public addRange(textRange: TextRange) {
         // Future: merge ranges
-        collections.insertIntoSorted(this.ranges, textRange, this.comparer);
+        //collections.insertIntoSorted(this.ranges, textRange, this.comparer);
+        this.ranges.push(textRange);
+        this.sorted = false;
     }
 
     public addRanges(textRanges: TextRange[]) {
@@ -349,6 +385,8 @@ export class TextRangeAccumulator {
     }
 
     public isInRange(rangeToMatch: TextRange): boolean {
+        this.ensureSorted();
+
         let i = collections.binarySearchFirst(
             this.ranges,
             rangeToMatch,
@@ -370,9 +408,47 @@ export class TextRangeAccumulator {
         return false;
     }
 
+    private ensureSorted() {
+        if (!this.sorted) {
+            this.ranges.sort(this.comparer);
+            this.sorted = true;
+        }
+    }
+
     private comparer(x: TextRange, y: TextRange): number {
         return x.start.messageIndex - y.start.messageIndex;
     }
 }
 
-export class MessageAccumulator extends MatchAccumulator<IMessage> {}
+/**
+ * Return a new set that is the union of two sets
+ * @param x
+ * @param y
+ * @returns
+ */
+export function unionSet<T = any>(x: Set<T>, y: Set<T>): Set<T> {
+    let from: Set<T>;
+    let to: Set<T>;
+    if (x.size > y.size) {
+        from = y;
+        to = x;
+    } else {
+        from = x;
+        to = y;
+    }
+    const union = new Set(to);
+    if (from.size > 0) {
+        for (const value of from.values()) {
+            union.add(value);
+        }
+    }
+    return union;
+}
+
+export function unionInPlace<T = any>(set: Set<T>, other: Set<T>): void {
+    if (other.size > 0) {
+        for (const value of other.values()) {
+            set.add(value);
+        }
+    }
+}

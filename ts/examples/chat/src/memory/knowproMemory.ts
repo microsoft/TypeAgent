@@ -22,7 +22,7 @@ import {
     argSourceFile,
     argToDate,
     parseFreeAndNamedArguments,
-    recordFromArgs,
+    keyValuesFromNamedArgs,
 } from "./common.js";
 import { dateTime, ensureDir, readJsonFile, writeJsonFile } from "typeagent";
 import path from "path";
@@ -217,6 +217,8 @@ export async function createKnowproCommands(
                 description ?? "Search current knowPro conversation by terms",
             options: {
                 maxToDisplay: argNum("Maximum matches to display", 25),
+                startMinute: argNum("Starting at minute."),
+                endMinute: argNum("Ending minute."),
             },
         };
         if (kType === undefined) {
@@ -249,7 +251,8 @@ export async function createKnowproCommands(
             const matches = await kp.searchConversation(
                 conversation,
                 terms,
-                filterFromArgs(namedArgs, commandDef),
+                keyValuesFromNamedArgs(namedArgs, commandDef),
+                filterFromNamedArgs(namedArgs),
             );
             if (matches === undefined || matches.size === 0) {
                 context.printer.writeLine("No matches");
@@ -267,11 +270,25 @@ export async function createKnowproCommands(
         }
     }
 
-    function filterFromArgs(namedArgs: NamedArgs, metadata: CommandMetadata) {
+    function filterFromNamedArgs(namedArgs: NamedArgs) {
         let filter: kp.SearchFilter = {
             type: namedArgs.ktype,
-            propertiesToMatch: recordFromArgs(namedArgs, metadata),
         };
+        const dateRange = kp.getTimeRangeForConversation(context.podcast!);
+        if (dateRange && namedArgs.startMinute >= 0) {
+            filter.dateRange = {
+                start: dateTime.addMinutesToDate(
+                    dateRange.start,
+                    namedArgs.startMinute,
+                ),
+            };
+            if (namedArgs.endMinute) {
+                filter.dateRange.end = dateTime.addMinutesToDate(
+                    dateRange.start,
+                    namedArgs.endMinute,
+                );
+            }
+        }
         return filter;
     }
 
@@ -396,8 +413,8 @@ export async function createKnowproCommands(
     }
 }
 
-export function parseQueryTerms(args: string[]): kp.QueryTerm[] {
-    const queryTerms: kp.QueryTerm[] = [];
+export function parseQueryTerms(args: string[]): kp.SearchTerm[] {
+    const queryTerms: kp.SearchTerm[] = [];
     for (const arg of args) {
         let allTermStrings = knowLib.split(arg, ";", {
             trim: true,
@@ -405,7 +422,7 @@ export function parseQueryTerms(args: string[]): kp.QueryTerm[] {
         });
         if (allTermStrings.length > 0) {
             allTermStrings = allTermStrings.map((t) => t.toLowerCase());
-            const queryTerm: kp.QueryTerm = {
+            const queryTerm: kp.SearchTerm = {
                 term: { text: allTermStrings[0] },
             };
             if (allTermStrings.length > 0) {

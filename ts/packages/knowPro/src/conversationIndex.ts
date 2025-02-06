@@ -13,6 +13,8 @@ import {
     TextRange,
     TextLocation,
     IMessage,
+    SemanticRefIndex,
+    MessageIndex,
 } from "./dataFormat.js";
 import { conversation } from "knowledge-processor";
 import { openai } from "aiclient";
@@ -33,14 +35,14 @@ function createKnowledgeModel() {
 }
 
 function textLocationFromLocation(
-    messageIndex: number,
+    messageIndex: MessageIndex,
     chunkIndex = 0,
 ): TextLocation {
     return { messageIndex, chunkIndex };
 }
 
-function textRangeFromLocation(
-    messageIndex: number,
+export function textRangeFromLocation(
+    messageIndex: MessageIndex,
     chunkIndex = 0,
 ): TextRange {
     return {
@@ -148,6 +150,32 @@ export function addActionToIndex(
     addFacet(action.subjectEntityFacet, refIndex, semanticRefIndex);
 }
 
+export function addKnowledgeToIndex(
+    semanticRefs: SemanticRef[],
+    semanticRefIndex: ITermToSemanticRefIndex,
+    messageIndex: MessageIndex,
+    knowledge: conversation.KnowledgeResponse,
+) {
+    for (const entity of knowledge.entities) {
+        addEntityToIndex(entity, semanticRefs, semanticRefIndex, messageIndex);
+    }
+    for (const action of knowledge.actions) {
+        addActionToIndex(action, semanticRefs, semanticRefIndex, messageIndex);
+    }
+    for (const inverseAction of knowledge.inverseActions) {
+        addActionToIndex(
+            inverseAction,
+            semanticRefs,
+            semanticRefIndex,
+            messageIndex,
+        );
+    }
+    for (const topic of knowledge.topics) {
+        const topicObj: ITopic = { text: topic };
+        addTopicToIndex(topicObj, semanticRefs, semanticRefIndex, messageIndex);
+    }
+}
+
 export type ConversationIndexingResult = {
     index: ConversationIndex;
     failedMessages: { message: IMessage; error: string }[];
@@ -190,39 +218,12 @@ export async function buildConversationIndex<TMeta extends IKnowledgeSource>(
             if (knowledgeResult.success) {
                 const knowledge = knowledgeResult.data;
                 if (knowledge) {
-                    for (const entity of knowledge.entities) {
-                        addEntityToIndex(
-                            entity,
-                            semanticRefs,
-                            semanticRefIndex,
-                            i,
-                        );
-                    }
-                    for (const action of knowledge.actions) {
-                        addActionToIndex(
-                            action,
-                            semanticRefs,
-                            semanticRefIndex,
-                            i,
-                        );
-                    }
-                    for (const inverseAction of knowledge.inverseActions) {
-                        addActionToIndex(
-                            inverseAction,
-                            semanticRefs,
-                            semanticRefIndex,
-                            i,
-                        );
-                    }
-                    for (const topic of knowledge.topics) {
-                        const topicObj: ITopic = { text: topic };
-                        addTopicToIndex(
-                            topicObj,
-                            semanticRefs,
-                            semanticRefIndex,
-                            i,
-                        );
-                    }
+                    addKnowledgeToIndex(
+                        semanticRefs,
+                        semanticRefIndex,
+                        i,
+                        knowledge,
+                    );
                 }
             } else {
                 indexingResult.failedMessages.push({
@@ -257,22 +258,25 @@ export class ConversationIndex implements ITermToSemanticRefIndex {
         return this.map.size;
     }
 
-    getTerms(): string[] {
+    public getTerms(): string[] {
         return [...this.map.keys()];
     }
 
-    addTerm(term: string, semanticRefResult: number | ScoredSemanticRef): void {
-        if (typeof semanticRefResult === "number") {
-            semanticRefResult = {
-                semanticRefIndex: semanticRefResult,
+    public addTerm(
+        term: string,
+        semanticRefIndex: SemanticRefIndex | ScoredSemanticRef,
+    ): void {
+        if (typeof semanticRefIndex === "number") {
+            semanticRefIndex = {
+                semanticRefIndex: semanticRefIndex,
                 score: 1,
             };
         }
         term = this.prepareTerm(term);
         if (this.map.has(term)) {
-            this.map.get(term)?.push(semanticRefResult);
+            this.map.get(term)?.push(semanticRefIndex);
         } else {
-            this.map.set(term, [semanticRefResult]);
+            this.map.set(term, [semanticRefIndex]);
         }
     }
 

@@ -57,6 +57,40 @@ body {
   .action-text {
     color: lightgray;
   }
+
+  .chat-separator-line {
+    background-color: gray;
+  }
+
+  .chat-separator-text {
+    color: gray;
+  }
+}
+
+.history {
+  filter: grayscale(100%);
+}
+
+.chat-separator {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  text-align: center;
+  font-size: 10px;
+  margin: 20px 20px;
+}
+
+.chat-separator-line {
+  flex-grow: 1;
+  width: 40px;
+  background-color: darkgray;
+  height: 2px;
+}
+
+.chat-separator-text {
+  margin: 0px 10px;
+  color: darkgray;
+  height: 20px;
 }
 
 .wrapper {

@@ -25,7 +25,7 @@ import {
 } from "default-agent-provider";
 import { ShellSettings } from "./shellSettings.js";
 import { unlinkSync } from "fs";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { shellAgentProvider } from "./agent.js";
 import { BrowserAgentIpc } from "./browserIpc.js";
 import { WebSocketMessageV2 } from "common-utils";
@@ -58,6 +58,13 @@ process.argv.forEach((arg) => {
         unlinkSync(ShellSettings.filePath);
     }
 });
+
+export function runningTests(): boolean {
+    return (
+        process.env["INSTANCE_NAME"] !== undefined &&
+        process.env["INSTANCE_NAME"].startsWith("test_") === true
+    );
+}
 
 let mainWindow: BrowserWindow | null = null;
 let inlineWebContentView: WebContentsView | null = null;
@@ -614,6 +621,24 @@ async function initialize() {
         // Send settings asap
         ShellSettings.getinstance().onSettingsChanged!();
 
+        // Load chat history if enabled
+        const chatHistory: string = path.join(
+            getInstanceDir(),
+            "chat_history.html",
+        );
+        if (
+            ShellSettings.getinstance().chatHistory &&
+            existsSync(chatHistory)
+        ) {
+            chatView?.webContents.send(
+                "chat-history",
+                readFileSync(
+                    path.join(getInstanceDir(), "chat_history.html"),
+                    "utf-8",
+                ),
+            );
+        }
+
         // make sure links are opened in the external browser
         mainWindow.webContents.setWindowOpenHandler((details) => {
             require("electron").shell.openExternal(details.url);
@@ -623,8 +648,28 @@ async function initialize() {
         // The dispatcher can be use now that dom is ready and the client is ready to receive messages
         const dispatcher = await dispatcherP;
         updateSummary(dispatcher);
+
+        // send the agent greeting if it's turned on
         if (ShellSettings.getinstance().agentGreeting) {
             dispatcher.processCommand("@greeting", "agent-0", []);
+        }
+    });
+
+    // Store the chat history whenever the DOM changes
+    // this let's us rehydrate the chat when reopening the shell
+    ipcMain.on("dom changed", async (_event, html) => {
+        // store the modified DOM contents
+        const file: string = path.join(getInstanceDir(), "chat_history.html");
+
+        debugShell(`Saving chat history to '${file}'.`, performance.now());
+
+        try {
+            writeFileSync(file, html);
+        } catch (e) {
+            debugShell(
+                `Unable to save history to '${file}'. Error: ${e}`,
+                performance.now(),
+            );
         }
     });
 
@@ -642,6 +687,7 @@ async function initialize() {
         ShellSettings.getinstance().partialCompletion =
             settings.partialCompletion;
         ShellSettings.getinstance().darkMode = settings.darkMode;
+        ShellSettings.getinstance().chatHistory = settings.chatHistory;
 
         // write the settings to disk
         ShellSettings.getinstance().save();
@@ -673,11 +719,7 @@ async function initialize() {
     // On windows, we will spin up a local end point that listens
     // for pen events which will trigger speech reco
     // Don't spin this up during testing
-    if (
-        process.platform == "win32" &&
-        (process.env["INSTANCE_NAME"] == undefined ||
-            process.env["INSTANCE_NAME"].startsWith("test_") == false)
-    ) {
+    if (process.platform == "win32" && !runningTests()) {
         const pipePath = path.join("\\\\.\\pipe\\TypeAgent", "speech");
         const server = net.createServer((stream) => {
             stream.on("data", (c) => {
