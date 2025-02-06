@@ -397,15 +397,11 @@ export class GetSearchMatchesExpr extends QueryOpExpr<SemanticRefAccumulator> {
     }
 
     public override eval(context: QueryEvalContext): SemanticRefAccumulator {
-        const allMatches: SemanticRefAccumulator = new SemanticRefAccumulator();
-
+        const matches = new SemanticRefAccumulator();
         for (const matchExpr of this.searchTermExpressions) {
-            const termMatches = matchExpr.eval(context);
-            if (termMatches && termMatches.size > 0) {
-                allMatches.addUnion(termMatches);
-            }
+            matchExpr.accumulateMatches(context, matches);
         }
-        return allMatches;
+        return matches;
     }
 }
 
