@@ -209,7 +209,7 @@ export async function searchCode(
     const answer = result.answer;
 
     // 7. Produce an action result from that.
-    const entities: Entity[] = [];
+    const outputEntities: Entity[] = [];
     console_log(`  [Entities returned:]`);
     for (const ref of result.references) {
         const chunk = allChunks.find((c) => c.chunkId === ref);
@@ -228,7 +228,7 @@ export async function searchCode(
             additionalEntityText: `${chunk.fileName}#${blob.start + 1}`,
             // TODO: Include summary and signature somehow?
         };
-        entities.push(entity);
+        outputEntities.push(entity);
         console_log(
             `    [${entity.name} (${entity.type}) ${entity.uniqueId} ${entity.additionalEntityText}]`,
         );
@@ -242,7 +242,7 @@ export async function searchCode(
     };
     return createActionResultFromMarkdownDisplay(
         answer,
-        paramEntities,
+        outputEntities,
         resultEntity,
     );
 }
