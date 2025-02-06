@@ -31,19 +31,13 @@ export function sortMatchesByRelevance(matches: Match[]) {
 
 export class MatchAccumulator<T = any> {
     private matches: Map<T, Match<T>>;
-    private maxHitCount: number;
 
     constructor() {
         this.matches = new Map<T, Match<T>>();
-        this.maxHitCount = 0;
     }
 
     public get size(): number {
         return this.matches.size;
-    }
-
-    public get maxHits(): number {
-        return this.maxHitCount;
     }
 
     public has(value: T): boolean {
@@ -56,9 +50,6 @@ export class MatchAccumulator<T = any> {
 
     public setMatch(match: Match<T>): void {
         this.matches.set(match.value, match);
-        if (match.exactHitCount > this.maxHitCount) {
-            this.maxHitCount = match.exactHitCount;
-        }
     }
 
     public setMatches(
@@ -96,9 +87,6 @@ export class MatchAccumulator<T = any> {
             existingMatch.exactMatch = isExactMatch;
             existingMatch.exactHitCount++;
             existingMatch.score += newScore;
-            if (existingMatch.exactHitCount > this.maxHitCount) {
-                this.maxHitCount = existingMatch.exactHitCount;
-            }
         } else if (existingMatch.score < newScore) {
             existingMatch.score = newScore;
         }
@@ -149,7 +137,6 @@ export class MatchAccumulator<T = any> {
 
     public clearMatches(): void {
         this.matches.clear();
-        this.maxHitCount = 0;
     }
 
     public selectTopNScoring(
