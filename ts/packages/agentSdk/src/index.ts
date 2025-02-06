@@ -43,7 +43,7 @@ export {
 
 export {
     AppAction,
-    AppActionEx,
+    TypeAgentAction,
     ActionResultError,
     ActionResultSuccessNoDisplay,
     ActionResultSuccess,

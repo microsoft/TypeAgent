@@ -4,9 +4,7 @@
 import path from "node:path";
 import {
     ChangeVolumeAction,
-    CreatePlaylistAction,
     DeletePlaylistAction,
-    FilterTracksAction,
     GetFavoritesAction,
     GetPlaylistAction,
     PlayAlbumAction,
@@ -75,8 +73,7 @@ import {
     DisplayContent,
     Storage,
     ActionResult,
-    Entity,
-    AppActionEx,
+    TypeAgentAction,
 } from "@typeagent/agent-sdk";
 import {
     createActionResultFromHtmlDisplay,
@@ -468,7 +465,7 @@ async function playRandomAction(
 
 async function playTrackAction(
     clientContext: IClientContext,
-    action: AppActionEx<PlayTrackAction>,
+    action: TypeAgentAction<PlayTrackAction>,
 ): Promise<ActionResult> {
     if (action.parameters.albumName) {
         return playTrackWithAlbum(clientContext, action);
@@ -477,8 +474,8 @@ async function playTrackAction(
         clientContext,
         action.parameters.trackName,
         action.parameters.artists,
-        action.entities.trackName,
-        action.entities.artists,
+        action.entities?.trackName,
+        action.entities?.artists,
         3,
     );
 
@@ -509,14 +506,14 @@ function isTrackMatch(
 
 async function playTrackWithAlbum(
     clientContext: IClientContext,
-    action: AppActionEx<PlayTrackAction>,
+    action: TypeAgentAction<PlayTrackAction>,
 ): Promise<ActionResult> {
     const albumName = action.parameters.albumName!;
     const trackName = action.parameters.trackName;
     const trackFromEntity = await getTrackFromEntity(
         trackName,
         clientContext,
-        action.entities.trackName,
+        action.entities?.trackName,
     );
     if (trackFromEntity !== undefined) {
         if (
@@ -532,8 +529,8 @@ async function playTrackWithAlbum(
         albumName,
         action.parameters.artists,
         clientContext,
-        action.entities.albumName,
-        action.entities.artists,
+        action.entities?.albumName,
+        action.entities?.artists,
     );
 
     if (trackFromEntity !== undefined) {
@@ -591,14 +588,14 @@ async function playFromCurrentTrackListAction(
 }
 async function playAlbumAction(
     clientContext: IClientContext,
-    action: AppActionEx<PlayAlbumAction>,
+    action: TypeAgentAction<PlayAlbumAction>,
 ): Promise<ActionResult> {
     const albums = await findAlbums(
         action.parameters.albumName,
         action.parameters.artists,
         clientContext,
-        action.entities.albumName,
-        action.entities.artists,
+        action.entities?.albumName,
+        action.entities?.artists,
     );
 
     const album = albums[0];
@@ -631,19 +628,19 @@ async function playAlbumAction(
 
 async function playArtistAction(
     clientContext: IClientContext,
-    action: AppActionEx<PlayArtistAction>,
+    action: TypeAgentAction<PlayArtistAction>,
 ): Promise<ActionResult> {
     const tracks = await (action.parameters.genre
         ? findArtistTracksWithGenre(
               action.parameters.artist,
               action.parameters.genre,
               clientContext,
-              action.entities.artist,
+              action.entities?.artist,
           )
         : findArtistTopTracks(
               action.parameters.artist,
               clientContext,
-              action.entities.artist,
+              action.entities?.artist,
           ));
 
     const quantity = action.parameters.quantity ?? 0;
@@ -778,10 +775,9 @@ export function getUserDataStrings(clientContext: IClientContext) {
 }
 
 export async function handleCall(
-    action: AppActionEx<PlayerAction>,
+    action: TypeAgentAction<PlayerAction>,
     clientContext: IClientContext,
     actionIO: ActionIO,
-    entityMap: Map<string, Entity> | undefined,
 ): Promise<ActionResult> {
     switch (action.actionName) {
         case "playRandom":
@@ -1011,22 +1007,19 @@ export async function handleCall(
             return createErrorActionResult("No favorites found");
         }
         case "filterTracks": {
-            const filterTracksAction = action as FilterTracksAction;
             let input = clientContext.currentTrackList;
-            if (filterTracksAction.parameters.trackListEntityId && entityMap) {
+            const trackListEntity = action.entities?.trackListEntityId;
+            if (trackListEntity) {
                 console.log(
-                    `entity id: ${filterTracksAction.parameters.trackListEntityId}`,
-                );
-                const entity = entityMap.get(
-                    filterTracksAction.parameters.trackListEntityId,
+                    `entity id: ${action.parameters.trackListEntityId}`,
                 );
                 if (
-                    entity !== undefined &&
-                    entity.type.includes("track-list") &&
-                    entity.uniqueId
+                    trackListEntity !== undefined &&
+                    trackListEntity.type.includes("track-list") &&
+                    trackListEntity.uniqueId
                 ) {
                     const trackList = clientContext.trackListMap.get(
-                        entity.uniqueId,
+                        trackListEntity.uniqueId,
                     );
                     if (trackList) {
                         input = trackList;
@@ -1034,10 +1027,9 @@ export async function handleCall(
                 }
             }
             if (input) {
-                let filterType: string =
-                    filterTracksAction.parameters.filterType;
-                const filterText = filterTracksAction.parameters.filterValue;
-                const negate = filterTracksAction.parameters.negate;
+                let filterType: string = action.parameters.filterType;
+                const filterText = action.parameters.filterValue;
+                const negate = action.parameters.negate;
                 // TODO: add filter validation to overall instance validation
                 if (filterType === "name") {
                     filterType = "description";
@@ -1072,27 +1064,21 @@ export async function handleCall(
             return createErrorActionResult("no current track list to filter");
         }
         case "createPlaylist": {
-            const createPlaylistAction = action as CreatePlaylistAction;
-            const name = createPlaylistAction.parameters.name;
+            const name = action.parameters.name;
             let input = clientContext.currentTrackList;
 
-            if (
-                createPlaylistAction.parameters.trackListEntityId &&
-                entityMap
-            ) {
+            const trackListEntity = action.entities?.trackListEntityId;
+            if (trackListEntity) {
                 console.log(
-                    `entity id: ${createPlaylistAction.parameters.trackListEntityId}`,
+                    `entity id: ${action.parameters.trackListEntityId}`,
                 );
-                const entity = entityMap.get(
-                    createPlaylistAction.parameters.trackListEntityId,
-                );
+
                 if (
-                    entity !== undefined &&
-                    entity.type.includes("track-list") &&
-                    entity.uniqueId
+                    trackListEntity.type.includes("track-list") &&
+                    trackListEntity.uniqueId
                 ) {
                     const trackList = clientContext.trackListMap.get(
-                        entity.uniqueId,
+                        trackListEntity.uniqueId,
                     );
                     if (trackList) {
                         input = trackList;

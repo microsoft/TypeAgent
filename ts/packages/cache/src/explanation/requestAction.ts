@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { PromptSection } from "typechat";
-import { AppAction, Entity } from "@typeagent/agent-sdk";
+import { AppAction, TypeAgentAction, Entity } from "@typeagent/agent-sdk";
 
 export type PromptEntity = Entity & {
     sourceAppAgentName: string;
@@ -68,7 +68,7 @@ export interface JSONAction {
 }
 
 export interface ExecutableAction {
-    action: FullAction;
+    action: TypeAgentAction<FullAction>;
     resultEntityId?: string;
 }
 
@@ -78,7 +78,7 @@ export function createExecutableAction(
     parameters?: ParamObjectType,
     resultEntityId?: string,
 ): ExecutableAction {
-    const action: FullAction = {
+    const action: TypeAgentAction<FullAction> = {
         translatorName,
         actionName,
     };
