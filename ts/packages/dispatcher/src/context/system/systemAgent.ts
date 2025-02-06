@@ -78,7 +78,7 @@ function executeSystemAction(
     context: ActionContext<CommandHandlerContext>,
 ) {
     switch (action.translatorName) {
-        case "system.session":            
+        case "system.session":
             return executeSessionAction(action, context);
         case "system.config":
             return executeConfigAction(action, context);
