@@ -76,6 +76,7 @@ import {
     Storage,
     ActionResult,
     Entity,
+    AppActionEx,
 } from "@typeagent/agent-sdk";
 import {
     createActionResultFromHtmlDisplay,
@@ -467,17 +468,17 @@ async function playRandomAction(
 
 async function playTrackAction(
     clientContext: IClientContext,
-    action: PlayTrackAction,
-    entityMap: Map<string, Entity> | undefined,
+    action: AppActionEx<PlayTrackAction>,
 ): Promise<ActionResult> {
     if (action.parameters.albumName) {
-        return playTrackWithAlbum(clientContext, action, entityMap);
+        return playTrackWithAlbum(clientContext, action);
     }
     const tracks = await findTracks(
         clientContext,
         action.parameters.trackName,
         action.parameters.artists,
-        entityMap,
+        action.entities.trackName,
+        action.entities.artists,
         3,
     );
 
@@ -508,15 +509,14 @@ function isTrackMatch(
 
 async function playTrackWithAlbum(
     clientContext: IClientContext,
-    action: PlayTrackAction,
-    entityMap: Map<string, Entity> | undefined,
+    action: AppActionEx<PlayTrackAction>,
 ): Promise<ActionResult> {
     const albumName = action.parameters.albumName!;
     const trackName = action.parameters.trackName;
     const trackFromEntity = await getTrackFromEntity(
         trackName,
         clientContext,
-        entityMap,
+        action.entities.trackName,
     );
     if (trackFromEntity !== undefined) {
         if (
@@ -532,7 +532,8 @@ async function playTrackWithAlbum(
         albumName,
         action.parameters.artists,
         clientContext,
-        entityMap,
+        action.entities.albumName,
+        action.entities.artists,
     );
 
     if (trackFromEntity !== undefined) {
@@ -590,14 +591,14 @@ async function playFromCurrentTrackListAction(
 }
 async function playAlbumAction(
     clientContext: IClientContext,
-    action: PlayAlbumAction,
-    entityMap: Map<string, Entity> | undefined,
+    action: AppActionEx<PlayAlbumAction>,
 ): Promise<ActionResult> {
     const albums = await findAlbums(
         action.parameters.albumName,
         action.parameters.artists,
         clientContext,
-        entityMap,
+        action.entities.albumName,
+        action.entities.artists,
     );
 
     const album = albums[0];
@@ -630,20 +631,19 @@ async function playAlbumAction(
 
 async function playArtistAction(
     clientContext: IClientContext,
-    action: PlayArtistAction,
-    entityMap: Map<string, Entity> | undefined,
+    action: AppActionEx<PlayArtistAction>,
 ): Promise<ActionResult> {
     const tracks = await (action.parameters.genre
         ? findArtistTracksWithGenre(
               action.parameters.artist,
               action.parameters.genre,
               clientContext,
-              entityMap,
+              action.entities.artist,
           )
         : findArtistTopTracks(
               action.parameters.artist,
               clientContext,
-              entityMap,
+              action.entities.artist,
           ));
 
     const quantity = action.parameters.quantity ?? 0;
@@ -778,7 +778,7 @@ export function getUserDataStrings(clientContext: IClientContext) {
 }
 
 export async function handleCall(
-    action: PlayerAction,
+    action: AppActionEx<PlayerAction>,
     clientContext: IClientContext,
     actionIO: ActionIO,
     entityMap: Map<string, Entity> | undefined,
@@ -787,13 +787,13 @@ export async function handleCall(
         case "playRandom":
             return playRandomAction(clientContext, action);
         case "playTrack":
-            return playTrackAction(clientContext, action, entityMap);
+            return playTrackAction(clientContext, action);
         case "playFromCurrentTrackList":
             return playFromCurrentTrackListAction(clientContext, action);
         case "playAlbum":
-            return playAlbumAction(clientContext, action, entityMap);
+            return playAlbumAction(clientContext, action);
         case "playArtist":
-            return playArtistAction(clientContext, action, entityMap);
+            return playArtistAction(clientContext, action);
         case "playGenre":
             return playGenreAction(clientContext, action);
         case "status": {

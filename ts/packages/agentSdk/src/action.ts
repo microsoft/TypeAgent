@@ -40,3 +40,27 @@ export type ActionResult =
     | ActionResultSuccessNoDisplay
     | ActionResultSuccess
     | ActionResultError;
+
+type EntityField<T> = T extends string
+    ? Entity
+    : T extends any[]
+      ? (EntityField<Required<T[number]>> | undefined)[]
+      : T extends object
+        ? EntityField<T>
+        : undefined;
+
+export type EntityMap<T> = {
+    [Property in keyof T]?: EntityField<T[Property]>;
+};
+
+export type ActionEntities<T extends AppAction = AppAction> =
+    T["parameters"] extends undefined
+        ? undefined
+        : EntityMap<Required<T["parameters"]>>;
+
+export type AppActionEx<T extends AppAction> = T extends AppAction
+    ? T & {
+          translatorName: string;
+          entities: ActionEntities<T>;
+      }
+    : never;

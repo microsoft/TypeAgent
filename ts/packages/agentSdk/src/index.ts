@@ -43,6 +43,7 @@ export {
 
 export {
     AppAction,
+    AppActionEx,
     ActionResultError,
     ActionResultSuccessNoDisplay,
     ActionResultSuccess,
