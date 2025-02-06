@@ -385,30 +385,6 @@ export class MatchSearchTermExpr extends MatchTermExpr {
         term: Term,
         relatedTerm?: Term,
     ) {
-        /*
-        if (relatedTerm === undefined) {
-            const semanticRefs = this.lookupTerm(context, term);
-            if (context.hasTermAlreadyMatched(term.text)) {
-                matches.updateExistingMatchScores(term, semanticRefs, true);
-            } else {
-                matches.addSearchTermMatches(term, semanticRefs);
-                context.recordTermMatch(term.text);
-            }
-        } else {
-            const semanticRefs = this.lookupTerm(context, relatedTerm);
-            if (context.hasTermAlreadyMatched(relatedTerm.text)) {
-                matches.updateExistingMatchScores(
-                    term,
-                    semanticRefs,
-                    false,
-                    relatedTerm.score,
-                );
-            } else {
-                matches.addRelatedTermMatches(term, relatedTerm, semanticRefs);
-                context.recordTermMatch(relatedTerm.text);
-            }
-        }
-        */
         if (relatedTerm === undefined) {
             const semanticRefs = this.lookupTerm(context, term);
             if (context.hasTermAlreadyMatched(term.text)) {
@@ -548,7 +524,7 @@ export class MatchPropertyTermExpr extends MatchTermExpr {
             if (context.hasPropertyAlreadyMatched(propName, propVal.text)) {
                 matches.updateExistingMatchScores(propVal, semanticRefs, true);
             } else {
-                matches.addSearchTermMatches(propVal, semanticRefs);
+                matches.addOrUpdate(propVal, semanticRefs, true);
                 context.recordPropertyMatched(propName, propVal.text);
             }
         } else {
@@ -566,10 +542,11 @@ export class MatchPropertyTermExpr extends MatchTermExpr {
                     relatedPropVal.score,
                 );
             } else {
-                matches.addRelatedTermMatches(
+                matches.addOrUpdate(
                     propVal,
-                    relatedPropVal,
                     semanticRefs,
+                    false,
+                    relatedPropVal.score,
                 );
                 context.recordPropertyMatched(propName, relatedPropVal.text);
             }

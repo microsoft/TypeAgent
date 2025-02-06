@@ -17,7 +17,7 @@ import { isInTextRange } from "./query.js";
 export interface Match<T = any> {
     value: T;
     score: number;
-    hitCount: number;
+    exactHitCount: number;
     exactMatch: boolean;
 }
 
@@ -56,8 +56,8 @@ export class MatchAccumulator<T = any> {
 
     public setMatch(match: Match<T>): void {
         this.matches.set(match.value, match);
-        if (match.hitCount > this.maxHitCount) {
-            this.maxHitCount = match.hitCount;
+        if (match.exactHitCount > this.maxHitCount) {
+            this.maxHitCount = match.exactHitCount;
         }
     }
 
@@ -78,7 +78,7 @@ export class MatchAccumulator<T = any> {
         if (match) {
             // Increment the existing match
             if (isNewMatchExact) {
-                match.hitCount += 1;
+                match.exactHitCount += 1;
                 match.exactMatch = true;
             }
             match.score += score;
@@ -87,13 +87,13 @@ export class MatchAccumulator<T = any> {
             match = {
                 value,
                 score,
-                hitCount: 1,
+                exactHitCount: 1,
                 exactMatch: isNewMatchExact,
             };
             this.matches.set(value, match);
         }
-        if (match.hitCount > this.maxHitCount) {
-            this.maxHitCount = match.hitCount;
+        if (match.exactHitCount > this.maxHitCount) {
+            this.maxHitCount = match.exactHitCount;
         }
     }
 
@@ -103,7 +103,7 @@ export class MatchAccumulator<T = any> {
             if (existingMatch) {
                 if (otherMatch.exactMatch) {
                     existingMatch.exactMatch = otherMatch.exactMatch;
-                    existingMatch.hitCount += otherMatch.hitCount;
+                    existingMatch.exactHitCount += otherMatch.exactHitCount;
                     existingMatch.score += otherMatch.score;
                 } else if (existingMatch.score < otherMatch.score) {
                     existingMatch.score = otherMatch.score;
@@ -112,8 +112,8 @@ export class MatchAccumulator<T = any> {
                 this.setMatch(otherMatch);
                 existingMatch = otherMatch;
             }
-            if (existingMatch.hitCount > this.maxHitCount) {
-                this.maxHitCount = existingMatch.hitCount;
+            if (existingMatch.exactHitCount > this.maxHitCount) {
+                this.maxHitCount = existingMatch.exactHitCount;
             }
         }
     }
@@ -195,7 +195,7 @@ export class MatchAccumulator<T = any> {
         minHitCount: number | undefined,
     ): IterableIterator<Match<T>> {
         return minHitCount !== undefined && minHitCount > 0
-            ? this.getMatches((m) => m.hitCount >= minHitCount)
+            ? this.getMatches((m) => m.exactHitCount >= minHitCount)
             : this.matches.values();
     }
 }
@@ -253,7 +253,7 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
                     match = {
                         value: scoredRef.semanticRefIndex,
                         score,
-                        hitCount: 1,
+                        exactHitCount: 1,
                         exactMatch: false,
                     };
                     this.setMatch(match);
@@ -287,7 +287,7 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
                 } else {
                     this.setMatch({
                         value: scoredRef.semanticRefIndex,
-                        hitCount: isExactMatch ? 1 : 0,
+                        exactHitCount: isExactMatch ? 1 : 0,
                         score: newScore,
                         exactMatch: isExactMatch,
                     });
@@ -329,7 +329,7 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
     ): void {
         if (isExactMatch) {
             existingMatch.exactMatch = isExactMatch;
-            existingMatch.hitCount++;
+            existingMatch.exactHitCount++;
             existingMatch.score += newScore;
         } else if (existingMatch.score < newScore) {
             existingMatch.score = newScore;
