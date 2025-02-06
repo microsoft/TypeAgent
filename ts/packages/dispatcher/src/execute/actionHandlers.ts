@@ -1,7 +1,13 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { Action, Actions, FullAction } from "agent-cache";
+import {
+    ExecutableAction,
+    toFullActions,
+    FullAction,
+    getFullActionName,
+    normalizeParamString,
+} from "agent-cache";
 import { CommandHandlerContext } from "../context/commandHandlerContext.js";
 import registerDebug from "debug";
 import { getAppAgentName } from "../translation/agentTranslators.js";
@@ -18,7 +24,7 @@ import {
     Entity,
     AppAgentManifest,
     AppAgent,
-    AppAction,
+    TypeAgentAction,
 } from "@typeagent/agent-sdk";
 import {
     createActionResult,
@@ -29,12 +35,15 @@ import {
     displayStatus,
     displayWarn,
 } from "@typeagent/agent-sdk/helpers/display";
-import { MatchResult } from "agent-cache";
+import { MatchResult, PromptEntity } from "agent-cache";
 import { getStorage } from "./storageImpl.js";
 import { IncrementalJsonValueCallBack } from "common-utils";
 import { ProfileNames } from "../utils/profileNames.js";
 import { conversation } from "knowledge-processor";
-import { makeClientIOMessage } from "../context/interactiveIO.js";
+import {
+    DispatcherName,
+    makeClientIOMessage,
+} from "../context/interactiveIO.js";
 import { UnknownAction } from "../context/dispatcher/schema/dispatcherActionSchema.js";
 import { isUnknownAction } from "../context/dispatcher/dispatcherUtils.js";
 import { isPendingRequestAction } from "../translation/pendingRequest.js";
@@ -61,7 +70,7 @@ function getActionContext(
     systemContext: CommandHandlerContext,
     requestId: string,
     actionIndex?: number,
-    action?: AppAction | string[],
+    action?: TypeAgentAction | string[],
 ): ActionContextWithClose {
     let context = systemContext;
     const sessionContext = context.agents.getSessionContext(appAgentName);
@@ -254,11 +263,11 @@ function getStreamingActionContext(
 }
 
 async function executeAction(
-    action: Action,
+    executableAction: ExecutableAction,
     context: ActionContext<CommandHandlerContext>,
     actionIndex: number,
-    entityMap?: Map<string, Entity>,
 ): Promise<ActionResult> {
+    const action = executableAction.action;
     const translatorName = action.translatorName;
 
     if (translatorName === undefined) {
@@ -278,21 +287,26 @@ async function executeAction(
         );
     }
 
+    if (debugActions.enabled) {
+        debugActions(
+            `Executing action: ${JSON.stringify(action, undefined, 2)}`,
+        );
+    }
     // Reuse the same streaming action context if one is available.
-    const fullAction = action.toFullAction();
+
     const { actionContext, closeActionContext } =
         getStreamingActionContext(
             appAgentName,
             actionIndex,
             systemContext,
-            fullAction,
+            action,
         ) ??
         getActionContext(
             appAgentName,
             systemContext,
             systemContext.requestId!,
             actionIndex,
-            fullAction,
+            action,
         );
 
     actionContext.profiler = systemContext.commandProfiler?.measure(
@@ -307,14 +321,10 @@ async function executeAction(
             systemContext,
         );
         displayStatus(
-            `${prefix}Executing action ${action.fullActionName}`,
+            `${prefix}Executing action ${getFullActionName(executableAction)}`,
             context,
         );
-        returnedResult = await appAgent.executeAction(
-            action,
-            actionContext,
-            entityMap,
-        );
+        returnedResult = await appAgent.executeAction(action, actionContext);
     } finally {
         actionContext.profiler?.stop();
         actionContext.profiler = undefined;
@@ -323,7 +333,7 @@ async function executeAction(
     let result: ActionResult;
     if (returnedResult === undefined) {
         result = createActionResult(
-            `Action ${action.fullActionName} completed.`,
+            `Action ${getFullActionName(executableAction)} completed.`,
         );
     } else {
         if (
@@ -345,11 +355,10 @@ async function executeAction(
 
     if (result.error !== undefined) {
         displayError(result.error, actionContext);
-        systemContext.chatHistory.addEntry(
-            `Action ${action.fullActionName} failed: ${result.error}`,
-            [],
-            "assistant",
+        systemContext.chatHistory.addAssistantEntry(
+            `Action ${getFullActionName(executableAction)} failed: ${result.error}`,
             systemContext.requestId,
+            appAgentName,
         );
     } else {
         if (result.displayContent !== undefined) {
@@ -368,14 +377,13 @@ async function executeAction(
         if (result.resultEntity) {
             combinedEntities.push(result.resultEntity);
         }
-        systemContext.chatHistory.addEntry(
+        systemContext.chatHistory.addAssistantEntry(
             result.literalText
                 ? result.literalText
-                : `Action ${action.fullActionName} completed.`,
-            combinedEntities,
-            "assistant",
+                : `Action ${getFullActionName(executableAction)} completed.`,
             systemContext.requestId,
-            undefined,
+            appAgentName,
+            combinedEntities,
             result.additionalInstructions,
         );
     }
@@ -385,13 +393,13 @@ async function executeAction(
 }
 
 async function canExecute(
-    actions: Actions,
+    actions: ExecutableAction[],
     context: ActionContext<CommandHandlerContext>,
 ): Promise<boolean> {
     const systemContext = context.sessionContext.agentContext;
     const unknown: UnknownAction[] = [];
     const disabled = new Set<string>();
-    for (const action of actions) {
+    for (const { action } of actions) {
         if (isUnknownAction(action)) {
             unknown.push(action);
         }
@@ -408,14 +416,13 @@ async function canExecute(
             (action) => action.parameters.request,
         );
         const lines = [
-            `Unable to determine ${actions.action === undefined ? "one or more actions in" : "action for"} the request.`,
+            `Unable to determine ${actions.length > 1 ? "one or more actions in" : "action for"} the request.`,
             ...unknownRequests.map((s) => `- ${s}`),
         ];
-        systemContext.chatHistory.addEntry(
+        systemContext.chatHistory.addAssistantEntry(
             lines.join("\n"),
-            [],
-            "assistant",
             systemContext.requestId,
+            DispatcherName,
         );
 
         const config = systemContext.session.getConfig();
@@ -460,11 +467,10 @@ async function canExecute(
 
     if (disabled.size > 0) {
         const message = `Not executed. Action disabled for ${Array.from(disabled.values()).join(", ")}`;
-        systemContext.chatHistory.addEntry(
+        systemContext.chatHistory.addAssistantEntry(
             message,
-            [],
-            "assistant",
             systemContext.requestId,
+            DispatcherName,
         );
 
         displayWarn(message, context);
@@ -474,15 +480,80 @@ async function canExecute(
     return true;
 }
 
+function getParameterEntities(
+    value: any,
+    resultEntityMap: Map<string, PromptEntity>,
+    promptEntityMap: Map<string, PromptEntity> | undefined,
+) {
+    switch (typeof value) {
+        case "undefined":
+            return;
+        case "string":
+            // LLM like to correct/change casing.  Normalize for look up.
+            const normalizedValue = normalizeParamString(value);
+            return (
+                resultEntityMap.get(normalizedValue) ??
+                promptEntityMap?.get(normalizedValue)
+            );
+        case "function":
+            throw new Error("Function is not supported as an action value");
+        case "object":
+            if (value === null) {
+                return undefined;
+            }
+            let hasEntity = false;
+            const entities: any = Array.isArray(value) ? [] : {};
+            for (const [key, v] of Object.entries(value)) {
+                const entity = getParameterEntities(
+                    v,
+                    resultEntityMap,
+                    promptEntityMap,
+                );
+                if (entity !== undefined) {
+                    hasEntity = true;
+                    entities[key] = entity;
+                }
+            }
+            return hasEntity ? entities : undefined;
+    }
+}
+
+type PendingAction = {
+    executableAction: ExecutableAction;
+    promptEntityMap: Map<string, PromptEntity> | undefined;
+};
+
+function toPendingActions(
+    actions: ExecutableAction[],
+    entities: PromptEntity[] | undefined,
+): PendingAction[] {
+    const promptEntityMap = entities
+        ? new Map<string, PromptEntity>(
+              entities.map(
+                  (entity) =>
+                      // LLM like to correct/change casing.  Normalize entity name for look up.
+                      [normalizeParamString(entity.name), entity] as const,
+              ),
+          )
+        : undefined;
+    return Array.from(actions).map((executableAction) => ({
+        executableAction,
+        promptEntityMap,
+    }));
+}
+
 export async function executeActions(
-    actions: Actions,
+    actions: ExecutableAction[],
+    entities: PromptEntity[] | undefined,
     context: ActionContext<CommandHandlerContext>,
 ) {
     const systemContext = context.sessionContext.agentContext;
     if (systemContext.commandResult === undefined) {
-        systemContext.commandResult = { actions: actions.toFullActions() };
+        systemContext.commandResult = {
+            actions: toFullActions(actions),
+        };
     } else {
-        systemContext.commandResult.actions = actions.toFullActions();
+        systemContext.commandResult.actions = toFullActions(actions);
     }
 
     if (!(await canExecute(actions, context))) {
@@ -490,11 +561,12 @@ export async function executeActions(
     }
     debugActions(`Executing actions: ${JSON.stringify(actions, undefined, 2)}`);
     let actionIndex = 0;
-    const entityMap = new Map<string, Entity>();
-    const actionQueue: Action[] = [...actions];
+    const resultEntityMap = new Map<string, PromptEntity>();
+    const actionQueue: PendingAction[] = toPendingActions(actions, entities);
 
     while (actionQueue.length !== 0) {
-        const action = actionQueue.shift()!;
+        const { executableAction, promptEntityMap } = actionQueue.shift()!;
+        const action = executableAction.action;
         if (isPendingRequestAction(action)) {
             const translationResult = await translatePendingRequestAction(
                 action,
@@ -504,18 +576,37 @@ export async function executeActions(
             if (!translationResult) {
                 throw new Error("Pending action translation error.");
             }
-            actionQueue.unshift(...translationResult.requestAction.actions);
+
+            const requestAction = translationResult.requestAction;
+            actionQueue.unshift(
+                ...toPendingActions(
+                    requestAction.actions,
+                    requestAction.history?.entities,
+                ),
+            );
             continue;
         }
+        action.entities = getParameterEntities(
+            action.parameters,
+            resultEntityMap,
+            promptEntityMap,
+        );
         const result = await executeAction(
-            action,
+            executableAction,
             context,
             actionIndex,
-            entityMap,
         );
         if (result.error === undefined) {
-            if (result.resultEntity && action.resultEntityId) {
-                entityMap.set(action.resultEntityId, result.resultEntity);
+            if (result.resultEntity && executableAction.resultEntityId) {
+                resultEntityMap.set(
+                    normalizeParamString(executableAction.resultEntityId),
+                    {
+                        ...result.resultEntity,
+                        sourceAppAgentName: getAppAgentName(
+                            action.translatorName,
+                        ),
+                    },
+                );
             }
         }
         actionIndex++;
@@ -527,7 +618,7 @@ export async function validateWildcardMatch(
     context: CommandHandlerContext,
 ) {
     const actions = match.match.actions;
-    for (const action of actions) {
+    for (const { action } of actions) {
         const translatorName = action.translatorName;
         if (translatorName === undefined) {
             continue;

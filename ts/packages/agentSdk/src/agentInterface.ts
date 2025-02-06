@@ -1,8 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { AppAction, ActionResult } from "./action.js";
-import { Entity } from "./memory.js";
+import { AppAction, ActionResult, TypeAgentAction } from "./action.js";
 import { AppAgentCommandInterface } from "./command.js";
 import { ActionIO, DisplayType, DynamicDisplay } from "./display.js";
 import { Profiler } from "./profiler.js";
@@ -59,9 +58,8 @@ export interface AppAgent extends Partial<AppAgentCommandInterface> {
         context: ActionContext<unknown>,
     ): void;
     executeAction?(
-        action: AppAction,
+        action: TypeAgentAction,
         context: ActionContext<unknown>,
-        entityMap?: Map<string, Entity>,
     ): Promise<ActionResult | undefined>;
 
     // Cache extensions

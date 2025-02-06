@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { createJsonTranslatorFromFile } from "common-utils";
-import { RequestAction } from "../requestAction.js";
+import { toJsonActions, RequestAction } from "../requestAction.js";
 import { TypeChatAgent } from "../typeChatAgent.js";
 import {
     checkActionProperty,
@@ -44,7 +44,7 @@ function createInstructions([
         }
     }
 
-    const actionProps = requestAction.actions.toJSON();
+    const actionProps = toJsonActions(requestAction.actions);
     const propertySubPhraseDescription = Array.from(
         propertySubPhraseMap.entries(),
     ).map(([propertyName, subPhrases]) => {
@@ -120,7 +120,7 @@ export function validateAlternativesExplanationV5(
         }
     }
 
-    const actionProps = requestAction.actions.toJSON();
+    const actionProps = toJsonActions(requestAction.actions);
     // Validate parameters
     const corrections: string[] = [];
     const propertyNameSet = new Set<string>();

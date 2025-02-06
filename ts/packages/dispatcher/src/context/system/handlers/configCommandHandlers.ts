@@ -616,6 +616,41 @@ class FixedSchemaCommandHandler implements CommandHandler {
     }
 }
 
+class HistoryLimitCommandHandler implements CommandHandler {
+    public readonly description =
+        "Set the limit of chat history usage in translation";
+    public readonly parameters = {
+        args: {
+            limit: {
+                description: "Number of actions",
+                type: "number",
+            },
+        },
+    } as const;
+    public async run(
+        context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const limit = params.args.limit;
+        if (limit < 0) {
+            throw new Error("Limit must be positive integer");
+        }
+        await changeContextConfig(
+            {
+                translation: {
+                    history: {
+                        limit: limit,
+                    },
+                },
+            },
+            context,
+        );
+        displayResult(
+            `Chat history used in translation limit is set to ${limit}`,
+            context,
+        );
+    }
+}
 const configTranslationCommandHandlers: CommandHandlerTable = {
     description: "Translation configuration",
     defaultSubCommand: "on",
@@ -727,15 +762,22 @@ const configTranslationCommandHandlers: CommandHandlerTable = {
                 ),
             },
         },
-        history: getToggleHandlerTable(
-            "history",
-            async (context, enable: boolean) => {
-                await changeContextConfig(
-                    { translation: { history: enable } },
-                    context,
-                );
+        history: {
+            description: "Configure chat history usage in translation",
+            commands: {
+                ...getToggleCommandHandlers(
+                    "history",
+                    async (context, enable: boolean) => {
+                        await changeContextConfig(
+                            { translation: { history: { enabled: enable } } },
+                            context,
+                        );
+                    },
+                ),
+                limit: new HistoryLimitCommandHandler(),
             },
-        ),
+        },
+
         stream: getToggleHandlerTable(
             "streaming translation",
             async (context, enable: boolean) => {

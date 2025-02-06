@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { AppAction, DisplayAppendMode } from "@typeagent/agent-sdk";
+import { DisplayAppendMode, TypeAgentAction } from "@typeagent/agent-sdk";
 import { IAgentMessage, RequestId } from "../context/interactiveIO.js";
 import { TemplateEditConfig } from "../translation/actionTemplate.js";
 
@@ -26,7 +26,7 @@ export type ClientIOCallFunctions = {
         source: string;
         requestId: RequestId;
         actionIndex?: number | undefined;
-        action?: AppAction | undefined;
+        action?: TypeAgentAction | undefined;
     }): void;
     setDisplay(params: { message: IAgentMessage }): void;
     appendDisplay(params: {

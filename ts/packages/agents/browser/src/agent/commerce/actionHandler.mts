@@ -13,9 +13,10 @@ import {
   ShoppingCartDetails,
   StoreLocation,
 } from "./schema/pageComponents.mjs";
+import { ShoppingActions } from "./schema/userActions.mjs";
 
 export async function handleCommerceAction(
-  action: any,
+  action: ShoppingActions,
   context: ActionContext<BrowserActionContext>,
 ) {
   let message = "OK";
@@ -33,6 +34,9 @@ export async function handleCommerceAction(
       await searchForProduct(action.parameters.productName);
       break;
     case "selectSearchResult":
+      if (action.parameters.productName === undefined) {
+        throw new Error("Missing product name");
+      }
       await selectSearchResult(action.parameters.productName);
       break;
     case "addToCartAction":

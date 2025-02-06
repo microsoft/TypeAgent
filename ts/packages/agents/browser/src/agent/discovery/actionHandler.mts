@@ -17,9 +17,10 @@ import { fileURLToPath } from "url";
 import { UserActionsList } from "./schema/userActionsPool.mjs";
 import { PageDescription } from "./schema/pageSummary.mjs";
 import { createTempAgentForSchema } from "./tempAgentActionHandler.mjs";
+import { SchemaDiscoveryActions } from "./schema/discoveryActions.mjs";
 
 export async function handleSchemaDiscoveryAction(
-  action: any,
+  action: SchemaDiscoveryActions,
   context: ActionContext<BrowserActionContext>,
 ) {
   let message = "OK";

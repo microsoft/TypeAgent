@@ -4,7 +4,7 @@
 import { AppAction } from "@typeagent/agent-sdk";
 import { DispatcherName } from "../context/interactiveIO.js";
 import { PendingRequestEntry } from "./multipleActionSchema.js";
-import { Action } from "agent-cache";
+import { createExecutableAction } from "agent-cache";
 
 export type PendingRequestAction = {
     actionName: "pendingRequestAction";
@@ -24,7 +24,7 @@ export function isPendingRequestAction(
 }
 
 export function createPendingRequestAction(entry: PendingRequestEntry) {
-    return new Action(DispatcherName, "pendingRequestAction", {
+    return createExecutableAction(DispatcherName, "pendingRequestAction", {
         pendingRequest: entry.request,
         pendingResultEntityId: entry.pendingResultEntityId,
     });

@@ -24,7 +24,6 @@ export function createTypeAgentRequestPrompt(
     if (context && history !== undefined) {
         promptSections = history.promptSections;
         entities = history.entities;
-
         if (entities.length > 0) {
             for (let i = 0; i < entities.length; ++i) {
                 const entity = entities[i];

@@ -35,14 +35,14 @@ function createKnowledgeModel() {
 }
 
 function textLocationFromLocation(
-    messageIndex: number,
+    messageIndex: MessageIndex,
     chunkIndex = 0,
 ): TextLocation {
     return { messageIndex, chunkIndex };
 }
 
-function textRangeFromLocation(
-    messageIndex: number,
+export function textRangeFromLocation(
+    messageIndex: MessageIndex,
     chunkIndex = 0,
 ): TextRange {
     return {

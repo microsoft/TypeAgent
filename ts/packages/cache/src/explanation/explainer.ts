@@ -1,7 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { RequestAction, HistoryContext } from "./requestAction.js";
+import {
+    RequestAction,
+    HistoryContext,
+    toJsonActions,
+} from "./requestAction.js";
 import {
     GenericExplanationResult,
     ConstructionFactory,
@@ -34,7 +38,7 @@ function getContextPart(history?: HistoryContext) {
 
 export function getActionDescription(requestAction: RequestAction) {
     const actions = requestAction.actions;
-    const leafPropertyNames = getLeafNames(actions.toJSON());
+    const leafPropertyNames = getLeafNames(toJsonActions(actions));
     let propertyPart = "";
     if (leafPropertyNames.length > 0) {
         propertyPart = `The property name${

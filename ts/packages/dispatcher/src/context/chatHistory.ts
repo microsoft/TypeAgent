@@ -4,40 +4,47 @@
 import { Entity } from "@typeagent/agent-sdk";
 import { CachedImageWithDetails, extractRelevantExifTags } from "common-utils";
 import { PromptSection } from "typechat";
-type PromptRole = "user" | "assistant" | "system";
+import { RequestId } from "./interactiveIO.js";
+import { normalizeParamString, PromptEntity } from "agent-cache";
 
-export interface ChatHistoryEntry {
+type UserEntry = {
+    role: "user";
     text: string;
-    entities: Entity[];
-    role: PromptRole;
-    id: string | undefined;
-    additionalInstructions?: string[] | undefined;
+    id: RequestId;
     attachments?: CachedImageWithDetails[] | undefined;
-}
+};
+
+type AssistantEntry = {
+    role: "assistant";
+    text: string;
+    id: string | undefined;
+    sourceAppAgentName: string;
+    entities?: Entity[] | undefined;
+    additionalInstructions?: string[] | undefined;
+};
+
+type ChatHistoryEntry = UserEntry | AssistantEntry;
 
 export interface ChatHistory {
     entries: ChatHistoryEntry[];
-    getTopKEntities(k: number): Entity[];
-    getEntitiesByName(name: string): Entity[] | undefined;
-    getEntitiesByType(type: string): Entity[] | undefined;
-    addEntry(
+    getTopKEntities(k: number): PromptEntity[];
+    addUserEntry(
         text: string,
-        entities: Entity[],
-        role: PromptRole,
-        id?: string,
+        id: string | undefined,
         attachments?: CachedImageWithDetails[],
+    ): void;
+    addAssistantEntry(
+        text: string,
+        id: string | undefined,
+        sourceAppAgentName: string,
+        entities?: Entity[],
         additionalInstructions?: string[],
     ): void;
-    getEntry(id: string): ChatHistoryEntry | undefined;
     getCurrentInstructions(): string[] | undefined;
     getPromptSections(): PromptSection[];
 }
 
 export function createChatHistory(): ChatHistory {
-    const nameMap: Map<string, Entity[]> = new Map();
-    const typeMap: Map<string, Entity[]> = new Map();
-    const userIdMap: Map<string, number> = new Map();
-    const assistantIdMap: Map<string, number> = new Map();
     return {
         entries: [],
         getPromptSections(maxChars = 2000) {
@@ -65,7 +72,11 @@ export function createChatHistory(): ChatHistory {
                     sections.push({ role: entry.role, content: entry.text });
                 }
 
-                if (entry.attachments && entry.attachments.length > 0) {
+                if (
+                    entry.role === "user" &&
+                    entry.attachments &&
+                    entry.attachments.length > 0
+                ) {
                     for (const attachment of entry.attachments) {
                         sections.push({
                             role: entry.role,
@@ -112,10 +123,10 @@ export function createChatHistory(): ChatHistory {
                 i--;
             }
             while (i >= 0) {
-                if (this.entries[i].role === "user") {
+                const entry = this.entries[i];
+                if (entry.role === "user") {
                     break;
                 }
-                const entry = this.entries[i];
                 if (entry.additionalInstructions) {
                     instructions.push(...entry.additionalInstructions);
                 }
@@ -123,93 +134,91 @@ export function createChatHistory(): ChatHistory {
             }
             return instructions.length > 0 ? instructions : undefined;
         },
-        addEntry(
+        addUserEntry(
             text: string,
-            entities: Entity[],
-            role: PromptRole = "user",
-            id?: string,
+            id: string | undefined,
             attachments?: CachedImageWithDetails[],
+        ): void {
+            this.entries.push({
+                role: "user",
+                text,
+                id,
+                attachments,
+            });
+        },
+        addAssistantEntry(
+            text: string,
+            id: string | undefined,
+            sourceAppAgentName: string,
+            entities?: Entity[],
             additionalInstructions?: string[],
         ): void {
             this.entries.push({
+                role: "assistant",
                 text,
-                entities,
-                role,
                 id,
-                attachments,
+                sourceAppAgentName,
+                entities: structuredClone(entities), // make a copy so that it doesn't get modified by others later.
                 additionalInstructions,
             });
-            const index = this.entries.length - 1;
-            if (id) {
-                if (role === "user") {
-                    userIdMap.set(id, index);
-                } else {
-                    assistantIdMap.set(id, index);
-                }
-            }
-            for (const entity of entities) {
-                if (!nameMap.has(entity.name)) {
-                    nameMap.set(entity.name, []);
-                }
-                nameMap.get(entity.name)?.push(entity);
-
-                for (const type of entity.type) {
-                    if (!typeMap.has(type)) {
-                        typeMap.set(type, []);
-                    }
-                    typeMap.get(type)?.push(entity);
-                }
-            }
         },
-
-        getEntitiesByName(name: string): Entity[] | undefined {
-            return nameMap.get(name);
-        },
-        getEntitiesByType(type: string): Entity[] | undefined {
-            return typeMap.get(type);
-        },
-        getTopKEntities(k: number): Entity[] {
-            const uniqueEntities = new Map<string, Entity>();
-            let valueCount = 0;
+        getTopKEntities(k: number): PromptEntity[] {
+            const uniqueEntities = new Map<string, PromptEntity[]>();
+            const result: PromptEntity[] = [];
             // loop over entries from last to first
             for (let i = this.entries.length - 1; i >= 0; i--) {
                 const entry = this.entries[i];
+                if (entry.role === "user" || entry.entities === undefined) {
+                    continue;
+                }
                 for (const entity of entry.entities) {
                     // Multiple entities may have the same name ('Design meeting') but different
                     // entity instances. E.g. {Design meeting, on 9/12} vs {Design meeting, on 9/19}
-                    // Use a unique id provided by the agent to distinguish between name
-                    let entityId = entity.uniqueId;
-                    if (entityId) {
-                        // Scope ids by their type...
-                        // An entityId need be unique only for a type, not in the global namespace
-                        entityId = `${entity.type}.${entityId}`;
-                    }
-                    if (!entityId) {
-                        // If entity has no unique id, make one the entity using it name
-                        entityId = entity.name;
-                        if (entity.additionalEntityText) {
-                            entityId += `v${valueCount++}`;
+                    // Add index the name if there are conflicts.
+
+                    // LLM like to correct/change casing.  Normalize for look up.
+                    const normalizedName = normalizeParamString(entity.name);
+                    const uniqueIndex = `${normalizedName}.${entity.type}`;
+                    let existing = uniqueEntities.get(uniqueIndex);
+                    let promptEntity: PromptEntity;
+                    if (existing) {
+                        if (
+                            existing.some(
+                                (e) =>
+                                    e.sourceAppAgentName ===
+                                        entry.sourceAppAgentName &&
+                                    e.uniqueId === entity.uniqueId,
+                            )
+                        ) {
+                            // Duplicate
+                            continue;
                         }
-                    }
-                    if (!uniqueEntities.has(entityId)) {
-                        uniqueEntities.set(entityId, entity);
-                        if (uniqueEntities.size === k) {
-                            return [...uniqueEntities.values()];
+
+                        if (existing.length === 1) {
+                            // Add index to the first one.
+                            existing[0].name = `${existing[0].name}v1`;
                         }
+
+                        promptEntity = {
+                            ...entity,
+                            name: `${entity.name}v${existing.length + 1}`,
+                            sourceAppAgentName: entry.sourceAppAgentName,
+                        };
+                        existing.push(promptEntity);
+                    } else {
+                        promptEntity = {
+                            ...entity,
+                            sourceAppAgentName: entry.sourceAppAgentName,
+                        };
+                        uniqueEntities.set(uniqueIndex, [promptEntity]);
+                    }
+                    result.push(promptEntity);
+                    if (result.length >= k) {
+                        break;
                     }
                 }
             }
-            // return unique entities across all entries
-            return [...uniqueEntities.values()];
-        },
-        getEntry(id: string, role = "user"): ChatHistoryEntry | undefined {
-            if (role === "assistant") {
-                const index = assistantIdMap.get(id);
-                return index !== undefined ? this.entries[index] : undefined;
-            } else {
-                const index = userIdMap.get(id);
-                return index !== undefined ? this.entries[index] : undefined;
-            }
+            return result;
         },
     };
 }

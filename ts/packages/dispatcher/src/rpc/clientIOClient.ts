@@ -13,7 +13,7 @@ import {
 } from "./clientIOTypes.js";
 import { TemplateEditConfig } from "../translation/actionTemplate.js";
 import { RpcChannel } from "agent-rpc/channel";
-import { DisplayAppendMode, AppAction } from "@typeagent/agent-sdk";
+import { DisplayAppendMode, TypeAgentAction } from "@typeagent/agent-sdk";
 
 export function createClientIORpcClient(channel: RpcChannel): ClientIO {
     const rpc = createRpc<ClientIOInvokeFunctions, ClientIOCallFunctions>(
@@ -32,7 +32,7 @@ export function createClientIORpcClient(channel: RpcChannel): ClientIO {
             source: string,
             requestId: RequestId,
             actionIndex?: number,
-            action?: AppAction,
+            action?: TypeAgentAction,
         ): void {
             return rpc.send("setDisplayInfo", {
                 source,

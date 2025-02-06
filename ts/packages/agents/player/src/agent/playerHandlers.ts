@@ -16,7 +16,7 @@ import {
     DisplayType,
     AppAgentEvent,
     DynamicDisplay,
-    Entity,
+    TypeAgentAction,
 } from "@typeagent/agent-sdk";
 import { createActionResultFromError } from "@typeagent/agent-sdk/helpers/action";
 import { searchAlbum, searchTracks } from "../client.js";
@@ -52,16 +52,14 @@ async function initializePlayerContext() {
 }
 
 async function executePlayerAction(
-    action: PlayerAction,
+    action: TypeAgentAction<PlayerAction>,
     context: ActionContext<PlayerActionContext>,
-    entityMap: Map<string, Entity>,
 ) {
     if (context.sessionContext.agentContext.spotify) {
         return handleCall(
-            action as PlayerAction,
+            action,
             context.sessionContext.agentContext.spotify,
             context.actionIO,
-            entityMap,
         );
     }
 

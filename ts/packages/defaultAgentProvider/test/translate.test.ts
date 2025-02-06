@@ -41,7 +41,7 @@ describe("translation action stability", () => {
                     appAgentProviders: defaultAppAgentProviders,
                     actions: null,
                     commands: { dispatcher: true },
-                    translation: { history: false },
+                    translation: { history: { enabled: false } },
                     explainer: { enabled: false },
                     cache: { enabled: false },
                 }),
