@@ -203,7 +203,7 @@ class SearchQueryBuilder {
     private prepareSearchTerms(searchTerms: SearchTerm[]): void {
         for (const searchTerm of searchTerms) {
             this.prepareTerm(searchTerm.term);
-            searchTerm.term.score ??= 10.0;
+            searchTerm.term.score ??= searchTerms.length * 10;
             if (searchTerm.relatedTerms) {
                 searchTerm.relatedTerms.forEach((st) => this.prepareTerm(st));
             }

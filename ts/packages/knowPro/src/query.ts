@@ -388,22 +388,22 @@ export class MatchSearchTermExpr extends MatchTermExpr {
         if (relatedTerm === undefined) {
             const semanticRefs = this.lookupTerm(context, term);
             if (context.hasTermAlreadyMatched(term.text)) {
-                matches.updateExistingMatchScores(term, semanticRefs, true);
+                matches.updateTermMatches(term, semanticRefs, true);
             } else {
-                matches.addOrUpdate(term, semanticRefs, true);
+                matches.addTermMatches(term, semanticRefs, true);
                 context.recordTermMatch(term.text);
             }
         } else {
             const semanticRefs = this.lookupTerm(context, relatedTerm);
             if (context.hasTermAlreadyMatched(relatedTerm.text)) {
-                matches.updateExistingMatchScores(
+                matches.updateTermMatches(
                     term,
                     semanticRefs,
                     false,
                     relatedTerm.score,
                 );
             } else {
-                matches.addOrUpdate(
+                matches.addTermMatches(
                     term,
                     semanticRefs,
                     false,
@@ -522,9 +522,9 @@ export class MatchPropertyTermExpr extends MatchTermExpr {
                 propVal.text,
             );
             if (context.hasPropertyAlreadyMatched(propName, propVal.text)) {
-                matches.updateExistingMatchScores(propVal, semanticRefs, true);
+                matches.updateTermMatches(propVal, semanticRefs, true);
             } else {
-                matches.addOrUpdate(propVal, semanticRefs, true);
+                matches.addTermMatches(propVal, semanticRefs, true);
                 context.recordPropertyMatched(propName, propVal.text);
             }
         } else {
@@ -535,14 +535,14 @@ export class MatchPropertyTermExpr extends MatchTermExpr {
             if (
                 context.hasPropertyAlreadyMatched(propName, relatedPropVal.text)
             ) {
-                matches.updateExistingMatchScores(
+                matches.updateTermMatches(
                     propVal,
                     semanticRefs,
                     false,
                     relatedPropVal.score,
                 );
             } else {
-                matches.addOrUpdate(
+                matches.addTermMatches(
                     propVal,
                     semanticRefs,
                     false,

@@ -73,34 +73,34 @@ export class MatchAccumulator<T = any> {
         }
     }
 
-    public add(value: T, score: number, isNewMatchExact: boolean): void {
-        let match = this.matches.get(value);
-        if (match) {
-            // Increment the existing match
-            if (isNewMatchExact) {
-                match.exactHitCount += 1;
-                match.exactMatch = true;
-            }
-            match.score += score;
+    public add(value: T, score: number, isExactMatch: boolean) {
+        const existingMatch = this.getMatch(value);
+        if (existingMatch) {
+            this.updateExisting(existingMatch, score, isExactMatch);
         } else {
-            // New match
-            match = {
+            this.setMatch({
                 value,
+                exactHitCount: isExactMatch ? 1 : 0,
                 score,
-                exactHitCount: 1,
-                exactMatch: isNewMatchExact,
-            };
-            this.matches.set(value, match);
-        }
-        if (match.exactHitCount > this.maxHitCount) {
-            this.maxHitCount = match.exactHitCount;
+                exactMatch: isExactMatch,
+            });
         }
     }
 
-    public updateExistingScore(value: T, score: number) {
-        let match = this.matches.get(value);
-        if (match && match.score < score) {
-            match.score = score;
+    protected updateExisting(
+        existingMatch: Match,
+        newScore: number,
+        isExactMatch: boolean,
+    ): void {
+        if (isExactMatch) {
+            existingMatch.exactMatch = isExactMatch;
+            existingMatch.exactHitCount++;
+            existingMatch.score += newScore;
+            if (existingMatch.exactHitCount > this.maxHitCount) {
+                this.maxHitCount = existingMatch.exactHitCount;
+            }
+        } else if (existingMatch.score < newScore) {
+            existingMatch.score = newScore;
         }
     }
 
@@ -179,7 +179,7 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
         super();
     }
 
-    public addOrUpdate(
+    public addTermMatches(
         searchTerm: Term,
         scoredRefs:
             | ScoredSemanticRef[]
@@ -191,24 +191,17 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
         if (scoredRefs) {
             scoreBoost ??= searchTerm.score ?? 0;
             for (const scoredRef of scoredRefs) {
-                const existingMatch = this.getMatch(scoredRef.semanticRefIndex);
-                const newScore = scoredRef.score + scoreBoost;
-                if (existingMatch) {
-                    this.updateExisting(existingMatch, isExactMatch, newScore);
-                } else {
-                    this.setMatch({
-                        value: scoredRef.semanticRefIndex,
-                        exactHitCount: isExactMatch ? 1 : 0,
-                        score: newScore,
-                        exactMatch: isExactMatch,
-                    });
-                }
+                this.add(
+                    scoredRef.semanticRefIndex,
+                    scoredRef.score + scoreBoost,
+                    isExactMatch,
+                );
             }
             this.searchTermMatches.add(searchTerm.text);
         }
     }
 
-    public updateExistingMatchScores(
+    public updateTermMatches(
         searchTerm: Term,
         scoredRefs:
             | ScoredSemanticRef[]
@@ -222,28 +215,17 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
             for (const scoredRef of scoredRefs) {
                 const existingMatch = this.getMatch(scoredRef.semanticRefIndex);
                 if (existingMatch) {
-                    const newScore = scoredRef.score + scoreBoost;
-                    this.updateExisting(existingMatch, isExactMatch, newScore);
+                    this.updateExisting(
+                        existingMatch,
+                        scoredRef.score + scoreBoost,
+                        isExactMatch,
+                    );
                 } else {
                     throw new Error(
                         `No existing match for ${searchTerm.text} Id: ${scoredRef.semanticRefIndex}`,
                     );
                 }
             }
-        }
-    }
-
-    private updateExisting(
-        existingMatch: Match,
-        isExactMatch: boolean,
-        newScore: number,
-    ): void {
-        if (isExactMatch) {
-            existingMatch.exactMatch = isExactMatch;
-            existingMatch.exactHitCount++;
-            existingMatch.score += newScore;
-        } else if (existingMatch.score < newScore) {
-            existingMatch.score = newScore;
         }
     }
 
