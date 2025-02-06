@@ -232,17 +232,14 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
     public override getSortedByScore(
         minHitCount?: number,
     ): Match<SemanticRefIndex>[] {
-        return super.getSortedByScore(this.getMinHitCount(minHitCount));
+        return super.getSortedByScore(minHitCount);
     }
 
     public override getTopNScoring(
         maxMatches?: number,
         minHitCount?: number,
     ): Match<SemanticRefIndex>[] {
-        return super.getTopNScoring(
-            maxMatches,
-            this.getMinHitCount(minHitCount),
-        );
+        return super.getTopNScoring(maxMatches, minHitCount);
     }
 
     public *getSemanticRefs(
@@ -328,12 +325,6 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
                 score: m.score,
             };
         }, 0);
-    }
-
-    private getMinHitCount(minHitCount?: number): number {
-        //return minHitCount !== undefined ? minHitCount : this.maxHits;
-        return minHitCount ?? 0;
-        //: this.queryTermMatches.termMatches.size;
     }
 }
 
