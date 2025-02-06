@@ -19,7 +19,9 @@ import { PropertySearchTerm, SearchTerm } from "./search.js";
 import {
     Match,
     MatchAccumulator,
+    PropertyTermSet,
     SemanticRefAccumulator,
+    TermSet,
     TextRangeCollection,
 } from "./collections.js";
 import { PropertyNames } from "./propertyIndex.js";
@@ -231,9 +233,14 @@ export interface IQueryOpExpr<T> {
 
 export class QueryEvalContext {
     private matchedTermText = new Set<string>();
+    public matchedTerms = new TermSet();
+    public matchedPropertyTerms = new PropertyTermSet();
+
     constructor(public conversation: IConversation) {
         if (!isConversationSearchable(conversation)) {
-            throw new Error(`${conversation.nameTag} is not initialized`);
+            throw new Error(
+                `${conversation.nameTag} is not initialized and cannot be searched`,
+            );
         }
     }
 
@@ -258,30 +265,9 @@ export class QueryEvalContext {
         return this.conversation.messages[messageIndex];
     }
 
-    public hasTermAlreadyMatched(termText: string): boolean {
-        return this.matchedTermText.has(termText);
-    }
-
-    public recordTermMatch(termText: string): void {
-        this.matchedTermText.add(termText);
-    }
-
-    public hasPropertyAlreadyMatched(
-        propertyName: string,
-        propertyValue: string,
-    ): boolean {
-        return this.matchedTermText.has(propertyName + propertyValue);
-    }
-
-    public recordPropertyMatched(
-        propertyName: string,
-        propertyValue: string,
-    ): void {
-        this.matchedTermText.add(propertyName + propertyValue);
-    }
-
     public clearMatchedTerms() {
         this.matchedTermText.clear();
+        this.matchedPropertyTerms.clear();
     }
 }
 
@@ -307,7 +293,7 @@ export class SelectTopNExpr<T extends MatchAccumulator> extends QueryOpExpr<T> {
     }
 }
 
-export class GetSearchMatchesExpr extends QueryOpExpr<SemanticRefAccumulator> {
+export class MatchAllTermsExpr extends QueryOpExpr<SemanticRefAccumulator> {
     constructor(public searchTermExpressions: MatchTermExpr[]) {
         super();
     }
@@ -315,6 +301,7 @@ export class GetSearchMatchesExpr extends QueryOpExpr<SemanticRefAccumulator> {
     public override eval(context: QueryEvalContext): SemanticRefAccumulator {
         const allMatches = new SemanticRefAccumulator();
         context.clearMatchedTerms();
+        context.matchedTerms.clear();
         for (const matchExpr of this.searchTermExpressions) {
             matchExpr.accumulateMatches(context, allMatches);
         }
@@ -387,15 +374,15 @@ export class MatchSearchTermExpr extends MatchTermExpr {
     ) {
         if (relatedTerm === undefined) {
             const semanticRefs = this.lookupTerm(context, term);
-            if (context.hasTermAlreadyMatched(term.text)) {
+            if (context.matchedTerms.has(term)) {
                 matches.updateTermMatches(term, semanticRefs, true);
             } else {
                 matches.addTermMatches(term, semanticRefs, true);
-                context.recordTermMatch(term.text);
+                context.matchedTerms.add(term);
             }
         } else {
             const semanticRefs = this.lookupTerm(context, relatedTerm);
-            if (context.hasTermAlreadyMatched(relatedTerm.text)) {
+            if (context.matchedTerms.has(relatedTerm)) {
                 matches.updateTermMatches(
                     term,
                     semanticRefs,
@@ -409,7 +396,7 @@ export class MatchSearchTermExpr extends MatchTermExpr {
                     false,
                     relatedTerm.score,
                 );
-                context.recordTermMatch(relatedTerm.text);
+                context.matchedTerms.add(relatedTerm);
             }
         }
     }
@@ -521,20 +508,18 @@ export class MatchPropertyTermExpr extends MatchTermExpr {
                 propName,
                 propVal.text,
             );
-            if (context.hasPropertyAlreadyMatched(propName, propVal.text)) {
+            if (context.matchedPropertyTerms.has(propName, propVal)) {
                 matches.updateTermMatches(propVal, semanticRefs, true);
             } else {
                 matches.addTermMatches(propVal, semanticRefs, true);
-                context.recordPropertyMatched(propName, propVal.text);
+                context.matchedPropertyTerms.add(propName, propVal);
             }
         } else {
             const semanticRefs = propertyIndex.lookupProperty(
                 propName,
                 relatedPropVal.text,
             );
-            if (
-                context.hasPropertyAlreadyMatched(propName, relatedPropVal.text)
-            ) {
+            if (context.matchedPropertyTerms.has(propName, relatedPropVal)) {
                 matches.updateTermMatches(
                     propVal,
                     semanticRefs,
@@ -548,7 +533,7 @@ export class MatchPropertyTermExpr extends MatchTermExpr {
                     false,
                     relatedPropVal.score,
                 );
-                context.recordPropertyMatched(propName, relatedPropVal.text);
+                context.matchedPropertyTerms.add(propName, relatedPropVal);
             }
         }
     }

@@ -399,6 +399,69 @@ export class TextRangeCollection {
     }
 }
 
+export class TermSet {
+    constructor(private terms: Map<string, Term> = new Map()) {}
+
+    public add(term: Term) {
+        const existingTerm = this.terms.get(term.text);
+        if (!existingTerm) {
+            this.terms.set(term.text, term);
+        }
+    }
+
+    public addOrUnion(term: Term) {
+        const existingTerm = this.terms.get(term.text);
+        if (existingTerm) {
+            const existingScore = existingTerm.score ?? 0;
+            const newScore = term.score ?? 0;
+            if (existingScore < newScore) {
+                existingTerm.score = newScore;
+            }
+        } else {
+            this.terms.set(term.text, term);
+        }
+    }
+
+    public get(term: string | Term): Term | undefined {
+        return typeof term === "string"
+            ? this.terms.get(term)
+            : this.terms.get(term.text);
+    }
+
+    public has(term: Term): boolean {
+        return this.terms.has(term.text);
+    }
+
+    public clear(): void {
+        this.terms.clear();
+    }
+}
+
+export class PropertyTermSet {
+    constructor(private terms: Map<string, Term> = new Map()) {}
+
+    public add(propertyName: string, propertyValue: Term) {
+        const key = this.makeKey(propertyName, propertyValue);
+        const existingTerm = this.terms.get(key);
+        if (!existingTerm) {
+            this.terms.set(key, propertyValue);
+        }
+    }
+
+    public has(propertyName: string, propertyValue: Term): boolean {
+        const key = this.makeKey(propertyName, propertyValue);
+        return this.terms.has(key);
+    }
+
+    public clear(): void {
+        this.terms.clear();
+    }
+
+    private makeKey(propertyName: string, propertyValue: Term): string {
+        return propertyName + ":" + propertyValue.text;
+    }
+}
+
 /**
  * Return a new set that is the union of two sets
  * @param x

@@ -146,7 +146,7 @@ class SearchQueryBuilder {
             matchTermsExpr.push(...this.compilePropertyTerms(propertyTerms));
         }
         let selectExpr: q.IQueryOpExpr<SemanticRefAccumulator> =
-            new q.GetSearchMatchesExpr(matchTermsExpr);
+            new q.MatchAllTermsExpr(matchTermsExpr);
 
         return selectExpr;
     }
