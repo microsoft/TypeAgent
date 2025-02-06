@@ -93,16 +93,17 @@ async function searchAlbums(
 async function getArtistFromEntity(
     artistName: string,
     context: IClientContext,
-    entityMap: Map<string, Entity>,
+    artistEntity: Entity | undefined,
 ) {
-    const entity = entityMap.get(artistName);
     if (
-        entity !== undefined &&
-        entity.type.includes("artist") &&
-        entity.uniqueId !== undefined
+        artistEntity !== undefined &&
+        artistEntity.type.includes("artist") &&
+        artistEntity.uniqueId !== undefined
     ) {
-        debugReuse(`Reusing artist entity: ${artistName}: ${entity.uniqueId}`);
-        return getArtist(context.service, entity.uniqueId);
+        debugReuse(
+            `Reusing artist entity: ${artistName}: ${artistEntity.uniqueId}`,
+        );
+        return getArtist(context.service, artistEntity.uniqueId);
     }
     return undefined;
 }
@@ -110,13 +111,13 @@ async function getArtistFromEntity(
 async function searchArtistSorted(
     artistName: string,
     context: IClientContext,
-    entityMap: Map<string, Entity> | undefined,
+    artistEntity: Entity | undefined,
 ): Promise<SpotifyApi.ArtistObjectFull[] | undefined> {
-    if (entityMap) {
+    if (artistEntity) {
         const artist = await getArtistFromEntity(
             artistName,
             context,
-            entityMap,
+            artistEntity,
         );
 
         if (artist !== undefined) {
@@ -164,16 +165,17 @@ async function getAlbumsByIds(service: SpotifyService, ids: string[]) {
 async function getAlbumFromEntity(
     albumName: string,
     context: IClientContext,
-    entityMap: Map<string, Entity> | undefined,
+    albumEntity: Entity | undefined,
 ) {
-    const entity = entityMap?.get(albumName);
     if (
-        entity !== undefined &&
-        entity.type.includes("album") &&
-        entity.uniqueId !== undefined
+        albumEntity !== undefined &&
+        albumEntity.type.includes("album") &&
+        albumEntity.uniqueId !== undefined
     ) {
-        debugReuse(`Reusing album entity: ${albumName}: ${entity.uniqueId}`);
-        return getAlbum(context.service, entity.uniqueId);
+        debugReuse(
+            `Reusing album entity: ${albumName}: ${albumEntity.uniqueId}`,
+        );
+        return getAlbum(context.service, albumEntity.uniqueId);
     }
     return undefined;
 }
@@ -182,12 +184,12 @@ async function searchAlbumSorted(
     albumName: string,
     artists: SpotifyApi.ArtistObjectFull[] | undefined,
     context: IClientContext,
-    entityMap: Map<string, Entity> | undefined,
+    albumEntity: Entity | undefined,
 ) {
     const albumFromEntity = await getAlbumFromEntity(
         albumName,
         context,
-        entityMap,
+        albumEntity,
     );
     if (albumFromEntity) {
         if (filterByArtists([albumFromEntity], artists) !== undefined) {
@@ -299,10 +301,10 @@ function compareKnownTracks(
 export async function resolveArtists(
     artistNames: string[],
     context: IClientContext,
-    entityMap?: Map<string, Entity>,
+    artistEntities?: (Entity | undefined)[],
 ): Promise<SpotifyApi.ArtistObjectFull[] | undefined> {
     try {
-        return await findArtists(artistNames, context, entityMap);
+        return await findArtists(artistNames, context, artistEntities);
     } catch {
         return undefined;
     }
@@ -311,10 +313,12 @@ export async function resolveArtists(
 async function findArtists(
     artistNames: string[],
     context: IClientContext,
-    entityMap?: Map<string, Entity>,
+    artistEntities: (Entity | undefined)[] | undefined,
 ): Promise<SpotifyApi.ArtistObjectFull[]> {
     const matches = await Promise.all(
-        artistNames.map((a) => searchArtistSorted(a, context, entityMap)),
+        artistNames.map((a, i) =>
+            searchArtistSorted(a, context, artistEntities?.[i]),
+        ),
     );
 
     const artists: SpotifyApi.ArtistObjectFull[] = [];
@@ -333,14 +337,14 @@ async function searchAlbumsWithTrackArtists(
     albumName: string,
     artists: SpotifyApi.ArtistObjectFull[],
     context: IClientContext,
-    entityMap: Map<string, Entity> | undefined,
+    albumEntity: Entity | undefined,
 ) {
     // Try again without artist, as the artist on the album might not match the one in the tracks.
     let albums = await searchAlbumSorted(
         albumName,
         undefined,
         context,
-        entityMap,
+        albumEntity,
     );
     if (albums === undefined) {
         return undefined;
@@ -361,9 +365,9 @@ export async function findArtistTracksWithGenre(
     artistName: string,
     genre: string,
     context: IClientContext,
-    entityMap: Map<string, Entity> | undefined,
+    artistEntity: Entity | undefined,
 ) {
-    const artists = await searchArtistSorted(artistName, context, entityMap);
+    const artists = await searchArtistSorted(artistName, context, artistEntity);
     if (artists === undefined) {
         throw new Error(`Unable to find artist '${artistName}'`);
     }
@@ -395,9 +399,9 @@ export async function findArtistTracksWithGenre(
 export async function findArtistTopTracks(
     artistName: string,
     context: IClientContext,
-    entityMap: Map<string, Entity> | undefined,
+    artistEntity: Entity | undefined,
 ): Promise<SpotifyApi.TrackObjectFull[]> {
-    const artists = await searchArtistSorted(artistName, context, entityMap);
+    const artists = await searchArtistSorted(artistName, context, artistEntity);
     if (artists === undefined) {
         throw new Error(`Unable to find artist '${artistName}'`);
     }
@@ -416,7 +420,8 @@ export async function findAlbums(
     albumName: string,
     artistNames: string[] | undefined,
     context: IClientContext,
-    entityMap: Map<string, Entity> | undefined,
+    albumEntity: Entity | undefined,
+    artistEntities: (Entity | undefined)[] | undefined,
 ): Promise<SpotifyApi.AlbumObjectFull[]> {
     let albums: SpotifyApi.AlbumObjectFull[] | undefined;
     if (artistNames !== undefined) {
@@ -424,13 +429,13 @@ export async function findAlbums(
         const matchedArtists = await findArtists(
             artistNames,
             context,
-            entityMap,
+            artistEntities,
         );
         albums = await searchAlbumSorted(
             albumName,
             matchedArtists,
             context,
-            entityMap,
+            albumEntity,
         );
 
         if (albums === undefined) {
@@ -438,7 +443,7 @@ export async function findAlbums(
                 albumName,
                 matchedArtists,
                 context,
-                entityMap,
+                albumEntity,
             );
             if (albums === undefined) {
                 throw new Error(
@@ -451,7 +456,7 @@ export async function findAlbums(
             albumName,
             undefined,
             context,
-            entityMap,
+            albumEntity,
         );
         if (albums === undefined) {
             throw new Error(`Unable to find album '${albumName}'`);
@@ -588,16 +593,17 @@ function filterByArtists<
 export async function getTrackFromEntity(
     trackName: string,
     context: IClientContext,
-    entityMap: Map<string, Entity> | undefined,
+    trackEntity: Entity | undefined,
 ) {
-    const entity = entityMap?.get(trackName);
     if (
-        entity !== undefined &&
-        entity.type.includes("track") &&
-        entity.uniqueId !== undefined
+        trackEntity !== undefined &&
+        trackEntity.type.includes("track") &&
+        trackEntity.uniqueId !== undefined
     ) {
-        debugReuse(`Reusing track entity: ${trackName}: ${entity.uniqueId}`);
-        return getTrack(context.service, entity.uniqueId);
+        debugReuse(
+            `Reusing track entity: ${trackName}: ${trackEntity.uniqueId}`,
+        );
+        return getTrack(context.service, trackEntity.uniqueId);
     }
     return undefined;
 }
@@ -606,18 +612,19 @@ export async function findTracks(
     context: IClientContext,
     trackName: string,
     artistNames: string[] | undefined,
-    entityMap: Map<string, Entity> | undefined,
+    trackEntity: Entity | undefined,
+    artistEntities: (Entity | undefined)[] | undefined,
     quantity: number = 0,
 ): Promise<SpotifyApi.TrackObjectFull[]> {
     // try search for the most likely artist names.
     const matchedArtists = artistNames
-        ? await findArtists(artistNames, context, entityMap)
+        ? await findArtists(artistNames, context, artistEntities)
         : undefined;
 
     const trackFromEntity = await getTrackFromEntity(
         trackName,
         context,
-        entityMap,
+        trackEntity,
     );
 
     if (trackFromEntity) {

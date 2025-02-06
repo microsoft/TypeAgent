@@ -11,9 +11,10 @@ import {
 } from "../commerce/schema/shoppingResults.mjs";
 
 import { setupPageActions, UIElementSchemas } from "./pageActions.mjs";
+import { InstacartActions } from "./schema/userActions.mjs";
 
 export async function handleInstacartAction(
-  action: any,
+  action: InstacartActions,
   context: ActionContext<BrowserActionContext>,
 ) {
   let message = "OK";

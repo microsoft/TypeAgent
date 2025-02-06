@@ -14,9 +14,8 @@ import {
     DisplayAppendMode,
     AppAgentEvent,
     ClientAction,
-    AppAction,
     AppAgentManifest,
-    Entity,
+    TypeAgentAction,
 } from "@typeagent/agent-sdk";
 
 import {
@@ -64,8 +63,7 @@ export function createAgentRpcServer(
         },
         async executeAction(
             param: Partial<ActionContextParams> & {
-                action: AppAction;
-                entityMap: [string, Entity][];
+                action: TypeAgentAction;
             },
         ): Promise<any> {
             if (agent.executeAction === undefined) {
@@ -74,7 +72,6 @@ export function createAgentRpcServer(
             return agent.executeAction(
                 param.action,
                 getActionContextShim(param),
-                new Map(param.entityMap),
             );
         },
         async validateWildcardMatch(param): Promise<any> {

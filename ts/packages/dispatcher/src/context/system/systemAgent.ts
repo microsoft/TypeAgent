@@ -11,6 +11,7 @@ import {
     SessionContext,
     PartialParsedCommandParams,
     AppAgentManifest,
+    TypeAgentAction,
 } from "@typeagent/agent-sdk";
 import {
     CommandHandler,
@@ -63,9 +64,17 @@ import {
 import { getEnvCommandHandlers } from "./handlers/envCommandHandler.js";
 import { executeNotificationAction } from "./action/notificationActionHandler.js";
 import { executeHistoryAction } from "./action/historyActionHandler.js";
+import { ConfigAction } from "./schema/configActionSchema.js";
+import { NotificationAction } from "./schema/notificationActionSchema.js";
+import { HistoryAction } from "./schema/historyActionSchema.js";
+import { SessionAction } from "./schema/sessionActionSchema.js";
 
 function executeSystemAction(
-    action: AppAction,
+    action:
+        | TypeAgentAction<SessionAction, "system.session">
+        | TypeAgentAction<ConfigAction, "system.config">
+        | TypeAgentAction<NotificationAction, "system.notify">
+        | TypeAgentAction<HistoryAction, "system.history">,
     context: ActionContext<CommandHandlerContext>,
 ) {
     switch (action.translatorName) {
@@ -77,9 +86,11 @@ function executeSystemAction(
             return executeNotificationAction(action, context);
         case "system.history":
             return executeHistoryAction(action, context);
+        default:
+            throw new Error(
+                `Invalid system sub-translator: ${(action as TypeAgentAction).translatorName}`,
+            );
     }
-
-    throw new Error(`Invalid system sub-translator: ${action.translatorName}`);
 }
 
 class HelpCommandHandler implements CommandHandler {

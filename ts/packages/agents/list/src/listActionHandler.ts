@@ -3,11 +3,11 @@
 
 import {
     ActionContext,
-    AppAction,
     AppAgent,
     SessionContext,
     Storage,
     ActionResult,
+    TypeAgentAction,
 } from "@typeagent/agent-sdk";
 import {
     createActionResultFromTextDisplay,
@@ -30,11 +30,11 @@ type ListActionContext = {
 };
 
 async function executeListAction(
-    action: AppAction,
+    action: TypeAgentAction<ListAction>,
     context: ActionContext<ListActionContext>,
 ) {
     let result = await handleListAction(
-        action as ListAction,
+        action,
         context.sessionContext.agentContext,
     );
     return result;

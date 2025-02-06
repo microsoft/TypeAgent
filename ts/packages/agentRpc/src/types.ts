@@ -12,11 +12,11 @@ import {
     DisplayContent,
     DisplayType,
     DynamicDisplay,
-    Entity,
     ParameterDefinitions,
     ParsedCommandParams,
     StorageListOptions,
     TemplateSchema,
+    TypeAgentAction,
 } from "@typeagent/agent-sdk";
 
 export type AgentContextCallFunctions = {
@@ -116,8 +116,7 @@ export type AgentInvokeFunctions = {
     ) => Promise<void>;
     executeAction: (
         param: Partial<ActionContextParams> & {
-            action: AppAction;
-            entityMap: [string, Entity][];
+            action: TypeAgentAction;
         },
     ) => Promise<ActionResult | undefined>;
     validateWildcardMatch: (

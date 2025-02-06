@@ -24,7 +24,7 @@ import {
     Entity,
     AppAgentManifest,
     AppAgent,
-    AppAction,
+    TypeAgentAction,
 } from "@typeagent/agent-sdk";
 import {
     createActionResult,
@@ -70,7 +70,7 @@ function getActionContext(
     systemContext: CommandHandlerContext,
     requestId: string,
     actionIndex?: number,
-    action?: AppAction | string[],
+    action?: TypeAgentAction | string[],
 ): ActionContextWithClose {
     let context = systemContext;
     const sessionContext = context.agents.getSessionContext(appAgentName);
@@ -266,7 +266,6 @@ async function executeAction(
     executableAction: ExecutableAction,
     context: ActionContext<CommandHandlerContext>,
     actionIndex: number,
-    entityMap?: Map<string, Entity>,
 ): Promise<ActionResult> {
     const action = executableAction.action;
     const translatorName = action.translatorName;
@@ -292,11 +291,6 @@ async function executeAction(
         debugActions(
             `Executing action: ${JSON.stringify(action, undefined, 2)}`,
         );
-        if (entityMap) {
-            debugActions(
-                `Entity map: ${JSON.stringify(Array.from(entityMap?.entries()), undefined, 2)}`,
-            );
-        }
     }
     // Reuse the same streaming action context if one is available.
 
@@ -330,11 +324,7 @@ async function executeAction(
             `${prefix}Executing action ${getFullActionName(executableAction)}`,
             context,
         );
-        returnedResult = await appAgent.executeAction(
-            action,
-            actionContext,
-            entityMap,
-        );
+        returnedResult = await appAgent.executeAction(action, actionContext);
     } finally {
         actionContext.profiler?.stop();
         actionContext.profiler = undefined;
@@ -490,50 +480,42 @@ async function canExecute(
     return true;
 }
 
-function getStringValues(params: unknown) {
-    const values: string[] = [];
-    const pending: unknown[] = [params];
-    while (pending.length > 0) {
-        const current = pending.pop()!;
-        if (typeof current === "object" && current !== null) {
-            for (const value of Object.values(current)) {
-                pending.push(value);
-            }
-        } else if (typeof current === "function") {
-            throw new Error("Function is not supported as an action value");
-        } else if (typeof current === "string") {
-            values.push(current);
-        }
-    }
-    return values;
-}
-
-function getActionEntityMap(
-    action: FullAction,
+function getParameterEntities(
+    value: any,
     resultEntityMap: Map<string, PromptEntity>,
     promptEntityMap: Map<string, PromptEntity> | undefined,
 ) {
-    const entityMap = new Map<string, Entity>();
-    const actionStringValues = getStringValues(action.parameters);
-    const appAgentName = getAppAgentName(action.translatorName);
-    for (const value of actionStringValues) {
-        // LLM like to correct/change casing.  Normalize for look up.
-        const normalizedValue = normalizeParamString(value);
-
-        // If there is a conflict between the result entity name and the
-        // chat history entity name, the result entity will be used.
-        const entity =
-            resultEntityMap.get(normalizedValue) ??
-            promptEntityMap?.get(normalizedValue);
-        if (entity) {
-            // Only use the entity if it was created by the same app agent.
-            if (entity.sourceAppAgentName === appAgentName) {
-                // Use the value in the action for the agent to look up. No need to normalize
-                entityMap.set(value, entity);
+    switch (typeof value) {
+        case "undefined":
+            return;
+        case "string":
+            // LLM like to correct/change casing.  Normalize for look up.
+            const normalizedValue = normalizeParamString(value);
+            return (
+                resultEntityMap.get(normalizedValue) ??
+                promptEntityMap?.get(normalizedValue)
+            );
+        case "function":
+            throw new Error("Function is not supported as an action value");
+        case "object":
+            if (value === null) {
+                return undefined;
             }
-        }
+            let hasEntity = false;
+            const entities: any = Array.isArray(value) ? [] : {};
+            for (const [key, v] of Object.entries(value)) {
+                const entity = getParameterEntities(
+                    v,
+                    resultEntityMap,
+                    promptEntityMap,
+                );
+                if (entity !== undefined) {
+                    hasEntity = true;
+                    entities[key] = entity;
+                }
+            }
+            return hasEntity ? entities : undefined;
     }
-    return entityMap.size === 0 ? undefined : entityMap;
 }
 
 type PendingAction = {
@@ -604,11 +586,15 @@ export async function executeActions(
             );
             continue;
         }
+        action.entities = getParameterEntities(
+            action.parameters,
+            resultEntityMap,
+            promptEntityMap,
+        );
         const result = await executeAction(
             executableAction,
             context,
             actionIndex,
-            getActionEntityMap(action, resultEntityMap, promptEntityMap),
         );
         if (result.error === undefined) {
             if (result.resultEntity && executableAction.resultEntityId) {

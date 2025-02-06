@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { AppAction, DisplayContent } from "@typeagent/agent-sdk";
+import { DisplayContent, TypeAgentAction } from "@typeagent/agent-sdk";
 import {
     CommandResult,
     IAgentMessage,
@@ -73,7 +73,7 @@ export class MessageGroup {
     public setDisplayInfo(
         source: string,
         actionIndex?: number,
-        action?: AppAction | string[],
+        action?: TypeAgentAction | string[],
     ) {
         const agentMessage = this.ensureAgentMessage({
             message: "",

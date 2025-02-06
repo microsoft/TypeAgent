@@ -5,10 +5,10 @@ import { createWebSocket } from "common-utils/ws";
 import { WebSocket } from "ws";
 import {
   ActionContext,
-  AppAction,
   AppAgent,
   AppAgentEvent,
   SessionContext,
+  TypeAgentAction,
 } from "@typeagent/agent-sdk";
 import { createActionResult } from "@typeagent/agent-sdk/helpers/action";
 import { Crossword } from "./crossword/schema/pageSchema.mjs";
@@ -36,6 +36,12 @@ import { handleInstacartAction } from "./instacart/planHandler.mjs";
 import { processWebAgentMessage, WebAgentChannels } from "./webTypeAgent.mjs";
 import { isWebAgentMessage } from "../common/webAgentMessageTypes.mjs";
 import { handleSchemaDiscoveryAction } from "./discovery/actionHandler.mjs";
+import { BrowserActions } from "./actionsSchema.mjs";
+import { PaleoBioDbActions } from "./paleoBioDb/schema.mjs";
+import { CrosswordActions } from "./crossword/schema/userActions.mjs";
+import { InstacartActions } from "./instacart/schema/userActions.mjs";
+import { ShoppingActions } from "./commerce/schema/userActions.mjs";
+import { SchemaDiscoveryActions } from "./discovery/schema/discoveryActions.mjs";
 
 export function instantiate(): AppAgent {
   return {
@@ -182,7 +188,14 @@ async function updateBrowserContext(
 }
 
 async function executeBrowserAction(
-  action: AppAction,
+  action:
+    | TypeAgentAction<BrowserActions, "browser">
+    | TypeAgentAction<PaleoBioDbActions, "browser.paleoBioDb">
+    | TypeAgentAction<CrosswordActions, "browser.crossword">
+    | TypeAgentAction<ShoppingActions, "browser.commerce">
+    | TypeAgentAction<InstacartActions, "browser.instacart">
+    | TypeAgentAction<SchemaDiscoveryActions, "browser.schemaFinder">,
+
   context: ActionContext<BrowserActionContext>,
 ) {
   const webSocketEndpoint = context.sessionContext.agentContext.webSocket;
