@@ -129,7 +129,6 @@ export interface IClientContext {
     currentTrackList?: ITrackCollection;
     lastTrackStartIndex?: number;
     lastTrackEndIndex?: number;
-    entityMap?: Map<string, Entity> | undefined;
     trackListMap: Map<string, ITrackCollection>;
     trackListCount: number;
     userData?: UserData | undefined;
@@ -784,7 +783,6 @@ export async function handleCall(
     actionIO: ActionIO,
     entityMap: Map<string, Entity> | undefined,
 ): Promise<ActionResult> {
-    clientContext.entityMap = entityMap;
     switch (action.actionName) {
         case "playRandom":
             return playRandomAction(clientContext, action);
@@ -1015,14 +1013,11 @@ export async function handleCall(
         case "filterTracks": {
             const filterTracksAction = action as FilterTracksAction;
             let input = clientContext.currentTrackList;
-            if (
-                filterTracksAction.parameters.trackListEntityId &&
-                clientContext.entityMap
-            ) {
+            if (filterTracksAction.parameters.trackListEntityId && entityMap) {
                 console.log(
                     `entity id: ${filterTracksAction.parameters.trackListEntityId}`,
                 );
-                const entity = clientContext.entityMap.get(
+                const entity = entityMap.get(
                     filterTracksAction.parameters.trackListEntityId,
                 );
                 if (
@@ -1083,12 +1078,12 @@ export async function handleCall(
 
             if (
                 createPlaylistAction.parameters.trackListEntityId &&
-                clientContext.entityMap
+                entityMap
             ) {
                 console.log(
                     `entity id: ${createPlaylistAction.parameters.trackListEntityId}`,
                 );
-                const entity = clientContext.entityMap.get(
+                const entity = entityMap.get(
                     createPlaylistAction.parameters.trackListEntityId,
                 );
                 if (
