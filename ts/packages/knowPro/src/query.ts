@@ -346,7 +346,7 @@ export class QueryEvalContext {
         return this.conversation.messages[messageIndex];
     }
 
-    public wasTermMatched(termText: string): boolean {
+    public hasTermAlreadyMatched(termText: string): boolean {
         return this.matchedTermText.has(termText);
     }
 
@@ -354,7 +354,7 @@ export class QueryEvalContext {
         this.matchedTermText.add(termText);
     }
 
-    public wasPropertyMatched(
+    public hasPropertyAlreadyMatched(
         propertyName: string,
         propertyValue: string,
     ): boolean {
@@ -474,7 +474,7 @@ export class MatchSearchTermExpr extends MatchTermExpr {
     ) {
         if (relatedTerm === undefined) {
             const semanticRefs = this.lookupTerm(context, term);
-            if (context.wasTermMatched(term.text)) {
+            if (context.hasTermAlreadyMatched(term.text)) {
                 matches.updateExistingMatchScores(term, semanticRefs, true);
             } else {
                 matches.addSearchTermMatches(term, semanticRefs);
@@ -482,7 +482,7 @@ export class MatchSearchTermExpr extends MatchTermExpr {
             }
         } else {
             const semanticRefs = this.lookupTerm(context, relatedTerm);
-            if (context.wasTermMatched(relatedTerm.text)) {
+            if (context.hasTermAlreadyMatched(relatedTerm.text)) {
                 matches.updateExistingMatchScores(
                     term,
                     semanticRefs,
@@ -589,37 +589,47 @@ export class MatchPropertyTermExpr extends MatchTermExpr {
     private accumulateMatchesForPropertyValue(
         context: QueryEvalContext,
         matches: SemanticRefAccumulator,
-        propertyName: string,
-        propertyValue: Term,
-        relatedPropertyValue?: Term,
+        propName: string,
+        propVal: Term,
+        relatedPropVal?: Term,
     ): void {
         const propertyIndex = context.propertyIndex;
         if (!propertyIndex) {
             return;
         }
-        const isExact = relatedPropertyValue === undefined;
-        const propertyValueToSearchFor = relatedPropertyValue ?? propertyValue;
-        const semanticRefs = propertyIndex.lookupProperty(
-            propertyName,
-            propertyValueToSearchFor.text,
-        );
-        if (context.wasPropertyMatched(propertyName, propertyValue.text)) {
-            matches.updateExistingMatchScores(
-                propertyValue,
-                semanticRefs,
-                isExact,
-                propertyValueToSearchFor.score,
+        if (relatedPropVal === undefined) {
+            const semanticRefs = propertyIndex.lookupProperty(
+                propName,
+                propVal.text,
             );
+            if (context.hasPropertyAlreadyMatched(propName, propVal.text)) {
+                matches.updateExistingMatchScores(propVal, semanticRefs, true);
+            } else {
+                matches.addSearchTermMatches(propVal, semanticRefs);
+                context.recordPropertyMatched(propName, propVal.text);
+            }
         } else {
-            matches.addSearchTermMatches(
-                propertyValue,
-                semanticRefs,
-                propertyValueToSearchFor.score,
+            const semanticRefs = propertyIndex.lookupProperty(
+                propName,
+                relatedPropVal.text,
             );
-            context.recordPropertyMatched(
-                propertyName,
-                propertyValueToSearchFor.text,
-            );
+            if (
+                context.hasPropertyAlreadyMatched(propName, relatedPropVal.text)
+            ) {
+                matches.updateExistingMatchScores(
+                    propVal,
+                    semanticRefs,
+                    false,
+                    relatedPropVal.score,
+                );
+            } else {
+                matches.addRelatedTermMatches(
+                    propVal,
+                    relatedPropVal,
+                    semanticRefs,
+                );
+                context.recordPropertyMatched(propName, relatedPropVal.text);
+            }
         }
     }
 }
