@@ -1,7 +1,13 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { Action, Actions, FullAction, normalizeParamString } from "agent-cache";
+import {
+    ExecutableAction,
+    toFullActions,
+    FullAction,
+    getFullActionName,
+    normalizeParamString,
+} from "agent-cache";
 import { CommandHandlerContext } from "../context/commandHandlerContext.js";
 import registerDebug from "debug";
 import { getAppAgentName } from "../translation/agentTranslators.js";
@@ -257,11 +263,12 @@ function getStreamingActionContext(
 }
 
 async function executeAction(
-    action: Action,
+    executableAction: ExecutableAction,
     context: ActionContext<CommandHandlerContext>,
     actionIndex: number,
     entityMap?: Map<string, Entity>,
 ): Promise<ActionResult> {
+    const action = executableAction.action;
     const translatorName = action.translatorName;
 
     if (translatorName === undefined) {
@@ -292,20 +299,20 @@ async function executeAction(
         }
     }
     // Reuse the same streaming action context if one is available.
-    const fullAction = action.toFullAction();
+
     const { actionContext, closeActionContext } =
         getStreamingActionContext(
             appAgentName,
             actionIndex,
             systemContext,
-            fullAction,
+            action,
         ) ??
         getActionContext(
             appAgentName,
             systemContext,
             systemContext.requestId!,
             actionIndex,
-            fullAction,
+            action,
         );
 
     actionContext.profiler = systemContext.commandProfiler?.measure(
@@ -320,7 +327,7 @@ async function executeAction(
             systemContext,
         );
         displayStatus(
-            `${prefix}Executing action ${action.fullActionName}`,
+            `${prefix}Executing action ${getFullActionName(executableAction)}`,
             context,
         );
         returnedResult = await appAgent.executeAction(
@@ -336,7 +343,7 @@ async function executeAction(
     let result: ActionResult;
     if (returnedResult === undefined) {
         result = createActionResult(
-            `Action ${action.fullActionName} completed.`,
+            `Action ${getFullActionName(executableAction)} completed.`,
         );
     } else {
         if (
@@ -359,7 +366,7 @@ async function executeAction(
     if (result.error !== undefined) {
         displayError(result.error, actionContext);
         systemContext.chatHistory.addAssistantEntry(
-            `Action ${action.fullActionName} failed: ${result.error}`,
+            `Action ${getFullActionName(executableAction)} failed: ${result.error}`,
             systemContext.requestId,
             appAgentName,
         );
@@ -383,7 +390,7 @@ async function executeAction(
         systemContext.chatHistory.addAssistantEntry(
             result.literalText
                 ? result.literalText
-                : `Action ${action.fullActionName} completed.`,
+                : `Action ${getFullActionName(executableAction)} completed.`,
             systemContext.requestId,
             appAgentName,
             combinedEntities,
@@ -396,13 +403,13 @@ async function executeAction(
 }
 
 async function canExecute(
-    actions: Actions,
+    actions: ExecutableAction[],
     context: ActionContext<CommandHandlerContext>,
 ): Promise<boolean> {
     const systemContext = context.sessionContext.agentContext;
     const unknown: UnknownAction[] = [];
     const disabled = new Set<string>();
-    for (const action of actions) {
+    for (const { action } of actions) {
         if (isUnknownAction(action)) {
             unknown.push(action);
         }
@@ -419,7 +426,7 @@ async function canExecute(
             (action) => action.parameters.request,
         );
         const lines = [
-            `Unable to determine ${actions.action === undefined ? "one or more actions in" : "action for"} the request.`,
+            `Unable to determine ${actions.length > 1 ? "one or more actions in" : "action for"} the request.`,
             ...unknownRequests.map((s) => `- ${s}`),
         ];
         systemContext.chatHistory.addAssistantEntry(
@@ -502,7 +509,7 @@ function getStringValues(params: unknown) {
 }
 
 function getActionEntityMap(
-    action: Action,
+    action: FullAction,
     resultEntityMap: Map<string, PromptEntity>,
     promptEntityMap: Map<string, PromptEntity> | undefined,
 ) {
@@ -530,14 +537,14 @@ function getActionEntityMap(
 }
 
 type PendingAction = {
-    action: Action;
+    executableAction: ExecutableAction;
     promptEntityMap: Map<string, PromptEntity> | undefined;
 };
 
 function toPendingActions(
-    actions: Actions,
+    actions: ExecutableAction[],
     entities: PromptEntity[] | undefined,
-) {
+): PendingAction[] {
     const promptEntityMap = entities
         ? new Map<string, PromptEntity>(
               entities.map(
@@ -547,22 +554,24 @@ function toPendingActions(
               ),
           )
         : undefined;
-    return Array.from(actions).map((action) => ({
-        action,
+    return Array.from(actions).map((executableAction) => ({
+        executableAction,
         promptEntityMap,
     }));
 }
 
 export async function executeActions(
-    actions: Actions,
+    actions: ExecutableAction[],
     entities: PromptEntity[] | undefined,
     context: ActionContext<CommandHandlerContext>,
 ) {
     const systemContext = context.sessionContext.agentContext;
     if (systemContext.commandResult === undefined) {
-        systemContext.commandResult = { actions: actions.toFullActions() };
+        systemContext.commandResult = {
+            actions: toFullActions(actions),
+        };
     } else {
-        systemContext.commandResult.actions = actions.toFullActions();
+        systemContext.commandResult.actions = toFullActions(actions);
     }
 
     if (!(await canExecute(actions, context))) {
@@ -574,7 +583,8 @@ export async function executeActions(
     const actionQueue: PendingAction[] = toPendingActions(actions, entities);
 
     while (actionQueue.length !== 0) {
-        const { action, promptEntityMap } = actionQueue.shift()!;
+        const { executableAction, promptEntityMap } = actionQueue.shift()!;
+        const action = executableAction.action;
         if (isPendingRequestAction(action)) {
             const translationResult = await translatePendingRequestAction(
                 action,
@@ -595,15 +605,15 @@ export async function executeActions(
             continue;
         }
         const result = await executeAction(
-            action,
+            executableAction,
             context,
             actionIndex,
             getActionEntityMap(action, resultEntityMap, promptEntityMap),
         );
         if (result.error === undefined) {
-            if (result.resultEntity && action.resultEntityId) {
+            if (result.resultEntity && executableAction.resultEntityId) {
                 resultEntityMap.set(
-                    normalizeParamString(action.resultEntityId),
+                    normalizeParamString(executableAction.resultEntityId),
                     {
                         ...result.resultEntity,
                         sourceAppAgentName: getAppAgentName(
@@ -622,7 +632,7 @@ export async function validateWildcardMatch(
     context: CommandHandlerContext,
 ) {
     const actions = match.match.actions;
-    for (const action of actions) {
+    for (const { action } of actions) {
         const translatorName = action.translatorName;
         if (translatorName === undefined) {
             continue;

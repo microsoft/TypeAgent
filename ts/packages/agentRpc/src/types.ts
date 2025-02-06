@@ -19,12 +19,6 @@ import {
     TemplateSchema,
 } from "@typeagent/agent-sdk";
 
-// TODO: Duplicate code from agent-cache
-export interface JSONAction {
-    fullActionName: string;
-    parameters?: Record<string, unknown> | undefined;
-}
-
 export type AgentContextCallFunctions = {
     notify(param: {
         contextId: number;
@@ -122,12 +116,12 @@ export type AgentInvokeFunctions = {
     ) => Promise<void>;
     executeAction: (
         param: Partial<ActionContextParams> & {
-            action: JSONAction;
+            action: AppAction;
             entityMap: [string, Entity][];
         },
     ) => Promise<ActionResult | undefined>;
     validateWildcardMatch: (
-        param: Partial<ContextParams> & { action: JSONAction },
+        param: Partial<ContextParams> & { action: AppAction },
     ) => Promise<boolean>;
     getDynamicDisplay: (
         param: Partial<ContextParams> & {

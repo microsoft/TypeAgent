@@ -64,153 +64,46 @@ export interface FullAction extends AppAction {
 export interface JSONAction {
     fullActionName: string;
     parameters?: ParamObjectType;
+    resultEntityId?: string;
 }
 
-function parseActionNameParts(fullActionName: string) {
+export interface ExecutableAction {
+    action: FullAction;
+    resultEntityId?: string;
+}
+
+export function createExecutableAction(
+    translatorName: string,
+    actionName: string,
+    parameters?: ParamObjectType,
+    resultEntityId?: string,
+): ExecutableAction {
+    const action: FullAction = {
+        translatorName,
+        actionName,
+    };
+    if (parameters !== undefined) {
+        action.parameters = parameters;
+    }
+
+    const executableAction: ExecutableAction = {
+        action,
+    };
+    if (resultEntityId !== undefined) {
+        executableAction.resultEntityId = resultEntityId;
+    }
+    return executableAction;
+}
+
+const format =
+    "'<request> => translator.action(<parameters>)' or '<request> => [ translator.action1(<parameters1>), translator.action2(<parameters2>), ... ]'";
+
+function parseFullActionNameParts(fullActionName: string) {
     const parts = fullActionName.split(".");
     const translatorName = parts.slice(0, -1).join(".");
     const actionName = parts.at(-1)!;
     return { translatorName, actionName };
 }
-
-export class Action {
-    constructor(
-        public readonly translatorName: string,
-        public readonly actionName: string,
-        public readonly parameters: ParamObjectType | undefined,
-        public readonly resultEntityId?: string,
-    ) {}
-
-    public get fullActionName() {
-        return `${this.translatorNameString}.${this.actionName}`;
-    }
-
-    public get translatorNameString(): string {
-        return this.translatorName;
-    }
-    public toString() {
-        return `${this.fullActionName}(${this.parameters ? JSON.stringify(this.parameters) : ""})`;
-    }
-    public toJSON(): JSONAction {
-        const result: JSONAction = { fullActionName: this.fullActionName };
-        if (this.parameters) {
-            result.parameters = this.parameters;
-        }
-        return result;
-    }
-
-    public static fromJSONObject(actionJSON: JSONAction): Action {
-        const { translatorName, actionName } = parseActionNameParts(
-            actionJSON.fullActionName,
-        );
-        return new Action(translatorName, actionName, actionJSON.parameters);
-    }
-
-    public toFullAction(): FullAction {
-        const result: FullAction = {
-            translatorName: this.translatorName,
-            actionName: this.actionName,
-        };
-        if (this.parameters) {
-            result.parameters = this.parameters;
-        }
-        return result;
-    }
-    public static fromFullAction(fullAction: FullAction): Action {
-        return new Action(
-            fullAction.translatorName,
-            fullAction.actionName,
-            fullAction.parameters,
-        );
-    }
-}
-
-export class Actions {
-    constructor(private readonly actions: Action | Action[]) {}
-
-    public get data() {
-        return this.actions;
-    }
-    public get action() {
-        return Array.isArray(this.actions) ? undefined : this.actions;
-    }
-
-    // Sorted array of unique translator names
-    public get translatorNames(): string[] {
-        return Array.isArray(this.actions)
-            ? Array.from(
-                  new Set(
-                      this.actions.map((a) => a.translatorNameString),
-                  ).values(),
-              ).sort() // sort it so that it is stable.
-            : [this.actions.translatorNameString];
-    }
-
-    public get(index: number) {
-        return Array.isArray(this.actions)
-            ? this.actions[index]
-            : index === 0
-              ? this.action
-              : undefined;
-    }
-    public [Symbol.iterator](): Iterator<Action> {
-        if (Array.isArray(this.actions)) {
-            return this.actions[Symbol.iterator]();
-        }
-        let action: Action | undefined = this.actions;
-        return {
-            next() {
-                if (action !== undefined) {
-                    const ret = { value: action, done: false };
-                    action = undefined;
-                    return ret;
-                }
-                return { value: undefined, done: true };
-            },
-        };
-    }
-
-    public static fromJSON(actionJSON: JSONAction | JSONAction[]): Actions {
-        return new Actions(
-            Array.isArray(actionJSON)
-                ? actionJSON.map((a) => Action.fromJSONObject(a))
-                : Action.fromJSONObject(actionJSON),
-        );
-    }
-
-    public toJSON() {
-        return Array.isArray(this.actions)
-            ? this.actions.map((a) => a.toJSON())
-            : this.actions.toJSON();
-    }
-
-    public toFullActions(): FullAction[] {
-        return Array.isArray(this.actions)
-            ? this.actions.map((a) => a.toFullAction())
-            : [this.actions.toFullAction()];
-    }
-
-    public static fromFullActions(fullAction: FullAction[]): Actions {
-        return new Actions(
-            fullAction.length === 1
-                ? Action.fromFullAction(fullAction[0])
-                : fullAction.map((a) => Action.fromFullAction(a)),
-        );
-    }
-    public toString() {
-        return Array.isArray(this.actions)
-            ? `[${this.actions.join(",")}]`
-            : this.actions.toString();
-    }
-    public static fromString(actions: string) {
-        return new Actions(
-            actions[0] === "[" ? parseActions(actions) : parseAction(actions),
-        );
-    }
-}
-
-const format =
-    "'<request> => translator.action(<parameters>)' or '<request> => [ translator.action1(<parameters1>), translator.action2(<parameters2>), ... ]'";
 
 function parseAction(action: string, index: number = -1) {
     const leftParan = action.indexOf("(");
@@ -220,7 +113,8 @@ function parseAction(action: string, index: number = -1) {
         );
     }
     const functionName = action.substring(0, leftParan);
-    const { translatorName, actionName } = parseActionNameParts(functionName);
+    const { translatorName, actionName } =
+        parseFullActionNameParts(functionName);
     if (!actionName) {
         throw new Error(
             `${index !== -1 ? `Action ${index}: ` : ""}Unable to parse action name from '${functionName}'. Input must be in the form of ${format}`,
@@ -242,14 +136,14 @@ function parseAction(action: string, index: number = -1) {
             );
         }
     }
-    return new Action(translatorName, actionName, parameters);
+    return createExecutableAction(translatorName, actionName, parameters);
 }
 
 function parseActions(actionStr: string) {
     if (actionStr[actionStr.length - 1] !== "]") {
         `Missing terminating ']'. Input must be in the form of ${format}`;
     }
-    const actions: Action[] = [];
+    const actions: ExecutableAction[] = [];
     // Remove the brackets
     let curr = actionStr.substring(1, actionStr.length - 1);
 
@@ -277,17 +171,90 @@ function parseActions(actionStr: string) {
     return actions;
 }
 
+export function getFullActionName(action: ExecutableAction) {
+    return `${action.action.translatorName}.${action.action.actionName}`;
+}
+
+function parseExecutableActionsString(actions: string): ExecutableAction[] {
+    return actions[0] === "[" ? parseActions(actions) : [parseAction(actions)];
+}
+
+function executableActionToString(action: ExecutableAction): string {
+    return `${getFullActionName(action)}(${action.action.parameters ? JSON.stringify(action.action.parameters) : ""})`;
+}
+
+function executableActionsToString(actions: ExecutableAction[]): string {
+    return actions.length !== 1
+        ? `[${actions.map(executableActionToString).join(",")}]`
+        : executableActionToString(actions[0]);
+}
+
+function fromJsonAction(actionJSON: JSONAction) {
+    const { translatorName, actionName } = parseFullActionNameParts(
+        actionJSON.fullActionName,
+    );
+    return createExecutableAction(
+        translatorName,
+        actionName,
+        actionJSON.parameters,
+        actionJSON.resultEntityId,
+    );
+}
+
+export function fromJsonActions(
+    actions: JSONAction | JSONAction[],
+): ExecutableAction[] {
+    return Array.isArray(actions)
+        ? actions.map((a) => fromJsonAction(a))
+        : [fromJsonAction(actions)];
+}
+
+function toJsonAction(action: ExecutableAction): JSONAction {
+    const result: JSONAction = { fullActionName: getFullActionName(action) };
+    if (action.action.parameters) {
+        result.parameters = action.action.parameters;
+    }
+    if (action.resultEntityId) {
+        result.resultEntityId = action.resultEntityId;
+    }
+    return result;
+}
+
+export function toJsonActions(
+    actions: ExecutableAction[],
+): JSONAction | JSONAction[] {
+    return actions.length !== 1
+        ? actions.map(toJsonAction)
+        : toJsonAction(actions[0]);
+}
+
+export function toExecutableActions(actions: FullAction[]): ExecutableAction[] {
+    return actions.map((action) => ({ action }));
+}
+
+export function toFullActions(actions: ExecutableAction[]): FullAction[] {
+    return actions.map((a) => a.action);
+}
+
+export function getTranslationNamesForActions(
+    actions: ExecutableAction[],
+): string[] {
+    return Array.from(
+        new Set(actions.map((a) => a.action.translatorName)),
+    ).sort();
+}
+
 export class RequestAction {
     public static readonly Separator = " => ";
 
     constructor(
         public readonly request: string,
-        public readonly actions: Actions,
+        public readonly actions: ExecutableAction[],
         public readonly history?: HistoryContext,
     ) {}
 
     public toString() {
-        return `${this.request}${RequestAction.Separator}${this.actions}`;
+        return `${this.request}${RequestAction.Separator}${executableActionsToString(this.actions)}`;
     }
 
     public toPromptString() {
@@ -306,7 +273,7 @@ export class RequestAction {
         const separator = trimmed.indexOf(RequestAction.Separator);
         if (separator === -1) {
             throw new Error(
-                `'=>' not found. Input must be in the form of ${format}`,
+                `'${RequestAction.Separator}' not found. Input must be in the form of ${format}`,
             );
         }
         const request = trimmed.substring(0, separator).trim();
@@ -314,14 +281,21 @@ export class RequestAction {
             .substring(separator + RequestAction.Separator.length)
             .trim();
 
-        return new RequestAction(request, Actions.fromString(actions));
+        return new RequestAction(
+            request,
+            parseExecutableActionsString(actions),
+        );
     }
 
     public static create(
         request: string,
-        actions: Action | Action[],
+        actions: ExecutableAction | ExecutableAction[],
         history?: HistoryContext,
     ) {
-        return new RequestAction(request, new Actions(actions), history);
+        return new RequestAction(
+            request,
+            Array.isArray(actions) ? actions : [actions],
+            history,
+        );
     }
 }

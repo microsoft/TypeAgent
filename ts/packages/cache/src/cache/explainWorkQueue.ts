@@ -3,6 +3,7 @@
 
 import { QueueObject, queue } from "async";
 import {
+    getTranslationNamesForActions,
     normalizeParamString,
     RequestAction,
 } from "../explanation/requestAction.js";
@@ -24,7 +25,7 @@ function checkExplainableValues(
     const normalizedRequest = normalizeParamString(requestAction.request);
     const pending: unknown[] = [];
 
-    for (const action of requestAction.actions) {
+    for (const { action } of requestAction.actions) {
         pending.push(action.parameters);
     }
 
@@ -111,7 +112,7 @@ export class ExplainWorkQueue {
             const startTime = performance.now();
             const actions = requestAction.actions;
             const explainer = this.getExplainerForTranslator(
-                actions.translatorNames,
+                getTranslationNamesForActions(actions),
                 model,
             );
             const explainerConfig = {

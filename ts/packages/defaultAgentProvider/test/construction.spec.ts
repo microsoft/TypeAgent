@@ -10,7 +10,7 @@ import {
     readTestData,
     createActionConfigProvider,
 } from "agent-dispatcher/internal";
-import { Actions, RequestAction } from "agent-cache";
+import { fromJsonActions, RequestAction } from "agent-cache";
 import { getDefaultAppAgentProviders } from "../src/defaultAgentProviders.js";
 import { glob } from "glob";
 
@@ -24,7 +24,7 @@ const testInput = inputs.flatMap((f) =>
     f.entries.map<[string, string, RequestAction, object, string[]]>((data) => [
         f.schemaName,
         f.explainerName,
-        new RequestAction(data.request, Actions.fromJSON(data.action)),
+        new RequestAction(data.request, fromJsonActions(data.action)),
         data.explanation,
         data.tags ?? [],
     ]),
