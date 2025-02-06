@@ -159,7 +159,8 @@ export async function searchCode(
 
     // 3. Ask a fast LLM for the most relevant chunks, rank them, and keep the best N.
     // This is done concurrently for real-time speed.
-    console_log(`[Step 3: Select 30 most relevant chunks]`);
+    const keep = 50; // N
+    console_log(`[Step 3: Select ${keep} most relevant chunks]`);
     const chunkDescs: ChunkDescription[] = await selectChunks(
         context,
         allChunks,
