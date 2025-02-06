@@ -479,11 +479,11 @@ export function getChatHistoryForTranslation(
             role: "system",
         });
     }
-    const config = context.session.getConfig();
+    const translateConfig = context.session.getConfig().translation;
     const entities = context.chatHistory.getTopKEntities(
-        config.translation.history.limit,
+        translateConfig.history.limit,
     );
-    const additionalInstructions = config.translation.promptConfig
+    const additionalInstructions = translateConfig.promptConfig
         .additionalInstructions
         ? context.chatHistory.getCurrentInstructions()
         : undefined;
