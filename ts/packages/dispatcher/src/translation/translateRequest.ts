@@ -479,9 +479,12 @@ export function getChatHistoryForTranslation(
             role: "system",
         });
     }
-    const entities = context.chatHistory.getTopKEntities(20);
-    const additionalInstructions = context.session.getConfig().translation
-        .promptConfig.additionalInstructions
+    const translateConfig = context.session.getConfig().translation;
+    const entities = context.chatHistory.getTopKEntities(
+        translateConfig.history.limit,
+    );
+    const additionalInstructions = translateConfig.promptConfig
+        .additionalInstructions
         ? context.chatHistory.getCurrentInstructions()
         : undefined;
     return { promptSections, entities, additionalInstructions };
