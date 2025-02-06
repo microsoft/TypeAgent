@@ -141,9 +141,7 @@ export class MatchAccumulator<T = any> {
         minHitCount?: number,
     ): number {
         const topN = this.getTopNScoring(maxMatches, minHitCount);
-        if (topN.length > 0) {
-            this.setMatches(topN, true);
-        }
+        this.setMatches(topN, true);
         return topN.length;
     }
 
