@@ -442,20 +442,18 @@ export class MatchSearchTermExpr extends MatchTermExpr {
         matches: SemanticRefAccumulator,
     ) {
         // Match the search term
-        this.accumulateMatchesForTerm(
-            context,
-            matches,
-            this.searchTerm.term,
-            true,
-        );
+        this.accumulateMatchesForTerm(context, matches, this.searchTerm.term);
         // And any related terms
-        if (this.searchTerm.relatedTerms) {
+        if (
+            this.searchTerm.relatedTerms &&
+            this.searchTerm.relatedTerms.length > 0
+        ) {
             for (const relatedTerm of this.searchTerm.relatedTerms) {
                 this.accumulateMatchesForTerm(
                     context,
                     matches,
+                    this.searchTerm.term,
                     relatedTerm,
-                    false,
                 );
             }
         }
@@ -472,18 +470,26 @@ export class MatchSearchTermExpr extends MatchTermExpr {
         context: QueryEvalContext,
         matches: SemanticRefAccumulator,
         term: Term,
-        isExact: boolean,
+        relatedTerm?: Term,
     ) {
-        const semanticRefs = this.lookupTerm(context, term);
-        if (context.wasTermMatched(term.text)) {
-            matches.updateExistingMatchScores(term, semanticRefs, isExact);
-        } else {
-            matches.addSearchTermMatches(
-                this.searchTerm.term,
+        const isExact = relatedTerm === undefined;
+        const termToSearchFor = relatedTerm ?? term;
+        const semanticRefs = this.lookupTerm(context, termToSearchFor);
+        if (context.wasTermMatched(termToSearchFor.text)) {
+            matches.updateExistingMatchScores(
+                term,
                 semanticRefs,
                 isExact,
+                termToSearchFor.score,
             );
-            context.recordTermMatch(term.text);
+        } else {
+            // Related matches match on behalf of term..
+            matches.addSearchTermMatches(
+                term,
+                semanticRefs,
+                termToSearchFor.score,
+            );
+            context.recordTermMatch(termToSearchFor.text);
         }
     }
 }
@@ -558,19 +564,20 @@ export class MatchPropertyTermExpr extends MatchTermExpr {
     ) {
         this.accumulateMatchesForPropertyValue(
             context,
+            matches,
             propertyName,
             propertyValue.term,
-            matches,
-            true,
         );
-        if (propertyValue.relatedTerms) {
+        if (
+            propertyValue.relatedTerms &&
+            propertyValue.relatedTerms.length > 0
+        ) {
             for (const relatedPropertyValue of propertyValue.relatedTerms) {
                 this.accumulateMatchesForPropertyValue(
                     context,
+                    matches,
                     propertyName,
                     relatedPropertyValue,
-                    matches,
-                    false,
                 );
             }
         }
@@ -578,28 +585,38 @@ export class MatchPropertyTermExpr extends MatchTermExpr {
 
     private accumulateMatchesForPropertyValue(
         context: QueryEvalContext,
+        matches: SemanticRefAccumulator,
         propertyName: string,
         propertyValue: Term,
-        matches: SemanticRefAccumulator,
-        isExact: boolean,
+        relatedPropertyValue?: Term,
     ): void {
         const propertyIndex = context.propertyIndex;
         if (!propertyIndex) {
             return;
         }
+        const isExact = relatedPropertyValue === undefined;
+        const propertyValueToSearchFor = relatedPropertyValue ?? propertyValue;
         const semanticRefs = propertyIndex.lookupProperty(
             propertyName,
-            propertyValue.text,
+            propertyValueToSearchFor.text,
         );
         if (context.wasPropertyMatched(propertyName, propertyValue.text)) {
             matches.updateExistingMatchScores(
                 propertyValue,
                 semanticRefs,
                 isExact,
+                propertyValueToSearchFor.score,
             );
         } else {
-            matches.addSearchTermMatches(propertyValue, semanticRefs, isExact);
-            context.recordPropertyMatched(propertyName, propertyValue.text);
+            matches.addSearchTermMatches(
+                propertyValue,
+                semanticRefs,
+                propertyValueToSearchFor.score,
+            );
+            context.recordPropertyMatched(
+                propertyName,
+                propertyValueToSearchFor.text,
+            );
         }
     }
 }

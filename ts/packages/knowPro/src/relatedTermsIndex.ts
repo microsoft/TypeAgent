@@ -76,7 +76,7 @@ export async function resolveRelatedTerms(
     searchTerms: SearchTerm[],
 ): Promise<void> {
     for (const searchTerm of searchTerms) {
-        if (!isSearchTermWildcard(searchTerm)) {
+        if (isSearchTermWildcard(searchTerm)) {
             continue;
         }
         const termText = searchTerm.term.text;

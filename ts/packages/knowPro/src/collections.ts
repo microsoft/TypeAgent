@@ -211,15 +211,15 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
             | ScoredSemanticRef[]
             | IterableIterator<ScoredSemanticRef>
             | undefined,
-        isExactMatch: boolean = true,
+        scoreBoost?: number,
     ) {
         if (scoredRefs) {
-            const scoreBoost = searchTerm.score ?? 0;
+            scoreBoost ??= searchTerm.score ?? 0;
             for (const scoredRef of scoredRefs) {
                 this.add(
                     scoredRef.semanticRefIndex,
                     scoredRef.score + scoreBoost,
-                    isExactMatch,
+                    true,
                 );
             }
             this.searchTermMatches.add(searchTerm.text);
@@ -233,9 +233,10 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
             | IterableIterator<ScoredSemanticRef>
             | undefined,
         isExactMatch: boolean,
+        scoreBoost?: number,
     ) {
         if (scoredRefs) {
-            const scoreBoost = searchTerm.score ?? 0;
+            scoreBoost ??= searchTerm.score ?? 0;
             for (const scoredRef of scoredRefs) {
                 const existingMatch = this.getMatch(scoredRef.semanticRefIndex);
                 const newScore = scoredRef.score + scoreBoost;

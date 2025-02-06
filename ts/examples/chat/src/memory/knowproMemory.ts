@@ -425,7 +425,7 @@ export function parseQueryTerms(args: string[]): kp.SearchTerm[] {
             const queryTerm: kp.SearchTerm = {
                 term: { text: allTermStrings[0] },
             };
-            if (allTermStrings.length > 0) {
+            if (allTermStrings.length > 1) {
                 queryTerm.relatedTerms = [];
                 for (let i = 1; i < allTermStrings.length; ++i) {
                     queryTerm.relatedTerms.push({ text: allTermStrings[i] });

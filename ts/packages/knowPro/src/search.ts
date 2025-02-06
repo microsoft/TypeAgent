@@ -99,6 +99,8 @@ class SearchQueryBuilder {
         maxMatches?: number,
     ) {
         let query = this.compileQuery(terms, propertyTerms, filter);
+
+        this.prepareSearchTerms(this.allSearchTerms);
         // For all individual SearchTerms created during query compilation, resolve any related terms
         if (this.conversation.termToRelatedTermsIndex) {
             await resolveRelatedTerms(
@@ -201,6 +203,7 @@ class SearchQueryBuilder {
     private prepareSearchTerms(searchTerms: SearchTerm[]): void {
         for (const searchTerm of searchTerms) {
             this.prepareTerm(searchTerm.term);
+            searchTerm.term.score ??= 1.0;
             if (searchTerm.relatedTerms) {
                 searchTerm.relatedTerms.forEach((st) => this.prepareTerm(st));
             }
