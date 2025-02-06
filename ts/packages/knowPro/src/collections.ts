@@ -97,35 +97,7 @@ export class MatchAccumulator<T = any> {
         }
     }
 
-    public addUnion(other: MatchAccumulator<T>): void {
-        for (const otherMatch of other.matches.values()) {
-            let existingMatch = this.matches.get(otherMatch.value);
-            if (existingMatch) {
-                if (otherMatch.exactMatch) {
-                    existingMatch.exactMatch = otherMatch.exactMatch;
-                    existingMatch.exactHitCount += otherMatch.exactHitCount;
-                    existingMatch.score += otherMatch.score;
-                } else if (existingMatch.score < otherMatch.score) {
-                    existingMatch.score = otherMatch.score;
-                }
-            } else {
-                this.setMatch(otherMatch);
-                existingMatch = otherMatch;
-            }
-            if (existingMatch.exactHitCount > this.maxHitCount) {
-                this.maxHitCount = existingMatch.exactHitCount;
-            }
-        }
-    }
-
     public updateExistingScore(value: T, score: number) {
-        let match = this.matches.get(value);
-        if (match && match.score < score) {
-            match.score = score;
-        }
-    }
-
-    public incrementExistingScore(value: T, score: number) {
         let match = this.matches.get(value);
         if (match && match.score < score) {
             match.score = score;
@@ -205,67 +177,6 @@ export type KnowledgePredicate<T extends Knowledge> = (knowledge: T) => boolean;
 export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
     constructor(public searchTermMatches = new Set<string>()) {
         super();
-    }
-
-    public addSearchTermMatches(
-        searchTerm: Term,
-        scoredRefs:
-            | ScoredSemanticRef[]
-            | IterableIterator<ScoredSemanticRef>
-            | undefined,
-        scoreBoost?: number,
-    ) {
-        if (scoredRefs) {
-            scoreBoost ??= searchTerm.score ?? 0;
-            for (const scoredRef of scoredRefs) {
-                this.add(
-                    scoredRef.semanticRefIndex,
-                    scoredRef.score + scoreBoost,
-                    true,
-                );
-            }
-            this.searchTermMatches.add(searchTerm.text);
-        }
-    }
-
-    public addRelatedTermMatches(
-        searchTerm: Term,
-        relatedTerm: Term,
-        scoredRefs:
-            | ScoredSemanticRef[]
-            | IterableIterator<ScoredSemanticRef>
-            | undefined,
-        scoreBoost?: number,
-    ) {
-        if (scoredRefs) {
-            // Related term matches count as matches for the queryTerm...
-            // BUT are scored with the score of the related term
-            scoreBoost ??= relatedTerm.score ?? 0;
-            for (const scoredRef of scoredRefs) {
-                let score = scoredRef.score + scoreBoost;
-                let match = this.getMatch(scoredRef.semanticRefIndex);
-                if (match !== undefined) {
-                    if (match.score < score) {
-                        match.score = score;
-                    }
-                    //match.score += score;
-                } else {
-                    match = {
-                        value: scoredRef.semanticRefIndex,
-                        score,
-                        exactHitCount: 1,
-                        exactMatch: false,
-                    };
-                    this.setMatch(match);
-                }
-            }
-            this.searchTermMatches.add(searchTerm.text);
-        }
-    }
-
-    public addUnion(other: SemanticRefAccumulator): void {
-        super.addUnion(other);
-        unionInPlace(this.searchTermMatches, other.searchTermMatches);
     }
 
     public addOrUpdate(
