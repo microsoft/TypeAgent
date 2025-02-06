@@ -139,7 +139,7 @@ export class PropertyIndex implements IPropertyToSemanticRefIndex {
     public getValues(): string[] {
         const terms: string[] = [];
         for (const key of this.map.keys()) {
-            const nv = this.splitPropertyTerm(key);
+            const nv = this.termTextToNameValue(key);
             terms.push(nv[1]);
         }
         return terms;
@@ -150,18 +150,18 @@ export class PropertyIndex implements IPropertyToSemanticRefIndex {
         value: string,
         semanticRefIndex: SemanticRefIndex | ScoredSemanticRef,
     ): void {
-        let term = this.toPropertyTerm(propertyName, value);
+        let termText = this.toPropertyTermText(propertyName, value);
         if (typeof semanticRefIndex === "number") {
             semanticRefIndex = {
                 semanticRefIndex: semanticRefIndex,
                 score: 1,
             };
         }
-        term = this.prepareTerm(term);
-        if (this.map.has(term)) {
-            this.map.get(term)?.push(semanticRefIndex);
+        termText = this.prepareTermText(termText);
+        if (this.map.has(termText)) {
+            this.map.get(termText)?.push(semanticRefIndex);
         } else {
-            this.map.set(term, [semanticRefIndex]);
+            this.map.set(termText, [semanticRefIndex]);
         }
     }
 
@@ -169,25 +169,33 @@ export class PropertyIndex implements IPropertyToSemanticRefIndex {
         propertyName: string,
         value: string,
     ): ScoredSemanticRef[] | undefined {
-        const term = this.toPropertyTerm(propertyName, value);
-        return this.map.get(this.prepareTerm(term)) ?? [];
+        const termText = this.toPropertyTermText(propertyName, value);
+        return this.map.get(this.prepareTermText(termText)) ?? [];
     }
 
     /**
      * Do any pre-processing of the term.
-     * @param term
+     * @param termText
      */
-    private prepareTerm(term: string): string {
-        return term.toLowerCase();
+    private prepareTermText(termText: string): string {
+        return termText.toLowerCase();
     }
 
-    PropertyDelimiter = "@@";
-    private toPropertyTerm(name: string, value: string) {
-        return `prop.${name}${this.PropertyDelimiter}${value}`;
+    private toPropertyTermText(name: string, value: string) {
+        return makePropertyTermText(name, value);
     }
 
-    private splitPropertyTerm(term: string): [string, string] {
-        const parts = term.split(this.PropertyDelimiter);
-        return [parts[0], parts[1]];
+    private termTextToNameValue(termText: string): [string, string] {
+        return splitPropertyTermText(termText);
     }
+}
+
+const PropertyDelimiter = "@@";
+function makePropertyTermText(name: string, value: string) {
+    return `prop.${name}${PropertyDelimiter}${value}`;
+}
+
+function splitPropertyTermText(termText: string): [string, string] {
+    const parts = termText.split(PropertyDelimiter);
+    return [parts[0], parts[1]];
 }

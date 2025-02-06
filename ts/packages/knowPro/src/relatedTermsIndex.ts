@@ -23,6 +23,7 @@ import {
 } from "./dataFormat.js";
 import { createEmbeddingCache } from "knowledge-processor";
 import { SearchTerm } from "./search.js";
+import { isSearchTermWildcard } from "./query.js";
 
 export class TermToRelatedTermsMap {
     public map: collections.MultiMap<string, Term> = new collections.MultiMap();
@@ -75,6 +76,9 @@ export async function resolveRelatedTerms(
     searchTerms: SearchTerm[],
 ): Promise<void> {
     for (const searchTerm of searchTerms) {
+        if (!isSearchTermWildcard(searchTerm)) {
+            continue;
+        }
         const termText = searchTerm.term.text;
         // Resolve any specific term to related term mappings
         if (!searchTerm.relatedTerms || searchTerm.relatedTerms.length === 0) {

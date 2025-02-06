@@ -33,13 +33,6 @@ export function createSearchTerm(text: string, score?: number): SearchTerm {
     };
 }
 
-/**
- * A ConstrainedSearchTerm restricts the semantic refs it matches by using:
- * - a restricting propertyName or facetName
- * - a property / facet value
- */
-export type ConstrainedSearchTerm = PropertySearchTerm | FacetSearchTerm;
-
 export type KnowledgePropertyName =
     | "name"
     | "type"
@@ -50,15 +43,8 @@ export type KnowledgePropertyName =
     | "tag";
 
 export type PropertySearchTerm = {
-    type: "property";
-    propertyName: KnowledgePropertyName;
+    propertyName: KnowledgePropertyName | SearchTerm;
     propertyValue: SearchTerm;
-};
-
-export type FacetSearchTerm = {
-    type: "facet";
-    facetName: SearchTerm;
-    facetValue: SearchTerm;
 };
 
 export type SearchResult = {
@@ -112,13 +98,8 @@ class SearchQueryBuilder {
         filter?: SearchFilter,
         maxMatches?: number,
     ) {
-        let selectExpr = this.compileSelect(terms, propertyTerms, filter);
-        const query = new q.SelectTopNKnowledgeGroupExpr(
-            new q.GroupByKnowledgeTypeExpr(selectExpr),
-            maxMatches,
-        );
-
-        // Also Resolve related terms (where needed) for all search terms injected while building the index
+        let query = this.compileQuery(terms, propertyTerms, filter);
+        // For all individual SearchTerms created during query compilation, resolve any related terms
         if (this.conversation.termToRelatedTermsIndex) {
             await resolveRelatedTerms(
                 this.conversation.termToRelatedTermsIndex,
@@ -129,32 +110,46 @@ class SearchQueryBuilder {
         return query;
     }
 
-    private compileSelect(
+    public async compileQuery(
         terms: SearchTerm[],
         propertyTerms?: Record<string, string>,
         filter?: SearchFilter,
+        maxMatches?: number,
     ) {
-        let matchTermsExpr: q.QueryTermExpr[] = this.compileSearchTerms(terms);
-        if (propertyTerms) {
-            matchTermsExpr.push(...this.compilePropertyTerms(propertyTerms));
-        }
-        let selectExpr: q.IQueryOpExpr<SemanticRefAccumulator> =
-            new q.GetSearchMatchesExpr(matchTermsExpr);
-        // Always apply "tag match" scope... all text ranges that matched tags.. are in scope
+        let selectExpr = this.compileSelect(terms, propertyTerms, filter);
+        // Constrain the select with scopes
         selectExpr = this.compileScope(selectExpr, filter?.dateRange);
         if (filter !== undefined) {
-            // Where clause
+            // Further constrain with any filters
             selectExpr = new q.WhereSemanticRefExpr(
                 selectExpr,
                 this.compileFilter(filter),
             );
         }
+        // And lastly, select 'TopN' and group knowledge by type
+        return new q.SelectTopNKnowledgeGroupExpr(
+            new q.GroupByKnowledgeTypeExpr(selectExpr),
+            maxMatches,
+        );
+    }
+
+    private compileSelect(
+        terms: SearchTerm[],
+        propertyTerms?: Record<string, string>,
+        filter?: SearchFilter,
+    ) {
+        // Select is a combination of ordinary search terms and property search terms
+        let matchTermsExpr = this.compileSearchTerms(terms);
+        if (propertyTerms) {
+            matchTermsExpr.push(...this.compilePropertyTerms(propertyTerms));
+        }
+        let selectExpr: q.IQueryOpExpr<SemanticRefAccumulator> =
+            new q.GetSearchMatchesExpr(matchTermsExpr);
+
         return selectExpr;
     }
 
-    private compileSearchTerms(
-        searchTerms: SearchTerm[],
-    ): q.MatchSearchTermExpr[] {
+    private compileSearchTerms(searchTerms: SearchTerm[]): q.MatchTermExpr[] {
         const matchExpressions: q.MatchSearchTermExpr[] = [];
         for (const searchTerm of searchTerms) {
             matchExpressions.push(new q.MatchSearchTermExpr(searchTerm));
@@ -165,17 +160,17 @@ class SearchQueryBuilder {
 
     private compilePropertyTerms(
         properties: Record<string, string>,
-    ): q.MatchConstrainedSearchTermExpr[] {
-        const matchExpressions: q.MatchConstrainedSearchTermExpr[] = [];
-
+    ): q.MatchTermExpr[] {
+        const matchExpressions: q.MatchPropertyTermExpr[] = [];
         for (const propertyName of Object.keys(properties)) {
             const propertyValue = properties[propertyName];
-            let matchExpr: q.MatchConstrainedSearchTermExpr | undefined;
-            const [qualifiedTerm, searchTermsCreated] =
-                constrainedSearchTermFromKeyValue(propertyName, propertyValue);
+            const [propertySearchTerm, searchTermsCreated] =
+                propertySearchTermFromKeyValue(propertyName, propertyValue);
+
+            matchExpressions.push(
+                new q.MatchPropertyTermExpr(propertySearchTerm),
+            );
             this.allSearchTerms.push(...searchTermsCreated);
-            matchExpr = new q.MatchConstrainedSearchTermExpr(qualifiedTerm);
-            matchExpressions.push(matchExpr);
         }
         return matchExpressions;
     }
@@ -217,21 +212,17 @@ class SearchQueryBuilder {
     }
 }
 
-export function constrainedSearchTermFromKeyValue(
+export function propertySearchTermFromKeyValue(
     key: string,
     value: string,
-): [ConstrainedSearchTerm, SearchTerm[]] {
-    let qualifiedSearchTerm: ConstrainedSearchTerm | undefined;
+): [PropertySearchTerm, SearchTerm[]] {
     const searchTermsCreated: SearchTerm[] = [];
+    let propertyName: KnowledgePropertyName | SearchTerm;
+    let propertyValue: SearchTerm;
     switch (key) {
         default:
-            qualifiedSearchTerm = {
-                type: "facet",
-                facetName: createSearchTerm(key),
-                facetValue: createSearchTerm(value),
-            };
-            searchTermsCreated.push(qualifiedSearchTerm.facetName);
-            searchTermsCreated.push(qualifiedSearchTerm.facetValue);
+            propertyName = createSearchTerm(key);
+            searchTermsCreated.push(propertyName);
             break;
         case "name":
         case "type":
@@ -240,15 +231,12 @@ export function constrainedSearchTermFromKeyValue(
         case "object":
         case "indirectObject":
         case "tag":
-            qualifiedSearchTerm = {
-                type: "property",
-                propertyName: key as KnowledgePropertyName,
-                propertyValue: createSearchTerm(value),
-            };
-            searchTermsCreated.push(qualifiedSearchTerm.propertyValue);
+            propertyName = key;
             break;
     }
-    return [qualifiedSearchTerm, searchTermsCreated];
+    propertyValue = createSearchTerm(value);
+    searchTermsCreated.push(propertyValue);
+    return [{ propertyName, propertyValue }, searchTermsCreated];
 }
 
 function toGroupedSearchResults(
