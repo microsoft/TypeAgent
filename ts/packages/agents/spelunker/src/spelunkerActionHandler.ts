@@ -56,7 +56,6 @@ class RequestCommandHandler implements CommandHandler {
                 result = await searchCode(
                     actionContext.sessionContext.agentContext,
                     question,
-                    [], // paramEntities
                     [], // inputEntities
                 );
             }
@@ -165,7 +164,6 @@ async function handleSpelunkerAction(
                 return await searchCode(
                     context.agentContext,
                     question,
-                    action.parameters.entities,
                     entities,
                 );
             }

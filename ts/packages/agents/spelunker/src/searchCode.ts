@@ -101,12 +101,10 @@ function createQueryContext(): QueryContext {
 export async function searchCode(
     context: SpelunkerContext,
     input: string,
-    paramEntities: Entity[], // From action.parameters.entities: MyEntity[]
     inputEntities: Entity[], // Passed to executeAction (as Map<string, Entity>)
 ): Promise<ActionResult> {
     epoch = 0; // Reset logging clock
     console_log(`[searchCode question='${input}']`);
-    console.log(`  [paramEntities=${JSON.stringify(paramEntities)}]`);
     console.log(`  [inputEntities=${JSON.stringify(inputEntities)}]`);
 
     // 0. Check if the focus is set.
@@ -165,7 +163,6 @@ export async function searchCode(
         context,
         allChunks,
         input,
-        paramEntities,
         inputEntities,
         50,
     );
@@ -262,7 +259,6 @@ async function selectChunks(
     context: SpelunkerContext,
     chunks: Chunk[],
     input: string,
-    paramEntities: Entity[],
     inputEntities: Entity[],
     keep: number,
 ): Promise<ChunkDescription[]> {
@@ -300,7 +296,7 @@ async function selectChunks(
     // Give valid input entities a relevance boost to 2.0
     let boostCount = 0;
     let newCount = 0;
-    for (const entity of [...paramEntities, ...inputEntities]) {
+    for (const entity of inputEntities) {
         if (entity.type.includes("code") && entity.uniqueId) {
             const chunkDesc = allChunkDescs.find(
                 (c) => c.chunkId === entity.uniqueId,
