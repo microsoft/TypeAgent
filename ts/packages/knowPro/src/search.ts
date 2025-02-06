@@ -56,13 +56,9 @@ export type SearchFilter = {
     type?: KnowledgeType | undefined;
     dateRange?: DateRange;
 };
+
 /**
  * Searches conversation for terms
- * @param conversation
- * @param searchTerms
- * @param maxMatches
- * @param minHitCount
- * @returns
  */
 export async function searchConversation(
     conversation: IConversation,
@@ -70,6 +66,7 @@ export async function searchConversation(
     propertyTerms?: Record<string, string>,
     filter?: SearchFilter,
     maxMatches?: number,
+    minHitCount?: number,
 ): Promise<Map<KnowledgeType, SearchResult> | undefined> {
     if (!q.isConversationSearchable(conversation)) {
         return undefined;
@@ -80,6 +77,7 @@ export async function searchConversation(
         propertyTerms,
         filter,
         maxMatches,
+        minHitCount,
     );
     const queryResults = query.eval(new q.QueryEvalContext(conversation));
     return toGroupedSearchResults(queryResults);
@@ -97,8 +95,15 @@ class SearchQueryBuilder {
         propertyTerms?: Record<string, string>,
         filter?: SearchFilter,
         maxMatches?: number,
+        minHitCount?: number,
     ) {
-        let query = this.compileQuery(terms, propertyTerms, filter);
+        let query = this.compileQuery(
+            terms,
+            propertyTerms,
+            filter,
+            maxMatches,
+            minHitCount,
+        );
 
         this.prepareSearchTerms(this.allSearchTerms);
         // For all individual SearchTerms created during query compilation, resolve any related terms
@@ -117,6 +122,7 @@ class SearchQueryBuilder {
         propertyTerms?: Record<string, string>,
         filter?: SearchFilter,
         maxMatches?: number,
+        minHitCount?: number,
     ) {
         let selectExpr = this.compileSelect(terms, propertyTerms, filter);
         // Constrain the select with scopes
@@ -132,6 +138,7 @@ class SearchQueryBuilder {
         return new q.SelectTopNKnowledgeGroupExpr(
             new q.GroupByKnowledgeTypeExpr(selectExpr),
             maxMatches,
+            minHitCount,
         );
     }
 

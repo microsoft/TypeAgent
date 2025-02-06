@@ -219,6 +219,7 @@ export async function createKnowproCommands(
                 maxToDisplay: argNum("Maximum matches to display", 25),
                 startMinute: argNum("Starting at minute."),
                 endMinute: argNum("Ending minute."),
+                exact: argBool("Only display exact matches", false),
             },
         };
         if (kType === undefined) {
@@ -253,6 +254,8 @@ export async function createKnowproCommands(
                 terms,
                 keyValuesFromNamedArgs(namedArgs, commandDef),
                 filterFromNamedArgs(namedArgs),
+                undefined,
+                namedArgs.exact ? 1 : undefined,
             );
             if (matches === undefined || matches.size === 0) {
                 context.printer.writeLine("No matches");
