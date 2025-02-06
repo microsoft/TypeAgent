@@ -181,7 +181,7 @@ export function createSessionContext<T = unknown>(
               // acquire the lock to prevent change the state while we are processing a command or adding dynamic agent.
               // WARNING: deadlock if this is call because we are processing a request
               context.commandLock(async () =>
-                  context.agents.removeDynamicAgent(agentName),
+                  context.agents.removeAgent(agentName),
               )
         : () => {
               throw new Error("Permission denied: cannot remove dynamic agent");
@@ -283,7 +283,7 @@ async function executeAction(
 
     if (appAgent.executeAction === undefined) {
         throw new Error(
-            `Agent ${appAgentName} does not support executeAction.`,
+            `Agent '${appAgentName}' does not support executeAction.`,
         );
     }
 
@@ -647,7 +647,7 @@ export function startStreamPartialAction(
     if (appAgent.streamPartialAction === undefined) {
         // The config declared that there are streaming action, but the agent didn't implement it.
         throw new Error(
-            `Agent ${appAgentName} does not support streamPartialAction.`,
+            `Agent '${appAgentName}' does not support streamPartialAction.`,
         );
     }
 
@@ -685,7 +685,7 @@ export async function executeCommand(
     const appAgent = context.agents.getAppAgent(appAgentName);
     if (appAgent.executeCommand === undefined) {
         throw new Error(
-            `Agent ${appAgentName} does not support executeCommand.`,
+            `Agent '${appAgentName}' does not support executeCommand.`,
         );
     }
 
