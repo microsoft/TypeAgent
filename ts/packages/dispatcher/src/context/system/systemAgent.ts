@@ -68,6 +68,10 @@ import { ConfigAction } from "./schema/configActionSchema.js";
 import { NotificationAction } from "./schema/notificationActionSchema.js";
 import { HistoryAction } from "./schema/historyActionSchema.js";
 import { SessionAction } from "./schema/sessionActionSchema.js";
+import {
+    InstallCommandHandler,
+    UninstallCommandHandler,
+} from "./handlers/installCommandHandlers.js";
 
 function executeSystemAction(
     action:
@@ -372,6 +376,8 @@ const systemHandlers: CommandHandlerTable = {
         notify: getNotifyCommandHandlers(),
         token: getTokenCommandHandlers(),
         env: getEnvCommandHandlers(),
+        install: new InstallCommandHandler(),
+        uninstall: new UninstallCommandHandler(),
     },
 };
 

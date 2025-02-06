@@ -14,7 +14,7 @@ const modulePath = process.argv[3];
 const module = await import(modulePath);
 if (typeof module.instantiate !== "function") {
     throw new Error(
-        `Failed to load module agent ${modulePath}: missing 'instantiate' function.`,
+        `Failed to load module agent '${modulePath}': missing 'instantiate' function.`,
     );
 }
 
@@ -32,6 +32,6 @@ createAgentRpcServer(agentName, agent, createChannelProvider(checkedProcess));
 
 debug(`${agentName} agent process started: ${modulePath}`);
 process.on("disconnect", () => {
-    debug(`Parent process disconnected, exiting ${agentName}: ${modulePath}`);
+    debug(`Parent process disconnected, exiting '${agentName}': ${modulePath}`);
     process.exit(-1);
 });
