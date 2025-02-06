@@ -272,6 +272,7 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
                     if (match.score < score) {
                         match.score = score;
                     }
+                    //match.score += score;
                 } else {
                     match = {
                         value: scoredRef.semanticRefIndex,

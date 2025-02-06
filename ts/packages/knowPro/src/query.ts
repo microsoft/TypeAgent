@@ -5,7 +5,6 @@ import {
     DateRange,
     IConversation,
     IMessage,
-    IPropertyToSemanticRefIndex,
     ITermToSemanticRefIndex,
     KnowledgeType,
     ScoredSemanticRef,
@@ -126,93 +125,6 @@ export function messageLength(message: IMessage): number {
         length += chunk.length;
     }
     return length;
-}
-
-/**
- * Look
- * @param semanticRefIndex
- * @param searchTerm
- * @param predicate
- * @param matches
- * @returns
- */
-export function lookupSearchTermInIndex(
-    semanticRefIndex: ITermToSemanticRefIndex,
-    searchTerm: SearchTerm,
-    predicate?: (scoredRef: ScoredSemanticRef) => boolean,
-    matches?: SemanticRefAccumulator,
-): SemanticRefAccumulator {
-    matches ??= new SemanticRefAccumulator();
-    // Lookup search term
-    matches.addSearchTermMatches(
-        searchTerm.term,
-        predicate
-            ? lookupAndFilter(semanticRefIndex, searchTerm.term.text, predicate)
-            : semanticRefIndex.lookupTerm(searchTerm.term.text),
-    );
-    // And any related terms
-    if (searchTerm.relatedTerms && searchTerm.relatedTerms.length > 0) {
-        for (const relatedTerm of searchTerm.relatedTerms) {
-            // Related term matches count as matches for the queryTerm...
-            // BUT are scored with the score of the related term
-            matches.addRelatedTermMatches(
-                searchTerm.term,
-                relatedTerm,
-                predicate
-                    ? lookupAndFilter(
-                          semanticRefIndex,
-                          relatedTerm.text,
-                          predicate,
-                      )
-                    : semanticRefIndex.lookupTerm(relatedTerm.text),
-                relatedTerm.score,
-            );
-        }
-    }
-    return matches;
-
-    function* lookupAndFilter(
-        semanticRefIndex: ITermToSemanticRefIndex,
-        text: string,
-        predicate: (scoredRef: ScoredSemanticRef) => boolean,
-    ) {
-        const scoredRefs = semanticRefIndex.lookupTerm(text);
-        if (scoredRefs) {
-            for (const scoredRef of scoredRefs) {
-                if (predicate(scoredRef)) {
-                    yield scoredRef;
-                }
-            }
-        }
-    }
-}
-
-export function lookupSearchTermInPropertyIndex(
-    propertyIndex: IPropertyToSemanticRefIndex,
-    propertyName: string,
-    searchTerm: SearchTerm,
-    matchAccumulator?: SemanticRefAccumulator,
-): SemanticRefAccumulator {
-    matchAccumulator ??= new SemanticRefAccumulator();
-    // Lookup search term
-    matchAccumulator.addSearchTermMatches(
-        searchTerm.term,
-        propertyIndex.lookupProperty(propertyName, searchTerm.term.text),
-    );
-    // And any related terms
-    if (searchTerm.relatedTerms && searchTerm.relatedTerms.length > 0) {
-        for (const relatedTerm of searchTerm.relatedTerms) {
-            // Related term matches count as matches for the queryTerm...
-            // BUT are scored with the score of the related term
-            matchAccumulator.addRelatedTermMatches(
-                searchTerm.term,
-                relatedTerm,
-                propertyIndex.lookupProperty(propertyName, relatedTerm.text),
-                relatedTerm.score,
-            );
-        }
-    }
-    return matchAccumulator;
 }
 
 export function* lookupTermFiltered(
