@@ -580,6 +580,7 @@ export class MatchPropertyTermExpr extends MatchTermExpr {
                     context,
                     matches,
                     propertyName,
+                    propertyValue.term,
                     relatedPropertyValue,
                 );
             }
