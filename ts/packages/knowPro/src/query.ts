@@ -472,24 +472,27 @@ export class MatchSearchTermExpr extends MatchTermExpr {
         term: Term,
         relatedTerm?: Term,
     ) {
-        const isExact = relatedTerm === undefined;
-        const termToSearchFor = relatedTerm ?? term;
-        const semanticRefs = this.lookupTerm(context, termToSearchFor);
-        if (context.wasTermMatched(termToSearchFor.text)) {
-            matches.updateExistingMatchScores(
-                term,
-                semanticRefs,
-                isExact,
-                termToSearchFor.score,
-            );
+        if (relatedTerm === undefined) {
+            const semanticRefs = this.lookupTerm(context, term);
+            if (context.wasTermMatched(term.text)) {
+                matches.updateExistingMatchScores(term, semanticRefs, true);
+            } else {
+                matches.addSearchTermMatches(term, semanticRefs);
+                context.recordTermMatch(term.text);
+            }
         } else {
-            // Related matches match on behalf of term..
-            matches.addSearchTermMatches(
-                term,
-                semanticRefs,
-                termToSearchFor.score,
-            );
-            context.recordTermMatch(termToSearchFor.text);
+            const semanticRefs = this.lookupTerm(context, relatedTerm);
+            if (context.wasTermMatched(relatedTerm.text)) {
+                matches.updateExistingMatchScores(
+                    term,
+                    semanticRefs,
+                    false,
+                    relatedTerm.score,
+                );
+            } else {
+                matches.addRelatedTermMatches(term, relatedTerm, semanticRefs);
+                context.recordTermMatch(relatedTerm.text);
+            }
         }
     }
 }
