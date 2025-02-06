@@ -18,7 +18,6 @@ export interface Match<T = any> {
     value: T;
     score: number;
     exactHitCount: number;
-    exactMatch: boolean;
 }
 
 /**
@@ -73,7 +72,6 @@ export class MatchAccumulator<T = any> {
                 value,
                 exactHitCount: isExactMatch ? 1 : 0,
                 score,
-                exactMatch: isExactMatch,
             });
         }
     }
@@ -84,7 +82,6 @@ export class MatchAccumulator<T = any> {
         isExactMatch: boolean,
     ): void {
         if (isExactMatch) {
-            existingMatch.exactMatch = isExactMatch;
             existingMatch.exactHitCount++;
             existingMatch.score += newScore;
         } else if (existingMatch.score < newScore) {
