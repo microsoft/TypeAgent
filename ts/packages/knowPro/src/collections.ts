@@ -102,10 +102,12 @@ export class MatchAccumulator<T = any> {
             let existingMatch = this.matches.get(otherMatch.value);
             if (existingMatch) {
                 if (otherMatch.exactMatch) {
-                    existingMatch.hitCount += otherMatch.hitCount;
                     existingMatch.exactMatch = otherMatch.exactMatch;
+                    existingMatch.hitCount += otherMatch.hitCount;
+                    existingMatch.score += otherMatch.score;
+                } else if (existingMatch.score < otherMatch.score) {
+                    existingMatch.score = otherMatch.score;
                 }
-                existingMatch.score += otherMatch.score;
             } else {
                 this.setMatch(otherMatch);
                 existingMatch = otherMatch;
@@ -226,32 +228,6 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
         }
     }
 
-    public updateExistingMatchScores(
-        searchTerm: Term,
-        scoredRefs:
-            | ScoredSemanticRef[]
-            | IterableIterator<ScoredSemanticRef>
-            | undefined,
-        isExactMatch: boolean,
-        scoreBoost?: number,
-    ) {
-        if (scoredRefs) {
-            scoreBoost ??= searchTerm.score ?? 0;
-            for (const scoredRef of scoredRefs) {
-                const existingMatch = this.getMatch(scoredRef.semanticRefIndex);
-                const newScore = scoredRef.score + scoreBoost;
-                if (existingMatch) {
-                    if (existingMatch.score < newScore) {
-                        existingMatch.score = newScore;
-                    }
-                    if (!existingMatch.exactMatch) {
-                        existingMatch.exactMatch = isExactMatch;
-                    }
-                }
-            }
-        }
-    }
-
     public addRelatedTermMatches(
         searchTerm: Term,
         relatedTerm: Term,
@@ -290,6 +266,74 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
     public addUnion(other: SemanticRefAccumulator): void {
         super.addUnion(other);
         unionInPlace(this.searchTermMatches, other.searchTermMatches);
+    }
+
+    public addOrUpdate(
+        searchTerm: Term,
+        scoredRefs:
+            | ScoredSemanticRef[]
+            | IterableIterator<ScoredSemanticRef>
+            | undefined,
+        isExactMatch: boolean,
+        scoreBoost?: number,
+    ) {
+        if (scoredRefs) {
+            scoreBoost ??= searchTerm.score ?? 0;
+            for (const scoredRef of scoredRefs) {
+                const existingMatch = this.getMatch(scoredRef.semanticRefIndex);
+                const newScore = scoredRef.score + scoreBoost;
+                if (existingMatch) {
+                    this.updateExisting(existingMatch, isExactMatch, newScore);
+                } else {
+                    this.setMatch({
+                        value: scoredRef.semanticRefIndex,
+                        hitCount: isExactMatch ? 1 : 0,
+                        score: newScore,
+                        exactMatch: isExactMatch,
+                    });
+                }
+            }
+            this.searchTermMatches.add(searchTerm.text);
+        }
+    }
+
+    public updateExistingMatchScores(
+        searchTerm: Term,
+        scoredRefs:
+            | ScoredSemanticRef[]
+            | IterableIterator<ScoredSemanticRef>
+            | undefined,
+        isExactMatch: boolean,
+        scoreBoost?: number,
+    ) {
+        if (scoredRefs) {
+            scoreBoost ??= searchTerm.score ?? 0;
+            for (const scoredRef of scoredRefs) {
+                const existingMatch = this.getMatch(scoredRef.semanticRefIndex);
+                if (existingMatch) {
+                    const newScore = scoredRef.score + scoreBoost;
+                    this.updateExisting(existingMatch, isExactMatch, newScore);
+                } else {
+                    throw new Error(
+                        `No existing match for ${searchTerm.text} Id: ${scoredRef.semanticRefIndex}`,
+                    );
+                }
+            }
+        }
+    }
+
+    private updateExisting(
+        existingMatch: Match,
+        isExactMatch: boolean,
+        newScore: number,
+    ): void {
+        if (isExactMatch) {
+            existingMatch.exactMatch = isExactMatch;
+            existingMatch.hitCount++;
+            existingMatch.score += newScore;
+        } else if (existingMatch.score < newScore) {
+            existingMatch.score = newScore;
+        }
     }
 
     public override getSortedByScore(
@@ -394,7 +438,8 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
     }
 
     private getMinHitCount(minHitCount?: number): number {
-        return minHitCount !== undefined ? minHitCount : this.maxHits;
+        //return minHitCount !== undefined ? minHitCount : this.maxHits;
+        return minHitCount ?? 0;
         //: this.queryTermMatches.termMatches.size;
     }
 }

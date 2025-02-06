@@ -314,11 +314,9 @@ export class GetSearchMatchesExpr extends QueryOpExpr<SemanticRefAccumulator> {
 
     public override eval(context: QueryEvalContext): SemanticRefAccumulator {
         const allMatches = new SemanticRefAccumulator();
+        context.clearMatchedTerms();
         for (const matchExpr of this.searchTermExpressions) {
-            const matches = matchExpr.eval(context);
-            if (matches) {
-                allMatches.addUnion(matches);
-            }
+            matchExpr.accumulateMatches(context, allMatches);
         }
         return allMatches;
     }
@@ -335,7 +333,6 @@ export class MatchTermExpr extends QueryOpExpr<
         context: QueryEvalContext,
     ): SemanticRefAccumulator | undefined {
         const matches = new SemanticRefAccumulator();
-        context.clearMatchedTerms();
         this.accumulateMatches(context, matches);
         return matches.size > 0 ? matches : undefined;
     }
@@ -388,6 +385,7 @@ export class MatchSearchTermExpr extends MatchTermExpr {
         term: Term,
         relatedTerm?: Term,
     ) {
+        /*
         if (relatedTerm === undefined) {
             const semanticRefs = this.lookupTerm(context, term);
             if (context.hasTermAlreadyMatched(term.text)) {
@@ -407,6 +405,34 @@ export class MatchSearchTermExpr extends MatchTermExpr {
                 );
             } else {
                 matches.addRelatedTermMatches(term, relatedTerm, semanticRefs);
+                context.recordTermMatch(relatedTerm.text);
+            }
+        }
+        */
+        if (relatedTerm === undefined) {
+            const semanticRefs = this.lookupTerm(context, term);
+            if (context.hasTermAlreadyMatched(term.text)) {
+                matches.updateExistingMatchScores(term, semanticRefs, true);
+            } else {
+                matches.addOrUpdate(term, semanticRefs, true);
+                context.recordTermMatch(term.text);
+            }
+        } else {
+            const semanticRefs = this.lookupTerm(context, relatedTerm);
+            if (context.hasTermAlreadyMatched(relatedTerm.text)) {
+                matches.updateExistingMatchScores(
+                    term,
+                    semanticRefs,
+                    false,
+                    relatedTerm.score,
+                );
+            } else {
+                matches.addOrUpdate(
+                    term,
+                    semanticRefs,
+                    false,
+                    relatedTerm.score,
+                );
                 context.recordTermMatch(relatedTerm.text);
             }
         }
