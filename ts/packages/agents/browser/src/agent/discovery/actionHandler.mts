@@ -15,9 +15,10 @@ import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "url";
 import { UserActionsList } from "./schema/userActionsPool.mjs";
+import { SchemaDiscoveryActions } from "./schema/discoveryActions.mjs";
 
 export async function handleSchemaDiscoveryAction(
-  action: any,
+  action: SchemaDiscoveryActions,
   context: ActionContext<BrowserActionContext>,
 ) {
   let message = "OK";

@@ -58,10 +58,12 @@ export type ActionEntities<T extends AppAction = AppAction> =
         ? undefined
         : EntityMap<Required<T["parameters"]>>;
 
-export type TypeAgentAction<T extends AppAction = AppAction> =
-    T extends AppAction
-        ? T & {
-              translatorName: string;
-              entities?: ActionEntities<T>;
-          }
-        : never;
+export type TypeAgentAction<
+    T extends AppAction = AppAction,
+    Name extends string = string,
+> = T extends AppAction
+    ? T & {
+          translatorName: Name;
+          entities?: ActionEntities<T>;
+      }
+    : never;
