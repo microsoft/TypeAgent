@@ -252,7 +252,7 @@ export async function createKnowproCommands(
             const matches = await kp.searchConversation(
                 conversation,
                 terms,
-                keyValuesFromNamedArgs(namedArgs, commandDef),
+                propertyTermsFromNamedArgs(namedArgs, commandDef),
                 filterFromNamedArgs(namedArgs),
                 undefined,
                 namedArgs.exact ? 1 : undefined,
@@ -271,6 +271,23 @@ export async function createKnowproCommands(
             ``;
             context.printer.writeError("Conversation is not indexed");
         }
+    }
+
+    function propertyTermsFromNamedArgs(
+        namedArgs: NamedArgs,
+        commandDef: CommandMetadata,
+    ): kp.PropertySearchTerm[] {
+        const keyValues = keyValuesFromNamedArgs(namedArgs, commandDef);
+        const propertySearchTerms: kp.PropertySearchTerm[] = [];
+        for (const propertyName of Object.keys(keyValues)) {
+            const propertyValue = keyValues[propertyName];
+            const propertySearchTerm = kp.propertySearchTermFromKeyValue(
+                propertyName,
+                propertyValue,
+            );
+            propertySearchTerms.push(propertySearchTerm);
+        }
+        return propertySearchTerms;
     }
 
     function filterFromNamedArgs(namedArgs: NamedArgs) {

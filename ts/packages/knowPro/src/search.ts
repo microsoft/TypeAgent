@@ -63,7 +63,7 @@ export type SearchFilter = {
 export async function searchConversation(
     conversation: IConversation,
     searchTerms: SearchTerm[],
-    propertyTerms?: Record<string, string>,
+    propertyTerms?: PropertySearchTerm[],
     filter?: SearchFilter,
     maxMatches?: number,
     minHitCount?: number,
@@ -92,7 +92,7 @@ class SearchQueryBuilder {
 
     public async compile(
         terms: SearchTerm[],
-        propertyTerms?: Record<string, string>,
+        propertyTerms?: PropertySearchTerm[],
         filter?: SearchFilter,
         maxMatches?: number,
         minHitCount?: number,
@@ -119,7 +119,7 @@ class SearchQueryBuilder {
 
     public async compileQuery(
         terms: SearchTerm[],
-        propertyTerms?: Record<string, string>,
+        propertyTerms?: PropertySearchTerm[],
         filter?: SearchFilter,
         maxMatches?: number,
         minHitCount?: number,
@@ -144,7 +144,7 @@ class SearchQueryBuilder {
 
     private compileSelect(
         terms: SearchTerm[],
-        propertyTerms?: Record<string, string>,
+        propertyTerms?: PropertySearchTerm[],
         filter?: SearchFilter,
     ) {
         // Select is a combination of ordinary search terms and property search terms
@@ -168,18 +168,15 @@ class SearchQueryBuilder {
     }
 
     private compilePropertyTerms(
-        properties: Record<string, string>,
+        propertyTerms: PropertySearchTerm[],
     ): q.MatchTermExpr[] {
         const matchExpressions: q.MatchPropertyTermExpr[] = [];
-        for (const propertyName of Object.keys(properties)) {
-            const propertyValue = properties[propertyName];
-            const [propertySearchTerm, searchTermsCreated] =
-                propertySearchTermFromKeyValue(propertyName, propertyValue);
-
-            matchExpressions.push(
-                new q.MatchPropertyTermExpr(propertySearchTerm),
-            );
-            this.allSearchTerms.push(...searchTermsCreated);
+        for (const propertyTerm of propertyTerms) {
+            matchExpressions.push(new q.MatchPropertyTermExpr(propertyTerm));
+            if (typeof propertyTerm.propertyName !== "string") {
+                this.allSearchTerms.push(propertyTerm.propertyName);
+            }
+            this.allSearchTerms.push(propertyTerm.propertyValue);
         }
         return matchExpressions;
     }
@@ -225,14 +222,12 @@ class SearchQueryBuilder {
 export function propertySearchTermFromKeyValue(
     key: string,
     value: string,
-): [PropertySearchTerm, SearchTerm[]] {
-    const searchTermsCreated: SearchTerm[] = [];
+): PropertySearchTerm {
     let propertyName: KnowledgePropertyName | SearchTerm;
     let propertyValue: SearchTerm;
     switch (key) {
         default:
             propertyName = createSearchTerm(key);
-            searchTermsCreated.push(propertyName);
             break;
         case "name":
         case "type":
@@ -245,8 +240,7 @@ export function propertySearchTermFromKeyValue(
             break;
     }
     propertyValue = createSearchTerm(value);
-    searchTermsCreated.push(propertyValue);
-    return [{ propertyName, propertyValue }, searchTermsCreated];
+    return { propertyName, propertyValue };
 }
 
 function toGroupedSearchResults(
