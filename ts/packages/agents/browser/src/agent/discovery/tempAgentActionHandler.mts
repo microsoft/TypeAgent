@@ -3,7 +3,10 @@
 
 import { AppAgent } from "@typeagent/agent-sdk";
 import { BrowserConnector } from "../browserConnector.mjs";
-import { NavigateToPage } from "./schema/userActionsPool.mjs";
+import {
+  BrowseProductCategoriesAction,
+  NavigateToPage,
+} from "./schema/userActionsPool.mjs";
 import { handleCommerceAction } from "../commerce/actionHandler.mjs";
 import { NavigationLink } from "./schema/pageComponents.mjs";
 
@@ -24,6 +27,7 @@ export function createTempAgentForSchema(
         case "selectSearchResult":
           handleCommerceAction(action, context);
         case "browseProductCategoriesAction":
+          handleBrowseProductCategory(action);
           break;
         case "filterProductsAction":
           break;
@@ -56,7 +60,7 @@ export function createTempAgentForSchema(
     );
 
     if (!response.success) {
-      console.error("Attempt to get product tilefailed");
+      console.error(`Attempt to get ${componentType} failed`);
       console.error(response.message);
       return;
     }
@@ -77,6 +81,21 @@ export function createTempAgentForSchema(
     const link = (await getComponentFromPage(
       "NavigationLink",
       `link text ${action.parameters.keywords}`,
+    )) as NavigationLink;
+    console.log(link);
+
+    await followLink(link?.linkCssSelector);
+  }
+
+  async function handleBrowseProductCategory(
+    action: BrowseProductCategoriesAction,
+  ) {
+    let linkText = action.parameters.categoryName
+      ? `link text ${action.parameters.categoryName}`
+      : "";
+    const link = (await getComponentFromPage(
+      "NavigationLink",
+      linkText,
     )) as NavigationLink;
     console.log(link);
 

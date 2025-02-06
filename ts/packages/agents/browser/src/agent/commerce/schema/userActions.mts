@@ -43,6 +43,7 @@ export type SelectSearchResult = {
 
 export type ShoppingActions =
   | AddToCartAction
+  | ViewShoppingCartAction
   | FindNearbyStoreAction
   | GetLocationInStore
   | SearchForProductAction
