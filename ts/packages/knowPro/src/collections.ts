@@ -17,8 +17,7 @@ import { isInTextRange } from "./query.js";
 export interface Match<T = any> {
     value: T;
     score: number;
-    hitCount: number;
-    exactMatch: boolean;
+    exactHitCount: number;
 }
 
 /**
@@ -31,19 +30,13 @@ export function sortMatchesByRelevance(matches: Match[]) {
 
 export class MatchAccumulator<T = any> {
     private matches: Map<T, Match<T>>;
-    private maxHitCount: number;
 
     constructor() {
         this.matches = new Map<T, Match<T>>();
-        this.maxHitCount = 0;
     }
 
     public get size(): number {
         return this.matches.size;
-    }
-
-    public get maxHits(): number {
-        return this.maxHitCount;
     }
 
     public has(value: T): boolean {
@@ -56,9 +49,6 @@ export class MatchAccumulator<T = any> {
 
     public setMatch(match: Match<T>): void {
         this.matches.set(match.value, match);
-        if (match.hitCount > this.maxHitCount) {
-            this.maxHitCount = match.hitCount;
-        }
     }
 
     public setMatches(
@@ -73,46 +63,29 @@ export class MatchAccumulator<T = any> {
         }
     }
 
-    public add(value: T, score: number, isNewMatchExact: boolean): void {
-        let match = this.matches.get(value);
-        if (match) {
-            // Increment the existing match
-            if (isNewMatchExact) {
-                match.hitCount += 1;
-                match.exactMatch = true;
-            }
-            match.score += score;
+    public add(value: T, score: number, isExactMatch: boolean) {
+        const existingMatch = this.getMatch(value);
+        if (existingMatch) {
+            this.updateExisting(existingMatch, score, isExactMatch);
         } else {
-            // New match
-            match = {
+            this.setMatch({
                 value,
+                exactHitCount: isExactMatch ? 1 : 0,
                 score,
-                hitCount: 1,
-                exactMatch: isNewMatchExact,
-            };
-            this.matches.set(value, match);
-        }
-        if (match.hitCount > this.maxHitCount) {
-            this.maxHitCount = match.hitCount;
+            });
         }
     }
 
-    public addUnion(other: MatchAccumulator<T>): void {
-        for (const otherMatch of other.matches.values()) {
-            const existingMatch = this.matches.get(otherMatch.value);
-            if (existingMatch) {
-                if (otherMatch.exactMatch) {
-                    existingMatch.hitCount += otherMatch.hitCount;
-                } else if (existingMatch.hitCount < otherMatch.hitCount) {
-                    existingMatch.hitCount = otherMatch.hitCount;
-                }
-                existingMatch.score += otherMatch.score;
-                if (existingMatch.hitCount > this.maxHitCount) {
-                    this.maxHitCount = existingMatch.hitCount;
-                }
-            } else {
-                this.setMatch(otherMatch);
-            }
+    protected updateExisting(
+        existingMatch: Match,
+        newScore: number,
+        isExactMatch: boolean,
+    ): void {
+        if (isExactMatch) {
+            existingMatch.exactHitCount++;
+            existingMatch.score += newScore;
+        } else if (existingMatch.score < newScore) {
+            existingMatch.score = newScore;
         }
     }
 
@@ -161,7 +134,6 @@ export class MatchAccumulator<T = any> {
 
     public clearMatches(): void {
         this.matches.clear();
-        this.maxHitCount = 0;
     }
 
     public selectTopNScoring(
@@ -169,9 +141,7 @@ export class MatchAccumulator<T = any> {
         minHitCount?: number,
     ): number {
         const topN = this.getTopNScoring(maxMatches, minHitCount);
-        if (topN.length > 0) {
-            this.setMatches(topN, true);
-        }
+        this.setMatches(topN, true);
         return topN.length;
     }
 
@@ -179,7 +149,7 @@ export class MatchAccumulator<T = any> {
         minHitCount: number | undefined,
     ): IterableIterator<Match<T>> {
         return minHitCount !== undefined && minHitCount > 0
-            ? this.getMatches((m) => m.hitCount >= minHitCount)
+            ? this.getMatches((m) => m.exactHitCount >= minHitCount)
             : this.matches.values();
     }
 }
@@ -191,80 +161,67 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
         super();
     }
 
-    public addSearchTermMatch(
+    public addTermMatches(
         searchTerm: Term,
-        semanticRefs:
+        scoredRefs:
             | ScoredSemanticRef[]
             | IterableIterator<ScoredSemanticRef>
             | undefined,
+        isExactMatch: boolean,
         scoreBoost?: number,
     ) {
-        if (semanticRefs) {
+        if (scoredRefs) {
             scoreBoost ??= searchTerm.score ?? 0;
-            for (const match of semanticRefs) {
+            for (const scoredRef of scoredRefs) {
                 this.add(
-                    match.semanticRefIndex,
-                    match.score + scoreBoost,
-                    true,
+                    scoredRef.semanticRefIndex,
+                    scoredRef.score + scoreBoost,
+                    isExactMatch,
                 );
             }
             this.searchTermMatches.add(searchTerm.text);
         }
     }
 
-    public addRelatedTermMatch(
+    public updateTermMatches(
         searchTerm: Term,
-        relatedTerm: Term,
-        semanticRefs:
+        scoredRefs:
             | ScoredSemanticRef[]
             | IterableIterator<ScoredSemanticRef>
             | undefined,
+        isExactMatch: boolean,
         scoreBoost?: number,
     ) {
-        if (semanticRefs) {
-            // Related term matches count as matches for the queryTerm...
-            // BUT are scored with the score of the related term
-            scoreBoost ??= relatedTerm.score ?? 0;
-            for (const semanticRef of semanticRefs) {
-                let score = semanticRef.score + scoreBoost;
-                let match = this.getMatch(semanticRef.semanticRefIndex);
-                if (match !== undefined) {
-                    if (match.score < score) {
-                        match.score = score;
-                    }
+        if (scoredRefs) {
+            scoreBoost ??= searchTerm.score ?? 0;
+            for (const scoredRef of scoredRefs) {
+                const existingMatch = this.getMatch(scoredRef.semanticRefIndex);
+                if (existingMatch) {
+                    this.updateExisting(
+                        existingMatch,
+                        scoredRef.score + scoreBoost,
+                        isExactMatch,
+                    );
                 } else {
-                    match = {
-                        value: semanticRef.semanticRefIndex,
-                        score,
-                        hitCount: 1,
-                        exactMatch: false,
-                    };
-                    this.setMatch(match);
+                    throw new Error(
+                        `No existing match for ${searchTerm.text} Id: ${scoredRef.semanticRefIndex}`,
+                    );
                 }
             }
-            this.searchTermMatches.add(searchTerm.text);
         }
-    }
-
-    public addUnion(other: SemanticRefAccumulator): void {
-        super.addUnion(other);
-        unionInPlace(this.searchTermMatches, other.searchTermMatches);
     }
 
     public override getSortedByScore(
         minHitCount?: number,
     ): Match<SemanticRefIndex>[] {
-        return super.getSortedByScore(this.getMinHitCount(minHitCount));
+        return super.getSortedByScore(minHitCount);
     }
 
     public override getTopNScoring(
         maxMatches?: number,
         minHitCount?: number,
     ): Match<SemanticRefIndex>[] {
-        return super.getTopNScoring(
-            maxMatches,
-            this.getMinHitCount(minHitCount),
-        );
+        return super.getTopNScoring(maxMatches, minHitCount);
     }
 
     public *getSemanticRefs(
@@ -351,11 +308,6 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
             };
         }, 0);
     }
-
-    private getMinHitCount(minHitCount?: number): number {
-        return minHitCount !== undefined ? minHitCount : this.maxHits;
-        //: this.queryTermMatches.termMatches.size;
-    }
 }
 
 export class MessageAccumulator extends MatchAccumulator<IMessage> {}
@@ -417,6 +369,69 @@ export class TextRangeCollection {
 
     private comparer(x: TextRange, y: TextRange): number {
         return x.start.messageIndex - y.start.messageIndex;
+    }
+}
+
+export class TermSet {
+    constructor(private terms: Map<string, Term> = new Map()) {}
+
+    public add(term: Term) {
+        const existingTerm = this.terms.get(term.text);
+        if (!existingTerm) {
+            this.terms.set(term.text, term);
+        }
+    }
+
+    public addOrUnion(term: Term) {
+        const existingTerm = this.terms.get(term.text);
+        if (existingTerm) {
+            const existingScore = existingTerm.score ?? 0;
+            const newScore = term.score ?? 0;
+            if (existingScore < newScore) {
+                existingTerm.score = newScore;
+            }
+        } else {
+            this.terms.set(term.text, term);
+        }
+    }
+
+    public get(term: string | Term): Term | undefined {
+        return typeof term === "string"
+            ? this.terms.get(term)
+            : this.terms.get(term.text);
+    }
+
+    public has(term: Term): boolean {
+        return this.terms.has(term.text);
+    }
+
+    public clear(): void {
+        this.terms.clear();
+    }
+}
+
+export class PropertyTermSet {
+    constructor(private terms: Map<string, Term> = new Map()) {}
+
+    public add(propertyName: string, propertyValue: Term) {
+        const key = this.makeKey(propertyName, propertyValue);
+        const existingTerm = this.terms.get(key);
+        if (!existingTerm) {
+            this.terms.set(key, propertyValue);
+        }
+    }
+
+    public has(propertyName: string, propertyValue: Term): boolean {
+        const key = this.makeKey(propertyName, propertyValue);
+        return this.terms.has(key);
+    }
+
+    public clear(): void {
+        this.terms.clear();
+    }
+
+    private makeKey(propertyName: string, propertyValue: Term): string {
+        return propertyName + ":" + propertyValue.text;
     }
 }
 

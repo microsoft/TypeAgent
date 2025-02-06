@@ -117,7 +117,7 @@ export class KnowProPrinter extends ChatPrinter {
 
             this.writeInColor(
                 chalk.green,
-                `#${i + 1}: ${semanticRef.knowledgeType} [${match.score}]`,
+                `#${i + 1}: <${match.semanticRefIndex}> ${semanticRef.knowledgeType} [${match.score}]`,
             );
             this.writeSemanticRef(semanticRef);
             this.writeLine();
