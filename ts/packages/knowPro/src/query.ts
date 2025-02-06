@@ -279,6 +279,10 @@ export class QueryEvalContext {
     ): void {
         this.matchedTermText.add(propertyName + propertyValue);
     }
+
+    public clearMatchedTerms() {
+        this.matchedTermText.clear();
+    }
 }
 
 export class QueryOpExpr<T = void> implements IQueryOpExpr<T> {
@@ -309,11 +313,14 @@ export class GetSearchMatchesExpr extends QueryOpExpr<SemanticRefAccumulator> {
     }
 
     public override eval(context: QueryEvalContext): SemanticRefAccumulator {
-        const matches = new SemanticRefAccumulator();
+        const allMatches = new SemanticRefAccumulator();
         for (const matchExpr of this.searchTermExpressions) {
-            matchExpr.accumulateMatches(context, matches);
+            const matches = matchExpr.eval(context);
+            if (matches) {
+                allMatches.addUnion(matches);
+            }
         }
-        return matches;
+        return allMatches;
     }
 }
 
@@ -328,6 +335,7 @@ export class MatchTermExpr extends QueryOpExpr<
         context: QueryEvalContext,
     ): SemanticRefAccumulator | undefined {
         const matches = new SemanticRefAccumulator();
+        context.clearMatchedTerms();
         this.accumulateMatches(context, matches);
         return matches.size > 0 ? matches : undefined;
     }

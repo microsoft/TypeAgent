@@ -99,19 +99,19 @@ export class MatchAccumulator<T = any> {
 
     public addUnion(other: MatchAccumulator<T>): void {
         for (const otherMatch of other.matches.values()) {
-            const existingMatch = this.matches.get(otherMatch.value);
+            let existingMatch = this.matches.get(otherMatch.value);
             if (existingMatch) {
                 if (otherMatch.exactMatch) {
                     existingMatch.hitCount += otherMatch.hitCount;
-                } else if (existingMatch.hitCount < otherMatch.hitCount) {
-                    existingMatch.hitCount = otherMatch.hitCount;
+                    existingMatch.exactMatch = otherMatch.exactMatch;
                 }
                 existingMatch.score += otherMatch.score;
-                if (existingMatch.hitCount > this.maxHitCount) {
-                    this.maxHitCount = existingMatch.hitCount;
-                }
             } else {
                 this.setMatch(otherMatch);
+                existingMatch = otherMatch;
+            }
+            if (existingMatch.hitCount > this.maxHitCount) {
+                this.maxHitCount = existingMatch.hitCount;
             }
         }
     }
