@@ -79,7 +79,7 @@ async function pickInitialSchema(
                 const found = result[0].item.actionSchemaFile.schemaName;
                 // If it is close to dispatcher actions (unknown and clarify), just use the last used action schema
                 if (found !== DispatcherName) {
-                    schemaName = result[0].item.actionSchemaFile.schemaName;
+                    schemaName = found;
                 }
             }
         }
@@ -295,13 +295,18 @@ async function findAssistantForRequest(
         context,
     );
     const systemContext = context.sessionContext.agentContext;
+    const schemaNames = systemContext.agents
+        .getActiveSchemas()
+        .filter(
+            (enabledTranslatorName) => translatorName !== enabledTranslatorName,
+        );
+
+    if (schemaNames.length === 0) {
+        return undefined;
+    }
+
     const selectTranslator = loadAssistantSelectionJsonTranslator(
-        systemContext.agents
-            .getActiveSchemas()
-            .filter(
-                (enabledTranslatorName) =>
-                    translatorName !== enabledTranslatorName,
-            ),
+        schemaNames,
         systemContext.agents,
     );
 
