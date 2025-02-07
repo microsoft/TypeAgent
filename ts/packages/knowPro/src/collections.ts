@@ -66,11 +66,13 @@ export class MatchAccumulator<T = any> {
     public add(value: T, score: number, isExactMatch: boolean) {
         const existingMatch = this.getMatch(value);
         if (existingMatch) {
-            //this.updateExisting(existingMatch, score, isExactMatch);
+            this.updateExisting(existingMatch, score, isExactMatch);
+            /*
             if (isExactMatch) {
                 existingMatch.exactHitCount++;
-                existingMatch.score += score;
             }
+            existingMatch.score += score;
+            */
         } else {
             this.setMatch({
                 value,
