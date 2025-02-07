@@ -6,7 +6,7 @@ Work in progress.
 
 ## Installation
 
-- Follow the standard exteneral [Agent installation steps](../../../packages/agentSdk/ExternalAgents_README.md#install_agent)
+- Follow the standard external [Agent installation steps](../../../../docs/tutorial/agent.md#step-3-install-echo-agent-in-typeagent-cli-or-shell)
 
 ## Trademarks
 
