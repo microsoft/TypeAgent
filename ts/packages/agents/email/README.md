@@ -2,7 +2,7 @@
 
 Email agent is **sample code** that explores how to build a typed email agent with **TypeChat**. This package contains the schema defintion and implementation for building a Email Agent that interacts the Outlook mail client using Microsoft Graph API. This [article](https://learn.microsoft.com/en-us/graph/tutorials/typescript-app-only?tabs=aad) explores how to work with typescript and Microsoft Graph APIs. Please visit the [link](https://learn.microsoft.com/en-us/graph/api/resources/mail-api-overview?view=graph-rest-1.0) to learn about more about email specific Microsoft Graph APIs.
 
-This agent depends on the utility library [graph-utils](../graphUtils/src/mailClient.ts) to implement different email actions.
+This agent depends on the utility library [graph-utils](../agentUtils/graphUtils/src/mailClient.ts) to implement different email actions.
 
 The email agent uses the Microsoft Graph API to interact with the user's email. The agent uses `@microsoft/microsoft-graph-client` library to interact with the Microsoft Graph API. The agent enables operations to compose, reply, and get email messages.
 
