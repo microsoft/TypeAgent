@@ -9,8 +9,10 @@ import {
     SimilarityType,
     generateTextEmbeddingsWithRetry,
     collections,
-    dotProduct,
     EmbeddedValue,
+    ScoredItem,
+    indexesOfAllNearest,
+    dotProduct,
 } from "typeagent";
 import {
     Term,
@@ -114,7 +116,7 @@ export class TermToRelatedTermsIndex implements ITermToRelatedTermsIndex {
         termText: string,
     ): Promise<Term[] | undefined> {
         if (this.termEmbeddingsIndex) {
-            return await this.termEmbeddingsIndex.lookupTermsFuzzy(termText);
+            return await this.termEmbeddingsIndex.lookup(termText);
         }
         return undefined;
     }
@@ -133,7 +135,7 @@ export class TermToRelatedTermsIndex implements ITermToRelatedTermsIndex {
                 this.termAliases.deserialize(data.relatedTermsData);
             }
             if (data.textEmbeddingData) {
-                this.termEmbeddingsIndex = new TermEmbeddingIndex(
+                this.termEmbeddingsIndex = new TextEmbeddingIndex(
                     this.settings.embeddingIndexSettings,
                 );
                 this.termEmbeddingsIndex.deserialize(data.textEmbeddingData);
@@ -167,7 +169,7 @@ export async function buildTermEmbeddingIndex(
         batch: collections.Slice<string>,
     ) => boolean,
 ): Promise<ITermEmbeddingIndex> {
-    const termIndex = new TermEmbeddingIndex(settings);
+    const termIndex = new TextEmbeddingIndex(settings);
     for (const slice of collections.slices(terms, batchSize)) {
         if (progressCallback && !progressCallback(terms, slice)) {
             break;
@@ -177,16 +179,16 @@ export async function buildTermEmbeddingIndex(
     return termIndex;
 }
 
-export class TermEmbeddingIndex implements ITermEmbeddingIndex {
-    private termText: string[];
-    private termEmbeddings: NormalizedEmbedding[];
+export class TextEmbeddingIndex implements ITermEmbeddingIndex {
+    private textList: string[];
+    private textEmbeddings: NormalizedEmbedding[];
 
     constructor(
         public settings: TextEmbeddingIndexSettings,
         data?: ITextEmbeddingIndexData,
     ) {
-        this.termText = [];
-        this.termEmbeddings = [];
+        this.textList = [];
+        this.textEmbeddings = [];
         if (data !== undefined) {
             this.deserialize(data);
         }
@@ -210,38 +212,41 @@ export class TermEmbeddingIndex implements ITermEmbeddingIndex {
         }
     }
 
-    public async lookupTermsFuzzy(
+    public async lookup(
         term: string,
         maxMatches?: number,
         minScore?: number,
     ): Promise<Term[] | undefined> {
-        const termEmbedding = await generateEmbedding(
-            this.settings.embeddingModel,
+        let matches = await this.indexesOfNearestTerms(
             term,
+            maxMatches,
+            minScore,
         );
-        maxMatches ??= this.settings.maxMatches;
-        minScore ??= this.settings.minScore;
-        if (maxMatches && maxMatches > 0) {
-            const matches = indexesOfNearest(
-                this.termEmbeddings,
-                termEmbedding,
-                maxMatches,
-                SimilarityType.Dot,
-                minScore,
-            );
-            return matches.map((m) => {
-                return { text: this.termText[m.item], score: m.score };
-            });
-        } else {
-            return this.indexesOfNearestTerms(termEmbedding, minScore);
-        }
+        return matches.map((m) => {
+            return { text: this.textList[m.item], score: m.score };
+        });
+    }
+
+    public async lookupEmbeddings(
+        text: string,
+        maxMatches?: number,
+        minScore?: number,
+    ): Promise<[string, NormalizedEmbedding][] | undefined> {
+        let matches = await this.indexesOfNearestTerms(
+            text,
+            maxMatches,
+            minScore,
+        );
+        return matches.map((m) => {
+            return [this.textList[m.item], this.textEmbeddings[m.item]];
+        });
     }
 
     public remove(term: string): boolean {
-        const indexOf = this.termText.indexOf(term);
+        const indexOf = this.textList.indexOf(term);
         if (indexOf >= 0) {
-            this.termText.splice(indexOf, 1);
-            this.termEmbeddings.splice(indexOf, 1);
+            this.textList.splice(indexOf, 1);
+            this.textEmbeddings.splice(indexOf, 1);
             return true;
         }
         return false;
@@ -260,10 +265,10 @@ export class TermEmbeddingIndex implements ITermEmbeddingIndex {
 
     public serialize(): ITextEmbeddingIndexData {
         const embeddingData: ITextEmbeddingDataItem[] = [];
-        for (let i = 0; i < this.termText.length; ++i) {
+        for (let i = 0; i < this.textList.length; ++i) {
             embeddingData.push({
-                text: this.termText[i],
-                embedding: Array.from<number>(this.termEmbeddings[i]),
+                text: this.textList[i],
+                embedding: Array.from<number>(this.textEmbeddings[i]),
             });
         }
         return {
@@ -272,23 +277,38 @@ export class TermEmbeddingIndex implements ITermEmbeddingIndex {
     }
 
     private addTermEmbedding(term: string, embedding: NormalizedEmbedding) {
-        this.termText.push(term);
-        this.termEmbeddings.push(embedding);
+        this.textList.push(term);
+        this.textEmbeddings.push(embedding);
     }
 
-    private indexesOfNearestTerms(
-        other: NormalizedEmbedding,
+    private async indexesOfNearestTerms(
+        term: string,
+        maxMatches?: number,
         minScore?: number,
-    ): Term[] {
-        minScore ??= 0;
-        const matches: Term[] = [];
-        for (let i = 0; i < this.termEmbeddings.length; ++i) {
-            const score: number = dotProduct(this.termEmbeddings[i], other);
-            if (score >= minScore) {
-                matches.push({ text: this.termText[i], score });
-            }
+    ): Promise<ScoredItem[]> {
+        const termEmbedding = await generateEmbedding(
+            this.settings.embeddingModel,
+            term,
+        );
+        maxMatches ??= this.settings.maxMatches;
+        minScore ??= this.settings.minScore;
+        let matches: ScoredItem[];
+        if (maxMatches && maxMatches > 0) {
+            matches = indexesOfNearest(
+                this.textEmbeddings,
+                termEmbedding,
+                maxMatches,
+                SimilarityType.Dot,
+                minScore,
+            );
+        } else {
+            matches = indexesOfAllNearest(
+                this.textEmbeddings,
+                termEmbedding,
+                SimilarityType.Dot,
+                minScore,
+            );
         }
-        matches.sort((x, y) => y.score! - x.score!);
         return matches;
     }
 }
