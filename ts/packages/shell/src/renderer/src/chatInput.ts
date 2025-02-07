@@ -80,17 +80,23 @@ export class ExpandableTextarea {
             this.textEntry.textContent = content;
         }
 
+        this.moveCursorToEnd();
+    }
+
+    public moveCursorToEnd() {
         // Set the cursor to the end of the text
         const r = document.createRange();
         if (this.textEntry.childNodes.length > 0) {
-            r.setEnd(this.textEntry.childNodes[0], content?.length ?? 0);
+            r.selectNode(this.textEntry);
+            r.setStartBefore(this.textEntry.childNodes[0]);
+            r.setEndAfter(this.textEntry.childNodes[this.textEntry.childNodes.length - 1]);
             r.collapse(false);
             const s = document.getSelection();
             if (s) {
                 s.removeAllRanges();
                 s.addRange(r);
             }
-        }
+        }        
     }
 
     replaceTextAtCursor(

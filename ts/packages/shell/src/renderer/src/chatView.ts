@@ -153,6 +153,8 @@ export class ChatView {
                         this.chatInput.textarea.getTextEntry().innerHTML =
                             content;
 
+                        this.chatInput.textarea.moveCursorToEnd();
+
                         return false;
                     }
                 }
