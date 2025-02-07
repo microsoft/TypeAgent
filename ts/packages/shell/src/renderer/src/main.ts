@@ -325,6 +325,9 @@ function addEvents(
             }
         }
     });
+    api.onFileSelected((_, fileName: string, fileContent: string) => {
+        chatView.chatInput.loadImageContent(fileName, fileContent);
+    });
 }
 
 function showNotifications(

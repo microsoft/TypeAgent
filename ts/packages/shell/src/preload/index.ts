@@ -46,6 +46,9 @@ const api: ClientAPI = {
     onChatHistory(callback) {
         ipcRenderer.on("chat-history", callback);
     },
+    onFileSelected(callback) {
+        ipcRenderer.on("file-selected", callback);
+    },
     registerClientIO: (clientIO: ClientIO) => {
         if (clientIORegistered) {
             throw new Error("ClientIO already registered");
