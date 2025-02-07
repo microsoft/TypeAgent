@@ -160,32 +160,32 @@ export function createSessionContext<T = unknown>(
         : undefined;
     const addDynamicAgent = allowDynamicAgent
         ? (agentName: string, manifest: AppAgentManifest, appAgent: AppAgent) =>
-              // acquire the lock to prevent change the state while we are processing a command or removing dynamic agent.
-              // WARNING: deadlock if this is call because we are processing a request
-              context.commandLock(async () => {
-                  await context.agents.addDynamicAgent(
-                      agentName,
-                      manifest,
-                      appAgent,
-                  );
-                  // Update the enable state to reflect the new agent
-                  context.agents.setState(context, context.session.getConfig());
-              })
+            // acquire the lock to prevent change the state while we are processing a command or removing dynamic agent.
+            // WARNING: deadlock if this is call because we are processing a request
+            context.commandLock(async () => {
+                await context.agents.addDynamicAgent(
+                    agentName,
+                    manifest,
+                    appAgent,
+                );
+                // Update the enable state to reflect the new agent
+                context.agents.setState(context, context.session.getConfig());
+            })
         : () => {
-              throw new Error("Permission denied: cannot add dynamic agent");
-          };
+            throw new Error("Permission denied: cannot add dynamic agent");
+        };
 
     // TODO: only allow remove agent added by this agent.
     const removeDynamicAgent = allowDynamicAgent
         ? (agentName: string) =>
-              // acquire the lock to prevent change the state while we are processing a command or adding dynamic agent.
-              // WARNING: deadlock if this is call because we are processing a request
-              context.commandLock(async () =>
-                  context.agents.removeAgent(agentName),
-              )
+            // acquire the lock to prevent change the state while we are processing a command or adding dynamic agent.
+            // WARNING: deadlock if this is call because we are processing a request
+            context.commandLock(async () =>
+                context.agents.removeAgent(agentName),
+            )
         : () => {
-              throw new Error("Permission denied: cannot remove dynamic agent");
-          };
+            throw new Error("Permission denied: cannot remove dynamic agent");
+        };
     const sessionContext: SessionContext<T> = {
         get agentContext() {
             return agentContext;
@@ -481,6 +481,7 @@ async function canExecute(
 }
 
 function getParameterEntities(
+    appAgentName: string,
     value: any,
     resultEntityMap: Map<string, PromptEntity>,
     promptEntityMap: Map<string, PromptEntity> | undefined,
@@ -491,10 +492,11 @@ function getParameterEntities(
         case "string":
             // LLM like to correct/change casing.  Normalize for look up.
             const normalizedValue = normalizeParamString(value);
-            return (
+            const entity = (
                 resultEntityMap.get(normalizedValue) ??
                 promptEntityMap?.get(normalizedValue)
             );
+            return entity?.sourceAppAgentName === appAgentName ? entity : undefined;
         case "function":
             throw new Error("Function is not supported as an action value");
         case "object":
@@ -505,6 +507,7 @@ function getParameterEntities(
             const entities: any = Array.isArray(value) ? [] : {};
             for (const [key, v] of Object.entries(value)) {
                 const entity = getParameterEntities(
+                    appAgentName,
                     v,
                     resultEntityMap,
                     promptEntityMap,
@@ -529,12 +532,12 @@ function toPendingActions(
 ): PendingAction[] {
     const promptEntityMap = entities
         ? new Map<string, PromptEntity>(
-              entities.map(
-                  (entity) =>
-                      // LLM like to correct/change casing.  Normalize entity name for look up.
-                      [normalizeParamString(entity.name), entity] as const,
-              ),
-          )
+            entities.map(
+                (entity) =>
+                    // LLM like to correct/change casing.  Normalize entity name for look up.
+                    [normalizeParamString(entity.name), entity] as const,
+            ),
+        )
         : undefined;
     return Array.from(actions).map((executableAction) => ({
         executableAction,
@@ -586,7 +589,11 @@ export async function executeActions(
             );
             continue;
         }
+        const appAgentName = getAppAgentName(
+            action.translatorName,
+        );
         action.entities = getParameterEntities(
+            appAgentName,
             action.parameters,
             resultEntityMap,
             promptEntityMap,
@@ -602,9 +609,7 @@ export async function executeActions(
                     normalizeParamString(executableAction.resultEntityId),
                     {
                         ...result.resultEntity,
-                        sourceAppAgentName: getAppAgentName(
-                            action.translatorName,
-                        ),
+                        sourceAppAgentName: appAgentName,
                     },
                 );
             }
