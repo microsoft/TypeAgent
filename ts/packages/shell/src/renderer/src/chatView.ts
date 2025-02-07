@@ -5,10 +5,10 @@ import { IdGenerator, getDispatcher } from "./main";
 import { ChatInput, ExpandableTextarea } from "./chatInput";
 import { iconCheckMarkCircle, iconX } from "./icon";
 import {
-    AppAction,
     DisplayAppendMode,
     DisplayContent,
     DynamicDisplay,
+    TypeAgentAction,
 } from "@typeagent/agent-sdk";
 import { TTS } from "./tts/tts";
 import {
@@ -152,6 +152,8 @@ export class ChatView {
                             this.commandBackStack[this.commandBackStackIndex];
                         this.chatInput.textarea.getTextEntry().innerHTML =
                             content;
+
+                        this.chatInput.textarea.moveCursorToEnd();
 
                         return false;
                     }
@@ -454,7 +456,7 @@ export class ChatView {
         source: string,
         requestId: RequestId,
         actionIndex?: number,
-        action?: AppAction | string[],
+        action?: TypeAgentAction | string[],
     ) {
         this.getMessageGroup(requestId)?.setDisplayInfo(
             source,

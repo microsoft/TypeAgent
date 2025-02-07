@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ActionContext } from "@typeagent/agent-sdk";
+import { ActionContext, AppAgentManifest } from "@typeagent/agent-sdk";
 import { BrowserActionContext } from "../actionHandler.mjs";
 import { BrowserConnector } from "../browserConnector.mjs";
 import { createDiscoveryPageTranslator } from "./translator.mjs";
@@ -15,9 +15,12 @@ import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "url";
 import { UserActionsList } from "./schema/userActionsPool.mjs";
+import { PageDescription } from "./schema/pageSummary.mjs";
+import { createTempAgentForSchema } from "./tempAgentActionHandler.mjs";
+import { SchemaDiscoveryActions } from "./schema/discoveryActions.mjs";
 
 export async function handleSchemaDiscoveryAction(
-  action: any,
+  action: SchemaDiscoveryActions,
   context: ActionContext<BrowserActionContext>,
 ) {
   let message = "OK";
@@ -57,9 +60,13 @@ export async function handleSchemaDiscoveryAction(
       screenshot,
     );
 
+    let schemaDescription =
+      "A schema that enables interactions with the current page";
     if (summaryResponse.success) {
       pageSummary =
         "Page summary: \n" + JSON.stringify(summaryResponse.data, null, 2);
+      schemaDescription += (summaryResponse.data as PageDescription)
+        .description;
     }
 
     const timerName = `Analyzing page actions`;
@@ -75,6 +82,7 @@ export async function handleSchemaDiscoveryAction(
     if (!response.success) {
       console.error("Attempt to get page actions failed");
       console.error(response.message);
+      message = "Action could not be completed";
       return;
     }
 
@@ -90,6 +98,27 @@ export async function handleSchemaDiscoveryAction(
 
     const schema = await getDynamicSchema(actionNames);
     message += `\n =========== \n Discovered actions schema: \n ${schema} `;
+
+    if (action.parameters.registerAgent) {
+      const manifest: AppAgentManifest = {
+        emojiChar: "🚧",
+        description: schemaDescription,
+        schema: {
+          description: schemaDescription,
+          schemaType: "DynamicUserPageActions",
+          schemaFile: { content: schema, type: "ts" },
+        },
+      };
+
+      // register agent after request is processed to avoid a deadlock
+      setTimeout(async () => {
+        await context.sessionContext.addDynamicAgent(
+          "tempPageSchema",
+          manifest,
+          createTempAgentForSchema(browser, agent, context),
+        );
+      }, 500);
+    }
 
     return response.data;
   }
@@ -127,9 +156,13 @@ export async function handleSchemaDiscoveryAction(
       typeDefinitions.map((definition) => sc.ref(definition)),
     );
     const entry = sc.type("DynamicUserPageActions", union);
+    entry.exported = true;
     const actionSchemas = new Map<string, ActionSchemaTypeDefinition>();
     const order = new Map<string, number>();
-    const schema = await generateActionSchema({ entry, actionSchemas, order });
+    const schema = await generateActionSchema(
+      { entry, actionSchemas, order },
+      { exact: true },
+    );
 
     return schema;
   }
@@ -143,6 +176,7 @@ export async function handleSchemaDiscoveryAction(
     if (!response.success) {
       console.error("Attempt to get page summary failed");
       console.error(response.message);
+      message = "Action could not be completed";
       return;
     }
 
@@ -160,6 +194,7 @@ export async function handleSchemaDiscoveryAction(
     if (!response.success) {
       console.error("Attempt to get page layout failed");
       console.error(response.message);
+      message = "Action could not be completed";
       return;
     }
 
@@ -183,6 +218,7 @@ export async function handleSchemaDiscoveryAction(
     if (!response.success) {
       console.error("Attempt to get page layout failed");
       console.error(response.message);
+      message = "Action could not be completed";
       return;
     }
 

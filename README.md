@@ -82,6 +82,8 @@ Microsoft TypeAgent Repo is a mono-repo, with components organized with the foll
 - [`python`](./python) Python code ([Readme](./python/README.md))
 - [`dotnet`](./dotnet) Dotnet (C#) code ([Readme](./dotnet/README.md))
 
+For developer who want to experiment with TypeAgent and see how typed action schema drives actions, the [Agent Shell](./ts/packages/shell) example allow additional agent to be installed/registered to extent functionality. The `Echo` agent [tutorial](./docs/tutorial/agent.md) is a starting point to create a plugin agent, and [Agent SDK](./ts/packages/agentSdk/) provides the details of the interface between [Dispatcher](./ts/packages/dispatcher) and the agent.
+
 ## Contributing
 
 This project welcomes contributions and suggestions. Most contributions require you to

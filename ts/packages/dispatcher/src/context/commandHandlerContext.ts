@@ -50,6 +50,7 @@ import {
     SetStateResult,
 } from "./appAgentManager.js";
 import {
+    AppAgentInstaller,
     AppAgentProvider,
     ConstructionProvider,
 } from "../agentProvider/agentProvider.js";
@@ -84,9 +85,11 @@ export interface ClientSettingsProvider {
 // Command Handler Context definition.
 export type CommandHandlerContext = {
     agents: AppAgentManager;
+    agentInstaller: AppAgentInstaller | undefined;
     session: Session;
 
     instanceDir?: string | undefined;
+    cacheDirPath?: string | undefined;
     conversationManager?: Conversation.ConversationManager | undefined;
     // Per activation configs
     developerMode?: boolean;
@@ -211,6 +214,7 @@ export type InitializeCommandHandlerContextOptions = SessionOptions & {
     metrics?: boolean; // default to false
     dblogging?: boolean; // default to false
     constructionProvider?: ConstructionProvider;
+    agentInstaller?: AppAgentInstaller;
 };
 
 async function getSession(instanceDir?: string) {
@@ -266,11 +270,8 @@ function getLoggerSink(isDbEnabled: () => boolean, clientIO: ClientIO) {
 async function addAppAgentProviders(
     context: CommandHandlerContext,
     appAgentProviders?: AppAgentProvider[],
-    cacheDirPath?: string,
 ) {
-    const embeddingCachePath = cacheDirPath
-        ? path.join(cacheDirPath, "embeddingCache.json")
-        : undefined;
+    const embeddingCachePath = getEmbeddingCachePath(context);
     let embeddingCache: EmbeddingCache | undefined;
 
     if (embeddingCachePath) {
@@ -293,17 +294,44 @@ async function addAppAgentProviders(
         }
     }
     if (embeddingCachePath) {
-        try {
-            const embeddings = context.agents.getActionEmbeddings();
-            if (embeddings) {
-                await writeEmbeddingCache(embeddingCachePath, embeddings);
-                debug(
-                    `Action Schema Embedding cache saved: ${embeddingCachePath}`,
-                );
-            }
-        } catch {
-            // Ignore error
+        return saveActionEmbeddings(context, embeddingCachePath);
+    }
+}
+
+function getEmbeddingCachePath(context: CommandHandlerContext) {
+    const cacheDirPath = context.cacheDirPath;
+    return cacheDirPath
+        ? path.join(cacheDirPath, "embeddingCache.json")
+        : undefined;
+}
+
+async function saveActionEmbeddings(
+    context: CommandHandlerContext,
+    embeddingCachePath: string,
+) {
+    try {
+        const embeddings = context.agents.getActionEmbeddings();
+        if (embeddings) {
+            await writeEmbeddingCache(embeddingCachePath, embeddings);
+            debug(`Action Schema Embedding cache saved: ${embeddingCachePath}`);
         }
+    } catch {
+        // Ignore error
+    }
+}
+
+export async function installAppProvider(
+    context: CommandHandlerContext,
+    provider: AppAgentProvider,
+) {
+    // Don't use embedding cache for a new agent.
+    await context.agents.addProvider(provider);
+
+    await setAppAgentStates(context);
+
+    const embeddingCachePath = getEmbeddingCachePath(context);
+    if (embeddingCachePath !== undefined) {
+        await saveActionEmbeddings(context, embeddingCachePath);
     }
 }
 
@@ -364,8 +392,10 @@ export async function initializeCommandHandlerContext(
         const constructionProvider = options?.constructionProvider;
         const context: CommandHandlerContext = {
             agents,
+            agentInstaller: options?.agentInstaller,
             session,
             instanceDir,
+            cacheDirPath,
             conversationManager,
             explanationAsynchronousMode,
             dblogging: options?.dblogging ?? false,
@@ -391,11 +421,7 @@ export async function initializeCommandHandlerContext(
             constructionProvider,
         };
 
-        await addAppAgentProviders(
-            context,
-            options?.appAgentProviders,
-            cacheDirPath,
-        );
+        await addAppAgentProviders(context, options?.appAgentProviders);
 
         await setAppAgentStates(context, options);
         debug("Context initialized");

@@ -7,6 +7,7 @@ import {
     AppAgent,
     SessionContext,
     ActionResult,
+    TypeAgentAction,
 } from "@typeagent/agent-sdk";
 import { createActionResult } from "@typeagent/agent-sdk/helpers/action";
 import {
@@ -32,10 +33,10 @@ type PhotoActionContext = {
 };
 
 async function executeAction(
-    action: AppAction,
+    action: TypeAgentAction<AndroidMobileAction>,
     context: ActionContext<PhotoActionContext>,
 ) {
-    let result = await handlePhotoAction(action as SetAlarmAction, context);
+    let result = await handlePhotoAction(action, context);
     return result;
 }
 

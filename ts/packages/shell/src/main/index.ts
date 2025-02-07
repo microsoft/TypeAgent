@@ -21,6 +21,7 @@ import registerDebug from "debug";
 import { createDispatcher, Dispatcher } from "agent-dispatcher";
 import {
     getDefaultAppAgentProviders,
+    getDefaultAppAgentInstaller,
     getDefaultConstructionProvider,
 } from "default-agent-provider";
 import { ShellSettings } from "./shellSettings.js";
@@ -528,12 +529,15 @@ async function initializeDispatcher(
         },
     };
 
+    const instanceDir = getInstanceDir();
+
     // Set up dispatcher
     const newDispatcher = await createDispatcher("shell", {
         appAgentProviders: [
             shellAgentProvider,
-            ...getDefaultAppAgentProviders(getInstanceDir()),
+            ...getDefaultAppAgentProviders(instanceDir),
         ],
+        agentInstaller: getDefaultAppAgentInstaller(instanceDir),
         explanationAsynchronousMode: true,
         persistSession: true,
         enableServiceHost: true,
@@ -693,12 +697,28 @@ async function initialize() {
         ShellSettings.getinstance().save();
     });
 
+    ipcMain.on("open-image-file", async () => {
+        // TODO: imeplement
+        const result = await dialog.showOpenDialog(mainWindow);
+        if (result && !result.canceled) {
+            let paths = result.filePaths;
+            if (paths && paths.length > 0) {
+                const content = readFileSync(paths[0], "utf-8").toString();
+                console.log(content);
+                return content;
+            }
+        }
+
+        return null;
+    });
+
     ipcMain.on(
         "send-to-browser-ipc",
         async (_event, data: WebSocketMessageV2) => {
             await BrowserAgentIpc.getinstance().send(data);
         },
     );
+
     globalShortcut.register("Alt+Right", () => {
         chatView.webContents.send("send-demo-event", "Alt+Right");
     });

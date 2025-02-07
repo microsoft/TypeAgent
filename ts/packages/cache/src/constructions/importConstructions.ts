@@ -3,7 +3,11 @@
 
 import { SchemaInfoProvider } from "../explanation/schemaInfoProvider.js";
 import { Construction } from "./constructions.js";
-import { Actions, RequestAction } from "../explanation/requestAction.js";
+import {
+    fromJsonActions,
+    getTranslationNamesForActions,
+    RequestAction,
+} from "../explanation/requestAction.js";
 import {
     ConstructionFactory,
     GenericExplainer,
@@ -62,12 +66,12 @@ function createConstructions(
     for (const entry of data.entries) {
         const requestAction = new RequestAction(
             entry.request,
-            Actions.fromJSON(entry.action),
+            fromJsonActions(entry.action),
         );
 
         try {
             const actions = requestAction.actions;
-            for (const action of actions) {
+            for (const { action } of actions) {
                 if (!dataSchemaNames.has(action.translatorName)) {
                     throw new Error(
                         `Schema name '${action.translatorName}' not found in data header`,
@@ -76,7 +80,7 @@ function createConstructions(
             }
             const explanation = entry.explanation;
             const namespaceKeys = getSchemaNamespaceKeys(
-                actions.translatorNames,
+                getTranslationNamesForActions(actions),
                 schemaInfoProvider,
             );
             const construction = createConstruction(

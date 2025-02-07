@@ -1,6 +1,6 @@
 # Local TTS using SpeechT5 for TypeAgent shell
 
-This directory contains an example of local Text to speech (TTS) server that works with the [TypeAgent shell](../../ts/packages/shell/). TTS is implemented using [SpeechT5](https://github.com/microsoft/SpeechT5) framework and the
+This directory contains an example of local Text to speech (TTS) server that works with the [TypeAgent shell](../../../ts/packages/shell/). TTS is implemented using [SpeechT5](https://github.com/microsoft/SpeechT5) framework and the
 
 ## Setup
 
@@ -22,4 +22,4 @@ Option 2: Manual steps
 ### Usage
 
 - Start the service `python speechT5.py`
-- In [TypeAgent shell](../../ts/packages/shell/), change the TTS provider to local and choose a voice.
+- In [TypeAgent shell](../../../ts/packages/shell), change the TTS provider to local and choose a voice.

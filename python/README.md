@@ -6,4 +6,4 @@
 
 This directory contain python code that support our **TypeAgent** implementation.
 
-- [Local Whisper Service](./whisperService/) - an optional locally hosted whisper service for voice input.
+- [Local Whisper Service](./stt/whisperService/) - an optional locally hosted whisper service for voice input.

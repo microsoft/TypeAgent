@@ -2,9 +2,9 @@
 // Licensed under the MIT License.
 
 import {
-    AppAction,
     DisplayAppendMode,
     DisplayContent,
+    TypeAgentAction,
 } from "@typeagent/agent-sdk";
 import { TTS, TTSMetrics } from "./tts/tts";
 import {
@@ -118,9 +118,9 @@ export class MessageContainer {
     private completed = false;
     private pendingSpeakText: string = "";
     private defaultSource?: string;
-    private action?: AppAction | string[];
+    private action?: TypeAgentAction | string[];
 
-    public setDisplayInfo(source: string, action?: AppAction | string[]) {
+    public setDisplayInfo(source: string, action?: TypeAgentAction | string[]) {
         this.defaultSource = source;
         this.action = action;
         this.updateSource();

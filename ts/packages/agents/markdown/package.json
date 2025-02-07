@@ -29,6 +29,7 @@
     "aiclient": "workspace:*",
     "common-utils": "workspace:*",
     "express": "^4.21.2",
+    "express-rate-limit": "^7.5.0",
     "katex": "^0.16.21",
     "markdown-it": "^14.1.0",
     "markdown-it-texmath": "^1.0.0",

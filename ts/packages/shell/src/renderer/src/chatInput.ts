@@ -80,10 +80,18 @@ export class ExpandableTextarea {
             this.textEntry.textContent = content;
         }
 
+        this.moveCursorToEnd();
+    }
+
+    public moveCursorToEnd() {
         // Set the cursor to the end of the text
         const r = document.createRange();
         if (this.textEntry.childNodes.length > 0) {
-            r.setEnd(this.textEntry.childNodes[0], content?.length ?? 0);
+            r.selectNode(this.textEntry);
+            r.setStartBefore(this.textEntry.childNodes[0]);
+            r.setEndAfter(
+                this.textEntry.childNodes[this.textEntry.childNodes.length - 1],
+            );
             r.collapse(false);
             const s = document.getSelection();
             if (s) {
@@ -151,14 +159,14 @@ export class ExpandableTextarea {
 
 export class ChatInput {
     private inputContainer: HTMLDivElement;
-    textarea: ExpandableTextarea;
+    public textarea: ExpandableTextarea;
     private micButton: HTMLButtonElement;
-    attachButton: HTMLLabelElement;
-    camButton: HTMLButtonElement;
+    public attachButton: HTMLButtonElement;
+    public camButton: HTMLButtonElement;
     private dragTemp: string | undefined = undefined;
-    private fileInput: HTMLInputElement;
+    //private fileInput: HTMLInputElement;
     public dragEnabled: boolean = true;
-    sendButton: HTMLButtonElement;
+    public sendButton: HTMLButtonElement;
     private separator: HTMLDivElement;
     private separatorContainer: HTMLDivElement;
     constructor(
@@ -255,17 +263,17 @@ export class ChatInput {
             e.preventDefault();
         };
 
-        this.fileInput = document.createElement("input");
-        this.fileInput.type = "file";
-        this.fileInput.classList.add("chat-message-hidden");
-        this.fileInput.id = "image_upload";
-        this.inputContainer.append(this.fileInput);
-        this.fileInput.accept = "image/*,.jpg,.png,.gif";
-        this.fileInput.onchange = () => {
-            if (this.fileInput.files && this.fileInput.files?.length > 0) {
-                this.loadImageFile(this.fileInput.files[0]);
-            }
-        };
+        // this.fileInput = document.createElement("input");
+        // this.fileInput.type = "file";
+        // this.fileInput.classList.add("chat-message-hidden");
+        // this.fileInput.id = "image_upload";
+        // this.inputContainer.append(this.fileInput);
+        // this.fileInput.accept = "image/*,.jpg,.png,.gif";
+        // this.fileInput.onchange = () => {
+        //     if (this.fileInput.files && this.fileInput.files?.length > 0) {
+        //         this.loadImageFile(this.fileInput.files[0]);
+        //     }
+        // };
 
         this.micButton = document.createElement("button");
         this.micButton.appendChild(iconMicrophone());
@@ -304,8 +312,8 @@ export class ChatInput {
         this.camButton.appendChild(iconCamera());
         this.camButton.className = "chat-input-button";
 
-        this.attachButton = document.createElement("label");
-        this.attachButton.htmlFor = this.fileInput.id;
+        this.attachButton = document.createElement("button");
+        //this.attachButton.htmlFor = this.fileInput.id;
         this.attachButton.appendChild(iconAttach());
         this.attachButton.className = "chat-input-button";
 

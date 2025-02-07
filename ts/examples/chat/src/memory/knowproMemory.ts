@@ -219,6 +219,7 @@ export async function createKnowproCommands(
                 maxToDisplay: argNum("Maximum matches to display", 25),
                 startMinute: argNum("Starting at minute."),
                 endMinute: argNum("Ending minute."),
+                exact: argBool("Only display exact matches", false),
             },
         };
         if (kType === undefined) {
@@ -251,8 +252,10 @@ export async function createKnowproCommands(
             const matches = await kp.searchConversation(
                 conversation,
                 terms,
-                keyValuesFromNamedArgs(namedArgs, commandDef),
+                propertyTermsFromNamedArgs(namedArgs, commandDef),
                 filterFromNamedArgs(namedArgs),
+                undefined,
+                namedArgs.exact ? 1 : undefined,
             );
             if (matches === undefined || matches.size === 0) {
                 context.printer.writeLine("No matches");
@@ -268,6 +271,23 @@ export async function createKnowproCommands(
             ``;
             context.printer.writeError("Conversation is not indexed");
         }
+    }
+
+    function propertyTermsFromNamedArgs(
+        namedArgs: NamedArgs,
+        commandDef: CommandMetadata,
+    ): kp.PropertySearchTerm[] {
+        const keyValues = keyValuesFromNamedArgs(namedArgs, commandDef);
+        const propertySearchTerms: kp.PropertySearchTerm[] = [];
+        for (const propertyName of Object.keys(keyValues)) {
+            const propertyValue = keyValues[propertyName];
+            const propertySearchTerm = kp.propertySearchTermFromKeyValue(
+                propertyName,
+                propertyValue,
+            );
+            propertySearchTerms.push(propertySearchTerm);
+        }
+        return propertySearchTerms;
     }
 
     function filterFromNamedArgs(namedArgs: NamedArgs) {
@@ -425,7 +445,7 @@ export function parseQueryTerms(args: string[]): kp.SearchTerm[] {
             const queryTerm: kp.SearchTerm = {
                 term: { text: allTermStrings[0] },
             };
-            if (allTermStrings.length > 0) {
+            if (allTermStrings.length > 1) {
                 queryTerm.relatedTerms = [];
                 for (let i = 1; i < allTermStrings.length; ++i) {
                     queryTerm.relatedTerms.push({ text: allTermStrings[i] });

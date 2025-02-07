@@ -10,6 +10,15 @@ export interface AppAgentProvider {
     unloadAppAgent(appAgentName: string): void;
 }
 
+export interface AppAgentInstaller {
+    install(
+        name: string,
+        moduleName: string,
+        packagePath: string,
+    ): AppAgentProvider;
+    uninstall(name: string): void;
+}
+
 export interface ConstructionProvider {
     getBuiltinConstructionConfig(
         explainerName: string,
