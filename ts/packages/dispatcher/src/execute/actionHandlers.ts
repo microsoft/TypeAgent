@@ -481,6 +481,7 @@ async function canExecute(
 }
 
 function getParameterEntities(
+    appAgentName: string,
     value: any,
     resultEntityMap: Map<string, PromptEntity>,
     promptEntityMap: Map<string, PromptEntity> | undefined,
@@ -491,10 +492,12 @@ function getParameterEntities(
         case "string":
             // LLM like to correct/change casing.  Normalize for look up.
             const normalizedValue = normalizeParamString(value);
-            return (
+            const entity =
                 resultEntityMap.get(normalizedValue) ??
-                promptEntityMap?.get(normalizedValue)
-            );
+                promptEntityMap?.get(normalizedValue);
+            return entity?.sourceAppAgentName === appAgentName
+                ? entity
+                : undefined;
         case "function":
             throw new Error("Function is not supported as an action value");
         case "object":
@@ -505,6 +508,7 @@ function getParameterEntities(
             const entities: any = Array.isArray(value) ? [] : {};
             for (const [key, v] of Object.entries(value)) {
                 const entity = getParameterEntities(
+                    appAgentName,
                     v,
                     resultEntityMap,
                     promptEntityMap,
@@ -586,7 +590,9 @@ export async function executeActions(
             );
             continue;
         }
+        const appAgentName = getAppAgentName(action.translatorName);
         action.entities = getParameterEntities(
+            appAgentName,
             action.parameters,
             resultEntityMap,
             promptEntityMap,
@@ -602,9 +608,7 @@ export async function executeActions(
                     normalizeParamString(executableAction.resultEntityId),
                     {
                         ...result.resultEntity,
-                        sourceAppAgentName: getAppAgentName(
-                            action.translatorName,
-                        ),
+                        sourceAppAgentName: appAgentName,
                     },
                 );
             }
