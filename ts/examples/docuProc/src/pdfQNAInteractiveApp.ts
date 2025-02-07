@@ -11,7 +11,7 @@ import * as iapp from "interactive-app";
 import * as knowLib from "knowledge-processor";
 import { NameValue, ScoredItem } from "typeagent";
 
-import { IndexType, ChunkyIndex } from "./pdfChunkyIndexer.js";
+import { IndexType, ChunkyIndex } from "./pdfChunkyIndex.js";
 import { QuerySpec, QuerySpecs } from "./pdfDocQuerySchema.js";
 import { Chunk, ChunkId } from "./pdfChunker.js";
 import { importAllFiles } from "./pdfImporter.js";

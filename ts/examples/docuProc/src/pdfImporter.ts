@@ -9,7 +9,7 @@ import * as knowLib from "knowledge-processor";
 import { asyncArray } from "typeagent";
 
 import * as iapp from "interactive-app";
-import { ChunkyIndex, IndexNames } from "./pdfChunkyIndexer.js";
+import { ChunkyIndex, IndexNames } from "./pdfChunkyIndex.js";
 import { PdfDocChunk, PdfFileDocumentation } from "./pdfDocChunkSchema.js";
 import {
     Chunk,
@@ -18,7 +18,7 @@ import {
     chunkifyPdfFiles,
     ErrorItem,
 } from "./pdfChunker.js";
-import { purgeNormalizedFile } from "./pdfQNAInterface.js";
+import { purgeNormalizedFile } from "./pdfQNAInteractiveApp.js";
 
 function log(
     io: iapp.InteractiveIo | undefined,
