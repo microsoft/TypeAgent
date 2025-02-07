@@ -90,8 +90,10 @@ export async function resolveRelatedTerms(
         // If no hard-coded mappings, lookup any fuzzy related terms
         // Future: do this in batch
         if (!searchTerm.relatedTerms || searchTerm.relatedTerms.length === 0) {
-            searchTerm.relatedTerms =
-                await relatedTermsIndex.lookupTermFuzzy(termText);
+            if (relatedTermsIndex.termEmbeddings) {
+                searchTerm.relatedTerms =
+                    await relatedTermsIndex.termEmbeddings.lookupTerm(termText);
+            }
         }
     }
 }
@@ -108,17 +110,12 @@ export class TermToRelatedTermsIndex implements ITermToRelatedTermsIndex {
         this.termAliases = new TermToRelatedTermsMap();
     }
 
-    public lookupTerm(termText: string): Term[] | undefined {
-        return this.termAliases.lookupTerm(termText);
+    public get termEmbeddings() {
+        return this.termEmbeddingsIndex;
     }
 
-    public async lookupTermFuzzy(
-        termText: string,
-    ): Promise<Term[] | undefined> {
-        if (this.termEmbeddingsIndex) {
-            return await this.termEmbeddingsIndex.lookup(termText);
-        }
-        return undefined;
+    public lookupTerm(termText: string): Term[] | undefined {
+        return this.termAliases.lookupTerm(termText);
     }
 
     public serialize(): ITermsToRelatedTermsIndexData {
@@ -212,13 +209,17 @@ export class TextEmbeddingIndex implements ITermEmbeddingIndex {
         }
     }
 
-    public async lookup(
-        term: string,
+    public async lookupTerm(
+        text: string | NormalizedEmbedding,
         maxMatches?: number,
         minScore?: number,
     ): Promise<Term[] | undefined> {
-        let matches = await this.indexesOfNearestTerms(
-            term,
+        const termEmbedding = await generateEmbedding(
+            this.settings.embeddingModel,
+            text,
+        );
+        let matches = this.indexesOfNearestTerms(
+            termEmbedding,
             maxMatches,
             minScore,
         );
@@ -232,8 +233,12 @@ export class TextEmbeddingIndex implements ITermEmbeddingIndex {
         maxMatches?: number,
         minScore?: number,
     ): Promise<[string, NormalizedEmbedding][] | undefined> {
-        let matches = await this.indexesOfNearestTerms(
+        const termEmbedding = await generateEmbedding(
+            this.settings.embeddingModel,
             text,
+        );
+        let matches = this.indexesOfNearestTerms(
+            termEmbedding,
             maxMatches,
             minScore,
         );
@@ -281,15 +286,11 @@ export class TextEmbeddingIndex implements ITermEmbeddingIndex {
         this.textEmbeddings.push(embedding);
     }
 
-    private async indexesOfNearestTerms(
-        term: string,
+    private indexesOfNearestTerms(
+        termEmbedding: NormalizedEmbedding,
         maxMatches?: number,
         minScore?: number,
-    ): Promise<ScoredItem[]> {
-        const termEmbedding = await generateEmbedding(
-            this.settings.embeddingModel,
-            term,
-        );
+    ): ScoredItem[] {
         maxMatches ??= this.settings.maxMatches;
         minScore ??= this.settings.minScore;
         let matches: ScoredItem[];
