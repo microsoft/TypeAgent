@@ -268,12 +268,11 @@ async function selectChunks(
     console_log(
         `  [maxConcurrency = ${maxConcurrency}, chunksPerJob = ${chunksPerJob}, numJobs = ${numJobs}]`,
     );
-    for (let i = 0; i < chunks.length; i += chunksPerJob) {
-        const slice = chunks.slice(i, i + chunksPerJob);
+    for (const batch of makeBatches(chunks, 50000)) {
         const p = limiter(() =>
             selectRelevantChunks(
                 context.queryContext!.chunkSelector,
-                slice,
+                batch,
                 input,
             ),
         );
@@ -400,7 +399,7 @@ function createTranslator<T extends object>(
     return translator;
 }
 
-export interface FileMtimeSize {
+interface FileMtimeSize {
     file: string;
     mtime: number;
     size: number;
@@ -799,7 +798,7 @@ async function retryTranslateOn429<T>(
                         `  [Couldn't find msec in '${wrappedResult.message}'`,
                     );
                 }
-                console_log(`  [Retry on 429 error: sleep ${delay} ms]`);
+                console_log(`    [Retry on 429 error: sleep ${delay} ms]`);
                 await new Promise((resolve) => setTimeout(resolve, delay));
                 continue;
             }
@@ -808,4 +807,42 @@ async function retryTranslateOn429<T>(
         }
     } while (!wrappedResult.success);
     return wrappedResult.data;
+}
+
+function makeBatches(
+    chunks: Chunk[],
+    batchSize: number, // In characters
+): Chunk[][] {
+    const batches: Chunk[][] = [];
+    let batch: Chunk[] = [];
+    let size = 0;
+    for (const chunk of chunks) {
+        const chunkSize = getChunkSize(chunk);
+        if (size + chunkSize > batchSize && batch.length) {
+            batches.push(batch);
+            console_log(
+                `    [Batch ${batches.length} has ${batch.length} chunks and ${size} bytes]`,
+            );
+            batch = [];
+            size = 0;
+        }
+        batch.push(chunk);
+        size += chunkSize;
+    }
+    if (batch.length) {
+        batches.push(batch);
+        console_log(
+            `    [Batch ${batches.length} has ${batch.length} chunks and ${size} bytes (last)]`,
+        );
+    }
+    return batches;
+}
+
+function getChunkSize(chunk: Chunk): number {
+    // This is all an approximation
+    let size = chunk.fileName.length + 50;
+    for (const blob of chunk.blobs) {
+        size += blob.lines.join("").length + 4 * blob.lines.length;
+    }
+    return size;
 }
