@@ -26,7 +26,5 @@ export type SearchCodeAction = {
     parameters: {
         // Question to answer
         question: string;
-        // Unique Ids of entities relevant to the question, taken from the entities' uniqueId fields
-        entityUniqueIds: string[];
     };
 };

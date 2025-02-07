@@ -7,6 +7,10 @@ export type FindPageComponents = {
 
 export type FindUserActions = {
   actionName: "findUserActions";
+  parameters: {
+    registerAgent: boolean;
+    agentName?: string;
+  };
 };
 
 export type GetPageType = {

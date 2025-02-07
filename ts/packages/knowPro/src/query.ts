@@ -5,7 +5,6 @@ import {
     DateRange,
     IConversation,
     IMessage,
-    IPropertyToSemanticRefIndex,
     ITermToSemanticRefIndex,
     KnowledgeType,
     ScoredSemanticRef,
@@ -16,19 +15,15 @@ import {
     TextRange,
     TimestampedTextRange,
 } from "./dataFormat.js";
-import {
-    PropertySearchTerm,
-    FacetSearchTerm,
-    ConstrainedSearchTerm,
-    SearchTerm,
-} from "./search.js";
+import { PropertySearchTerm, SearchTerm } from "./search.js";
 import {
     Match,
     MatchAccumulator,
+    PropertyTermSet,
     SemanticRefAccumulator,
+    TermSet,
     TextRangeCollection,
 } from "./collections.js";
-import { TermToRelatedTermsMap } from "./relatedTermsIndex.js";
 import { PropertyNames } from "./propertyIndex.js";
 import { conversation } from "knowledge-processor";
 
@@ -134,94 +129,45 @@ export function messageLength(message: IMessage): number {
     return length;
 }
 
-/**
- * Look
- * @param semanticRefIndex
- * @param searchTerm
- * @param predicate
- * @param matches
- * @returns
- */
-export function lookupSearchTermInIndex(
+export function* lookupTermFiltered(
     semanticRefIndex: ITermToSemanticRefIndex,
-    searchTerm: SearchTerm,
-    predicate?: (scoredRef: ScoredSemanticRef) => boolean,
-    matches?: SemanticRefAccumulator,
-): SemanticRefAccumulator {
-    matches ??= new SemanticRefAccumulator();
-    // Lookup search term
-    matches.addSearchTermMatch(
-        searchTerm.term,
-        predicate
-            ? lookupAndFilter(semanticRefIndex, searchTerm.term.text, predicate)
-            : semanticRefIndex.lookupTerm(searchTerm.term.text),
-    );
-    // And any related terms
-    if (searchTerm.relatedTerms && searchTerm.relatedTerms.length > 0) {
-        for (const relatedTerm of searchTerm.relatedTerms) {
-            // Related term matches count as matches for the queryTerm...
-            // BUT are scored with the score of the related term
-            matches.addRelatedTermMatch(
-                searchTerm.term,
-                relatedTerm,
-                predicate
-                    ? lookupAndFilter(
-                          semanticRefIndex,
-                          relatedTerm.text,
-                          predicate,
-                      )
-                    : semanticRefIndex.lookupTerm(relatedTerm.text),
-                relatedTerm.score,
-            );
-        }
-    }
-    return matches;
-
-    function* lookupAndFilter(
-        semanticRefIndex: ITermToSemanticRefIndex,
-        text: string,
-        predicate: (scoredRef: ScoredSemanticRef) => boolean,
-    ) {
-        const scoredRefs = semanticRefIndex.lookupTerm(text);
-        if (scoredRefs) {
-            for (const scoredRef of scoredRefs) {
-                if (predicate(scoredRef)) {
-                    yield scoredRef;
-                }
+    term: Term,
+    semanticRefs: SemanticRef[],
+    filter: (
+        semanticRefs: SemanticRef[],
+        scoredRef: ScoredSemanticRef,
+    ) => boolean,
+) {
+    const scoredRefs = semanticRefIndex.lookupTerm(term.text);
+    if (scoredRefs && scoredRefs.length > 0) {
+        for (const scoredRef of scoredRefs) {
+            if (filter(semanticRefs, scoredRef)) {
+                yield scoredRef;
             }
         }
     }
 }
 
-export function lookupSearchTermInPropertyIndex(
-    propertyIndex: IPropertyToSemanticRefIndex,
-    propertyName: string,
-    searchTerm: SearchTerm,
-    matchAccumulator?: SemanticRefAccumulator,
-): SemanticRefAccumulator {
-    matchAccumulator ??= new SemanticRefAccumulator();
-    // Lookup search term
-    matchAccumulator.addSearchTermMatch(
-        searchTerm.term,
-        propertyIndex.lookupProperty(propertyName, searchTerm.term.text),
-    );
-    // And any related terms
-    if (searchTerm.relatedTerms && searchTerm.relatedTerms.length > 0) {
-        for (const relatedTerm of searchTerm.relatedTerms) {
-            // Related term matches count as matches for the queryTerm...
-            // BUT are scored with the score of the related term
-            matchAccumulator.addRelatedTermMatch(
-                searchTerm.term,
-                relatedTerm,
-                propertyIndex.lookupProperty(propertyName, relatedTerm.text),
-                relatedTerm.score,
-            );
+export function* lookupTermFilterByType(
+    semanticRefIndex: ITermToSemanticRefIndex,
+    term: Term,
+    semanticRefs: SemanticRef[],
+    knowledgeType: KnowledgeType,
+) {
+    const scoredRefs = semanticRefIndex.lookupTerm(term.text);
+    if (scoredRefs && scoredRefs.length > 0) {
+        for (const scoredRef of scoredRefs) {
+            if (
+                semanticRefs[scoredRef.semanticRefIndex].knowledgeType ===
+                knowledgeType
+            ) {
+                yield scoredRef;
+            }
         }
     }
-    return matchAccumulator;
 }
 
-function isSearchTermWildcard(searchTerm: SearchTerm): boolean {
+export function isSearchTermWildcard(searchTerm: SearchTerm): boolean {
     return searchTerm.term.text === "*";
 }
 
@@ -286,12 +232,15 @@ export interface IQueryOpExpr<T> {
 }
 
 export class QueryEvalContext {
-    constructor(
-        public conversation: IConversation,
-        public termToRelatedTerms: TermToRelatedTermsMap = new TermToRelatedTermsMap(),
-    ) {
+    private matchedTermText = new Set<string>();
+    public matchedTerms = new TermSet();
+    public matchedPropertyTerms = new PropertyTermSet();
+
+    constructor(public conversation: IConversation) {
         if (!isConversationSearchable(conversation)) {
-            throw new Error(`${conversation.nameTag} is not initialized`);
+            throw new Error(
+                `${conversation.nameTag} is not initialized and cannot be searched`,
+            );
         }
     }
 
@@ -314,6 +263,11 @@ export class QueryEvalContext {
     public getMessageForRef(semanticRef: SemanticRef): IMessage {
         const messageIndex = semanticRef.range.start.messageIndex;
         return this.conversation.messages[messageIndex];
+    }
+
+    public clearMatchedTerms() {
+        this.matchedTermText.clear();
+        this.matchedPropertyTerms.clear();
     }
 }
 
@@ -339,126 +293,249 @@ export class SelectTopNExpr<T extends MatchAccumulator> extends QueryOpExpr<T> {
     }
 }
 
-export type QueryTermExpr =
-    | MatchSearchTermExpr
-    | MatchConstrainedSearchTermExpr;
-
-export class GetSearchMatchesExpr extends QueryOpExpr<SemanticRefAccumulator> {
-    constructor(public searchTermExpressions: QueryTermExpr[]) {
+export class MatchAllTermsExpr extends QueryOpExpr<SemanticRefAccumulator> {
+    constructor(public searchTermExpressions: MatchTermExpr[]) {
         super();
     }
 
     public override eval(context: QueryEvalContext): SemanticRefAccumulator {
-        const allMatches: SemanticRefAccumulator = new SemanticRefAccumulator();
-
+        const allMatches = new SemanticRefAccumulator();
+        context.clearMatchedTerms();
+        context.matchedTerms.clear();
         for (const matchExpr of this.searchTermExpressions) {
-            const termMatches = matchExpr.eval(context);
-            if (termMatches && termMatches.size > 0) {
-                allMatches.addUnion(termMatches);
-            }
+            matchExpr.accumulateMatches(context, allMatches);
         }
         return allMatches;
     }
 }
 
-export class MatchSearchTermExpr extends QueryOpExpr<SemanticRefAccumulator> {
-    constructor(public searchTerm: SearchTerm) {
-        super();
-    }
-
-    public override eval(context: QueryEvalContext): SemanticRefAccumulator {
-        return lookupSearchTermInIndex(
-            context.semanticRefIndex,
-            this.searchTerm,
-        );
-    }
-}
-
-export class MatchConstrainedSearchTermExpr extends QueryOpExpr<
+export class MatchTermExpr extends QueryOpExpr<
     SemanticRefAccumulator | undefined
 > {
-    constructor(public qualifiedSearchTerm: ConstrainedSearchTerm) {
+    constructor() {
         super();
     }
 
     public override eval(
         context: QueryEvalContext,
     ): SemanticRefAccumulator | undefined {
-        if (!context.propertyIndex) {
-            return undefined;
-        }
-        let matches: SemanticRefAccumulator | undefined;
-        if (this.qualifiedSearchTerm.type === "property") {
-            matches = this.matchProperty(context, this.qualifiedSearchTerm);
-        } else {
-            matches = this.matchFacet(context, this.qualifiedSearchTerm);
-        }
-        return matches;
+        const matches = new SemanticRefAccumulator();
+        this.accumulateMatches(context, matches);
+        return matches.size > 0 ? matches : undefined;
     }
 
-    private matchProperty(
+    public accumulateMatches(
         context: QueryEvalContext,
-        propertySearchTerm: PropertySearchTerm,
-    ): SemanticRefAccumulator | undefined {
-        if (propertySearchTerm.propertyName === "tag") {
-            return this.matchTag(context, propertySearchTerm);
-        }
-        const propertyIndex = context.propertyIndex;
-        if (propertyIndex) {
-            return lookupSearchTermInPropertyIndex(
-                propertyIndex,
-                propertySearchTerm.propertyName,
-                propertySearchTerm.propertyValue,
-            );
-        }
-        return undefined;
-    }
-
-    private matchTag(
-        context: QueryEvalContext,
-        searchTerm: PropertySearchTerm,
+        matches: SemanticRefAccumulator,
     ) {
-        return lookupSearchTermInIndex(
-            context.semanticRefIndex,
-            searchTerm.propertyValue,
-            (scoredRef) => {
-                return (
-                    context.getSemanticRef(scoredRef.semanticRefIndex)
-                        .knowledgeType === "tag"
+        return;
+    }
+}
+
+export class MatchSearchTermExpr extends MatchTermExpr {
+    constructor(public searchTerm: SearchTerm) {
+        super();
+    }
+
+    public override accumulateMatches(
+        context: QueryEvalContext,
+        matches: SemanticRefAccumulator,
+    ) {
+        // Match the search term
+        this.accumulateMatchesForTerm(context, matches, this.searchTerm.term);
+        // And any related terms
+        if (
+            this.searchTerm.relatedTerms &&
+            this.searchTerm.relatedTerms.length > 0
+        ) {
+            for (const relatedTerm of this.searchTerm.relatedTerms) {
+                this.accumulateMatchesForTerm(
+                    context,
+                    matches,
+                    this.searchTerm.term,
+                    relatedTerm,
                 );
-            },
+            }
+        }
+    }
+
+    protected lookupTerm(
+        context: QueryEvalContext,
+        term: Term,
+    ): ScoredSemanticRef[] | IterableIterator<ScoredSemanticRef> | undefined {
+        return context.semanticRefIndex.lookupTerm(term.text);
+    }
+
+    private accumulateMatchesForTerm(
+        context: QueryEvalContext,
+        matches: SemanticRefAccumulator,
+        term: Term,
+        relatedTerm?: Term,
+    ) {
+        if (relatedTerm === undefined) {
+            const semanticRefs = this.lookupTerm(context, term);
+            if (context.matchedTerms.has(term)) {
+                matches.updateTermMatches(term, semanticRefs, true);
+            } else {
+                matches.addTermMatches(term, semanticRefs, true);
+                context.matchedTerms.add(term);
+            }
+        } else {
+            const semanticRefs = this.lookupTerm(context, relatedTerm);
+            if (context.matchedTerms.has(relatedTerm)) {
+                matches.updateTermMatches(
+                    term,
+                    semanticRefs,
+                    false,
+                    relatedTerm.score,
+                );
+            } else {
+                matches.addTermMatches(
+                    term,
+                    semanticRefs,
+                    false,
+                    relatedTerm.score,
+                );
+                context.matchedTerms.add(relatedTerm);
+            }
+        }
+    }
+}
+
+export class MatchTagExpr extends MatchSearchTermExpr {
+    constructor(public tagTerm: SearchTerm) {
+        super(tagTerm);
+    }
+    protected override lookupTerm(context: QueryEvalContext, term: Term) {
+        return lookupTermFilterByType(
+            context.semanticRefIndex,
+            term,
+            context.semanticRefs,
+            "tag",
         );
     }
+}
 
-    private matchFacet(
+export class MatchPropertyTermExpr extends MatchTermExpr {
+    constructor(public propertySearchTerm: PropertySearchTerm) {
+        super();
+    }
+
+    public override accumulateMatches(
         context: QueryEvalContext,
-        facetSearchTerm: FacetSearchTerm,
-    ): SemanticRefAccumulator | undefined {
-        const propertyIndex = context.propertyIndex;
-        if (propertyIndex) {
-            let facetMatches = lookupSearchTermInPropertyIndex(
-                propertyIndex,
-                PropertyNames.FacetName,
-                facetSearchTerm.facetName,
+        matches: SemanticRefAccumulator,
+    ): void {
+        if (typeof this.propertySearchTerm.propertyName === "string") {
+            this.accumulateMatchesForProperty(
+                context,
+                this.propertySearchTerm.propertyName,
+                this.propertySearchTerm.propertyValue,
+                matches,
             );
-            if (
-                facetMatches.size > 0 &&
-                facetSearchTerm.facetValue &&
-                !isSearchTermWildcard(facetSearchTerm.facetValue)
-            ) {
-                let valueMatches = lookupSearchTermInPropertyIndex(
-                    propertyIndex,
-                    PropertyNames.FacetValue,
-                    facetSearchTerm.facetValue,
-                );
-                if (valueMatches.size > 0) {
-                    facetMatches.addUnion(valueMatches);
-                }
-            }
-
-            return facetMatches;
+        } else {
+            this.accumulateMatchesForFacets(
+                context,
+                this.propertySearchTerm.propertyName,
+                this.propertySearchTerm.propertyValue,
+                matches,
+            );
         }
-        return undefined;
+    }
+
+    private accumulateMatchesForFacets(
+        context: QueryEvalContext,
+        propertyName: SearchTerm,
+        propertyValue: SearchTerm,
+        matches: SemanticRefAccumulator,
+    ) {
+        this.accumulateMatchesForProperty(
+            context,
+            PropertyNames.FacetName,
+            propertyName,
+            matches,
+        );
+        if (!isSearchTermWildcard(propertyValue)) {
+            this.accumulateMatchesForProperty(
+                context,
+                PropertyNames.FacetValue,
+                propertyValue,
+                matches,
+            );
+        }
+    }
+
+    private accumulateMatchesForProperty(
+        context: QueryEvalContext,
+        propertyName: string,
+        propertyValue: SearchTerm,
+        matches: SemanticRefAccumulator,
+    ) {
+        this.accumulateMatchesForPropertyValue(
+            context,
+            matches,
+            propertyName,
+            propertyValue.term,
+        );
+        if (
+            propertyValue.relatedTerms &&
+            propertyValue.relatedTerms.length > 0
+        ) {
+            for (const relatedPropertyValue of propertyValue.relatedTerms) {
+                this.accumulateMatchesForPropertyValue(
+                    context,
+                    matches,
+                    propertyName,
+                    propertyValue.term,
+                    relatedPropertyValue,
+                );
+            }
+        }
+    }
+
+    private accumulateMatchesForPropertyValue(
+        context: QueryEvalContext,
+        matches: SemanticRefAccumulator,
+        propName: string,
+        propVal: Term,
+        relatedPropVal?: Term,
+    ): void {
+        const propertyIndex = context.propertyIndex;
+        if (!propertyIndex) {
+            return;
+        }
+        if (relatedPropVal === undefined) {
+            const semanticRefs = propertyIndex.lookupProperty(
+                propName,
+                propVal.text,
+            );
+            if (context.matchedPropertyTerms.has(propName, propVal)) {
+                matches.updateTermMatches(propVal, semanticRefs, true);
+            } else {
+                matches.addTermMatches(propVal, semanticRefs, true);
+                context.matchedPropertyTerms.add(propName, propVal);
+            }
+        } else {
+            const semanticRefs = propertyIndex.lookupProperty(
+                propName,
+                relatedPropVal.text,
+            );
+            if (context.matchedPropertyTerms.has(propName, relatedPropVal)) {
+                matches.updateTermMatches(
+                    propVal,
+                    semanticRefs,
+                    false,
+                    relatedPropVal.score,
+                );
+            } else {
+                matches.addTermMatches(
+                    propVal,
+                    semanticRefs,
+                    false,
+                    relatedPropVal.score,
+                );
+                context.matchedPropertyTerms.add(propName, relatedPropVal);
+            }
+        }
     }
 }
 

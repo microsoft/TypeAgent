@@ -41,7 +41,7 @@ Test if the installation worked by starting the backend `python faster-whisper.p
 
 You can connect to the whisper service using the example "whisperClient" project in the `ts/examples` folder. To use it:
 
-- Go to the repo's [ts/examples/whisperClient](../../ts/examples/whisperClient/) folder
+- Go to the repo's [ts/examples/whisperClient](../../../ts/examples/whisperClient/) folder
 - Build the project using `pnpm run build`
 - Start the web UI using `pnpm run start`
 

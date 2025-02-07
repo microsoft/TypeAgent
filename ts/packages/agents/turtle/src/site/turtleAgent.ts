@@ -1,13 +1,16 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { AppAgent, AppAction } from "@typeagent/agent-sdk";
+import { AppAgent, TypeAgentAction } from "@typeagent/agent-sdk";
 import { Turtle } from "./turtleTypes";
 import { TurtleAction } from "./turtleActionSchema";
 
 export function createTurtleAgent(turtle: Turtle): AppAgent {
     return {
-        async executeAction(action: TurtleAction, context): Promise<undefined> {
+        async executeAction(
+            action: TypeAgentAction<TurtleAction>,
+            context,
+        ): Promise<undefined> {
             console.log(`Executing action: ${action.actionName}`);
             switch (action.actionName) {
                 case "forward":
@@ -27,7 +30,7 @@ export function createTurtleAgent(turtle: Turtle): AppAgent {
                     break;
                 default:
                     throw new Error(
-                        `Unknown action: ${(action as AppAction).actionName}`,
+                        `Unknown action: ${(action as TypeAgentAction).actionName}`,
                     );
             }
         },

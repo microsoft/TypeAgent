@@ -43,7 +43,7 @@ To use the [Desktop Agent](./packages/agents/desktop/] for windows, follow the i
 
 ### Local Whisper Service (Optional)
 
-If you want to use a local whisper service for voice input in the [TypeAgent Shell](./packages/shell), please follow instruction in the [README.md](../python/whisperService/README.md) in the python's [whisperService](../python/whisperService/) directory.
+If you want to use a local whisper service for voice input in the [TypeAgent Shell](./packages/shell), please follow instruction in the [README.md](../python/stt/whisperService/README.md) in the python's [whisperService](../python/stt/whisperService/) directory.
 
 ## Running Prerequisites
 

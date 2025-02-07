@@ -28,6 +28,7 @@
     "aiclient": "workspace:*",
     "better-sqlite3": "11.8.1",
     "code-processor": "workspace:*",
+    "common-utils": "workspace:*",
     "typeagent": "workspace:*",
     "typechat": "^0.1.1",
     "typescript": "^5.4.2"

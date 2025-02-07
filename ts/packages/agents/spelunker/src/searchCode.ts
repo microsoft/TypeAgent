@@ -3,12 +3,16 @@
 
 import * as fs from "fs";
 import * as path from "path";
+import { createRequire } from "module";
 
 import Database, * as sqlite from "better-sqlite3";
 
-import { ChatModel, openai } from "aiclient";
-import { createJsonTranslator, TypeChatJsonTranslator } from "typechat";
+import { createJsonTranslator, Result, TypeChatJsonTranslator } from "typechat";
 import { createTypeScriptJsonValidator } from "typechat/ts";
+
+import { ChatModel, openai } from "aiclient";
+import { createLimiter } from "common-utils";
+
 import {
     ActionResult,
     ActionResultSuccess,
@@ -17,13 +21,12 @@ import {
 import { createActionResultFromError } from "@typeagent/agent-sdk/helpers/action";
 import { loadSchema } from "typeagent";
 
+import { Blob, Chunk, ChunkedFile, ChunkerErrorItem } from "./chunkSchema.js";
 import { OracleSpecs } from "./oracleSchema.js";
+import { chunkifyPythonFiles } from "./pythonChunker.js";
 import { ChunkDescription, SelectorSpecs } from "./selectorSchema.js";
 import { SpelunkerContext } from "./spelunkerActionHandler.js";
-import { Blob, Chunk, ChunkedFile, ChunkerErrorItem } from "./chunkSchema.js";
-import { chunkifyPythonFiles } from "./pythonChunker.js";
 import { SummarizerSpecs } from "./summarizerSchema.js";
-import { createRequire } from "module";
 import { chunkifyTypeScriptFiles } from "./typescriptChunker.js";
 
 let epoch: number = 0;
@@ -98,13 +101,9 @@ function createQueryContext(): QueryContext {
 export async function searchCode(
     context: SpelunkerContext,
     input: string,
-    entityUniqueIds: string[],
-    inputEntities: Entity[],
 ): Promise<ActionResult> {
     epoch = 0; // Reset logging clock
-    console_log(
-        `[searchCode question='${input}', entityUniqueIds=${JSON.stringify(entityUniqueIds)}, entities=${JSON.stringify(inputEntities)}]`,
-    );
+    console_log(`[searchCode question='${input}']`);
 
     // 0. Check if the focus is set.
     if (!context.focusFolders.length) {
@@ -154,14 +153,15 @@ export async function searchCode(
     }
     console_log(`  [Loaded ${allChunks.length} chunks]`);
 
-    // 3. Ask a fast LLM for the most relevant chunks, rank them, and keep tthe best 30.
+    // 3. Ask a fast LLM for the most relevant chunks, rank them, and keep the best N.
     // This is done concurrently for real-time speed.
-    console_log(`[Step 3: Select 30 most relevant chunks]`);
+    const keep = 50; // N
+    console_log(`[Step 3: Select ${keep} most relevant chunks]`);
     const chunkDescs: ChunkDescription[] = await selectChunks(
         context,
         allChunks,
         input,
-        inputEntities,
+        50,
     );
     if (!chunkDescs.length) {
         throw new Error("No chunks selected");
@@ -173,16 +173,13 @@ export async function searchCode(
         .map((chunkDesc) => prepChunk(chunkDesc, allChunks))
         .filter(Boolean) as Chunk[];
     // TODO: Prompt engineering
+    // TODO: Include summaries in the prompt
     const prompt = `\
-        Please answer the user question using the given context and summaries.
+        Please answer the user question using the given context.
 
-        Summaries of all chunks in the code base:
+        User question: "${input}"
 
-        ${prepareSummaries(db)}
-
-        Context:
-
-        ${prepareChunks(preppedChunks)}
+        Context: ${prepareChunks(preppedChunks)}
 
         User question: "${input}"
         `;
@@ -206,7 +203,7 @@ export async function searchCode(
     const answer = result.answer;
 
     // 7. Produce an action result from that.
-    const entities: Entity[] = [];
+    const outputEntities: Entity[] = [];
     console_log(`  [Entities returned:]`);
     for (const ref of result.references) {
         const chunk = allChunks.find((c) => c.chunkId === ref);
@@ -225,7 +222,7 @@ export async function searchCode(
             additionalEntityText: `${chunk.fileName}#${blob.start + 1}`,
             // TODO: Include summary and signature somehow?
         };
-        entities.push(entity);
+        outputEntities.push(entity);
         console_log(
             `    [${entity.name} (${entity.type}) ${entity.uniqueId} ${entity.additionalEntityText}]`,
         );
@@ -234,12 +231,12 @@ export async function searchCode(
     const resultEntity: Entity = {
         name: `answer for ${input}`,
         type: ["text", "answer", "markdown"],
-        uniqueId: "<TODO: unique ID>",
+        uniqueId: "", // TODO
         additionalEntityText: answer,
     };
     return createActionResultFromMarkdownDisplay(
         answer,
-        entities,
+        outputEntities,
         resultEntity,
     );
 }
@@ -259,27 +256,26 @@ async function selectChunks(
     context: SpelunkerContext,
     chunks: Chunk[],
     input: string,
-    inputEntities: Entity[],
+    keep: number,
 ): Promise<ChunkDescription[]> {
     console_log(`  [Starting chunk selection ...]`);
     const promises: Promise<ChunkDescription[]>[] = [];
-    // TODO: Throttle if too many concurrent calls (e.g. > AZURE_OPENAI_MAX_CONCURRENCY)
     const maxConcurrency =
         parseInt(process.env.AZURE_OPENAI_MAX_CONCURRENCY ?? "0") ?? 40;
-    const chunksPerJob =
-        chunks.length / maxConcurrency < 5
-            ? 5
-            : Math.ceil(chunks.length / maxConcurrency);
+    const limiter = createLimiter(maxConcurrency);
+    const chunksPerJob = 30;
     const numJobs = Math.ceil(chunks.length / chunksPerJob);
     console_log(
         `  [maxConcurrency = ${maxConcurrency}, chunksPerJob = ${chunksPerJob}, numJobs = ${numJobs}]`,
     );
     for (let i = 0; i < chunks.length; i += chunksPerJob) {
         const slice = chunks.slice(i, i + chunksPerJob);
-        const p = selectRelevantChunks(
-            context.queryContext!.chunkSelector,
-            slice,
-            input,
+        const p = limiter(() =>
+            selectRelevantChunks(
+                context.queryContext!.chunkSelector,
+                slice,
+                input,
+            ),
         );
         promises.push(p);
     }
@@ -293,37 +289,9 @@ async function selectChunks(
     // Reminder: There's no overlap in chunkIds between the slices
     console_log(`  [Total ${allChunkDescs.length} chunks selected]`);
 
-    // Give valid input entities a relevance boost to 2.0
-    let boostCount = 0;
-    let newCount = 0;
-    for (const entity of inputEntities) {
-        if (entity.type.includes("code") && entity.uniqueId) {
-            const chunkDesc = allChunkDescs.find(
-                (c) => c.chunkId === entity.uniqueId,
-            );
-            if (chunkDesc) {
-                chunkDesc.relevance = 2.0;
-                boostCount += 1;
-            } else {
-                const chunk = chunks.find((c) => c.chunkId === entity.uniqueId);
-                if (chunk) {
-                    allChunkDescs.push({
-                        chunkId: entity.uniqueId,
-                        relevance: 2.0,
-                    });
-                    newCount += 1;
-                }
-            }
-        }
-    }
-    if (boostCount + newCount) {
-        console_log(
-            `  [Boosted ${boostCount} selected chunks and added ${newCount} newly boosted ones]`,
-        );
-    }
     allChunkDescs.sort((a, b) => b.relevance - a.relevance);
     // console_log(`  [${allChunks.map((c) => (c.relevance)).join(", ")}]`);
-    allChunkDescs.splice(30);
+    allChunkDescs.splice(keep);
     console_log(`  [Keeping ${allChunkDescs.length} chunks]`);
     // console_log(`  [${allChunks.map((c) => [c.chunkId, c.relevance])}]`);
     return allChunkDescs;
@@ -348,14 +316,16 @@ async function selectRelevantChunks(
     ${prepareChunks(chunks)}
     `;
     // console_log(prompt);
-    const wrappedResult = await selector.translate(prompt);
-    // console_log(wrappedResult);
-    if (!wrappedResult.success) {
-        console_log(`[Error selecting chunks: ${wrappedResult.message}]`);
+    const result = await retryTranslateOn429(() => selector.translate(prompt));
+    if (!result) {
+        const chunkSummary = chunks
+            .map((c) => `${path.basename(c.fileName)}:${c.codeName}`)
+            .join(", ");
+        console_log(`  [Failed to select chunks for ${chunkSummary}]`);
         return [];
+    } else {
+        return result.chunks;
     }
-    const result = wrappedResult.data;
-    return result.chunks;
 }
 
 function prepareChunks(chunks: Chunk[]): string {
@@ -397,13 +367,18 @@ function prepareChunks(chunks: Chunk[]): string {
     return output.join("");
 }
 
-function prepareSummaries(db: sqlite.Database): string {
+// TODO: Remove export once we're using summaries again.
+export function prepareSummaries(db: sqlite.Database): string {
     const languageCommentMap: { [key: string]: string } = {
         python: "#",
         typescript: "//",
     };
     const selectAllSummaries = db.prepare(`SELECT * FROM Summaries`);
     const summaryRows: any[] = selectAllSummaries.all();
+    if (summaryRows.length > 100) {
+        console_log(`  [Over 100 summary rows, skipping summaries in prompt]`);
+        return "";
+    }
     const lines: string[] = [];
     for (const summaryRow of summaryRows) {
         const comment = languageCommentMap[summaryRow.language] ?? "#";
@@ -425,46 +400,48 @@ function createTranslator<T extends object>(
     return translator;
 }
 
-/**
- * Recursively gathers all .py and .ts files under a given directory synchronously.
- *
- * @param dir - The directory to search within.
- * @returns An array of absolute paths to .py files.
- *
- * (First version written by ChatGPT)
- */
-const supportedExtensions = [".py", ".ts"];
-const skipDirectories = ["node_modules", ".git", "dist"];
-function getAllSourceFilesSync(dir: string): string[] {
-    let results: string[] = [];
+export interface FileMtimeSize {
+    file: string;
+    mtime: number;
+    size: number;
+}
+
+// Recursively gather all .py and .ts files under a given directory.
+function getAllSourceFiles(dir: string): FileMtimeSize[] {
+    const supportedExtensions = [".py", ".ts"];
+    const skipDirectories = ["node_modules", ".git", "dist"];
+
+    let results: FileMtimeSize[] = [];
 
     // Resolve the directory to an absolute path
     const absoluteDir = path.isAbsolute(dir) ? dir : path.resolve(dir);
 
     // Read the contents of the directory
-    const list = fs.readdirSync(absoluteDir);
+    const files = fs.readdirSync(absoluteDir);
 
-    list.forEach((file) => {
+    for (const file of files) {
         const filePath = path.join(absoluteDir, file);
-        const stat = fs.statSync(filePath);
+        const lstat = fs.lstatSync(filePath);
+        if (!lstat || lstat.isSymbolicLink()) {
+            // Skip symlinks and files that failed to stat
+            continue;
+        }
 
-        if (
-            stat &&
-            !stat.isSymbolicLink() &&
-            stat.isDirectory() &&
-            !skipDirectories.includes(file)
-        ) {
+        if (lstat.isDirectory() && !skipDirectories.includes(file)) {
             // Recursively search in subdirectories
-            results = results.concat(getAllSourceFilesSync(filePath));
+            results = results.concat(getAllSourceFiles(filePath));
         } else if (
-            stat &&
-            stat.isFile() &&
+            lstat.isFile() &&
             supportedExtensions.includes(path.extname(file))
         ) {
-            // If it's a supported file type, add to the results
-            results.push(filePath);
+            // It's a supported file type, add to the results
+            results.push({
+                file: filePath,
+                mtime: lstat.mtimeMs / 1000,
+                size: lstat.size,
+            });
         }
-    });
+    }
 
     return results;
 }
@@ -472,8 +449,8 @@ function getAllSourceFilesSync(dir: string): string[] {
 // Should be in actionHelpers.ts
 function createActionResultFromMarkdownDisplay(
     literalText: string,
-    entities: Entity[],
-    resultEntity: Entity,
+    entities: Entity[] = [],
+    resultEntity?: Entity,
 ): ActionResultSuccess {
     return {
         literalText,
@@ -522,45 +499,46 @@ async function loadDatabase(
         `INSERT INTO Blobs (chunkId, start, lines, breadcrumb) VALUES (?, ?, ?, ?)`,
     );
 
-    // 1a. Find all source files in the focus directories (locally, using a subprocess).
+    // 1a. Find all source files in the focus directories (locally, using a recursive walk).
     // TODO: Factor into simpler functions
     console_log(`[Step 1a: Find source files (of supported languages)]`);
-    const files: string[] = []; // TODO: Include mtime and size, since we do a stat anyways
+    const files: FileMtimeSize[] = [];
     for (let i = 0; i < context.focusFolders.length; i++) {
-        files.push(...getAllSourceFilesSync(context.focusFolders[i]));
+        files.push(...getAllSourceFiles(context.focusFolders[i]));
     }
 
     // Compare files found and files in the database.
     const filesToDo: string[] = [];
-    const filesInDb: Map<string, { mtime: number; size: number }> = new Map();
+    const filesInDb: Map<string, FileMtimeSize> = new Map();
     const fileRows: any[] = prepSelectAllFiles.all();
     for (const fileRow of fileRows) {
         filesInDb.set(fileRow.fileName, {
+            file: fileRow.fileName,
             mtime: fileRow.mtime,
             size: fileRow.size,
         });
     }
     for (const file of files) {
-        // TODO: Error handling
-        const stat = fs.statSync(file);
-        const dbStat = filesInDb.get(file);
+        const dbStat = filesInDb.get(file.file);
         if (
             !dbStat ||
-            dbStat.mtime !== stat.mtimeMs * 0.001 ||
-            dbStat.size !== stat.size
+            dbStat.mtime !== file.mtime ||
+            dbStat.size !== file.size
         ) {
             // console_log(`  [Need to update ${file} (mtime/size mismatch)]`);
-            filesToDo.push(file);
+            filesToDo.push(file.file);
             // TODO: Make this insert part of the transaction for this file
-            prepInsertFiles.run(file, stat.mtimeMs * 0.001, stat.size);
-            filesInDb.set(file, {
-                mtime: stat.mtimeMs * 0.001,
-                size: stat.size,
+            prepInsertFiles.run(file.file, file.mtime, file.size);
+            filesInDb.set(file.file, {
+                file: file.file,
+                mtime: file.mtime,
+                size: file.size,
             });
         }
     }
+    const filesSet: Set<string> = new Set(files.map((file) => file.file));
     const filesToDelete: string[] = [...filesInDb.keys()].filter(
-        (file) => !files.includes(file),
+        (file) => !filesSet.has(file),
     );
     if (filesToDelete.length) {
         console_log(`  [Deleting ${filesToDelete.length} files from database]`);
@@ -630,7 +608,7 @@ async function loadDatabase(
                     chunk.chunkId,
                     blob.start,
                     blob.lines.map((line) => line.trimEnd()).join("\n"),
-                    blob.breadcrumb ? 1 : 0,
+                    blob.breadcrumb,
                 );
             }
         }
@@ -640,10 +618,14 @@ async function loadDatabase(
         `  [Chunked ${allChunkedFiles.length} files into ${allChunks.length} chunks]`,
     );
 
-    // 1c. Use a fast model to summarize all chunks.
-    if (allChunks.length) {
-        await summarizeChunks(context, allChunks);
-    }
+    // Let's see how things go without summaries.
+    // They are slow and don't fit in the oracle's buffer.
+    // TODO: Restore this feature.
+
+    // // 1c. Use a fast model to summarize all chunks.
+    // if (allChunks.length) {
+    //     await summarizeChunks(context, allChunks);
+    // }
 
     return db;
 }
@@ -658,18 +640,18 @@ CREATE TABLE IF NOT EXISTS Chunks (
     chunkId TEXT PRIMARY KEY,
     treeName TEXT NOT NULL,
     codeName TEXT NOT NULL,
-    parentId TEXT KEY REFERENCES chunks(chunkId), -- May be null
+    parentId TEXT KEY REFERENCES Chunks(chunkId), -- May be null
     fileName TEXT KEY REFERENCES files(fileName) NOT NULL,
     lineNo INTEGER NOT NULL -- 1-based
 );
 CREATE TABLE IF NOT EXISTS Blobs (
-    chunkId TEXT KEY REFERENCES chunks(chunkId) NOT NULL,
+    chunkId TEXT KEY REFERENCES Chunks(chunkId) NOT NULL,
     start INTEGER NOT NULL, -- 0-based
     lines TEXT NOT NULL,
-    breadcrumb BOOLEAN NOT NULL -- Values: 0 or 1
+    breadcrumb TEXT -- Chunk ID or empty string or NULL
 );
 CREATE TABLE IF NOT EXISTS Summaries (
-    chunkId TEXT PRIMARY KEY REFERENCES chunks(chunkId),
+    chunkId TEXT PRIMARY KEY REFERENCES Chunks(chunkId),
     language TEXT, -- "python", "typescript", etc.
     summary TEXT,
     signature TEXT
@@ -715,7 +697,7 @@ function createDatabase(context: SpelunkerContext): sqlite.Database {
     return db;
 }
 
-async function summarizeChunks(
+export async function summarizeChunks(
     context: SpelunkerContext,
     chunks: Chunk[],
 ): Promise<void> {
@@ -724,15 +706,16 @@ async function summarizeChunks(
     );
     const maxConcurrency =
         parseInt(process.env.AZURE_OPENAI_MAX_CONCURRENCY ?? "0") ?? 40;
-    let chunksPerJob = Math.ceil(chunks.length / maxConcurrency);
-    if (chunksPerJob < 5) {
-        chunksPerJob = 5;
-    }
-    // TODO: Use a semaphore to limit parallelism
+    let chunksPerJob = 30;
+    let numJobs = Math.ceil(chunks.length / chunksPerJob);
+    console_log(
+        `  [maxConcurrency = ${maxConcurrency}, chunksPerJob = ${chunksPerJob}, numJobs = ${numJobs}]`,
+    );
+    const limiter = createLimiter(maxConcurrency);
     const promises: Promise<void>[] = [];
     for (let i = 0; i < chunks.length; i += chunksPerJob) {
         const slice = chunks.slice(i, i + chunksPerJob);
-        promises.push(summarizeChunkSlice(context, slice));
+        promises.push(limiter(() => summarizeChunkSlice(context, slice)));
     }
     await Promise.all(promises);
 }
@@ -752,13 +735,18 @@ async function summarizeChunkSlice(
     ${prepareChunks(chunks)}
     `;
     // console_log(prompt);
-    const wrappedResult = await summarizer.translate(prompt);
-    // console_log(wrappedResult);
-    if (!wrappedResult.success) {
-        console_log(`  [Error summarizing chunks: ${wrappedResult.message}]`);
+    const result = await retryTranslateOn429(() =>
+        summarizer.translate(prompt),
+    );
+    if (!result) {
+        const chunkSummary = chunks
+            .map((c) => `${path.basename(c.fileName)}:${c.codeName}`)
+            .join(", ");
+        console_log(`  [Failed to summarize chunks for ${chunkSummary}]`);
         return;
     }
-    const summarizeSpecs = wrappedResult.data;
+
+    const summarizeSpecs = result;
     // console_log(`  [Received ${result.summaries.length} summaries]`);
     // Enter them into the database
     const db = context.queryContext!.database!;
@@ -776,9 +764,48 @@ async function summarizeChunkSlice(
                 summary.signature,
             );
         } catch (error) {
+            console_log(
+                `*** Db error for INSERT INTO Summaries ${JSON.stringify(summary)}: ${error}`,
+            );
             errors += 1;
-            // console_log(`*** Error for ${JSON.stringify(summary)}: ${error}`);
         }
     }
     if (errors) console_log(`  [${errors} errors]`);
+}
+
+async function retryTranslateOn429<T>(
+    translate: () => Promise<Result<T>>,
+    retries: number = 3,
+    defaultDelay: number = 5000,
+): Promise<T | undefined> {
+    let wrappedResult: Result<T>;
+    do {
+        retries--;
+        wrappedResult = await translate();
+        // console_log(wrappedResult);
+        if (!wrappedResult.success) {
+            if (
+                retries > 0 &&
+                wrappedResult.message.includes("fetch error: 429:")
+            ) {
+                let delay = defaultDelay;
+                const msec = wrappedResult.message.match(
+                    /after (\d+) milliseconds/,
+                );
+                if (msec) {
+                    delay = parseInt(msec[1]) ?? defaultDelay;
+                } else {
+                    console_log(
+                        `  [Couldn't find msec in '${wrappedResult.message}'`,
+                    );
+                }
+                console_log(`  [Retry on 429 error: sleep ${delay} ms]`);
+                await new Promise((resolve) => setTimeout(resolve, delay));
+                continue;
+            }
+            console_log(`  [${wrappedResult.message}]`);
+            return undefined;
+        }
+    } while (!wrappedResult.success);
+    return wrappedResult.data;
 }

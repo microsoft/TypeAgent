@@ -72,7 +72,7 @@ export async function chunkifyTypeScriptFiles(
             for (const childNode of parentNode.getChildren(sourceFile)) {
                 if (
                     ts.isInterfaceDeclaration(childNode) ||
-                    ts.isTypeAliasDeclaration(childNode) ||
+                    // ts.isTypeAliasDeclaration(childNode) || // These are too small and numerous
                     ts.isFunctionDeclaration(childNode) ||
                     ts.isClassDeclaration(childNode)
                 ) {
@@ -158,7 +158,11 @@ function spliceBlobs(parentChunk: Chunk, childChunk: Chunk): void {
     const sig: string = signature(childChunk);
     // console.log("signature", sig);
     if (sig) {
-        blobs.push({ start: childBlob.start, lines: [sig], breadcrumb: true });
+        blobs.push({
+            start: childBlob.start,
+            lines: [sig],
+            breadcrumb: childChunk.chunkId,
+        });
     }
     if (linesAfter.length) {
         blobs.push({ start: startAfter, lines: linesAfter });

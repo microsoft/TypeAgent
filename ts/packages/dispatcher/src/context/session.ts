@@ -82,7 +82,10 @@ type DispatcherConfig = {
             search: boolean;
         };
         multiple: MultipleActionConfig;
-        history: boolean;
+        history: {
+            enabled: boolean;
+            limit: number;
+        };
         schema: {
             generation: {
                 enabled: boolean;
@@ -146,7 +149,10 @@ const defaultSessionConfig: SessionConfig = {
             result: true,
             pending: true,
         },
-        history: true,
+        history: {
+            enabled: true,
+            limit: 20,
+        },
         schema: {
             generation: {
                 enabled: true,

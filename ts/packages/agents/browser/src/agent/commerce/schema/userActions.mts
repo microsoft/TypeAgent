@@ -8,6 +8,11 @@ export type AddToCartAction = {
   };
 };
 
+// This allows you to view the shopping cart contents
+export type ViewShoppingCartAction = {
+  actionName: "viewShoppingCartAction";
+};
+
 export type FindNearbyStoreAction = {
   actionName: "findNearbyStoreAction";
 };
@@ -38,6 +43,7 @@ export type SelectSearchResult = {
 
 export type ShoppingActions =
   | AddToCartAction
+  | ViewShoppingCartAction
   | FindNearbyStoreAction
   | GetLocationInStore
   | SearchForProductAction

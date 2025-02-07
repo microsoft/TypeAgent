@@ -12,6 +12,7 @@ import {
     ActionContext,
     AppAgent,
     AppAgentManifest,
+    TypeAgentAction,
 } from "@typeagent/agent-sdk";
 import { CommandHandlerContext } from "../commandHandlerContext.js";
 import { createActionResultNoDisplay } from "@typeagent/agent-sdk/helpers/action";
@@ -28,7 +29,7 @@ const dispatcherHandlers: CommandHandlerTable = {
 };
 
 async function executeDispatcherAction(
-    action: DispatcherActions | ClarifyRequestAction,
+    action: TypeAgentAction<DispatcherActions | ClarifyRequestAction>,
     context: ActionContext<CommandHandlerContext>,
 ) {
     if (

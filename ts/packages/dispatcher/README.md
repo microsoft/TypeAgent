@@ -163,29 +163,9 @@ Use the `@const <args>` command at the prompt to control the construction store.
 
 ## Adding Dispatcher Agent
 
-Addition Dispatcher Agent can be create to extend the capabilities of the **single personal assistant**.
+Additional Dispatcher Agent can be create and added to the dispatcher to extend the capabilities of TypeAgent as a **single personal assistant**. [Agent SDK](../agentSdk) defines the interfaces and helper needed to develop an agent. The `Echo` agent [tutorial](../../../docs/tutorial/agent.md) illustrate the steps to create a basic agent in a NPM module and install into TypeAgent's [shell](../shell) and [CLI](../cli).
 
-### NPM Module
-
-Go to Agent SDK [README](../agentSdk/README.md) for details on how to create a dispatcher agent in a NPM modules.
-
-Dispatcher currently only supports "static" loading of dispatcher agent. To add a dispatcher agent:
-
-- Add the package in as dependency in the dispatcher's [package.json](./package.json)
-- Add a declaration of the module under `agents` in the dispatcher's [config.json](./data/config.json)
-
-```
-   "agents": {
-      "<agentName>": {
-         "type": "module",
-         "name": "<packageName>",
-      }
-   }
-```
-
-### Inline dispatcher agent
-
-For internal use only, but an agent can be inlined in the dispatcher. This should only be used for agents that strongly ties to the inner working of the dispatcher (e.g. system configuration, etc.)
+By default dispatcher only comes with `system` and `dispatcher` agents, providing minimal base functionality. Additional agents are provided using [AppAgentProvider](./src/agentProvider/agentProvider.ts)) when the dispatcher is created by the host. The host of the dispatcher (like [shell](../shell) and [CLI](../cli)) is configured with the default provider with subset of agents implemented in this repo, and a extensible provider that allow additional agent to be dynamically install/registered. (See [default-agent-provider](../defaultAgentProvider/) package).
 
 ## Trademarks
 

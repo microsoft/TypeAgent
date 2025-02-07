@@ -2,19 +2,31 @@
 // Licensed under the MIT License.
 
 export type AddToCartAction = {
-  actionName: "AddToCartAction";
+  actionName: "addToCartAction";
   parameters: {
     productName: string;
   };
 };
 
+export type RemoveFromCartAction = {
+  actionName: "removeFromCartAction";
+  parameters: {
+    productName: string;
+  };
+};
+
+// This allows you to view the shopping cart contents
+export type ViewShoppingCartAction = {
+  actionName: "viewShoppingCartAction";
+};
+
 export type FindNearbyStoreAction = {
-  actionName: "FindNearbyStoreAction";
+  actionName: "findNearbyStoreAction";
 };
 
 // Use this action for user queries such as "where is product X in the store"
 export type GetLocationInStore = {
-  actionName: "GetLocationInStore";
+  actionName: "getLocationInStore";
   parameters: {
     productName: string;
   };
@@ -22,97 +34,72 @@ export type GetLocationInStore = {
 
 // IMPORTANT: Use this action when the user query involves search for products on an e-commerce store, such as "aaa batteries"
 export type SearchForProductAction = {
-  actionName: "SearchForProductAction";
+  actionName: "searchForProductAction";
   parameters: {
     productName: string;
+    selectionCriteria?: string;
   };
 };
 
 // This allows users to select individual results on the search results page.
 export type SelectSearchResult = {
-  actionName: "SelectSearchResult";
+  actionName: "selectSearchResult";
   parameters: {
     position: number;
     productName?: string;
   };
 };
 
-export type NavigateToHomePage = {
-  actionName: "NavigateToHomePage";
+export type NavigateToPage = {
+  actionName: "navigateToPage";
   parameters: {
-    linkCssSelector: string;
+    keywords: string;
   };
 };
 
-// Follow a link to view  a store landing page
-export type NavigateToStorePage = {
-  actionName: "NavigateToStorePage";
+export type BrowseProductCategoriesAction = {
+  actionName: "browseProductCategoriesAction";
   parameters: {
-    linkCssSelector: string;
+    categoryName?: string;
+  };
+};
+
+// This allows users to filter products based on a criteria such as price, size, shipping options etc.
+export type FilterProductsAction = {
+  actionName: "filterProductsAction";
+  parameters: {
+    filterCriteria: string;
+  };
+};
+
+export type SignUpForNewsletterAction = {
+  actionName: "signUpForNewsletterAction";
+  parameters: {
+    emailAddress: string;
   };
 };
 
 // Follow a link to view  a product details page
 export type NavigateToProductPage = {
-  actionName: "NavigateToProductPage";
+  actionName: "navigateToProductPage";
   parameters: {
-    linkCssSelector: string;
-  };
-};
-
-// Follow a link to view  a recipe details page. This link is typically named "Recipe" or "Recipes"
-export type NavigateToRecipePage = {
-  actionName: "NavigateToRecipePage";
-  parameters: {
-    linkCssSelector: string;
-  };
-};
-
-export type NavigateToListPage = {
-  actionName: "NavigateToListPage";
-  parameters: {
-    linkCssSelector: string;
-  };
-};
-
-// Navigate to the "Buy it again" page. This page may also be called Past Orders.
-export type NavigateToBuyItAgainPage = {
-  actionName: "NavigateToBuyItAgainPage";
-  parameters: {
-    linkCssSelector: string;
-  };
-};
-
-// This link opens the shopping cart. Its usually indicated by a cart or bag icon.
-export type NavigateToShoppingCartPage = {
-  actionName: "NavigateToShoppingCartPage";
-  parameters: {
-    linkCssSelector: string;
-  };
-};
-
-export type NavigateToOtherPage = {
-  actionName: "NavigateToOtherPage";
-  parameters: {
-    pageType: string;
-    linkCssSelector: string;
+    productName: string;
   };
 };
 
 export type UserPageActions =
   | AddToCartAction
+  | BrowseProductCategoriesAction
+  | FilterProductsAction
   | FindNearbyStoreAction
   | GetLocationInStore
+  | NavigateToPage
+  | NavigateToProductPage
+  | RemoveFromCartAction
   | SearchForProductAction
   | SelectSearchResult
-  | NavigateToBuyItAgainPage
-  | NavigateToHomePage
-  | NavigateToListPage
-  | NavigateToOtherPage
-  | NavigateToProductPage
-  | NavigateToRecipePage
-  | NavigateToShoppingCartPage
-  | NavigateToStorePage;
+  | SignUpForNewsletterAction
+  | ViewShoppingCartAction;
 
 export type UserActionsList = {
   actions: UserPageActions[];

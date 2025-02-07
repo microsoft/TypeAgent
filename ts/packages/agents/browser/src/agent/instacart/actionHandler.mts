@@ -38,13 +38,8 @@ export async function handleInstacartAction(
     case "getShoppingCartAction":
       await handleGetCart(action);
       break;
-      break;
-    case "getShoppingCartAction":
-      await handleGetCart(action);
-      break;
     case "addToListAction":
       await handleAddToList(action);
-      break;
       break;
     case "findNearbyStoreAction":
       await handleFindStores(action);
