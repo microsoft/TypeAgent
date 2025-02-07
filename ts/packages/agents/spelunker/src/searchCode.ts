@@ -101,11 +101,9 @@ function createQueryContext(): QueryContext {
 export async function searchCode(
     context: SpelunkerContext,
     input: string,
-    inputEntities: Entity[], // Passed to executeAction (as Map<string, Entity>)
 ): Promise<ActionResult> {
     epoch = 0; // Reset logging clock
     console_log(`[searchCode question='${input}']`);
-    console.log(`  [inputEntities=${JSON.stringify(inputEntities)}]`);
 
     // 0. Check if the focus is set.
     if (!context.focusFolders.length) {
@@ -163,7 +161,6 @@ export async function searchCode(
         context,
         allChunks,
         input,
-        inputEntities,
         50,
     );
     if (!chunkDescs.length) {
@@ -234,7 +231,7 @@ export async function searchCode(
     const resultEntity: Entity = {
         name: `answer for ${input}`,
         type: ["text", "answer", "markdown"],
-        uniqueId: "<TODO: unique ID>",
+        uniqueId: "", // TODO
         additionalEntityText: answer,
     };
     return createActionResultFromMarkdownDisplay(
@@ -259,7 +256,6 @@ async function selectChunks(
     context: SpelunkerContext,
     chunks: Chunk[],
     input: string,
-    inputEntities: Entity[],
     keep: number,
 ): Promise<ChunkDescription[]> {
     console_log(`  [Starting chunk selection ...]`);
@@ -293,34 +289,6 @@ async function selectChunks(
     // Reminder: There's no overlap in chunkIds between the slices
     console_log(`  [Total ${allChunkDescs.length} chunks selected]`);
 
-    // Give valid input entities a relevance boost to 2.0
-    let boostCount = 0;
-    let newCount = 0;
-    for (const entity of inputEntities) {
-        if (entity.type.includes("code") && entity.uniqueId) {
-            const chunkDesc = allChunkDescs.find(
-                (c) => c.chunkId === entity.uniqueId,
-            );
-            if (chunkDesc) {
-                chunkDesc.relevance = 2.0;
-                boostCount += 1;
-            } else {
-                const chunk = chunks.find((c) => c.chunkId === entity.uniqueId);
-                if (chunk) {
-                    allChunkDescs.push({
-                        chunkId: entity.uniqueId,
-                        relevance: 2.0,
-                    });
-                    newCount += 1;
-                }
-            }
-        }
-    }
-    if (boostCount + newCount) {
-        console_log(
-            `  [Boosted ${boostCount} selected chunks and added ${newCount} newly boosted ones]`,
-        );
-    }
     allChunkDescs.sort((a, b) => b.relevance - a.relevance);
     // console_log(`  [${allChunks.map((c) => (c.relevance)).join(", ")}]`);
     allChunkDescs.splice(keep);

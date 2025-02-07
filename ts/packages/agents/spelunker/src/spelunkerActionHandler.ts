@@ -56,7 +56,6 @@ class RequestCommandHandler implements CommandHandler {
                 result = await searchCode(
                     actionContext.sessionContext.agentContext,
                     question,
-                    [], // inputEntities
                 );
             }
             if (typeof result.error === "string") {
@@ -141,13 +140,10 @@ async function saveContext(
 async function executeSpelunkerAction(
     action: AppAction,
     context: ActionContext<SpelunkerContext>,
-    entityMap?: Map<string, Entity>,
 ): Promise<ActionResult> {
-    const entities = entityMap ? Array.from(entityMap.values()) : [];
     const result = await handleSpelunkerAction(
         action as SpelunkerAction,
         context.sessionContext,
-        entities,
     );
     return result;
 }
@@ -155,7 +151,6 @@ async function executeSpelunkerAction(
 async function handleSpelunkerAction(
     action: SpelunkerAction,
     context: SessionContext<SpelunkerContext>,
-    entities: Entity[],
 ): Promise<ActionResult> {
     switch (action.actionName) {
         case "searchCode": {
@@ -164,7 +159,6 @@ async function handleSpelunkerAction(
                 return await searchCode(
                     context.agentContext,
                     question,
-                    entities,
                 );
             }
             return createActionResultFromError("I see no question to answer");
