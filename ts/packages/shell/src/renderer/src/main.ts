@@ -449,8 +449,8 @@ document.addEventListener("DOMContentLoaded", async function () {
     chatView.chatInput.attachButton.onclick = () => {
         if ((window as any).electron) {
             (window as any).electron.ipcRenderer.send("open-image-file");
-        }        
-    }
+        }
+    };
 
     const settingsView = new SettingsView(chatView);
     chatView.settingsView = settingsView;

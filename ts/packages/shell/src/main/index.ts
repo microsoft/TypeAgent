@@ -706,7 +706,6 @@ async function initialize() {
         }
 
         return null;
-    
     });
 
     ipcMain.on(

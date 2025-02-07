@@ -89,14 +89,16 @@ export class ExpandableTextarea {
         if (this.textEntry.childNodes.length > 0) {
             r.selectNode(this.textEntry);
             r.setStartBefore(this.textEntry.childNodes[0]);
-            r.setEndAfter(this.textEntry.childNodes[this.textEntry.childNodes.length - 1]);
+            r.setEndAfter(
+                this.textEntry.childNodes[this.textEntry.childNodes.length - 1],
+            );
             r.collapse(false);
             const s = document.getSelection();
             if (s) {
                 s.removeAllRanges();
                 s.addRange(r);
             }
-        }        
+        }
     }
 
     replaceTextAtCursor(
