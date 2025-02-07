@@ -167,11 +167,16 @@ async function executeEchoAction(
 
 #### Folder structure for **Echo** agent:
 
-![alt text](./imgs/image-files.png)
+```
+┣━ package.json
+┣━ tsconfig.json
+┗━ src
+   ┣━ echoManifest.json
+   ┣━ echoActionSchema.ts
+   ┗━ echoActionHandler.ts
+```
 
-<a id="install_agent"></a>
-
-#### Step 2: Build the Agent
+### Step 2: Build the Agent
 
 First make sure the [TypeAgent's typescript code](../../ts) is built.
 
