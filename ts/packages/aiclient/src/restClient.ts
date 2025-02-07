@@ -76,7 +76,11 @@ export async function callJsonApi(
         throttler,
     );
     if (result.success) {
-        return success(await result.data.json());
+        try {
+            return success(await result.data.json());
+        } catch (e: any) {
+            return error(`callJsonApi(): .json(): ${e.message}`);
+        }
     }
     return result;
 }
@@ -285,6 +289,7 @@ export function getRetryAfterMs(
     try {
         let pauseHeader = result.headers.get("Retry-After");
         if (pauseHeader !== null) {
+            // console.log(`Retry-After: ${pauseHeader}`);
             pauseHeader = pauseHeader.trim();
             if (pauseHeader) {
                 let seconds = parseInt(pauseHeader);

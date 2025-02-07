@@ -11,7 +11,12 @@ import {
     getTranslatorForSelectedActions,
 } from "../context/commandHandlerContext.js";
 import { ActionContext } from "@typeagent/agent-sdk";
-import { Action, HistoryContext, RequestAction } from "agent-cache";
+import {
+    createExecutableAction,
+    ExecutableAction,
+    HistoryContext,
+    RequestAction,
+} from "agent-cache";
 import {
     CachedImageWithDetails,
     IncrementalJsonValueCallBack,
@@ -353,7 +358,7 @@ async function finalizeAction(
     attachments?: CachedImageWithDetails[],
     resultEntityId?: string,
     streamingActionIndex?: number,
-): Promise<Action | Action[] | undefined> {
+): Promise<ExecutableAction | ExecutableAction[] | undefined> {
     let currentAction: TranslatedAction | undefined = action;
     let currentTranslatorName: string = translatorName;
     const systemContext = context.sessionContext.agentContext;
@@ -414,7 +419,7 @@ async function finalizeAction(
         currentAction = unknownAction;
     }
 
-    return new Action(
+    return createExecutableAction(
         systemContext.agents.getInjectedSchemaForActionName(
             currentAction.actionName,
         ) ?? currentTranslatorName,
@@ -430,13 +435,13 @@ async function finalizeMultipleActions(
     context: ActionContext<CommandHandlerContext>,
     history?: HistoryContext,
     attachments?: CachedImageWithDetails[],
-): Promise<Action[] | undefined> {
+): Promise<ExecutableAction[] | undefined> {
     if (attachments !== undefined && attachments.length !== 0) {
         // TODO: What to do with attachments with multiple actions?
         throw new Error("Attachments with multiple actions not supported");
     }
     const requests = action.parameters.requests;
-    const actions: Action[] = [];
+    const actions: ExecutableAction[] = [];
     for (const request of requests) {
         if (isPendingRequest(request)) {
             actions.push(createPendingRequestAction(request));
@@ -474,9 +479,12 @@ export function getChatHistoryForTranslation(
             role: "system",
         });
     }
-    const entities = context.chatHistory.getTopKEntities(20);
-    const additionalInstructions = context.session.getConfig().translation
-        .promptConfig.additionalInstructions
+    const translateConfig = context.session.getConfig().translation;
+    const entities = context.chatHistory.getTopKEntities(
+        translateConfig.history.limit,
+    );
+    const additionalInstructions = translateConfig.promptConfig
+        .additionalInstructions
         ? context.chatHistory.getCurrentInstructions()
         : undefined;
     return { promptSections, entities, additionalInstructions };

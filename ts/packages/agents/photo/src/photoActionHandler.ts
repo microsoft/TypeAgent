@@ -7,6 +7,7 @@ import {
     AppAgent,
     SessionContext,
     ActionResult,
+    TypeAgentAction,
 } from "@typeagent/agent-sdk";
 import { createActionResult } from "@typeagent/agent-sdk/helpers/action";
 import { PhotoAction } from "./photoSchema.js";
@@ -25,7 +26,7 @@ type PhotoActionContext = {
 };
 
 async function executePhotoAction(
-    action: PhotoAction,
+    action: TypeAgentAction<PhotoAction>,
     context: ActionContext<PhotoActionContext>,
 ) {
     let result = await handlePhotoAction(action, context);

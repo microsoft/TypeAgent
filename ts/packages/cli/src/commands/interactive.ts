@@ -12,6 +12,7 @@ import {
 import {
     getDefaultAppAgentProviders,
     getDefaultConstructionProvider,
+    getDefaultAppAgentInstaller,
 } from "default-agent-provider";
 import inspector from "node:inspector";
 import { getChatModelNames } from "aiclient";
@@ -21,7 +22,8 @@ import {
 } from "agent-dispatcher/helpers/console";
 
 const modelNames = await getChatModelNames();
-const defaultAppAgentProviders = getDefaultAppAgentProviders(getInstanceDir());
+const instanceDir = getInstanceDir();
+const defaultAppAgentProviders = getDefaultAppAgentProviders(instanceDir);
 const schemaNames = getSchemaNamesForActionConfigProvider(
     await createActionConfigProvider(defaultAppAgentProviders),
 );
@@ -77,6 +79,7 @@ export default class Interactive extends Command {
         await withConsoleClientIO(async (clientIO) => {
             const dispatcher = await createDispatcher("cli interactive", {
                 appAgentProviders: defaultAppAgentProviders,
+                agentInstaller: getDefaultAppAgentInstaller(instanceDir),
                 schemas,
                 translation: { model: flags.model },
                 explainer: { name: flags.explainer },

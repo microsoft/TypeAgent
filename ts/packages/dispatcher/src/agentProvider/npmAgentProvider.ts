@@ -70,7 +70,7 @@ async function loadModuleAgent(
     const module = await import(handlerPath);
     if (typeof module.instantiate !== "function") {
         throw new Error(
-            `Failed to load agent ${appAgentName} package ${info.name}: missing 'instantiate' function.`,
+            `Failed to load agent '${appAgentName}' package '${info.name}': missing 'instantiate' function.`,
         );
     }
     return {
@@ -80,36 +80,28 @@ async function loadModuleAgent(
     };
 }
 
-async function loadAppAgentManifest(
-    config: Record<string, AppAgentInfo>,
-    requirePath: string,
-) {
-    const appAgents: Map<string, AppAgentManifest> = new Map();
-    for (const [name, info] of Object.entries(config)) {
-        appAgents.set(name, await loadManifest(info, requirePath));
-    }
-    return appAgents;
-}
-
 export function createNpmAppAgentProvider(
     configs: Record<string, AppAgentInfo>,
     requirePath: string,
 ): AppAgentProvider {
     const moduleAgents = new Map<string, AgentProcess>();
-    let manifests: Map<string, AppAgentManifest> | undefined;
+    const manifests = new Map<string, AppAgentManifest>();
     return {
         getAppAgentNames() {
             return Object.keys(configs);
         },
         async getAppAgentManifest(appAgentName: string) {
-            if (manifests === undefined) {
-                manifests = await loadAppAgentManifest(configs, requirePath);
-            }
             const manifest = manifests.get(appAgentName);
-            if (manifest === undefined) {
+            if (manifest !== undefined) {
+                return manifest;
+            }
+            const config = configs[appAgentName];
+            if (config === undefined) {
                 throw new Error(`Invalid app agent: ${appAgentName}`);
             }
-            return manifest;
+            const newManifests = await loadManifest(config, requirePath);
+            manifests.set(appAgentName, newManifests);
+            return newManifests;
         },
         async loadAppAgent(appAgentName: string) {
             const existing = moduleAgents.get(appAgentName);

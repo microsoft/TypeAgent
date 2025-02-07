@@ -21,6 +21,7 @@ import registerDebug from "debug";
 import { createDispatcher, Dispatcher } from "agent-dispatcher";
 import {
     getDefaultAppAgentProviders,
+    getDefaultAppAgentInstaller,
     getDefaultConstructionProvider,
 } from "default-agent-provider";
 import { ShellSettings } from "./shellSettings.js";
@@ -528,12 +529,15 @@ async function initializeDispatcher(
         },
     };
 
+    const instanceDir = getInstanceDir();
+
     // Set up dispatcher
     const newDispatcher = await createDispatcher("shell", {
         appAgentProviders: [
             shellAgentProvider,
-            ...getDefaultAppAgentProviders(getInstanceDir()),
+            ...getDefaultAppAgentProviders(instanceDir),
         ],
+        agentInstaller: getDefaultAppAgentInstaller(instanceDir),
         explanationAsynchronousMode: true,
         persistSession: true,
         enableServiceHost: true,

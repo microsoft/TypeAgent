@@ -5,6 +5,7 @@ import {
     ActionContext,
     AppAgent,
     ParsedCommandParams,
+    TypeAgentAction,
 } from "@typeagent/agent-sdk";
 import { TestActions } from "./schema.js";
 import { createActionResult } from "@typeagent/agent-sdk/helpers/action";
@@ -45,7 +46,7 @@ export function instantiate(): AppAgent {
 }
 
 async function executeAction(
-    action: TestActions,
+    action: TypeAgentAction<TestActions>,
     context: ActionContext<void>,
 ) {
     switch (action.actionName) {

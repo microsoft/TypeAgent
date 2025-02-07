@@ -8,7 +8,7 @@ export type ChunkId = string;
 export interface Blob {
     start: number; // int; 0-based!
     lines: string[];
-    breadcrumb?: boolean;
+    breadcrumb?: ChunkId | undefined;
 }
 
 export interface Chunk {

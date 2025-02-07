@@ -6,7 +6,7 @@ import { CommandHandlerContext } from "./commandHandlerContext.js";
 import {
     DisplayContent,
     DisplayAppendMode,
-    AppAction,
+    TypeAgentAction,
 } from "@typeagent/agent-sdk";
 import { RequestMetrics } from "../utils/metrics.js";
 
@@ -45,7 +45,7 @@ export interface ClientIO {
         source: string,
         requestId: RequestId,
         actionIndex?: number,
-        action?: AppAction | string[],
+        action?: TypeAgentAction | string[],
     ): void;
     setDisplay(message: IAgentMessage): void;
     appendDisplay(message: IAgentMessage, mode: DisplayAppendMode): void;

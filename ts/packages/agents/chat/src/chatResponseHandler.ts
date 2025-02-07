@@ -25,6 +25,7 @@ import {
     AppAction,
     ActionResult,
     ActionResultSuccess,
+    TypeAgentAction,
 } from "@typeagent/agent-sdk";
 import {
     createActionResult,
@@ -53,11 +54,13 @@ function isChatResponseAction(action: AppAction): action is ChatResponseAction {
 }
 
 export async function executeChatResponseAction(
-    chatAction: AppAction,
+    chatAction: TypeAgentAction<ChatResponseAction>,
     context: ActionContext,
 ) {
     if (!isChatResponseAction(chatAction)) {
-        throw new Error(`Invalid chat action: ${chatAction.actionName}`);
+        throw new Error(
+            `Invalid chat action: ${(chatAction as TypeAgentAction).actionName}`,
+        );
     }
     return handleChatResponse(chatAction, context);
 }
