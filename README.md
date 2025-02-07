@@ -21,7 +21,7 @@ The TypeAgent repo contains the personal agent and example application agents, a
 
 - [Agent Dispatcher](./ts/packages/dispatcher/)
 
-  Explores applying TypeChat to route user requests to agents whose typed contract best matches user intent.  Main component of the personal agent.
+  Explores applying TypeChat to route user requests to agents whose typed contract best matches user intent. Main component of the personal agent.
 
 - [Agent Cache](./ts/packages/cache/)
 
@@ -61,9 +61,18 @@ TypeAgent is early stage sample code over TypeChat. TypeAgent is not a framework
 
 TypeAgent is written in TypeScript and relies on TypeChat. To understand how TypeAgent examples work, we recommend getting comfortable with TypeChat and [TypeChat examples](https://github.com/microsoft/TypeChat/tree/main/typescript/examples) first.
 
-### Agent Shell Example
+### Quick start - Agent Shell Example
 
-The main entry point to explore TypeAgent is the Agent Shell example. Follow the [instructions](./ts/README.md) in the TypeScript code [directory](./ts) to get started.
+The main entry point to explore TypeAgent is the [Agent Shell](./ts/packages/shell) example.
+
+Follow these quick starts for step-by-step instructions to quickly setup tools and environments from scratch to build, run and develop.
+
+- [Windows](./docs/setup/setup-Windows.md)
+- [WSL2](./docs/setup/setup-WSL2.md)
+- [Linux (Ubuntu/Debian)](./docs/setup/setup-Linux.md)
+- MacOS (coming soon)
+
+See the [instructions](./ts/README.md) in the TypeScript code [directory](./ts) for more detailed setup instructions.
 
 ## Developers
 

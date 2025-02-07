@@ -23,18 +23,20 @@ export function getInteractiveIO(): InteractiveIo {
 }
 
 export function createInteractiveIO(): InteractiveIo {
+    const line = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout,
+    });
     return {
         stdin: process.stdin,
         stdout: process.stdout,
-        readline: readline.createInterface({
-            input: process.stdin,
-            output: process.stdout,
-        }),
+        readline: line,
         writer: new ConsoleWriter(process.stdout),
     };
 }
 
 export type ListOptions = {
+    title?: string | undefined;
     type: "ol" | "ul" | "plain" | "csv";
 };
 
@@ -54,6 +56,14 @@ export class ConsoleWriter {
         return this;
     }
 
+    public writeInline(text: string, prevText?: string): ConsoleWriter {
+        if (prevText) {
+            this.stdout.moveCursor(-prevText.length, 0);
+        }
+        this.write(text);
+        return this;
+    }
+
     public writeLine(value?: string | number): ConsoleWriter {
         let text: any;
         if (value !== undefined && typeof value !== "string") {
@@ -68,8 +78,9 @@ export class ConsoleWriter {
         return this;
     }
 
-    public writeJson(obj: any, indented: boolean = true): void {
+    public writeJson(obj: any, indented: boolean = true): ConsoleWriter {
         this.writeLine(indented ? this.jsonString(obj) : JSON.stringify(obj));
+        return this;
     }
 
     public jsonString(obj: any): string {
@@ -77,20 +88,29 @@ export class ConsoleWriter {
     }
 
     public writeList(
-        list?: string | string[] | (string | undefined)[],
+        list?: string | string[] | (string | undefined)[] | Set<string>,
         options?: ListOptions,
-    ): void {
+    ): ConsoleWriter {
         if (!list) {
-            return;
+            return this;
+        }
+        const isInline =
+            options && (options.type === "plain" || options.type === "csv");
+        if (options?.title) {
+            if (isInline) {
+                this.write(options.title + ": ");
+            } else {
+                this.writeLine(options.title);
+            }
         }
         if (typeof list === "string") {
             this.writeLine(this.listItemToString(1, list, options));
-            return;
+            return this;
         }
-        if (list.length === 0) {
-            return;
+        if (list instanceof Set) {
+            list = [...list.values()];
         }
-        if (options && (options.type === "plain" || options.type === "csv")) {
+        if (isInline) {
             const sep = options.type === "plain" ? " " : ", ";
             for (let i = 0; i < list.length; ++i) {
                 if (i > 0) {
@@ -107,15 +127,17 @@ export class ConsoleWriter {
                 }
             }
         }
+        return this;
     }
 
-    public writeTable(table: string[][]): void {
+    public writeTable(table: string[][]): ConsoleWriter {
         if (table.length === 0) {
-            return;
+            return this;
         }
         for (let i = 0; i < table.length; ++i) {
             this.writeList(table[i]);
         }
+        return this;
     }
 
     public writeNameValue(
@@ -123,7 +145,7 @@ export class ConsoleWriter {
         value: any,
         paddedNameLength?: number,
         indent?: string,
-    ): void {
+    ): ConsoleWriter {
         if (indent) {
             this.write(indent);
         }
@@ -132,6 +154,7 @@ export class ConsoleWriter {
         }
         const line = `${paddedNameLength ? name.padEnd(paddedNameLength) : name}  ${value}`;
         this.writeLine(line);
+        return this;
     }
 
     public writeRecord<T = string>(
@@ -160,8 +183,9 @@ export class ConsoleWriter {
         return maxLength;
     }
 
-    public writeLink(url: string): void {
+    public writeLink(url: string): ConsoleWriter {
         this.writeLine(pathToFileURL(url).toString());
+        return this;
     }
 
     private listItemToString(
@@ -194,4 +218,34 @@ export async function askYesNo(
 ): Promise<boolean> {
     let answer = await io.readline.question(`${question} (y/n):`);
     return answer.trim().toLowerCase() === "y";
+}
+
+export class ProgressBar {
+    private _lastText: string = "";
+    constructor(
+        public writer: ConsoleWriter,
+        public total: number,
+        public count = 0,
+    ) {}
+
+    public advance(amount: number = 1) {
+        if (this.count >= this.total) {
+            return;
+        }
+        let next = this.count + amount;
+        if (next >= this.total) {
+            next = this.total;
+        }
+        this.count = next;
+        let progressText = `[${this.count} / ${this.total}]`;
+        this.writer.writeInline(progressText, this._lastText);
+        this._lastText = progressText;
+    }
+
+    public complete() {
+        if (this._lastText) {
+            this.writer.writeInline("", this._lastText);
+            this._lastText = "";
+        }
+    }
 }

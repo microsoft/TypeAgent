@@ -10,7 +10,7 @@ import {
 } from "@typeagent/agent-sdk";
 import { TemplateData, TemplateEditConfig } from "agent-dispatcher";
 import { getObjectProperty, setObjectProperty } from "common-utils";
-import { getClientAPI } from "./main";
+import { getDispatcher } from "./main";
 import { SearchMenu, SearchMenuItem } from "./search";
 
 function cloneTemplateData(
@@ -74,7 +74,7 @@ class FieldContainer {
         );
         this.editingField = undefined;
 
-        this.current[index].schema = await getClientAPI().getTemplateSchema(
+        this.current[index].schema = await getDispatcher().getTemplateSchema(
             this.actionTemplates.templateAgentName,
             this.actionTemplates.templateName,
             this.current[index].data,
@@ -590,7 +590,7 @@ class FieldScalar extends FieldBase {
             if (templateConfig.completion === true) {
                 const searchMenu = this.createSearchMenu(input, []);
                 this.editUI.searchMenu = searchMenu;
-                getClientAPI()
+                getDispatcher()
                     .getTemplateCompletion(
                         this.data.actionTemplates.templateAgentName,
                         this.data.actionTemplates.templateName,
@@ -598,7 +598,10 @@ class FieldScalar extends FieldBase {
                         this.fullPropertyName,
                     )
                     .then((items) => {
-                        if (searchMenu !== this.editUI?.searchMenu) {
+                        if (
+                            searchMenu !== this.editUI?.searchMenu ||
+                            items === undefined
+                        ) {
                             return;
                         }
                         searchMenu.setChoices(

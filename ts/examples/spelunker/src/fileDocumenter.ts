@@ -46,7 +46,7 @@ export function createFileDocumenter(model: ChatModel): FileDocumenter {
             "Method C.foo finds the most twisted anagram for a word.\n" +
             "It uses various heuristics to rank a word's twistedness'.\n" +
             "```\n" +
-            "Also fill in the lists of keywords, topics, goals, and dependencies.\n";
+            "Also fill in the lists of keywords, tags, synonyms, and dependencies.\n";
         const result = await fileDocTranslator.translate(request, text);
 
         // Now assign each comment to its chunk.

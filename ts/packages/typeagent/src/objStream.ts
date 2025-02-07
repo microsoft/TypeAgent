@@ -343,6 +343,7 @@ export async function writeJsonFiles(
     destFolderPath: string,
     baseFileName: string,
     objects: any[],
+    fSys?: FileSystem,
 ) {
     if (objects.length === 0) {
         return;
@@ -355,7 +356,7 @@ export async function writeJsonFiles(
             destFolderPath,
             `${baseFileName}_${fileId}.json`,
         );
-        await writeJsonFile(turnFilePath, objects[i]);
+        await writeJsonFile(turnFilePath, objects[i], fSys);
     }
 }
 
@@ -403,9 +404,16 @@ export async function removeFile(
     return false;
 }
 
-export async function ensureDir(folderPath: string): Promise<string> {
-    if (!fs.existsSync(folderPath)) {
-        await fs.promises.mkdir(folderPath, { recursive: true });
+export async function ensureDir(
+    folderPath: string,
+    fSys?: FileSystem,
+): Promise<string> {
+    if (fSys) {
+        await fSys.ensureDir(folderPath);
+    } else {
+        if (!fs.existsSync(folderPath)) {
+            await fs.promises.mkdir(folderPath, { recursive: true });
+        }
     }
     return folderPath;
 }
@@ -433,6 +441,11 @@ export async function removeDir(
         }
     }
     return false;
+}
+
+export async function cleanDir(folderPath: string, fSys?: FileSystem) {
+    await removeDir(folderPath, fSys);
+    await ensureDir(folderPath, fSys);
 }
 
 /**

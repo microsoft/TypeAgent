@@ -2,18 +2,14 @@
 // Licensed under the MIT License.
 
 import WebSocket, { WebSocketServer } from "ws";
-import { Dispatcher } from "agent-dispatcher";
 import { IncomingMessage, Server } from "node:http";
-import { WebAPIClientIO } from "./webClientIO.js";
 
 export class TypeAgentAPIWebSocketServer {
     private server: WebSocketServer;
-    private settingSummary: string = "";
 
     constructor(
         webServer: Server<any, any>,
-        dispatcher: Dispatcher,
-        webClientIO: WebAPIClientIO,
+        connectCallback: (ws: WebSocket) => void,
     ) {
         this.server = new WebSocketServer({
             server: webServer,
@@ -34,8 +30,6 @@ export class TypeAgentAPIWebSocketServer {
         this.server.on("connection", (ws: WebSocket, req: IncomingMessage) => {
             console.log("New client connected");
 
-            webClientIO.CurrentWebSocket = ws;
-
             if (req.url) {
                 const params = new URLSearchParams(req.url.split("?")[1]);
                 const clientId = params.get("clientId");
@@ -52,95 +46,10 @@ export class TypeAgentAPIWebSocketServer {
 
             console.log(`Connection count: ${this.server.clients.size}`);
 
-            // intialize client
-            webClientIO.updateSettingsSummary(this.settingSummary, [
-                ...dispatcher.getTranslatorNameToEmojiMap(),
-            ]);
             // TODO: send agent greeting!?
 
             // messages from web clients arrive here
-            ws.on("message", async (message: string) => {
-                try {
-                    const msgObj = JSON.parse(message);
-                    console.log(`Received ${msgObj.message} message`);
-
-                    // update client summary if it has changed
-                    const newSettingSummary = dispatcher.getSettingSummary();
-                    if (newSettingSummary !== this.settingSummary) {
-                        this.settingSummary = newSettingSummary;
-                        webClientIO.updateSettingsSummary(this.settingSummary, [
-                            ...dispatcher.getTranslatorNameToEmojiMap(),
-                        ]);
-                    }
-
-                    switch (msgObj.message) {
-                        case "process-shell-request":
-                            try {
-                                const metrics = await dispatcher.processCommand(
-                                    msgObj.data.request,
-                                    msgObj.data.id,
-                                    msgObj.data.images,
-                                );
-                                console.log(metrics);
-                                webClientIO.sendSuccessfulCommandResult(
-                                    msgObj.data.messageId,
-                                    msgObj.data.id,
-                                    metrics,
-                                );
-                            } catch (error: any) {
-                                webClientIO.sendFailedCommandResult(
-                                    msgObj.data.messageId,
-                                    msgObj.data.id,
-                                    error,
-                                );
-                            }
-                            break;
-                        case "askYesNoResponse":
-                            // user said Yes (or no)!
-                            webClientIO.resolveYesNoPromise(
-                                msgObj.data.askYesNoId,
-                                msgObj.data.accept,
-                            );
-                            break;
-                        case "proposeActionResponse":
-                            webClientIO.resolveProposeActionPromise(
-                                msgObj.data.proposeActionId,
-                                msgObj.data.replacement,
-                            );
-                            break;
-                        case "questionResponse":
-                            webClientIO.resolveQuestionPromise(
-                                msgObj.data.questionId,
-                                msgObj.data.answer,
-                            );
-                            break;
-                        case "get-dynamic-display":
-                            dispatcher.getDynamicDisplay(
-                                msgObj.data.appAgentName,
-                                msgObj.data.displayType,
-                                msgObj.data.requestId,
-                            );
-                            break;
-                        case "get-template-schema":
-                            let schema = await dispatcher.getTemplateSchema(
-                                msgObj.data.templateAgentName,
-                                msgObj.data.templateName,
-                                msgObj.data.data,
-                            );
-                            webClientIO.sendTemplateSchema(
-                                msgObj.data.messageId,
-                                schema,
-                            );
-                            break;
-                    }
-                } catch {
-                    console.log("WebSocket message not parsed.");
-                }
-            });
-
-            ws.on("close", () => {
-                console.log("Client disconnected");
-            });
+            connectCallback(ws);
         });
 
         process.on("disconnect", () => {

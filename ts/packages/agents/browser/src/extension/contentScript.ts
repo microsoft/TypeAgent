@@ -3,6 +3,7 @@
 
 import { Readability, isProbablyReaderable } from "@mozilla/readability";
 import { HTMLReducer } from "./htmlReducer";
+import { SkeletonLoadingDetector } from "./loadingDetector";
 import { convert } from "html-to-text";
 import DOMPurify from "dompurify";
 
@@ -167,9 +168,14 @@ function markInvisibleNodesForCleanup() {
     });
 }
 
-function getPageHTML(fullSize: boolean, documentHtml: string, frameId: number) {
+function getPageHTML(
+    fullSize: boolean,
+    documentHtml: string,
+    frameId: number,
+    useTimestampIds: boolean,
+) {
     if (!documentHtml) {
-        setIdsOnAllElements(frameId);
+        setIdsOnAllElements(frameId, useTimestampIds);
         markInvisibleNodesForCleanup();
         documentHtml = document.children[0].outerHTML;
     }
@@ -186,7 +192,7 @@ function getPageHTML(fullSize: boolean, documentHtml: string, frameId: number) {
 
 function getPageText(documentHtml: string, frameId: number) {
     if (!documentHtml) {
-        setIdsOnAllElements(frameId);
+        setIdsOnAllElements(frameId, false);
         documentHtml = document.body.outerHTML;
     }
 
@@ -225,10 +231,16 @@ function getPageHTMLSubFragments(
 function getPageHTMLFragments(
     documentHtml: string,
     frameId: number,
+    useTimestampIds: boolean,
     maxSize: 16000,
 ) {
     if (!documentHtml) {
-        documentHtml = getPageHTML(false, documentHtml, frameId);
+        documentHtml = getPageHTML(
+            false,
+            documentHtml,
+            frameId,
+            useTimestampIds,
+        );
     }
     const domParser = new DOMParser();
     const doc = domParser.parseFromString(
@@ -449,9 +461,9 @@ function daysIntoYear() {
     );
 }
 
-function setIdsOnAllElements(frameId: number) {
+function setIdsOnAllElements(frameId: number, useTimestampIds?: boolean) {
     const allElements = Array.from(document.getElementsByTagName("*"));
-    const idPrefix = `id_${daysIntoYear()}_${frameId}_`;
+    let idPrefix = `id_${daysIntoYear()}_${frameId}_`;
     const skipIdsFor = [
         "BR",
         "P",
@@ -484,17 +496,46 @@ function setIdsOnAllElements(frameId: number) {
         "OL",
         "LI",
         "LABEL",
+        "PATH",
+        "SVG",
     ];
-    let i = 0;
-    for (let element of allElements) {
+    // let i = 0;
+    for (let i = 0; i < allElements.length; i++) {
+        let element = allElements[i];
+
+        // for (let element of allElements) {
         if (
             !element.hasAttribute("id") &&
-            !skipIdsFor.includes(element.tagName)
+            !skipIdsFor.includes(element.tagName.toUpperCase())
         ) {
-            element.setAttribute("id", idPrefix + i.toString());
-            i++;
+            if (useTimestampIds) {
+                // element.setAttribute("id", idPrefix + performance.now().toString().replace('.', '_'));
+                element.setAttribute("id", idPrefix + i.toString());
+            } else {
+                element.setAttribute("id", idPrefix + i.toString());
+                // i++;
+            }
         }
     }
+}
+
+async function awaitPageIncrementalUpdates() {
+    return new Promise<string | undefined>((resolve, reject) => {
+        const detector = new SkeletonLoadingDetector({
+            stabilityThresholdMs: 500,
+            // Consider elements visible when they're at least 10% in view
+            intersectionThreshold: 0.1,
+        });
+
+        detector
+            .detect()
+            .then(() => {
+                resolve("true");
+            })
+            .catch((_error: Error) => {
+                resolve("false");
+            });
+    });
 }
 
 function sendPaleoDbRequest(data: any) {
@@ -581,6 +622,7 @@ async function handleScriptAction(
                 message.fullSize,
                 message.inputHtml,
                 message.frameId,
+                message.useTimestampIds,
             );
             sendResponse(html);
             break;
@@ -607,6 +649,7 @@ async function handleScriptAction(
                 message.inputHtml,
                 message.frameId,
                 message.maxFragmentSize,
+                message.useTimestampIds,
             );
             sendResponse(htmlFragments);
             break;
@@ -615,6 +658,12 @@ async function handleScriptAction(
         case "get_element_bounding_boxes": {
             const boundingBoxes = getInteractiveElementsBoundingBoxes();
             sendResponse(boundingBoxes);
+            break;
+        }
+
+        case "await_page_incremental_load": {
+            const updated = await awaitPageIncrementalUpdates();
+            sendResponse(updated);
             break;
         }
 
@@ -665,12 +714,13 @@ async function handleScriptAction(
 }
 
 chrome.runtime?.onMessage.addListener(
-    async (
-        message: any,
-        sender: chrome.runtime.MessageSender,
-        sendResponse,
-    ) => {
-        await handleScriptAction(message, sendResponse);
+    (message: any, sender: chrome.runtime.MessageSender, sendResponse) => {
+        const handleMessage = async () => {
+            await handleScriptAction(message, sendResponse);
+        };
+
+        handleMessage();
+        return true; // Important: indicates we'll send response asynchronously
     },
 );
 
@@ -678,9 +728,10 @@ window.addEventListener(
     "message",
     async (event) => {
         if (
-            event.data.source == "preload" &&
-            event.data.target == "contentScript" &&
-            event.data.messageType == "scriptActionRequest"
+            event.data !== undefined &&
+            event.data.source === "preload" &&
+            event.data.target === "contentScript" &&
+            event.data.messageType === "scriptActionRequest"
         ) {
             await handleScriptAction(event.data.body, (response) => {
                 window.top?.postMessage(

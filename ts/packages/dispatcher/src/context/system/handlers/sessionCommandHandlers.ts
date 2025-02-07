@@ -28,9 +28,7 @@ import {
     displaySuccess,
     displayWarn,
 } from "@typeagent/agent-sdk/helpers/display";
-import { getToggleHandlerTable } from "../../../command/handlerUtils.js";
 import { askYesNoWithContext } from "../../interactiveIO.js";
-import path from "node:path";
 
 class SessionNewCommandHandler implements CommandHandler {
     public readonly description = "Create a new empty session";
@@ -149,7 +147,7 @@ class SessionClearCommandHandler implements CommandHandlerNoParams {
             systemContext,
             systemContext.session,
         );
-        displaySuccess(`Session cleared.`, context);
+        displaySuccess(`Session data cleared.`, context);
     }
 }
 
@@ -261,8 +259,9 @@ class SessionInfoCommandHandler implements CommandHandlerNoParams {
               )
             : [];
         displayResult((log: (message?: string) => void) => {
+            log(`${chalk.bold("Instance Dir:")} ${systemContext.instanceDir}`);
             log(
-                `Session settings (${
+                `${chalk.bold("Session settings")} (${
                     systemContext.session.sessionDirPath
                         ? chalk.green(
                               getSessionName(
@@ -288,7 +287,7 @@ class SessionInfoCommandHandler implements CommandHandlerNoParams {
             printConfig(systemContext.session.getConfig());
 
             if (constructionFiles.length) {
-                log("\nConstruction Files:");
+                log(`\n${chalk.bold("Construction Files:")}`);
                 for (const file of constructionFiles) {
                     log(
                         `  ${

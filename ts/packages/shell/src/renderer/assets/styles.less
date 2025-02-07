@@ -13,6 +13,86 @@ body {
   font-size: 14px;
 }
 
+.dark-mode {
+  background-color: #333;
+
+  .action-container {
+    background-color: #222;
+  }
+
+  .chat-container {
+    background-color: #222;
+
+    .scroll_enabled {
+      background-color: #222;
+    }
+  }
+
+  .replacement-container {
+    background-color: #222;
+  }
+
+  .chat-input {
+    background-color: #444;
+    border: 1px solid #444;
+
+    .user-textarea {
+      color: white;
+    }
+
+    .chat-input-button {
+      color: white;
+    }
+
+    label {
+      color: white;
+    }
+
+    .autocomplete-container {
+      background-color: #444;
+      color: white;
+    }
+  }
+
+  .action-text {
+    color: lightgray;
+  }
+
+  .chat-separator-line {
+    background-color: gray;
+  }
+
+  .chat-separator-text {
+    color: gray;
+  }
+}
+
+.history {
+  filter: grayscale(100%);
+}
+
+.chat-separator {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  text-align: center;
+  font-size: 10px;
+  margin: 20px 20px;
+}
+
+.chat-separator-line {
+  flex-grow: 1;
+  width: 40px;
+  background-color: darkgray;
+  height: 2px;
+}
+
+.chat-separator-text {
+  margin: 0px 10px;
+  color: darkgray;
+  height: 20px;
+}
+
 .wrapper {
   height: 100%;
   width: 100%;
@@ -217,6 +297,7 @@ body {
   .chat-message-body;
   position: relative;
   background-color: lavender;
+  margin-right: 30px;
 }
 
 .chat-message-agent {
@@ -252,6 +333,10 @@ body {
 }
 
 .chat-message-agent-text {
+  white-space: break-spaces;
+}
+
+.chat-message-user-text {
   white-space: break-spaces;
 }
 
@@ -355,6 +440,7 @@ table.table-message td {
 .chat-timestamp-user {
   .chat-timestamp;
   text-align: end;
+  margin-right: 35px;
 }
 
 .agent-icon {
@@ -368,10 +454,42 @@ table.table-message td {
   text-align: center;
 }
 
+.user-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 15px;
+  position: absolute;
+  right: 0px;
+  font-size: 20px;
+  font-style: normal;
+  text-align: center;
+  background: plum;
+  color: purple;
+  margin-top: 2px;
+  font-family: sans-serif;
+  font-weight: 300;
+}
+
 .agent-name {
   font-style: normal;
   font-weight: bold;
   margin-right: 8px;
+}
+
+.agent-name[action-data]:hover:after {
+  content: attr(action-data);
+  position: absolute;
+  top: 30px;
+  left: 10px;
+  white-space: pre-wrap;
+  background-color: #86d9fd;
+  color: gray;
+  border: 1px solid #d6f3ff;
+  border-radius: 5px;
+  padding: 5px;
+  font-size: 100%;
+  font-family: "Courier New", Courier, monospace;
+  z-index: 100;
 }
 
 .timeString {

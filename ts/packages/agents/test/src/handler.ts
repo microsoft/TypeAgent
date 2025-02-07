@@ -6,7 +6,7 @@ import {
     AppAgent,
     ParsedCommandParams,
 } from "@typeagent/agent-sdk";
-import { AddAction } from "./schema.js";
+import { TestActions } from "./schema.js";
 import { createActionResult } from "@typeagent/agent-sdk/helpers/action";
 import {
     CommandHandler,
@@ -44,12 +44,17 @@ export function instantiate(): AppAgent {
     };
 }
 
-async function executeAction(action: AddAction, context: ActionContext<void>) {
+async function executeAction(
+    action: TestActions,
+    context: ActionContext<void>,
+) {
     switch (action.actionName) {
         case "add":
             const { a, b } = action.parameters;
             return createActionResult(`The sum of ${a} and ${b} is ${a + b}`);
+        case "random":
+            return createActionResult(`Random number: ${Math.random()}`);
         default:
-            throw new Error(`Unknown action: ${action.actionName}`);
+            throw new Error(`Unknown action: ${(action as any).actionName}`);
     }
 }

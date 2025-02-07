@@ -5,10 +5,10 @@ import fs from "node:fs";
 import path from "node:path";
 import chalk from "chalk";
 import {
-    ActionConfigProvider,
     loadAgentJsonTranslator,
     TranslatedAction,
 } from "../../translation/agentTranslators.js";
+import { ActionConfigProvider } from "../../translation/actionConfigProvider.js";
 import {
     JSONAction,
     RequestAction,
@@ -23,7 +23,10 @@ import {
 import { getElapsedString, createLimiter, Limiter } from "common-utils";
 import { getCacheFactory } from "../cacheFactory.js";
 import { Result } from "typechat";
-import { isMultipleAction } from "../../translation/multipleActionSchema.js";
+import {
+    isMultipleAction,
+    isPendingRequest,
+} from "../../translation/multipleActionSchema.js";
 
 const testDataJSONVersion = 2;
 export type TestDataEntry<T extends object = object> =
@@ -362,20 +365,32 @@ function getGenerateTestDataFn(
             }
             const newActions = result.data as TranslatedAction;
 
-            action = isMultipleAction(newActions)
-                ? newActions.parameters.requests.map(
-                      (e) =>
-                          new Action(
-                              schemaName,
-                              e.action.actionName,
-                              e.action.parameters,
-                          ),
-                  )
-                : new Action(
-                      schemaName,
-                      newActions.actionName,
-                      newActions.parameters,
-                  );
+            if (isMultipleAction(newActions)) {
+                const actions: Action[] = [];
+                for (const e of newActions.parameters.requests) {
+                    if (isPendingRequest(e)) {
+                        return toFailedResult({
+                            request,
+                            message: "Failed translation: Pending action",
+                            tags,
+                        });
+                    }
+                    actions.push(
+                        new Action(
+                            schemaName,
+                            e.action.actionName,
+                            e.action.parameters,
+                        ),
+                    );
+                }
+                action = actions;
+            } else {
+                action = new Action(
+                    schemaName,
+                    newActions.actionName,
+                    newActions.parameters,
+                );
+            }
         }
 
         const requestAction = RequestAction.create(request, action, history);

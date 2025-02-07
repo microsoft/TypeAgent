@@ -77,12 +77,14 @@ function htmlPlaybackStatus(
             actionResult.entities.push({
                 name: status.item.name,
                 type: ["track"],
+                uniqueId: status.item.id,
             });
             // make an entity for each artist
             for (const artist of status.item.artists) {
                 actionResult.entities.push({
                     name: artist.name,
                     type: ["artist"],
+                    uniqueId: artist.id,
                 });
             }
             const plainArtists = "    A" + artists.substring(1);
@@ -91,6 +93,7 @@ function htmlPlaybackStatus(
             actionResult.entities.push({
                 name: album,
                 type: ["album"],
+                uniqueId: status.item.album.id,
             });
         }
     }

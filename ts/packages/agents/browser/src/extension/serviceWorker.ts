@@ -1,7 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { WebSocketMessage } from "../../../../commonUtils/dist/indexBrowser";
+import { WebSocketMessageV2 } from "../../../../commonUtils/dist/indexBrowser";
+import {
+    isWebAgentMessage,
+    isWebAgentMessageFromDispatcher,
+    WebAgentDisconnectMessage,
+} from "../../dist/common/webAgentMessageTypes.mjs";
 
 async function getConfigValues(): Promise<Record<string, string>> {
     const envLocation = chrome.runtime.getURL(".env");
@@ -34,7 +39,7 @@ export async function createWebSocket() {
     let socketEndpoint =
         configValues["WEBSOCKET_HOST"] ?? "ws://localhost:8080/";
 
-    socketEndpoint += "?clientId=" + chrome.runtime.id;
+    socketEndpoint += `?channel=browser&role=client&clientId=${chrome.runtime.id}`;
     return new Promise<WebSocket | undefined>((resolve, reject) => {
         const webSocket = new WebSocket(socketEndpoint);
         console.log("Connected to: " + socketEndpoint);
@@ -80,59 +85,66 @@ async function ensureWebsocketConnected() {
 
         webSocket.onmessage = async (event: any, isBinary: boolean) => {
             const text = await event.data.text();
-            const data = JSON.parse(text) as WebSocketMessage;
-            if (data.target == "browser") {
-                if (data.messageType == "browserActionRequest") {
-                    const response = await runBrowserAction(data.body);
-                    webSocket.send(
-                        JSON.stringify({
-                            source: data.target,
-                            target: data.source,
-                            messageType: "browserActionResponse",
-                            id: data.id,
-                            body: response,
-                        }),
-                    );
-                } else if (data.messageType == "siteTranslatorStatus") {
-                    if (data.body.status == "initializing") {
-                        showBadgeBusy();
-                        console.log(`Initializing ${data.body.translator}`);
-                    } else if (data.body.status == "initialized") {
-                        showBadgeHealthy();
-                        console.log(
-                            `Finished initializing ${data.body.translator}`,
+            const data = JSON.parse(text) as WebSocketMessageV2;
+
+            if (data.error) {
+                console.error(data.error);
+                return;
+            }
+
+            if (data.method && data.method.indexOf("/") > 0) {
+                const [schema, actionName] = data.method?.split("/");
+
+                if (schema == "browser") {
+                    if (actionName == "siteTranslatorStatus") {
+                        if (data.params.status == "initializing") {
+                            showBadgeBusy();
+                            console.log(
+                                `Initializing ${data.params.translator}`,
+                            );
+                        } else if (data.params.status == "initialized") {
+                            showBadgeHealthy();
+                            console.log(
+                                `Finished initializing ${data.params.translator}`,
+                            );
+                        }
+                    } else {
+                        const response = await runBrowserAction({
+                            actionName: actionName,
+                            parameters: data.params,
+                        });
+
+                        webSocket.send(
+                            JSON.stringify({
+                                id: data.id,
+                                result: response,
+                            }),
                         );
                     }
-                } else if (
-                    data.messageType.startsWith("browserActionRequest.")
-                ) {
-                    const message = await runSiteAction(
-                        data.messageType,
-                        data.body,
-                    );
+                } else if (schema.startsWith("browser.")) {
+                    const message = await runSiteAction(schema, {
+                        actionName: actionName,
+                        parameters: data.params,
+                    });
 
                     webSocket.send(
                         JSON.stringify({
-                            source: data.target,
-                            target: data.source,
-                            messageType: "browserActionResponse",
                             id: data.id,
-                            body: message,
+                            result: message,
                         }),
                     );
                 }
-
-                console.log(
-                    `Browser websocket client received message: ${text}`,
-                );
             }
+            console.log(`Browser websocket client received message: ${text}`);
         };
 
-        webSocket.onclose = (event: object) => {
+        webSocket.onclose = (event: any) => {
             console.log("websocket connection closed");
             webSocket = undefined;
             showBadgeError();
-            reconnectWebSocket();
+            if (event.reason !== "duplicate") {
+                reconnectWebSocket();
+            }
         };
 
         resolve(webSocket);
@@ -144,10 +156,8 @@ export function keepWebSocketAlive(webSocket: WebSocket) {
         if (webSocket && webSocket.readyState === WebSocket.OPEN) {
             webSocket.send(
                 JSON.stringify({
-                    source: "browser",
-                    target: "none",
-                    messageType: "keepAlive",
-                    body: {},
+                    method: "keepAlive",
+                    params: {},
                 }),
             );
         } else {
@@ -228,6 +238,20 @@ async function awaitPageLoad(targetTab: chrome.tabs.Tab) {
 
         chrome.tabs.onUpdated.addListener(handler);
     });
+}
+
+async function awaitPageIncrementalUpdates(targetTab: chrome.tabs.Tab) {
+    const loadingCompleted = await chrome.tabs.sendMessage(
+        targetTab.id!,
+        {
+            type: "await_page_incremental_load",
+        },
+        { frameId: 0 },
+    );
+
+    if (!loadingCompleted) {
+        console.error("Incremental loading did not complete for this page.");
+    }
 }
 
 async function getLatLongForLocation(locationName: string) {
@@ -342,7 +366,7 @@ async function getTabAnnotatedScreenshot(downloadImage: boolean) {
             });
 
         const img = await loadImage(dataUrl);
-        // pad image with 5 px all aaround?
+        // pad image with 5 px all around?
         canvas.width = img.width + 10;
         canvas.height = img.height + 10;
 
@@ -473,14 +497,14 @@ async function getTabAnnotatedScreenshot(downloadImage: boolean) {
         return canvas.toDataURL();
     };
 
-    const annoatationResults = await chrome.scripting.executeScript({
+    const annotationResults = await chrome.scripting.executeScript({
         func: annotate,
         target: { tabId: targetTab.id! },
         args: [dataUrl, boundingBoxes],
     });
 
-    if (annoatationResults) {
-        const annotatedScreen = annoatationResults[0];
+    if (annotationResults) {
+        const annotatedScreen = annotationResults[0];
         if (downloadImage) {
             await downloadImageAsFile(
                 targetTab,
@@ -529,12 +553,14 @@ async function getTabHTML(
     fullSize: boolean,
     downloadAsFile: boolean,
     useDebugAPI?: boolean,
+    useTimestampIds?: boolean,
 ) {
     if (!useDebugAPI) {
         let outerHTML = await chrome.tabs.sendMessage(targetTab.id!, {
             type: "get_reduced_html",
             fullSize: fullSize,
             frameId: 0,
+            useTimestampIds: useTimestampIds,
         });
 
         if (downloadAsFile) {
@@ -590,6 +616,7 @@ async function getTabHTMLFragments(
     fullSize: boolean,
     downloadAsFile: boolean,
     extractText: boolean,
+    useTimestampIds: boolean,
     maxFragmentSize: 16000,
 ) {
     const frames = await chrome.webNavigation.getAllFrames({
@@ -608,6 +635,7 @@ async function getTabHTMLFragments(
                         type: "get_reduced_html",
                         fullSize: fullSize,
                         frameId: frames[i].frameId,
+                        useTimestampIds: useTimestampIds,
                     },
                     { frameId: frames[i].frameId },
                 );
@@ -702,6 +730,7 @@ async function getTabHTMLFragmentsBySize(
 async function getFilteredHTMLFragments(
     targetTab: chrome.tabs.Tab,
     inputHtmlFragments: any[],
+    cssSelectorsToKeep: string[],
 ) {
     let htmlFragments: any[] = [];
 
@@ -712,10 +741,7 @@ async function getFilteredHTMLFragments(
                 {
                     type: "get_filtered_html_fragments",
                     inputHtml: inputHtmlFragments[i].content,
-                    cssSelectors: [
-                        inputHtmlFragments[i].cssSelectorAcross,
-                        inputHtmlFragments[i].cssSelectorDown,
-                    ].join(", "),
+                    cssSelectors: cssSelectorsToKeep.join(", "),
                     frameId: inputHtmlFragments[i].frameId,
                 },
                 { frameId: inputHtmlFragments[i].frameId },
@@ -733,20 +759,21 @@ async function getFilteredHTMLFragments(
 let currentSiteTranslator = "";
 let currentCrosswordUrl = "";
 async function toggleSiteTranslator(targetTab: chrome.tabs.Tab) {
-    let messageType = "enableSiteTranslator";
-    let messageBody = "";
+    let method = "enableSiteTranslator";
+    let translatorName = "";
     await ensureWebsocketConnected();
     if (targetTab.url) {
         const host = new URL(targetTab.url).host;
 
         if (host === "paleobiodb.org" || host === "www.paleobiodb.org") {
-            messageType = "enableSiteTranslator";
-            messageBody = "browser.paleoBioDb";
+            method = "enableSiteTranslator";
+            translatorName = "browser.paleoBioDb";
             currentSiteTranslator = "browser.paleoBioDb";
         } else {
             if (currentSiteTranslator == "browser.paleoBioDb") {
-                messageType = "disableSiteTranslator";
-                messageBody = "browser.paleoBioDb";
+                method = "disableSiteTranslator";
+                translatorName = "browser.paleoBioDb";
+                currentSiteTranslator = "";
             }
         }
 
@@ -770,9 +797,9 @@ async function toggleSiteTranslator(targetTab: chrome.tabs.Tab) {
                 "https://www.bestcrosswords.com/bestcrosswords/guestconstructor",
             )
         ) {
-            messageType = "enableSiteTranslator";
-            messageBody = "browser.crossword";
-            currentSiteTranslator = "browser.crossword";
+            method = "enableSiteTranslator";
+            translatorName = "browser.crossword";
+            currentSiteTranslator = translatorName;
             currentCrosswordUrl = targetTab.url;
         }
 
@@ -780,33 +807,37 @@ async function toggleSiteTranslator(targetTab: chrome.tabs.Tab) {
             "www.homedepot.com",
             "www.target.com",
             "www.walmart.com",
-            "www.instacart.com",
         ];
 
         if (commerceHosts.includes(host)) {
-            messageType = "enableSiteTranslator";
-            messageBody = "browser.commerce";
-            currentSiteTranslator = "browser.commerce";
+            method = "enableSiteTranslator";
+            translatorName = "browser.commerce";
+            currentSiteTranslator = translatorName;
         }
 
         if (host === "instacart.com" || host === "www.instacart.com") {
-            messageType = "enableSiteTranslator";
-            messageBody = "browser.instacart";
-            currentSiteTranslator = "browser.instacart";
+            method = "enableSiteTranslator";
+            translatorName = "browser.instacart";
+            currentSiteTranslator = translatorName;
+        }
+
+        if (translatorName === "") {
+            // default to schemaFinder
+            method = "enableSiteTranslator";
+            translatorName = "browser.schemaFinder";
+            currentSiteTranslator = translatorName;
         }
 
         // trigger translator change
         if (
             webSocket &&
             webSocket.readyState === WebSocket.OPEN &&
-            messageBody
+            translatorName
         ) {
             webSocket.send(
                 JSON.stringify({
-                    source: "browser",
-                    target: "dispatcher",
-                    messageType: messageType,
-                    body: messageBody,
+                    method: method,
+                    params: { translator: translatorName },
                 }),
             );
         }
@@ -818,37 +849,21 @@ async function sendActionToTabIndex(action: any) {
         if (webSocket) {
             try {
                 const callId = new Date().getTime().toString();
-                const messageType = "tabIndexRequest";
 
                 webSocket.send(
                     JSON.stringify({
-                        source: "browser",
-                        target: "dispatcher",
-                        messageType: messageType,
+                        method: action.actionName,
                         id: callId,
-                        body: action,
+                        params: action.parameters,
                     }),
                 );
 
                 const handler = async (event: any) => {
                     const text = await event.data.text();
-                    const data = JSON.parse(text) as WebSocketMessage;
-                    if (
-                        data.target == "browser" &&
-                        data.source == "dispatcher" &&
-                        data.id == callId &&
-                        data.body
-                    ) {
-                        switch (data.messageType) {
-                            case "tabIndexResponse": {
-                                webSocket.removeEventListener(
-                                    "message",
-                                    handler,
-                                );
-                                resolve(data.body);
-                                break;
-                            }
-                        }
+                    const data = JSON.parse(text) as WebSocketMessageV2;
+                    if (data.id == callId && data.result) {
+                        webSocket.removeEventListener("message", handler);
+                        resolve(data.result);
                     }
                 };
 
@@ -1137,6 +1152,7 @@ async function runBrowserAction(action: any) {
                 action.parameters?.fullHTML,
                 action.parameters?.downloadAsFile,
                 action.parameters?.extractText,
+                action.parameters?.useTimestampIds,
                 16000,
             );
             break;
@@ -1147,6 +1163,7 @@ async function runBrowserAction(action: any) {
             responseObject = await getFilteredHTMLFragments(
                 targetTab,
                 action.parameters.fragments,
+                action.parameters.cssSelectorsToKeep,
             );
             break;
         }
@@ -1158,6 +1175,7 @@ async function runBrowserAction(action: any) {
         case "awaitPageLoad": {
             const targetTab = await getActiveTab();
             await awaitPageLoad(targetTab);
+            await awaitPageIncrementalUpdates(targetTab);
             responseObject = targetTab.url;
             break;
         }
@@ -1236,10 +1254,10 @@ async function runBrowserAction(action: any) {
     };
 }
 
-async function runSiteAction(messageType: string, action: any) {
+async function runSiteAction(schemaName: string, action: any) {
     let confirmationMessage = "OK";
-    switch (messageType) {
-        case "browserActionRequest.paleoBioDb": {
+    switch (schemaName) {
+        case "browser.paleoBioDb": {
             const targetTab = await getActiveTab();
             const actionName =
                 action.actionName ?? action.fullActionName.split(".").at(-1);
@@ -1264,7 +1282,7 @@ async function runSiteAction(messageType: string, action: any) {
             // to do: update confirmation to include current page screenshot.
             break;
         }
-        case "browserActionRequest.crossword": {
+        case "browser.crossword": {
             const targetTab = await getActiveTab();
 
             const result = await chrome.tabs.sendMessage(targetTab.id!, {
@@ -1275,7 +1293,7 @@ async function runSiteAction(messageType: string, action: any) {
             // to do: update confirmation to include current page screenshot.
             break;
         }
-        case "browserActionRequest.commerce": {
+        case "browser.commerce": {
             const targetTab = await getActiveTab();
 
             const result = await chrome.tabs.sendMessage(targetTab.id!, {
@@ -1433,8 +1451,8 @@ chrome.runtime.onMessageExternal.addListener(
         async () => {
             switch (message.type) {
                 case "crosswordAction": {
-                    const respose = await runBrowserAction(message.body);
-                    sendResponse(respose);
+                    const response = await runBrowserAction(message.body);
+                    sendResponse(response);
                     break;
                 }
             }
@@ -1495,10 +1513,8 @@ chrome.contextMenus?.onClicked.addListener(
                 if (webSocket && webSocket.readyState === WebSocket.OPEN) {
                     webSocket.send(
                         JSON.stringify({
-                            source: "browser",
-                            target: "dispatcher",
-                            messageType: "enableSiteTranslator",
-                            body: "browser.crossword",
+                            method: "enableSiteTranslator",
+                            params: { translator: "browser.crossword" },
                         }),
                     );
                 }
@@ -1528,3 +1544,44 @@ chrome.contextMenus?.onClicked.addListener(
         }
     },
 );
+
+chrome.runtime.onConnect.addListener(async (port) => {
+    if (port.name !== "typeagent") {
+        // This shouldn't happen.
+        return;
+    }
+    if (!webSocket || webSocket.readyState !== WebSocket.OPEN) {
+        port.disconnect();
+        return;
+    }
+
+    const handler = async (event: any) => {
+        const message = await event.data.text();
+        const data = JSON.parse(message) as WebSocketMessageV2;
+        if (isWebAgentMessageFromDispatcher(data)) {
+            port.postMessage(data);
+        }
+    };
+    webSocket.addEventListener("message", handler);
+
+    const agentNames: string[] = [];
+    port.onMessage.addListener((data) => {
+        if (isWebAgentMessage(data)) {
+            if (data.method === "webAgent/register") {
+                agentNames.push(data.params.param.name);
+            }
+            webSocket.send(JSON.stringify(data));
+        }
+    });
+    port.onDisconnect.addListener(() => {
+        for (const name of agentNames) {
+            const message: WebAgentDisconnectMessage = {
+                source: "webAgent",
+                method: "webAgent/disconnect",
+                params: name,
+            };
+            webSocket.send(JSON.stringify(message));
+        }
+        webSocket.removeEventListener("message", handler);
+    });
+});

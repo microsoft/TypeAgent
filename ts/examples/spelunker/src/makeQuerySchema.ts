@@ -15,8 +15,8 @@ export type QuerySpecs = {
     // Queries directed to various indexes. Comments describe what's in each index.
     summaries?: QuerySpec; // A paragraph describing the code
     keywords?: QuerySpec; // Short key words and phrases extracted from the code
-    topics?: QuerySpec; // Slightly longer phrases relating to the code
-    goals?: QuerySpec; // What the code is trying to achieve
+    tags?: QuerySpec; // Optional high-level labels (e.g. "algorithmic", "I/O")
+    synonyms?: QuerySpec; // Additional synonyms or related domain concepts
     dependencies?: QuerySpec; // External dependencies
 
     // If the question can be answered based on chat history and general knowledge.

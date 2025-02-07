@@ -3,9 +3,14 @@
 
 import { PromptSection } from "typechat";
 import { AppAction, Entity } from "@typeagent/agent-sdk";
+
+export type PromptEntity = Entity & {
+    sourceAppAgentName: string;
+};
+
 export type HistoryContext = {
     promptSections: PromptSection[];
-    entities: Entity[];
+    entities: PromptEntity[];
     additionalInstructions?: string[] | undefined;
 };
 
@@ -73,6 +78,7 @@ export class Action {
         public readonly translatorName: string,
         public readonly actionName: string,
         public readonly parameters: ParamObjectType | undefined,
+        public readonly resultEntityId?: string,
     ) {}
 
     public get fullActionName() {

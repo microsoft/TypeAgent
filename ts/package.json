@@ -23,6 +23,8 @@
     "cli:dev": "pnpm -C packages/cli run start:dev",
     "elevate": "node tools/scripts/elevate.js",
     "getKeys": "node tools/scripts/getKeys.mjs",
+    "getKeys:build": "node tools/scripts/getKeys.mjs --vault build-pipeline-kv",
+    "postinstall": "cd node_modules/.pnpm/node_modules/better-sqlite3 && pnpm exec prebuild-install && shx cp build/Release/better_sqlite3.node build/Release/better_sqlite3.n.node",
     "knowledgeVisualizer": "pnpm -C packages/knowledgeVisualizer exec npm run start",
     "kv": "pnpm -C packages/knowledgeVisualizer exec npm run start",
     "lint": "fluid-build . -t prettier",
@@ -33,17 +35,20 @@
     "regen": "pnpm -C packages/cli run regen",
     "regen:builtin": "pnpm -C packages/cli run regen:builtin",
     "shell": "pnpm -C packages/shell run dev",
-    "test": "pnpm -r --no-sort --stream --workspace-concurrency=0 run test",
-    "test:full": "pnpm run -r --parallel --stream test:full"
+    "shell:test": "npx --prefix packages/shell playwright test simple.spec.ts",
+    "test": "pnpm run test:local && pnpm run test:live",
+    "test:live": "pnpm -r --no-sort --stream --workspace-concurrency=0 run test:live",
+    "test:local": "pnpm -r --no-sort --stream --workspace-concurrency=0 run test:local"
   },
   "devDependencies": {
     "@fluidframework/build-tools": "^0.35.0-247707",
     "@types/node": "^20.8.9",
     "concurrently": "^8.2.2",
     "markdown-link-check": "^3.12.2",
-    "prettier": "^3.2.5"
+    "prettier": "^3.2.5",
+    "shx": "^0.3.4"
   },
-  "packageManager": "pnpm@9.15.0+sha512.76e2379760a4328ec4415815bcd6628dee727af3779aaa4c914e3944156c4299921a89f976381ee107d41f12cfa4b66681ca9c718f0668fa0831ed4c6d8ba56c",
+  "packageManager": "pnpm@9.15.5+sha512.845196026aab1cc3f098a0474b64dfbab2afe7a1b4e91dd86895d8e4aa32a7a6d03049e2d0ad770bbe4de023a7122fb68c1a1d6e0d033c7076085f9d5d4800d4",
   "engines": {
     "node": ">=18",
     "pnpm": ">=9"

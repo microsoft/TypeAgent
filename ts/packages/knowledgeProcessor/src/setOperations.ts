@@ -17,7 +17,7 @@ export function createPostings(ids: number[] | Iterable<number>): Postings {
     return postings;
 }
 
-export function* intersect<T>(
+export function* intersectMerge<T>(
     xArray: Iterator<T> | Array<T>,
     yArray: Iterator<T> | Array<T>,
 ): IterableIterator<T> {
@@ -35,6 +35,27 @@ export function* intersect<T>(
         } else {
             yVal = y.next();
         }
+    }
+}
+
+export function* intersect<T>(
+    xArray: Iterator<T> | Array<T>,
+    yArray: Iterator<T> | Array<T>,
+): IterableIterator<T> {
+    const x: Iterator<T> = Array.isArray(xArray) ? xArray.values() : xArray;
+    const y: Iterator<T> = Array.isArray(yArray) ? yArray.values() : yArray;
+    const xSet = new Set<T>();
+    let xVal = x.next();
+    while (!xVal.done) {
+        xSet.add(xVal.value);
+        xVal = x.next();
+    }
+    let yVal = y.next();
+    while (!yVal.done) {
+        if (xSet.has(yVal.value)) {
+            yield yVal.value;
+        }
+        yVal = y.next();
     }
 }
 
@@ -69,7 +90,7 @@ export function intersectUnionMultiple<T>(
     return topKItems.sort();
 }
 
-export function* union<T>(
+export function* unionMerge<T>(
     xArray: Iterator<T> | Array<T>,
     yArray: Iterator<T> | Array<T>,
 ): IterableIterator<T> {
@@ -79,7 +100,6 @@ export function* union<T>(
     let yVal = y.next();
 
     while (!xVal.done && !yVal.done) {
-        // TODO: replace with a comparer: currently for strings, this is 2 comparisons
         if (xVal.value === yVal.value) {
             yield xVal.value;
             xVal = x.next();
@@ -99,6 +119,34 @@ export function* union<T>(
     while (!yVal.done) {
         yield yVal.value;
         yVal = y.next();
+    }
+}
+
+export function* union<T>(
+    xArray: Iterator<T> | Array<T>,
+    yArray: Iterator<T> | Array<T>,
+): IterableIterator<T> {
+    const x: Iterator<T> = Array.isArray(xArray) ? xArray.values() : xArray;
+    const y: Iterator<T> = Array.isArray(yArray) ? yArray.values() : yArray;
+    let unionSet = new Set<T>();
+    let xVal = x.next();
+    while (!xVal.done) {
+        unionSet.add(xVal.value);
+        xVal = x.next();
+    }
+    let yVal = y.next();
+    while (!yVal.done) {
+        unionSet.add(yVal.value);
+        yVal = y.next();
+    }
+    /*
+    const unionArray = [...unionSet.values()].sort();
+    for (const item of unionArray) {
+        yield item;
+    }
+        */
+    for (const value of unionSet.values()) {
+        yield value;
     }
 }
 
@@ -128,7 +176,6 @@ export function* unionScored<T>(
     let yVal = y.next();
 
     while (!xVal.done && !yVal.done) {
-        // TODO: replace with a comparer: currently for strings, this is 2 comparisons
         if (xVal.value.item === yVal.value.item) {
             // If both are equal, yield the one with a higher score
             yield xVal.value.score >= yVal.value.score
@@ -152,6 +199,36 @@ export function* unionScored<T>(
         yield yVal.value;
         yVal = y.next();
     }
+}
+
+export function* unionScoredHash(
+    xArray: Iterator<ScoredItem<number>> | Array<ScoredItem<number>>,
+    yArray: Iterator<ScoredItem<number>> | Array<ScoredItem<number>>,
+): IterableIterator<ScoredItem<number>> {
+    const x: Iterator<ScoredItem<number>> = Array.isArray(xArray)
+        ? xArray.values()
+        : xArray;
+    const y: Iterator<ScoredItem<number>> = Array.isArray(yArray)
+        ? yArray.values()
+        : yArray;
+
+    const unionSet = new Map<number, ScoredItem<number>>();
+    let xVal = x.next();
+    while (!xVal.done) {
+        unionSet.set(xVal.value.item, xVal.value);
+        xVal = x.next();
+    }
+
+    let yVal = y.next();
+    while (!yVal.done) {
+        const existing = unionSet.get(yVal.value.item);
+        if (!existing || existing.score < yVal.value.score) {
+            unionSet.set(yVal.value.item, yVal.value);
+        }
+        yVal = y.next();
+    }
+
+    return [...unionSet.values()].sort();
 }
 
 export function unionMultipleScored<T>(

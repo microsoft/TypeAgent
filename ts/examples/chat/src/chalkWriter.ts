@@ -132,7 +132,7 @@ export class ChalkWriter extends ConsoleWriter {
 
     public writeListInColor(
         color: ChalkInstance,
-        list?: string | string[] | (string | undefined)[],
+        list?: string | string[] | (string | undefined)[] | Set<string>,
         options?: ListOptions,
     ) {
         const prevColor = this.setForeColor(color);

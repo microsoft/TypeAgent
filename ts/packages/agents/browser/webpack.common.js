@@ -11,11 +11,17 @@ module.exports = {
     mode: "production",
     entry: {
         "extension/contentScript": path.join(srcDir, "contentScript.ts"),
+        "extension/webTypeAgentMain": path.join(srcDir, "webTypeAgentMain.ts"),
+        "extension/webTypeAgentContentScript": path.join(
+            srcDir,
+            "webTypeAgentContentScript.ts",
+        ),
         "electron/contentScript": path.join(srcDir, "contentScript.ts"),
         "electron/agentActivation": path.join(
             electronSrcDir,
             "agentActivation.ts",
         ),
+        "electron/webTypeAgentMain": path.join(srcDir, "webTypeAgentMain.ts"),
         "extension/serviceWorker": path.join(srcDir, "serviceWorker.ts"),
         "extension/uiEventsDispatcher": path.join(
             srcDir,

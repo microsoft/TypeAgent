@@ -44,7 +44,7 @@ class AzPIMClient {
         console.log("Looking up role information...");
         const roleAssignmentScheduleRequestName = randomUUID();
         const parameters = {
-            principalId: await this.getPrincipalId(),
+            principalId: await this.getPrincipalId(options?.continueOnFailure),
             requestType: options.requestType,
             roleDefinitionId: await this.getRoleDefinitionId(
                 client,
@@ -146,7 +146,7 @@ class AzPIMClient {
         }
     }
 
-    async getPrincipalId() {
+    async getPrincipalId(continueOnFailure = false) {
         try {
             const accountDetails = JSON.parse(
                 await execAsync("az ad signed-in-user show"),
@@ -155,7 +155,12 @@ class AzPIMClient {
             return accountDetails.id;
         } catch (e) {
             console.log(e);
-            fatal(12, "Unable to get principal id of the current user.");
+
+            if (!continueOnFailure) {
+                fatal(12, "Unable to get principal id of the current user.");
+            } else {
+                throw "Unable to get principal id of the current user.";
+            }
         }
     }
 }

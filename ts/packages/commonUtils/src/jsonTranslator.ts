@@ -10,12 +10,11 @@ import {
     success,
     TypeChatJsonTranslator,
     TypeChatJsonValidator,
-    TypeChatLanguageModel,
 } from "typechat";
 import { createTypeScriptJsonValidator } from "typechat/ts";
 import { TypeChatConstraintsValidator } from "./constraints.js";
 import registerDebug from "debug";
-import { openai as ai } from "aiclient";
+import { openai as ai, JsonSchema } from "aiclient";
 import {
     createIncrementalJsonParser,
     IncrementalJsonParser,
@@ -231,7 +230,7 @@ async function attachAttachments(
 export type JsonTranslatorOptions<T extends object> = {
     constraintsValidator?: TypeChatConstraintsValidator<T> | undefined; // Optional
     instructions?: PromptSection[] | undefined; // Instructions before the per request preamble
-    model?: string | TypeChatLanguageModel | undefined; // optional
+    model?: string | undefined; // optional
 };
 
 /**
@@ -261,36 +260,52 @@ export function createJsonTranslatorFromSchemaDef<T extends object>(
     );
 }
 
+export interface TypeAgentJsonValidator<T extends object>
+    extends TypeChatJsonValidator<T> {
+    getSchemaText: () => string;
+    getTypeName: () => string;
+    validate(jsonObject: object): Result<T>;
+    getJsonSchema?: () => JsonSchema | undefined;
+}
+
 export function createJsonTranslatorWithValidator<T extends object>(
     name: string,
-    validator: TypeChatJsonValidator<T>,
+    validator: TypeAgentJsonValidator<T>,
     options?: JsonTranslatorOptions<T>,
 ) {
-    let model = options?.model;
-    if (typeof model !== "object") {
-        model = ai.createChatModel(
-            model,
-            {
-                response_format: { type: "json_object" },
-            },
-            undefined,
-            ["translator", name],
-        );
-    }
+    const model = ai.createChatModel(
+        options?.model,
+        {
+            response_format: { type: "json_object" },
+        },
+        undefined,
+        ["translate", name],
+    );
 
     const debugPrompt = registerDebug(`typeagent:translate:${name}:prompt`);
+    const debugJsonSchema = registerDebug(
+        `typeagent:translate:${name}:jsonschema`,
+    );
     const debugResult = registerDebug(`typeagent:translate:${name}:result`);
     const complete = model.complete.bind(model);
     model.complete = async (prompt: string | PromptSection[]) => {
         debugPrompt(prompt);
-        return complete(prompt);
+        const jsonSchema = validator.getJsonSchema?.();
+        if (jsonSchema !== undefined) {
+            debugJsonSchema(jsonSchema);
+        }
+        return complete(prompt, jsonSchema);
     };
 
     if (ai.supportsStreaming(model)) {
         const completeStream = model.completeStream.bind(model);
         model.completeStream = async (prompt: string | PromptSection[]) => {
             debugPrompt(prompt);
-            return completeStream(prompt);
+            const jsonSchema = validator.getJsonSchema?.();
+            if (jsonSchema !== undefined) {
+                debugJsonSchema(jsonSchema);
+            }
+            return completeStream(prompt, jsonSchema);
         };
     }
 
@@ -382,7 +397,7 @@ export function createJsonTranslatorFromFile<T extends object>(
 const header = `// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.`;
 
-function readSchemaFile(schemaFile: string): string {
+export function readSchemaFile(schemaFile: string): string {
     let content = fs.readFileSync(schemaFile, "utf8");
     if (content.startsWith(header)) {
         // strip copyright header for the prompt

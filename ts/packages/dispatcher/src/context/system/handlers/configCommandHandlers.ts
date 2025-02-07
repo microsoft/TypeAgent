@@ -34,6 +34,8 @@ import {
 import { alwaysEnabledAgents } from "../../appAgentManager.js";
 import { getCacheFactory } from "../../../utils/cacheFactory.js";
 import { resolveCommand } from "../../../command/command.js";
+import child_process from "node:child_process";
+import { fileURLToPath } from "node:url";
 
 const enum AgentToggle {
     Schema,
@@ -48,6 +50,11 @@ const AgentToggleDescription = [
     "agent commands",
     "agents",
 ] as const;
+
+const penLauncherPath = new URL(
+    "../../../../../../../dotnet/penLauncher/bin/Debug/net9.0/penLauncher.exe",
+    import.meta.url,
+);
 
 function getAgentToggleOptions(
     toggle: AgentToggle,
@@ -536,7 +543,7 @@ class ConfigTranslationNumberOfInitialActionsCommandHandler
     ) {
         const count = params.args.count;
         if (count < 0) {
-            throw new Error("Count must be positive interger");
+            throw new Error("Count must be positive integer");
         }
         await changeContextConfig(
             {
@@ -620,15 +627,38 @@ const configTranslationCommandHandlers: CommandHandlerTable = {
             );
         }),
         model: new ConfigModelSetCommandHandler("translation"),
-        multi: getToggleHandlerTable(
-            "multiple action translation",
-            async (context, enable: boolean) => {
-                await changeContextConfig(
-                    { translation: { multipleActions: enable } },
-                    context,
-                );
+        multi: {
+            description: "multiple actions",
+            commands: {
+                ...getToggleCommandHandlers(
+                    "multiple action translation",
+                    async (context, enable: boolean) => {
+                        await changeContextConfig(
+                            { translation: { multiple: { enabled: enable } } },
+                            context,
+                        );
+                    },
+                ),
+                result: getToggleHandlerTable(
+                    "result id in multiple action",
+                    async (context, enable: boolean) => {
+                        await changeContextConfig(
+                            { translation: { multiple: { result: enable } } },
+                            context,
+                        );
+                    },
+                ),
+                pending: getToggleHandlerTable(
+                    "pending request in multiple action",
+                    async (context, enable: boolean) => {
+                        await changeContextConfig(
+                            { translation: { multiple: { pending: enable } } },
+                            context,
+                        );
+                    },
+                ),
             },
-        ),
+        },
         switch: {
             description: "auto switch schemas",
             commands: {
@@ -718,21 +748,45 @@ const configTranslationCommandHandlers: CommandHandlerTable = {
         schema: {
             description: "Action schema configuration",
             commands: {
-                generation: getToggleHandlerTable(
-                    "generated action schema",
-                    async (context, enable: boolean) => {
-                        await changeContextConfig(
-                            {
-                                translation: {
-                                    schema: {
-                                        generation: enable,
+                generation: {
+                    description: "Generated action schema",
+                    commands: {
+                        ...getToggleCommandHandlers(
+                            "generated action schema",
+                            async (context, enable: boolean) => {
+                                await changeContextConfig(
+                                    {
+                                        translation: {
+                                            schema: {
+                                                generation: {
+                                                    enabled: enable,
+                                                },
+                                            },
+                                        },
                                     },
-                                },
+                                    context,
+                                );
                             },
-                            context,
-                        );
+                        ),
+                        json: getToggleHandlerTable(
+                            "use generate json schema if model supports it",
+                            async (context, enable: boolean) => {
+                                await changeContextConfig(
+                                    {
+                                        translation: {
+                                            schema: {
+                                                generation: {
+                                                    jsonSchema: enable,
+                                                },
+                                            },
+                                        },
+                                    },
+                                    context,
+                                );
+                            },
+                        ),
                     },
-                ),
+                },
                 optimize: {
                     description: "Optimize schema",
                     commands: {
@@ -937,7 +991,7 @@ export function getConfigCommandHandlers(): CommandHandlerTable {
                                 defaultSubCommand: "on",
                                 commands: {
                                     ...getToggleCommandHandlers(
-                                        "all expanation reference filters",
+                                        "all explanation reference filters",
                                         async (context, enable) => {
                                             await changeContextConfig(
                                                 {
@@ -1033,6 +1087,34 @@ export function getConfigCommandHandlers(): CommandHandlerTable {
                     ),
                 },
             },
+            pen: {
+                description: "Toggles click note pen handler.",
+                defaultSubCommand: "on",
+                commands: getToggleCommandHandlers(
+                    "Surface Pen Click Handler",
+                    async (isContext, enable) => {
+                        if (enable) {
+                            spawnPenLauncherProcess("--register");
+                        } else {
+                            spawnPenLauncherProcess("--unregister");
+                        }
+                    },
+                ),
+            },
         },
     };
+}
+
+async function spawnPenLauncherProcess(args: string) {
+    return new Promise<child_process.ChildProcess>((resolve, reject) => {
+        const child = child_process.spawn(fileURLToPath(penLauncherPath), [
+            args,
+        ]);
+        child.on("error", (err) => {
+            reject(err);
+        });
+        child.on("spawn", () => {
+            resolve(child);
+        });
+    });
 }

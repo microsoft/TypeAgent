@@ -1,0 +1,38 @@
+{
+  "name": "measure",
+  "version": "0.0.1",
+  "description": "Measure is an agent that maintains a simple database of measurements.",
+  "homepage": "https://github.com/microsoft/TypeAgent#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/microsoft/TypeAgent.git",
+    "directory": "ts/examples/agentExamples/measure"
+  },
+  "license": "MIT",
+  "author": "Microsoft",
+  "type": "module",
+  "exports": {
+    "./agent/manifest": "./dist/measureManifest.json",
+    "./agent/handlers": "./dist/measureActionHandler.js"
+  },
+  "scripts": {
+    "build": "npm run tsc",
+    "postbuild": "copyfiles -u 1 \"src/**/*Schema*.ts\" \"src/**/*Manifest*.json\" dist",
+    "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
+    "prettier": "prettier --check . --ignore-path ../../../.prettierignore",
+    "prettier:fix": "prettier --write . --ignore-path ../../../.prettierignore",
+    "tsc": "tsc -b"
+  },
+  "dependencies": {
+    "@typeagent/agent-sdk": "workspace:*",
+    "better-sqlite3": "11.8.1",
+    "typeagent": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "7.6.11",
+    "copyfiles": "^2.4.1",
+    "prettier": "^3.2.5",
+    "rimraf": "^5.0.5",
+    "typescript": "^5.4.2"
+  }
+}

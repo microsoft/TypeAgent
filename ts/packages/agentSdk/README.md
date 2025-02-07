@@ -1,12 +1,14 @@
 # Agent SDK Interfaces and Utilities
 
-This package contains interface definitions and utilities for implementing a Dispatcher Agent.
-[List](../agents/list/) agent is a good example and initial template for building a dispatcher agent.
-Go to the [dispatcher README](../dispatcher/README.md) for instructions on how to add a dispatcher agent.
+This package contains interface definitions and utilities for implementing a **Dispatcher Agent**.
+
+- [List](../agents/list/) agent is a good example and initial template for building a dispatcher agent.
+- The [Dispatcher README](../dispatcher/README.md) contains instructions on how to register a dispatcher agent with the TypeAgent Dispatcher.
+- You can also create agents as [installable packages](./ExternalAgents_README.md) called [**external application agents**](./ExternalAgents_README.md).
 
 ## Agent SDK
 
-To build a dispatcher agent, it needs to provide a manifest and an instantiation entry point.  
+To build a dispatcher agent, you provide a manifest and an instantiation entry point for your agent.  
 These are declared in the `package.json` as export paths:
 
 - `./agent/manifest` - The location of the JSON file for the manifest.
@@ -18,9 +20,9 @@ When loading dispatcher agent in a NPM package, the dispatcher first loads the m
 
 ### Instantiation Entry point
 
-`AppAgent` is the main interface any agents needs to implements.
+`AppAgent` is the main interface that your agent implements.
 
-The instantiation entry point is the code entry point for an app agent. After loading the `./agent/handlers` ESM module, the `instantiate` function will be call to get an instance of the `AppAgent`. The `AppAgent` provides these optional APIs:
+The instantiation entry point is the code entry point for an app agent. After loading the `./agent/handlers` ESM module, the `instantiate` function will be called to get an instance of the `AppAgent`. The `AppAgent` provides these optional APIs:
 
 Lifecycle APIs:
 

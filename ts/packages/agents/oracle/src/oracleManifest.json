@@ -1,6 +1,7 @@
 {
   "emojiChar": "🌀",
   "description": "Agent to produce oracular answers",
+  "schemaDefaultEnabled": false,
   "schema": {
     "description": "Oracle which gives mysterious answers",
     "schemaFile": "./oracleSchema.ts",

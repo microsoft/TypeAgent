@@ -10,11 +10,7 @@ import {
     collections,
     dateTime,
 } from "typeagent";
-import {
-    TermMap,
-    TextIndexSettings,
-    createTermMap,
-} from "../knowledgeIndex.js";
+import { TermMap, TextIndexSettings, createTermMap } from "../textIndex.js";
 import {
     createKnowledgeStoreOnStorage,
     KnowledgeStore,

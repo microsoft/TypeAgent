@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { WebSocketMessage, createWebSocket } from "common-utils";
+import { WebSocketMessageV2, createWebSocket } from "common-utils";
 import { WebSocket } from "ws";
 import {
     ActionContext,
@@ -52,7 +52,7 @@ async function updateCodeContext(
             return;
         }
 
-        const webSocket = await createWebSocket();
+        const webSocket = await createWebSocket("code", "dispatcher");
         if (webSocket) {
             agentContext.webSocket = webSocket;
             agentContext.pendingCall = new Map();
@@ -62,29 +62,18 @@ async function updateCodeContext(
             };
             webSocket.onmessage = async (event: any) => {
                 const text = event.data.toString();
-                const data = JSON.parse(text) as WebSocketMessage;
-                if (
-                    data.target == "dispatcher" &&
-                    data.source == "code" &&
-                    data.body
-                ) {
-                    switch (data.messageType) {
-                        case "confirmAction": {
-                            const pendingCall = agentContext.pendingCall.get(
-                                data.body.callId,
-                            );
+                const data = JSON.parse(text) as WebSocketMessageV2;
 
-                            if (pendingCall) {
-                                agentContext.pendingCall.delete(
-                                    data.body.callId,
-                                );
-                                const { resolve, context } = pendingCall;
-                                context.actionIO.setDisplay(data.body.message);
-                                resolve();
-                            }
+                if (data.id !== undefined && data.result !== undefined) {
+                    const pendingCall = agentContext.pendingCall.get(
+                        Number(data.id),
+                    );
 
-                            break;
-                        }
+                    if (pendingCall) {
+                        agentContext.pendingCall.delete(Number(data.id));
+                        const { resolve, context } = pendingCall;
+                        context.actionIO.setDisplay(data.result);
+                        resolve();
                     }
                 }
             };
@@ -119,13 +108,9 @@ async function executeCodeAction(
                 });
                 webSocketEndpoint.send(
                     JSON.stringify({
-                        source: "dispatcher",
-                        target: "code",
-                        messageType: "translatedAction",
-                        body: {
-                            callId,
-                            action,
-                        },
+                        id: callId,
+                        method: `code/${action.actionName}`,
+                        params: action.parameters,
                     }),
                 );
             });

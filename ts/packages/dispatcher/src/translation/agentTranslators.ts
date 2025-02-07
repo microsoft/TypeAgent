@@ -4,24 +4,23 @@
 import {
     CachedImageWithDetails,
     createJsonTranslatorFromSchemaDef,
+    createJsonTranslatorWithValidator,
     enableJsonTranslatorStreaming,
+    JsonTranslatorOptions,
 } from "common-utils";
-import {
-    AppAction,
-    ActionManifest,
-    SchemaDefinition,
-    AppAgentManifest,
-} from "@typeagent/agent-sdk";
+import { AppAction } from "@typeagent/agent-sdk";
 import { Result, TypeChatJsonTranslator } from "typechat";
 import { getPackageFilePath } from "../utils/getPackageFilePath.js";
-import { getMultipleActionSchemaDef } from "./multipleActionSchema.js";
+import {
+    getMultipleActionSchemaDef,
+    MultipleActionOptions,
+} from "./multipleActionSchema.js";
 import {
     TranslatorSchemaDef,
     composeTranslatorSchemas,
     IncrementalJsonValueCallBack,
 } from "common-utils";
 
-import registerDebug from "debug";
 import { HistoryContext, ParamObjectType } from "agent-cache";
 import { createTypeAgentRequestPrompt } from "../context/chatHistoryPrompt.js";
 import {
@@ -35,128 +34,33 @@ import {
     generateSchemaTypeDefinition,
     ActionSchemaObject,
     ActionSchemaCreator as sc,
-    ActionSchemaFile,
 } from "action-schema";
-const debugConfig = registerDebug("typeagent:dispatcher:schema:config");
-
-// A flatten AppAgentManifest
-export type ActionConfig = {
-    emojiChar: string;
-
-    translationDefaultEnabled: boolean;
-    actionDefaultEnabled: boolean;
-    transient: boolean;
-    schemaName: string;
-} & SchemaDefinition;
-
-export interface ActionConfigProvider {
-    tryGetActionConfig(schemaName: string): ActionConfig | undefined;
-    getActionConfig(schemaName: string): ActionConfig;
-    getActionConfigs(): [string, ActionConfig][];
-    getActionSchemaFileForConfig(config: ActionConfig): ActionSchemaFile;
-}
-
-function isValidSubSchemaName(schemaNamePart: string) {
-    // . is use as a sub-schema separator
-    // | is used in the cache as as multiple schema name separator
-    // , is used in the cache as a separator between schema name and its hash
-    return !/[.|,]/.test(schemaNamePart);
-}
-
-function collectActionConfigs(
-    actionConfigs: { [key: string]: ActionConfig },
-    manifest: ActionManifest,
-    schemaName: string,
-    emojiChar: string,
-    transient: boolean,
-    translationDefaultEnabled: boolean,
-    actionDefaultEnabled: boolean,
-) {
-    transient = manifest.transient ?? transient; // inherit from parent if not specified
-    translationDefaultEnabled =
-        manifest.translationDefaultEnabled ??
-        manifest.defaultEnabled ??
-        translationDefaultEnabled; // inherit from parent if not specified
-    actionDefaultEnabled =
-        manifest.actionDefaultEnabled ??
-        manifest.defaultEnabled ??
-        actionDefaultEnabled; // inherit from parent if not specified
-
-    if (manifest.schema) {
-        debugConfig(`Adding schema '${schemaName}'`);
-        actionConfigs[schemaName] = {
-            schemaName,
-            emojiChar,
-            ...manifest.schema,
-            transient,
-            translationDefaultEnabled,
-            actionDefaultEnabled,
-        };
-    }
-
-    const subManifests = manifest.subActionManifests;
-    if (subManifests) {
-        for (const [subName, subManfiest] of Object.entries(subManifests)) {
-            if (!isValidSubSchemaName(subName)) {
-                throw new Error(`Invalid sub-schema name: ${subName}`);
-            }
-            collectActionConfigs(
-                actionConfigs,
-                subManfiest,
-                `${schemaName}.${subName}`,
-                emojiChar,
-                transient, // propagate default transient
-                translationDefaultEnabled, // propagate default translationDefaultEnabled
-                actionDefaultEnabled, // propagate default actionDefaultEnabled
-            );
-        }
-    }
-}
-
-export function convertToActionConfig(
-    name: string,
-    config: AppAgentManifest,
-    actionConfigs: Record<string, ActionConfig> = {},
-): Record<string, ActionConfig> {
-    if (!isValidSubSchemaName(name)) {
-        throw new Error(`Invalid schema name: ${name}`);
-    }
-    const emojiChar = config.emojiChar;
-    collectActionConfigs(
-        actionConfigs,
-        config,
-        name,
-        emojiChar,
-        false, // transient default to false if not specified
-        true, // translationDefaultEnable default to true if not specified
-        true, // actionDefaultEnabled default to true if not specified
-    );
-    return actionConfigs;
-}
+import { ActionConfig } from "./actionConfig.js";
+import { ActionConfigProvider } from "./actionConfigProvider.js";
 
 export function getAppAgentName(schemaName: string) {
     return schemaName.split(".")[0];
 }
 
-const changeAssistantActionTypeName = "ChangeAssistantAction";
-const changeAssistantActionName = "changeAssistantAction";
-export type ChangeAssistantAction = {
-    actionName: "changeAssistantAction";
+const additionalActionLookupTypeName = "AdditionalActionLookupAction";
+const additionalActionLookup = "additionalActionLookup";
+export type AdditionalActionLookupAction = {
+    actionName: "additionalActionLookup";
     parameters: {
-        assistant: string;
+        schemaName: string;
         request: string; // this is constrained to active translators in the LLM schema
     };
 };
 
-export function isChangeAssistantAction(
+export function isAdditionalActionLookupAction(
     action: AppAction,
-): action is ChangeAssistantAction {
-    return action.actionName === changeAssistantActionName;
+): action is AdditionalActionLookupAction {
+    return action.actionName === additionalActionLookup;
 }
 
-const changeAssistantTypeComments = [
-    ` Use this ${changeAssistantActionTypeName} if the request is for an action that should be handled by a different assistant.`,
-    " The assistant will be chosen based on the assistant parameter",
+const additionalActionLookupTypeComments = [
+    ` Use this ${additionalActionLookupTypeName} to look up additional actions in schema groups`,
+    " The schema group will be chosen based on the schemaName parameter",
 ];
 export function createChangeAssistantActionSchema(
     provider: ActionConfigProvider,
@@ -176,23 +80,23 @@ export function createChangeAssistantActionSchema(
         return undefined;
     }
 
-    const assistantParameterComments = translators.map(
+    const schemaNameParameterComments = translators.map(
         ([name, translator]) => ` ${name} - ${translator.description}`,
     );
     const obj: ActionSchemaObject = sc.obj({
-        actionName: sc.string(changeAssistantActionName),
+        actionName: sc.string(additionalActionLookup),
         parameters: sc.obj({
-            assistant: sc.field(
+            schemaName: sc.field(
                 sc.string(translators.map(([name]) => name)),
-                assistantParameterComments,
+                schemaNameParameterComments,
             ),
             request: sc.string(),
         }),
     } as const);
     return sc.intf(
-        changeAssistantActionTypeName,
+        additionalActionLookupTypeName,
         obj,
-        changeAssistantTypeComments,
+        additionalActionLookupTypeComments,
         true,
     );
 }
@@ -212,7 +116,7 @@ function getChangeAssistantSchemaDef(
     }
     return {
         kind: "inline",
-        typeName: changeAssistantActionTypeName,
+        typeName: additionalActionLookupTypeName,
         schema: generateSchemaTypeDefinition(definition, { exact: true }),
     };
 }
@@ -220,11 +124,25 @@ function getChangeAssistantSchemaDef(
 function getTranslatorSchemaDef(
     actionConfig: ActionConfig,
 ): TranslatorSchemaDef {
-    return {
-        kind: "file",
-        typeName: actionConfig.schemaType,
-        fileName: getPackageFilePath(actionConfig.schemaFile),
-    };
+    if (typeof actionConfig.schemaFile === "string") {
+        return {
+            kind: "file",
+            typeName: actionConfig.schemaType,
+            fileName: getPackageFilePath(actionConfig.schemaFile),
+        };
+    }
+
+    if (actionConfig.schemaFile.type === "ts") {
+        return {
+            kind: "inline",
+            typeName: actionConfig.schemaType,
+            schema: actionConfig.schemaFile.content,
+        };
+    }
+
+    throw new Error(
+        `Unsupported schema source type: ${actionConfig.schemaFile.type}"`,
+    );
 }
 
 export function getInjectedActionConfigs(
@@ -249,7 +167,7 @@ function getInjectedSchemaDefs(
     provider: ActionConfigProvider,
     activeTranslators: { [key: string]: boolean },
     changeAgentAction: boolean,
-    multipleActions: boolean,
+    multipleActionOptions: MultipleActionOptions,
 ): TranslatorSchemaDef[] {
     // Add all injected schemas
     const injectedActionConfigs = getInjectedActionConfigs(
@@ -279,8 +197,8 @@ function getInjectedSchemaDefs(
     }
 
     // Add multiple action schema
-    const multipleActionSchemaDef = multipleActions
-        ? getMultipleActionSchemaDef(subActionType)
+    const multipleActionSchemaDef = multipleActionOptions
+        ? getMultipleActionSchemaDef(subActionType, multipleActionOptions)
         : undefined;
 
     if (multipleActionSchemaDef) {
@@ -295,7 +213,7 @@ function getTranslatorSchemaDefs(
     provider: ActionConfigProvider,
     activeTranslators: { [key: string]: boolean },
     changeAgentAction: boolean,
-    multipleActions: boolean,
+    multipleActionOptions: MultipleActionOptions,
 ): TranslatorSchemaDef[] {
     const actionConfig = provider.getActionConfig(schemaName);
     return [
@@ -306,7 +224,7 @@ function getTranslatorSchemaDefs(
             provider,
             activeTranslators,
             changeAgentAction,
-            multipleActions,
+            multipleActionOptions,
         ),
     ];
 }
@@ -318,6 +236,7 @@ export type TypeAgentTranslator<T = object> = {
         attachments?: CachedImageWithDetails[],
         cb?: IncrementalJsonValueCallBack,
     ) => Promise<Result<T>>;
+    checkTranslate: (request: string) => Promise<Result<T>>;
 };
 
 // TranslatedAction are actions returned from the LLM without the translator name
@@ -340,11 +259,13 @@ export function loadAgentJsonTranslator<
     provider: ActionConfigProvider,
     activeTranslators: { [key: string]: boolean } = {},
     changeAgentAction: boolean = false,
-    multipleActions: boolean = false,
+    multipleActionOptions: MultipleActionOptions,
     regenerateSchema: boolean = true,
     model?: string,
     exact: boolean = true,
+    jsonSchema: boolean = false,
 ): TypeAgentTranslator<T> {
+    const options = { model };
     const translator = regenerateSchema
         ? createActionJsonTranslatorFromSchemaDef<T>(
               "AllActions",
@@ -353,10 +274,10 @@ export function loadAgentJsonTranslator<
                   provider,
                   activeTranslators,
                   changeAgentAction,
-                  multipleActions,
+                  multipleActionOptions,
               ),
-              { model },
-              { exact },
+              options,
+              { exact, jsonSchema },
           )
         : createJsonTranslatorFromSchemaDef<T>(
               "AllActions",
@@ -365,17 +286,20 @@ export function loadAgentJsonTranslator<
                   provider,
                   activeTranslators,
                   changeAgentAction,
-                  multipleActions,
+                  multipleActionOptions,
               ),
-              { model },
+              options,
           );
 
-    return createTypeAgentTranslator(translator);
+    return createTypeAgentTranslator(translator, options);
 }
 
 function createTypeAgentTranslator<
     T extends TranslatedAction = TranslatedAction,
->(translator: TypeChatJsonTranslator<T>): TypeAgentTranslator<T> {
+>(
+    translator: TypeChatJsonTranslator<T>,
+    options: JsonTranslatorOptions<T>,
+): TypeAgentTranslator<T> {
     const streamingTranslator = enableJsonTranslatorStreaming(translator);
 
     // the request prompt is already expanded by the override replacement below
@@ -384,6 +308,16 @@ function createTypeAgentTranslator<
         return request;
     };
 
+    // Create another translator so that we can have a different
+    // debug/token count tag
+    const altTranslator = createJsonTranslatorWithValidator(
+        "check",
+        translator.validator,
+        options,
+    );
+    altTranslator.createRequestPrompt = (request: string) => {
+        return request;
+    };
     const typeAgentTranslator = {
         translate: async (
             request: string,
@@ -406,6 +340,17 @@ function createTypeAgentTranslator<
                 attachments,
             );
         },
+        // No streaming, no history, no attachments.
+        checkTranslate: async (request: string) => {
+            const requestPrompt = createTypeAgentRequestPrompt(
+                altTranslator,
+                request,
+                undefined,
+                undefined,
+                false,
+            );
+            return altTranslator.translate(requestPrompt);
+        },
     };
 
     return typeAgentTranslator;
@@ -419,9 +364,10 @@ export function createTypeAgentTranslatorForSelectedActions<
     provider: ActionConfigProvider,
     activeTranslators: { [key: string]: boolean },
     changeAgentAction: boolean,
-    multipleActions: boolean,
+    multipleActionOptions: MultipleActionOptions,
     model?: string,
 ) {
+    const options = { model };
     const translator = createActionJsonTranslatorFromSchemaDef<T>(
         "AllActions",
         composeSelectedActionSchema(
@@ -430,11 +376,11 @@ export function createTypeAgentTranslatorForSelectedActions<
             provider,
             activeTranslators,
             changeAgentAction,
-            multipleActions,
+            multipleActionOptions,
         ),
-        { model },
+        options,
     );
-    return createTypeAgentTranslator<T>(translator);
+    return createTypeAgentTranslator<T>(translator, options);
 }
 
 // For CLI, replicate the behavior of loadAgentJsonTranslator to get the schema
@@ -443,7 +389,7 @@ export function getFullSchemaText(
     provider: ActionConfigProvider,
     activeSchemas: string[] = [],
     changeAgentAction: boolean,
-    multipleActions: boolean,
+    multipleActionOptions: MultipleActionOptions,
     generated: boolean,
 ): string {
     const active = Object.fromEntries(
@@ -457,7 +403,7 @@ export function getFullSchemaText(
                 provider,
                 active,
                 changeAgentAction,
-                multipleActions,
+                multipleActionOptions,
             ),
             { exact: true },
         );
@@ -467,7 +413,7 @@ export function getFullSchemaText(
         provider,
         active,
         changeAgentAction,
-        multipleActions,
+        multipleActionOptions,
     );
     return composeTranslatorSchemas("AllActions", schemaDefs);
 }

@@ -9,6 +9,7 @@ export interface ITrackCollection {
     getTracks(): SpotifyApi.TrackObjectFull[];
     getContext(): string | undefined;
     getPlaylist(): SpotifyApi.PlaylistObjectSimplified | undefined;
+    copy(): ITrackCollection;
 }
 
 export class TrackCollection implements ITrackCollection {
@@ -31,6 +32,10 @@ export class TrackCollection implements ITrackCollection {
     getPlaylist(): SpotifyApi.PlaylistObjectSimplified | undefined {
         return undefined;
     }
+
+    copy() {
+        return new TrackCollection(this.tracks, this.contextUri);
+    }
 }
 
 export class PlaylistTrackCollection extends TrackCollection {
@@ -44,6 +49,10 @@ export class PlaylistTrackCollection extends TrackCollection {
     getPlaylist() {
         return this.playlist;
     }
+
+    copy() {
+        return new PlaylistTrackCollection(this.playlist, this.getTracks());
+    }
 }
 
 export class AlbumTrackCollection extends TrackCollection {
@@ -54,5 +63,8 @@ export class AlbumTrackCollection extends TrackCollection {
             ),
             album.uri,
         );
+    }
+    copy() {
+        return new AlbumTrackCollection(this.album);
     }
 }

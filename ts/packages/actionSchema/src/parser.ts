@@ -183,7 +183,7 @@ export function createActionSchemaFile(
 ): ActionSchemaFile {
     if (strict && !entry.exported) {
         throw new Error(
-            `Schema Error: ${schemaName}: Type ${entry.name} must be exported`,
+            `Schema Error: ${schemaName}: Type '${entry.name}' must be exported`,
         );
     }
 
@@ -208,7 +208,7 @@ export function createActionSchemaFile(
             case "type-union":
                 if (strict && current.comments) {
                     throw new Error(
-                        `Schema Error: ${schemaName}: entry type comments for '${current.name}' are not supported`,
+                        `Schema Error: ${schemaName}: entry type comments for '${current.name}' are not used for prompts. Remove from the action schema file.\n${current.comments.map((s) => `  - ${s}`).join("\n")}`,
                     );
                 }
                 for (const t of current.type.types) {
@@ -229,19 +229,19 @@ export function createActionSchemaFile(
                 // Definition that references another type is the same as a union type with a single type.
                 if (strict && current.comments) {
                     throw new Error(
-                        `Schema Error: ${schemaName}:  entry type comments for '${current.name} are not supported`,
+                        `Schema Error: ${schemaName}: entry type comments for '${current.name}' are not used for prompts. Remove from the action schema file.\n${current.comments.map((s) => `  - ${s}`).join("\n")}`,
                     );
                 }
                 if (current.type.definition === undefined) {
                     throw new Error(
-                        `Schema Error: ${schemaName}:  unresolved type reference '${current.type.name}' in the entry type union`,
+                        `Schema Error: ${schemaName}: unresolved type reference '${current.type.name}' in the entry type union`,
                     );
                 }
                 pending.push(current.type.definition);
                 break;
             default:
                 throw new Error(
-                    `Schema Error: ${schemaName}:  invalid type ${current.type.type} in action schema type ${current.name}`,
+                    `Schema Error: ${schemaName}: invalid type '${current.type.type}' in action schema type ${current.name}`,
                 );
         }
     }
@@ -304,7 +304,7 @@ class ActionParser {
         const parser = new ActionParser();
         const definition = parser.parseSchema(sourceFile, typeName);
         if (definition === undefined) {
-            throw new Error(`Type ${typeName} not found`);
+            throw new Error(`Type '${typeName}' not found`);
         }
         const result = createActionSchemaFile(
             schemaName,
@@ -330,7 +330,7 @@ class ActionParser {
         for (const pending of this.pendingReferences) {
             const resolvedType = this.typeMap.get(pending.name);
             if (resolvedType === undefined) {
-                throw new Error(`Type ${pending.name} not found`);
+                throw new Error(`Type '${pending.name}' not found`);
             }
             pending.definition = resolvedType;
         }
@@ -506,8 +506,18 @@ class ActionParser {
         };
     }
 
-    private parseTypeUnionType(node: ts.UnionTypeNode): SchemaTypeUnion {
+    private parseTypeUnionType(
+        node: ts.UnionTypeNode,
+    ): SchemaTypeUnion | SchemaTypeStringUnion {
         const types = node.types.map((type) => this.parseType(type));
+        if (types.every((type) => type.type === "string-union")) {
+            return {
+                type: "string-union",
+                typeEnum: types
+                    .map((type) => (type as SchemaTypeStringUnion).typeEnum)
+                    .flat(),
+            };
+        }
         return {
             type: "type-union",
             types,

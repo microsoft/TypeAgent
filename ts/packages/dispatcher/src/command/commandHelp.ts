@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import {
+    ActionContext,
     CommandDescriptor,
     CommandDescriptorTable,
 } from "@typeagent/agent-sdk";
@@ -12,6 +13,7 @@ import {
     isCommandDescriptorTable,
 } from "@typeagent/agent-sdk/helpers/command";
 import { getDefaultSubCommandDescriptor } from "./command.js";
+import { displayResult } from "@typeagent/agent-sdk/helpers/display";
 
 export function getUsage(command: string, descriptor: CommandDescriptor) {
     if (descriptor.help) {
@@ -116,4 +118,93 @@ export function getHandlerTableUsage(
         output.push(`  ${subcommand.padEnd(20)}: ${handler.description}`);
     }
     return output.join("\n");
+}
+
+export function printStructuredHandlerTableUsage(
+    table: CommandDescriptorTable,
+    command: string | undefined,
+    context: ActionContext<CommandHandlerContext>,
+) {
+    let index: number = 0;
+    const commands: string[][] = [];
+
+    if (command) {
+        const defaultSubCommand = getDefaultSubCommandDescriptor(table);
+        if (defaultSubCommand !== undefined) {
+            displayResult(`${chalk.bold(chalk.underline("Command"))}`, context);
+            displayResult(getUsage(command, defaultSubCommand), context);
+            displayResult("\n", context);
+        }
+
+        if (Object.keys(table.commands).length == 0) {
+            return;
+        }
+
+        displayResult(
+            `${chalk.bold(chalk.underline(`Subcommands: ${table.description}`))}`,
+            context,
+        );
+        displayResult("\n", context);
+        displayResult(
+            `${chalk.bold("Usage")}: @${command} <subcommand> ...`,
+            context,
+        );
+        displayResult("\n", context);
+    } else {
+        displayResult(
+            `${chalk.bold(chalk.underline(table.description))}`,
+            context,
+        );
+        displayResult("\n", context);
+        displayResult(
+            `${chalk.bold("Usage")}: @[<agentName>] <subcommand> ...`,
+            context,
+        );
+        displayResult("\n", context);
+
+        commands[index] = ["Agent Name (* default agent)", "Description"];
+        index++;
+
+        const systemContext = context.sessionContext.agentContext;
+        for (const name of systemContext.agents.getAppAgentNames()) {
+            if (systemContext.agents.isCommandEnabled(name)) {
+                commands[index] = [];
+
+                if (name == "system") {
+                    commands[index].push(`${name} *`);
+                } else {
+                    commands[index].push(name);
+                }
+
+                commands[index].push(
+                    systemContext.agents.getAppAgentDescription(name),
+                );
+
+                index++;
+            }
+        }
+
+        displayResult(commands, context);
+        displayResult("\n", context);
+    }
+
+    const subCommands: string[][] = [];
+    index = 0;
+
+    subCommands[index] = ["Sub commands", "Description"];
+    index++;
+
+    for (const name in table.commands) {
+        const handler = table.commands[name];
+        const subcommand = isCommandDescriptorTable(handler)
+            ? `${name} <subcommand>`
+            : name;
+
+        subCommands[index] = [];
+        subCommands[index].push(subcommand);
+        subCommands[index].push(handler.description);
+        index++;
+    }
+
+    displayResult(subCommands, context);
 }

@@ -11,35 +11,35 @@ import {
     dialog,
     DevicePermissionHandlerHandlerDetails,
     WebContents,
-    BrowserView,
+    session,
+    WebContentsView,
 } from "electron";
-import { join } from "node:path";
+import path, { join } from "node:path";
 import { electronApp, optimizer, is } from "@electron-toolkit/utils";
 import { runDemo } from "./demo.js";
 import registerDebug from "debug";
+import { createDispatcher, Dispatcher } from "agent-dispatcher";
 import {
-    ClientIO,
-    createDispatcher,
-    RequestId,
-    Dispatcher,
-    NotifyExplainedData,
-    IAgentMessage,
-    TemplateEditConfig,
-} from "agent-dispatcher";
-import { getDefaultAppAgentProviders } from "agent-dispatcher/internal";
+    getDefaultAppAgentProviders,
+    getDefaultConstructionProvider,
+} from "default-agent-provider";
 import { ShellSettings } from "./shellSettings.js";
 import { unlinkSync } from "fs";
-import { existsSync } from "node:fs";
-import { AppAgentEvent, DisplayAppendMode } from "@typeagent/agent-sdk";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { shellAgentProvider } from "./agent.js";
 import { BrowserAgentIpc } from "./browserIpc.js";
-import { WebSocketMessage } from "common-utils";
+import { WebSocketMessageV2 } from "common-utils";
 import { AzureSpeech } from "./azureSpeech.js";
 import { auth } from "aiclient";
 import {
     closeLocalWhisper,
     isLocalWhisperEnabled,
 } from "./localWhisperCommandHandler.js";
+import { createDispatcherRpcServer } from "agent-dispatcher/rpc/dispatcher/server";
+import { createGenericChannel } from "agent-rpc/channel";
+import net from "node:net";
+import { createClientIORpcClient } from "agent-dispatcher/rpc/clientio/client";
+import { getInstanceDir } from "agent-dispatcher/internal";
 
 console.log(auth.AzureTokenScopes.CogServices);
 
@@ -59,9 +59,16 @@ process.argv.forEach((arg) => {
     }
 });
 
+export function runningTests(): boolean {
+    return (
+        process.env["INSTANCE_NAME"] !== undefined &&
+        process.env["INSTANCE_NAME"].startsWith("test_") === true
+    );
+}
+
 let mainWindow: BrowserWindow | null = null;
-let inlineBrowserView: BrowserView | null = null;
-let chatView: BrowserView | null = null;
+let inlineWebContentView: WebContentsView | null = null;
+let chatView: WebContentsView | null = null;
 
 const inlineBrowserSize = 1000;
 const userAgent =
@@ -74,9 +81,9 @@ function setContentSize() {
         let newWidth = newBounds.width;
         let chatWidth = chatView.getBounds().width;
 
-        if (inlineBrowserView) {
+        if (inlineWebContentView) {
             let browserWidth = newWidth - chatWidth;
-            inlineBrowserView?.setBounds({
+            inlineWebContentView?.setBounds({
                 x: chatWidth + 4,
                 y: 0,
                 width: browserWidth,
@@ -103,7 +110,8 @@ function setContentSize() {
 
 const time = performance.now();
 debugShell("Starting...");
-function createWindow(): void {
+
+async function createWindow() {
     debugShell("Creating window", performance.now() - time);
 
     // Create the browser window.
@@ -131,7 +139,15 @@ function createWindow(): void {
 
     mainWindow.webContents.setUserAgent(userAgent);
 
-    chatView = new BrowserView({
+    const browserExtensionPath = join(
+        app.getAppPath(),
+        "../agents/browser/dist/electron",
+    );
+    await session.defaultSession.loadExtension(browserExtensionPath, {
+        allowFileAccess: true,
+    });
+
+    chatView = new WebContentsView({
         webPreferences: {
             preload: join(__dirname, "../preload/index.mjs"),
             sandbox: false,
@@ -141,7 +157,7 @@ function createWindow(): void {
 
     chatView.webContents.setUserAgent(userAgent);
 
-    // ensure links are openend in a new browser window
+    // ensure links are opened in a new browser window
     chatView.webContents.setWindowOpenHandler((details) => {
         // TODO: add logic for keeping things in the browser window
         shell.openExternal(details.url);
@@ -150,7 +166,7 @@ function createWindow(): void {
 
     setContentSize();
 
-    mainWindow.setBrowserView(chatView);
+    mainWindow.contentView.addChildView(chatView);
 
     setupDevicePermissions(mainWindow);
 
@@ -191,16 +207,25 @@ function createWindow(): void {
 
     mainWindow.on("resize", setContentSize);
 
+    const contentLoadP: Promise<void>[] = [];
     // HMR for renderer base on electron-vite cli.
     // Load the remote URL for development or the local html file for production.
     if (is.dev && process.env["ELECTRON_RENDERER_URL"]) {
-        chatView.webContents.loadURL(process.env["ELECTRON_RENDERER_URL"]);
+        contentLoadP.push(
+            chatView.webContents.loadURL(process.env["ELECTRON_RENDERER_URL"]),
+        );
     } else {
-        chatView.webContents.loadURL(join(__dirname, "../renderer/index.html"));
+        contentLoadP.push(
+            chatView.webContents.loadFile(
+                join(__dirname, "../renderer/index.html"),
+            ),
+        );
     }
 
-    mainWindow.webContents.loadURL(
-        join(__dirname, "../renderer/viewHost.html"),
+    contentLoadP.push(
+        mainWindow.webContents.loadFile(
+            join(__dirname, "../renderer/viewHost.html"),
+        ),
     );
 
     mainWindow.removeMenu();
@@ -221,8 +246,8 @@ function createWindow(): void {
                 height: chatBounds?.height!,
             });
 
-            if (inlineBrowserView) {
-                inlineBrowserView?.setBounds({
+            if (inlineWebContentView) {
+                inlineWebContentView?.setBounds({
                     x: chatBounds!.width + 4,
                     y: 0,
                     width: bounds.width - newWidth - 20,
@@ -233,11 +258,29 @@ function createWindow(): void {
     });
 
     // Notify renderer process whenever settings are modified
-    ShellSettings.getinstance().onSettingsChanged = (): void => {
+    ShellSettings.getinstance().onSettingsChanged = (
+        settingName?: string | undefined,
+    ): void => {
         chatView?.webContents.send(
             "settings-changed",
             ShellSettings.getinstance().getSerializable(),
         );
+
+        if (settingName == "size") {
+            mainWindow?.setSize(
+                ShellSettings.getinstance().width,
+                ShellSettings.getinstance().height,
+            );
+        } else if (settingName == "position") {
+            mainWindow?.setPosition(
+                ShellSettings.getinstance().x!,
+                ShellSettings.getinstance().y!,
+            );
+        }
+
+        if (settingName == "zoomLevel") {
+            setZoomLevel(ShellSettings.getinstance().zoomLevel, chatView);
+        }
     };
 
     ShellSettings.getinstance().onShowSettingsDialog = (
@@ -259,20 +302,20 @@ function createWindow(): void {
     ): void => {
         const mainWindowSize = mainWindow?.getBounds();
 
-        if (!inlineBrowserView && mainWindowSize) {
-            inlineBrowserView = new BrowserView({
+        if (!inlineWebContentView && mainWindowSize) {
+            inlineWebContentView = new WebContentsView({
                 webPreferences: {
-                    preload: join(__dirname, "../preload/webview.mjs"),
+                    preload: join(__dirname, "../preload-cjs/webview.cjs"),
                     sandbox: false,
                 },
             });
 
-            inlineBrowserView.webContents.setUserAgent(userAgent);
+            inlineWebContentView.webContents.setUserAgent(userAgent);
 
-            mainWindow?.addBrowserView(inlineBrowserView);
+            mainWindow?.contentView.addChildView(inlineWebContentView);
 
-            setupDevToolsHandlers(inlineBrowserView);
-            setupZoomHandlers(inlineBrowserView);
+            setupDevToolsHandlers(inlineWebContentView);
+            setupZoomHandlers(inlineWebContentView);
 
             mainWindow?.setBounds({
                 width: mainWindowSize.width + inlineBrowserSize,
@@ -280,20 +323,17 @@ function createWindow(): void {
             setContentSize();
         }
 
-        inlineBrowserView?.webContents.loadURL(targetUrl.toString());
-        inlineBrowserView?.webContents.on("did-finish-load", () => {
-            inlineBrowserView?.webContents.send("init-site-agent");
-        });
+        inlineWebContentView?.webContents.loadURL(targetUrl.toString());
     };
 
     ShellSettings.getinstance().onCloseInlineBrowser = (): void => {
         const mainWindowSize = mainWindow?.getBounds();
 
-        if (inlineBrowserView && mainWindowSize) {
-            const browserBounds = inlineBrowserView.getBounds();
-            inlineBrowserView.webContents.close();
-            mainWindow?.removeBrowserView(inlineBrowserView);
-            inlineBrowserView = null;
+        if (inlineWebContentView && mainWindowSize) {
+            const browserBounds = inlineWebContentView.getBounds();
+            inlineWebContentView.webContents.close();
+            mainWindow?.contentView.removeChildView(inlineWebContentView);
+            inlineWebContentView = null;
 
             mainWindow?.setBounds({
                 width: mainWindowSize.width - browserBounds.width,
@@ -307,14 +347,16 @@ function createWindow(): void {
         await BrowserAgentIpc.getinstance().ensureWebsocketConnected();
 
         BrowserAgentIpc.getinstance().onMessageReceived = (
-            message: WebSocketMessage,
+            message: WebSocketMessageV2,
         ) => {
-            inlineBrowserView?.webContents.send(
+            inlineWebContentView?.webContents.send(
                 "received-from-browser-ipc",
                 message,
             );
         };
     });
+
+    return { mainWindow, chatView, contentLoadP };
 }
 
 /**
@@ -430,163 +472,6 @@ async function triggerRecognitionOnce() {
     );
 }
 
-function updateDisplay(message: IAgentMessage, mode?: DisplayAppendMode) {
-    // Ignore message without requestId
-    if (message.requestId === undefined) {
-        console.warn("updateDisplay: requestId is undefined");
-        return;
-    }
-    chatView?.webContents.send("updateDisplay", message, mode);
-}
-
-function notifyExplained(requestId: RequestId, data: NotifyExplainedData) {
-    // Ignore message without requestId
-    if (requestId === undefined) {
-        console.warn("notifyExplained: requestId is undefined");
-        return;
-    }
-    chatView?.webContents.send("notifyExplained", requestId, data);
-}
-
-function updateRandomCommandSelected(requestId: RequestId, message: string) {
-    // Ignore message without requestId
-    if (requestId === undefined) {
-        console.warn("updateRandomCommandSelected: requestId is undefined");
-        return;
-    }
-
-    chatView?.webContents.send("update-random-command", requestId, message);
-}
-
-let maxAskYesNoId = 0;
-async function askYesNo(
-    message: string,
-    requestId: RequestId,
-    defaultValue: boolean = false,
-) {
-    // Ignore message without requestId
-    if (requestId === undefined) {
-        console.warn("askYesNo: requestId is undefined");
-        return defaultValue;
-    }
-    const currentAskYesNoId = maxAskYesNoId++;
-    return new Promise<boolean>((resolve) => {
-        const callback = (
-            _event: Electron.IpcMainEvent,
-            questionId: number,
-            response: boolean,
-        ) => {
-            if (currentAskYesNoId !== questionId) {
-                return;
-            }
-            ipcMain.removeListener("askYesNoResponse", callback);
-            resolve(response);
-        };
-        ipcMain.on("askYesNoResponse", callback);
-        chatView?.webContents.send(
-            "askYesNo",
-            currentAskYesNoId,
-            message,
-            requestId,
-        );
-    });
-}
-
-let maxProposeActionId = 0;
-async function proposeAction(
-    actionTemplates: TemplateEditConfig,
-    requestId: RequestId,
-    source: string,
-) {
-    const currentProposeActionId = maxProposeActionId++;
-    return new Promise<unknown>((resolve) => {
-        const callback = (
-            _event: Electron.IpcMainEvent,
-            proposeActionId: number,
-            replacement?: unknown,
-        ) => {
-            if (currentProposeActionId !== proposeActionId) {
-                return;
-            }
-            ipcMain.removeListener("proposeActionResponse", callback);
-            resolve(replacement);
-        };
-        ipcMain.on("proposeActionResponse", callback);
-        chatView?.webContents.send(
-            "proposeAction",
-            currentProposeActionId,
-            actionTemplates,
-            requestId,
-            source,
-        );
-    });
-}
-
-const clientIO: ClientIO = {
-    clear: () => {
-        chatView?.webContents.send("clear");
-    },
-    setDisplay: updateDisplay,
-    appendDisplay: (message, mode) => updateDisplay(message, mode ?? "inline"),
-    setDynamicDisplay,
-    askYesNo,
-    proposeAction,
-    notify(event: string, requestId: RequestId, data: any, source: string) {
-        switch (event) {
-            case "explained":
-                notifyExplained(requestId, data);
-                break;
-            case "randomCommandSelected":
-                updateRandomCommandSelected(requestId, data.message);
-                break;
-            case "showNotifications":
-                chatView?.webContents.send(
-                    "notification-command",
-                    requestId,
-                    data,
-                );
-                break;
-            case AppAgentEvent.Error:
-            case AppAgentEvent.Warning:
-            case AppAgentEvent.Info:
-                console.log(`[${event}] ${source}: ${data}`);
-                chatView?.webContents.send(
-                    "notification-arrived",
-                    event,
-                    requestId,
-                    source,
-                    data,
-                );
-                break;
-            default:
-            // ignore
-        }
-    },
-    exit: () => {
-        app.quit();
-    },
-    takeAction: (action: string, data: unknown) => {
-        chatView?.webContents.send("take-action", action, data);
-    },
-};
-
-async function setDynamicDisplay(
-    source: string,
-    requestId: RequestId,
-    actionIndex: number,
-    displayId: string,
-    nextRefreshMs: number,
-) {
-    chatView?.webContents.send(
-        "set-dynamic-action-display",
-        source,
-        requestId,
-        actionIndex,
-        displayId,
-        nextRefreshMs,
-    );
-}
-
 async function initializeSpeech() {
     const key = process.env["SPEECH_SDK_KEY"];
     const region = process.env["SPEECH_SDK_REGION"];
@@ -624,27 +509,40 @@ async function initializeSpeech() {
     }
 }
 
-// This method will be called when Electron has finished
-// initialization and is ready to create browser windows.
-// Some APIs can only be used after this event occurs.
-async function initialize() {
-    debugShell("Ready", performance.now() - time);
-    // Set app user model id for windows
-    electronApp.setAppUserModelId("com.electron");
+async function initializeDispatcher(
+    chatView: WebContentsView,
+    updateSummary: (dispatcher: Dispatcher) => void,
+) {
+    const clientIOChannel = createGenericChannel((message: any) => {
+        chatView.webContents.send("clientio-rpc-call", message);
+    });
+    ipcMain.on("clientio-rpc-reply", (_event, message) => {
+        clientIOChannel.message(message);
+    });
 
-    const dispatcher = await createDispatcher("shell", {
+    const newClientIO = createClientIORpcClient(clientIOChannel.channel);
+    const clientIO = {
+        ...newClientIO,
+        exit: () => {
+            app.quit();
+        },
+    };
+
+    // Set up dispatcher
+    const newDispatcher = await createDispatcher("shell", {
         appAgentProviders: [
             shellAgentProvider,
-            ...getDefaultAppAgentProviders(),
+            ...getDefaultAppAgentProviders(getInstanceDir()),
         ],
         explanationAsynchronousMode: true,
         persistSession: true,
         enableServiceHost: true,
         metrics: true,
+        dblogging: true,
         clientIO,
+        constructionProvider: getDefaultConstructionProvider(),
     });
 
-    let settingSummary: string = "";
     async function processShellRequest(
         text: string,
         id: string,
@@ -653,108 +551,128 @@ async function initialize() {
         if (typeof text !== "string" || typeof id !== "string") {
             throw new Error("Invalid request");
         }
-        debugShell(dispatcher.getPrompt(), text);
+        debugShell(newDispatcher.getPrompt(), text);
 
-        const metrics = await dispatcher.processCommand(text, id, images);
-        chatView?.webContents.send("send-demo-event", "CommandProcessed");
+        const metrics = await newDispatcher.processCommand(text, id, images);
+        chatView.webContents.send("send-demo-event", "CommandProcessed");
+        updateSummary(dispatcher);
+        return metrics;
+    }
+
+    const dispatcher = {
+        ...newDispatcher,
+        processCommand: processShellRequest,
+    };
+
+    // Set up the RPC
+    const dispatcherChannel = createGenericChannel((message: any) => {
+        chatView.webContents.send("dispatcher-rpc-reply", message);
+    });
+    ipcMain.on("dispatcher-rpc-call", (_event, message) => {
+        dispatcherChannel.message(message);
+    });
+    createDispatcherRpcServer(dispatcher, dispatcherChannel.channel);
+
+    setupQuit(dispatcher);
+
+    // Dispatcher is ready to be called from the client, but we need to wait for the dom to be ready to start
+    // using it to process command, so that the client can receive messages.
+    debugShell("Dispatcher initialized", performance.now() - time);
+
+    return dispatcher;
+}
+
+// This method will be called when Electron has finished
+// initialization and is ready to create browser windows.
+// Some APIs can only be used after this event occurs.
+async function initialize() {
+    debugShell("Ready", performance.now() - time);
+    // Set app user model id for windows
+    electronApp.setAppUserModelId("com.electron");
+
+    await initializeSpeech();
+
+    const { mainWindow, chatView, contentLoadP } = await createWindow();
+
+    let settingSummary: string = "";
+    function updateSummary(dispatcher: Dispatcher) {
         const newSettingSummary = dispatcher.getSettingSummary();
         if (newSettingSummary !== settingSummary) {
             settingSummary = newSettingSummary;
-            chatView?.webContents.send(
+            chatView.webContents.send(
                 "setting-summary-changed",
                 newSettingSummary,
                 dispatcher.getTranslatorNameToEmojiMap(),
             );
 
-            mainWindow?.setTitle(
-                `${newSettingSummary} Zoom: ${Math.round(chatView?.webContents.zoomFactor! * 100)}%`,
+            mainWindow.setTitle(
+                `${newSettingSummary} Zoom: ${Math.round(chatView.webContents.zoomFactor! * 100)}%`,
             );
         }
-
-        return metrics;
     }
 
-    if (ShellSettings.getinstance().agentGreeting) {
-        processShellRequest("@greeting", "agent-0", []);
-    }
+    // Note: Make sure dom ready before using dispatcher.
+    const dispatcherP = initializeDispatcher(chatView, updateSummary);
 
-    ipcMain.on(
-        "process-shell-request",
-        (_event, text: string, id: string, images: string[]) => {
-            processShellRequest(text, id, images)
-                .then((metrics) =>
-                    chatView?.webContents.send(
-                        "process-shell-request-done",
-                        id,
-                        metrics,
-                    ),
-                )
-                .catch((error) => {
-                    chatView?.webContents.send(
-                        "process-shell-request-error",
-                        id,
-                        error.message,
-                    );
-                });
-        },
-    );
-    ipcMain.handle("getCommandCompletion", async (_event, prefix: string) => {
-        return dispatcher.getCommandCompletion(prefix);
-    });
-    ipcMain.handle(
-        "getTemplateCompletion",
-        async (
-            _event,
-            templateAgentName: string,
-            templateName: string,
-            data: unknown,
-            propertyName: string,
-        ) => {
-            return dispatcher.getTemplateCompletion(
-                templateAgentName,
-                templateName,
-                data,
-                propertyName,
-            );
-        },
-    );
-    ipcMain.handle("get-dynamic-display", async (_event, appAgentName, id) =>
-        dispatcher.getDynamicDisplay(appAgentName, "html", id),
-    );
-    ipcMain.handle(
-        "get-template-schema",
-        async (_event, templateAgentName, templateName, data) => {
-            return dispatcher.getTemplateSchema(
-                templateAgentName,
-                templateName,
-                data,
-            );
-        },
-    );
     ipcMain.on("dom ready", async () => {
-        settingSummary = dispatcher.getSettingSummary();
-        chatView?.webContents.send(
-            "setting-summary-changed",
-            settingSummary,
-            dispatcher.getTranslatorNameToEmojiMap(),
-        );
-
-        mainWindow?.setTitle(
-            `${settingSummary} Zoom: ${Math.round(chatView?.webContents.zoomFactor! * 100)}%`,
-        );
-        mainWindow?.show();
+        debugShell("Showing window", performance.now() - time);
+        mainWindow.show();
 
         // Send settings asap
         ShellSettings.getinstance().onSettingsChanged!();
 
+        // Load chat history if enabled
+        const chatHistory: string = path.join(
+            getInstanceDir(),
+            "chat_history.html",
+        );
+        if (
+            ShellSettings.getinstance().chatHistory &&
+            existsSync(chatHistory)
+        ) {
+            chatView?.webContents.send(
+                "chat-history",
+                readFileSync(
+                    path.join(getInstanceDir(), "chat_history.html"),
+                    "utf-8",
+                ),
+            );
+        }
+
         // make sure links are opened in the external browser
-        mainWindow?.webContents.setWindowOpenHandler((details) => {
+        mainWindow.webContents.setWindowOpenHandler((details) => {
             require("electron").shell.openExternal(details.url);
             return { action: "deny" };
         });
+
+        // The dispatcher can be use now that dom is ready and the client is ready to receive messages
+        const dispatcher = await dispatcherP;
+        updateSummary(dispatcher);
+
+        // send the agent greeting if it's turned on
+        if (ShellSettings.getinstance().agentGreeting) {
+            dispatcher.processCommand("@greeting", "agent-0", []);
+        }
     });
 
-    await initializeSpeech();
+    // Store the chat history whenever the DOM changes
+    // this let's us rehydrate the chat when reopening the shell
+    ipcMain.on("dom changed", async (_event, html) => {
+        // store the modified DOM contents
+        const file: string = path.join(getInstanceDir(), "chat_history.html");
+
+        debugShell(`Saving chat history to '${file}'.`, performance.now());
+
+        try {
+            writeFileSync(file, html);
+        } catch (e) {
+            debugShell(
+                `Unable to save history to '${file}'. Error: ${e}`,
+                performance.now(),
+            );
+        }
+    });
+
     ipcMain.handle("get-localWhisper-status", async () => {
         return isLocalWhisperEnabled();
     });
@@ -768,42 +686,73 @@ async function initialize() {
         ShellSettings.getinstance().agentGreeting = settings.agentGreeting;
         ShellSettings.getinstance().partialCompletion =
             settings.partialCompletion;
+        ShellSettings.getinstance().darkMode = settings.darkMode;
+        ShellSettings.getinstance().chatHistory = settings.chatHistory;
+
+        // write the settings to disk
         ShellSettings.getinstance().save();
+    });
+
+    ipcMain.on("open-image-file", async () => {
+        // TODO: imeplement
+        const result = await dialog.showOpenDialog(mainWindow);
+        if (result && !result.canceled) {
+            let paths = result.filePaths;
+            if (paths && paths.length > 0) {
+                const content = readFileSync(paths[0], "utf-8").toString();
+                console.log(content);
+                return content;
+            }
+        }
+
+        return null;
+    
     });
 
     ipcMain.on(
         "send-to-browser-ipc",
-        async (_event, data: WebSocketMessage) => {
+        async (_event, data: WebSocketMessageV2) => {
             await BrowserAgentIpc.getinstance().send(data);
         },
     );
-    globalShortcut.register("Alt+Right", () => {
-        chatView?.webContents.send("send-demo-event", "Alt+Right");
-    });
 
-    setupQuit(dispatcher);
+    globalShortcut.register("Alt+Right", () => {
+        chatView.webContents.send("send-demo-event", "Alt+Right");
+    });
 
     // Default open or close DevTools by F12 in development
     // and ignore CommandOrControl + R in production.
     // see https://github.com/alex8088/electron-toolkit/tree/master/packages/utils
     app.on("browser-window-created", async (_, window) => {
         optimizer.watchWindowShortcuts(window);
-        const browserExtensionPath = join(
-            app.getAppPath(),
-            "../agents/browser/dist/electron",
-        );
-        await window.webContents.session.loadExtension(browserExtensionPath, {
-            allowFileAccess: true,
-        });
     });
 
-    createWindow();
-
-    app.on("activate", function () {
+    app.on("activate", async function () {
         // On macOS it's common to re-create a window in the app when the
         // dock icon is clicked and there are no other windows open.
-        if (BrowserWindow.getAllWindows().length === 0) createWindow();
+        if (BrowserWindow.getAllWindows().length === 0) await createWindow();
     });
+
+    // On windows, we will spin up a local end point that listens
+    // for pen events which will trigger speech reco
+    // Don't spin this up during testing
+    if (process.platform == "win32" && !runningTests()) {
+        const pipePath = path.join("\\\\.\\pipe\\TypeAgent", "speech");
+        const server = net.createServer((stream) => {
+            stream.on("data", (c) => {
+                if (c.toString() == "triggerRecognitionOnce") {
+                    console.log("Pen click note button click received!");
+                    triggerRecognitionOnce();
+                }
+            });
+            stream.on("error", (e) => {
+                console.log(e);
+            });
+        });
+
+        server.listen(pipePath);
+    }
+    return Promise.all(contentLoadP);
 }
 
 app.whenReady()
@@ -831,6 +780,7 @@ function setupQuit(dispatcher: Dispatcher) {
         } catch (e) {
             debugShellError("Error closing dispatcher", e);
         }
+
         debugShell("Quitting");
         canQuit = true;
         app.quit();
@@ -861,36 +811,32 @@ app.on("window-all-closed", () => {
     }
 });
 
-function zoomIn(chatView: BrowserView) {
-    const curr = chatView.webContents.zoomLevel;
-    chatView.webContents.zoomLevel = Math.min(curr + 0.5, 9);
-
-    ShellSettings.getinstance().set(
-        "zoomLevel",
-        chatView.webContents.zoomLevel,
-    );
-
-    updateZoomInTitle(chatView);
+function zoomIn(chatView: WebContentsView) {
+    setZoomLevel(chatView.webContents.zoomFactor + 0.1, chatView);
 }
 
-function zoomOut(chatView: BrowserView) {
-    const curr = chatView.webContents.zoomLevel;
-    chatView.webContents.zoomLevel = Math.max(curr - 0.5, -8);
-    ShellSettings.getinstance().set(
-        "zoomLevel",
-        chatView.webContents.zoomLevel,
-    );
-
-    updateZoomInTitle(chatView);
+function zoomOut(chatView: WebContentsView) {
+    setZoomLevel(chatView.webContents.zoomFactor - 0.1, chatView);
 }
 
-function resetZoom(chatView: BrowserView) {
-    chatView.webContents.zoomLevel = 0;
-    ShellSettings.getinstance().set("zoomLevel", 0);
-    updateZoomInTitle(chatView);
+function setZoomLevel(zoomLevel: number, chatView: WebContentsView | null) {
+    if (zoomLevel < 0.1) {
+        zoomLevel = 0.1;
+    } else if (zoomLevel > 10) {
+        zoomLevel = 10;
+    }
+
+    chatView!.webContents.zoomFactor = zoomLevel;
+    ShellSettings.getinstance().set("zoomLevel", zoomLevel);
+
+    updateZoomInTitle(chatView!);
 }
 
-function updateZoomInTitle(chatView: BrowserView) {
+function resetZoom(chatView: WebContentsView) {
+    setZoomLevel(1, chatView);
+}
+
+function updateZoomInTitle(chatView: WebContentsView) {
     const prevTitle = mainWindow?.getTitle();
     if (prevTitle) {
         let summary = prevTitle.substring(0, prevTitle.indexOf("Zoom: "));
@@ -902,7 +848,7 @@ function updateZoomInTitle(chatView: BrowserView) {
 }
 
 const isMac = process.platform === "darwin";
-function setupZoomHandlers(chatView: BrowserView) {
+function setupZoomHandlers(chatView: WebContentsView) {
     chatView.webContents.on("before-input-event", (_event, input) => {
         if ((isMac ? input.meta : input.control) && input.type === "keyDown") {
             if (
@@ -929,7 +875,7 @@ function setupZoomHandlers(chatView: BrowserView) {
     });
 }
 
-function setupDevToolsHandlers(view: BrowserView) {
+function setupDevToolsHandlers(view: WebContentsView) {
     view.webContents.on("before-input-event", (_event, input) => {
         if (input.type === "keyDown") {
             if (!is.dev) {

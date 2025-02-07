@@ -3,7 +3,7 @@
 
 import fs from "node:fs";
 import { ActionSchemaFile, ActionSchemaTypeDefinition } from "action-schema";
-import { ActionConfig } from "./agentTranslators.js";
+import { ActionConfig } from "./actionConfig.js";
 import {
     generateEmbeddingWithRetry,
     generateTextEmbeddingsWithRetry,
@@ -24,7 +24,7 @@ type Entry = {
 export type EmbeddingCache = Map<string, NormalizedEmbedding>;
 
 export class ActionSchemaSemanticMap {
-    private readonly actionSemanticMap = new Map<string, Entry>();
+    private readonly actionSemanticMaps = new Map<string, Map<string, Entry>>();
     private readonly model: TextEmbeddingModel;
     public constructor(model?: TextEmbeddingModel) {
         this.model = model ?? openai.createEmbeddingModel();
@@ -37,11 +37,20 @@ export class ActionSchemaSemanticMap {
         const keys: string[] = [];
         const definitions: ActionSchemaTypeDefinition[] = [];
 
+        if (this.actionSemanticMaps.has(config.schemaName)) {
+            throw new Error(
+                `Internal Error: Duplicate schemaName ${config.schemaName}`,
+            );
+        }
+
+        const actionSemanticMap = new Map<string, Entry>();
+        this.actionSemanticMaps.set(config.schemaName, actionSemanticMap);
+
         for (const [name, definition] of actionSchemaFile.actionSchemas) {
-            const key = `${config.schemaName} ${config.description} ${name} ${definition.comments?.[0] ?? ""}`;
+            const key = `${config.schemaName} ${name} ${definition.comments?.[0] ?? ""}`;
             const embedding = cache?.get(key);
             if (embedding) {
-                this.actionSemanticMap.set(key, {
+                actionSemanticMap.set(key, {
                     embedding,
                     actionSchemaFile,
                     definition,
@@ -56,12 +65,16 @@ export class ActionSchemaSemanticMap {
             keys,
         );
         for (let i = 0; i < keys.length; i++) {
-            this.actionSemanticMap.set(keys[i], {
+            actionSemanticMap.set(keys[i], {
                 embedding: embeddings[i],
                 actionSchemaFile,
                 definition: definitions[i],
             });
         }
+    }
+
+    public removeActionSchemaFile(schemaName: string) {
+        this.actionSemanticMaps.delete(schemaName);
     }
 
     public async nearestNeighbors(
@@ -72,26 +85,32 @@ export class ActionSchemaSemanticMap {
     ): Promise<ScoredItem<Entry>[]> {
         const embedding = await generateEmbeddingWithRetry(this.model, request);
         const matches = new TopNCollection<Entry>(maxMatches, {} as Entry);
-        for (const entry of this.actionSemanticMap.values()) {
-            if (!filter(entry.actionSchemaFile.schemaName)) {
+        for (const [name, actionSemanticMap] of this.actionSemanticMaps) {
+            if (!filter(name)) {
                 continue;
             }
-            const score = similarity(
-                entry.embedding,
-                embedding,
-                SimilarityType.Dot,
-            );
-            if (score >= minScore) {
-                matches.push(entry, score);
+            for (const entry of actionSemanticMap.values()) {
+                const score = similarity(
+                    entry.embedding,
+                    embedding,
+                    SimilarityType.Dot,
+                );
+                if (score >= minScore) {
+                    matches.push(entry, score);
+                }
             }
         }
         return matches.byRank();
     }
 
     public embeddings(): [string, NormalizedEmbedding][] {
-        return Array.from(this.actionSemanticMap.entries()).map(
-            ([key, entry]) => [key, entry.embedding],
-        );
+        const result: [string, NormalizedEmbedding][] = [];
+        for (const actionSemanticMap of this.actionSemanticMaps.values()) {
+            for (const [key, entry] of actionSemanticMap) {
+                result.push([key, entry.embedding]);
+            }
+        }
+        return result;
     }
 }
 

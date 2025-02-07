@@ -1,7 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { WebSocketMessage } from "common-utils";
 import { AppAction, SessionContext } from "@typeagent/agent-sdk";
 import { BrowserActionContext } from "./actionHandler.mjs";
 
@@ -12,44 +11,36 @@ export class BrowserConnector {
     this.webSocket = context.agentContext.webSocket;
   }
 
-  async sendActionToBrowser(action: AppAction, messageType?: string) {
+  async sendActionToBrowser(action: AppAction, schemaName?: string) {
     return new Promise<any | undefined>((resolve, reject) => {
       if (this.webSocket) {
         try {
           const callId = new Date().getTime().toString();
-          if (!messageType) {
-            messageType = "browserActionRequest";
+          if (!schemaName) {
+            schemaName = "browser";
           }
 
           this.webSocket.send(
             JSON.stringify({
-              source: "dispatcher",
-              target: "browser",
-              messageType: messageType,
               id: callId,
-              body: action,
+              method: `${schemaName}/${action.actionName}`,
+              params: action.parameters,
             }),
           );
 
           const handler = (event: any) => {
             const text = event.data.toString();
-            const data = JSON.parse(text) as WebSocketMessage;
-            if (
-              data.target == "dispatcher" &&
-              data.source == "browser" &&
-              data.messageType == "browserActionResponse" &&
-              data.id == callId &&
-              data.body
-            ) {
+            const data = JSON.parse(text);
+            if (data.id == callId && data.result) {
               this.webSocket.removeEventListener("message", handler);
-              resolve(data.body);
+              resolve(data.result);
             }
           };
 
           this.webSocket.addEventListener("message", handler);
         } catch {
           console.log("Unable to contact browser backend.");
-          reject("Unable to contact browser backend.");
+          reject("Unable to contact browser backend (from connector).");
         }
       } else {
         throw new Error("No websocket connection.");
@@ -59,10 +50,7 @@ export class BrowserConnector {
 
   private async getPageDataFromBrowser(action: any) {
     return new Promise<string | undefined>(async (resolve, reject) => {
-      const response = await this.sendActionToBrowser(
-        action,
-        "browserActionRequest",
-      );
+      const response = await this.sendActionToBrowser(action, "browser");
       if (response.data) {
         resolve(response.data);
       } else {
@@ -71,7 +59,7 @@ export class BrowserConnector {
     });
   }
 
-  async getHtmlFragments() {
+  async getHtmlFragments(useTimestampIds?: boolean) {
     const timeoutPromise = new Promise((f) => setTimeout(f, 120000));
     const htmlAction = {
       actionName: "getHTML",
@@ -79,6 +67,7 @@ export class BrowserConnector {
         fullHTML: false,
         downloadAsFile: false,
         extractText: false,
+        useTimestampIds: useTimestampIds,
       },
     };
 
@@ -91,13 +80,17 @@ export class BrowserConnector {
     return [];
   }
 
-  async getFilteredHtmlFragments(inputHtmlFragments: any[]) {
+  async getFilteredHtmlFragments(
+    inputHtmlFragments: any[],
+    cssSelectorsToKeep: string[],
+  ) {
     let htmlFragments: any[] = [];
     const timeoutPromise = new Promise((f) => setTimeout(f, 5000));
     const filterAction = {
       actionName: "getFilteredHTMLFragments",
       parameters: {
         fragments: inputHtmlFragments,
+        cssSelectorsToKeep: cssSelectorsToKeep,
       },
     };
 
@@ -173,7 +166,7 @@ export class BrowserConnector {
       },
     };
 
-    return this.sendActionToBrowser(schemaAction, "browserActionRequest");
+    return this.sendActionToBrowser(schemaAction, "browser");
   }
 
   async getPageUrl() {
@@ -213,15 +206,21 @@ export class BrowserConnector {
       actionName: "awaitPageLoad",
     };
 
-    const actionPromise = this.sendActionToBrowser(
-      action,
-      "browserActionRequest",
-    );
+    const actionPromise = this.sendActionToBrowser(action, "browser");
     if (timeout) {
       const timeoutPromise = new Promise((f) => setTimeout(f, timeout));
       return Promise.race([actionPromise, timeoutPromise]);
     } else {
       return actionPromise;
     }
+  }
+
+  async awaitPageInteraction(timeout?: number) {
+    if (!timeout) {
+      timeout = 400;
+    }
+
+    const timeoutPromise = new Promise((f) => setTimeout(f, timeout));
+    return timeoutPromise;
   }
 }

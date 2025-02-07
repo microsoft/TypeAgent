@@ -40,7 +40,10 @@ import {
     processCommandNoLock,
     resolveCommand,
 } from "../../command/command.js";
-import { getHandlerTableUsage, getUsage } from "../../command/commandHelp.js";
+import {
+    getUsage,
+    printStructuredHandlerTableUsage,
+} from "../../command/commandHelp.js";
 import { DisplayCommandHandler } from "./handlers/displayCommandHandler.js";
 import {
     getActionCompletion,
@@ -57,7 +60,9 @@ import {
     getParameterNames,
     validateAction,
 } from "action-schema";
-import { EnvCommandHandler } from "./handlers/envCommandHandler.js";
+import { getEnvCommandHandlers } from "./handlers/envCommandHandler.js";
+import { executeNotificationAction } from "./action/notificationActionHandler.js";
+import { executeHistoryAction } from "./action/historyActionHandler.js";
 
 function executeSystemAction(
     action: AppAction,
@@ -68,6 +73,10 @@ function executeSystemAction(
             return executeSessionAction(action, context);
         case "system.config":
             return executeConfigAction(action, context);
+        case "system.notify":
+            return executeNotificationAction(action, context);
+        case "system.history":
+            return executeHistoryAction(action, context);
     }
 
     throw new Error(`Invalid system sub-translator: ${action.translatorName}`);
@@ -90,8 +99,9 @@ class HelpCommandHandler implements CommandHandler {
     ) {
         const systemContext = context.sessionContext.agentContext;
         if (params.args.command === undefined) {
-            displayResult(
-                getHandlerTableUsage(systemHandlers, undefined, systemContext),
+            printStructuredHandlerTableUsage(
+                systemHandlers,
+                undefined,
                 context,
             );
         } else {
@@ -127,10 +137,7 @@ class HelpCommandHandler implements CommandHandler {
                 throw new Error(`Unknown command '${params.args.command}'`);
             }
 
-            displayResult(
-                getHandlerTableUsage(result.table, command, systemContext),
-                context,
-            );
+            printStructuredHandlerTableUsage(result.table, command, context);
         }
     }
 }
@@ -215,13 +222,17 @@ class ActionCommandHandler implements CommandHandler {
         const action: AppAction = {
             translatorName,
             actionName,
-            parameters: params.flags.parameters,
         };
+
+        if (params.flags.parameters !== undefined) {
+            action.parameters = params.flags.parameters;
+        }
 
         validateAction(actionSchema, action, true);
 
         return executeActions(
             Actions.fromFullActions([action as FullAction]),
+            undefined,
             context,
         );
     }
@@ -349,7 +360,7 @@ const systemHandlers: CommandHandlerTable = {
         random: getRandomCommandHandlers(),
         notify: getNotifyCommandHandlers(),
         token: getTokenCommandHandlers(),
-        env: new EnvCommandHandler(),
+        env: getEnvCommandHandlers(),
     },
 };
 
@@ -371,6 +382,22 @@ export const systemManifest: AppAgentManifest = {
                 schemaFile:
                     "./src/context/system/schema/sessionActionSchema.ts",
                 schemaType: "SessionAction",
+            },
+        },
+        notify: {
+            schema: {
+                description: "System agent that helps manage notifications.",
+                schemaFile:
+                    "./src/context/system/schema/notificationActionSchema.ts",
+                schemaType: "NotificationAction",
+            },
+        },
+        history: {
+            schema: {
+                description: "System agent that helps manage chat history.",
+                schemaFile:
+                    "./src/context/system/schema/historyActionSchema.ts",
+                schemaType: "HistoryAction",
             },
         },
     },

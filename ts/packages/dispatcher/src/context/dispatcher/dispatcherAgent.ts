@@ -10,21 +10,13 @@ import { TranslateCommandHandler } from "./handlers/translateCommandHandler.js";
 import { ExplainCommandHandler } from "./handlers/explainCommandHandler.js";
 import {
     ActionContext,
-    AppAction,
     AppAgent,
     AppAgentManifest,
 } from "@typeagent/agent-sdk";
 import { CommandHandlerContext } from "../commandHandlerContext.js";
 import { createActionResultNoDisplay } from "@typeagent/agent-sdk/helpers/action";
-import {
-    DispatcherActions,
-    UnknownAction,
-} from "./schema/dispatcherActionSchema.js";
+import { DispatcherActions } from "./schema/dispatcherActionSchema.js";
 import { ClarifyRequestAction } from "./schema/clarifyActionSchema.js";
-
-export function isUnknownAction(action: AppAction): action is UnknownAction {
-    return action.actionName === "unknown";
-}
 
 const dispatcherHandlers: CommandHandlerTable = {
     description: "Type Agent Dispatcher Commands",
@@ -70,7 +62,7 @@ function clarifyRequestAction(
 
 export const dispatcherManifest: AppAgentManifest = {
     emojiChar: "🤖",
-    description: "Built-in agent to dispatch request",
+    description: "Built-in agent to dispatch requests",
     schema: {
         description: "",
         schemaType: "DispatcherActions",

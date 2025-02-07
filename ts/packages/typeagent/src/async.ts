@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { Result } from "typechat";
+
 /**
  * Call an async function with automatic retry in the case of exceptions
  * @param asyncFn Use closures to pass parameters
@@ -26,6 +28,30 @@ export async function callWithRetry<T = any>(
             ) {
                 throw e;
             }
+        }
+        await pause(retryPauseMs);
+        retryCount++;
+        retryPauseMs *= 2; // Use exponential backoff for retries
+    }
+}
+
+/**
+ * Get a result by calling a function with automatic retry
+ * @param asyncFn
+ * @param retryMaxAttempts
+ * @param retryPauseMs
+ * @returns
+ */
+export async function getResultWithRetry<T = any>(
+    asyncFn: () => Promise<Result<T>>,
+    retryMaxAttempts: number = 2,
+    retryPauseMs: number = 1000,
+): Promise<Result<T>> {
+    let retryCount = 0;
+    while (true) {
+        const result = await asyncFn();
+        if (result.success || retryCount >= retryMaxAttempts) {
+            return result;
         }
         await pause(retryPauseMs);
         retryCount++;

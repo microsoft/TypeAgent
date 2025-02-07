@@ -9,6 +9,7 @@ import {
 import { ChatView } from "./chatView.js";
 import { getTTS, getTTSProviders, getTTSVoices } from "./tts/tts.js";
 import { DisplayType } from "../../preload/electronTypes";
+import { iconMoon, iconSun } from "./icon.js";
 
 function addOption(
     select: HTMLSelectElement,
@@ -86,12 +87,14 @@ export class SettingsView {
     private ttsVoice: HTMLSelectElement;
     private agentGreetingCheckBox: HTMLInputElement;
     private intellisenseCheckBox: HTMLInputElement;
+    private darkModeToggle: HTMLButtonElement;
     private _shellSettings: ShellSettingsType = defaultSettings;
     private updateFromSettings: () => Promise<void>;
     public get shellSettings(): Readonly<ShellSettingsType> {
         return this._shellSettings;
     }
     private devUICheckBox: HTMLInputElement;
+    private saveChatHistoryCheckBox: HTMLInputElement;
 
     public set shellSettings(value: ShellSettingsType) {
         this._shellSettings = value;
@@ -100,6 +103,7 @@ export class SettingsView {
         this.intellisenseCheckBox.checked = value.partialCompletion;
         this.agentGreetingCheckBox.checked = value.agentGreeting;
         this.devUICheckBox.checked = !value.devUI;
+        this.saveChatHistoryCheckBox.checked = value.chatHistory;
         this.updateFromSettings();
     }
 
@@ -172,6 +176,24 @@ export class SettingsView {
             chatView.setMetricsVisible(this.shellSettings.devUI);
         };
 
+        const updateTheme = () => {
+            const labelElement = document.createElement("span");
+            labelElement.innerText = this._shellSettings.darkMode
+                ? "Light mode"
+                : "Dark mode";
+            if (this._shellSettings.darkMode) {
+                this.darkModeToggle.innerHTML = "";
+                this.darkModeToggle.appendChild(iconSun());
+                this.darkModeToggle.appendChild(labelElement);
+                document.body.classList.add("dark-mode");
+            } else {
+                this.darkModeToggle.innerHTML = "";
+                this.darkModeToggle.appendChild(iconMoon());
+                this.darkModeToggle.appendChild(labelElement);
+                document.body.classList.remove("dark-mode");
+            }
+        };
+
         const updateInputs = () => {
             if (this.shellSettings.multiModalContent) {
                 chatView.chatInput.camButton.classList.remove(
@@ -240,6 +262,7 @@ export class SettingsView {
         updateTTSSelections();
 
         this.updateFromSettings = async () => {
+            updateTheme();
             updateChatView();
             await updateTTSSelections();
             updateInputs();
@@ -268,10 +291,46 @@ export class SettingsView {
             this._shellSettings.devUI = !this.agentGreetingCheckBox.checked;
             chatView.setMetricsVisible(!this.devUICheckBox.checked);
         });
+
+        this.darkModeToggle = this.addButton(
+            this._shellSettings.darkMode ? iconSun() : iconMoon(),
+            () => {
+                this._shellSettings.darkMode = !this._shellSettings.darkMode;
+                this.saveSettings();
+                this.updateFromSettings();
+            },
+            this._shellSettings.darkMode ? "Light mode" : "Dark mode",
+        );
+
+        this.saveChatHistoryCheckBox = this.addCheckbox(
+            "Save Chat History",
+            () => {
+                this._shellSettings.chatHistory =
+                    this.saveChatHistoryCheckBox.checked;
+            },
+        );
     }
 
     getContainer() {
         return this.mainContainer;
+    }
+
+    private addButton(
+        innerContent: HTMLElement,
+        onclick: () => void,
+        label?: string,
+    ) {
+        const button = document.createElement("button");
+        button.innerHTML = innerContent.innerHTML;
+        button.onclick = onclick;
+        button.classList.add("settings-button");
+        if (label) {
+            const labelElement = document.createElement("span");
+            labelElement.innerText = label;
+            button.appendChild(labelElement);
+        }
+        this.mainContainer.appendChild(button);
+        return button;
     }
 
     private addSelect(labelText: string, id: string, onchange: () => void) {
@@ -325,12 +384,8 @@ export class SettingsView {
     }
 
     public isDisplayTypeAllowed(displayType: DisplayType): boolean {
-        for (let i = 0; i < this.shellSettings.allowedDisplayType.length; i++) {
-            if (this.shellSettings.allowedDisplayType[i] === displayType) {
-                return true;
-            }
-        }
-
-        return false;
+        return !this.shellSettings.disallowedDisplayType.some(
+            (type) => type === displayType,
+        );
     }
 }

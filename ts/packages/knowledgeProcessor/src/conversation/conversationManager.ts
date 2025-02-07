@@ -55,15 +55,19 @@ export type ConversationMessage = {
      * Message timestamp
      */
     timestamp?: Date | undefined;
+    /**
+     * Message header (Optional).
+     * No knowledge is extracted from the header
+     */
     header?: string | undefined;
     /**
-     * Message sender
+     * Message sender (Optional)
      */
     sender?: string | undefined;
     /**
-     * Optional message header.
-     * No knowledge is extracted from the header
+     * Message recipients (Optional)
      */
+    recipients?: string[] | undefined;
 };
 
 export type AddMessageTask = {

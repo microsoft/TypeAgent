@@ -20,89 +20,80 @@ pr:
       - "*"
 
 pool:
-  vmImage: 'ubuntu-latest'
+  vmImage: "ubuntu-latest"
 
 variables:
-  node_version: '18'
-  pnpm_version: '9.0.0'
-  workingDirectory: 'ts'
-  agentsdk_folder: 'ts/packages/agentSdk'
-  
+  workingDirectory: "ts"
+  agentsdk_folder: "ts/packages/agentSdk"
+
 jobs:
-- job: build_ts
-  displayName: 'Build TypeScript Project'
-  strategy:
-    matrix:
-      node_20:
-        nodeVersion: '20'
-  steps:
-  - checkout: TypeAgent-GH
-    displayName: 'Checkout TypeAgent Repository'
-    path: 'typeagent'
+  - job: build_ts
+    displayName: "Build TypeScript Project"
+    strategy:
+      matrix:
+        node_22:
+          nodeVersion: "22"
+    steps:
+      - checkout: TypeAgent-GH
+        displayName: "Checkout TypeAgent Repository"
+        path: "typeagent"
 
-  - template: include-install-pnpm.yml
-    parameters:
-      buildDirectory: $(Build.SourcesDirectory)/ts
+      - task: UseNode@1
+        displayName: "Setup Node.js"
+        inputs:
+          version: $(nodeVersion)
+          checkLatest: true
 
-  - script: |
-      curl -fsSL https://get.pnpm.io/v6.14.js | node - add --global pnpm@$(pnpm_version)
-      export PNPM_HOME="$HOME/.local/share/pnpm"
-      export PATH="$PNPM_HOME:$PATH"
-    displayName: 'Install pnpm'
-    condition: always()
+      - template: include-install-pnpm.yml
+        parameters:
+          buildDirectory: $(Build.SourcesDirectory)/ts
 
-  - task: UseNode@1
-    displayName: 'Setup Node.js'
-    inputs:
-      version: $(nodeVersion)
-      checkLatest: true
+      - script: |
+          pnpm install --frozen-lockfile --strict-peer-dependencies
+        displayName: "Install dependencies"
+        workingDirectory: $(workingDirectory)
 
-  - script: |
-      pnpm install --frozen-lockfile --strict-peer-dependencies
-    displayName: 'Install dependencies'
-    workingDirectory: $(workingDirectory)
+      - script: |
+          current_version=$(node -p "require('./package.json').version")
+          new_version="${current_version}-$(Build.BuildId)"
+          echo "##vso[task.setvariable variable=package_version]$new_version"
+          jq ".version=\"$new_version\"" package.json > package.tmp.json
+          mv package.tmp.json package.json
+          echo "Updated package.json to version $new_version"
+          cat package.json
+        displayName: "Update Package Version"
+        workingDirectory: $(agentsdk_folder)
 
-  - script: |
-      current_version=$(node -p "require('./package.json').version")
-      new_version="${current_version}-$(Build.BuildId)"
-      echo "##vso[task.setvariable variable=package_version]$new_version"
-      jq ".version=\"$new_version\"" package.json > package.tmp.json
-      mv package.tmp.json package.json
-      echo "Updated package.json to version $new_version"
-      cat package.json
-    displayName: 'Update Package Version'
-    workingDirectory: $(agentsdk_folder)
+      - script: |
+          npm run build
+        displayName: "Build"
+        workingDirectory: $(workingDirectory)
 
-  - script: |
-      npm run build
-    displayName: 'Build'
-    workingDirectory: $(workingDirectory)
+      - script: |
+          npm run test:local
+        displayName: "Run Tests (Local)"
+        workingDirectory: $(workingDirectory)
 
-  - script: |
-      npm run test
-    displayName: 'Run Tests'
-    workingDirectory: $(workingDirectory)
+      - script: |
+          npm run lint
+        displayName: "Lint"
+        workingDirectory: $(workingDirectory)
 
-  - script: |
-      npm run lint
-    displayName: 'Lint'
-    workingDirectory: $(workingDirectory)
+      - script: |
+          echo $(ADO_REGISTRY)
+          echo "registry=$(ADO_REGISTRY)" > .npmrc
+          echo "always-auth=true" >> .npmrc
+          cat .npmrc
+        displayName: "Create .npmrc file."
+        workingDirectory: $(agentsdk_folder)
 
-  - script: |
-      echo $(ADO_REGISTRY)
-      echo "registry=$(ADO_REGISTRY)" > .npmrc
-      echo "always-auth=true" >> .npmrc
-      cat .npmrc
-    displayName: 'Create .npmrc file.'
-    workingDirectory: $(agentsdk_folder)
+      - task: npmAuthenticate@0
+        inputs:
+          workingFile: "$(agentsdk_folder)/.npmrc"
+        displayName: "Authenticate with Azure Artifacts"
 
-  - task: npmAuthenticate@0
-    inputs:
-      workingFile: '$(agentsdk_folder)/.npmrc'
-    displayName: 'Authenticate with Azure Artifacts'
-
-  - script: |
-      cd $(Build.SourcesDirectory)/$(agentsdk_folder)
-      npm publish --registry=$(ADO_REGISTRY)
-    displayName: 'Pack and Publish agent-sdk Module'
-    condition: succeeded()
+      - script: |
+          cd $(Build.SourcesDirectory)/$(agentsdk_folder)
+          npm publish --registry=$(ADO_REGISTRY)
+        displayName: "Pack and Publish agent-sdk Module"
+        condition: succeeded()

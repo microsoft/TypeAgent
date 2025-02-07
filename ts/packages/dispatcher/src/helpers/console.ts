@@ -118,6 +118,9 @@ function createConsoleClientIO(): ClientIO {
         },
 
         // Display
+        setDisplayInfo() {
+            // Ignored
+        },
         setDisplay(message: IAgentMessage): void {
             displayContent(message.message);
         },

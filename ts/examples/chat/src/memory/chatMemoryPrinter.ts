@@ -19,8 +19,9 @@ export class ChatMemoryPrinter extends ChatPrinter {
         super(io);
     }
 
-    public writeLink(filePath: string): void {
+    public writeLink(filePath: string) {
         this.writeInColor(chalk.cyan, pathToFileURL(filePath).toString());
+        return this;
     }
 
     public writeBlocks(
@@ -54,16 +55,6 @@ export class ChatMemoryPrinter extends ChatPrinter {
         if (timestamp) {
             this.writeInColor(chalk.gray, timestamp.toString());
         }
-    }
-
-    public writeProgress(
-        curCount: number,
-        total: number,
-        label?: string | undefined,
-    ): void {
-        label = label ? label + " " : "";
-        const text = `[${label}${curCount} / ${total}]`;
-        this.writeInColor(chalk.gray, text);
     }
 
     public writeBatchProgress(
@@ -141,17 +132,28 @@ export class ChatMemoryPrinter extends ChatPrinter {
     }
 
     public writeExtractedEntities(
-        entities?: (conversation.ExtractedEntity | undefined)[],
+        entities?:
+            | conversation.ExtractedEntity
+            | (conversation.ExtractedEntity | undefined)[]
+            | undefined,
     ): void {
-        if (entities && entities.length > 0) {
-            this.writeTitle("Entities");
-            for (const entity of entities) {
-                if (entity) {
-                    this.writeCompositeEntity(
-                        conversation.toCompositeEntity(entity.value),
-                    );
-                    this.writeLine();
+        if (entities) {
+            if (Array.isArray(entities)) {
+                if (entities.length > 0) {
+                    this.writeTitle("Entities");
+                    for (const entity of entities) {
+                        if (entity) {
+                            this.writeCompositeEntity(
+                                conversation.toCompositeEntity(entity.value),
+                            );
+                            this.writeLine();
+                        }
+                    }
                 }
+            } else {
+                this.writeCompositeEntity(
+                    conversation.toCompositeEntity(entities.value),
+                );
             }
         }
     }
@@ -160,6 +162,8 @@ export class ChatMemoryPrinter extends ChatPrinter {
         entities: (conversation.CompositeEntity | undefined)[],
     ): void {
         if (entities && entities.length > 0) {
+            entities = knowLib.sets.removeUndefined(entities);
+            entities.sort((x, y) => x!.name.localeCompare(y!.name));
             this.writeTitle("Entities");
             for (const entity of entities) {
                 this.writeCompositeEntity(entity);
@@ -289,11 +293,10 @@ export class ChatMemoryPrinter extends ChatPrinter {
                     `Action to Message Hit Count: ${actionIds.size}`,
                 );
             }
-            if (response.messages) {
-                this.writeLine(
-                    `Message Hit Count: ${response.messages ? response.messages.length : 0}`,
-                );
-            }
+            const messageHitCount = response.messages
+                ? response.messages.length
+                : 0;
+            this.writeLine(`Message Hit Count: ${messageHitCount}`);
         }
     }
 
@@ -322,20 +325,28 @@ export class ChatMemoryPrinter extends ChatPrinter {
         this.writeSearchQuestion(result);
         if (result.response && result.response.answer) {
             this.writeResultStats(result.response);
-            if (result.response.answer.answer) {
-                const answer = result.response.answer.answer;
-                this.writeInColor(
-                    result.response.fallbackUsed ? chalk.gray : chalk.green,
-                    answer,
-                );
-            } else if (result.response.answer.whyNoAnswer) {
-                const answer = result.response.answer.whyNoAnswer;
-                this.writeInColor(chalk.red, answer);
-            }
+            this.writeAnswer(
+                result.response.answer,
+                result.response.fallbackUsed,
+            );
             this.writeLine();
             if (debug) {
                 this.writeSearchResponse(result.response);
             }
+        }
+    }
+
+    public writeAnswer(
+        response: conversation.AnswerResponse,
+        fallback: boolean = false,
+    ) {
+        if (response.answer) {
+            const answer = response.answer;
+            //this.writeInColor(fallback ? chalk.gray : chalk.green, answer);
+            this.writeInColor(chalk.green, answer);
+        } else if (response.whyNoAnswer) {
+            const answer = response.whyNoAnswer;
+            this.writeInColor(chalk.red, answer);
         }
     }
 

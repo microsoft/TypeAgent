@@ -28,10 +28,10 @@
     "agent-cache": "workspace:*",
     "agent-dispatcher": "workspace:*",
     "chalk": "^5.3.0",
-    "debug": "^4.3.4"
+    "debug": "^4.4.0"
   },
   "devDependencies": {
-    "@types/debug": "^4.1.10",
+    "@types/debug": "^4.1.12",
     "@types/jest": "^29.5.7",
     "@types/node": "^18.18.7",
     "html-webpack-plugin": "^5.6.0",
@@ -42,6 +42,6 @@
     "typescript": "^5.4.2",
     "webpack": "^5.94.0",
     "webpack-cli": "^5.1.4",
-    "webpack-dev-server": "^5.0.4"
+    "webpack-dev-server": "^5.2.0"
   }
 }

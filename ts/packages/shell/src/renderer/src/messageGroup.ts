@@ -1,8 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { DisplayContent } from "@typeagent/agent-sdk";
-import { IAgentMessage, NotifyExplainedData } from "agent-dispatcher";
+import { AppAction, DisplayContent } from "@typeagent/agent-sdk";
+import {
+    CommandResult,
+    IAgentMessage,
+    NotifyExplainedData,
+} from "agent-dispatcher";
 import { RequestMetrics } from "agent-dispatcher";
 
 import { MessageContainer } from "./messageContainer";
@@ -23,7 +27,7 @@ export class MessageGroup {
         private readonly settingsView: SettingsView,
         request: DisplayContent,
         container: HTMLDivElement,
-        requestPromise: Promise<RequestMetrics | undefined> | undefined,
+        requestPromise: Promise<CommandResult | undefined> | undefined,
         public agents: Map<string, string>,
         private hideMetrics: boolean,
     ) {
@@ -31,14 +35,14 @@ export class MessageGroup {
             chatView,
             settingsView,
             "user",
-            "",
+            chatView.userGivenName,
             agents,
             container,
             hideMetrics,
             this.start,
         );
 
-        this.userMessage.setMessage(request, "");
+        this.userMessage.setMessage(request, chatView.userGivenName);
 
         if (container.firstChild) {
             container.firstChild.before(this.userMessage.div);
@@ -52,7 +56,7 @@ export class MessageGroup {
 
         if (requestPromise) {
             requestPromise
-                .then((metrics) => this.requestCompleted(metrics))
+                .then((result) => this.requestCompleted(result?.metrics))
                 .catch((error) => this.requestException(error));
         }
     }
@@ -65,6 +69,20 @@ export class MessageGroup {
             agentMessage.setMetricsVisible(visible);
         }
     }
+
+    public setDisplayInfo(
+        source: string,
+        actionIndex?: number,
+        action?: AppAction | string[],
+    ) {
+        const agentMessage = this.ensureAgentMessage({
+            message: "",
+            source,
+            actionIndex,
+        });
+        agentMessage.setDisplayInfo(source, action);
+    }
+
     private requestCompleted(metrics: RequestMetrics | undefined) {
         this.updateMetrics(metrics);
         if (this.statusMessage === undefined) {
@@ -163,7 +181,7 @@ export class MessageGroup {
                         this.chatView,
                         this.settingsView,
                         "agent",
-                        msg.actionName ?? msg.source,
+                        msg.source,
                         this.agents,
                         beforeElem.div,
                         this.hideMetrics,
@@ -185,7 +203,7 @@ export class MessageGroup {
     }
 
     public updateUserMessage(message: string) {
-        this.userMessage.setMessage(message, "");
+        this.userMessage.setMessage(message, this.chatView.userGivenName);
     }
 
     public notifyExplained(data: NotifyExplainedData) {

@@ -6,18 +6,14 @@ import { CacheConfig, AgentCache, getDefaultExplainerName } from "agent-cache";
 import registerDebug from "debug";
 import fs from "node:fs";
 import path from "node:path";
-import lockfile from "proper-lockfile";
-import { getBuiltinConstructionConfig } from "../utils/config.js";
-import {
-    ensureDirectory,
-    getUniqueFileName,
-    getYMDPrefix,
-} from "../utils/userData.js";
+import { getUniqueFileName, getYMDPrefix } from "../utils/userData.js";
 import ExifReader from "exifreader";
 import { AppAgentState, AppAgentStateOptions } from "./appAgentManager.js";
 import { cloneConfig, mergeConfig } from "./options.js";
 import { TokenCounter, TokenCounterData } from "aiclient";
 import { DispatcherName } from "./interactiveIO.js";
+import { ConstructionProvider } from "../agentProvider/agentProvider.js";
+import { MultipleActionConfig } from "../translation/multipleActionSchema.js";
 
 const debugSession = registerDebug("typeagent:session");
 
@@ -68,7 +64,7 @@ async function newSessionDir(instanceDir: string) {
         JSON.stringify(sessions, undefined, 2),
     );
     debugSession(`New session: ${dir}`);
-    return dir;
+    return fullDir;
 }
 
 type DispatcherConfig = {
@@ -85,10 +81,13 @@ type DispatcherConfig = {
             inline: boolean;
             search: boolean;
         };
-        multipleActions: boolean;
+        multiple: MultipleActionConfig;
         history: boolean;
         schema: {
-            generation: boolean;
+            generation: {
+                enabled: boolean;
+                jsonSchema: boolean;
+            };
             optimize: {
                 enabled: boolean;
                 numInitialActions: number; // 0 means no limit
@@ -142,12 +141,19 @@ const defaultSessionConfig: SessionConfig = {
             inline: true,
             search: true,
         },
-        multipleActions: true,
+        multiple: {
+            enabled: true,
+            result: true,
+            pending: true,
+        },
         history: true,
         schema: {
-            generation: true,
-            optimize: {
+            generation: {
                 enabled: true,
+                jsonSchema: false,
+            },
+            optimize: {
+                enabled: false,
                 numInitialActions: 5,
             },
         },
@@ -458,6 +464,7 @@ export class Session {
 export async function setupAgentCache(
     session: Session,
     agentCache: AgentCache,
+    provider?: ConstructionProvider,
 ) {
     const config = session.getConfig();
     agentCache.model = config.explainer.model;
@@ -486,7 +493,12 @@ export async function setupAgentCache(
             debugSession(`Creating session cache ${newCacheData ?? ""}`);
         }
 
-        await setupBuiltInCache(session, agentCache, config.cache.builtInCache);
+        await setupBuiltInCache(
+            session,
+            agentCache,
+            config.cache.builtInCache,
+            provider,
+        );
     }
     await agentCache.constructionStore.setAutoSave(config.cache.autoSave);
 }
@@ -495,9 +507,10 @@ export async function setupBuiltInCache(
     session: Session,
     agentCache: AgentCache,
     enable: boolean,
+    provider?: ConstructionProvider,
 ) {
     const builtInConstructions = enable
-        ? getBuiltinConstructionConfig(session.explainerName)?.file
+        ? provider?.getBuiltinConstructionConfig(session.explainerName)?.file
         : undefined;
 
     try {

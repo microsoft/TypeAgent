@@ -9,15 +9,23 @@ import fs from "node:fs";
 
 const debug = registerDebug("typeagent:websockets");
 
-export type WebSocketMessage = {
-    source: string;
-    target: string;
+export type WebSocketMessageV2 = {
     id?: string;
-    messageType: string;
-    body: any;
+    method: string;
+    params?: any;
+    result?: any;
+    error?: {
+        code?: number | undefined;
+        message: string;
+    };
+    source?: string;
 };
 
-export async function createWebSocket() {
+export async function createWebSocket(
+    channel: string,
+    role: "dispatcher" | "client",
+    clientId?: string,
+) {
     return new Promise<WebSocket | undefined>((resolve, reject) => {
         let endpoint = "ws://localhost:8080";
         if (process.env["WEBSOCKET_HOST"]) {
@@ -30,6 +38,11 @@ export async function createWebSocket() {
                     endpoint = vals["WEBSOCKET_HOST"];
                 }
             }
+        }
+
+        endpoint += `?channel=${channel}&role=${role}`;
+        if (clientId) {
+            endpoint += `&clientId=${clientId}`;
         }
 
         const webSocket = new WebSocket(endpoint);

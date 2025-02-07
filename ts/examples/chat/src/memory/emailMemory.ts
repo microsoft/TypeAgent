@@ -84,7 +84,9 @@ export async function createEmailMemory(
         emailSettings,
         storage,
     );
+    memory.searchProcessor.answers.settings.chunking.enable = true;
     memory.searchProcessor.answers.settings.chunking.fastStop = true;
+    memory.searchProcessor.answers.settings.maxCharsInContext = 4096 * 4; // 4096 tokens * 4 chars per token
     return memory;
 }
 
@@ -173,24 +175,26 @@ export function createEmailCommands(
             description: "Email indexing statistics",
             options: {
                 destFile: argDestFile(),
+                displayFull: argBool("Display full stats", false),
             },
         };
     }
-
     commands.emailStats.metadata = emailStatsDef();
     async function emailStats(args: string[]): Promise<void> {
         const namedArgs = parseNamedArguments(args, emailStatsDef());
         const stats = await loadStats(false);
         context.printer.writeBullet(`Email count: ${stats.itemStats.length}`);
-        context.printer.writeBullet(
-            `Total chars: ${stats.totalStats.charCount}`,
-        );
-        context.printer.writeCompletionStats(stats.totalStats.tokenStats);
+        if (namedArgs.displayFull) {
+            context.printer.writeBullet(
+                `Total chars: ${stats.totalStats.charCount}`,
+            );
+            context.printer.writeCompletionStats(stats.totalStats.tokenStats);
+        }
         if (stats.itemStats && stats.itemStats) {
             const csv = indexingStatsToCsv(stats.itemStats);
             if (namedArgs.destFile) {
                 await fs.promises.writeFile(namedArgs.destFile, csv);
-            } else {
+            } else if (namedArgs.displayFull) {
                 context.printer.writeLine(csv);
             }
         }
