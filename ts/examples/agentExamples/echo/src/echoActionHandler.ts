@@ -31,8 +31,9 @@ async function executeEchoAction(
     const echoContext = context.sessionContext.agentContext;
     switch (action.actionName) {
         case "echoGen":
-            const displayText = `>> Echo ${++echoContext.echoCount}: ${action.parameters.text
-                }`;
+            const displayText = `>> Echo ${++echoContext.echoCount}: ${
+                action.parameters.text
+            }`;
             return createActionResultFromTextDisplay(displayText, displayText);
 
         default:
