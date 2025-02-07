@@ -1,6 +1,8 @@
-# External Agents
+# Building Agents for TypeAgent Dispatcher
 
-The TypeAgent repo includes several example [agents](../../ts/packages/agents/). You can also build **your own application agents** **_outside_** the TypeAgent repo by using the [agent-sdk](../../ts/packages/agentSdk/README.md). You can package these agents as npm packages and surface them in the [TypeAgent Shell](../../ts/packages/shell) and [TypeAgent CLI](../../ts/packages/cli).
+TypeAgent [Shell](../../ts/packages/shell) and [CLI](../../ts/packages/cli) are built using [Dispatcher](../../ts/packages/dispatcher). It has an configurable and extensible architecture that allow new agents to plug into the system.
+
+The TypeAgent repo includes several example [agents](../../ts/packages/agents/). **Application agents** can be built **_outside_** the TypeAgent repo by using the [Agent SDK](../../ts/packages/agentSdk/README.md). These agents can be packaged as npm packages and surface them in the [Shell](../../ts/packages/shell) and [CLI](../../ts/packages/cli).
 
 This document describes how you can build your own application agents.
 
@@ -8,7 +10,7 @@ This document describes how you can build your own application agents.
 
 Begin by exploring the following:
 
-- **Agent-Sdk**: Read about the architecture of the [**agent-sdk**](../../ts/packages/agentSdk/README.md).
+- **Agent SDK**: Read about the architecture of the [**Agent SDK**](../../ts/packages/agentSdk/README.md).
 - **Example Agents**:
   - Review agents under the [agents](../../ts/packages/agents) directory. The [List](../../ts/packages/agents/list/) agent provides a good example and template for building an agent.
   - The [Echo](../../ts/examples/agentExamples/echo/) agent illustrates the basics of building your own external application agents.
