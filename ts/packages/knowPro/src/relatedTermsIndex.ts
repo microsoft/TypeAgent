@@ -10,6 +10,7 @@ import {
     generateTextEmbeddingsWithRetry,
     collections,
     dotProduct,
+    EmbeddedValue,
 } from "typeagent";
 import {
     Term,
@@ -310,4 +311,66 @@ export function createTextEmbeddingIndexSettings(
         retryMaxAttempts: 2,
         retryPauseMs: 2000,
     };
+}
+
+export class RelatedTermSet {
+    private embeddedTerms: Map<string, EmbeddedValue<Term>>;
+
+    constructor() {
+        this.embeddedTerms = new Map();
+    }
+
+    public *getTerms() {
+        for (const embeddedTerm of this.embeddedTerms.values()) {
+            yield embeddedTerm.value;
+        }
+    }
+
+    public add(term: Term, embedding: NormalizedEmbedding) {
+        this.embeddedTerms.set(term.text, { value: term, embedding });
+    }
+
+    public getSimilar(term: Term, minScore?: number): Term[] {
+        minScore ??= 0;
+        const similarTerms: Term[] = [];
+        const testTerm = this.embeddedTerms.get(term.text);
+        if (testTerm === undefined) {
+            return similarTerms;
+        }
+        for (const embeddedTerm of this.embeddedTerms.values()) {
+            const similarity = dotProduct(
+                testTerm.embedding,
+                embeddedTerm.embedding,
+            );
+            if (
+                similarity >= minScore &&
+                embeddedTerm.value.text !== testTerm.value.text
+            ) {
+                similarTerms.push(embeddedTerm.value);
+            }
+        }
+        return similarTerms;
+    }
+
+    public removeAllSimilar(thresholdScore: number) {
+        const allKeys = [...this.embeddedTerms.keys()];
+        for (const key of allKeys) {
+            const embeddedTerm = this.embeddedTerms.get(key);
+            if (embeddedTerm !== undefined) {
+                const similarTerms = this.getSimilar(
+                    embeddedTerm.value,
+                    thresholdScore,
+                );
+                if (similarTerms.length > 0) {
+                    this.removeTerms(similarTerms);
+                }
+            }
+        }
+    }
+
+    public removeTerms(terms: Term[] | IterableIterator<Term>) {
+        for (const term of terms) {
+            this.embeddedTerms.delete(term.text);
+        }
+    }
 }

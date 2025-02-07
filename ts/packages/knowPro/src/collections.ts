@@ -381,6 +381,10 @@ export class TextRangeCollection {
 export class TermSet {
     constructor(private terms: Map<string, Term> = new Map()) {}
 
+    public get size() {
+        return this.terms.size;
+    }
+
     public add(term: Term) {
         const existingTerm = this.terms.get(term.text);
         if (!existingTerm) {
@@ -413,6 +417,10 @@ export class TermSet {
 
     public clear(): void {
         this.terms.clear();
+    }
+
+    public values() {
+        return this.terms.values();
     }
 }
 
