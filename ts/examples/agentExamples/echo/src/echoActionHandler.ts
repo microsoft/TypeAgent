@@ -1,81 +1,41 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import {
-    ActionContext,
-    AppAction,
-    AppAgent,
-    SessionContext,
-    ActionResult,
-} from "@typeagent/agent-sdk";
+import { ActionContext, AppAgent, TypeAgentAction } from "@typeagent/agent-sdk";
 import {
     createActionResultFromTextDisplay,
     createActionResultFromError,
 } from "@typeagent/agent-sdk/helpers/action";
-
-import { EchoAction } from "./echoActionsSchema.js";
+import { EchoAction } from "./echoActionSchema.js";
 
 export function instantiate(): AppAgent {
     return {
         initializeAgentContext: initializeEchoContext,
-        updateAgentContext: updateEchoContext,
         executeAction: executeEchoAction,
     };
 }
 
 type EchoActionContext = {
     echoCount: number;
-    echoRequests: Set<string> | undefined;
 };
 
-async function initializeEchoContext() {
-    return {
-        echoCount: 0,
-        echoRequests: undefined,
-    };
-}
-
-async function updateEchoContext(
-    enable: boolean,
-    context: SessionContext<EchoActionContext>,
-): Promise<void> {
-    if (enable) {
-        context.agentContext.echoRequests = new Set<string>();
-        context.agentContext.echoCount = 0;
-    }
-    context.agentContext.echoCount++;
+async function initializeEchoContext(): Promise<EchoActionContext> {
+    return { echoCount: 0 };
 }
 
 async function executeEchoAction(
-    action: AppAction,
+    action: TypeAgentAction<EchoAction>,
     context: ActionContext<EchoActionContext>,
 ) {
-    let result = await handleEchoAction(
-        action as EchoAction,
-        context.sessionContext.agentContext,
-    );
-    return result;
-}
-
-async function handleEchoAction(
-    action: EchoAction,
-    echoContext: EchoActionContext,
-) {
-    let result: ActionResult | undefined = undefined;
-    let displayText: string | undefined = undefined;
+    // The context created in initializeEchoContext is returned in the action context.
+    const echoContext = context.sessionContext.agentContext;
     switch (action.actionName) {
         case "echoGen":
-            displayText = `>> Echo: ${action.parameters.text}`;
-            result = createActionResultFromTextDisplay(
-                displayText,
-                displayText,
-            );
-            break;
+            const displayText = `>> Echo ${++echoContext.echoCount}: ${action.parameters.text
+                }`;
+            return createActionResultFromTextDisplay(displayText, displayText);
+
         default:
-            result = createActionResultFromError(
-                "Unable to process the action",
-            );
-            break;
+            return createActionResultFromError("Unable to process the action");
     }
-    return result;
 }
