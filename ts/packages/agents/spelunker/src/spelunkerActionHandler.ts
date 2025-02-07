@@ -156,10 +156,7 @@ async function handleSpelunkerAction(
         case "searchCode": {
             const question = action.parameters.question.trim();
             if (typeof question === "string" && question) {
-                return await searchCode(
-                    context.agentContext,
-                    question,
-                );
+                return await searchCode(context.agentContext, question);
             }
             return createActionResultFromError("I see no question to answer");
         }
