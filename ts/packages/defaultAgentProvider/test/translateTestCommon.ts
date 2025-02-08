@@ -46,6 +46,7 @@ export async function defineTranslateTest(name: string, dataFiles: string[]) {
                         translation: { history: { enabled: false } },
                         explainer: { enabled: false },
                         cache: { enabled: false },
+                        collectCommandResult: true,
                     }),
                 );
             }
@@ -62,11 +63,15 @@ export async function defineTranslateTest(name: string, dataFiles: string[]) {
                         match,
                     } of requests) {
                         if (history !== undefined) {
-                            await dispatcher.processCommand(
-                                `@history insert ${JSON.stringify(history)}`,
-                            );
+                            const insertResult =
+                                await dispatcher.processCommand(
+                                    `@history insert ${JSON.stringify(history)}`,
+                                );
+                            expect(insertResult?.hasError).toBeFalsy();
                         }
                         const result = await dispatcher.processCommand(request);
+                        expect(result?.hasError).toBeFalsy();
+
                         const actions = result?.actions;
                         expect(actions).toBeDefined();
 

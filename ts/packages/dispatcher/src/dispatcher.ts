@@ -27,6 +27,7 @@ import { RequestMetrics } from "./utils/metrics.js";
 import { FullAction } from "agent-cache";
 
 export type CommandResult = {
+    hasError?: boolean;
     actions?: FullAction[];
     metrics?: RequestMetrics;
 };

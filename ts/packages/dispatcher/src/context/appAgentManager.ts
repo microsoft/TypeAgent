@@ -17,7 +17,7 @@ import { createSessionContext } from "../execute/actionHandlers.js";
 import { AppAgentProvider } from "../agentProvider/agentProvider.js";
 import registerDebug from "debug";
 import { DeepPartialUndefinedAndNull } from "common-utils";
-import { DispatcherName } from "./interactiveIO.js";
+import { DispatcherName } from "./dispatcher/dispatcherUtils.js";
 import {
     ActionSchemaSemanticMap,
     EmbeddingCache,
