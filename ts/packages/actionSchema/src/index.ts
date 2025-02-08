@@ -33,5 +33,8 @@ export {
     fromJSONActionSchemaFile,
 } from "./serialize.js";
 
+// Generic (non-action) Schema
+export { validateType } from "./validate.js";
+
 // Schema Config
 export { SchemaConfig, ParamSpec, ActionParamSpecs } from "./schemaConfig.js";
