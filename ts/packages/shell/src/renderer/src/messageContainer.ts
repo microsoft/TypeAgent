@@ -14,30 +14,11 @@ import {
 } from "agent-dispatcher";
 
 import { ChoicePanel, InputChoice } from "./choicePanel";
-import { setContent } from "./setContent";
+import { setContent, swapContent } from "./setContent";
 import { ChatView } from "./chatView";
 import { iconCheckMarkCircle, iconRoadrunner, iconX } from "./icon";
 import { TemplateEditor } from "./templateEditor";
 import { SettingsView } from "./settingsView";
-
-function createTimestampDiv(timestamp: Date, className: string) {
-    const timeStampDiv = document.createElement("div");
-    timeStampDiv.classList.add(className);
-
-    const nameSpan = document.createElement("span");
-    nameSpan.className = "agent-name";
-    timeStampDiv.appendChild(nameSpan); // name placeholder
-
-    const dateSpan = document.createElement("span");
-    dateSpan.className = "timestring";
-    dateSpan.setAttribute("data", timestamp.toString());
-
-    timeStampDiv.appendChild(dateSpan); // time string
-
-    dateSpan.innerText = "- " + timestamp.toLocaleTimeString();
-
-    return timeStampDiv;
-}
 
 function updateMetrics(
     mainMetricsDiv: HTMLDivElement,
@@ -100,6 +81,7 @@ export class MessageContainer {
     private readonly messageDiv: HTMLDivElement;
     private readonly timestampDiv: HTMLDivElement;
     private readonly iconDiv?: HTMLDivElement;
+    private nameSpan: HTMLSpanElement;
 
     private metricsDiv?: {
         mainMetricsDiv: HTMLDivElement;
@@ -159,12 +141,34 @@ export class MessageContainer {
             if (this.action !== undefined && !Array.isArray(this.action)) {
                 label.setAttribute(
                     "action-data",
-                    JSON.stringify(this.action, undefined, 2),
+                    "<pre>" +
+                        JSON.stringify(this.action, undefined, 2) +
+                        "</pre>",
                 );
+
+                // mark the span as clickable
+                this.nameSpan.classList.add("clickable");
             }
 
             this.iconDiv.innerText = this.sourceIcon;
         }
+    }
+
+    private createTimestampDiv(timestamp: Date, className: string) {
+        const timeStampDiv = document.createElement("div");
+        timeStampDiv.classList.add(className);
+
+        timeStampDiv.appendChild(this.nameSpan); // name placeholder
+
+        const dateSpan = document.createElement("span");
+        dateSpan.className = "timestring";
+        dateSpan.setAttribute("data", timestamp.toString());
+
+        timeStampDiv.appendChild(dateSpan); // time string
+
+        dateSpan.innerText = "- " + timestamp.toLocaleTimeString();
+
+        return timeStampDiv;
     }
 
     constructor(
@@ -181,7 +185,25 @@ export class MessageContainer {
         const div = document.createElement("div");
         div.className = `chat-message-container-${classNameSuffix}`;
 
-        const timestampDiv = createTimestampDiv(
+        // create the name placeholder
+        this.nameSpan = document.createElement("span");
+        this.nameSpan.className = "agent-name";
+        this.nameSpan.addEventListener("click", () => {
+            swapContent(this.nameSpan, this.messageDiv);
+            // const data: string = this.nameSpan.getAttribute("action-data") ?? "";
+            // const originalMessage: string = this.messageDiv.innerHTML;
+
+            // if (this.messageDiv.classList.contains("chat-message-action-data")) {
+            //     this.messageDiv.classList.remove("chat-message-action-data");
+            // } else {
+            //     this.messageDiv.classList.add("chat-message-action-data");
+            // }
+
+            // this.nameSpan.setAttribute("action-data", originalMessage);
+            // this.messageDiv.innerHTML = data;
+        });
+
+        const timestampDiv = this.createTimestampDiv(
             new Date(),
             `chat-timestamp-${classNameSuffix}`,
         );

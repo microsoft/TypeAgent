@@ -47,18 +47,4 @@ test.describe("List Agent Tests", () => {
             ],
         );
     });
-
-    // test("delete_list", async ({}, testInfo) => {
-    //     console.log(`Running test '${testInfo.title}`);
-
-    //     await testUserRequest(
-    //         [
-    //             "delete the shopping list",
-    //             "is there a shopping list?"
-    //         ],
-    //         [
-    //             "Cleared list: shopping",
-    //             "List 'shopping' is empty"
-    //         ]);
-    // });
 });
