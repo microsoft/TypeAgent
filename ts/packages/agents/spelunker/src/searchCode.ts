@@ -254,7 +254,7 @@ async function selectChunks(
     const limiter = createLimiter(maxConcurrency);
     const batches = makeBatches(allChunks, 250000); // TODO: Tune this more
     console_log(
-        `  [maxConcurrency = ${maxConcurrency}, ${batches.length} batches]`,
+        `  [${batches.length} batches, maxConcurrency ${maxConcurrency}]`,
     );
     for (const batch of batches) {
         const p = limiter(() =>
@@ -280,13 +280,13 @@ async function selectChunks(
     // console_log(`  [${allChunks.map((c) => (c.relevance)).join(", ")}]`);
     const chunks = keepBestChunks(allChunkDescs, allChunks, 250000); // TODO: Tune this more
     console_log(`  [Keeping ${chunks.length} chunks]`);
-    for (let i = 0; i < chunks.length; i++) {
-        const chunk = chunks[i];
-        const chunkDesc = allChunkDescs[i];
-        console_log(
-            `    [${chunkDesc.relevance} ${path.basename(chunk.fileName)}:${chunk.codeName} ${chunk.chunkId}]`,
-        );
-    }
+    // for (let i = 0; i < chunks.length; i++) {
+    //     const chunk = chunks[i];
+    //     const chunkDesc = allChunkDescs[i];
+    //     console_log(
+    //         `    [${chunkDesc.relevance} ${path.basename(chunk.fileName)}:${chunk.codeName} ${chunk.chunkId}]`,
+    //     );
+    // }
     return chunks;
 }
 
@@ -611,14 +611,10 @@ async function loadDatabase(
         `  [Chunked ${allChunkedFiles.length} files into ${allChunks.length} chunks]`,
     );
 
-    // Let's see how things go without summaries.
-    // They are slow and don't fit in the oracle's buffer.
-    // TODO: Restore this feature.
-
-    // // 1c. Use a fast model to summarize all chunks.
-    // if (allChunks.length) {
-    //     await summarizeChunks(context, allChunks);
-    // }
+    // 1c. Use a fast model to summarize all chunks.
+    if (allChunks.length) {
+        await summarizeChunks(context, allChunks);
+    }
 
     return db;
 }
@@ -697,12 +693,15 @@ export async function summarizeChunks(
     console_log(
         `[Step 1c: Summarizing ${chunks.length} chunks (may take a while)]`,
     );
+    // NOTE: We cannot stuff the buffer, because the completion size
+    // is limited to 4096 tokens, and we expect a certain number of
+    // tokens per chunk. Experimentally, 40 chunks per job works great.
     const maxConcurrency =
-        parseInt(process.env.AZURE_OPENAI_MAX_CONCURRENCY ?? "0") ?? 40;
-    let chunksPerJob = 30;
+        parseInt(process.env.AZURE_OPENAI_MAX_CONCURRENCY ?? "0") ?? 5;
+    let chunksPerJob = 40;
     let numJobs = Math.ceil(chunks.length / chunksPerJob);
     console_log(
-        `  [maxConcurrency = ${maxConcurrency}, chunksPerJob = ${chunksPerJob}, numJobs = ${numJobs}]`,
+        `  [${chunksPerJob} chunks/job, ${numJobs} jobs, maxConcurrency ${maxConcurrency}]`,
     );
     const limiter = createLimiter(maxConcurrency);
     const promises: Promise<void>[] = [];
@@ -732,10 +731,9 @@ async function summarizeChunkSlice(
         summarizer.translate(prompt),
     );
     if (!result) {
-        const chunkSummary = chunks
-            .map((c) => `${path.basename(c.fileName)}:${c.codeName}`)
-            .join(", ");
-        console_log(`  [Failed to summarize chunks for ${chunkSummary}]`);
+        console_log(
+            `  [Failed to summarize chunks for ${chunks.length} chunks]`,
+        );
         return;
     }
 
