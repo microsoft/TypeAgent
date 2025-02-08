@@ -25,6 +25,7 @@
   "dependencies": {
     "@typeagent/agent-sdk": "workspace:*",
     "chalk": "^5.3.0",
+    "common-utils": "workspace:*",
     "date-fns": "^4.1.0",
     "debug": "^4.4.0",
     "graph-utils": "workspace:*"

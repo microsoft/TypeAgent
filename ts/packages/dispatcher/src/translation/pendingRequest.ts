@@ -3,7 +3,7 @@
 
 import { AppAction } from "@typeagent/agent-sdk";
 import { PendingRequestEntry } from "./multipleActionSchema.js";
-import { createExecutableAction } from "agent-cache";
+//import { createExecutableAction } from "agent-cache";
 import { DispatcherName } from "../context/dispatcher/dispatcherUtils.js";
 
 export type PendingRequestAction = {

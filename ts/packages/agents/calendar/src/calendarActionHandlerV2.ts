@@ -11,11 +11,13 @@ import {
 import {
     createCalendarGraphClient,
     CalendarClient,
-    getTimeZoneName,
     GraphEntity,
-    getUniqueLocalId,
     ErrorResponse,
 } from "graph-utils";
+import {
+    getTimeZoneName,
+    getUniqueLocalId,
+} from "common-utils";
 import chalk from "chalk";
 import {
     CalendarAction,
