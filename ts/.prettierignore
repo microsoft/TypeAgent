@@ -13,11 +13,11 @@ pnpm-lock.yaml
 # Typescript config
 tsconfig.json
 
-# TypeChat Fork
-packages/typechat
-
-
 # Test data
-packages/dispatcher/test/data
-packages/dispatcher/test/repo
-packages/dispatcher/data/**/*.json
+packages/defaultAgentProvider/test/data
+packages/defaultAgentProvider/test/repo
+packages/defaultAgentProvider/data/**/*.json
+
+# Test result
+packages/shell/test-results/*
+packages/shell/playwright-report/*

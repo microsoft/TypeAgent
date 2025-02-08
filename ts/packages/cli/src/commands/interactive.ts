@@ -2,27 +2,37 @@
 // Licensed under the MIT License.
 
 import { Args, Command, Flags } from "@oclif/core";
+import { createDispatcher, Dispatcher } from "agent-dispatcher";
 import {
-    getSchemaNamesFromDefaultAppAgentProviders,
+    createActionConfigProvider,
     getCacheFactory,
-    getDefaultAppAgentProviders,
+    getInstanceDir,
+    getSchemaNamesForActionConfigProvider,
 } from "agent-dispatcher/internal";
+import {
+    getDefaultAppAgentProviders,
+    getDefaultConstructionProvider,
+    getDefaultAppAgentInstaller,
+} from "default-agent-provider";
 import inspector from "node:inspector";
 import { getChatModelNames } from "aiclient";
 import {
     processCommands,
     withConsoleClientIO,
 } from "agent-dispatcher/helpers/console";
-import { createDispatcher, Dispatcher } from "agent-dispatcher";
 
 const modelNames = await getChatModelNames();
-
+const instanceDir = getInstanceDir();
+const defaultAppAgentProviders = getDefaultAppAgentProviders(instanceDir);
+const schemaNames = getSchemaNamesForActionConfigProvider(
+    await createActionConfigProvider(defaultAppAgentProviders),
+);
 export default class Interactive extends Command {
     static description = "Interactive mode";
     static flags = {
         translator: Flags.string({
             description: "Schema names",
-            options: getSchemaNamesFromDefaultAppAgentProviders(),
+            options: schemaNames,
             multiple: true,
         }),
         explainer: Flags.string({
@@ -68,13 +78,16 @@ export default class Interactive extends Command {
 
         await withConsoleClientIO(async (clientIO) => {
             const dispatcher = await createDispatcher("cli interactive", {
-                appAgentProviders: getDefaultAppAgentProviders(),
+                appAgentProviders: defaultAppAgentProviders,
+                agentInstaller: getDefaultAppAgentInstaller(instanceDir),
                 schemas,
                 translation: { model: flags.model },
                 explainer: { name: flags.explainer },
                 persistSession: !flags.memory,
                 enableServiceHost: true,
                 clientIO,
+                dblogging: true,
+                constructionProvider: getDefaultConstructionProvider(),
             });
             try {
                 if (args.input) {

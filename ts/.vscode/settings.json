@@ -5,6 +5,7 @@
         "AUTOINCREMENT",
         "Exif",
         "exifreader",
+        "Knowpro",
         "lightgray",
         "NOCASE",
         "oclif",
@@ -29,6 +30,9 @@
     ],
     "jest.runMode": "on-demand",
     "[json]": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode"
+    },
+    "[typescript]": {
         "editor.defaultFormatter": "esbenp.prettier-vscode"
     }
 }

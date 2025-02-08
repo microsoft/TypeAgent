@@ -19,8 +19,9 @@ export class ChatMemoryPrinter extends ChatPrinter {
         super(io);
     }
 
-    public writeLink(filePath: string): void {
+    public writeLink(filePath: string) {
         this.writeInColor(chalk.cyan, pathToFileURL(filePath).toString());
+        return this;
     }
 
     public writeBlocks(
@@ -54,16 +55,6 @@ export class ChatMemoryPrinter extends ChatPrinter {
         if (timestamp) {
             this.writeInColor(chalk.gray, timestamp.toString());
         }
-    }
-
-    public writeProgress(
-        curCount: number,
-        total: number,
-        label?: string | undefined,
-    ): void {
-        label = label ? label + " " : "";
-        const text = `[${label}${curCount} / ${total}]`;
-        this.writeInColor(chalk.gray, text);
     }
 
     public writeBatchProgress(

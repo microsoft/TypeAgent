@@ -10,7 +10,8 @@ import {
     SchemaConfig,
     toJSONActionSchemaFile,
 } from "action-schema";
-import { ActionConfig, ActionConfigProvider } from "./agentTranslators.js";
+import { ActionConfig } from "./actionConfig.js";
+import { ActionConfigProvider } from "./actionConfigProvider.js";
 import { getPackageFilePath } from "../utils/getPackageFilePath.js";
 import { AppAction } from "@typeagent/agent-sdk";
 import { DeepPartialUndefined, simpleStarRegex } from "common-utils";
@@ -30,7 +31,7 @@ function hashStrings(...str: string[]) {
     return hash.digest("base64");
 }
 
-const ActionSchemaFileCacheVersion = 1;
+const ActionSchemaFileCacheVersion = 2;
 type ActionSchemaFileCacheJSON = {
     version: number;
     entries: [string, ActionSchemaFileJSON][];
@@ -117,6 +118,7 @@ export class ActionSchemaFileCache {
             actionConfig.schemaType,
             fullPath,
             schemaConfig,
+            true,
         );
         this.actionSchemaFiles.set(actionConfig.schemaName, parsed);
 
@@ -192,8 +194,6 @@ export function getActionSchema(
 export function createSchemaInfoProvider(
     provider: ActionConfigProvider,
 ): SchemaInfoProvider {
-    const hashCache = new Map<string, string>();
-
     const getActionSchemaFile = (schemaName: string) => {
         return provider.getActionSchemaFileForConfig(
             provider.getActionConfig(schemaName),

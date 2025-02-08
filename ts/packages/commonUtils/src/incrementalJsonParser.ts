@@ -335,7 +335,7 @@ export function createIncrementalJsonParser(
     }
     function parseObjectPropStart(c: string) {
         if (c === '"') {
-            // Push an empty property name to indicate the next string literal is a proeprty name
+            // Push an empty property name to indicate the next string literal is a property name
             props.push("");
             return startLiteral("", State.LiteralString);
         }

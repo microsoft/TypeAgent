@@ -11,6 +11,7 @@ import {
     SessionContext,
     PartialParsedCommandParams,
     AppAgentManifest,
+    TypeAgentAction,
 } from "@typeagent/agent-sdk";
 import {
     CommandHandler,
@@ -41,7 +42,6 @@ import {
     resolveCommand,
 } from "../../command/command.js";
 import {
-    getHandlerTableUsage,
     getUsage,
     printStructuredHandlerTableUsage,
 } from "../../command/commandHelp.js";
@@ -52,7 +52,7 @@ import {
     getSystemTemplateSchema,
 } from "../../translation/actionTemplate.js";
 import { getTokenCommandHandlers } from "./handlers/tokenCommandHandler.js";
-import { Actions, FullAction } from "agent-cache";
+import { toExecutableActions, FullAction } from "agent-cache";
 import { getActionSchema } from "../../translation/actionSchemaFileCache.js";
 import { executeActions } from "../../execute/actionHandlers.js";
 import { getObjectProperty } from "common-utils";
@@ -61,12 +61,24 @@ import {
     getParameterNames,
     validateAction,
 } from "action-schema";
-import { EnvCommandHandler } from "./handlers/envCommandHandler.js";
+import { getEnvCommandHandlers } from "./handlers/envCommandHandler.js";
 import { executeNotificationAction } from "./action/notificationActionHandler.js";
 import { executeHistoryAction } from "./action/historyActionHandler.js";
+import { ConfigAction } from "./schema/configActionSchema.js";
+import { NotificationAction } from "./schema/notificationActionSchema.js";
+import { HistoryAction } from "./schema/historyActionSchema.js";
+import { SessionAction } from "./schema/sessionActionSchema.js";
+import {
+    InstallCommandHandler,
+    UninstallCommandHandler,
+} from "./handlers/installCommandHandlers.js";
 
 function executeSystemAction(
-    action: AppAction,
+    action:
+        | TypeAgentAction<SessionAction, "system.session">
+        | TypeAgentAction<ConfigAction, "system.config">
+        | TypeAgentAction<NotificationAction, "system.notify">
+        | TypeAgentAction<HistoryAction, "system.history">,
     context: ActionContext<CommandHandlerContext>,
 ) {
     switch (action.translatorName) {
@@ -78,9 +90,11 @@ function executeSystemAction(
             return executeNotificationAction(action, context);
         case "system.history":
             return executeHistoryAction(action, context);
+        default:
+            throw new Error(
+                `Invalid system sub-translator: ${(action as TypeAgentAction).translatorName}`,
+            );
     }
-
-    throw new Error(`Invalid system sub-translator: ${action.translatorName}`);
 }
 
 class HelpCommandHandler implements CommandHandler {
@@ -105,41 +119,35 @@ class HelpCommandHandler implements CommandHandler {
                 undefined,
                 context,
             );
-        } else {
-            const result = await resolveCommand(
-                params.args.command,
-                systemContext,
-            );
-
-            const command = getParsedCommand(result);
-            if (result.suffix.length !== 0) {
-                displayError(
-                    `ERROR: '${result.suffix}' is not a subcommand for '@${command}'`,
-                    context,
-                );
-            }
-
-            if (result.descriptor !== undefined) {
-                const defaultSubCommand =
-                    result.table !== undefined
-                        ? getDefaultSubCommandDescriptor(result.table)
-                        : undefined;
-
-                if (defaultSubCommand !== result.descriptor) {
-                    displayResult(
-                        getUsage(command, result.descriptor),
-                        context,
-                    );
-                    return;
-                }
-            }
-
-            if (result.table === undefined) {
-                throw new Error(`Unknown command '${params.args.command}'`);
-            }
-
-            printStructuredHandlerTableUsage(result.table, command, context);
+            return;
         }
+        const result = await resolveCommand(params.args.command, systemContext);
+
+        const command = getParsedCommand(result);
+        if (result.suffix.length !== 0) {
+            displayError(
+                `ERROR: '${result.suffix}' is not a subcommand for '@${command}'`,
+                context,
+            );
+        }
+
+        if (result.descriptor !== undefined) {
+            const defaultSubCommand =
+                result.table !== undefined
+                    ? getDefaultSubCommandDescriptor(result.table)
+                    : undefined;
+
+            if (defaultSubCommand !== result.descriptor) {
+                displayResult(getUsage(command, result.descriptor), context);
+                return;
+            }
+        }
+
+        if (result.table === undefined) {
+            throw new Error(`Unknown command '${params.args.command}'`);
+        }
+
+        printStructuredHandlerTableUsage(result.table, command, context);
     }
 }
 
@@ -223,13 +231,17 @@ class ActionCommandHandler implements CommandHandler {
         const action: AppAction = {
             translatorName,
             actionName,
-            parameters: params.flags.parameters,
         };
+
+        if (params.flags.parameters !== undefined) {
+            action.parameters = params.flags.parameters;
+        }
 
         validateAction(actionSchema, action, true);
 
         return executeActions(
-            Actions.fromFullActions([action as FullAction]),
+            toExecutableActions([action as FullAction]),
+            undefined,
             context,
         );
     }
@@ -357,7 +369,9 @@ const systemHandlers: CommandHandlerTable = {
         random: getRandomCommandHandlers(),
         notify: getNotifyCommandHandlers(),
         token: getTokenCommandHandlers(),
-        env: new EnvCommandHandler(),
+        env: getEnvCommandHandlers(),
+        install: new InstallCommandHandler(),
+        uninstall: new UninstallCommandHandler(),
     },
 };
 

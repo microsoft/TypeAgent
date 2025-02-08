@@ -3,13 +3,12 @@
 
 import chalk from "chalk";
 import registerDebug from "debug";
-import {
-    RequestId,
-    DispatcherName,
-    makeClientIOMessage,
-} from "../context/interactiveIO.js";
+import { RequestId, makeClientIOMessage } from "../context/interactiveIO.js";
 import { getDefaultExplainerName } from "agent-cache";
-import { CommandHandlerContext } from "../context/commandHandlerContext.js";
+import {
+    CommandHandlerContext,
+    ensureCommandResult,
+} from "../context/commandHandlerContext.js";
 
 import {
     CommandDescriptor,
@@ -18,9 +17,10 @@ import {
 } from "@typeagent/agent-sdk";
 import { executeCommand } from "../execute/actionHandlers.js";
 import { isCommandDescriptorTable } from "@typeagent/agent-sdk/helpers/command";
-import { RequestMetrics } from "../utils/metrics.js";
 import { parseParams } from "./parameters.js";
 import { getHandlerTableUsage, getUsage } from "./commandHelp.js";
+import { CommandResult } from "../dispatcher.js";
+import { DispatcherName } from "../context/dispatcher/dispatcherUtils.js";
 
 const debugCommand = registerDebug("typeagent:dispatcher:command");
 const debugCommandError = registerDebug("typeagent:dispatcher:command:error");
@@ -240,7 +240,7 @@ export async function processCommandNoLock(
 ) {
     try {
         const result = await parseCommand(originalInput, context);
-        await executeCommand(
+        return await executeCommand(
             result.command,
             result.params,
             result.appAgentName,
@@ -266,31 +266,52 @@ export async function processCommandNoLock(
     }
 }
 
+function beginProcessCommand(
+    requestId: RequestId,
+    context: CommandHandlerContext,
+) {
+    context.requestId = requestId;
+    context.commandResult = undefined;
+    if (requestId) {
+        context.commandProfiler =
+            context.metricsManager?.beginCommand(requestId);
+    }
+}
+
+function endProcessCommand(
+    requestId: RequestId,
+    context: CommandHandlerContext,
+) {
+    context.commandProfiler?.stop();
+    context.commandProfiler = undefined;
+
+    const metrics = requestId
+        ? context.metricsManager?.endCommand(requestId)
+        : undefined;
+
+    if (metrics) {
+        ensureCommandResult(context).metrics = metrics;
+    }
+    const result = context.commandResult;
+    context.commandResult = undefined;
+    context.requestId = undefined;
+
+    return result;
+}
+
 export async function processCommand(
     originalInput: string,
     context: CommandHandlerContext,
     requestId?: RequestId,
     attachments?: string[],
-): Promise<RequestMetrics | undefined> {
+): Promise<CommandResult | undefined> {
     // Process one command at at time.
     return context.commandLock(async () => {
-        context.requestId = requestId;
-        if (requestId) {
-            context.commandProfiler =
-                context.metricsManager?.beginCommand(requestId);
-        }
+        beginProcessCommand(requestId, context);
         try {
             await processCommandNoLock(originalInput, context, attachments);
         } finally {
-            context.commandProfiler?.stop();
-            context.commandProfiler = undefined;
-
-            const metrics = requestId
-                ? context.metricsManager?.endCommand(requestId)
-                : undefined;
-
-            context.requestId = undefined;
-            return metrics;
+            return endProcessCommand(requestId, context);
         }
     });
 }

@@ -8,42 +8,52 @@ import DOMPurify from "dompurify";
 import { ipcRenderer } from "electron";
 
 ipcRenderer.on("received-from-browser-ipc", async (_, data) => {
-    if (data.target == "browser") {
-        if (data.messageType == "browserActionRequest") {
-            const response = await runBrowserAction(data.body);
-            sendToBrowserAgent({
-                source: data.target,
-                target: data.source,
-                messageType: "browserActionResponse",
-                id: data.id,
-                body: response,
-            });
-        } else if (data.messageType == "siteTranslatorStatus") {
-            if (data.body.status == "initializing") {
-                console.log(`Initializing ${data.body.translator}`);
-            } else if (data.body.status == "initialized") {
-                console.log(`Finished initializing ${data.body.translator}`);
+    if (data.error) {
+        console.error(data.error);
+        return;
+    }
+
+    if (data.method !== undefined && data.method.indexOf("/") > 0) {
+        const [schema, actionName] = data.method?.split("/");
+
+        if (schema === "browser") {
+            if (actionName == "siteTranslatorStatus") {
+                if (data.body.status == "initializing") {
+                    console.log(`Initializing ${data.body.translator}`);
+                } else if (data.body.status == "initialized") {
+                    console.log(
+                        `Finished initializing ${data.body.translator}`,
+                    );
+                }
+            } else {
+                const response = await runBrowserAction({
+                    actionName: actionName,
+                    parameters: data.params,
+                });
+
+                sendToBrowserAgent({
+                    id: data.id,
+                    result: response,
+                });
             }
-        } else if (data.messageType.startsWith("browserActionRequest.")) {
-            const message = await runSiteAction(data.messageType, data.body);
+        } else if (schema.startsWith("browser.")) {
+            const message = await runSiteAction(schema, {
+                actionName: actionName,
+                parameters: data.params,
+            });
 
             sendToBrowserAgent({
-                source: data.target,
-                target: data.source,
-                messageType: "browserActionResponse",
                 id: data.id,
-                body: message,
+                result: message,
             });
+        } else if (schema === "webAgent") {
+            window.postMessage(data);
         }
 
         console.log(
             `Browser websocket client received message: ${JSON.stringify(data)}`,
         );
     }
-});
-
-ipcRenderer.on("init-site-agent", () => {
-    window.postMessage("setupSiteAgent");
 });
 
 function sendToBrowserAgent(message: any) {
@@ -85,7 +95,7 @@ export async function awaitPageLoad() {
 
 export async function getTabHTMLFragments(
     fullSize: boolean,
-    extactText: boolean,
+    extractText: boolean,
 ) {
     let htmlFragments: any[] = [];
     let htmlPromises: Promise<any>[] = [];
@@ -135,7 +145,7 @@ export async function getTabHTMLFragments(
         const frameHTML = htmlResults[i];
         if (frameHTML) {
             let frameText = "";
-            if (extactText) {
+            if (extractText) {
                 frameText = await sendScriptAction(
                     {
                         type: "get_page_text",
@@ -372,10 +382,10 @@ async function runBrowserAction(action: any) {
     };
 }
 
-async function runSiteAction(messageType: string, action: any) {
+async function runSiteAction(schemaName: string, action: any) {
     let confirmationMessage = "OK";
-    switch (messageType) {
-        case "browserActionRequest.paleoBioDb": {
+    switch (schemaName) {
+        case "browser.paleoBioDb": {
             const actionName =
                 action.actionName ?? action.fullActionName.split(".").at(-1);
             if (
@@ -398,7 +408,7 @@ async function runSiteAction(messageType: string, action: any) {
 
             break;
         }
-        case "browserActionRequest.crossword": {
+        case "browser.crossword": {
             sendScriptAction({
                 type: "run_crossword_action",
                 action: action,
@@ -406,7 +416,7 @@ async function runSiteAction(messageType: string, action: any) {
 
             break;
         }
-        case "browserActionRequest.commerce": {
+        case "browser.commerce": {
             sendScriptAction({
                 type: "run_commerce_action",
                 action: action,
@@ -419,31 +429,29 @@ async function runSiteAction(messageType: string, action: any) {
     return confirmationMessage;
 }
 
-await ipcRenderer.invoke("init-browser-ipc");
+ipcRenderer.invoke("init-browser-ipc");
 
 contextBridge.exposeInMainWorld("browserConnect", {
     enableSiteAgent: (translatorName) => {
         if (translatorName) {
             sendToBrowserAgent({
-                source: "browser",
-                target: "dispatcher",
-                messageType: "enableSiteTranslator",
-                body: translatorName,
+                method: "enableSiteTranslator",
+                params: { translator: translatorName },
             });
         }
     },
     disableSiteAgent: (translatorName) => {
         if (translatorName) {
             sendToBrowserAgent({
-                source: "browser",
-                target: "dispatcher",
-                messageType: "disableSiteTranslator",
-                body: translatorName,
+                method: "disableSiteTranslator",
+                params: { translator: translatorName },
             });
         }
     },
 });
 
-window.onbeforeunload = () => {
-    window.postMessage("disableSiteAgent");
-};
+window.addEventListener("message", (event) => {
+    if (event.data !== undefined && event.data.source === "webAgent") {
+        sendToBrowserAgent(event.data);
+    }
+});

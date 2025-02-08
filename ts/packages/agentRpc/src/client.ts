@@ -14,6 +14,8 @@ import {
     ParameterDefinitions,
     ClientAction,
     AppAgentManifest,
+    AppAction,
+    TypeAgentAction,
 } from "@typeagent/agent-sdk";
 import {
     AgentCallFunctions,
@@ -292,7 +294,8 @@ export async function createAgentRpcClient(
         AgentContextCallFunctions
     >(channel, agentContextInvokeHandlers, agentContextCallHandlers);
 
-    // The shim needs to implement all the APIs
+    // The shim needs to implement all the APIs regardless whether the actual agent
+    // has that API.  We remove remove it the one that is not necessary below.
     const agent: Required<AppAgent> = {
         initializeAgentContext() {
             return rpc.invoke("initializeAgentContext", undefined);
@@ -308,7 +311,10 @@ export async function createAgentRpcClient(
                 schemaName,
             });
         },
-        executeAction(action: any, context: ActionContext<ShimContext>) {
+        executeAction(
+            action: TypeAgentAction,
+            context: ActionContext<ShimContext>,
+        ) {
             return withActionContextAsync(context, (contextParams) =>
                 rpc.invoke("executeAction", {
                     ...contextParams,
@@ -317,7 +323,7 @@ export async function createAgentRpcClient(
             );
         },
         validateWildcardMatch(
-            action: any,
+            action: AppAction,
             context: SessionContext<ShimContext>,
         ) {
             return rpc.invoke("validateWildcardMatch", {

@@ -19,6 +19,7 @@ export {
     generateActionSchema,
     generateSchemaTypeDefinition,
 } from "./generator.js";
+export { generateActionJsonSchema } from "./jsonSchemaGenerator.js";
 export { validateAction } from "./validate.js";
 export { getParameterType, getParameterNames } from "./utils.js";
 
@@ -31,6 +32,9 @@ export {
     toJSONActionSchemaFile,
     fromJSONActionSchemaFile,
 } from "./serialize.js";
+
+// Generic (non-action) Schema
+export { validateType } from "./validate.js";
 
 // Schema Config
 export { SchemaConfig, ParamSpec, ActionParamSpecs } from "./schemaConfig.js";

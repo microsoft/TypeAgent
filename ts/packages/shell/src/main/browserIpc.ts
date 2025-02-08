@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import {
-    WebSocketMessage,
+    WebSocketMessageV2,
     createWebSocket,
     keepWebSocketAlive,
 } from "common-utils";
@@ -11,7 +11,7 @@ import WebSocket from "ws";
 
 export class BrowserAgentIpc {
     private static instance: BrowserAgentIpc;
-    public onMessageReceived: ((message: WebSocketMessage) => void) | null;
+    public onMessageReceived: ((message: WebSocketMessageV2) => void) | null;
     private webSocket: any;
 
     private constructor() {
@@ -40,7 +40,11 @@ export class BrowserAgentIpc {
                 } catch {}
             }
 
-            this.webSocket = await createWebSocket();
+            this.webSocket = await createWebSocket(
+                "browser",
+                "client",
+                "inlineBrowser",
+            );
             if (!this.webSocket) {
                 resolve(undefined);
                 return;
@@ -51,9 +55,19 @@ export class BrowserAgentIpc {
 
             this.webSocket.onmessage = async (event: any) => {
                 const text = event.data.toString();
-                const data = JSON.parse(text) as WebSocketMessage;
-                if (data.target == "browser" && this.onMessageReceived) {
-                    this.onMessageReceived(data);
+                const data = JSON.parse(text) as WebSocketMessageV2;
+                if (data.method) {
+                    let schema = data.method?.split("/")[0];
+                    schema = schema || "browser";
+
+                    if (
+                        (schema == "browser" ||
+                            schema == "webAgent" ||
+                            schema.startsWith("browser.")) &&
+                        this.onMessageReceived
+                    ) {
+                        this.onMessageReceived(data);
+                    }
                 }
             };
 
@@ -82,7 +96,7 @@ export class BrowserAgentIpc {
         }, 5 * 1000);
     }
 
-    public async send(message: WebSocketMessage) {
+    public async send(message: WebSocketMessageV2) {
         await this.ensureWebsocketConnected();
         this.webSocket.send(JSON.stringify(message));
     }

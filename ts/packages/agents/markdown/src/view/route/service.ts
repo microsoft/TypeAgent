@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import express, { Express, Request, Response } from "express";
+import rateLimit from "express-rate-limit";
 import MarkdownIt from "markdown-it";
 import { GeoJSONPlugin } from "./plugins/geoJson.js";
 import { MermaidPlugin } from "./plugins/mermaid.js";
@@ -13,9 +14,15 @@ import fs from "fs";
 const app: Express = express();
 const port = process.env.PORT || 9001;
 
+const limiter = rateLimit({
+    windowMs: 60000,
+    max: 100, // limit each IP to 100 requests per windowMs
+});
+
 // Serve static content
 const staticPath = fileURLToPath(new URL("../site", import.meta.url));
 
+app.use(limiter);
 app.use(express.static(staticPath));
 
 app.get("/", (req: Request, res: Response) => {

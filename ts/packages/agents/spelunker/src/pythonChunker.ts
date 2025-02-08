@@ -9,53 +9,28 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { promisify } from "util";
 
-import { FileDocumentation } from "./fileDocSchema.js";
+import {
+    ChunkId,
+    Chunk,
+    ChunkedFile,
+    ChunkerErrorItem,
+} from "./chunkSchema.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const execPromise = promisify(exec);
 
-export type ChunkId = string;
-
-export interface Blob {
-    start: number; // int; 0-based!
-    lines: string[];
-    breadcrumb?: boolean;
-}
-
-export interface Chunk {
-    // Names here must match names in chunker.py.
-    id: ChunkId;
-    treeName: string;
-    blobs: Blob[];
-    parentId: ChunkId;
-    children: ChunkId[];
-    fileName: string; // Set upon receiving end from ChunkedFile.fileName.
-    docs?: FileDocumentation; // Computed later by fileDocumenter.
-}
-
-export interface ChunkedFile {
-    fileName: string;
-    chunks: Chunk[];
-}
-
-export interface ErrorItem {
-    error: string;
-    filename?: string;
-    output?: string;
-}
-
 export async function chunkifyPythonFiles(
     filenames: string[],
-): Promise<(ChunkedFile | ErrorItem)[]> {
+): Promise<(ChunkedFile | ChunkerErrorItem)[]> {
     let output,
         errors,
         success = false;
     try {
         const chunkerPath = path.join(__dirname, "chunker.py");
         let { stdout, stderr } = await execPromise(
-            `python3 ${chunkerPath} ${filenames.join(" ")}`,
+            `python3 -X utf8 ${chunkerPath} ${filenames.join(" ")}`,
             { maxBuffer: 64 * 1024 * 1024 }, // Super large buffer
         );
         output = stdout;
@@ -76,7 +51,7 @@ export async function chunkifyPythonFiles(
         return [{ error: "No output from chunker script" }];
     }
 
-    const results: (ChunkedFile | ErrorItem)[] = JSON.parse(output);
+    const results: (ChunkedFile | ChunkerErrorItem)[] = JSON.parse(output);
     // TODO: validate that JSON matches our schema.
 
     // Ensure all chunks have a filename.
@@ -84,6 +59,9 @@ export async function chunkifyPythonFiles(
         if (!("error" in result)) {
             for (const chunk of result.chunks) {
                 chunk.fileName = result.fileName;
+                chunk.lineNo = chunk.blobs.length
+                    ? chunk.blobs[0].start + 1
+                    : 1;
             }
         }
     }
@@ -94,9 +72,9 @@ const CHUNK_COUNT_LIMIT = 25; // How many chunks at most.
 const FILE_SIZE_LIMIT = 25000; // How many characters at most.
 
 function splitLargeFiles(
-    items: (ChunkedFile | ErrorItem)[],
-): (ChunkedFile | ErrorItem)[] {
-    const results: (ChunkedFile | ErrorItem)[] = [];
+    items: (ChunkedFile | ChunkerErrorItem)[],
+): (ChunkedFile | ChunkerErrorItem)[] {
+    const results: (ChunkedFile | ChunkerErrorItem)[] = [];
     for (const item of items) {
         if (
             "error" in item ||
@@ -117,7 +95,7 @@ function splitFile(file: ChunkedFile): ChunkedFile[] {
     const parentMap: Map<ChunkId, Chunk> = new Map();
     for (const chunk of file.chunks) {
         // Only nodes with children will be looked up in this map.
-        if (chunk.children.length) parentMap.set(chunk.id, chunk);
+        if (chunk.children.length) parentMap.set(chunk.chunkId, chunk);
     }
 
     const results: ChunkedFile[] = []; // Where output accumulates.

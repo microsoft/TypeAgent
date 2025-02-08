@@ -33,6 +33,7 @@
     "exifreader": "4.23.5",
     "interactive-app": "workspace:*",
     "knowledge-processor": "workspace:*",
+    "knowpro": "workspace:*",
     "memory-providers": "workspace:*",
     "typeagent": "workspace:*",
     "typechat": "^0.1.1",

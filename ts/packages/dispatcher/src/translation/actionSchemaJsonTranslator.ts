@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { error, Result, success, TypeChatJsonValidator } from "typechat";
+import { error, Result, success } from "typechat";
 import {
     ActionSchemaFile,
     generateActionSchema,
@@ -12,30 +12,43 @@ import {
     ActionSchemaUnion,
     ActionSchemaGroup,
     GenerateSchemaOptions,
+    generateActionJsonSchema,
 } from "action-schema";
 import {
     createJsonTranslatorWithValidator,
     JsonTranslatorOptions,
+    TypeAgentJsonValidator,
 } from "common-utils";
 import {
     getInjectedActionConfigs,
-    ActionConfigProvider,
-    ActionConfig,
     createChangeAssistantActionSchema,
     TranslatedAction,
 } from "./agentTranslators.js";
-import { createMultipleActionSchema } from "./multipleActionSchema.js";
+import {
+    createMultipleActionSchema,
+    MultipleActionOptions,
+} from "./multipleActionSchema.js";
+import { ActionConfig } from "./actionConfig.js";
+import { ActionConfigProvider } from "./actionConfigProvider.js";
 
 function createActionSchemaJsonValidator<T extends TranslatedAction>(
     actionSchemaGroup: ActionSchemaGroup,
     generateOptions?: GenerateSchemaOptions,
-): TypeChatJsonValidator<T> {
+): TypeAgentJsonValidator<T> {
     const schema = generateActionSchema(actionSchemaGroup, generateOptions);
+    const generateJsonSchema = generateOptions?.jsonSchema ?? false;
+    const jsonSchema = generateJsonSchema
+        ? generateActionJsonSchema(actionSchemaGroup)
+        : undefined;
     return {
         getSchemaText: () => schema,
         getTypeName: () => actionSchemaGroup.entry.name,
+        getJsonSchema: () => jsonSchema,
         validate(jsonObject: object): Result<T> {
-            const value: any = jsonObject;
+            const value: any = generateJsonSchema
+                ? (jsonObject as any).response
+                : jsonObject;
+
             if (value.actionName === undefined) {
                 return error("Missing actionName property");
             }
@@ -48,6 +61,7 @@ function createActionSchemaJsonValidator<T extends TranslatedAction>(
 
             try {
                 validateAction(actionSchema, value);
+                // Return the unwrapped value with generateJsonSchema as the translated result
                 return success(value);
             } catch (e: any) {
                 return error(e.message);
@@ -169,7 +183,7 @@ export function composeActionSchema(
     provider: ActionConfigProvider,
     activeSchemas: { [key: string]: boolean },
     changeAgentAction: boolean,
-    multipleActions: boolean,
+    multipleActionOptions: MultipleActionOptions,
 ) {
     const builder = new ActionSchemaBuilder(provider);
     builder.addActionConfig(provider.getActionConfig(schemaName));
@@ -179,7 +193,7 @@ export function composeActionSchema(
         provider,
         activeSchemas,
         changeAgentAction,
-        multipleActions,
+        multipleActionOptions,
         false,
     );
 }
@@ -190,13 +204,15 @@ export function composeSelectedActionSchema(
     provider: ActionConfigProvider,
     activeSchemas: { [key: string]: boolean },
     changeAgentAction: boolean,
-    multipleActions: boolean,
+    multipleActionOptions: MultipleActionOptions,
 ) {
     const builder = new ActionSchemaBuilder(provider);
     const union = sc.union(definitions.map((definition) => sc.ref(definition)));
     const config = provider.getActionConfig(schemaName);
-    const comment = `${config.schemaType} includes a partial list of actions available in schema group '${schemaName}' - ${config.description}`;
-    const entry = sc.type(config.schemaType, union, comment);
+    const typeName = `Partial${config.schemaType}`;
+    const comments = `${typeName} is a partial list of actions available in schema group '${schemaName}'.`;
+
+    const entry = sc.type(typeName, union, comments);
     builder.addTypeDefinition(entry);
 
     return finalizeActionSchemaBuilder(
@@ -205,7 +221,7 @@ export function composeSelectedActionSchema(
         provider,
         activeSchemas,
         changeAgentAction,
-        multipleActions,
+        multipleActionOptions,
         true,
     );
 }
@@ -216,7 +232,7 @@ function finalizeActionSchemaBuilder(
     provider: ActionConfigProvider,
     activeSchemas: { [key: string]: boolean },
     changeAgentAction: boolean,
-    multipleActions: boolean,
+    multipleActionOptions: MultipleActionOptions,
     partial: boolean,
 ) {
     builder.addActionConfig(
@@ -235,9 +251,16 @@ function finalizeActionSchemaBuilder(
         }
     }
 
-    if (multipleActions) {
+    if (
+        multipleActionOptions === true ||
+        (multipleActionOptions !== false &&
+            multipleActionOptions.enabled === true)
+    ) {
         builder.addTypeDefinition(
-            createMultipleActionSchema(builder.getTypeUnion()),
+            createMultipleActionSchema(
+                builder.getTypeUnion(),
+                multipleActionOptions,
+            ),
         );
     }
     return builder.build();

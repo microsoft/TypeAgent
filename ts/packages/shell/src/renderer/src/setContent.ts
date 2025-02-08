@@ -99,6 +99,7 @@ export function setContent(
     elm: HTMLElement,
     content: DisplayContent,
     settingsView: SettingsView,
+    classNameModifier: string,
     appendMode?: DisplayAppendMode,
 ): string | undefined {
     // Remove existing content if we are not appending.
@@ -152,13 +153,17 @@ export function setContent(
 
     if (type === "text") {
         const prevElm = contentDiv.lastChild as HTMLElement | null;
-        if (prevElm?.classList.contains("chat-message-agent-text")) {
+        if (
+            prevElm?.classList.contains(
+                `chat-message-${classNameModifier}-text`,
+            )
+        ) {
             // If there is an existing text element then append to it.
             contentElm = prevElm;
         } else {
             const span = document.createElement("span");
             // create a text span so we can set "whitespace: break-spaces" css style of text content.
-            span.className = `chat-message-agent-text`;
+            span.className = `chat-message-${classNameModifier}-text`;
             contentDiv.appendChild(span);
             contentElm = span;
         }
@@ -223,4 +228,27 @@ export function setContent(
 
     const parser = new DOMParser();
     return parser.parseFromString(contentHtml, "text/html").body.innerText;
+}
+
+/**
+ * Takes the "action-data" attribute from the source element and places it as the html
+ * of the target element.
+ * @param sourceElement The source element.
+ * @param targetElement The target element.
+ */
+export function swapContent(
+    sourceElement: HTMLElement,
+    targetElement: HTMLElement,
+) {
+    const data: string = sourceElement.getAttribute("action-data") ?? "";
+    const originalMessage: string = targetElement.innerHTML;
+
+    if (targetElement.classList.contains("chat-message-action-data")) {
+        targetElement.classList.remove("chat-message-action-data");
+    } else {
+        targetElement.classList.add("chat-message-action-data");
+    }
+
+    sourceElement.setAttribute("action-data", originalMessage);
+    targetElement.innerHTML = data;
 }

@@ -1,10 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { app } from "electron";
 import registerDebug from "debug";
 import { readFileSync, existsSync, writeFileSync } from "fs";
-import path from "path";
 import {
     defaultSettings,
     ShellSettingsType,
@@ -15,6 +13,8 @@ import {
     DisplayType,
     EmptyFunction,
 } from "../preload/electronTypes.js";
+import { getInstanceDir } from "agent-dispatcher";
+import path from "path";
 
 const debugShell = registerDebug("typeagent:shell");
 
@@ -37,13 +37,14 @@ export class ShellSettings
     public devUI: boolean;
     public partialCompletion: boolean;
     public disallowedDisplayType: DisplayType[];
-    public onSettingsChanged: EmptyFunction | null;
+    public onSettingsChanged: ((name?: string | undefined) => void) | null;
     public onShowSettingsDialog: ((dialogName: string) => void) | null;
     public onRunDemo: ((interactive: boolean) => void) | null;
     public onToggleTopMost: EmptyFunction | null;
     public onOpenInlineBrowser: ((targetUrl: URL) => void) | null;
     public onCloseInlineBrowser: EmptyFunction | null;
     public darkMode: boolean;
+    public chatHistory: boolean;
 
     public get width(): number {
         return this.size[0] ?? defaultSettings.size[0];
@@ -91,10 +92,11 @@ export class ShellSettings
         this.onOpenInlineBrowser = null;
         this.onCloseInlineBrowser = null;
         this.darkMode = settings.darkMode;
+        this.chatHistory = settings.chatHistory;
     }
 
     public static get filePath(): string {
-        return path.join(app.getPath("userData"), "shellSettings.json");
+        return path.join(getInstanceDir(), "shellSettings.json");
     }
 
     public static getinstance = (): ShellSettings => {
@@ -133,6 +135,7 @@ export class ShellSettings
 
     public set(name: string, value: any) {
         const t = typeof ShellSettings.getinstance()[name];
+        const oldValue = ShellSettings.getinstance()[name];
 
         if (t === typeof value) {
             ShellSettings.getinstance()[name] = value;
@@ -151,13 +154,17 @@ export class ShellSettings
                         value.toLowerCase() === "true" || value === "1";
                     break;
                 case "object":
+                case "undefined":
                     ShellSettings.getinstance()[name] = JSON.parse(value);
                     break;
             }
         }
 
-        if (ShellSettings.getinstance().onSettingsChanged != null) {
-            ShellSettings.getinstance().onSettingsChanged!();
+        if (
+            ShellSettings.getinstance().onSettingsChanged != null &&
+            oldValue != value
+        ) {
+            ShellSettings.getinstance().onSettingsChanged!(name);
         }
     }
 

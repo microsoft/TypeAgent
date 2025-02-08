@@ -1,0 +1,35 @@
+{
+  "name": "echo",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Echo example for TypeAgent",
+  "homepage": "https://github.com/microsoft/TypeAgent#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/microsoft/TypeAgent.git",
+    "directory": "ts/examples/agentExamples/echo"
+  },
+  "license": "MIT",
+  "author": "Microsoft",
+  "type": "module",
+  "exports": {
+    "./agent/handlers": "./dist/echoActionHandler.js",
+    "./agent/manifest": "./src/echoManifest.json"
+  },
+  "scripts": {
+    "build": "npm run tsc",
+    "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
+    "prettier": "prettier --check . --ignore-path ../../../.prettierignore",
+    "prettier:fix": "prettier --write . --ignore-path ../../../.prettierignore",
+    "tsc": "tsc -b"
+  },
+  "dependencies": {
+    "@typeagent/agent-sdk": "workspace:*"
+  },
+  "devDependencies": {
+    "copyfiles": "^2.4.1",
+    "prettier": "^3.2.5",
+    "rimraf": "^5.0.5",
+    "typescript": "^5.4.2"
+  }
+}

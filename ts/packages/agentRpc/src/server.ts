@@ -14,8 +14,8 @@ import {
     DisplayAppendMode,
     AppAgentEvent,
     ClientAction,
-    AppAction,
     AppAgentManifest,
+    TypeAgentAction,
 } from "@typeagent/agent-sdk";
 
 import {
@@ -25,26 +25,10 @@ import {
     AgentContextInvokeFunctions,
     AgentInvokeFunctions,
     ContextParams,
-    JSONAction,
 } from "./types.js";
 import { createRpc } from "./rpc.js";
 import { ChannelProvider } from "./common.js";
 import { createLimiter } from "common-utils";
-
-// TODO: Duplicate code from agent-cache
-function parseActionNameParts(fullActionName: string) {
-    const parts = fullActionName.split(".");
-    const translatorName = parts.slice(0, -1).join(".");
-    const actionName = parts.at(-1)!;
-    return { translatorName, actionName };
-}
-
-function fromJSONAction(action: JSONAction): AppAction {
-    return {
-        ...parseActionNameParts(action.fullActionName),
-        parameters: action.parameters,
-    };
-}
 
 export function createAgentRpcServer(
     name: string,
@@ -78,16 +62,15 @@ export function createAgentRpcServer(
             );
         },
         async executeAction(
-            param: Partial<ActionContextParams> & { action: JSONAction },
+            param: Partial<ActionContextParams> & {
+                action: TypeAgentAction;
+            },
         ): Promise<any> {
             if (agent.executeAction === undefined) {
                 throw new Error("Invalid invocation of executeAction");
             }
             return agent.executeAction(
-                // REVIEW: blah!
-                param.action.fullActionName !== undefined
-                    ? fromJSONAction(param.action)
-                    : (param.action as unknown as AppAction),
+                param.action,
                 getActionContextShim(param),
             );
         },
@@ -96,7 +79,7 @@ export function createAgentRpcServer(
                 throw new Error("Invalid invocation of validateWildcardMatch");
             }
             return agent.validateWildcardMatch(
-                fromJSONAction(param.action),
+                param.action,
                 getSessionContextShim(param),
             );
         },

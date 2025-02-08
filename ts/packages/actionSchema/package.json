@@ -23,18 +23,18 @@
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
     "prettier": "prettier --check . --ignore-path ../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../prettierignore",
-    "test": "node --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js --testPathPattern=\".*\\.spec\\.js\"",
-    "test:debug": "node --inspect-brk --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js --testPathPattern=\".*\\.spec\\.js\"",
-    "test:full": "node --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js",
+    "test": "npm run test:local",
+    "test:local": "node --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js --testPathPattern=\".*\\.spec\\.js\"",
+    "test:local:debug": "node --inspect-brk --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js --testPathPattern=\".*\\.spec\\.js\"",
     "tsc": "tsc -b"
   },
   "dependencies": {
-    "debug": "^4.3.4",
+    "debug": "^4.4.0",
     "typechat": "^0.1.1",
     "typescript": "^5.4.2"
   },
   "devDependencies": {
-    "@types/debug": "^4.1.10",
+    "@types/debug": "^4.1.12",
     "@types/jest": "^29.5.7",
     "@types/node": "^18.18.7",
     "jest": "^29.7.0",

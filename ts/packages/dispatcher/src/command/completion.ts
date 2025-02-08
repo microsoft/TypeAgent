@@ -1,7 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import registerDebug from "debug";
 import { CommandHandlerContext } from "../context/commandHandlerContext.js";
 
 import {
@@ -28,8 +27,6 @@ export type CommandCompletionResult = {
     prefix: string; // the prefix for completion match
     completions: string[]; // All the partial completions available after partial (and space if true)
 };
-
-const debugPartialError = registerDebug("typeagent:dispatcher:partial:error");
 
 // Determine the command to resolve for partial completion
 // If there is a trailing space, then it will just be the input (minus the @)
@@ -73,10 +70,18 @@ function getPendingFlag(
     }
     const lastToken = params.tokens[params.tokens.length - 1];
     const resolvedFlag = resolveFlag(flags, lastToken);
-    return resolvedFlag !== undefined &&
-        getFlagType(resolvedFlag[1]) !== "boolean"
-        ? `--${resolvedFlag[0]}` // use the full flag name in case it was a short flag
-        : undefined;
+    if (resolvedFlag === undefined) {
+        return undefined;
+    }
+    const type = getFlagType(resolvedFlag[1]);
+    if (type === "boolean") {
+        return undefined;
+    }
+    if (type === "json") {
+        return `${lastToken}`;
+    }
+
+    return `--${resolvedFlag[0]}`; // use the full flag name in case it was a short flag
 }
 
 async function getCommandParameterCompletion(

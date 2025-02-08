@@ -25,7 +25,7 @@ import {
     getCommandInterface,
 } from "@typeagent/agent-sdk/helpers/command";
 
-import { answerQuestion, ModelContext } from "./answerQuestions.js";
+import { searchCode, QueryContext } from "./searchCode.js";
 import { SpelunkerAction } from "./spelunkerSchema.js";
 
 class RequestCommandHandler implements CommandHandler {
@@ -48,11 +48,17 @@ class RequestCommandHandler implements CommandHandler {
         params: ParsedCommandParams<ParameterDefinitions>,
     ): Promise<void> {
         if (typeof params.args?.question === "string") {
-            const result: ActionResult = await answerQuestion(
-                actionContext.sessionContext.agentContext,
-                params.args.question,
-            );
-            if (typeof result.error == "string") {
+            let result: ActionResult;
+            const question = params.args.question.trim();
+            if (question.startsWith(".")) {
+                result = handleFocus(actionContext.sessionContext, question);
+            } else {
+                result = await searchCode(
+                    actionContext.sessionContext.agentContext,
+                    question,
+                );
+            }
+            if (typeof result.error === "string") {
                 actionContext.actionIO.appendDisplay({
                     type: "text",
                     content: result.error,
@@ -86,13 +92,13 @@ export function instantiate(): AppAgent {
 
 export type SpelunkerContext = {
     focusFolders: string[];
-    modelContext: ModelContext | undefined;
+    queryContext: QueryContext | undefined;
 };
 
 async function initializeSpelunkerContext(): Promise<SpelunkerContext> {
     return {
         focusFolders: [],
-        modelContext: undefined,
+        queryContext: undefined,
     };
 }
 
@@ -135,7 +141,7 @@ async function executeSpelunkerAction(
     action: AppAction,
     context: ActionContext<SpelunkerContext>,
 ): Promise<ActionResult> {
-    let result = await handleSpelunkerAction(
+    const result = await handleSpelunkerAction(
         action as SpelunkerAction,
         context.sessionContext,
     );
@@ -147,15 +153,10 @@ async function handleSpelunkerAction(
     context: SessionContext<SpelunkerContext>,
 ): Promise<ActionResult> {
     switch (action.actionName) {
-        case "answerQuestion": {
-            if (
-                typeof action.parameters.question == "string" &&
-                action.parameters.question.trim()
-            ) {
-                return await answerQuestion(
-                    context.agentContext,
-                    action.parameters.question,
-                );
+        case "searchCode": {
+            const question = action.parameters.question.trim();
+            if (typeof question === "string" && question) {
+                return await searchCode(context.agentContext, question);
             }
             return createActionResultFromError("I see no question to answer");
         }
@@ -191,7 +192,7 @@ async function handleSpelunkerAction(
 }
 
 function expandHome(pathname: string): string {
-    if (pathname[0] != "~") return pathname;
+    if (pathname[0] !== "~") return pathname;
     return process.env.HOME + pathname.substring(1);
 }
 
@@ -214,4 +215,47 @@ function focusReport(
         ),
     ];
     return createActionResult(literalText, undefined, entities);
+}
+
+function handleFocus(
+    sessionContext: SessionContext<SpelunkerContext>,
+    question: string,
+): ActionResult {
+    question = question.trim();
+    if (!question.startsWith(".")) {
+        throw new Error("handleFocus requires a question starting with '.'");
+    }
+    const spelunkerContext: SpelunkerContext = sessionContext.agentContext;
+    const words = question.split(/\s+/);
+    if (words[0] === ".exit") {
+        return createActionResult(
+            `To exit Spelunker, use '@config request dispatcher'`,
+        );
+    }
+    if (words[0] === ".") {
+        return createActionResult("?"); // Joke for ed users
+    }
+    if (words[0] !== ".focus") {
+        const text = `Unknown '.' command (${words[0]}) -- try .focus`;
+        return createActionResult(text);
+    }
+    if (words.length < 2) {
+        return focusReport(
+            sessionContext.agentContext,
+            "Focus is empty",
+            "Focus is",
+        );
+    }
+    spelunkerContext.focusFolders = [
+        ...words
+            .slice(1)
+            .map((folder) => path.resolve(expandHome(folder)))
+            .filter((f) => fs.existsSync(f) && fs.statSync(f).isDirectory()),
+    ];
+    saveContext(sessionContext);
+    return focusReport(
+        sessionContext.agentContext,
+        "Focus cleared",
+        "Focus set to",
+    );
 }

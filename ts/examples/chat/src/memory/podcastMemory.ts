@@ -21,7 +21,6 @@ import {
     parseNamedArguments,
 } from "interactive-app";
 import {
-    addMinutesToDate,
     argClean,
     argPause,
     argSourceFileOrFolder,
@@ -480,7 +479,7 @@ export function createPodcastCommands(
         const sourcePath = namedArgs.sourcePath;
         const startAt = argToDate(namedArgs.startAt);
         const endAt = startAt
-            ? addMinutesToDate(startAt, namedArgs.length)
+            ? dateTime.addMinutesToDate(startAt, namedArgs.length)
             : undefined;
         await importTranscript(sourcePath, startAt, endAt);
     }

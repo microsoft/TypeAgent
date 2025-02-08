@@ -21,6 +21,7 @@ module.exports = {
             electronSrcDir,
             "agentActivation.ts",
         ),
+        "electron/webTypeAgentMain": path.join(srcDir, "webTypeAgentMain.ts"),
         "extension/serviceWorker": path.join(srcDir, "serviceWorker.ts"),
         "extension/uiEventsDispatcher": path.join(
             srcDir,

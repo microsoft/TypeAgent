@@ -20,7 +20,7 @@
     "build": "pnpm run esbuild-base --sourcemap",
     "clean": "rimraf --glob out dist-pub *.tsbuildinfo *.done.build.log",
     "deploy:local": "pnpm run package && code --install-extension dist-pub/aisystems-coda.vsix --force",
-    "esbuild-base": "esbuild ./src/extension.ts --bundle --outfile=out/extension.js --external:vscode --format=cjs --platform=node",
+    "esbuild-base": "esbuild ./src/extension.ts --bundle --outfile=out/extension.js --external:vscode --format=cjs --platform=node --log-level=warning",
     "esbuild-watch": "pnpm run esbuild-base --sourcemap --watch",
     "package": "mkdirp dist-pub && vsce package --allow-star-activation --allow-missing-repository --no-dependencies -o dist-pub/aisystems-coda.vsix",
     "prettier": "prettier --check . --ignore-path ../../.prettierignore",
@@ -52,7 +52,7 @@
     "body-parser": "^1.20.3",
     "chalk": "^5.3.0",
     "cors": "^2.8.5",
-    "debug": "^4.3.4",
+    "debug": "^4.4.0",
     "dotenv": "^16.3.1",
     "open": "^7.0.4",
     "ws": "^8.17.1"
@@ -60,7 +60,7 @@
   "devDependencies": {
     "@types/body-parser": "^1.19.5",
     "@types/cors": "^2.8.17",
-    "@types/debug": "^4.1.10",
+    "@types/debug": "^4.1.12",
     "@types/express": "^4.17.17",
     "@types/mocha": "^10.0.6",
     "@types/node": "18.x",

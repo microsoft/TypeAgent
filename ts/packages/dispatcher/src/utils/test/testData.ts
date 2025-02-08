@@ -5,25 +5,29 @@ import fs from "node:fs";
 import path from "node:path";
 import chalk from "chalk";
 import {
-    ActionConfigProvider,
     loadAgentJsonTranslator,
     TranslatedAction,
 } from "../../translation/agentTranslators.js";
+import { ActionConfigProvider } from "../../translation/actionConfigProvider.js";
 import {
     JSONAction,
     RequestAction,
     CorrectionRecord,
     ExplanationDataEntry,
     GenericExplanationResult,
-    Action,
+    ExecutableAction,
     HistoryContext,
-    Actions,
     ExplanationData,
+    toJsonActions,
+    createExecutableAction,
 } from "agent-cache";
 import { getElapsedString, createLimiter, Limiter } from "common-utils";
 import { getCacheFactory } from "../cacheFactory.js";
 import { Result } from "typechat";
-import { isMultipleAction } from "../../translation/multipleActionSchema.js";
+import {
+    isMultipleAction,
+    isPendingRequest,
+} from "../../translation/multipleActionSchema.js";
 
 const testDataJSONVersion = 2;
 export type TestDataEntry<T extends object = object> =
@@ -123,7 +127,7 @@ export type GenerateTestDataResult = {
 
 type Pending = {
     request: string;
-    action: Actions | undefined;
+    actions: ExecutableAction[] | undefined;
     history: HistoryContext | undefined;
     tags: string[] | undefined;
 };
@@ -204,7 +208,7 @@ function getInitialTestData(
 
         pending.set(request, {
             request,
-            action: actions,
+            actions,
             history,
             tags: tagsMap.get(request),
         });
@@ -241,7 +245,7 @@ async function saveTestDataFile(
             Array.from(pending.values()).map((e) => {
                 return {
                     request: e.request,
-                    action: e.action?.toJSON(),
+                    action: e.actions ? toJsonActions(e.actions) : undefined,
                     message: "Not processed",
                 };
             }),
@@ -339,7 +343,7 @@ function getGenerateTestDataFn(
     const safeExplain = getSafeExplainFn([schemaName], explainerName, model);
     return async (
         request: string,
-        action: Action | Action[] | undefined,
+        actions: ExecutableAction[] | undefined,
         history: HistoryContext | undefined,
         tags: string[] | undefined,
     ): Promise<AddResult> => {
@@ -351,7 +355,7 @@ function getGenerateTestDataFn(
                 entry,
             };
         };
-        if (action === undefined) {
+        if (actions === undefined) {
             const result = await safeTranslate(request);
             if (!result.success) {
                 return toFailedResult({
@@ -360,27 +364,41 @@ function getGenerateTestDataFn(
                     tags,
                 });
             }
-            const newActions = result.data as TranslatedAction;
+            const translatedAction = result.data as TranslatedAction;
 
-            action = isMultipleAction(newActions)
-                ? newActions.parameters.requests.map(
-                      (e) =>
-                          new Action(
-                              schemaName,
-                              e.action.actionName,
-                              e.action.parameters,
-                          ),
-                  )
-                : new Action(
-                      schemaName,
-                      newActions.actionName,
-                      newActions.parameters,
-                  );
+            if (isMultipleAction(translatedAction)) {
+                const newActions: ExecutableAction[] = [];
+                for (const e of translatedAction.parameters.requests) {
+                    if (isPendingRequest(e)) {
+                        return toFailedResult({
+                            request,
+                            message: "Failed translation: Pending action",
+                            tags,
+                        });
+                    }
+                    newActions.push(
+                        createExecutableAction(
+                            schemaName,
+                            e.action.actionName,
+                            e.action.parameters,
+                        ),
+                    );
+                }
+                actions = newActions;
+            } else {
+                actions = [
+                    createExecutableAction(
+                        schemaName,
+                        translatedAction.actionName,
+                        translatedAction.parameters,
+                    ),
+                ];
+            }
         }
 
-        const requestAction = RequestAction.create(request, action, history);
-        for (const a of requestAction.actions) {
-            if (a.actionName === "unknown") {
+        const requestAction = RequestAction.create(request, actions, history);
+        for (const { action } of requestAction.actions) {
+            if (action.actionName === "unknown") {
                 return toFailedResult({
                     request,
                     message: "Failed translation: Unknown action",
@@ -394,7 +412,7 @@ function getGenerateTestDataFn(
         if (!explanation.success) {
             return toFailedResult({
                 request,
-                action: requestAction.actions.toJSON(),
+                action: toJsonActions(requestAction.actions),
                 message: `Failed Explanation: ${explanation.message}`,
                 corrections: explanation.corrections,
                 tags,
@@ -406,7 +424,7 @@ function getGenerateTestDataFn(
             elapsedMs: performance.now() - startTime,
             entry: {
                 request,
-                action: requestAction.actions.toJSON(),
+                action: toJsonActions(requestAction.actions),
                 explanation: explanation.data,
                 corrections: explanation.corrections,
                 tags,
@@ -510,7 +528,7 @@ async function generateTestDataFile(
     const processInput = async (pendingInput: Pending) => {
         const { success, elapsedMs, entry } = await generateTestData(
             pendingInput.request,
-            pendingInput.action?.data,
+            pendingInput.actions,
             pendingInput.history,
             pendingInput.tags,
         );
@@ -519,7 +537,7 @@ async function generateTestDataFile(
         attemptsCount += attempts;
         totalElapsedMs += elapsedMs;
 
-        const outputType = pendingInput.action ? " explanation" : "";
+        const outputType = pendingInput.actions ? " explanation" : "";
         const statusPrefix = `${done()}${prefix}[${getElapsedString(
             elapsedMs,
             false,

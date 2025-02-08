@@ -530,11 +530,9 @@ async function awaitPageIncrementalUpdates() {
         detector
             .detect()
             .then(() => {
-                console.log("Page incremental load completed.");
                 resolve("true");
             })
-            .catch((error: Error) => {
-                console.error("Failed to detect page load completion:", error);
+            .catch((_error: Error) => {
                 resolve("false");
             });
     });
@@ -730,9 +728,10 @@ window.addEventListener(
     "message",
     async (event) => {
         if (
-            event.data.source == "preload" &&
-            event.data.target == "contentScript" &&
-            event.data.messageType == "scriptActionRequest"
+            event.data !== undefined &&
+            event.data.source === "preload" &&
+            event.data.target === "contentScript" &&
+            event.data.messageType === "scriptActionRequest"
         ) {
             await handleScriptAction(event.data.body, (response) => {
                 window.top?.postMessage(

@@ -1,11 +1,4 @@
 {
   "emojiChar": "🖐️",
-  "description": "Agent to generate greating messages",
-  "schema": {
-    "description": "Greeting agent that created personalized welcome messages.",
-    "schemaFile": "./greetingActionSchema.ts",
-    "schemaType": "GreetingAction",
-    "injected": true,
-    "cached": false
-  }
+  "description": "Agent to generate greating messages"
 }

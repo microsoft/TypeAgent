@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { ParamSpec } from "action-schema";
-import { Action } from "./requestAction.js";
+import { ExecutableAction, FullAction } from "./requestAction.js";
 
 export type ParamRange = {
     min: string;
@@ -23,17 +23,17 @@ export function getParamRange(spec: ParamSpec): ParamRange | undefined {
 }
 
 export function doCacheAction(
-    action: Action,
+    action: ExecutableAction,
     schemaInfoProvider?: SchemaInfoProvider,
 ) {
     return schemaInfoProvider?.getActionCacheEnabled(
-        action.translatorName,
-        action.actionName,
+        action.action.translatorName,
+        action.action.actionName,
     );
 }
 
 export function getParamSpec(
-    action: Action,
+    action: FullAction,
     paramName: string,
     schemaInfoProvider?: SchemaInfoProvider,
 ): ParamSpec | undefined {

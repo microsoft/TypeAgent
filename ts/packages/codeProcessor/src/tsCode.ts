@@ -87,6 +87,12 @@ export function getStatementName(statement: ts.Statement): string | undefined {
     ) {
         return statement.name?.text;
     }
+    if (
+        ts.isInterfaceDeclaration(statement) ||
+        ts.isTypeAliasDeclaration(statement)
+    ) {
+        return statement.name?.escapedText.toString();
+    }
     return undefined;
 }
 

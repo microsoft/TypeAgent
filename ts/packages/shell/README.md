@@ -28,7 +28,7 @@ del %LOCALAPPDATA%\.IdentityService\typeagent-tokencache
 
 ### Azure Speech to Text service (Optional)
 
-Currently, TypeAgent Shell optionally supports voice input via Azure Speech Services or [Local Whisper Service](../../../python/whisperService/) beside keyboard input.
+Currently, TypeAgent Shell optionally supports voice input via Azure Speech Services or [Local Whisper Service](../../../python/stt/whisperService/) beside keyboard input.
 
 To set up Azure [Speech to Text service](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/index-speech-to-text), the following variables in the `.env` are needed.
 

@@ -4,16 +4,20 @@
 import registerDebug from "debug";
 import { IClientContext } from "./client.js";
 import {
+    getAlbum,
     getAlbums,
+    getArtist,
     getArtistTopTracks,
-    getGenreSeeds,
+    getTrack,
     search,
 } from "./endpoints.js";
 import { MusicItemInfo, SpotifyUserData } from "./userData.js";
 import chalk from "chalk";
 import { SpotifyService } from "./service.js";
+import { Entity } from "@typeagent/agent-sdk";
 
 const debug = registerDebug("typeagent:spotify:search");
+const debugReuse = registerDebug("typeagent:spotify:search:reuse");
 const debugVerbose = registerDebug("typeagent:spotify-verbose:search");
 const debugError = registerDebug("typeagent:spotify:search:error");
 
@@ -86,7 +90,41 @@ async function searchAlbums(
     return result.albums.items;
 }
 
-async function searchArtistSorted(artistName: string, context: IClientContext) {
+async function getArtistFromEntity(
+    artistName: string,
+    context: IClientContext,
+    artistEntity: Entity | undefined,
+) {
+    if (
+        artistEntity !== undefined &&
+        artistEntity.type.includes("artist") &&
+        artistEntity.uniqueId !== undefined
+    ) {
+        debugReuse(
+            `Reusing artist entity: ${artistName}: ${artistEntity.uniqueId}`,
+        );
+        return getArtist(context.service, artistEntity.uniqueId);
+    }
+    return undefined;
+}
+
+async function searchArtistSorted(
+    artistName: string,
+    context: IClientContext,
+    artistEntity: Entity | undefined,
+): Promise<SpotifyApi.ArtistObjectFull[] | undefined> {
+    if (artistEntity) {
+        const artist = await getArtistFromEntity(
+            artistName,
+            context,
+            artistEntity,
+        );
+
+        if (artist !== undefined) {
+            return [artist];
+        }
+    }
+
     const data = await searchArtists(artistName, context);
     if (data && data.artists && data.artists.items.length > 0) {
         // Prefer the known one, then exact match, and then popularity.
@@ -111,43 +149,74 @@ async function searchArtistSorted(artistName: string, context: IClientContext) {
 }
 
 async function getAlbumsByIds(service: SpotifyService, ids: string[]) {
-    const ablums: SpotifyApi.AlbumObjectFull[] = [];
+    const albums: SpotifyApi.AlbumObjectFull[] = [];
     for (let i = 0; i < ids.length; i += 20) {
         const result = await getAlbums(service, ids.slice(i, i + 20));
         if (result === undefined || result.albums.length === 0) {
             // skip id not found?
             continue;
         }
-        ablums.push(...result.albums);
+        albums.push(...result.albums);
     }
 
-    return ablums.length === 0 ? undefined : ablums;
+    return albums.length === 0 ? undefined : albums;
 }
+
+async function getAlbumFromEntity(
+    albumName: string,
+    context: IClientContext,
+    albumEntity: Entity | undefined,
+) {
+    if (
+        albumEntity !== undefined &&
+        albumEntity.type.includes("album") &&
+        albumEntity.uniqueId !== undefined
+    ) {
+        debugReuse(
+            `Reusing album entity: ${albumName}: ${albumEntity.uniqueId}`,
+        );
+        return getAlbum(context.service, albumEntity.uniqueId);
+    }
+    return undefined;
+}
+
 async function searchAlbumSorted(
     albumName: string,
     artists: SpotifyApi.ArtistObjectFull[] | undefined,
     context: IClientContext,
+    albumEntity: Entity | undefined,
 ) {
+    const albumFromEntity = await getAlbumFromEntity(
+        albumName,
+        context,
+        albumEntity,
+    );
+    if (albumFromEntity) {
+        if (filterByArtists([albumFromEntity], artists) !== undefined) {
+            return [albumFromEntity];
+        }
+    }
+
     const artistNames = artists?.map((a) => a.name);
     const albumsResult = await searchAlbums(albumName, artistNames, context);
     const albums = filterByArtists(albumsResult, artists);
     if (albums === undefined) {
         return undefined;
     }
-    const fullAblums = await getAlbumsByIds(
+    const fullAlbums = await getAlbumsByIds(
         context.service,
         albums.map((a) => a.id),
     );
-    if (fullAblums === undefined) {
+    if (fullAlbums === undefined) {
         debugError("Unable to resolve to full albums");
         return undefined;
     }
 
-    if (fullAblums.length === 1) {
-        return fullAblums;
+    if (fullAlbums.length === 1) {
+        return fullAlbums;
     }
 
-    return fullAblums.sort((a, b) => {
+    return fullAlbums.sort((a, b) => {
         if (context.userData !== undefined) {
             const compKnown = compareKnownAlbums(context.userData.data, a, b);
             if (compKnown !== 0) {
@@ -232,9 +301,10 @@ function compareKnownTracks(
 export async function resolveArtists(
     artistNames: string[],
     context: IClientContext,
+    artistEntities?: (Entity | undefined)[],
 ): Promise<SpotifyApi.ArtistObjectFull[] | undefined> {
     try {
-        return await findArtists(artistNames, context);
+        return await findArtists(artistNames, context, artistEntities);
     } catch {
         return undefined;
     }
@@ -243,9 +313,12 @@ export async function resolveArtists(
 async function findArtists(
     artistNames: string[],
     context: IClientContext,
+    artistEntities: (Entity | undefined)[] | undefined,
 ): Promise<SpotifyApi.ArtistObjectFull[]> {
     const matches = await Promise.all(
-        artistNames.map((a) => searchArtistSorted(a, context)),
+        artistNames.map((a, i) =>
+            searchArtistSorted(a, context, artistEntities?.[i]),
+        ),
     );
 
     const artists: SpotifyApi.ArtistObjectFull[] = [];
@@ -264,9 +337,15 @@ async function searchAlbumsWithTrackArtists(
     albumName: string,
     artists: SpotifyApi.ArtistObjectFull[],
     context: IClientContext,
+    albumEntity: Entity | undefined,
 ) {
     // Try again without artist, as the artist on the album might not match the one in the tracks.
-    let albums = await searchAlbumSorted(albumName, undefined, context);
+    let albums = await searchAlbumSorted(
+        albumName,
+        undefined,
+        context,
+        albumEntity,
+    );
     if (albums === undefined) {
         return undefined;
     }
@@ -282,14 +361,51 @@ async function searchAlbumsWithTrackArtists(
     return filtered.length === 0 ? undefined : filtered;
 }
 
-export async function findArtistTopTracks(
+export async function findArtistTracksWithGenre(
     artistName: string,
+    genre: string,
     context: IClientContext,
-): Promise<SpotifyApi.TrackObjectFull[]> {
-    const artists = await searchArtistSorted(artistName, context);
+    artistEntity: Entity | undefined,
+) {
+    const artists = await searchArtistSorted(artistName, context, artistEntity);
     if (artists === undefined) {
         throw new Error(`Unable to find artist '${artistName}'`);
     }
+
+    const query: SpotifyQuery = {
+        artist: [artistName],
+        query: [genre],
+    };
+
+    const queryString = toQueryString(query);
+    const param: SpotifyApi.SearchForItemParameterObject = {
+        q: queryString,
+        type: "track",
+        limit: 50,
+        offset: 0,
+    };
+    const result = await search(param, context.service);
+    const tracks = result?.tracks?.items?.filter((track) =>
+        track.artists.some((trackArtist) => trackArtist.id === artists[0].id),
+    );
+    if (tracks === undefined || tracks.length === 0) {
+        throw new Error(
+            `Unable find track with genre '${genre}' and artist '${artistName}'`,
+        );
+    }
+    return tracks;
+}
+
+export async function findArtistTopTracks(
+    artistName: string,
+    context: IClientContext,
+    artistEntity: Entity | undefined,
+): Promise<SpotifyApi.TrackObjectFull[]> {
+    const artists = await searchArtistSorted(artistName, context, artistEntity);
+    if (artists === undefined) {
+        throw new Error(`Unable to find artist '${artistName}'`);
+    }
+
     const artist = artists[0];
     const artistId = artist.id;
     const result = await getArtistTopTracks(context.service, artistId);
@@ -304,18 +420,30 @@ export async function findAlbums(
     albumName: string,
     artistNames: string[] | undefined,
     context: IClientContext,
+    albumEntity: Entity | undefined,
+    artistEntities: (Entity | undefined)[] | undefined,
 ): Promise<SpotifyApi.AlbumObjectFull[]> {
     let albums: SpotifyApi.AlbumObjectFull[] | undefined;
     if (artistNames !== undefined) {
         // try search for the most likely artist names.
-        const matchedArtists = await findArtists(artistNames, context);
-        albums = await searchAlbumSorted(albumName, matchedArtists, context);
+        const matchedArtists = await findArtists(
+            artistNames,
+            context,
+            artistEntities,
+        );
+        albums = await searchAlbumSorted(
+            albumName,
+            matchedArtists,
+            context,
+            albumEntity,
+        );
 
         if (albums === undefined) {
             albums = await searchAlbumsWithTrackArtists(
                 albumName,
                 matchedArtists,
                 context,
+                albumEntity,
             );
             if (albums === undefined) {
                 throw new Error(
@@ -324,7 +452,12 @@ export async function findAlbums(
             }
         }
     } else {
-        albums = await searchAlbumSorted(albumName, undefined, context);
+        albums = await searchAlbumSorted(
+            albumName,
+            undefined,
+            context,
+            albumEntity,
+        );
         if (albums === undefined) {
             throw new Error(`Unable to find album '${albumName}'`);
         }
@@ -335,7 +468,7 @@ export async function findAlbums(
     return albums;
 }
 
-async function expandMovmentTracks(
+async function expandMovementTracks(
     originalQuery: SpotifyQuery,
     tracks: SpotifyApi.TrackObjectFull[],
     quantity: number = 50,
@@ -374,7 +507,7 @@ async function expandMovmentTracks(
     return expandedTracks;
 }
 
-async function sortAndExpandMovment(
+async function sortAndExpandMovement(
     context: IClientContext,
     query: SpotifyQuery,
     tracks: SpotifyApi.TrackObjectFull[],
@@ -405,7 +538,7 @@ async function sortAndExpandMovment(
 
     if (trackName && !equivalentNames(result[0].name, trackName)) {
         // Expand movements if it is not an exact match
-        result = await expandMovmentTracks(query, result, quantity, context);
+        result = await expandMovementTracks(query, result, quantity, context);
     }
 
     dumpTracks(result, userData);
@@ -418,19 +551,10 @@ export async function findTracksWithGenre(
     quantity: number = 0,
 ): Promise<SpotifyApi.TrackObjectFull[]> {
     // TODO: cache this.
-    const genreSeed = await getGenreSeeds(context.service);
+    const query: SpotifyQuery = {
+        query: [genre],
+    };
 
-    const matchedGenre = genreSeed?.genres.find((g) =>
-        equivalentNames(g, genre),
-    );
-
-    const query: SpotifyQuery = matchedGenre
-        ? {
-              genre: [matchedGenre],
-          }
-        : {
-              query: [genre],
-          };
     const queryString = toQueryString(query);
     const param: SpotifyApi.SearchForItemParameterObject = {
         q: queryString,
@@ -444,7 +568,7 @@ export async function findTracksWithGenre(
         throw new Error(`Unable find track with genre '${genre}'`);
     }
 
-    return sortAndExpandMovment(context, query, tracks, quantity);
+    return sortAndExpandMovement(context, query, tracks, quantity);
 }
 
 function filterByArtists<
@@ -455,7 +579,7 @@ function filterByArtists<
     items: T[] | undefined,
     artists: SpotifyApi.ArtistObjectFull[] | undefined,
 ): T[] | undefined {
-    if (items === undefined || artists == undefined) {
+    if (items === undefined || artists === undefined) {
         return items;
     }
     const result = items.filter((track) =>
@@ -466,16 +590,48 @@ function filterByArtists<
     return result.length === 0 ? undefined : result;
 }
 
+export async function getTrackFromEntity(
+    trackName: string,
+    context: IClientContext,
+    trackEntity: Entity | undefined,
+) {
+    if (
+        trackEntity !== undefined &&
+        trackEntity.type.includes("track") &&
+        trackEntity.uniqueId !== undefined
+    ) {
+        debugReuse(
+            `Reusing track entity: ${trackName}: ${trackEntity.uniqueId}`,
+        );
+        return getTrack(context.service, trackEntity.uniqueId);
+    }
+    return undefined;
+}
+
 export async function findTracks(
     context: IClientContext,
     trackName: string,
     artistNames: string[] | undefined,
+    trackEntity: Entity | undefined,
+    artistEntities: (Entity | undefined)[] | undefined,
     quantity: number = 0,
 ): Promise<SpotifyApi.TrackObjectFull[]> {
     // try search for the most likely artist names.
     const matchedArtists = artistNames
-        ? await findArtists(artistNames, context)
+        ? await findArtists(artistNames, context, artistEntities)
         : undefined;
+
+    const trackFromEntity = await getTrackFromEntity(
+        trackName,
+        context,
+        trackEntity,
+    );
+
+    if (trackFromEntity) {
+        if (filterByArtists([trackFromEntity], matchedArtists) !== undefined) {
+            return [trackFromEntity];
+        }
+    }
 
     const matchedArtistNames = matchedArtists?.map((a) => a.name);
     const query: SpotifyQuery = {
@@ -499,7 +655,7 @@ export async function findTracks(
         );
     }
 
-    return sortAndExpandMovment(context, query, tracks, quantity);
+    return sortAndExpandMovement(context, query, tracks, quantity);
 }
 
 function dumpArtists(

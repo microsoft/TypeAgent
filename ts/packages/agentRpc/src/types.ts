@@ -16,13 +16,8 @@ import {
     ParsedCommandParams,
     StorageListOptions,
     TemplateSchema,
+    TypeAgentAction,
 } from "@typeagent/agent-sdk";
-
-// TODO: Duplicate code from agent-cache
-export interface JSONAction {
-    fullActionName: string;
-    parameters?: Record<string, unknown> | undefined;
-}
 
 export type AgentContextCallFunctions = {
     notify(param: {
@@ -120,10 +115,12 @@ export type AgentInvokeFunctions = {
         },
     ) => Promise<void>;
     executeAction: (
-        param: Partial<ActionContextParams> & { action: JSONAction },
+        param: Partial<ActionContextParams> & {
+            action: TypeAgentAction;
+        },
     ) => Promise<ActionResult | undefined>;
     validateWildcardMatch: (
-        param: Partial<ContextParams> & { action: JSONAction },
+        param: Partial<ContextParams> & { action: AppAction },
     ) => Promise<boolean>;
     getDynamicDisplay: (
         param: Partial<ContextParams> & {

@@ -46,6 +46,7 @@ import { createImageMemory } from "./imageMemory.js";
 import { pathToFileURL } from "url";
 import { createPodcastCommands, createPodcastMemory } from "./podcastMemory.js";
 import { createImageCommands } from "./imageMemory.js";
+import { createKnowproCommands } from "./knowproMemory.js";
 
 export type Models = {
     chatModel: ChatModel;
@@ -341,6 +342,7 @@ export async function runChatMemory(): Promise<void> {
     createEmailCommands(context, commands);
     createPodcastCommands(context, commands);
     createImageCommands(context, commands);
+    await createKnowproCommands(context, commands);
     addStandardHandlers(commands);
 
     function onStart(io: InteractiveIo): void {

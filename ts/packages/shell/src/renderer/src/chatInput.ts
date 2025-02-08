@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import DOMPurify from "dompurify";
 import { _arrayBufferToBase64 } from "./chatView";
 import {
     iconMicrophone,
@@ -57,11 +58,12 @@ export class ExpandableTextarea {
             if (this.entryHandlers.onChange !== undefined) {
                 this.entryHandlers.onChange(this);
             }
-
+        });
+        this.textEntry.onchange = () => {
             if (sendButton !== undefined) {
                 sendButton.disabled = this.textEntry.innerHTML.length == 0;
             }
-        });
+        };
         this.textEntry.onwheel = (event) => {
             if (this.entryHandlers.onMouseWheel !== undefined) {
                 this.entryHandlers.onMouseWheel(this, event);
@@ -78,14 +80,24 @@ export class ExpandableTextarea {
             this.textEntry.textContent = content;
         }
 
+        this.moveCursorToEnd();
+    }
+
+    public moveCursorToEnd() {
         // Set the cursor to the end of the text
         const r = document.createRange();
-        r.setEnd(this.textEntry.childNodes[0], content?.length ?? 0);
-        r.collapse(false);
-        const s = document.getSelection();
-        if (s) {
-            s.removeAllRanges();
-            s.addRange(r);
+        if (this.textEntry.childNodes.length > 0) {
+            r.selectNode(this.textEntry);
+            r.setStartBefore(this.textEntry.childNodes[0]);
+            r.setEndAfter(
+                this.textEntry.childNodes[this.textEntry.childNodes.length - 1],
+            );
+            r.collapse(false);
+            const s = document.getSelection();
+            if (s) {
+                s.removeAllRanges();
+                s.addRange(r);
+            }
         }
     }
 
@@ -147,14 +159,14 @@ export class ExpandableTextarea {
 
 export class ChatInput {
     private inputContainer: HTMLDivElement;
-    textarea: ExpandableTextarea;
+    public textarea: ExpandableTextarea;
     private micButton: HTMLButtonElement;
-    attachButton: HTMLLabelElement;
-    camButton: HTMLButtonElement;
+    public attachButton: HTMLButtonElement;
+    public camButton: HTMLButtonElement;
     private dragTemp: string | undefined = undefined;
-    private fileInput: HTMLInputElement;
+    //private fileInput: HTMLInputElement;
     public dragEnabled: boolean = true;
-    sendButton: HTMLButtonElement;
+    public sendButton: HTMLButtonElement;
     private separator: HTMLDivElement;
     private separatorContainer: HTMLDivElement;
     constructor(
@@ -168,6 +180,7 @@ export class ChatInput {
         this.inputContainer = document.createElement("div");
         this.inputContainer.className = "chat-input";
         this.sendButton = document.createElement("button");
+        this.sendButton.id = "sendbutton";
         this.sendButton.appendChild(iconSend());
         this.sendButton.className = "chat-input-button";
         this.sendButton.onclick = () => {
@@ -186,6 +199,12 @@ export class ChatInput {
             this.sendButton,
         );
 
+        this.textarea.getTextEntry().onpaste = (e: ClipboardEvent) => {
+            if (e.clipboardData !== null) {
+                this.getTextFromDataTransfer(e.clipboardData);
+            }
+        };
+
         this.textarea.getTextEntry().ondragenter = (e: DragEvent) => {
             if (!this.dragEnabled) {
                 return;
@@ -200,7 +219,8 @@ export class ChatInput {
 
             console.log("enter " + this.dragTemp);
 
-            this.textarea.getTextEntry().innerText = "Drop image files here...";
+            this.textarea.getTextEntry().innerText =
+                "Drop image files or text here...";
             this.textarea.getTextEntry().classList.add("chat-input-drag");
         };
 
@@ -236,23 +256,11 @@ export class ChatInput {
 
             this.dragTemp = undefined;
 
-            if (e.dataTransfer != null && e.dataTransfer.files.length > 0) {
-                this.loadImageFile(e.dataTransfer.files[0]);
+            if (e.dataTransfer != null) {
+                this.getTextFromDataTransfer(e.dataTransfer);
             }
 
             e.preventDefault();
-        };
-
-        this.fileInput = document.createElement("input");
-        this.fileInput.type = "file";
-        this.fileInput.classList.add("chat-message-hidden");
-        this.fileInput.id = "image_upload";
-        this.inputContainer.append(this.fileInput);
-        this.fileInput.accept = "image/*,.jpg,.png,.gif";
-        this.fileInput.onchange = () => {
-            if (this.fileInput.files && this.fileInput.files?.length > 0) {
-                this.loadImageFile(this.fileInput.files[0]);
-            }
         };
 
         this.micButton = document.createElement("button");
@@ -292,14 +300,15 @@ export class ChatInput {
         this.camButton.appendChild(iconCamera());
         this.camButton.className = "chat-input-button";
 
-        this.attachButton = document.createElement("label");
-        this.attachButton.htmlFor = this.fileInput.id;
+        this.attachButton = document.createElement("button");
+        //this.attachButton.htmlFor = this.fileInput.id;
         this.attachButton.appendChild(iconAttach());
         this.attachButton.className = "chat-input-button";
 
         getSpeechToken().then((result) => {
             if (
                 result == undefined &&
+                typeof Android !== "undefined" &&
                 !Android?.isSpeechRecognitionSupported()
             ) {
                 const button = document.querySelector<HTMLButtonElement>(
@@ -327,15 +336,27 @@ export class ChatInput {
         this.inputContainer.appendChild(this.sendButton);
     }
 
+    /**
+     * Loads the contents of the supplied image into the input text box.
+     * @param file The file whose contents to load
+     */
     async loadImageFile(file: File) {
         let buffer: ArrayBuffer = await file.arrayBuffer();
 
-        let dropImg: HTMLImageElement = document.createElement("img");
-        let mimeType = file.name
-            .toLowerCase()
-            .substring(file.name.lastIndexOf(".") + 1, file.name.length);
+        this.loadImageContent(file.name, _arrayBufferToBase64(buffer));
+    }
 
-        if (file.name.toLowerCase().endsWith(".jpg")) {
+    /**
+     * Creates and sets an image in the input text area.
+     * @param mimeType The mime type of the supplied image content
+     * @param content The base64 encoded image content
+     */
+    public async loadImageContent(fileName: string, content: string) {
+        let mimeType = fileName
+            .toLowerCase()
+            .substring(fileName.lastIndexOf(".") + 1, fileName.length);
+
+        if (fileName.toLowerCase().endsWith(".jpg")) {
             mimeType = "jpeg";
         }
 
@@ -344,13 +365,15 @@ export class ChatInput {
             "jpeg",
             "png",
         ]);
+
         if (!supportedMimeTypes.has(mimeType)) {
-            console.log(`Unsupported MIME type for '${file.name}'`);
+            console.log(`Unsupported MIME type for '${fileName}'`);
             this.textarea.getTextEntry().innerText = `Unsupported file type '${mimeType}'. Supported types: ${Array.from(supportedMimeTypes).toString()}`;
             return;
         }
-        dropImg.src =
-            `data:image/${mimeType};base64,` + _arrayBufferToBase64(buffer);
+
+        let dropImg: HTMLImageElement = document.createElement("img");
+        dropImg.src = `data:image/${mimeType};base64,` + content;
 
         dropImg.className = "chat-input-dropImage";
 
@@ -375,5 +398,38 @@ export class ChatInput {
 
     public focus() {
         this.textarea.focus();
+    }
+
+    /**
+     * Takes dataTransfer and gets a plain text representation from the data there
+     * and loads it into the input box
+     *
+     * @param dataTransfer The dataTransfer object from drag/drop/paste events
+     */
+    public getTextFromDataTransfer(dataTransfer: DataTransfer) {
+        if (dataTransfer.files.length > 0) {
+            this.loadImageFile(dataTransfer.files[0]);
+        } else if (dataTransfer.items.length > 0) {
+            let index: number = dataTransfer.types.indexOf("text/plain");
+            let plainText: boolean = true;
+            if (index === -1) {
+                index = dataTransfer.types.indexOf("text/html");
+                plainText = false;
+            }
+
+            if (index === -1) {
+                this.textarea.getTextEntry().innerText = `Unsupported drag/drop data type '${dataTransfer.types.join(", ")}'`;
+            } else {
+                dataTransfer.items[index].getAsString((s) => {
+                    if (plainText) {
+                        this.textarea.getTextEntry().innerText = s;
+                    } else {
+                        // strip out all HTML from supplied input
+                        this.textarea.getTextEntry().innerText +=
+                            DOMPurify.sanitize(s, { ALLOWED_TAGS: [] });
+                    }
+                });
+            }
+        }
     }
 }

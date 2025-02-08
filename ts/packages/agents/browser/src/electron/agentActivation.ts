@@ -10,14 +10,19 @@ declare global {
 }
 
 let siteAgent: string = "";
+let siteAgentInitialized = false;
 function setupSiteAgent() {
     if (window.browserConnect) {
+        if (siteAgentInitialized) {
+            return;
+        }
+
         const pageUrl = window.location.href;
         const host = new URL(pageUrl).host;
 
         if (host === "paleobiodb.org" || host === "www.paleobiodb.org") {
             siteAgent = "browser.paleoBioDb";
-            window.browserConnect.enableSiteAgent("browser.paleoBioDb");
+            window.browserConnect.enableSiteAgent(siteAgent);
         }
 
         if (
@@ -39,7 +44,7 @@ function setupSiteAgent() {
             )
         ) {
             siteAgent = "browser.crossword";
-            window.browserConnect.enableSiteAgent("browser.crossword");
+            window.browserConnect.enableSiteAgent(siteAgent);
         }
 
         const commerceHosts = [
@@ -50,27 +55,32 @@ function setupSiteAgent() {
 
         if (commerceHosts.includes(host)) {
             siteAgent = "browser.commerce";
-            window.browserConnect.enableSiteAgent("browser.commerce");
+            window.browserConnect.enableSiteAgent(siteAgent);
         }
 
         if (host === "instacart.com" || host === "www.instacart.com") {
             siteAgent = "browser.instacart";
-            window.browserConnect.enableSiteAgent("browser.instacart");
+            window.browserConnect.enableSiteAgent(siteAgent);
         }
+
+        if (siteAgent === "") {
+            // default to schemaFinder
+            siteAgent = "browser.schemaFinder";
+            window.browserConnect.enableSiteAgent(siteAgent);
+        }
+
+        siteAgentInitialized = true;
     } else {
         console.log("browserconnect not found by UI events script");
     }
 }
 
-window.addEventListener("message", (event) => {
-    if (event.data === "setupSiteAgent") {
-        setupSiteAgent();
-    }
-    if (
-        event.data === "disableSiteAgent" &&
-        siteAgent &&
-        window.browserConnect
-    ) {
+document.addEventListener("DOMContentLoaded", () => {
+    setupSiteAgent();
+});
+
+window.addEventListener("beforeunload", (event) => {
+    if (siteAgent !== undefined && window.browserConnect !== undefined) {
         window.browserConnect.disableSiteAgent(siteAgent);
     }
 });

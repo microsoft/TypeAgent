@@ -104,7 +104,7 @@ async function handleMarkdownAction(
                     "Document could not be created: no name was provided",
                 );
             } else {
-                result = createActionResult("Openning document ...");
+                result = createActionResult("Opening document ...");
 
                 const newFileName = action.parameters.name.trim() + ".md";
                 actionContext.sessionContext.agentContext.currentFileName =
@@ -125,7 +125,7 @@ async function handleMarkdownAction(
                         filePath: fullPath,
                     });
                 }
-                result = createActionResult("Document openned");
+                result = createActionResult("Document opened");
             }
             break;
         }

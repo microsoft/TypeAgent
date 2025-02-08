@@ -1,0 +1,18 @@
+[   
+    {"request": "why do birds suddenly appear every time you are near", "action": "chat.generateResponse"},
+    {"request": "I am planning a trip to Spain. can you look up some of the cities I should visit.", "action": "chat.lookupAndGenerateResponse"},
+    {"request": "Look up the ingredients for lemon meringue pie", "action": "chat.lookupAndGenerateResponse"},
+    {"request": "Did duke win its bball game", "action": "chat.lookupAndGenerateResponse"},
+    {"request": "Lookup duke result on the web", "action": "chat.lookupAndGenerateResponse"},
+    {"request": "add play to the To do list", "action": "list.addItems"},
+    {"request": "add homework to To do list", "action": "list.addItems"},    
+    {"request": "add plan holiday to To do list.", "action": "list.addItems"},
+    {
+        "request": "get my top 50 favorite songs, filter the current list to Bach pieces, and create a playlist call test",
+        "action": ["player.getFavorites", "player.filterTracks", "player.createPlaylist"]
+    },
+    {
+        "request": "look up information about Oregon and write a poem using what you found",
+        "action": ["chat.lookupAndGenerateResponse", "dispatcher.pendingRequestAction"]
+    }
+]

@@ -3,14 +3,27 @@
 
 import { openai } from "aiclient";
 import { ChalkInstance } from "chalk";
-import { ArgDef, askYesNo, InteractiveIo } from "interactive-app";
+import {
+    ArgDef,
+    askYesNo,
+    CommandMetadata,
+    InteractiveIo,
+    NamedArgs,
+    parseNamedArguments,
+} from "interactive-app";
 import {
     conversation,
     ItemIndexingStats,
     SourceTextBlock,
 } from "knowledge-processor";
-import { asyncArray, ChatUserInterface, dateTime } from "typeagent";
+import {
+    asyncArray,
+    ChatUserInterface,
+    dateTime,
+    getFileName,
+} from "typeagent";
 import { ChatMemoryPrinter } from "./chatMemoryPrinter.js";
+import path from "path";
 
 export async function pause(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
@@ -68,6 +81,13 @@ export function indexingStatsToCsv(
 
 export function completionStatsToCsv(stats: openai.CompletionUsageStats) {
     return `${stats.prompt_tokens},${stats.completion_tokens},${stats.total_tokens}`;
+}
+
+export function addFileNameSuffixToPath(sourcePath: string, suffix: string) {
+    return path.join(
+        path.dirname(sourcePath),
+        getFileName(sourcePath) + suffix,
+    );
 }
 
 export function argSourceFile(defaultValue?: string | undefined): ArgDef {
@@ -162,14 +182,51 @@ export function argChunkSize(defaultValue?: number | undefined): ArgDef {
     };
 }
 
+export function keyValuesFromNamedArgs(
+    args: NamedArgs,
+    metadata?: CommandMetadata,
+): Record<string, string> {
+    const record: Record<string, string> = {};
+    const keys = Object.keys(args);
+    for (const key of keys) {
+        const value = args[key];
+        if (typeof value !== "function") {
+            record[key] = value;
+        }
+    }
+    if (metadata !== undefined) {
+        if (metadata.args) {
+            removeKeysFromRecord(record, Object.keys(metadata.args));
+        }
+        if (metadata.options) {
+            removeKeysFromRecord(record, Object.keys(metadata.options));
+        }
+    }
+    return record;
+}
+
+function removeKeysFromRecord(record: Record<string, string>, keys: string[]) {
+    for (const key of keys) {
+        delete record[key];
+    }
+}
+
 export function argToDate(value: string | undefined): Date | undefined {
     return value ? dateTime.stringToDate(value) : undefined;
 }
 
-export function addMinutesToDate(date: Date, minutes: number): Date {
-    const time = date.getTime();
-    const offsetMs = minutes * 60 * 1000;
-    return new Date(time + offsetMs);
+export function parseFreeAndNamedArguments(
+    args: string[],
+    argDefs: CommandMetadata,
+): [string[], NamedArgs] {
+    const namedArgsStartAt = args.findIndex((v) => v.startsWith("--"));
+    if (namedArgsStartAt < 0) {
+        return [args, parseNamedArguments([], argDefs)];
+    }
+    return [
+        args.slice(0, namedArgsStartAt),
+        parseNamedArguments(args.slice(namedArgsStartAt), argDefs),
+    ];
 }
 
 export function createChatUx(

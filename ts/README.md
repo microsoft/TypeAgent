@@ -43,7 +43,7 @@ To use the [Desktop Agent](./packages/agents/desktop/] for windows, follow the i
 
 ### Local Whisper Service (Optional)
 
-If you want to use a local whisper service for voice input in the [TypeAgent Shell](./packages/shell), please follow instruction in the [README.md](../python/whisperService/README.md) in the python's [whisperService](../python/whisperService/) directory.
+If you want to use a local whisper service for voice input in the [TypeAgent Shell](./packages/shell), please follow instruction in the [README.md](../python/stt/whisperService/README.md) in the python's [whisperService](../python/stt/whisperService/) directory.
 
 ## Running Prerequisites
 
@@ -213,7 +213,7 @@ Run `npm run test` at the root.
 
 If new translator or explainer, or any of the translator schema or explanation schema changes, the built-in construction cache and the test data needs to be regenerated and be evaluated for correctness.
 
-Test data are located in the [dispatcher](./packages/dispatcher)'s [test/data](./packages/dispatcher/test/data) directory. Each test data files are for specify translator and explainer.
+Test data are located in the [defaultAgentProvider](./packages/defaultAgentProvider)'s [test/data](./packages/defaultAgentProvider/test/data) directory. Each test data files are for specify translator and explainer.
 
 Use the `agent-cli data add` command to add new test cases.
 

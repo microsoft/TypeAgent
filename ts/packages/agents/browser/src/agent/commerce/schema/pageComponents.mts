@@ -27,7 +27,7 @@ export type ProductDetailsHeroTile = {
 
   storeName?: string;
   // The physical location of the goods, such as the Aisle, Bay or Shelf
-  // Only provide this infomration if it present on the page
+  // Only provide this information if it present on the page
   physicalLocationInStore?: string;
   numberInStock?: string;
 };
@@ -52,4 +52,20 @@ export type LocationInStore = {
   // The physical location of the goods, such as the Aisle, Bay or Shelf
   physicalLocationInStore: string;
   numberInStock?: string;
+};
+
+// The shopping cart button on the page
+export type ShoppingCartButton = {
+  label: string;
+  detailsLinkCssSelector: string;
+};
+
+export type ShoppingCartDetails = {
+  storeName: string;
+  deliveryInformation: string;
+  totalAmount: string;
+
+  productsInCart?: ProductTile[];
+
+  relatedProducts?: ProductTile[];
 };

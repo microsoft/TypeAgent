@@ -2,11 +2,17 @@
 // Licensed under the MIT License.
 
 import { TemplateEditConfig } from "../translation/actionTemplate.js";
-import { CommandHandlerContext } from "./commandHandlerContext.js";
-import { DisplayContent, DisplayAppendMode } from "@typeagent/agent-sdk";
+import {
+    CommandHandlerContext,
+    getCommandResult,
+} from "./commandHandlerContext.js";
+import {
+    DisplayContent,
+    DisplayAppendMode,
+    TypeAgentAction,
+} from "@typeagent/agent-sdk";
 import { RequestMetrics } from "../utils/metrics.js";
 
-export const DispatcherName = "dispatcher";
 export type RequestId = string | undefined;
 
 export enum NotifyCommands {
@@ -22,7 +28,6 @@ export interface IAgentMessage {
     source: string;
     actionIndex?: number | undefined;
     metrics?: RequestMetrics | undefined;
-    actionName?: string | undefined;
 }
 
 export type NotifyExplainedData = {
@@ -38,6 +43,12 @@ export interface ClientIO {
     exit(): void;
 
     // Display
+    setDisplayInfo(
+        source: string,
+        requestId: RequestId,
+        actionIndex?: number,
+        action?: TypeAgentAction | string[],
+    ): void;
     setDisplay(message: IAgentMessage): void;
     appendDisplay(message: IAgentMessage, mode: DisplayAppendMode): void;
     setDynamicDisplay(
@@ -79,12 +90,23 @@ export interface ClientIO {
 }
 
 export function makeClientIOMessage(
-    context: CommandHandlerContext | undefined,
+    context: CommandHandlerContext,
     message: DisplayContent,
     requestId: RequestId,
     source: string,
     actionIndex?: number,
 ): IAgentMessage {
+    if (
+        typeof message === "object" &&
+        !Array.isArray(message) &&
+        message.kind === "error"
+    ) {
+        const commandResult = getCommandResult(context);
+        if (commandResult !== undefined) {
+            commandResult.hasError = true;
+        }
+    }
+
     return {
         message,
         requestId,
@@ -92,9 +114,8 @@ export function makeClientIOMessage(
         actionIndex,
         metrics:
             requestId !== undefined
-                ? context?.metricsManager?.getMetrics(requestId)
+                ? context.metricsManager?.getMetrics(requestId)
                 : undefined,
-        actionName: context?.lastActionName,
     };
 }
 
@@ -111,6 +132,7 @@ export async function askYesNoWithContext(
 export const nullClientIO: ClientIO = {
     clear: () => {},
     exit: () => process.exit(0),
+    setDisplayInfo: () => {},
     setDisplay: () => {},
     appendDisplay: () => {},
     setDynamicDisplay: () => {},

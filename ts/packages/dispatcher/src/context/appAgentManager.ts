@@ -9,15 +9,15 @@ import {
 import { CommandHandlerContext } from "./commandHandlerContext.js";
 import {
     convertToActionConfig,
-    getAppAgentName,
     ActionConfig,
-    ActionConfigProvider,
-} from "../translation/agentTranslators.js";
+} from "../translation/actionConfig.js";
+import { ActionConfigProvider } from "../translation/actionConfigProvider.js";
+import { getAppAgentName } from "../translation/agentTranslators.js";
 import { createSessionContext } from "../execute/actionHandlers.js";
 import { AppAgentProvider } from "../agentProvider/agentProvider.js";
 import registerDebug from "debug";
 import { DeepPartialUndefinedAndNull } from "common-utils";
-import { DispatcherName } from "./interactiveIO.js";
+import { DispatcherName } from "./dispatcher/dispatcherUtils.js";
 import {
     ActionSchemaSemanticMap,
     EmbeddingCache,
@@ -311,7 +311,7 @@ export class AppAgentManager implements ActionConfigProvider {
             this.emojis[appAgentName] = manifest.emojiChar;
         } catch (e: any) {
             // Clean up what we did.
-            this.cleanupDynamicAgent(appAgentName);
+            this.cleanupAgent(appAgentName);
             throw e;
         }
 
@@ -335,7 +335,7 @@ export class AppAgentManager implements ActionConfigProvider {
         appAgent: AppAgent,
     ) {
         if (this.agents.has(appAgentName)) {
-            throw new Error(`App agent ${appAgentName} already exists`);
+            throw new Error(`App agent '${appAgentName}' already exists`);
         }
 
         // REVIEW: action embedding is not cached.
@@ -352,7 +352,7 @@ export class AppAgentManager implements ActionConfigProvider {
         debug("Finish action embeddings");
     }
 
-    private cleanupDynamicAgent(appAgentName: string) {
+    private cleanupAgent(appAgentName: string) {
         delete this.emojis[appAgentName];
         for (const [schemaName, config] of this.actionConfigs) {
             if (getAppAgentName(schemaName) !== appAgentName) {
@@ -376,10 +376,10 @@ export class AppAgentManager implements ActionConfigProvider {
         }
     }
 
-    public async removeDynamicAgent(appAgentName: string) {
+    public async removeAgent(appAgentName: string) {
         const record = this.getRecord(appAgentName);
         this.agents.delete(appAgentName);
-        this.cleanupDynamicAgent(appAgentName);
+        this.cleanupAgent(appAgentName);
 
         await this.closeSessionContext(record);
         if (record.appAgent !== undefined) {
@@ -415,7 +415,7 @@ export class AppAgentManager implements ActionConfigProvider {
     public getAppAgent(appAgentName: string): AppAgent {
         const record = this.getRecord(appAgentName);
         if (record.appAgent === undefined) {
-            throw new Error(`App agent ${appAgentName} is not initialized`);
+            throw new Error(`App agent' ${appAgentName}' is not initialized`);
         }
         return record.appAgent;
     }
@@ -424,7 +424,7 @@ export class AppAgentManager implements ActionConfigProvider {
         const record = this.getRecord(appAgentName);
         if (record.sessionContext === undefined) {
             throw new Error(
-                `Session context for ${appAgentName} is not initialized`,
+                `Session context for '${appAgentName}' is not initialized`,
             );
         }
         return record.sessionContext;

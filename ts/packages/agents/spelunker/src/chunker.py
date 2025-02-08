@@ -26,8 +26,12 @@ import ast
 from dataclasses import dataclass
 import datetime
 import json
+import os
 import sys
 from typing import Any, Iterator
+
+
+IdType = str
 
 
 @dataclass
@@ -36,7 +40,7 @@ class Blob:
 
     start: int  # 0-based!
     lines: list[str]
-    breadcrumb: bool = False  # True to ignore on reconstruction
+    breadcrumb: IdType | None = None  # Chunk id if breadcrumb
 
     def to_dict(self) -> dict[str, object]:
         result: dict[str, Any] = {
@@ -44,19 +48,17 @@ class Blob:
             "lines": self.lines,
         }
         if self.breadcrumb:
-            result["breadcrumb"] = True
+            result["breadcrumb"] = self.breadcrumb
         return result
-
-
-IdType = str
 
 
 @dataclass
 class Chunk:
     """A chunk at any level of nesting (root, inner, leaf)."""
 
-    id: IdType
+    chunkId: IdType
     treeName: str  # AST node name
+    codeName: str  # function/class/module name (TODO: dotted names)
     blobs: list[Blob]  # Blobs around the placeholders
 
     # For inner chunks:
@@ -68,8 +70,9 @@ class Chunk:
     # Used by custom_json() below.
     def to_dict(self) -> dict[str, object]:
         return {
-            "id": self.id,
+            "chunkId": self.chunkId,
             "treeName": self.treeName,
+            "codeName": self.codeName,
             "blobs": self.blobs,
             "parentId": self.parentId,
             "children": self.children,
@@ -180,6 +183,15 @@ def ast_iter_child_statement_nodes(node: ast.AST) -> Iterator[ast.AST]:
                         yield item
 
 
+def extract_code_name(node: ast.AST) -> str:
+    """Extract  function or class name of a node."""
+    if isinstance(node, ast.FunctionDef):
+        return node.name
+    elif isinstance(node, ast.ClassDef):
+        return node.name
+    return ""
+
+
 def extract_blob(lines: list[str], node: ast.AST) -> Blob:
     """Extract the text of a node from the source code (as list of lines)."""
     # TODO: Include immediately preceding comment blocks.
@@ -218,15 +230,17 @@ def create_chunks_recursively(
     for node in ast_iter_child_statement_nodes(tree):
         if isinstance(node, ast.FunctionDef) or isinstance(node, ast.ClassDef):
             node_name = node.__class__.__name__
+            code_name = extract_code_name(node)
             node_id = generate_id()
             node_blob = extract_blob(lines, node)
             node_blobs = [node_blob]
-            chunk = Chunk(node_id, node_name, node_blobs, parent.id, [])
+            chunk = Chunk(node_id, node_name, code_name, node_blobs, parent.chunkId, [])
             chunks.append(chunk)
             chunks.extend(create_chunks_recursively(lines, node, chunk))
             parent.children.append(node_id)
 
             # Split last parent.blobs[-1] into two, leaving a gap for the new Chunk
+            # and put a breadcrumb blob in between.
             parent_blob: Blob = parent.blobs.pop()
             parent_start: int = parent_blob.start
             parent_end: int = parent_blob.start + len(parent_blob.lines)
@@ -237,13 +251,13 @@ def create_chunks_recursively(
                 parent.blobs.append(Blob(parent_start, lines[parent_start:first_start]))
                 summary = summarize_chunk(chunk, node)
                 if summary:
-                    parent.blobs.append(Blob(first_start, summary, breadcrumb=True))
+                    parent.blobs.append(Blob(first_start, summary, breadcrumb=node_id))
                 parent.blobs.append(Blob(last_end, lines[last_end:parent_end]))
 
     return chunks
 
 
-def chunker(text: str, tree: ast.AST) -> list[Chunk]:
+def chunker(text: str, tree: ast.AST, module_name: str) -> list[Chunk]:
     """Chunker for Python code."""
 
     lines = text.splitlines(keepends=True)
@@ -252,7 +266,7 @@ def chunker(text: str, tree: ast.AST) -> list[Chunk]:
     # Handcraft the root node
     root_id = generate_id()
     root_name = tree.__class__.__name__
-    root = Chunk(root_id, root_name, [Blob(0, lines)], "", [])
+    root = Chunk(root_id, root_name, module_name, [Blob(0, lines)], "", [])
 
     chunks = create_chunks_recursively(lines, tree, root)
     chunks.insert(0, root)
@@ -265,11 +279,14 @@ def chunkify(text: str, filename: str) -> list[Chunk] | ErrorItem:
     except SyntaxError as e:
         return ErrorItem(repr(e), filename)
 
-    chunks = chunker(text, tree)
+    module_name = os.path.basename(filename)
+    if module_name.endswith(".py"):
+        module_name = module_name[:-3]
+    chunks = chunker(text, tree, module_name)
 
     # Remove leading and trailing blank lines from blobs,
-    # only keep non-empty chunks.
-    # Need to do this laster because blob lists are mutated above.
+    # only keeping non-empty blobs.
+    # Need to do this last because blob lists are mutated above.
     for chunk in chunks:
         blobs = chunk.blobs
         new_blobs: list[Blob] = []
@@ -304,7 +321,8 @@ def main():
             if isinstance(result, ErrorItem):
                 items.append(result)
             else:
-                chunks = [chunk for chunk in result if chunk.blobs]
+                # Only keep non-empty chunks, and the root node (empty parentId).
+                chunks = [chunk for chunk in result if chunk.blobs or not chunk.parentId]
                 items.append(ChunkedFile(filename, chunks))
 
     print(json.dumps(items, default=custom_json, indent=2))

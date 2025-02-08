@@ -11,9 +11,19 @@ export type WebSocketMessage = {
     body: any;
 };
 
-export async function createWebSocket() {
+export async function createWebSocket(
+    channel: string,
+    role: string,
+    clientId?: string,
+) {
     return new Promise<WebSocket | undefined>((resolve, reject) => {
-        const webSocket = new WebSocket("ws://localhost:8080/");
+        let endpoint = process.env["WEBSOCKET_HOST"] ?? "ws://localhost:8080";
+        endpoint += `?channel=${channel}&role=${role}`;
+        if (clientId) {
+            endpoint += `clientId=${clientId}`;
+        }
+
+        const webSocket = new WebSocket(endpoint);
 
         webSocket.onopen = (event: object) => {
             console.log("websocket open");
@@ -31,15 +41,13 @@ export async function createWebSocket() {
     });
 }
 
-export function keepWebSocketAlive(webSocket: WebSocket, source: string) {
+export function keepWebSocketAlive(webSocket: WebSocket) {
     const keepAliveIntervalId = setInterval(() => {
         if (webSocket && webSocket.readyState === WebSocket.OPEN) {
             webSocket.send(
                 JSON.stringify({
-                    source: `${source}`,
-                    target: "none",
-                    messageType: "keepAlive",
-                    body: {},
+                    method: "keepAlive",
+                    params: {},
                 }),
             );
         } else {

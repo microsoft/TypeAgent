@@ -4,14 +4,11 @@
 import path from "node:path";
 import {
     ChangeVolumeAction,
-    CreatePlaylistAction,
     DeletePlaylistAction,
-    FilterTracksAction,
     GetFavoritesAction,
     GetPlaylistAction,
     PlayAlbumAction,
     PlayFromCurrentTrackListAction,
-    PlayAlbumTrackAction,
     PlayArtistAction,
     PlayerAction,
     PlayGenreAction,
@@ -76,6 +73,7 @@ import {
     DisplayContent,
     Storage,
     ActionResult,
+    TypeAgentAction,
 } from "@typeagent/agent-sdk";
 import {
     createActionResultFromHtmlDisplay,
@@ -85,8 +83,10 @@ import {
     equivalentNames,
     findAlbums,
     findArtistTopTracks,
+    findArtistTracksWithGenre,
     findTracks,
     findTracksWithGenre,
+    getTrackFromEntity,
 } from "./search.js";
 import { toTrackObjectFull } from "./spotifyUtils.js";
 
@@ -127,6 +127,8 @@ export interface IClientContext {
     currentTrackList?: ITrackCollection;
     lastTrackStartIndex?: number;
     lastTrackEndIndex?: number;
+    trackListMap: Map<string, ITrackCollection>;
+    trackListCount: number;
     userData?: UserData | undefined;
 }
 
@@ -230,18 +232,21 @@ async function htmlTrackNames(
                 actionResult.entities.push({
                     name: track.name,
                     type: ["track", "song"],
+                    uniqueId: track.id,
                 });
                 // make an entity for each artist
                 for (const artist of track.artists) {
                     actionResult.entities.push({
                         name: artist.name,
                         type: ["artist"],
+                        uniqueId: artist.id,
                     });
                 }
                 // make an entity for the album
                 actionResult.entities.push({
                     name: track.album.name,
                     type: ["album"],
+                    uniqueId: track.album.id,
                 });
                 entCount++;
             }
@@ -282,18 +287,21 @@ async function htmlTrackNames(
         actionResult.entities.push({
             name: track.name,
             type: ["track", "song"],
+            uniqueId: track.id,
         });
         // make an entity for each artist
         for (const artist of track.artists) {
             actionResult.entities.push({
                 name: artist.name,
                 type: ["artist"],
+                uniqueId: artist.id,
             });
         }
         // make an entity for the album
         actionResult.entities.push({
             name: track.album.name,
             type: ["album"],
+            uniqueId: track.album.id,
         });
         const litArtistsPrefix =
             track.artists.length > 1 ? "artists: " : "artist ";
@@ -361,10 +369,22 @@ export async function getClientContext(
     return {
         deviceId,
         service,
+        trackListMap: new Map<string, ITrackCollection>(),
+        trackListCount: 0,
         userData: instanceStorage
             ? await initializeUserData(instanceStorage, service)
             : undefined,
     };
+}
+
+function internTrackCollection(
+    trackCollection: ITrackCollection,
+    clientContext: IClientContext,
+) {
+    const id = `trackList${clientContext.trackListCount}`;
+    clientContext.trackListMap.set(id, trackCollection.copy());
+    clientContext.trackListCount++;
+    return id;
 }
 
 export async function searchTracks(
@@ -445,12 +465,17 @@ async function playRandomAction(
 
 async function playTrackAction(
     clientContext: IClientContext,
-    action: PlayTrackAction,
+    action: TypeAgentAction<PlayTrackAction>,
 ): Promise<ActionResult> {
+    if (action.parameters.albumName) {
+        return playTrackWithAlbum(clientContext, action);
+    }
     const tracks = await findTracks(
         clientContext,
         action.parameters.trackName,
         action.parameters.artists,
+        action.entities?.trackName,
+        action.entities?.artists,
         3,
     );
 
@@ -459,6 +484,84 @@ async function playTrackAction(
     }
     const collection = new TrackCollection(tracks);
     return playTrackCollection(collection, clientContext);
+}
+
+function isTrackMatch(
+    track: SpotifyApi.TrackObjectFull,
+    albumName: string,
+    artists?: string[],
+) {
+    if (!track.album.name.toLowerCase().includes(albumName.toLowerCase())) {
+        return false;
+    }
+    if (artists === undefined) {
+        return true;
+    }
+    return artists.every((artist) =>
+        track.album.artists.some((albumArtist) =>
+            equivalentNames(artist, albumArtist.name),
+        ),
+    );
+}
+
+async function playTrackWithAlbum(
+    clientContext: IClientContext,
+    action: TypeAgentAction<PlayTrackAction>,
+): Promise<ActionResult> {
+    const albumName = action.parameters.albumName!;
+    const trackName = action.parameters.trackName;
+    const trackFromEntity = await getTrackFromEntity(
+        trackName,
+        clientContext,
+        action.entities?.trackName,
+    );
+    if (trackFromEntity !== undefined) {
+        if (
+            isTrackMatch(trackFromEntity, albumName, action.parameters.artists)
+        ) {
+            return playTrackCollection(
+                new TrackCollection([trackFromEntity]),
+                clientContext,
+            );
+        }
+    }
+    const albums = await findAlbums(
+        albumName,
+        action.parameters.artists,
+        clientContext,
+        action.entities?.albumName,
+        action.entities?.artists,
+    );
+
+    if (trackFromEntity !== undefined) {
+        if (albums.some((album) => album.id === trackFromEntity.album.id)) {
+            return playTrackCollection(
+                new TrackCollection([trackFromEntity]),
+                clientContext,
+            );
+        }
+    }
+
+    for (const album of albums) {
+        const track = album.tracks.items.find(
+            // TODO: Might want to use fuzzy matching here.
+            (track) =>
+                track.name
+                    .toLowerCase()
+                    .includes(action.parameters.trackName.toLowerCase()),
+        );
+        if (track !== undefined) {
+            return playTrackCollection(
+                new TrackCollection([toTrackObjectFull(track, album)]),
+                clientContext,
+            );
+        }
+    }
+
+    // Even though we search thru all the possible matched albums, just use the first one
+    return createErrorActionResult(
+        `Track ${trackName} not found in album ${albums[0].name}`,
+    );
 }
 
 async function playFromCurrentTrackListAction(
@@ -485,12 +588,14 @@ async function playFromCurrentTrackListAction(
 }
 async function playAlbumAction(
     clientContext: IClientContext,
-    action: PlayAlbumAction,
+    action: TypeAgentAction<PlayAlbumAction>,
 ): Promise<ActionResult> {
     const albums = await findAlbums(
         action.parameters.albumName,
         action.parameters.artists,
         clientContext,
+        action.entities?.albumName,
+        action.entities?.artists,
     );
 
     const album = albums[0];
@@ -521,47 +626,23 @@ async function playAlbumAction(
     );
 }
 
-async function playAlbumTrackAction(
-    clientContext: IClientContext,
-    action: PlayAlbumTrackAction,
-): Promise<ActionResult> {
-    const albums = await findAlbums(
-        action.parameters.albumName,
-        action.parameters.artists,
-        clientContext,
-    );
-
-    const trackName = action.parameters.trackName;
-    for (const album of albums) {
-        const track = album.tracks.items.find(
-            // TODO: Might want to use fuzzy matching here.
-            (track) =>
-                track.name
-                    .toLowerCase()
-                    .includes(action.parameters.trackName.toLowerCase()),
-        );
-        if (track !== undefined) {
-            return playTrackCollection(
-                new TrackCollection([toTrackObjectFull(track, album)]),
-                clientContext,
-            );
-        }
-    }
-
-    // Even though we search thru all the possible matched albums, just use the first one
-    return createErrorActionResult(
-        `Track ${trackName} not found in album ${albums[0].name}`,
-    );
-}
-
 async function playArtistAction(
     clientContext: IClientContext,
-    action: PlayArtistAction,
+    action: TypeAgentAction<PlayArtistAction>,
 ): Promise<ActionResult> {
-    const tracks = await findArtistTopTracks(
-        action.parameters.artist,
-        clientContext,
-    );
+    const tracks = await (action.parameters.genre
+        ? findArtistTracksWithGenre(
+              action.parameters.artist,
+              action.parameters.genre,
+              clientContext,
+              action.entities?.artist,
+          )
+        : findArtistTopTracks(
+              action.parameters.artist,
+              clientContext,
+              action.entities?.artist,
+          ));
+
     const quantity = action.parameters.quantity ?? 0;
     if (quantity > 0) {
         tracks.splice(quantity);
@@ -694,7 +775,7 @@ export function getUserDataStrings(clientContext: IClientContext) {
 }
 
 export async function handleCall(
-    action: PlayerAction,
+    action: TypeAgentAction<PlayerAction>,
     clientContext: IClientContext,
     actionIO: ActionIO,
 ): Promise<ActionResult> {
@@ -707,8 +788,6 @@ export async function handleCall(
             return playFromCurrentTrackListAction(clientContext, action);
         case "playAlbum":
             return playAlbumAction(clientContext, action);
-        case "playAlbumTrack":
-            return playAlbumTrackAction(clientContext, action);
         case "playArtist":
             return playArtistAction(clientContext, action);
         case "playGenre":
@@ -916,18 +995,41 @@ export async function handleCall(
                 const collection = new TrackCollection(tracks);
                 console.log(chalk.magentaBright("Favorites:"));
                 await updateTrackListAndPrint(collection, clientContext);
-                return htmlTrackNames(collection);
+                const id = internTrackCollection(collection, clientContext);
+                const result = await htmlTrackNames(collection);
+                result.resultEntity = {
+                    name: "getFavoritesResult",
+                    type: ["track-list"],
+                    uniqueId: id,
+                };
+                return result;
             }
             return createErrorActionResult("No favorites found");
         }
         case "filterTracks": {
-            const filterTracksAction = action as FilterTracksAction;
-            const trackCollection = clientContext.currentTrackList;
-            if (trackCollection) {
-                let filterType: string =
-                    filterTracksAction.parameters.filterType;
-                const filterText = filterTracksAction.parameters.filterValue;
-                const negate = filterTracksAction.parameters.negate;
+            let input = clientContext.currentTrackList;
+            const trackListEntity = action.entities?.trackListEntityId;
+            if (trackListEntity) {
+                console.log(
+                    `entity id: ${action.parameters.trackListEntityId}`,
+                );
+                if (
+                    trackListEntity !== undefined &&
+                    trackListEntity.type.includes("track-list") &&
+                    trackListEntity.uniqueId
+                ) {
+                    const trackList = clientContext.trackListMap.get(
+                        trackListEntity.uniqueId,
+                    );
+                    if (trackList) {
+                        input = trackList;
+                    }
+                }
+            }
+            if (input) {
+                let filterType: string = action.parameters.filterType;
+                const filterText = action.parameters.filterValue;
+                const negate = action.parameters.negate;
                 // TODO: add filter validation to overall instance validation
                 if (filterType === "name") {
                     filterType = "description";
@@ -935,7 +1037,7 @@ export async function handleCall(
                 const filter = filterType + ":" + filterText;
                 const parseResult = Filter.parseFilter(filter);
                 if (parseResult.ast) {
-                    const trackList = trackCollection.getTracks();
+                    const trackList = input.getTracks();
 
                     const tracks = await applyFilterExpr(
                         clientContext,
@@ -947,7 +1049,14 @@ export async function handleCall(
                     const collection = new TrackCollection(tracks);
                     console.log(chalk.magentaBright("Filtered Tracks:"));
                     await updateTrackListAndPrint(collection, clientContext);
-                    return await htmlTrackNames(collection);
+                    const result = await htmlTrackNames(collection);
+                    const id = internTrackCollection(collection, clientContext);
+                    result.resultEntity = {
+                        name: "filterTracksResult",
+                        type: ["track-list"],
+                        uniqueId: id,
+                    };
+                    return result;
                 } else {
                     console.log(parseResult.diagnostics);
                 }
@@ -955,9 +1064,27 @@ export async function handleCall(
             return createErrorActionResult("no current track list to filter");
         }
         case "createPlaylist": {
-            const createPlaylistAction = action as CreatePlaylistAction;
-            const name = createPlaylistAction.parameters.name;
-            const input = clientContext.currentTrackList;
+            const name = action.parameters.name;
+            let input = clientContext.currentTrackList;
+
+            const trackListEntity = action.entities?.trackListEntityId;
+            if (trackListEntity) {
+                console.log(
+                    `entity id: ${action.parameters.trackListEntityId}`,
+                );
+
+                if (
+                    trackListEntity.type.includes("track-list") &&
+                    trackListEntity.uniqueId
+                ) {
+                    const trackList = clientContext.trackListMap.get(
+                        trackListEntity.uniqueId,
+                    );
+                    if (trackList) {
+                        input = trackList;
+                    }
+                }
+            }
             if (input !== undefined) {
                 const trackList = input.getTracks();
                 const uris = trackList.map((track) => (track ? track.uri : ""));
@@ -970,10 +1097,18 @@ export async function handleCall(
                 );
                 console.log(`playlist ${name} created with tracks:`);
                 printTrackNames(input, clientContext);
+                const actionResult = await htmlTrackNames(input);
+                let displayText = "";
+                if (
+                    actionResult.displayContent &&
+                    typeof actionResult.displayContent === "object"
+                )
+                    if (!Array.isArray(actionResult.displayContent)) {
+                        displayText = actionResult.displayContent
+                            .content as string;
+                    }
                 return createActionResultFromHtmlDisplay(
-                    `<div>playlist ${name} created with tracks...</div>${await htmlTrackNames(
-                        input,
-                    )}`,
+                    `<div>playlist ${name} created with tracks...</div>${displayText}`,
                 );
             }
             return createErrorActionResult(

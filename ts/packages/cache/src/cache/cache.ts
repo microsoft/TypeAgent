@@ -4,7 +4,11 @@
 import { DeepPartialUndefined } from "common-utils";
 import * as Telemetry from "telemetry";
 import { ExplanationData } from "../explanation/explanationData.js";
-import { RequestAction } from "../explanation/requestAction.js";
+import {
+    getFullActionName,
+    getTranslationNamesForActions,
+    RequestAction,
+} from "../explanation/requestAction.js";
 import {
     SchemaInfoProvider,
     doCacheAction,
@@ -131,7 +135,7 @@ export class AgentCache {
 
                     if (!cacheAction) {
                         return getFailedResult(
-                            `Caching disabled in schema config for action '${action.fullActionName}'`,
+                            `Caching disabled in schema config for action '${getFullActionName(action)}'`,
                         );
                     }
                 }
@@ -169,7 +173,7 @@ export class AgentCache {
                     message = `Explainer '${this.explainerName}' doesn't support constructions.`;
                 } else {
                     const namespaceKeys = this.getNamespaceKeys(
-                        actions.translatorNames,
+                        getTranslationNamesForActions(actions),
                     );
                     const result = await store.addConstruction(
                         namespaceKeys,

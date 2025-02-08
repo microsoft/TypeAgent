@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { EventReference } from "./calendarActionsSchema.js";
+import { EventReference } from "./calendarActionsSchemaV1.js";
 import {
     getDateRelativeToDayV2,
     getISODayStartTime,

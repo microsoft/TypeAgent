@@ -80,7 +80,7 @@ export class MarkdownAgent<T extends object> {
             {
                 type: "text",
                 text: `
-            Create an updated markdown document that applies the changes requested by the user below. Format your reponse as a "MarkdownContent" 
+            Create an updated markdown document that applies the changes requested by the user below. Format your response as a "MarkdownContent" 
             object using the typescript schema below:
             '''
             ${this.schema}

@@ -139,13 +139,6 @@ export async function getTopUserTracks(service: SpotifyService, k = limitMax) {
     return getK(k, get);
 }
 
-export async function getGenreSeeds(service: SpotifyService) {
-    return callRestAPI<SpotifyApi.AvailableGenreSeedsResponse>(
-        service,
-        "https://api.spotify.com/v1/recommendations/available-genre-seeds",
-        {},
-    );
-}
 async function getKCursor<T>(
     k: number,
     get: (
@@ -221,7 +214,7 @@ export async function getArtist(service: SpotifyService, id: string) {
         },
     };
 
-    const artistsUrl = `https://api.spotify.com/v1/artist/${encodeURIComponent(id)}`;
+    const artistsUrl = `https://api.spotify.com/v1/artists/${encodeURIComponent(id)}`;
 
     try {
         const spotifyResult = await axios.get(artistsUrl, config);
@@ -588,6 +581,25 @@ export async function getAlbumTracks(service: SpotifyService, albumId: string) {
         translateAxiosError(e);
     }
     return undefined;
+}
+
+export async function getTrack(
+    service: SpotifyService,
+    id: string,
+): Promise<SpotifyApi.SingleTrackResponse | undefined> {
+    const config = {
+        headers: {
+            Authorization: `Bearer ${await service.tokenProvider.getAccessToken()}`,
+        },
+    };
+
+    const albumUrl = `https://api.spotify.com/v1/tracks/${encodeURIComponent(id)}`;
+    try {
+        const spotifyResult = await axios.get(albumUrl, config);
+        return spotifyResult.data as SpotifyApi.SingleTrackResponse;
+    } catch (e) {
+        translateAxiosError(e);
+    }
 }
 
 export async function getTracksFromIdsBatch(

@@ -1,14 +1,14 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { WebSocketMessage, createWebSocket } from "common-utils/ws";
+import { createWebSocket } from "common-utils/ws";
 import { WebSocket } from "ws";
 import {
   ActionContext,
-  AppAction,
   AppAgent,
   AppAgentEvent,
   SessionContext,
+  TypeAgentAction,
 } from "@typeagent/agent-sdk";
 import { createActionResult } from "@typeagent/agent-sdk/helpers/action";
 import { Crossword } from "./crossword/schema/pageSchema.mjs";
@@ -35,6 +35,13 @@ import { handleInstacartAction } from "./instacart/planHandler.mjs";
 
 import { processWebAgentMessage, WebAgentChannels } from "./webTypeAgent.mjs";
 import { isWebAgentMessage } from "../common/webAgentMessageTypes.mjs";
+import { handleSchemaDiscoveryAction } from "./discovery/actionHandler.mjs";
+import { BrowserActions } from "./actionsSchema.mjs";
+import { PaleoBioDbActions } from "./paleoBioDb/schema.mjs";
+import { CrosswordActions } from "./crossword/schema/userActions.mjs";
+import { InstacartActions } from "./instacart/schema/userActions.mjs";
+import { ShoppingActions } from "./commerce/schema/userActions.mjs";
+import { SchemaDiscoveryActions } from "./discovery/schema/discoveryActions.mjs";
 
 export function instantiate(): AppAgent {
   return {
@@ -83,7 +90,7 @@ async function updateBrowserContext(
       return;
     }
 
-    const webSocket = await createWebSocket();
+    const webSocket = await createWebSocket("browser", "dispatcher");
     if (webSocket) {
       context.agentContext.webSocket = webSocket;
       context.agentContext.browserConnector = new BrowserConnector(context);
@@ -94,25 +101,37 @@ async function updateBrowserContext(
       };
       webSocket.addEventListener("message", async (event: any) => {
         const text = event.data.toString();
-        const data = JSON.parse(text) as WebSocketMessage;
+        const data = JSON.parse(text);
         if (isWebAgentMessage(data)) {
           await processWebAgentMessage(data, context);
           return;
         }
 
-        if (data.target !== "dispatcher" || data.source !== "browser") {
+        if (data.error) {
+          console.error(data.error);
+          // TODO: Handle the case where no clients were found. Prompt the user
+          //       to launch inline browser or run automation in the headless browser.
           return;
         }
 
-        if (data.body) {
-          switch (data.messageType) {
+        if (data.method) {
+          switch (data.method) {
             case "enableSiteTranslator": {
-              if (data.body == "browser.crossword") {
+              const targetTranslator = data.params.translator;
+              if (targetTranslator == "browser.crossword") {
                 // initialize crossword state
-                sendSiteTranslatorStatus(data.body, "initializing", context);
+                sendSiteTranslatorStatus(
+                  targetTranslator,
+                  "initializing",
+                  context,
+                );
                 context.agentContext.crossWordState =
                   await getBoardSchema(context);
-                sendSiteTranslatorStatus(data.body, "initialized", context);
+                sendSiteTranslatorStatus(
+                  targetTranslator,
+                  "initialized",
+                  context,
+                );
 
                 if (context.agentContext.crossWordState) {
                   context.notify(
@@ -126,26 +145,26 @@ async function updateBrowserContext(
                   );
                 }
               }
-              await context.toggleTransientAgent(data.body, true);
+              await context.toggleTransientAgent(targetTranslator, true);
               break;
             }
             case "disableSiteTranslator": {
-              await context.toggleTransientAgent(data.body, false);
+              const targetTranslator = data.params.translator;
+              await context.toggleTransientAgent(targetTranslator, false);
               break;
             }
-            case "browserActionResponse": {
-              break;
-            }
-            case "debugBrowserAction": {
-              await executeBrowserAction(
-                data.body,
-                context as unknown as ActionContext<BrowserActionContext>,
+            case "addTabIdToIndex":
+            case "deleteTabIdFromIndex":
+            case "getTabIdFromIndex":
+            case "resetTabIdToIndex": {
+              await handleTabIndexActions(
+                {
+                  actionName: data.method,
+                  parameters: data.params,
+                },
+                context,
+                data.id,
               );
-
-              break;
-            }
-            case "tabIndexRequest": {
-              await handleTabIndexActions(data.body, context, data.id);
               break;
             }
           }
@@ -169,7 +188,14 @@ async function updateBrowserContext(
 }
 
 async function executeBrowserAction(
-  action: AppAction,
+  action:
+    | TypeAgentAction<BrowserActions, "browser">
+    | TypeAgentAction<PaleoBioDbActions, "browser.paleoBioDb">
+    | TypeAgentAction<CrosswordActions, "browser.crossword">
+    | TypeAgentAction<ShoppingActions, "browser.commerce">
+    | TypeAgentAction<InstacartActions, "browser.instacart">
+    | TypeAgentAction<SchemaDiscoveryActions, "browser.schemaFinder">,
+
   context: ActionContext<BrowserActionContext>,
 ) {
   const webSocketEndpoint = context.sessionContext.agentContext.webSocket;
@@ -178,9 +204,9 @@ async function executeBrowserAction(
     try {
       context.actionIO.setDisplay("Running remote action.");
 
-      let messageType = "browserActionRequest";
+      let schemaName = "browser";
       if (action.translatorName === "browser.paleoBioDb") {
-        messageType = "browserActionRequest.paleoBioDb";
+        schemaName = "browser.paleoBioDb";
       } else if (action.translatorName === "browser.crossword") {
         const crosswordResult = await handleCrosswordAction(action, context);
         return createActionResult(crosswordResult);
@@ -189,15 +215,23 @@ async function executeBrowserAction(
         return createActionResult(commerceResult);
       } else if (action.translatorName === "browser.instacart") {
         const instacartResult = await handleInstacartAction(action, context);
+
         return createActionResult(
           instacartResult.displayText,
           undefined,
           instacartResult.entities,
         );
+
         // return createActionResult(instacartResult);
+      } else if (action.translatorName === "browser.schemaFinder") {
+        const discoveryResult = await handleSchemaDiscoveryAction(
+          action,
+          context,
+        );
+        return createActionResult(discoveryResult);
       }
 
-      await connector?.sendActionToBrowser(action, messageType);
+      await connector?.sendActionToBrowser(action, schemaName);
     } catch (ex: any) {
       if (ex instanceof Error) {
         console.error(ex);
@@ -224,9 +258,7 @@ function sendSiteTranslatorStatus(
   if (webSocketEndpoint) {
     webSocketEndpoint.send(
       JSON.stringify({
-        source: "dispatcher",
-        target: "browser",
-        messageType: "siteTranslatorStatus",
+        method: "browser/siteTranslatorStatus",
         id: callId,
         body: {
           translator: translatorName,
@@ -286,11 +318,8 @@ async function handleTabIndexActions(
 
       webSocketEndpoint.send(
         JSON.stringify({
-          source: "dispatcher",
-          target: "browser",
-          messageType: "tabIndexResponse",
           id: requestId,
-          body: responseBody,
+          result: responseBody,
         }),
       );
     } catch (ex: any) {
