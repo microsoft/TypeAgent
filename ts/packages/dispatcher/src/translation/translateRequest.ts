@@ -5,11 +5,7 @@ import {
     displayStatus,
     displayWarn,
 } from "@typeagent/agent-sdk/helpers/display";
-import {
-    CommandHandlerContext,
-    getTranslatorForSchema,
-    getTranslatorForSelectedActions,
-} from "../context/commandHandlerContext.js";
+import { CommandHandlerContext } from "../context/commandHandlerContext.js";
 import { ActionContext } from "@typeagent/agent-sdk";
 import {
     createExecutableAction,
@@ -28,7 +24,9 @@ import {
     MultipleAction,
 } from "./multipleActionSchema.js";
 import {
+    createTypeAgentTranslatorForSelectedActions,
     isAdditionalActionLookupAction,
+    loadAgentJsonTranslator,
     TranslatedAction,
     TypeAgentTranslator,
 } from "./agentTranslators.js";
@@ -49,6 +47,70 @@ import registerDebug from "debug";
 import { confirmTranslation } from "./confirmTranslation.js";
 const debugTranslate = registerDebug("typeagent:translate");
 const debugSemanticSearch = registerDebug("typeagent:translate:semantic");
+
+function getActiveTranslators(context: CommandHandlerContext) {
+    return Object.fromEntries(
+        context.agents.getActiveSchemas().map((name) => [name, true]),
+    );
+}
+
+export function getTranslatorForSchema(
+    context: CommandHandlerContext,
+    translatorName: string,
+) {
+    const translator = context.translatorCache.get(translatorName);
+    if (translator !== undefined) {
+        return translator;
+    }
+    const config = context.session.getConfig().translation;
+    const newTranslator = loadAgentJsonTranslator(
+        translatorName,
+        context.agents,
+        getActiveTranslators(context),
+        config.switch.inline,
+        config.multiple,
+        config.schema.generation.enabled,
+        config.model,
+        !config.schema.optimize.enabled,
+        config.schema.generation.jsonSchema,
+    );
+    context.translatorCache.set(translatorName, newTranslator);
+    return newTranslator;
+}
+
+async function getTranslatorForSelectedActions(
+    context: CommandHandlerContext,
+    schemaName: string,
+    request: string,
+    numActions: number,
+): Promise<TypeAgentTranslator | undefined> {
+    const actionSchemaFile = context.agents.tryGetActionSchemaFile(schemaName);
+    if (
+        actionSchemaFile === undefined ||
+        actionSchemaFile.actionSchemas.size <= numActions
+    ) {
+        return undefined;
+    }
+    const nearestNeighbors = await context.agents.semanticSearchActionSchema(
+        request,
+        numActions,
+        (name) => name === schemaName,
+    );
+
+    if (nearestNeighbors === undefined) {
+        return undefined;
+    }
+    const config = context.session.getConfig().translation;
+    return createTypeAgentTranslatorForSelectedActions(
+        nearestNeighbors.map((e) => e.item.definition),
+        schemaName,
+        context.agents,
+        getActiveTranslators(context),
+        config.switch.inline,
+        config.multiple,
+        config.model,
+    );
+}
 
 async function pickInitialSchema(
     request: string,

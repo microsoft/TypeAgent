@@ -13,10 +13,7 @@ import {
     toFullActions,
 } from "agent-cache";
 
-import {
-    CommandHandlerContext,
-    getTranslatorForSchema,
-} from "../../commandHandlerContext.js";
+import { CommandHandlerContext } from "../../commandHandlerContext.js";
 
 import { CachedImageWithDetails } from "common-utils";
 import { Logger } from "telemetry";
@@ -38,6 +35,7 @@ import { DispatcherName } from "../../interactiveIO.js";
 import { isUnknownAction } from "../dispatcherUtils.js";
 import {
     getChatHistoryForTranslation,
+    getTranslatorForSchema,
     translateRequest,
 } from "../../../translation/translateRequest.js";
 import { matchRequest } from "../../../translation/matchRequest.js";

@@ -20,11 +20,7 @@ import {
     setupAgentCache,
     setupBuiltInCache,
 } from "./session.js";
-import {
-    loadAgentJsonTranslator,
-    TypeAgentTranslator,
-    createTypeAgentTranslatorForSelectedActions,
-} from "../translation/agentTranslators.js";
+import { TypeAgentTranslator } from "../translation/agentTranslators.js";
 import { ActionConfigProvider } from "../translation/actionConfigProvider.js";
 import { getCacheFactory } from "../utils/cacheFactory.js";
 import { createServiceHost } from "./system/handlers/serviceHost/serviceHostCommandHandler.js";
@@ -119,64 +115,6 @@ export type CommandHandlerContext = {
 
     instanceDirLock: (() => Promise<void>) | undefined;
 };
-
-export function getTranslatorForSchema(
-    context: CommandHandlerContext,
-    translatorName: string,
-) {
-    const translator = context.translatorCache.get(translatorName);
-    if (translator !== undefined) {
-        return translator;
-    }
-    const config = context.session.getConfig().translation;
-    const newTranslator = loadAgentJsonTranslator(
-        translatorName,
-        context.agents,
-        getActiveTranslators(context),
-        config.switch.inline,
-        config.multiple,
-        config.schema.generation.enabled,
-        config.model,
-        !config.schema.optimize.enabled,
-        config.schema.generation.jsonSchema,
-    );
-    context.translatorCache.set(translatorName, newTranslator);
-    return newTranslator;
-}
-
-export async function getTranslatorForSelectedActions(
-    context: CommandHandlerContext,
-    schemaName: string,
-    request: string,
-    numActions: number,
-): Promise<TypeAgentTranslator | undefined> {
-    const actionSchemaFile = context.agents.tryGetActionSchemaFile(schemaName);
-    if (
-        actionSchemaFile === undefined ||
-        actionSchemaFile.actionSchemas.size <= numActions
-    ) {
-        return undefined;
-    }
-    const nearestNeighbors = await context.agents.semanticSearchActionSchema(
-        request,
-        numActions,
-        (name) => name === schemaName,
-    );
-
-    if (nearestNeighbors === undefined) {
-        return undefined;
-    }
-    const config = context.session.getConfig().translation;
-    return createTypeAgentTranslatorForSelectedActions(
-        nearestNeighbors.map((e) => e.item.definition),
-        schemaName,
-        context.agents,
-        getActiveTranslators(context),
-        config.switch.inline,
-        config.multiple,
-        config.model,
-    );
-}
 
 async function getAgentCache(
     session: Session,
@@ -643,10 +581,4 @@ export async function changeContextConfig(
     }
 
     return changed;
-}
-
-function getActiveTranslators(context: CommandHandlerContext) {
-    return Object.fromEntries(
-        context.agents.getActiveSchemas().map((name) => [name, true]),
-    );
 }
