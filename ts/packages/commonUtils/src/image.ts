@@ -4,8 +4,16 @@
 import { Storage } from "@typeagent/agent-sdk";
 import { getBlob } from "aiclient";
 import ExifReader from "exifreader";
-import { MultimodalPromptContent, PromptSection, TextPromptContent } from "typechat";
-import { exifGPSTagToLatLong, findNearbyPointsOfInterest, reverseGeocode } from "./location.js";
+import {
+    MultimodalPromptContent,
+    PromptSection,
+    TextPromptContent,
+} from "typechat";
+import {
+    exifGPSTagToLatLong,
+    findNearbyPointsOfInterest,
+    reverseGeocode,
+} from "./location.js";
 import { openai } from "aiclient";
 import fs from "node:fs";
 import path from "node:path";
@@ -90,15 +98,15 @@ export async function downloadImage(
  * @param includeGeocodedAddress - Flag indicating if the image location should be geocoded if it's available.
  * @returns - A prompt section representing the supplied image and related details as requested.
  */
-export async function addImagePromptContent(role: "system" | "user" | "assistant", 
-    image: CachedImageWithDetails, 
-    includeFileName?: boolean, 
+export async function addImagePromptContent(
+    role: "system" | "user" | "assistant",
+    image: CachedImageWithDetails,
+    includeFileName?: boolean,
     includePartialExifTags?: boolean,
-    includeAllExifTags?: boolean, 
-    includePOI?: boolean, 
+    includeAllExifTags?: boolean,
+    includePOI?: boolean,
     includeGeocodedAddress?: boolean,
-    ): Promise<PromptSection> {
-
+): Promise<PromptSection> {
     const content: MultimodalPromptContent[] = [];
 
     // add the image to the prompt
@@ -114,7 +122,7 @@ export async function addImagePromptContent(role: "system" | "user" | "assistant
     if (includeFileName !== false) {
         content.push({
             type: "text",
-            text: `File Name: ${image.storageLocation}`
+            text: `File Name: ${image.storageLocation}`,
         } as TextPromptContent);
     }
 
@@ -123,19 +131,17 @@ export async function addImagePromptContent(role: "system" | "user" | "assistant
         content.push({
             type: "text",
             text: `Image EXIF tags: \n${extractAllExifTags(image.exifTags)}`,
-            }
-        );
-    } else if (includePartialExifTags === true)  {
+        });
+    } else if (includePartialExifTags === true) {
         content.push({
             type: "text",
             text: `Image EXIF tags: \n${extractRelevantExifTags(image.exifTags)}`,
-            }
-        );
+        });
     }
 
     // include POI
     if (includePOI !== false) {
-        content.push(                    {
+        content.push({
             type: "text",
             text: `Nearby Points of Interest: \n${JSON.stringify(
                 await findNearbyPointsOfInterest(
@@ -154,37 +160,35 @@ export async function addImagePromptContent(role: "system" | "user" | "assistant
     // include address
     if (includeGeocodedAddress !== false) {
         content.push({
-                type: "text",
-                text: `Reverse Geocode Results: \n${JSON.stringify(
-                    await reverseGeocode(
-                        exifGPSTagToLatLong(
-                            image.exifTags.GPSLatitude,
-                            image.exifTags.GPSLatitudeRef,
-                            image.exifTags.GPSLongitude,
-                            image.exifTags.GPSLongitudeRef,
-                        ),
-                        openai.apiSettingsFromEnv(),
+            type: "text",
+            text: `Reverse Geocode Results: \n${JSON.stringify(
+                await reverseGeocode(
+                    exifGPSTagToLatLong(
+                        image.exifTags.GPSLatitude,
+                        image.exifTags.GPSLatitudeRef,
+                        image.exifTags.GPSLongitude,
+                        image.exifTags.GPSLongitudeRef,
                     ),
-                )}`,
-            },
-        );
+                    openai.apiSettingsFromEnv(),
+                ),
+            )}`,
+        });
     }
 
     return {
         role: role,
-        content: content
+        content: content,
     };
 }
 
 /**
  * Tries to get the date the image was taken.
  * It attempts to use the filename and falls back to Exif tags.
- * 
+ *
  * @param path The path to the image file whose taken date is to be ascertained
  * @returns either the date.  If the date is undeterimined returns 1/1/1900 00:00:00
  */
-export function getDateTakenFuzzy(filePath: string, ): Date {
-
+export function getDateTakenFuzzy(filePath: string): Date {
     const fileName: string = path.basename(filePath).toLowerCase();
     let datePart: string = fileName.substring(0, fileName.indexOf("."));
     if (fileName.startsWith("img_")) {
@@ -198,20 +202,25 @@ export function getDateTakenFuzzy(filePath: string, ): Date {
 
         // Try to get the date time from the exif tags
         if (tags.DateTime?.description) {
-            retValue = parse(tags.DateTime.description, "yyyy:MM:dd hh:mm:ss", new Date());
+            retValue = parse(
+                tags.DateTime.description,
+                "yyyy:MM:dd hh:mm:ss",
+                new Date(),
+            );
         }
     } else {
         retValue.setFullYear(
-            parseInt(datePart.substring(0, 4)), 
-            parseInt(datePart.substring(5, 6)),
-            parseInt(datePart.substring(7,8)));
-    
+            parseInt(datePart.substring(0, 4)),
+            parseInt(datePart.substring(4, 6)) - 1,
+            parseInt(datePart.substring(6, 8)),
+        );
+
         retValue.setHours(
-            parseInt(datePart.substring(10,11)),
-            parseInt(datePart.substring(11,12)),
-            parseInt(datePart.substring(13,14))
-        );        
+            parseInt(datePart.substring(9, 11)),
+            parseInt(datePart.substring(11, 13)),
+            parseInt(datePart.substring(13, 15)),
+        );
     }
-    
+
     return retValue;
 }

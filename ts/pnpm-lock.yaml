@@ -74,6 +74,53 @@ importers:
         specifier: ^5.4.2
         version: 5.4.3
 
+  examples/agentExamples/echo:
+    dependencies:
+      '@typeagent/agent-sdk':
+        specifier: workspace:*
+        version: link:../../../packages/agentSdk
+    devDependencies:
+      copyfiles:
+        specifier: ^2.4.1
+        version: 2.4.1
+      prettier:
+        specifier: ^3.2.5
+        version: 3.2.5
+      rimraf:
+        specifier: ^5.0.5
+        version: 5.0.5
+      typescript:
+        specifier: ^5.4.2
+        version: 5.4.3
+
+  examples/agentExamples/measure:
+    dependencies:
+      '@typeagent/agent-sdk':
+        specifier: workspace:*
+        version: link:../../../packages/agentSdk
+      better-sqlite3:
+        specifier: 11.5.0
+        version: 11.5.0
+      typeagent:
+        specifier: workspace:*
+        version: link:../../../packages/typeagent
+    devDependencies:
+      '@types/better-sqlite3':
+        specifier: 7.6.11
+        version: 7.6.11
+      copyfiles:
+        specifier: ^2.4.1
+        version: 2.4.1
+      prettier:
+        specifier: ^3.2.5
+        version: 3.2.5
+      rimraf:
+        specifier: ^5.0.5
+        version: 5.0.5
+      typescript:
+        specifier: ^5.4.2
+        version: 5.4.3
+
   examples/chat:
     dependencies:
       aiclient:
@@ -167,6 +214,8 @@ importers:
         version: 11.7.2
         specifier: 11.8.1
         version: 11.8.1
+        specifier: 11.7.2
+        version: 11.7.2
       debug:
         specifier: ^4.4.0
         version: 4.4.0(supports-color@8.1.1)
@@ -404,6 +453,8 @@ importers:
       webpack-dev-server:
         specifier: ^5.2.0
         version: 5.2.0(debug@4.4.0)(webpack-cli@5.1.4)(webpack@5.94.0)
+        specifier: ^5.2.0
+        version: 5.2.0(debug@4.3.4)(webpack-cli@5.1.4)(webpack@5.94.0)
 
   examples/vscodeSchemaGen:
     dependencies:
@@ -490,6 +541,8 @@ importers:
       webpack-dev-server:
         specifier: ^5.2.0
         version: 5.2.0(debug@4.4.0)(webpack-cli@5.1.4)(webpack@5.94.0)
+        specifier: ^5.2.0
+        version: 5.2.0(debug@4.3.4)(webpack-cli@5.1.4)(webpack@5.94.0)
 
   packages/actionSchema:
     dependencies:
@@ -787,6 +840,9 @@ importers:
       date-fns:
         specifier: ^4.1.0
         version: 4.1.0
+      common-utils:
+        specifier: workspace:*
+        version: link:../../commonUtils
       debug:
         specifier: ^4.4.0
         version: 4.4.0(supports-color@8.1.1)
@@ -1080,6 +1136,8 @@ importers:
       express-rate-limit:
         specifier: ^7.5.0
         version: 7.5.0(express@4.21.2)
+        specifier: ^4.21.2
+        version: 4.21.2
       katex:
         specifier: ^0.16.21
         version: 0.16.21
@@ -1144,6 +1202,8 @@ importers:
       webpack-dev-server:
         specifier: ^5.2.0
         version: 5.2.0(debug@4.4.0)(webpack-cli@5.1.4)(webpack@5.94.0)
+        specifier: ^5.2.0
+        version: 5.2.0(debug@4.3.4)(webpack-cli@5.1.4)(webpack@5.94.0)
 
   packages/agents/oracle:
     dependencies:
@@ -1330,6 +1390,8 @@ importers:
       webpack-dev-server:
         specifier: ^5.2.0
         version: 5.2.0(debug@4.4.0)(webpack-cli@5.1.4)(webpack@5.94.0)
+        specifier: ^5.2.0
+        version: 5.2.0(debug@4.3.4)(webpack-cli@5.1.4)(webpack@5.94.0)
 
   packages/aiclient:
     dependencies:
@@ -1574,6 +1636,8 @@ importers:
       webpack-dev-server:
         specifier: ^5.2.0
         version: 5.2.0(debug@4.4.0)(webpack-cli@5.1.4)(webpack@5.94.0)
+        specifier: ^5.2.0
+        version: 5.2.0(debug@4.3.4)(webpack-cli@5.1.4)(webpack@5.94.0)
 
   packages/cli:
     dependencies:
@@ -2113,6 +2177,52 @@ importers:
         specifier: ^5.4.2
         version: 5.4.3
 
+  packages/knowPro:
+    dependencies:
+      aiclient:
+        specifier: workspace:*
+        version: link:../aiclient
+      debug:
+        specifier: ^4.3.4
+        version: 4.3.4(supports-color@8.1.1)
+      knowledge-processor:
+        specifier: workspace:*
+        version: link:../knowledgeProcessor
+      typeagent:
+        specifier: workspace:*
+        version: link:../typeagent
+      typechat:
+        specifier: ^0.1.1
+        version: 0.1.1(typescript@5.4.3)(zod@3.23.8)
+    devDependencies:
+      '@types/debug':
+        specifier: ^4.1.10
+        version: 4.1.10
+      '@types/jest':
+        specifier: ^29.5.7
+        version: 29.5.7
+      '@types/node':
+        specifier: ^18.18.7
+        version: 18.18.7
+      copyfiles:
+        specifier: ^2.4.1
+        version: 2.4.1
+      dotenv:
+        specifier: ^16.3.1
+        version: 16.3.1
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@18.18.7)(ts-node@10.9.2(@types/node@18.18.7)(typescript@5.4.3))
+      prettier:
+        specifier: ^3.2.5
+        version: 3.2.5
+      rimraf:
+        specifier: ^5.0.5
+        version: 5.0.5
+      typescript:
+        specifier: ^5.4.2
+        version: 5.4.3
+
   packages/knowledgeProcessor:
     dependencies:
       aiclient:
@@ -2129,6 +2239,9 @@ importers:
         version: 4.23.5
         specifier: ^4.4.0
         version: 4.4.0(supports-color@8.1.1)
+      exifreader:
+        specifier: 4.23.5
+        version: 4.23.5
       typeagent:
         specifier: workspace:*
         version: link:../typeagent
@@ -2218,6 +2331,8 @@ importers:
       webpack-dev-server:
         specifier: ^5.2.0
         version: 5.2.0(debug@4.4.0)(webpack-cli@5.1.4)(webpack@5.94.0)
+        specifier: ^5.2.0
+        version: 5.2.0(debug@4.3.4)(webpack-cli@5.1.4)(webpack@5.94.0)
 
   packages/schemaAuthor:
     dependencies:
@@ -2337,6 +2452,7 @@ importers:
       electron-vite:
         specifier: ^2.1.0
         version: 2.3.0(vite@5.4.12(@types/node@18.18.7)(less@4.2.0)(terser@5.27.0))
+        version: 2.3.0(vite@5.4.8(@types/node@18.18.7)(less@4.2.0)(terser@5.27.0))
       less:
         specifier: ^4.2.0
         version: 4.2.0
@@ -4807,6 +4923,9 @@ packages:
   better-sqlite3@11.8.1:
     resolution: {integrity: sha512-9BxNaBkblMjhJW8sMRZxnxVTRgbRmssZW0Oxc1MPBTfiR+WW21e2Mk4qu8CzrcZb1LwPCnFsfDEzq+SNcBU8eg==}
 
+  better-sqlite3@11.7.2:
+    resolution: {integrity: sha512-10a57cHVDmfNQS4jrZ9AH2t+2ekzYh5Rhbcnb4ytpmYweoLdogDmyTt5D+hLiY9b44Mx9foowb/4iXBTO2yP3Q==}
+
   binary-extensions@2.2.0:
     resolution: {integrity: sha512-jDctJ/IVQbZoJykoeHbhXpOlNBqGNcwXJKJog42E5HDPUwQTSdjCHdihjj0DlnheQ7blbT6dHOafNAiS8ooQKA==}
     engines: {node: '>=8'}
@@ -5961,6 +6080,8 @@ packages:
     peerDependencies:
       express: ^4.11 || 5 || ^5.0.0-beta.1
 
+  express@4.21.2:
+    resolution: {integrity: sha512-28HqgMZAmih1Czt9ny7qr6ek2qddF4FclbMzwhCREB6OFfH+rXAnuNCwo1/wFvrtbgsQDb4kSbX9de9lFbrXnA==}
   express@4.21.2:
     resolution: {integrity: sha512-28HqgMZAmih1Czt9ny7qr6ek2qddF4FclbMzwhCREB6OFfH+rXAnuNCwo1/wFvrtbgsQDb4kSbX9de9lFbrXnA==}
     engines: {node: '>= 0.10.0'}
@@ -10176,6 +10297,12 @@ snapshots:
       '@babel/template': 7.25.9
       '@babel/types': 7.26.5
       debug: 4.4.0(supports-color@8.1.1)
+      '@babel/code-frame': 7.26.2
+      '@babel/generator': 7.26.5
+      '@babel/parser': 7.26.5
+      '@babel/template': 7.25.9
+      '@babel/types': 7.26.5
+      debug: 4.3.4(supports-color@8.1.1)
       globals: 11.12.0
     transitivePeerDependencies:
       - supports-color
@@ -12228,6 +12355,7 @@ snapshots:
       webpack-cli: 5.1.4(webpack-dev-server@5.2.0)(webpack@5.94.0)
     optionalDependencies:
       webpack-dev-server: 5.2.0(debug@4.4.0)(webpack-cli@5.1.4)(webpack@5.94.0)
+      webpack-dev-server: 5.2.0(debug@4.3.4)(webpack-cli@5.1.4)(webpack@5.94.0)
 
   '@webpack-cli/serve@2.0.5(webpack-cli@5.1.4)(webpack@5.94.0)':
     dependencies:
@@ -12593,6 +12721,11 @@ snapshots:
 
   better-sqlite3@11.7.2:
   better-sqlite3@11.8.1:
+    dependencies:
+      bindings: 1.5.0
+      prebuild-install: 7.1.2
+
+  better-sqlite3@11.7.2:
     dependencies:
       bindings: 1.5.0
       prebuild-install: 7.1.2
@@ -13755,6 +13888,7 @@ snapshots:
       - supports-color
 
   electron-vite@2.3.0(vite@5.4.12(@types/node@18.18.7)(less@4.2.0)(terser@5.27.0)):
+  electron-vite@2.3.0(vite@5.4.8(@types/node@18.18.7)(less@4.2.0)(terser@5.27.0)):
     dependencies:
       '@babel/core': 7.26.0
       '@babel/plugin-transform-arrow-functions': 7.25.9(@babel/core@7.26.0)
@@ -13763,6 +13897,10 @@ snapshots:
       magic-string: 0.30.17
       picocolors: 1.1.1
       vite: 5.4.12(@types/node@18.18.7)(less@4.2.0)(terser@5.27.0)
+      esbuild: 0.21.5
+      magic-string: 0.30.17
+      picocolors: 1.1.1
+      vite: 5.4.8(@types/node@18.18.7)(less@4.2.0)(terser@5.27.0)
     transitivePeerDependencies:
       - supports-color
 
@@ -14021,6 +14159,7 @@ snapshots:
     dependencies:
       express: 4.21.2
 
+  express@4.21.2:
   express@4.21.2:
     dependencies:
       accepts: 1.3.8
@@ -17431,6 +17570,8 @@ snapshots:
       esbuild: 0.21.5
       postcss: 8.5.1
       rollup: 4.31.0
+      postcss: 8.5.1
+      rollup: 4.24.0
     optionalDependencies:
       '@types/node': 18.18.7
       fsevents: 2.3.3
@@ -17474,6 +17615,7 @@ snapshots:
       webpack-merge: 5.10.0
     optionalDependencies:
       webpack-dev-server: 5.2.0(debug@4.4.0)(webpack-cli@5.1.4)(webpack@5.94.0)
+      webpack-dev-server: 5.2.0(debug@4.3.4)(webpack-cli@5.1.4)(webpack@5.94.0)
 
   webpack-cli@5.1.4(webpack@5.94.0):
     dependencies:
@@ -17504,6 +17646,7 @@ snapshots:
       webpack: 5.94.0(webpack-cli@5.1.4)
 
   webpack-dev-server@5.2.0(debug@4.4.0)(webpack-cli@5.1.4)(webpack@5.94.0):
+  webpack-dev-server@5.2.0(debug@4.3.4)(webpack-cli@5.1.4)(webpack@5.94.0):
     dependencies:
       '@types/bonjour': 3.5.13
       '@types/connect-history-api-fallback': 1.5.4
@@ -17521,6 +17664,7 @@ snapshots:
       express: 4.21.2
       graceful-fs: 4.2.11
       http-proxy-middleware: 2.0.7(@types/express@4.17.21)(debug@4.4.0)
+      http-proxy-middleware: 2.0.7(@types/express@4.17.21)(debug@4.3.4)
       ipaddr.js: 2.1.0
       launch-editor: 2.9.1
       open: 10.1.0

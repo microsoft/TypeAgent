@@ -11,7 +11,7 @@ import {
     isSameMonth,
     isValid,
     parse,
-    parseISO
+    parseISO,
 } from "date-fns";
 
 export function parseDateString(dateString: string): Date | undefined {

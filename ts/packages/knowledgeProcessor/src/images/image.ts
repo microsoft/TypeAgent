@@ -20,7 +20,14 @@ import { KnowledgeResponse } from "../conversation/knowledgeSchema.js";
 import fs from "node:fs";
 import ExifReader from "exifreader";
 import { PromptSection } from "typechat";
-import { addImagePromptContent, CachedImageWithDetails, getDateTakenFuzzy, getMimeType, isImageFileType, parseDateString } from "common-utils";
+import {
+    addImagePromptContent,
+    CachedImageWithDetails,
+    getDateTakenFuzzy,
+    getMimeType,
+    isImageFileType,
+    parseDateString,
+} from "common-utils";
 import { KnowledgeExtractor } from "../conversation/knowledge.js";
 
 /**
@@ -94,7 +101,7 @@ export async function addImageToConversation(
     cm: ConversationManager,
     images: Image | Image[],
     maxCharsPerChunk: number,
-    extractor: KnowledgeExtractor
+    extractor: KnowledgeExtractor,
 ): Promise<void> {
     const messages: ConversationMessage[] = [];
     if (Array.isArray(images)) {
@@ -113,9 +120,13 @@ export async function addImageToConversation(
  * @param image
  * @returns
  */
-export async function imageToMessage(image: Image, extractor: KnowledgeExtractor): Promise<ConversationMessage> {
-
-    const kr: KnowledgeResponse | undefined = await extractor.extract(JSON.stringify(image));
+export async function imageToMessage(
+    image: Image,
+    extractor: KnowledgeExtractor,
+): Promise<ConversationMessage> {
+    const kr: KnowledgeResponse | undefined = await extractor.extract(
+        JSON.stringify(image),
+    );
 
     // const knowledge = getKnowledgeForImage(image, extractor);
     // kr?.actions.push(...knowledge.actions);
@@ -124,7 +135,7 @@ export async function imageToMessage(image: Image, extractor: KnowledgeExtractor
     // kr?.topics.push(...knowledge.topics);
 
     return {
-        header: `${image.fileName} - ${image.title}` ,
+        header: `${image.fileName} - ${image.title}`,
         text: image.caption,
         knowledge: kr,
         timestamp: parseDateString(image.dateTaken),
@@ -132,19 +143,20 @@ export async function imageToMessage(image: Image, extractor: KnowledgeExtractor
     };
 }
 
-export function getKnowledgeForImage(image: Image, extractor: KnowledgeExtractor): KnowledgeResponse {
-
+export function getKnowledgeForImage(
+    image: Image,
+    extractor: KnowledgeExtractor,
+): KnowledgeResponse {
     // TODO: optimize
     return {
-       entities: [ { name: image.fileName, type: ["file", "image"]} ],
-       actions: [],
-       inverseActions: [],
-       topics: [] 
+        entities: [{ name: image.fileName, type: ["file", "image"] }],
+        actions: [],
+        inverseActions: [],
+        topics: [],
     };
 }
 
-const imageCaptionGeneratingSchema = 
-`// An interface that describes an image in detail
+const imageCaptionGeneratingSchema = `// An interface that describes an image in detail
 export interface generateCaption {
     // A short, descriptive title for this image
     title: string;
@@ -173,11 +185,13 @@ export interface generateCaption {
     // The image height in pixels
     height: number;
     // The date the image was taken
-    dateTaken: string
+    dateTaken: string;
 }
 
-export async function loadImage(fileName: string, model: ChatModel): Promise<Image | undefined> {
-
+export async function loadImage(
+    fileName: string,
+    model: ChatModel,
+): Promise<Image | undefined> {
     const buffer: Buffer = fs.readFileSync(fileName);
 
     // load EXIF properties
@@ -189,7 +203,11 @@ export async function loadImage(fileName: string, model: ChatModel): Promise<Ima
         }
     }
     const mimeType = getMimeType(path.extname(fileName));
-    const loadedImage: CachedImageWithDetails = new CachedImageWithDetails(tags, fileName, `data:image/${mimeType};base64,${buffer.toString("base64")}`);
+    const loadedImage: CachedImageWithDetails = new CachedImageWithDetails(
+        tags,
+        fileName,
+        `data:image/${mimeType};base64,${buffer.toString("base64")}`,
+    );
 
     // create a caption for the image
     const caption = createTypeChat<generateCaption>(
@@ -202,18 +220,25 @@ export async function loadImage(fileName: string, model: ChatModel): Promise<Ima
         30,
     );
 
-    try { 
+    try {
         const prompt: PromptSection[] = [];
-        const content: PromptSection = await addImagePromptContent("user", loadedImage, true, true, true, true, true);
+        const content: PromptSection = await addImagePromptContent(
+            "user",
+            loadedImage,
+            true,
+            true,
+            true,
+            true,
+            true,
+        );
         //prompt.push(promptLib.dateTimePromptSection()); // Always include the current date and time. Makes the bot much smarter
         prompt.push(content);
 
         const chatResponse = await caption.translate(
-        //    "Caption supplied images in no less than 250 words without making any assumptions, remain factual. Incorporate supplied EXIF and location data to make a better description and to give context to when and where the image was taken.",
-        "Caption supplied images in no less than 150 words without making any assumptions, remain factual.",
-            prompt, 
+            //    "Caption supplied images in no less than 250 words without making any assumptions, remain factual. Incorporate supplied EXIF and location data to make a better description and to give context to when and where the image was taken.",
+            "Caption supplied images in no less than 150 words without making any assumptions, remain factual.",
+            prompt,
         );
-
 
         if (chatResponse.success) {
             return {
@@ -223,30 +248,32 @@ export async function loadImage(fileName: string, model: ChatModel): Promise<Ima
                 height: chatResponse.data.height,
                 fileName: chatResponse.data.fileName,
                 dateTaken: chatResponse.data.dateTaken,
-                metaData: properties
-            };    
+                metaData: properties,
+            };
         } else {
             const err = `Unable to load ${fileName}. '${chatResponse.message}'`;
-            console.error("\t" + err)
+            console.error("\t" + err);
             throw new Error(err);
         }
-    }
-    catch {
+    } catch {
         return undefined;
     }
 }
 
 interface imageFileAndDate {
-    fileName: string,
-    dateTaken: Date
+    fileName: string;
+    dateTaken: Date;
 }
 
 /**
  * Builds a histogram of image counts per bucket of time
  * @param filePath The path of the folder to build a histogram for
  */
-export function buildImageCountHistogram(filePath: string, recursive: boolean = true, bucketSizeInSeconds: number = 300) {
-
+export function buildImageCountHistogram(
+    filePath: string,
+    recursive: boolean = true,
+    bucketSizeInSeconds: number = 300,
+) {
     // paramter checking
     if (!fs.existsSync(filePath)) {
         throw new Error(`The supplied path '${filePath}' does not exist`);
@@ -256,44 +283,52 @@ export function buildImageCountHistogram(filePath: string, recursive: boolean = 
 
     // get all of the images files and the dates they were taken
     const allImageFiles: imageFileAndDate[] = [];
-    const files: fs.Dirent[] = fs.readdirSync(filePath, { recursive, encoding: null, withFileTypes: true });
+    const files: fs.Dirent[] = fs.readdirSync(filePath, {
+        recursive,
+        encoding: null,
+        withFileTypes: true,
+    });
     files.map((file) => {
-
         if (file.isFile()) {
             if (isImageFileType(path.extname(file.name))) {
                 allImageFiles.push({
                     fileName: path.join(file.path, file.name),
-                    dateTaken: getDateTakenFuzzy(path.join(file.path, file.name)),
-                })
+                    dateTaken: getDateTakenFuzzy(
+                        path.join(file.path, file.name),
+                    ),
+                });
             }
         }
     });
 
     // now sort the images by date/time
     allImageFiles.sort((a: imageFileAndDate, b: imageFileAndDate) => {
-
         if (a.dateTaken === undefined && b.dateTaken === undefined) {
             return 0;
         } else if (a.dateTaken === undefined && b.dateTaken !== undefined) {
-            return -1
+            return -1;
         } else if (a.dateTaken !== undefined && b.dateTaken === undefined) {
             return 1;
         } else {
             return a.dateTaken!.getTime() - b.dateTaken!.getTime();
-        }        
+        }
     });
 
     // now bucketize
     const histogram: number[] = [];
     const startDate: number = allImageFiles[0].dateTaken.getTime() / 1000;
-    const endDate: number = allImageFiles[allImageFiles.length - 1].dateTaken.getTime() / 1000;
+    const endDate: number =
+        allImageFiles[allImageFiles.length - 1].dateTaken.getTime() / 1000;
 
     // how many buckets do we need?
-    const buckets: number = Math.ceil((endDate - startDate) / bucketSizeInSeconds);
-    
+    const buckets: number = Math.ceil(
+        (endDate - startDate) / bucketSizeInSeconds,
+    );
+
     // now count how many images are in each bucket
-    for(let i = 0; i < allImageFiles.length; i++) {
-        const currentBucketLimit = (histogram.length + 1) * bucketSizeInSeconds + startDate;
+    for (let i = 0; i < allImageFiles.length; i++) {
+        const currentBucketLimit =
+            (histogram.length + 1) * bucketSizeInSeconds + startDate;
 
         if (allImageFiles[i].dateTaken.getTime() <= currentBucketLimit) {
             histogram[histogram.length]++;
@@ -307,5 +342,8 @@ export function buildImageCountHistogram(filePath: string, recursive: boolean = 
         throw Error("Bucket calculation mismatch!");
     }
 
-    fs.writeFileSync("histogram.json", JSON.stringify({ startDate, endDate, bucketSizeInSeconds, histogram }))
+    fs.writeFileSync(
+        "histogram.json",
+        JSON.stringify({ startDate, endDate, bucketSizeInSeconds, histogram }),
+    );
 }

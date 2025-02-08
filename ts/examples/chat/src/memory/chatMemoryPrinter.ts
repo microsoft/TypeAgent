@@ -342,19 +342,7 @@ export class ChatMemoryPrinter extends ChatPrinter {
     ) {
         if (response.answer) {
             let answer = response.answer;
-            let newAnswer = answer;
-
-            // TODO: remove after recording demo video
-            let index = answer.toLowerCase().search(/\d{8}_\d{6}\.jpg/);
-            while(index > -1) {
-                const fileName = answer.substring(index, index + 19)
-                answer = answer.replace(fileName, "");
-                newAnswer = newAnswer.replace(`${fileName}`, `file:///f:/pictures/${fileName}`);    
-
-                index = answer.toLowerCase().search(/\d{8}_\d{6}\.jpg/);
-            };
-            
-            this.writeInColor(chalk.green, newAnswer);
+            this.writeInColor(chalk.green, answer);
         } else if (response.whyNoAnswer) {
             const answer = response.whyNoAnswer;
             this.writeInColor(chalk.red, answer);

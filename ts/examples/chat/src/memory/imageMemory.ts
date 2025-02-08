@@ -15,7 +15,11 @@ import {
     Models,
     ReservedConversationNames,
 } from "./chatMemory.js";
-import { argDestFile, argSourceFileOrFolder, argSourceFolder } from "./common.js";
+import {
+    argDestFile,
+    argSourceFileOrFolder,
+    argSourceFolder,
+} from "./common.js";
 import { ensureDir, isDirectoryPath } from "typeagent";
 import fs from "node:fs";
 import * as knowLib from "knowledge-processor";
@@ -89,15 +93,16 @@ export function importImageDef(): CommandMetadata {
 }
 
 export function buildImageCountHistogramDef(): CommandMetadata {
-    return {  
-        description: "Builds a time series histogram from images in the supplied folder",
+    return {
+        description:
+            "Builds a time series histogram from images in the supplied folder",
         args: {
-            sourcePath: argSourceFolder(),            
+            sourcePath: argSourceFolder(),
         },
         options: {
             destPath: argDestFile(),
-        }
-    } 
+        },
+    };
 }
 
 export function createImageCommands(
@@ -115,27 +120,36 @@ export function createImageCommands(
         let isDir = isDirectoryPath(sourcePath);
 
         if (!fs.existsSync(sourcePath)) {
-            console.log(`The supplied file or folder '${sourcePath}' does not exist.`);
+            console.log(
+                `The supplied file or folder '${sourcePath}' does not exist.`,
+            );
             return;
         }
 
         const clock: StopWatch = new StopWatch();
-        const tokenCountStart: CompletionUsageStats = TokenCounter.getInstance().total;
+        const tokenCountStart: CompletionUsageStats =
+            TokenCounter.getInstance().total;
 
         if (isDir) {
             await indexImages(namedArgs, sourcePath, context);
         } else {
             await indexImage(sourcePath, context);
         }
-        
-        const tokenCountFinish: CompletionUsageStats = TokenCounter.getInstance().total;
+
+        const tokenCountFinish: CompletionUsageStats =
+            TokenCounter.getInstance().total;
 
         clock.stop();
         console.log(`Total Duration: ${clock.elapsedSeconds} seconds`);
-        console.log(`Prompt Token Consupmtion: ${tokenCountFinish.prompt_tokens - tokenCountStart.prompt_tokens}`);
-        console.log(`Completion Token Consupmtion: ${tokenCountFinish.completion_tokens - tokenCountStart.completion_tokens}`);
-        console.log(`Total Tokens: ${tokenCountFinish.total_tokens - tokenCountStart.total_tokens}`);
-
+        console.log(
+            `Prompt Token Consupmtion: ${tokenCountFinish.prompt_tokens - tokenCountStart.prompt_tokens}`,
+        );
+        console.log(
+            `Completion Token Consupmtion: ${tokenCountFinish.completion_tokens - tokenCountStart.completion_tokens}`,
+        );
+        console.log(
+            `Total Tokens: ${tokenCountFinish.total_tokens - tokenCountStart.total_tokens}`,
+        );
     }
 
     async function buildImageCountHistogram(args: string[], io: InteractiveIo) {
@@ -156,34 +170,32 @@ export function createImageCommands(
         });
 
         // index each image
-        for(let i = 0; i < fileNames.length; i++)
-        {
+        for (let i = 0; i < fileNames.length; i++) {
             const fullFilePath: string = path.join(sourcePath, fileNames[i]);
             console.log(fullFilePath);
             await indexImage(fullFilePath, context);
-        };
+        }
     }
 
     async function indexImage(fileName: string, context: ChatContext) {
         if (!fs.existsSync(fileName)) {
-            console.log(
-                `Could not find part of the file path '${fileName}'`,
-            );
+            console.log(`Could not find part of the file path '${fileName}'`);
             return;
         } else if (!isImageFileType(path.extname(fileName))) {
-            console.log(`Skipping '${fileName}', not a known image file.`)
+            console.log(`Skipping '${fileName}', not a known image file.`);
             return;
         }
 
         // load the image
-        const image: knowLib.image.Image | undefined = await knowLib.image.loadImage(fileName, context.models.chatModel);
+        const image: knowLib.image.Image | undefined =
+            await knowLib.image.loadImage(fileName, context.models.chatModel);
 
         if (image) {
             knowLib.image.addImageToConversation(
                 context.imageMemory,
                 image,
                 context.maxCharsPerChunk,
-                context.conversationManager.knowledgeExtractor
+                context.conversationManager.knowledgeExtractor,
             );
         }
     }

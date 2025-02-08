@@ -94,12 +94,12 @@ export function exifGPSTagToLatLong(
 
 /**
  * Gets the nearby POIs for the supplied coordinate and search radius. Will do a
- * progressive search of increasing radius until maxSearchRadius is reached or 
+ * progressive search of increasing radius until maxSearchRadius is reached or
  * a singular result is found.  Whichever occurs first.
  * @param position - the position at which to do a nearby search
  * @param settings - the API settings containing the endpoint to call
  * @param maxSearchRadius - the search radius
- * @param minResultCount - the minimum # of results to find before returning 
+ * @param minResultCount - the minimum # of results to find before returning
  * or the search radius is reached.  Whichever occurs first
  * @returns A list of summarized nearby POIs
  */
@@ -123,7 +123,7 @@ export async function findNearbyPointsOfInterest(
         // increasing radius to search
         const radii: Array<number> = [5, 10, 25, 50, 100, 1000, 10000];
         let index: number = 0;
-        
+
         do {
             //let fuzzySearch = `${getEnvSetting(env, EnvVars.AZURE_MAPS_ENDPOINT)}search/fuzzy/json?api-version=1.0&query={lat,long}`
             //let poi = `${getEnvSetting(env, EnvVars.AZURE_MAPS_ENDPOINT)}search/poi/{format}?api-version=1.0&lat={LAT}&lon={LON}`
@@ -166,9 +166,7 @@ export async function findNearbyPointsOfInterest(
             if (retVal.length >= minResultCount) {
                 return retVal;
             }
-
         } while (index < radii.length && radii[index++] <= maxSearchRadius);
-
     } catch (e) {
         console.warn(`Error performing nearby POI lookup: ${e}`);
     }
@@ -190,7 +188,7 @@ export async function reverseGeocode(
             console.warn("Unable to acquire AzureMaps token");
             return [];
         }
-        
+
         let reverseGeocode = `${getEnvSetting(env, openai.EnvVars.AZURE_MAPS_ENDPOINT)}reverseGeocode?api-version=2023-06-01&coordinates=${position.longitude},${position.latitude}`;
 
         const options: RequestInit = {
