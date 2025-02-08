@@ -31,8 +31,7 @@ import ExifReader from "exifreader";
 import { ProfileNames } from "../../../utils/profileNames.js";
 import { ActionContext, ParsedCommandParams } from "@typeagent/agent-sdk";
 import { CommandHandler } from "@typeagent/agent-sdk/helpers/command";
-import { DispatcherName } from "../../interactiveIO.js";
-import { isUnknownAction } from "../dispatcherUtils.js";
+import { DispatcherName, isUnknownAction } from "../dispatcherUtils.js";
 import {
     getChatHistoryForTranslation,
     getTranslatorForSchema,

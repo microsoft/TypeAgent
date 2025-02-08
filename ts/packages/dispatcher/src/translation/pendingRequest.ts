@@ -2,9 +2,9 @@
 // Licensed under the MIT License.
 
 import { AppAction } from "@typeagent/agent-sdk";
-import { DispatcherName } from "../context/interactiveIO.js";
 import { PendingRequestEntry } from "./multipleActionSchema.js";
 import { createExecutableAction } from "agent-cache";
+import { DispatcherName } from "../context/dispatcher/dispatcherUtils.js";
 
 export type PendingRequestAction = {
     actionName: "pendingRequestAction";

@@ -24,12 +24,7 @@ import { TypeAgentTranslator } from "../translation/agentTranslators.js";
 import { ActionConfigProvider } from "../translation/actionConfigProvider.js";
 import { getCacheFactory } from "../utils/cacheFactory.js";
 import { createServiceHost } from "./system/handlers/serviceHost/serviceHostCommandHandler.js";
-import {
-    ClientIO,
-    RequestId,
-    DispatcherName,
-    nullClientIO,
-} from "./interactiveIO.js";
+import { ClientIO, RequestId, nullClientIO } from "./interactiveIO.js";
 import { ChatHistory, createChatHistory } from "./chatHistory.js";
 import {
     ensureCacheDir,
@@ -68,6 +63,7 @@ import path from "node:path";
 import { createSchemaInfoProvider } from "../translation/actionSchemaFileCache.js";
 import { createInlineAppAgentProvider } from "./inlineAgentProvider.js";
 import { CommandResult } from "../dispatcher.js";
+import { DispatcherName } from "./dispatcher/dispatcherUtils.js";
 
 const debug = registerDebug("typeagent:dispatcher:init");
 const debugError = registerDebug("typeagent:dispatcher:init:error");
@@ -76,6 +72,24 @@ export type EmptyFunction = () => void;
 export type SetSettingFunction = (name: string, value: any) => void;
 export interface ClientSettingsProvider {
     set: SetSettingFunction | null;
+}
+
+export function getCommandResult(
+    context: CommandHandlerContext,
+): CommandResult | undefined {
+    if (context.collectCommandResult) {
+        return ensureCommandResult(context);
+    }
+    return undefined;
+}
+
+export function ensureCommandResult(
+    context: CommandHandlerContext,
+): CommandResult {
+    if (context.commandResult === undefined) {
+        context.commandResult = {};
+    }
+    return context.commandResult;
 }
 
 // Command Handler Context definition.
@@ -92,6 +106,7 @@ export type CommandHandlerContext = {
     explanationAsynchronousMode: boolean;
     dblogging: boolean;
     clientIO: ClientIO;
+    collectCommandResult: boolean;
 
     // Runtime context
     commandLock: Limiter; // Make sure we process one command at a time.
@@ -153,6 +168,7 @@ export type DispatcherOptions = SessionOptions & {
     dblogging?: boolean; // default to false
     constructionProvider?: ConstructionProvider;
     agentInstaller?: AppAgentInstaller;
+    collectCommandResult?: boolean; // default to false
 };
 
 async function getSession(instanceDir?: string) {
@@ -357,6 +373,7 @@ export async function initializeCommandHandlerContext(
             batchMode: false,
             instanceDirLock,
             constructionProvider,
+            collectCommandResult: options?.collectCommandResult ?? false,
         };
 
         await addAppAgentProviders(context, options?.appAgentProviders);

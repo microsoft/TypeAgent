@@ -260,6 +260,7 @@ export default class TestTranslateCommand extends Command {
                 translation: { history: { enabled: false } },
                 explainer: { enabled: false },
                 cache: { enabled: false },
+                collectCommandResult: true,
             });
             while (requests.length > 0) {
                 const request = requests.shift()!;

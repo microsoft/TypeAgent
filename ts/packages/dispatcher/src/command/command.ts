@@ -3,13 +3,12 @@
 
 import chalk from "chalk";
 import registerDebug from "debug";
-import {
-    RequestId,
-    DispatcherName,
-    makeClientIOMessage,
-} from "../context/interactiveIO.js";
+import { RequestId, makeClientIOMessage } from "../context/interactiveIO.js";
 import { getDefaultExplainerName } from "agent-cache";
-import { CommandHandlerContext } from "../context/commandHandlerContext.js";
+import {
+    CommandHandlerContext,
+    ensureCommandResult,
+} from "../context/commandHandlerContext.js";
 
 import {
     CommandDescriptor,
@@ -21,6 +20,7 @@ import { isCommandDescriptorTable } from "@typeagent/agent-sdk/helpers/command";
 import { parseParams } from "./parameters.js";
 import { getHandlerTableUsage, getUsage } from "./commandHelp.js";
 import { CommandResult } from "../dispatcher.js";
+import { DispatcherName } from "../context/dispatcher/dispatcherUtils.js";
 
 const debugCommand = registerDebug("typeagent:dispatcher:command");
 const debugCommandError = registerDebug("typeagent:dispatcher:command:error");
@@ -288,12 +288,9 @@ function endProcessCommand(
     const metrics = requestId
         ? context.metricsManager?.endCommand(requestId)
         : undefined;
+
     if (metrics) {
-        if (context.commandResult === undefined) {
-            context.commandResult = { metrics };
-        } else {
-            context.commandResult.metrics = metrics;
-        }
+        ensureCommandResult(context).metrics = metrics;
     }
     const result = context.commandResult;
     context.commandResult = undefined;

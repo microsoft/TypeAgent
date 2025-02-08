@@ -68,11 +68,11 @@ export async function createWebDispatcher(): Promise<WebDispatcher> {
         }
         console.log(dispatcher.getPrompt(), text);
 
-        const metrics = await dispatcher.processCommand(text, id, images);
+        const result = await dispatcher.processCommand(text, id, images);
 
         updateSettingSummary();
 
-        return metrics;
+        return result;
     }
 
     const patchedDispatcher = {

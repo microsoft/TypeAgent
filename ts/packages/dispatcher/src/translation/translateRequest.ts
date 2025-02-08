@@ -17,7 +17,6 @@ import {
     CachedImageWithDetails,
     IncrementalJsonValueCallBack,
 } from "common-utils";
-import { DispatcherName } from "../context/interactiveIO.js";
 import {
     isMultipleAction,
     isPendingRequest,
@@ -31,7 +30,10 @@ import {
     TypeAgentTranslator,
 } from "./agentTranslators.js";
 import { UnknownAction } from "../context/dispatcher/schema/dispatcherActionSchema.js";
-import { isUnknownAction } from "../context/dispatcher/dispatcherUtils.js";
+import {
+    DispatcherName,
+    isUnknownAction,
+} from "../context/dispatcher/dispatcherUtils.js";
 import { loadAssistantSelectionJsonTranslator } from "./unknownSwitcher.js";
 import {
     getSchemaNamePrefix,
