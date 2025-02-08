@@ -5,11 +5,7 @@ import {
     displayStatus,
     displayWarn,
 } from "@typeagent/agent-sdk/helpers/display";
-import {
-    CommandHandlerContext,
-    getTranslatorForSchema,
-    getTranslatorForSelectedActions,
-} from "../context/commandHandlerContext.js";
+import { CommandHandlerContext } from "../context/commandHandlerContext.js";
 import { ActionContext } from "@typeagent/agent-sdk";
 import {
     createExecutableAction,
@@ -21,19 +17,23 @@ import {
     CachedImageWithDetails,
     IncrementalJsonValueCallBack,
 } from "common-utils";
-import { DispatcherName } from "../context/interactiveIO.js";
 import {
     isMultipleAction,
     isPendingRequest,
     MultipleAction,
 } from "./multipleActionSchema.js";
 import {
+    createTypeAgentTranslatorForSelectedActions,
     isAdditionalActionLookupAction,
+    loadAgentJsonTranslator,
     TranslatedAction,
     TypeAgentTranslator,
 } from "./agentTranslators.js";
 import { UnknownAction } from "../context/dispatcher/schema/dispatcherActionSchema.js";
-import { isUnknownAction } from "../context/dispatcher/dispatcherUtils.js";
+import {
+    DispatcherName,
+    isUnknownAction,
+} from "../context/dispatcher/dispatcherUtils.js";
 import { loadAssistantSelectionJsonTranslator } from "./unknownSwitcher.js";
 import {
     getSchemaNamePrefix,
@@ -49,6 +49,70 @@ import registerDebug from "debug";
 import { confirmTranslation } from "./confirmTranslation.js";
 const debugTranslate = registerDebug("typeagent:translate");
 const debugSemanticSearch = registerDebug("typeagent:translate:semantic");
+
+function getActiveTranslators(context: CommandHandlerContext) {
+    return Object.fromEntries(
+        context.agents.getActiveSchemas().map((name) => [name, true]),
+    );
+}
+
+export function getTranslatorForSchema(
+    context: CommandHandlerContext,
+    translatorName: string,
+) {
+    const translator = context.translatorCache.get(translatorName);
+    if (translator !== undefined) {
+        return translator;
+    }
+    const config = context.session.getConfig().translation;
+    const newTranslator = loadAgentJsonTranslator(
+        translatorName,
+        context.agents,
+        getActiveTranslators(context),
+        config.switch.inline,
+        config.multiple,
+        config.schema.generation.enabled,
+        config.model,
+        !config.schema.optimize.enabled,
+        config.schema.generation.jsonSchema,
+    );
+    context.translatorCache.set(translatorName, newTranslator);
+    return newTranslator;
+}
+
+async function getTranslatorForSelectedActions(
+    context: CommandHandlerContext,
+    schemaName: string,
+    request: string,
+    numActions: number,
+): Promise<TypeAgentTranslator | undefined> {
+    const actionSchemaFile = context.agents.tryGetActionSchemaFile(schemaName);
+    if (
+        actionSchemaFile === undefined ||
+        actionSchemaFile.actionSchemas.size <= numActions
+    ) {
+        return undefined;
+    }
+    const nearestNeighbors = await context.agents.semanticSearchActionSchema(
+        request,
+        numActions,
+        (name) => name === schemaName,
+    );
+
+    if (nearestNeighbors === undefined) {
+        return undefined;
+    }
+    const config = context.session.getConfig().translation;
+    return createTypeAgentTranslatorForSelectedActions(
+        nearestNeighbors.map((e) => e.item.definition),
+        schemaName,
+        context.agents,
+        getActiveTranslators(context),
+        config.switch.inline,
+        config.multiple,
+        config.model,
+    );
+}
 
 async function pickInitialSchema(
     request: string,
@@ -79,7 +143,7 @@ async function pickInitialSchema(
                 const found = result[0].item.actionSchemaFile.schemaName;
                 // If it is close to dispatcher actions (unknown and clarify), just use the last used action schema
                 if (found !== DispatcherName) {
-                    schemaName = result[0].item.actionSchemaFile.schemaName;
+                    schemaName = found;
                 }
             }
         }
@@ -295,13 +359,18 @@ async function findAssistantForRequest(
         context,
     );
     const systemContext = context.sessionContext.agentContext;
+    const schemaNames = systemContext.agents
+        .getActiveSchemas()
+        .filter(
+            (enabledTranslatorName) => translatorName !== enabledTranslatorName,
+        );
+
+    if (schemaNames.length === 0) {
+        return undefined;
+    }
+
     const selectTranslator = loadAssistantSelectionJsonTranslator(
-        systemContext.agents
-            .getActiveSchemas()
-            .filter(
-                (enabledTranslatorName) =>
-                    translatorName !== enabledTranslatorName,
-            ),
+        schemaNames,
         systemContext.agents,
     );
 

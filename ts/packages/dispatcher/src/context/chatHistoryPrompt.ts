@@ -1,12 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { Entity } from "@typeagent/agent-sdk";
-import { HistoryContext } from "agent-cache";
+import { HistoryContext, PromptEntity } from "agent-cache";
 import { CachedImageWithDetails } from "common-utils";
 import { PromptSection, TypeChatJsonTranslator } from "typechat";
 
-function entityToText(entity: Entity) {
+function entityToText(entity: PromptEntity) {
     return `${entity.name} (${entity.type})${entity.additionalEntityText ? `: ${entity.additionalEntityText}` : ""}`;
 }
 
@@ -17,22 +16,6 @@ export function createTypeAgentRequestPrompt(
     attachments: CachedImageWithDetails[] | undefined,
     context: boolean = true,
 ) {
-    let promptSections: PromptSection[] = [];
-    let entities: Entity[] = [];
-    let entityStr: string[] = [];
-
-    if (context && history !== undefined) {
-        promptSections = history.promptSections;
-        entities = history.entities;
-        if (entities.length > 0) {
-            for (let i = 0; i < entities.length; ++i) {
-                const entity = entities[i];
-
-                entityStr.push(entityToText(entity));
-            }
-        }
-    }
-
     if (attachments !== undefined && attachments?.length > 0) {
         if (request.length == 0) {
             request = `Caption the first image in no less than 150 words without making any assumptions, remain factual.`;
@@ -46,31 +29,38 @@ export function createTypeAgentRequestPrompt(
         `\`\`\``,
     ];
     if (context) {
-        if (promptSections.length > 1) {
-            prompts.push("The following is a summary of the chat history:");
-            if (entityStr.length > 0) {
+        if (history !== undefined) {
+            const promptSections: PromptSection[] = history.promptSections;
+            if (promptSections.length > 1) {
+                prompts.push("The following is a summary of the chat history:");
+
+                const promptEntities = history.entities;
+                if (promptEntities.length > 0) {
+                    prompts.push("###");
+                    prompts.push(
+                        "Recent entities found in chat history, in order, oldest first:",
+                    );
+                    prompts.push(...promptEntities.map(entityToText).reverse());
+                }
+
+                const additionalInstructions = history?.additionalInstructions;
+                if (
+                    additionalInstructions !== undefined &&
+                    additionalInstructions.length > 0
+                ) {
+                    prompts.push("###");
+                    prompts.push(
+                        "Information about the latest assistant action:",
+                    );
+                    prompts.push(...additionalInstructions);
+                }
+
                 prompts.push("###");
+                prompts.push("The latest assistant response:");
                 prompts.push(
-                    "Recent entities found in chat history, in order, oldest first:",
+                    promptSections[promptSections.length - 1].content as string,
                 );
-                prompts.push(...entityStr.reverse());
             }
-
-            const additionalInstructions = history?.additionalInstructions;
-            if (
-                additionalInstructions !== undefined &&
-                additionalInstructions.length > 0
-            ) {
-                prompts.push("###");
-                prompts.push("Information about the latest assistant action:");
-                prompts.push(...additionalInstructions);
-            }
-
-            prompts.push("###");
-            prompts.push("The latest assistant response:");
-            prompts.push(
-                promptSections[promptSections.length - 1].content as string,
-            );
         }
 
         prompts.push("###");

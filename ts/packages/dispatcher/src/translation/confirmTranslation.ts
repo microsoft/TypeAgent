@@ -12,10 +12,10 @@ import {
 import chalk from "chalk";
 import { getColorElapsedString } from "common-utils";
 import { getActionTemplateEditConfig } from "./actionTemplate.js";
-import { DispatcherName } from "../context/interactiveIO.js";
 import { CommandHandlerContext } from "../context/commandHandlerContext.js";
 import { validateAction } from "action-schema";
 import { getActionSchema } from "./actionSchemaFileCache.js";
+import { DispatcherName } from "../context/dispatcher/dispatcherUtils.js";
 
 function validateReplaceActions(
     actions: unknown,
