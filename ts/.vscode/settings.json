@@ -31,5 +31,8 @@
     "jest.runMode": "on-demand",
     "[json]": {
         "editor.defaultFormatter": "esbenp.prettier-vscode"
+    },
+    "[typescript]": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode"
     }
 }
