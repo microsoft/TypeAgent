@@ -14,10 +14,7 @@ import {
     GraphEntity,
     ErrorResponse,
 } from "graph-utils";
-import {
-    getTimeZoneName,
-    getUniqueLocalId,
-} from "common-utils";
+import { getTimeZoneName, getUniqueLocalId } from "common-utils";
 import chalk from "chalk";
 import {
     CalendarAction,
