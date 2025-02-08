@@ -88,7 +88,7 @@ export interface ClientIO {
 }
 
 export function makeClientIOMessage(
-    context: CommandHandlerContext | undefined,
+    context: CommandHandlerContext,
     message: DisplayContent,
     requestId: RequestId,
     source: string,
@@ -101,7 +101,7 @@ export function makeClientIOMessage(
         actionIndex,
         metrics:
             requestId !== undefined
-                ? context?.metricsManager?.getMetrics(requestId)
+                ? context.metricsManager?.getMetrics(requestId)
                 : undefined,
     };
 }
