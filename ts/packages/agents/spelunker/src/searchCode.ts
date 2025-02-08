@@ -50,8 +50,16 @@ export interface QueryContext {
     database: sqlite.Database | undefined;
 }
 
+function captureTokenStats(req: any, response: any): void {
+    console_log(
+        `    [Tokens used: prompt=${response.usage.prompt_tokens}, ` +
+            `completion=${response.usage.completion_tokens}]`,
+    );
+}
+
 function createQueryContext(): QueryContext {
     const chatModel = openai.createChatModelDefault("spelunkerChat");
+    chatModel.completionCallback = captureTokenStats;
     const oracle = createTranslator<OracleSpecs>(
         chatModel,
         "oracleSchema.ts",
@@ -63,6 +71,7 @@ function createQueryContext(): QueryContext {
         undefined,
         ["spelunkerMini"],
     );
+    miniModel.completionCallback = captureTokenStats;
     const chunkSelector = createTranslator<SelectorSpecs>(
         miniModel,
         "selectorSchema.ts",
@@ -153,25 +162,17 @@ export async function searchCode(
     }
     console_log(`  [Loaded ${allChunks.length} chunks]`);
 
-    // 3. Ask a fast LLM for the most relevant chunks, rank them, and keep the best N.
-    // This is done concurrently for real-time speed.
-    const keep = 50; // N
-    console_log(`[Step 3: Select ${keep} most relevant chunks]`);
-    const chunkDescs: ChunkDescription[] = await selectChunks(
-        context,
-        allChunks,
-        input,
-        50,
-    );
-    if (!chunkDescs.length) {
+    // 3. Ask a fast LLM for the most relevant chunks, rank them, and keep the best ones.
+    // The selection is done concurrently for real-time speed.
+    console_log(`[Step 3: Select most relevant chunks]`);
+    const chunks: Chunk[] = await selectChunks(context, allChunks, input);
+    if (!chunks.length) {
+        // TODO: Return an ActionResult with an error message
         throw new Error("No chunks selected");
     }
 
     // 4. Construct a prompt from those chunks.
     console_log(`[Step 4: Construct a prompt for the oracle]`);
-    const preppedChunks: Chunk[] = chunkDescs
-        .map((chunkDesc) => prepChunk(chunkDesc, allChunks))
-        .filter(Boolean) as Chunk[];
     // TODO: Prompt engineering
     // TODO: Include summaries in the prompt
     const prompt = `\
@@ -179,7 +180,7 @@ export async function searchCode(
 
         User question: "${input}"
 
-        Context: ${prepareChunks(preppedChunks)}
+        Context: ${prepareChunks(chunks)}
 
         User question: "${input}"
         `;
@@ -241,39 +242,25 @@ export async function searchCode(
     );
 }
 
-function prepChunk(
-    chunkDesc: ChunkDescription,
-    allChunks: Chunk[],
-): Chunk | undefined {
-    const chunks = allChunks.filter(
-        (chunk) => chunk.chunkId === chunkDesc.chunkId,
-    );
-    if (chunks.length !== 1) return undefined;
-    return chunks[0];
-}
-
 async function selectChunks(
     context: SpelunkerContext,
-    chunks: Chunk[],
+    allChunks: Chunk[],
     input: string,
-    keep: number,
-): Promise<ChunkDescription[]> {
+): Promise<Chunk[]> {
     console_log(`  [Starting chunk selection ...]`);
     const promises: Promise<ChunkDescription[]>[] = [];
     const maxConcurrency =
-        parseInt(process.env.AZURE_OPENAI_MAX_CONCURRENCY ?? "0") ?? 40;
+        parseInt(process.env.AZURE_OPENAI_MAX_CONCURRENCY ?? "0") ?? 5;
     const limiter = createLimiter(maxConcurrency);
-    const chunksPerJob = 30;
-    const numJobs = Math.ceil(chunks.length / chunksPerJob);
+    const batches = makeBatches(allChunks, 250000); // TODO: Tune this more
     console_log(
-        `  [maxConcurrency = ${maxConcurrency}, chunksPerJob = ${chunksPerJob}, numJobs = ${numJobs}]`,
+        `  [maxConcurrency = ${maxConcurrency}, ${batches.length} batches]`,
     );
-    for (let i = 0; i < chunks.length; i += chunksPerJob) {
-        const slice = chunks.slice(i, i + chunksPerJob);
+    for (const batch of batches) {
         const p = limiter(() =>
             selectRelevantChunks(
                 context.queryContext!.chunkSelector,
-                slice,
+                batch,
                 input,
             ),
         );
@@ -291,10 +278,16 @@ async function selectChunks(
 
     allChunkDescs.sort((a, b) => b.relevance - a.relevance);
     // console_log(`  [${allChunks.map((c) => (c.relevance)).join(", ")}]`);
-    allChunkDescs.splice(keep);
-    console_log(`  [Keeping ${allChunkDescs.length} chunks]`);
-    // console_log(`  [${allChunks.map((c) => [c.chunkId, c.relevance])}]`);
-    return allChunkDescs;
+    const chunks = keepBestChunks(allChunkDescs, allChunks, 250000); // TODO: Tune this more
+    console_log(`  [Keeping ${chunks.length} chunks]`);
+    for (let i = 0; i < chunks.length; i++) {
+        const chunk = chunks[i];
+        const chunkDesc = allChunkDescs[i];
+        console_log(
+            `    [${chunkDesc.relevance} ${path.basename(chunk.fileName)}:${chunk.codeName} ${chunk.chunkId}]`,
+        );
+    }
+    return chunks;
 }
 
 async function selectRelevantChunks(
@@ -400,7 +393,7 @@ function createTranslator<T extends object>(
     return translator;
 }
 
-export interface FileMtimeSize {
+interface FileMtimeSize {
     file: string;
     mtime: number;
     size: number;
@@ -799,7 +792,7 @@ async function retryTranslateOn429<T>(
                         `  [Couldn't find msec in '${wrappedResult.message}'`,
                     );
                 }
-                console_log(`  [Retry on 429 error: sleep ${delay} ms]`);
+                console_log(`    [Retry on 429 error: sleep ${delay} ms]`);
                 await new Promise((resolve) => setTimeout(resolve, delay));
                 continue;
             }
@@ -808,4 +801,62 @@ async function retryTranslateOn429<T>(
         }
     } while (!wrappedResult.success);
     return wrappedResult.data;
+}
+
+function keepBestChunks(
+    chunkDescs: ChunkDescription[], // Sorted by descending relevance
+    allChunks: Chunk[],
+    batchSize: number, // In characters
+): Chunk[] {
+    const chunks: Chunk[] = [];
+    let size = 0;
+    for (const chunkDesc of chunkDescs) {
+        const chunk = allChunks.find((c) => c.chunkId === chunkDesc.chunkId);
+        if (!chunk) continue;
+        const chunkSize = getChunkSize(chunk);
+        if (size + chunkSize > batchSize && chunks.length) {
+            break;
+        }
+        chunks.push(chunk);
+        size += chunkSize;
+    }
+    return chunks;
+}
+
+function makeBatches(
+    chunks: Chunk[],
+    batchSize: number, // In characters
+): Chunk[][] {
+    const batches: Chunk[][] = [];
+    let batch: Chunk[] = [];
+    let size = 0;
+    function flush(): void {
+        batches.push(batch);
+        console_log(
+            `    [Batch ${batches.length} has ${batch.length} chunks and ${size} bytes]`,
+        );
+        batch = [];
+        size = 0;
+    }
+    for (const chunk of chunks) {
+        const chunkSize = getChunkSize(chunk);
+        if (size + chunkSize > batchSize && batch.length) {
+            flush();
+        }
+        batch.push(chunk);
+        size += chunkSize;
+    }
+    if (batch.length) {
+        flush();
+    }
+    return batches;
+}
+
+function getChunkSize(chunk: Chunk): number {
+    // This is all an approximation
+    let size = chunk.fileName.length + 50;
+    for (const blob of chunk.blobs) {
+        size += blob.lines.join("").length + 4 * blob.lines.length;
+    }
+    return size;
 }
