@@ -204,7 +204,7 @@ async function getAgentCache(
     return agentCache;
 }
 
-export type InitializeCommandHandlerContextOptions = SessionOptions & {
+export type DispatcherOptions = SessionOptions & {
     appAgentProviders?: AppAgentProvider[];
     explanationAsynchronousMode?: boolean; // default to false
     persistSession?: boolean; // default to false,
@@ -337,7 +337,7 @@ export async function installAppProvider(
 
 export async function initializeCommandHandlerContext(
     hostName: string,
-    options?: InitializeCommandHandlerContextOptions,
+    options?: DispatcherOptions,
 ): Promise<CommandHandlerContext> {
     const metrics = options?.metrics ?? false;
     const explanationAsynchronousMode =
