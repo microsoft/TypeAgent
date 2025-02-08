@@ -326,15 +326,20 @@ function addEvents(
                     // rewire up action-data click handler
                     const nameDiv = div.querySelector(".agent-name.clickable");
                     if (nameDiv != null) {
-                        const messageDiv = div.querySelector(".chat-message-content");
+                        const messageDiv = div.querySelector(
+                            ".chat-message-content",
+                        );
 
                         if (messageDiv) {
                             nameDiv.addEventListener("click", () => {
-                                swapContent(nameDiv as HTMLSpanElement, messageDiv as HTMLDivElement);
+                                swapContent(
+                                    nameDiv as HTMLSpanElement,
+                                    messageDiv as HTMLDivElement,
+                                );
                             });
                         }
                     }
-                    
+
                     // TODO: wire up any other functionality (player agent?)
                 }
             }

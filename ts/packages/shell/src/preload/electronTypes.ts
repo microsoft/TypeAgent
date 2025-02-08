@@ -75,7 +75,13 @@ export interface ClientAPI {
     onChatHistory(
         callback: (e: Electron.IpcRendererEvent, chatHistory: string) => void,
     ): void;
-    onFileSelected(callback: (e: Electron.IpcRendererEvent, fileName: string, fileContent: string) => void,): void;
+    onFileSelected(
+        callback: (
+            e: Electron.IpcRendererEvent,
+            fileName: string,
+            fileContent: string,
+        ) => void,
+    ): void;
     registerClientIO(clientIO: ClientIO);
 }
 

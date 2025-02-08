@@ -341,7 +341,7 @@ export class ChatInput {
      * @param file The file whose contents to load
      */
     async loadImageFile(file: File) {
-        let buffer: ArrayBuffer = await file.arrayBuffer();        
+        let buffer: ArrayBuffer = await file.arrayBuffer();
 
         this.loadImageContent(file.name, _arrayBufferToBase64(buffer));
     }
@@ -352,7 +352,6 @@ export class ChatInput {
      * @param content The base64 encoded image content
      */
     public async loadImageContent(fileName: string, content: string) {
-
         let mimeType = fileName
             .toLowerCase()
             .substring(fileName.lastIndexOf(".") + 1, fileName.length);
@@ -371,11 +370,10 @@ export class ChatInput {
             console.log(`Unsupported MIME type for '${fileName}'`);
             this.textarea.getTextEntry().innerText = `Unsupported file type '${mimeType}'. Supported types: ${Array.from(supportedMimeTypes).toString()}`;
             return;
-        }        
+        }
 
         let dropImg: HTMLImageElement = document.createElement("img");
-        dropImg.src =
-            `data:image/${mimeType};base64,` + content;
+        dropImg.src = `data:image/${mimeType};base64,` + content;
 
         dropImg.className = "chat-input-dropImage";
 

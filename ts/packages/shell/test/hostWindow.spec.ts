@@ -162,7 +162,7 @@ test.describe("Shell interface tests", () => {
         await exitApplication(mainWindow);
     });
 
-    test("command backstack", async({}, testInfo) => {
+    test("command backstack", async ({}, testInfo) => {
         console.log(`Running test '${testInfo.title}`);
 
         // start the app
@@ -170,16 +170,16 @@ test.describe("Shell interface tests", () => {
 
         // issue some commands
         const commands: string[] = ["@history", "@help", "@config agent"];
-        for(let i = 0; i < commands.length; i++) {
+        for (let i = 0; i < commands.length; i++) {
             await sendUserRequestAndWaitForCompletion(commands[i], mainWindow);
-        };
+        }
 
         // get the input box
         const element = await mainWindow.waitForSelector("#phraseDiv");
 
         // go through the command back stack to the end and make sure we get the expected
         // results. (command and cursor location)
-        for(let i = commands.length - 1; i >= -1; i--) {
+        for (let i = commands.length - 1; i >= -1; i--) {
             // press the up arrow
             await element.press("ArrowUp");
 
@@ -196,7 +196,7 @@ test.describe("Shell interface tests", () => {
         }
 
         // now reverse the process
-        for(let i = 1; i <= commands.length; i++) {
+        for (let i = 1; i <= commands.length; i++) {
             // press the up arrow
             await element.press("ArrowDown");
 
@@ -213,6 +213,6 @@ test.describe("Shell interface tests", () => {
         }
 
         // close the application
-        await exitApplication(mainWindow);        
+        await exitApplication(mainWindow);
     });
 });

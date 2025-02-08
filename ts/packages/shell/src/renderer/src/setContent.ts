@@ -236,7 +236,10 @@ export function setContent(
  * @param sourceElement The source element.
  * @param targetElement The target element.
  */
-export function swapContent(sourceElement: HTMLElement, targetElement: HTMLElement) {
+export function swapContent(
+    sourceElement: HTMLElement,
+    targetElement: HTMLElement,
+) {
     const data: string = sourceElement.getAttribute("action-data") ?? "";
     const originalMessage: string = targetElement.innerHTML;
 
@@ -247,5 +250,5 @@ export function swapContent(sourceElement: HTMLElement, targetElement: HTMLEleme
     }
 
     sourceElement.setAttribute("action-data", originalMessage);
-    targetElement.innerHTML = data;   
+    targetElement.innerHTML = data;
 }

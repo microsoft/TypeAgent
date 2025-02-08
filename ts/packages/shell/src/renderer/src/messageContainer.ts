@@ -141,7 +141,9 @@ export class MessageContainer {
             if (this.action !== undefined && !Array.isArray(this.action)) {
                 label.setAttribute(
                     "action-data",
-                    "<pre>" + JSON.stringify(this.action, undefined, 2) + "</pre>",
+                    "<pre>" +
+                        JSON.stringify(this.action, undefined, 2) +
+                        "</pre>",
                 );
 
                 // mark the span as clickable
@@ -155,17 +157,17 @@ export class MessageContainer {
     private createTimestampDiv(timestamp: Date, className: string) {
         const timeStampDiv = document.createElement("div");
         timeStampDiv.classList.add(className);
-    
+
         timeStampDiv.appendChild(this.nameSpan); // name placeholder
-    
+
         const dateSpan = document.createElement("span");
         dateSpan.className = "timestring";
         dateSpan.setAttribute("data", timestamp.toString());
-    
+
         timeStampDiv.appendChild(dateSpan); // time string
-    
+
         dateSpan.innerText = "- " + timestamp.toLocaleTimeString();
-    
+
         return timeStampDiv;
     }
 
@@ -178,16 +180,16 @@ export class MessageContainer {
         beforeElem: Element,
         private hideMetrics: boolean,
         private readonly requestStart: number,
-        private showFirstResponseMetrics = false,        
+        private showFirstResponseMetrics = false,
     ) {
         const div = document.createElement("div");
         div.className = `chat-message-container-${classNameSuffix}`;
 
-        // create the name placeholder 
+        // create the name placeholder
         this.nameSpan = document.createElement("span");
         this.nameSpan.className = "agent-name";
-        this.nameSpan.addEventListener("click", () => {     
-            swapContent(this.nameSpan, this.messageDiv)      ;
+        this.nameSpan.addEventListener("click", () => {
+            swapContent(this.nameSpan, this.messageDiv);
             // const data: string = this.nameSpan.getAttribute("action-data") ?? "";
             // const originalMessage: string = this.messageDiv.innerHTML;
 
@@ -199,7 +201,7 @@ export class MessageContainer {
 
             // this.nameSpan.setAttribute("action-data", originalMessage);
             // this.messageDiv.innerHTML = data;
-        });        
+        });
 
         const timestampDiv = this.createTimestampDiv(
             new Date(),

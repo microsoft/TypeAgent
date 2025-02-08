@@ -699,7 +699,12 @@ async function initialize() {
 
     ipcMain.on("open-image-file", async () => {
         const result = await dialog.showOpenDialog(mainWindow, {
-            filters: [{ name: "Image files", extensions: ["png","jpg","jpeg","gif"] }],
+            filters: [
+                {
+                    name: "Image files",
+                    extensions: ["png", "jpg", "jpeg", "gif"],
+                },
+            ],
         });
 
         if (result && !result.canceled) {
