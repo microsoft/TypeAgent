@@ -229,3 +229,23 @@ export function setContent(
     const parser = new DOMParser();
     return parser.parseFromString(contentHtml, "text/html").body.innerText;
 }
+
+/**
+ * Takes the "action-data" attribute from the source element and places it as the html
+ * of the target element.
+ * @param sourceElement The source element.
+ * @param targetElement The target element.
+ */
+export function swapContent(sourceElement: HTMLElement, targetElement: HTMLElement) {
+    const data: string = sourceElement.getAttribute("action-data") ?? "";
+    const originalMessage: string = targetElement.innerHTML;
+
+    if (targetElement.classList.contains("chat-message-action-data")) {
+        targetElement.classList.remove("chat-message-action-data");
+    } else {
+        targetElement.classList.add("chat-message-action-data");
+    }
+
+    sourceElement.setAttribute("action-data", originalMessage);
+    targetElement.innerHTML = data;   
+}
