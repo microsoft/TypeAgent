@@ -9,14 +9,18 @@ import * as util from "util";
 
 import * as iapp from "interactive-app";
 import * as knowLib from "knowledge-processor";
-import { NameValue, ScoredItem } from "typeagent";
+import { loadSchema, NameValue, ScoredItem } from "typeagent";
 
 import { IndexType, ChunkyIndex } from "./pdfChunkyIndex.js";
 import { QuerySpec, QuerySpecs } from "./pdfDocQuerySchema.js";
 import { Chunk, ChunkId } from "./pdfChunker.js";
 import { importAllFiles } from "./pdfImporter.js";
 import { AnswerSpecs } from "./pdfDocAnswerSchema.js";
-import { PromptSection } from "typechat";
+import { createJsonTranslator, PromptSection, TypeChatJsonTranslator, TypeChatLanguageModel } from "typechat";
+import { PdfDownloadQuery } from "./pdfDownloadSchema.js";
+import { createTypeScriptJsonValidator } from "typechat/ts";
+import { openai } from "aiclient";
+import { downloadArxivPapers } from "./pdfDownLoader.js";
 
 type QueryOptions = {
     maxHits: number;
@@ -69,6 +73,7 @@ export async function interactiveQueryLoop(
 ): Promise<void> {
     const handlers: Record<string, iapp.CommandHandler> = {
         import: importHandler, // Since you can't name a function "import".
+        download,
         clearMemory,
         chunk,
         search,
@@ -80,11 +85,67 @@ export async function interactiveQueryLoop(
         files,
         purgeFile,
     };
+
     iapp.addStandardHandlers(handlers);
+    const model = openai.createChatModelDefault("PdfDownloader");
+    const pdfDownloader = createPDFDownloadTranslator(model);
+
+    function createPDFDownloadTranslator(
+        model: TypeChatLanguageModel,
+    ): TypeChatJsonTranslator<PdfDownloadQuery> {
+        const typeName = "PdfDownloadQuery";
+
+        const schema = loadSchema(["pdfDownloadSchema.ts"], import.meta.url);
+        const validator = createTypeScriptJsonValidator<PdfDownloadQuery>(
+            schema,
+            typeName,
+        );
+        const translator = createJsonTranslator<PdfDownloadQuery>(
+            model,
+            validator,
+        );
+        return translator;
+    }
+
+
+    // Handle @download command.
+    function downloadDef(): iapp.CommandMetadata {
+        return {
+            description: "Download a PDF file with the query string.",
+            args: {
+                query: {
+                    description: "Natural language query",
+                    type: "string",
+                },
+            },
+        };
+    }
+    handlers.download.metadata = downloadDef();
+    async function download(
+        args: string[] | iapp.NamedArgs,
+        io: iapp.InteractiveIo,
+    ): Promise<void> {
+        const namedArgs = iapp.parseNamedArguments(args, downloadDef());
+        const query: string = namedArgs.query;
+        const result = await pdfDownloader.translate(query);
+        if (!result.success) {
+            writeError(io, `[Error: ${result.message}]`);
+            return;
+        }
+        else {
+            const pdfDownloadQuery = result.data;
+            const pdfs = await downloadArxivPapers(pdfDownloadQuery);
+            if (pdfs !== undefined) {
+                writeMain(io, `[Downloaded ${pdfs.length} PDFs]`);
+            } else {
+                writeError(io, `[No PDFs downloaded]`);
+            }
+        }
+    }
 
     function importDef(): iapp.CommandMetadata {
         return {
-            description: "Import a file or files of Python code.",
+            description: "Import a sinfle or multiple PDF files.",
             options: {
                 fileName: {
                     description:
@@ -216,6 +277,7 @@ export async function interactiveQueryLoop(
             },
         };
     }
+    
     handlers.search.metadata = searchDef();
     async function search(
         args: string[] | iapp.NamedArgs,

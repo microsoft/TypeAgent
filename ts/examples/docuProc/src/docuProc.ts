@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ArxivQuery } from "./docuProcSchema.js";
+import { PdfDownloadQuery } from "./pdfDownloadSchema.js";
 import { XMLParser } from "fast-xml-parser";
 import { fetchWithRetry } from "aiclient";
 import path from "path";
@@ -39,7 +39,7 @@ interface PdfChunk {
 }
 
 export async function fetchArxivPapers(
-    query: ArxivQuery,
+    query: PdfDownloadQuery,
 ): Promise<any[] | undefined> {
     const apiUrl = "https://export.arxiv.org/api/query";
 

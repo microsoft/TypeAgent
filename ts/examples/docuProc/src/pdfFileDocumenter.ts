@@ -84,7 +84,7 @@ function createFileDocTranslator(
     model: ChatModel,
 ): TypeChatJsonTranslator<PdfFileDocumentation> {
     const typeName = "FileDocumentation";
-    const schema = loadSchema(["fileDocSchema.ts"], import.meta.url);
+    const schema = loadSchema(["pdfDocChunkSchema.ts"], import.meta.url);
     const validator = createTypeScriptJsonValidator<PdfFileDocumentation>(
         schema,
         typeName,

@@ -38,12 +38,12 @@ export class ChunkyIndex {
     indexes!: Map<IndexType, knowLib.TextIndex<string, ChunkId>>;
 
     private constructor() {
-        this.chatModel = openai.createChatModelDefault("spelunkerChat");
+        this.chatModel = openai.createChatModelDefault("DocuProc");
         this.miniModel = openai.createChatModel(
             "GPT_35_TURBO",
             undefined,
             undefined,
-            ["spelunkerMini"],
+            ["DocuProcMini"],
         );
         this.embeddingModel = knowLib.createEmbeddingCache(
             openai.createEmbeddingModel(),
@@ -110,7 +110,7 @@ function createQueryMaker(
 ): TypeChatJsonTranslator<QuerySpecs> {
     const typeName = "QuerySpecs";
     const schema = loadSchema(
-        ["makeQuerySchema.ts", "makeAnswerSchema.ts"],
+        ["pdfDocQuerySchema.ts", "pdfDocAnswerSchema.ts"],
         import.meta.url,
     );
     const validator = createTypeScriptJsonValidator<QuerySpecs>(
@@ -125,7 +125,7 @@ function createAnswerMaker(
     model: ChatModel,
 ): TypeChatJsonTranslator<AnswerSpecs> {
     const typeName = "AnswerSpecs";
-    const schema = loadSchema(["makeAnswerSchema.ts"], import.meta.url);
+    const schema = loadSchema(["pdfDocAnswerSchema.ts"], import.meta.url);
     const validator = createTypeScriptJsonValidator<AnswerSpecs>(
         schema,
         typeName,

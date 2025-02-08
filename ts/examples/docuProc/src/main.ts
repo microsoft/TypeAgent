@@ -12,12 +12,12 @@ import { importAllFiles } from "./pdfImporter.js";
 import { interactiveQueryLoop } from "./pdfQNAInteractiveApp.js";
 import { ChunkyIndex } from "./pdfChunkyIndex.js";
 
-import {
+/*import {
     downloadArxivPaper,
     fetchArxivPapers,
     extractTextChunksFromPdf,
     printArxivPaperParsedData,
-} from "./docuProc.js";
+} from "./docuProc.js";*/
 
 // Set __dirname to emulate old JS behavior
 const __filename = fileURLToPath(import.meta.url);
@@ -105,7 +105,7 @@ function parseCommandLine(): string[] {
     return files;
 }
 
-export async function downloadPaper(paper: any): Promise<void> {
+/*export async function downloadPaper(paper: any): Promise<void> {
     console.log("Lets start processing your documents ...");
     const papers: any[] | undefined = await fetchArxivPapers({
         searchTerm: "transformer",
@@ -130,5 +130,5 @@ export async function downloadPaper(paper: any): Promise<void> {
             }
         });
     }
-}
+}*/
   
