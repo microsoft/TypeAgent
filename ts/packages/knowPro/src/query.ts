@@ -305,6 +305,7 @@ export class MatchAllTermsExpr extends QueryOpExpr<SemanticRefAccumulator> {
         for (const matchExpr of this.searchTermExpressions) {
             matchExpr.accumulateMatches(context, allMatches);
         }
+        allMatches.scaleScores();
         return allMatches;
     }
 }
@@ -382,19 +383,12 @@ export class MatchSearchTermExpr extends MatchTermExpr {
             }
         } else {
             const semanticRefs = this.lookupTerm(context, relatedTerm);
-            if (context.matchedTerms.has(relatedTerm)) {
-                matches.updateTermMatches(
-                    term,
-                    semanticRefs,
-                    false,
-                    relatedTerm.score,
-                );
-            } else {
+            if (!context.matchedTerms.has(relatedTerm)) {
                 matches.addTermMatches(
                     term,
                     semanticRefs,
                     false,
-                    relatedTerm.score,
+                    relatedTerm.weight,
                 );
                 context.matchedTerms.add(relatedTerm);
             }
@@ -524,14 +518,14 @@ export class MatchPropertyTermExpr extends MatchTermExpr {
                     propVal,
                     semanticRefs,
                     false,
-                    relatedPropVal.score,
+                    relatedPropVal.weight,
                 );
             } else {
                 matches.addTermMatches(
                     propVal,
                     semanticRefs,
                     false,
-                    relatedPropVal.score,
+                    relatedPropVal.weight,
                 );
                 context.matchedPropertyTerms.add(propName, relatedPropVal);
             }

@@ -17,7 +17,9 @@ import { isInTextRange } from "./query.js";
 export interface Match<T = any> {
     value: T;
     score: number;
-    exactHitCount: number;
+    hitCount: number;
+    relatedScore: number;
+    relatedHitCount: number;
 }
 
 /**
@@ -66,19 +68,45 @@ export class MatchAccumulator<T = any> {
     public add(value: T, score: number, isExactMatch: boolean) {
         const existingMatch = this.getMatch(value);
         if (existingMatch) {
-            this.updateExisting(existingMatch, score, isExactMatch);
-            /*
+            //this.updateExisting(existingMatch, score, isExactMatch);
             if (isExactMatch) {
-                existingMatch.exactHitCount++;
+                existingMatch.hitCount++;
+                existingMatch.score += score;
+            } else {
+                existingMatch.relatedHitCount++;
+                existingMatch.relatedScore += score;
             }
-            existingMatch.score += score;
-            */
         } else {
-            this.setMatch({
-                value,
-                exactHitCount: isExactMatch ? 1 : 0,
-                score,
-            });
+            if (isExactMatch) {
+                this.setMatch({
+                    value,
+                    hitCount: 1,
+                    score,
+                    relatedHitCount: 0,
+                    relatedScore: 0,
+                });
+            } else {
+                this.setMatch({
+                    value,
+                    hitCount: 0,
+                    score: 0,
+                    relatedHitCount: 1,
+                    relatedScore: score,
+                });
+            }
+        }
+    }
+
+    public scaleScores(scoreScaler?: (match: Match<T>) => void) {
+        scoreScaler ??= (m) => {
+            if (m.relatedHitCount > 0) {
+                const avgScore = m.relatedScore / m.relatedHitCount;
+                const normalizedScore = Math.log(1 + avgScore);
+                m.score += normalizedScore;
+            }
+        };
+        for (const match of this.getMatches()) {
+            scoreScaler(match);
         }
     }
 
@@ -88,10 +116,10 @@ export class MatchAccumulator<T = any> {
         isExactMatch: boolean,
     ): void {
         if (isExactMatch) {
-            existingMatch.exactHitCount++;
+            existingMatch.hitCount++;
             existingMatch.score += newScore;
-        } else if (existingMatch.score < newScore) {
-            existingMatch.score = newScore;
+        } else if (existingMatch.relatedScore < newScore) {
+            existingMatch.relatedScore = newScore;
         }
     }
 
@@ -155,7 +183,7 @@ export class MatchAccumulator<T = any> {
         minHitCount: number | undefined,
     ): IterableIterator<Match<T>> {
         return minHitCount !== undefined && minHitCount > 0
-            ? this.getMatches((m) => m.exactHitCount >= minHitCount)
+            ? this.getMatches((m) => m.hitCount >= minHitCount)
             : this.matches.values();
     }
 }
@@ -174,14 +202,14 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
             | IterableIterator<ScoredSemanticRef>
             | undefined,
         isExactMatch: boolean,
-        scoreBoost?: number,
+        weight?: number,
     ) {
         if (scoredRefs) {
-            scoreBoost ??= searchTerm.score ?? 0;
+            weight ??= searchTerm.weight ?? 1;
             for (const scoredRef of scoredRefs) {
                 this.add(
                     scoredRef.semanticRefIndex,
-                    scoredRef.score + scoreBoost,
+                    scoredRef.score * weight,
                     isExactMatch,
                 );
             }
@@ -196,16 +224,16 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
             | IterableIterator<ScoredSemanticRef>
             | undefined,
         isExactMatch: boolean,
-        scoreBoost?: number,
+        weight?: number,
     ) {
         if (scoredRefs) {
-            scoreBoost ??= searchTerm.score ?? 0;
+            weight ??= searchTerm.weight ?? 1;
             for (const scoredRef of scoredRefs) {
                 const existingMatch = this.getMatch(scoredRef.semanticRefIndex);
                 if (existingMatch) {
                     this.updateExisting(
                         existingMatch,
-                        scoredRef.score + scoreBoost,
+                        scoredRef.score * weight,
                         isExactMatch,
                     );
                 } else {
@@ -379,29 +407,46 @@ export class TextRangeCollection {
 }
 
 export class TermSet {
-    constructor(private terms: Map<string, Term> = new Map()) {}
+    private terms: Map<string, Term> = new Map();
+    constructor(terms?: Term[]) {
+        if (terms) {
+            this.addOrUnion(terms);
+        }
+    }
 
     public get size() {
         return this.terms.size;
     }
 
-    public add(term: Term) {
-        const existingTerm = this.terms.get(term.text);
-        if (!existingTerm) {
-            this.terms.set(term.text, term);
-        }
-    }
-
-    public addOrUnion(term: Term) {
+    public add(term: Term): boolean {
         const existingTerm = this.terms.get(term.text);
         if (existingTerm) {
-            const existingScore = existingTerm.score ?? 0;
-            const newScore = term.score ?? 0;
-            if (existingScore < newScore) {
-                existingTerm.score = newScore;
+            return false;
+        }
+        this.terms.set(term.text, term);
+        return true;
+    }
+
+    public addOrUnion(terms: Term | Term[] | undefined) {
+        if (terms === undefined) {
+            return;
+        }
+        if (Array.isArray(terms)) {
+            for (const term of terms) {
+                this.addOrUnion(term);
             }
         } else {
-            this.terms.set(term.text, term);
+            const term = terms;
+            const existingTerm = this.terms.get(term.text);
+            if (existingTerm) {
+                const existingScore = existingTerm.weight ?? 0;
+                const newScore = term.weight ?? 0;
+                if (existingScore < newScore) {
+                    existingTerm.weight = newScore;
+                }
+            } else {
+                this.terms.set(term.text, term);
+            }
         }
     }
 
@@ -411,10 +456,17 @@ export class TermSet {
             : this.terms.get(term.text);
     }
 
+    public getWeight(term: Term): number | undefined {
+        return this.terms.get(term.text)?.weight;
+    }
+
     public has(term: Term): boolean {
         return this.terms.has(term.text);
     }
 
+    public remove(term: Term) {
+        this.terms.delete(term.text);
+    }
     public clear(): void {
         this.terms.clear();
     }

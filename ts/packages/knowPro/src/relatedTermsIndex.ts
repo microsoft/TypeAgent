@@ -13,6 +13,7 @@ import {
     ScoredItem,
     indexesOfAllNearest,
     dotProduct,
+    generateTextEmbeddings,
 } from "typeagent";
 import {
     Term,
@@ -27,6 +28,7 @@ import {
 import { createEmbeddingCache } from "knowledge-processor";
 import { SearchTerm } from "./search.js";
 import { isSearchTermWildcard } from "./query.js";
+import { TermSet } from "./collections.js";
 
 export class TermToRelatedTermsMap {
     public map: collections.MultiMap<string, Term> = new collections.MultiMap();
@@ -78,10 +80,13 @@ export async function resolveRelatedTerms(
     relatedTermsIndex: ITermToRelatedTermsIndex,
     searchTerms: SearchTerm[],
 ): Promise<void> {
+    const searchableTerms = new TermSet();
+    const searchTermsNeedingRelated: SearchTerm[] = [];
     for (const searchTerm of searchTerms) {
         if (isSearchTermWildcard(searchTerm)) {
             continue;
         }
+        searchableTerms.addOrUnion(searchTerm.term);
         const termText = searchTerm.term.text;
         // Resolve any specific term to related term mappings
         if (!searchTerm.relatedTerms || searchTerm.relatedTerms.length === 0) {
@@ -90,10 +95,57 @@ export async function resolveRelatedTerms(
         // If no hard-coded mappings, lookup any fuzzy related terms
         // Future: do this in batch
         if (!searchTerm.relatedTerms || searchTerm.relatedTerms.length === 0) {
-            if (relatedTermsIndex.termEmbeddings) {
-                searchTerm.relatedTerms =
-                    await relatedTermsIndex.termEmbeddings.lookupTerm(termText);
+            searchTermsNeedingRelated.push(searchTerm);
+        }
+    }
+    if (
+        relatedTermsIndex.termEmbeddings &&
+        searchTermsNeedingRelated.length > 0
+    ) {
+        const relatedTermsForSearchTerms =
+            await relatedTermsIndex.termEmbeddings.lookupTerms(
+                searchTermsNeedingRelated.map((st) => st.term.text),
+            );
+        for (let i = 0; i < searchTermsNeedingRelated.length; ++i) {
+            searchTermsNeedingRelated[i].relatedTerms =
+                relatedTermsForSearchTerms[i];
+        }
+        //
+        // We need to prevent duplicate scoring.
+        // - The same related term can show up for different search terms but with different weights
+        // - related terms may also already be present as search terms
+        //
+        dedupeRelatedTerms(searchTerms);
+    }
+}
+
+function dedupeRelatedTerms(searchTerms: SearchTerm[]) {
+    const allSearchTerms = new TermSet();
+    const relatedWithMaxWeight = new TermSet();
+    searchTerms.forEach((st) => {
+        allSearchTerms.add(st.term);
+        relatedWithMaxWeight.addOrUnion(st.relatedTerms);
+    });
+    for (const searchTerm of searchTerms) {
+        if (searchTerm.relatedTerms && searchTerm.relatedTerms.length > 0) {
+            let nonDuplicateTerms: Term[] = [];
+            for (const candidateRelatedTerm of searchTerm.relatedTerms) {
+                if (allSearchTerms.has(candidateRelatedTerm)) {
+                    // This related term is already a search term
+                    continue;
+                }
+                // Related term is new. Only use it if it provides max weightf
+                const termWithMaxWeight =
+                    relatedWithMaxWeight.get(candidateRelatedTerm);
+                if (
+                    termWithMaxWeight !== undefined &&
+                    termWithMaxWeight.weight === candidateRelatedTerm.weight
+                ) {
+                    nonDuplicateTerms.push(termWithMaxWeight);
+                    relatedWithMaxWeight.remove(candidateRelatedTerm);
+                }
             }
+            searchTerm.relatedTerms = nonDuplicateTerms;
         }
     }
 }
@@ -213,7 +265,7 @@ export class TextEmbeddingIndex implements ITermEmbeddingIndex {
         text: string | NormalizedEmbedding,
         maxMatches?: number,
         minScore?: number,
-    ): Promise<Term[] | undefined> {
+    ): Promise<Term[]> {
         const termEmbedding = await generateEmbedding(
             this.settings.embeddingModel,
             text,
@@ -226,6 +278,24 @@ export class TextEmbeddingIndex implements ITermEmbeddingIndex {
         return matches.map((m) => {
             return { text: this.textList[m.item], score: m.score };
         });
+    }
+
+    public async lookupTerms(
+        texts: string[],
+        maxMatches?: number,
+        minScore?: number,
+    ): Promise<Term[][]> {
+        const termEmbeddings = await generateTextEmbeddings(
+            this.settings.embeddingModel,
+            texts,
+        );
+        const results = [];
+        for (const embedding of termEmbeddings) {
+            results.push(
+                await this.lookupTerm(embedding, maxMatches, minScore),
+            );
+        }
+        return results;
     }
 
     public async lookupEmbeddings(

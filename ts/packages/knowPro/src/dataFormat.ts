@@ -125,9 +125,9 @@ export interface IConversationData<TMessage> {
 export type Term = {
     text: string;
     /**
-     * Optional additional score to use when this term matches
+     * Optional weighting for these matches
      */
-    score?: number | undefined;
+    weight?: number | undefined;
 };
 
 export interface ITermToRelatedTermsIndex {
@@ -156,7 +156,12 @@ export interface ITermEmbeddingIndex {
         text: string,
         maxMatches?: number,
         minScore?: number,
-    ): Promise<Term[] | undefined>;
+    ): Promise<Term[]>;
+    lookupTerms(
+        texts: string[],
+        maxMatches?: number,
+        minScore?: number,
+    ): Promise<Term[][]>;
     lookupEmbeddings(
         text: string,
         maxMatches?: number,

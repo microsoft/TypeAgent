@@ -28,7 +28,7 @@ export function createSearchTerm(text: string, score?: number): SearchTerm {
     return {
         term: {
             text,
-            score,
+            weight: score,
         },
     };
 }
@@ -88,7 +88,11 @@ class SearchQueryBuilder {
     // We will them expand these search terms by also including related terms
     private allSearchTerms: SearchTerm[] = [];
 
-    constructor(public conversation: IConversation) {}
+    constructor(
+        public conversation: IConversation,
+        public defaultMatchWeight: number = 100,
+        public relatedIsExactThreshold: number = 0.95,
+    ) {}
 
     public async compile(
         terms: SearchTerm[],
@@ -207,9 +211,17 @@ class SearchQueryBuilder {
     private prepareSearchTerms(searchTerms: SearchTerm[]): void {
         for (const searchTerm of searchTerms) {
             this.prepareTerm(searchTerm.term);
-            searchTerm.term.score ??= searchTerms.length * 10;
+            searchTerm.term.weight ??= this.defaultMatchWeight;
             if (searchTerm.relatedTerms) {
-                searchTerm.relatedTerms.forEach((st) => this.prepareTerm(st));
+                searchTerm.relatedTerms.forEach((st) => {
+                    if (
+                        st.weight &&
+                        st.weight >= this.relatedIsExactThreshold
+                    ) {
+                        st.weight = this.defaultMatchWeight;
+                    }
+                    this.prepareTerm(st);
+                });
             }
         }
     }
