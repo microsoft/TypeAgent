@@ -186,26 +186,29 @@ export async function searchCode(
         `;
     // console_log(`[${prompt.slice(0, 1000)}]`);
 
-    // 5. Send prompt to smart, code-savvy LLM.
+    // 5. Send the prompt to the oracle.
     console_log(`[Step 5: Ask the oracle]`);
     const wrappedResult = await context.queryContext!.oracle.translate(prompt);
     if (!wrappedResult.success) {
-        console_log(`  [It's a failure: ${wrappedResult.message}]`);
+        console_log(`  [Failure: ${wrappedResult.message}]`);
         return createActionResultFromError(
             `Failed to get an answer: ${wrappedResult.message}`,
         );
     }
-    console_log(`  [It's a success]`);
+
+    // 6. Extract answer from result.
+    console_log(`  [Success:]`);
     const result = wrappedResult.data;
-    console_log(`  [References: ${result.references.join(", ")}]`);
     // console_log(`[${JSON.stringify(result, undefined, 2).slice(0, 1000)}]`);
-
-    // 6. Extract answer and references from result.
     const answer = result.answer;
+    console_log(`  [Got ${result.references.length} references; confidence is ${result.confidence}]`);
+    // console_log(`  [References: ${result.references.join(", ")}]`);
+    if (result.message) {
+        console_log(`  [*** Message: ${result.message} ***]`);
+    }
 
-    // 7. Produce an action result from that.
+    // 7. Produce entities and an action result from the result.
     const outputEntities: Entity[] = [];
-    console_log(`  [Entities returned:]`);
     for (const ref of result.references) {
         const chunk = allChunks.find((c) => c.chunkId === ref);
         if (!chunk) continue;
@@ -224,9 +227,9 @@ export async function searchCode(
             // TODO: Include summary and signature somehow?
         };
         outputEntities.push(entity);
-        console_log(
-            `    [${entity.name} (${entity.type}) ${entity.uniqueId} ${entity.additionalEntityText}]`,
-        );
+        // console_log(
+        //     `    [${entity.name} (${entity.type}) ${entity.uniqueId} ${entity.additionalEntityText}]`,
+        // );
     }
 
     const resultEntity: Entity = {
@@ -274,7 +277,7 @@ async function selectChunks(
         }
     }
     // Reminder: There's no overlap in chunkIds between the slices
-    console_log(`  [Total ${allChunkDescs.length} chunks selected]`);
+    console_log(`  [Total ${allChunkDescs.length} chunks selected out of a total of ${allChunks.length}]`);
 
     allChunkDescs.sort((a, b) => b.relevance - a.relevance);
     // console_log(`  [${allChunks.map((c) => (c.relevance)).join(", ")}]`);
