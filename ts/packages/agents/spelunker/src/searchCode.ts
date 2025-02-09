@@ -180,7 +180,7 @@ export async function searchCode(
 
         User question: "${input}"
 
-        Context: ${prepareChunks(chunks)}
+        Context: ${prepareChunks(chunks, db)}
 
         User question: "${input}"
         `;
@@ -201,7 +201,9 @@ export async function searchCode(
     const result = wrappedResult.data;
     // console_log(`[${JSON.stringify(result, undefined, 2).slice(0, 1000)}]`);
     const answer = result.answer;
-    console_log(`  [Got ${result.references.length} references; confidence is ${result.confidence}]`);
+    console_log(
+        `  [Got ${result.references.length} references; confidence is ${result.confidence}]`,
+    );
     // console_log(`  [References: ${result.references.join(", ")}]`);
     if (result.message) {
         console_log(`  [*** Message: ${result.message} ***]`);
@@ -277,11 +279,13 @@ async function selectChunks(
         }
     }
     // Reminder: There's no overlap in chunkIds between the slices
-    console_log(`  [Total ${allChunkDescs.length} chunks selected out of a total of ${allChunks.length}]`);
+    console_log(
+        `  [Total ${allChunkDescs.length} chunks selected out of a total of ${allChunks.length}]`,
+    );
 
     allChunkDescs.sort((a, b) => b.relevance - a.relevance);
     // console_log(`  [${allChunks.map((c) => (c.relevance)).join(", ")}]`);
-    const chunks = keepBestChunks(allChunkDescs, allChunks, 250000); // TODO: Tune this more
+    const chunks = keepBestChunks(allChunkDescs, allChunks, 200000); // TODO: Tune this more
     console_log(`  [Keeping ${chunks.length} chunks]`);
     // for (let i = 0; i < chunks.length; i++) {
     //     const chunk = chunks[i];
@@ -309,7 +313,7 @@ async function selectRelevantChunks(
     User question: "${input}"
 
     Chunks:
-    ${prepareChunks(chunks)}
+    ${prepareChunks(chunks, undefined)}
     `;
     // console_log(prompt);
     const result = await retryTranslateOn429(() => selector.translate(prompt));
@@ -324,13 +328,16 @@ async function selectRelevantChunks(
     }
 }
 
-function prepareChunks(chunks: Chunk[]): string {
+function prepareChunks(
+    chunks: Chunk[],
+    db: sqlite.Database | undefined,
+): string {
     chunks.sort(
         // Sort by file name and chunk ID (should order by line number)
         (a, b) => {
             let cmp = a.fileName.localeCompare(b.fileName);
             if (!cmp) {
-                cmp = a.chunkId.localeCompare(b.chunkId);
+                cmp = a.lineNo - b.lineNo;
             }
             return cmp;
         },
@@ -342,6 +349,9 @@ function prepareChunks(chunks: Chunk[]): string {
     }
     let lastFn = "";
     let lineNo = 0;
+    const prepGetSummary = db?.prepare(
+        "SELECT language, summary, signature FROM Summaries WHERE chunkId = ?",
+    );
     for (const chunk of chunks) {
         if (chunk.fileName !== lastFn) {
             lastFn = chunk.fileName;
@@ -354,7 +364,22 @@ function prepareChunks(chunks: Chunk[]): string {
         );
         for (const blob of chunk.blobs) {
             lineNo = blob.start;
-            for (const line of blob.lines) {
+            let blobLines = blob.lines;
+            if (db && blob.breadcrumb) {
+                // TODO: Do this earlier, so keepBestChunks can use the adjusted chunk sizes.
+                const summaryRow: any = prepGetSummary?.get(blob.breadcrumb);
+                if (summaryRow) {
+                    const indent = blobLines[0]?.match(/^(\s*)/)?.[1] ?? "";
+                    blobLines = [
+                        `${indent}${languageCommentMap[summaryRow.language ?? "python"]} ${summaryRow.summary}\n`,
+                        `${indent}${summaryRow.signature} ...\n`,
+                    ];
+                    // console_log(
+                    //     `  [Replacing\n'''\n${blob.lines.join("")}'''\nwith\n'''\n${blobLines.join("")}\n''']`,
+                    // );
+                }
+            }
+            for (const line of blobLines) {
                 lineNo += 1;
                 put(`${lineNo} ${line}`);
             }
@@ -363,12 +388,13 @@ function prepareChunks(chunks: Chunk[]): string {
     return output.join("");
 }
 
+const languageCommentMap: { [key: string]: string } = {
+    python: "#",
+    typescript: "//",
+};
+
 // TODO: Remove export once we're using summaries again.
 export function prepareSummaries(db: sqlite.Database): string {
-    const languageCommentMap: { [key: string]: string } = {
-        python: "#",
-        typescript: "//",
-    };
     const selectAllSummaries = db.prepare(`SELECT * FROM Summaries`);
     const summaryRows: any[] = selectAllSummaries.all();
     if (summaryRows.length > 100) {
@@ -727,7 +753,7 @@ async function summarizeChunkSlice(
     Also include the signature of the chunk.
 
     Chunks:
-    ${prepareChunks(chunks)}
+    ${prepareChunks(chunks, undefined)}
     `;
     // console_log(prompt);
     const result = await retryTranslateOn429(() =>
