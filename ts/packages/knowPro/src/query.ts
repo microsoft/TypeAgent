@@ -513,14 +513,7 @@ export class MatchPropertyTermExpr extends MatchTermExpr {
                 propName,
                 relatedPropVal.text,
             );
-            if (context.matchedPropertyTerms.has(propName, relatedPropVal)) {
-                matches.updateTermMatches(
-                    propVal,
-                    semanticRefs,
-                    false,
-                    relatedPropVal.weight,
-                );
-            } else {
+            if (!context.matchedPropertyTerms.has(propName, relatedPropVal)) {
                 matches.addTermMatches(
                     propVal,
                     semanticRefs,
