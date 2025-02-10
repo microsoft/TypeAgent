@@ -9,7 +9,11 @@ import {
     SimilarityType,
     generateTextEmbeddingsWithRetry,
     collections,
+    EmbeddedValue,
+    ScoredItem,
+    indexesOfAllNearest,
     dotProduct,
+    generateTextEmbeddings,
 } from "typeagent";
 import {
     Term,
@@ -24,6 +28,7 @@ import {
 import { createEmbeddingCache } from "knowledge-processor";
 import { SearchTerm } from "./search.js";
 import { isSearchTermWildcard } from "./query.js";
+import { TermSet } from "./collections.js";
 
 export class TermToRelatedTermsMap {
     public map: collections.MultiMap<string, Term> = new collections.MultiMap();
@@ -75,10 +80,13 @@ export async function resolveRelatedTerms(
     relatedTermsIndex: ITermToRelatedTermsIndex,
     searchTerms: SearchTerm[],
 ): Promise<void> {
+    const searchableTerms = new TermSet();
+    const searchTermsNeedingRelated: SearchTerm[] = [];
     for (const searchTerm of searchTerms) {
         if (isSearchTermWildcard(searchTerm)) {
             continue;
         }
+        searchableTerms.addOrUnion(searchTerm.term);
         const termText = searchTerm.term.text;
         // Resolve any specific term to related term mappings
         if (!searchTerm.relatedTerms || searchTerm.relatedTerms.length === 0) {
@@ -87,8 +95,64 @@ export async function resolveRelatedTerms(
         // If no hard-coded mappings, lookup any fuzzy related terms
         // Future: do this in batch
         if (!searchTerm.relatedTerms || searchTerm.relatedTerms.length === 0) {
-            searchTerm.relatedTerms =
-                await relatedTermsIndex.lookupTermFuzzy(termText);
+            searchTermsNeedingRelated.push(searchTerm);
+        }
+    }
+    if (
+        relatedTermsIndex.termEmbeddings &&
+        searchTermsNeedingRelated.length > 0
+    ) {
+        const relatedTermsForSearchTerms =
+            await relatedTermsIndex.termEmbeddings.lookupTerms(
+                searchTermsNeedingRelated.map((st) => st.term.text),
+            );
+        for (let i = 0; i < searchTermsNeedingRelated.length; ++i) {
+            searchTermsNeedingRelated[i].relatedTerms =
+                relatedTermsForSearchTerms[i];
+        }
+        //
+        // Due to fuzzy matching, a search term may end with related terms that overlap with those of other search terms.
+        // This causes scoring problems... duplicate/redundant scoring that can cause items to seem more relevant than they are
+        // - The same related term can show up for different search terms but with different weights
+        // - related terms may also already be present as search terms
+        //
+        dedupeRelatedTerms(searchTerms);
+    }
+}
+
+function dedupeRelatedTerms(searchTerms: SearchTerm[]) {
+    const allSearchTerms = new TermSet();
+    const allRelatedTerms = new TermSet();
+    //
+    // Collect all unique search and related terms.
+    // We end up with {term, maximum weight for term} pairs
+    //
+    searchTerms.forEach((st) => {
+        allSearchTerms.add(st.term);
+        allRelatedTerms.addOrUnion(st.relatedTerms);
+    });
+    for (const searchTerm of searchTerms) {
+        if (searchTerm.relatedTerms && searchTerm.relatedTerms.length > 0) {
+            let uniqueRelatedForSearchTerm: Term[] = [];
+            for (const candidateRelatedTerm of searchTerm.relatedTerms) {
+                if (allSearchTerms.has(candidateRelatedTerm)) {
+                    // This related term is already a search term
+                    continue;
+                }
+                // Each unique related term should be searched for
+                // only once, and (if there were duplicates) assigned the maximum weight assigned to that term
+                const termWithMaxWeight =
+                    allRelatedTerms.get(candidateRelatedTerm);
+                if (
+                    termWithMaxWeight !== undefined &&
+                    termWithMaxWeight.weight === candidateRelatedTerm.weight
+                ) {
+                    // Associate this related term with the current search term
+                    uniqueRelatedForSearchTerm.push(termWithMaxWeight);
+                    allRelatedTerms.remove(candidateRelatedTerm);
+                }
+            }
+            searchTerm.relatedTerms = uniqueRelatedForSearchTerm;
         }
     }
 }
@@ -105,17 +169,12 @@ export class TermToRelatedTermsIndex implements ITermToRelatedTermsIndex {
         this.termAliases = new TermToRelatedTermsMap();
     }
 
-    public lookupTerm(termText: string): Term[] | undefined {
-        return this.termAliases.lookupTerm(termText);
+    public get termEmbeddings() {
+        return this.termEmbeddingsIndex;
     }
 
-    public async lookupTermFuzzy(
-        termText: string,
-    ): Promise<Term[] | undefined> {
-        if (this.termEmbeddingsIndex) {
-            return await this.termEmbeddingsIndex.lookupTermsFuzzy(termText);
-        }
-        return undefined;
+    public lookupTerm(termText: string): Term[] | undefined {
+        return this.termAliases.lookupTerm(termText);
     }
 
     public serialize(): ITermsToRelatedTermsIndexData {
@@ -132,7 +191,7 @@ export class TermToRelatedTermsIndex implements ITermToRelatedTermsIndex {
                 this.termAliases.deserialize(data.relatedTermsData);
             }
             if (data.textEmbeddingData) {
-                this.termEmbeddingsIndex = new TermEmbeddingIndex(
+                this.termEmbeddingsIndex = new TextEmbeddingIndex(
                     this.settings.embeddingIndexSettings,
                 );
                 this.termEmbeddingsIndex.deserialize(data.textEmbeddingData);
@@ -166,7 +225,7 @@ export async function buildTermEmbeddingIndex(
         batch: collections.Slice<string>,
     ) => boolean,
 ): Promise<ITermEmbeddingIndex> {
-    const termIndex = new TermEmbeddingIndex(settings);
+    const termIndex = new TextEmbeddingIndex(settings);
     for (const slice of collections.slices(terms, batchSize)) {
         if (progressCallback && !progressCallback(terms, slice)) {
             break;
@@ -176,16 +235,16 @@ export async function buildTermEmbeddingIndex(
     return termIndex;
 }
 
-export class TermEmbeddingIndex implements ITermEmbeddingIndex {
-    private termText: string[];
-    private termEmbeddings: NormalizedEmbedding[];
+export class TextEmbeddingIndex implements ITermEmbeddingIndex {
+    private textList: string[];
+    private textEmbeddings: NormalizedEmbedding[];
 
     constructor(
         public settings: TextEmbeddingIndexSettings,
         data?: ITextEmbeddingIndexData,
     ) {
-        this.termText = [];
-        this.termEmbeddings = [];
+        this.textList = [];
+        this.textEmbeddings = [];
         if (data !== undefined) {
             this.deserialize(data);
         }
@@ -209,38 +268,67 @@ export class TermEmbeddingIndex implements ITermEmbeddingIndex {
         }
     }
 
-    public async lookupTermsFuzzy(
-        term: string,
+    public async lookupTerm(
+        text: string | NormalizedEmbedding,
         maxMatches?: number,
         minScore?: number,
-    ): Promise<Term[] | undefined> {
+    ): Promise<Term[]> {
         const termEmbedding = await generateEmbedding(
             this.settings.embeddingModel,
-            term,
+            text,
         );
-        maxMatches ??= this.settings.maxMatches;
-        minScore ??= this.settings.minScore;
-        if (maxMatches && maxMatches > 0) {
-            const matches = indexesOfNearest(
-                this.termEmbeddings,
-                termEmbedding,
-                maxMatches,
-                SimilarityType.Dot,
-                minScore,
+        let matches = this.indexesOfNearestTerms(
+            termEmbedding,
+            maxMatches,
+            minScore,
+        );
+        return matches.map((m) => {
+            return { text: this.textList[m.item], weight: m.score };
+        });
+    }
+
+    public async lookupTerms(
+        texts: string[],
+        maxMatches?: number,
+        minScore?: number,
+    ): Promise<Term[][]> {
+        const termEmbeddings = await generateTextEmbeddings(
+            this.settings.embeddingModel,
+            texts,
+        );
+        const results = [];
+        for (const embedding of termEmbeddings) {
+            results.push(
+                await this.lookupTerm(embedding, maxMatches, minScore),
             );
-            return matches.map((m) => {
-                return { text: this.termText[m.item], score: m.score };
-            });
-        } else {
-            return this.indexesOfNearestTerms(termEmbedding, minScore);
         }
+        return results;
+    }
+
+    public async lookupEmbeddings(
+        text: string,
+        maxMatches?: number,
+        minScore?: number,
+    ): Promise<[string, NormalizedEmbedding][] | undefined> {
+        const termEmbedding = await generateEmbedding(
+            this.settings.embeddingModel,
+            text,
+        );
+        let matches = this.indexesOfNearestTerms(
+            termEmbedding,
+            maxMatches,
+            minScore,
+        );
+        return matches.map((m) => {
+            return [this.textList[m.item], this.textEmbeddings[m.item]];
+        });
     }
 
     public remove(term: string): boolean {
-        const indexOf = this.termText.indexOf(term);
+        const indexOf = this.textList.indexOf(term);
         if (indexOf >= 0) {
-            this.termText.splice(indexOf, 1);
-            this.termEmbeddings.splice(indexOf, 1);
+            this.textList.splice(indexOf, 1);
+            this.textEmbeddings.splice(indexOf, 1);
             return true;
         }
         return false;
@@ -259,10 +347,10 @@ export class TermEmbeddingIndex implements ITermEmbeddingIndex {
 
     public serialize(): ITextEmbeddingIndexData {
         const embeddingData: ITextEmbeddingDataItem[] = [];
-        for (let i = 0; i < this.termText.length; ++i) {
+        for (let i = 0; i < this.textList.length; ++i) {
             embeddingData.push({
-                text: this.termText[i],
-                embedding: Array.from<number>(this.termEmbeddings[i]),
+                text: this.textList[i],
+                embedding: Array.from<number>(this.textEmbeddings[i]),
             });
         }
         return {
@@ -271,23 +359,34 @@ export class TermEmbeddingIndex implements ITermEmbeddingIndex {
     }
 
     private addTermEmbedding(term: string, embedding: NormalizedEmbedding) {
-        this.termText.push(term);
-        this.termEmbeddings.push(embedding);
+        this.textList.push(term);
+        this.textEmbeddings.push(embedding);
     }
 
     private indexesOfNearestTerms(
-        other: NormalizedEmbedding,
+        termEmbedding: NormalizedEmbedding,
+        maxMatches?: number,
         minScore?: number,
-    ): Term[] {
-        minScore ??= 0;
-        const matches: Term[] = [];
-        for (let i = 0; i < this.termEmbeddings.length; ++i) {
-            const score: number = dotProduct(this.termEmbeddings[i], other);
-            if (score >= minScore) {
-                matches.push({ text: this.termText[i], score });
-            }
+    ): ScoredItem[] {
+        maxMatches ??= this.settings.maxMatches;
+        minScore ??= this.settings.minScore;
+        let matches: ScoredItem[];
+        if (maxMatches && maxMatches > 0) {
+            matches = indexesOfNearest(
+                this.textEmbeddings,
+                termEmbedding,
+                maxMatches,
+                SimilarityType.Dot,
+                minScore,
+            );
+        } else {
+            matches = indexesOfAllNearest(
+                this.textEmbeddings,
+                termEmbedding,
+                SimilarityType.Dot,
+                minScore,
+            );
         }
-        matches.sort((x, y) => y.score! - x.score!);
         return matches;
     }
 }
@@ -310,4 +409,66 @@ export function createTextEmbeddingIndexSettings(
         retryMaxAttempts: 2,
         retryPauseMs: 2000,
     };
+}
+
+export class RelatedTermSet {
+    private embeddedTerms: Map<string, EmbeddedValue<Term>>;
+
+    constructor() {
+        this.embeddedTerms = new Map();
+    }
+
+    public *getTerms() {
+        for (const embeddedTerm of this.embeddedTerms.values()) {
+            yield embeddedTerm.value;
+        }
+    }
+
+    public add(term: Term, embedding: NormalizedEmbedding) {
+        this.embeddedTerms.set(term.text, { value: term, embedding });
+    }
+
+    public getSimilar(term: Term, minScore?: number): Term[] {
+        minScore ??= 0;
+        const similarTerms: Term[] = [];
+        const testTerm = this.embeddedTerms.get(term.text);
+        if (testTerm === undefined) {
+            return similarTerms;
+        }
+        for (const embeddedTerm of this.embeddedTerms.values()) {
+            const similarity = dotProduct(
+                testTerm.embedding,
+                embeddedTerm.embedding,
+            );
+            if (
+                similarity >= minScore &&
+                embeddedTerm.value.text !== testTerm.value.text
+            ) {
+                similarTerms.push(embeddedTerm.value);
+            }
+        }
+        return similarTerms;
+    }
+
+    public removeAllSimilar(thresholdScore: number) {
+        const allKeys = [...this.embeddedTerms.keys()];
+        for (const key of allKeys) {
+            const embeddedTerm = this.embeddedTerms.get(key);
+            if (embeddedTerm !== undefined) {
+                const similarTerms = this.getSimilar(
+                    embeddedTerm.value,
+                    thresholdScore,
+                );
+                if (similarTerms.length > 0) {
+                    this.removeTerms(similarTerms);
+                }
+            }
+        }
+    }
+
+    public removeTerms(terms: Term[] | IterableIterator<Term>) {
+        for (const term of terms) {
+            this.embeddedTerms.delete(term.text);
+        }
+    }
 }

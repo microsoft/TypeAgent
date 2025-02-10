@@ -305,6 +305,7 @@ export class MatchAllTermsExpr extends QueryOpExpr<SemanticRefAccumulator> {
         for (const matchExpr of this.searchTermExpressions) {
             matchExpr.accumulateMatches(context, allMatches);
         }
+        allMatches.calculateTotalScore();
         return allMatches;
     }
 }
@@ -374,27 +375,18 @@ export class MatchSearchTermExpr extends MatchTermExpr {
     ) {
         if (relatedTerm === undefined) {
             const semanticRefs = this.lookupTerm(context, term);
-            if (context.matchedTerms.has(term)) {
-                matches.updateTermMatches(term, semanticRefs, true);
-            } else {
+            if (!context.matchedTerms.has(term)) {
                 matches.addTermMatches(term, semanticRefs, true);
                 context.matchedTerms.add(term);
             }
         } else {
             const semanticRefs = this.lookupTerm(context, relatedTerm);
-            if (context.matchedTerms.has(relatedTerm)) {
-                matches.updateTermMatches(
-                    term,
-                    semanticRefs,
-                    false,
-                    relatedTerm.score,
-                );
-            } else {
+            if (!context.matchedTerms.has(relatedTerm)) {
                 matches.addTermMatches(
                     term,
                     semanticRefs,
                     false,
-                    relatedTerm.score,
+                    relatedTerm.weight,
                 );
                 context.matchedTerms.add(relatedTerm);
             }
@@ -508,9 +500,7 @@ export class MatchPropertyTermExpr extends MatchTermExpr {
                 propName,
                 propVal.text,
             );
-            if (context.matchedPropertyTerms.has(propName, propVal)) {
-                matches.updateTermMatches(propVal, semanticRefs, true);
-            } else {
+            if (!context.matchedPropertyTerms.has(propName, propVal)) {
                 matches.addTermMatches(propVal, semanticRefs, true);
                 context.matchedPropertyTerms.add(propName, propVal);
             }
@@ -519,19 +509,12 @@ export class MatchPropertyTermExpr extends MatchTermExpr {
                 propName,
                 relatedPropVal.text,
             );
-            if (context.matchedPropertyTerms.has(propName, relatedPropVal)) {
-                matches.updateTermMatches(
-                    propVal,
-                    semanticRefs,
-                    false,
-                    relatedPropVal.score,
-                );
-            } else {
+            if (!context.matchedPropertyTerms.has(propName, relatedPropVal)) {
                 matches.addTermMatches(
                     propVal,
                     semanticRefs,
                     false,
-                    relatedPropVal.score,
+                    relatedPropVal.weight,
                 );
                 context.matchedPropertyTerms.add(propName, relatedPropVal);
             }

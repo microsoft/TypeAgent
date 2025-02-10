@@ -21,7 +21,13 @@ import {
 import { createActionResultFromError } from "@typeagent/agent-sdk/helpers/action";
 import { loadSchema } from "typeagent";
 
-import { Blob, Chunk, ChunkedFile, ChunkerErrorItem } from "./chunkSchema.js";
+import {
+    Blob,
+    Chunk,
+    ChunkedFile,
+    ChunkerErrorItem,
+    ChunkId,
+} from "./chunkSchema.js";
 import { OracleSpecs } from "./oracleSchema.js";
 import { chunkifyPythonFiles } from "./pythonChunker.js";
 import { ChunkDescription, SelectorSpecs } from "./selectorSchema.js";
@@ -186,26 +192,31 @@ export async function searchCode(
         `;
     // console_log(`[${prompt.slice(0, 1000)}]`);
 
-    // 5. Send prompt to smart, code-savvy LLM.
+    // 5. Send the prompt to the oracle.
     console_log(`[Step 5: Ask the oracle]`);
     const wrappedResult = await context.queryContext!.oracle.translate(prompt);
     if (!wrappedResult.success) {
-        console_log(`  [It's a failure: ${wrappedResult.message}]`);
+        console_log(`  [Failure: ${wrappedResult.message}]`);
         return createActionResultFromError(
             `Failed to get an answer: ${wrappedResult.message}`,
         );
     }
-    console_log(`  [It's a success]`);
+
+    // 6. Extract answer from result.
+    console_log(`  [Success:]`);
     const result = wrappedResult.data;
-    console_log(`  [References: ${result.references.join(", ")}]`);
     // console_log(`[${JSON.stringify(result, undefined, 2).slice(0, 1000)}]`);
-
-    // 6. Extract answer and references from result.
     const answer = result.answer;
+    console_log(
+        `  [Got ${result.references.length} references; confidence is ${result.confidence}]`,
+    );
+    // console_log(`  [References: ${result.references.join(", ")}]`);
+    if (result.message) {
+        console_log(`  [*** Message: ${result.message} ***]`);
+    }
 
-    // 7. Produce an action result from that.
+    // 7. Produce entities and an action result from the result.
     const outputEntities: Entity[] = [];
-    console_log(`  [Entities returned:]`);
     for (const ref of result.references) {
         const chunk = allChunks.find((c) => c.chunkId === ref);
         if (!chunk) continue;
@@ -224,9 +235,9 @@ export async function searchCode(
             // TODO: Include summary and signature somehow?
         };
         outputEntities.push(entity);
-        console_log(
-            `    [${entity.name} (${entity.type}) ${entity.uniqueId} ${entity.additionalEntityText}]`,
-        );
+        // console_log(
+        //     `    [${entity.name} (${entity.type}) ${entity.uniqueId} ${entity.additionalEntityText}]`,
+        // );
     }
 
     const resultEntity: Entity = {
@@ -250,11 +261,12 @@ async function selectChunks(
     console_log(`  [Starting chunk selection ...]`);
     const promises: Promise<ChunkDescription[]>[] = [];
     const maxConcurrency =
-        parseInt(process.env.AZURE_OPENAI_MAX_CONCURRENCY ?? "0") ?? 5;
+        parseInt(process.env.AZURE_OPENAI_MAX_CONCURRENCY ?? "5") ?? 5;
     const limiter = createLimiter(maxConcurrency);
-    const batches = makeBatches(allChunks, 250000); // TODO: Tune this more
+    const batchLimit = process.env.OPENAI_API_KEY ? 100000 : 250000; // TODO: tune
+    const batches = makeBatches(allChunks, batchLimit);
     console_log(
-        `  [maxConcurrency = ${maxConcurrency}, ${batches.length} batches]`,
+        `  [${batches.length} batches, maxConcurrency ${maxConcurrency}]`,
     );
     for (const batch of batches) {
         const p = limiter(() =>
@@ -274,19 +286,22 @@ async function selectChunks(
         }
     }
     // Reminder: There's no overlap in chunkIds between the slices
-    console_log(`  [Total ${allChunkDescs.length} chunks selected]`);
+    console_log(
+        `  [Total ${allChunkDescs.length} chunks selected out of a total of ${allChunks.length}]`,
+    );
 
     allChunkDescs.sort((a, b) => b.relevance - a.relevance);
     // console_log(`  [${allChunks.map((c) => (c.relevance)).join(", ")}]`);
-    const chunks = keepBestChunks(allChunkDescs, allChunks, 250000); // TODO: Tune this more
+    const maxKeep = process.env.OPENAI_API_KEY ? 100000 : 200000; // TODO: tune
+    const chunks = keepBestChunks(allChunkDescs, allChunks, maxKeep);
     console_log(`  [Keeping ${chunks.length} chunks]`);
-    for (let i = 0; i < chunks.length; i++) {
-        const chunk = chunks[i];
-        const chunkDesc = allChunkDescs[i];
-        console_log(
-            `    [${chunkDesc.relevance} ${path.basename(chunk.fileName)}:${chunk.codeName} ${chunk.chunkId}]`,
-        );
-    }
+    // for (let i = 0; i < chunks.length; i++) {
+    //     const chunk = chunks[i];
+    //     const chunkDesc = allChunkDescs[i];
+    //     console_log(
+    //         `    [${chunkDesc.relevance} ${path.basename(chunk.fileName)}:${chunk.codeName} ${chunk.chunkId}]`,
+    //     );
+    // }
     return chunks;
 }
 
@@ -311,10 +326,7 @@ async function selectRelevantChunks(
     // console_log(prompt);
     const result = await retryTranslateOn429(() => selector.translate(prompt));
     if (!result) {
-        const chunkSummary = chunks
-            .map((c) => `${path.basename(c.fileName)}:${c.codeName}`)
-            .join(", ");
-        console_log(`  [Failed to select chunks for ${chunkSummary}]`);
+        console_log(`  [Failed to select chunks for ${chunks.length} chunks]`);
         return [];
     } else {
         return result.chunks;
@@ -327,7 +339,7 @@ function prepareChunks(chunks: Chunk[]): string {
         (a, b) => {
             let cmp = a.fileName.localeCompare(b.fileName);
             if (!cmp) {
-                cmp = a.chunkId.localeCompare(b.chunkId);
+                cmp = a.lineNo - b.lineNo;
             }
             return cmp;
         },
@@ -360,12 +372,15 @@ function prepareChunks(chunks: Chunk[]): string {
     return output.join("");
 }
 
+// TODO: Make the values two elements, comment start and comment end
+// (and then caller should ensure comment end doesn't occur in the comment text).
+const languageCommentMap: { [key: string]: string } = {
+    python: "#",
+    typescript: "//",
+};
+
 // TODO: Remove export once we're using summaries again.
 export function prepareSummaries(db: sqlite.Database): string {
-    const languageCommentMap: { [key: string]: string } = {
-        python: "#",
-        typescript: "//",
-    };
     const selectAllSummaries = db.prepare(`SELECT * FROM Summaries`);
     const summaryRows: any[] = selectAllSummaries.all();
     if (summaryRows.length > 100) {
@@ -494,7 +509,7 @@ async function loadDatabase(
 
     // 1a. Find all source files in the focus directories (locally, using a recursive walk).
     // TODO: Factor into simpler functions
-    console_log(`[Step 1a: Find source files (of supported languages)]`);
+    console_log(`[Step 1a: Find supported source files]`);
     const files: FileMtimeSize[] = [];
     for (let i = 0; i < context.focusFolders.length; i++) {
         files.push(...getAllSourceFiles(context.focusFolders[i]));
@@ -611,14 +626,10 @@ async function loadDatabase(
         `  [Chunked ${allChunkedFiles.length} files into ${allChunks.length} chunks]`,
     );
 
-    // Let's see how things go without summaries.
-    // They are slow and don't fit in the oracle's buffer.
-    // TODO: Restore this feature.
-
-    // // 1c. Use a fast model to summarize all chunks.
-    // if (allChunks.length) {
-    //     await summarizeChunks(context, allChunks);
-    // }
+    // 1c. Use a fast model to summarize all chunks.
+    if (allChunks.length) {
+        await summarizeChunks(context, allChunks);
+    }
 
     return db;
 }
@@ -694,15 +705,16 @@ export async function summarizeChunks(
     context: SpelunkerContext,
     chunks: Chunk[],
 ): Promise<void> {
-    console_log(
-        `[Step 1c: Summarizing ${chunks.length} chunks (may take a while)]`,
-    );
+    console_log(`[Step 1c: Summarizing ${chunks.length} chunks]`);
+    // NOTE: We cannot stuff the buffer, because the completion size
+    // is limited to 4096 tokens, and we expect a certain number of
+    // tokens per chunk. Experimentally, 40 chunks per job works great.
     const maxConcurrency =
-        parseInt(process.env.AZURE_OPENAI_MAX_CONCURRENCY ?? "0") ?? 40;
-    let chunksPerJob = 30;
+        parseInt(process.env.AZURE_OPENAI_MAX_CONCURRENCY ?? "0") ?? 5;
+    let chunksPerJob = 40;
     let numJobs = Math.ceil(chunks.length / chunksPerJob);
     console_log(
-        `  [maxConcurrency = ${maxConcurrency}, chunksPerJob = ${chunksPerJob}, numJobs = ${numJobs}]`,
+        `  [${chunksPerJob} chunks/job, ${numJobs} jobs, maxConcurrency ${maxConcurrency}]`,
     );
     const limiter = createLimiter(maxConcurrency);
     const promises: Promise<void>[] = [];
@@ -732,10 +744,9 @@ async function summarizeChunkSlice(
         summarizer.translate(prompt),
     );
     if (!result) {
-        const chunkSummary = chunks
-            .map((c) => `${path.basename(c.fileName)}:${c.codeName}`)
-            .join(", ");
-        console_log(`  [Failed to summarize chunks for ${chunkSummary}]`);
+        console_log(
+            `  [Failed to summarize chunks for ${chunks.length} chunks]`,
+        );
         return;
     }
 
@@ -743,9 +754,15 @@ async function summarizeChunkSlice(
     // console_log(`  [Received ${result.summaries.length} summaries]`);
     // Enter them into the database
     const db = context.queryContext!.database!;
-    const prepInsertSummary = db.prepare(`
-        INSERT OR REPLACE INTO Summaries (chunkId, language, summary, signature) VALUES (?, ?, ?, ?)
-    `);
+    const prepInsertSummary = db.prepare(
+        `INSERT OR REPLACE INTO Summaries (chunkId, language, summary, signature) VALUES (?, ?, ?, ?)`,
+    );
+    const prepGetBlobWithBreadcrumb = db.prepare(
+        `SELECT lines, breadcrumb FROM Blobs WHERE breadcrumb = ?`,
+    );
+    const prepUpdateBlob = db.prepare(
+        "UPDATE Blobs SET lines = ? WHERE breadcrumb = ?",
+    );
     let errors = 0;
     for (const summary of summarizeSpecs.summaries) {
         // console_log(summary);
@@ -758,7 +775,35 @@ async function summarizeChunkSlice(
             );
         } catch (error) {
             console_log(
-                `*** Db error for INSERT INTO Summaries ${JSON.stringify(summary)}: ${error}`,
+                `*** Db error for insert summary ${JSON.stringify(summary)}: ${error}`,
+            );
+            errors += 1;
+        }
+        try {
+            type BlobRowType = { lines: string; breadcrumb: ChunkId };
+            const blobRow: BlobRowType = prepGetBlobWithBreadcrumb.get(
+                summary.chunkId,
+            ) as any;
+            if (blobRow) {
+                let blobLines: string = blobRow.lines;
+                // Assume it doesn't start with a blank line /(^\s*\r?\n)*/
+                const indent = blobLines?.match(/^(\s*)\S/)?.[1] ?? ""; // Whitespace followed by non-whitespace
+                blobLines =
+                    `${indent}${languageCommentMap[summary.language ?? "python"]} ${summary.summary}\n` +
+                    `${indent}${summary.signature} ...\n`;
+                // console_log(
+                //     `  [Replacing\n'''\n${blobRow.lines}'''\nwith\n'''\n${blobLines}\n''']`,
+                // );
+                const res = prepUpdateBlob.run(blobLines, summary.chunkId);
+                if (res.changes !== 1) {
+                    console_log(
+                        `  [*** Failed to update blob lines for ${summary.chunkId}]`,
+                    );
+                }
+            }
+        } catch (error) {
+            console_log(
+                `*** Db error for update blob ${JSON.stringify(summary)}: ${error}`,
             );
             errors += 1;
         }
@@ -782,11 +827,21 @@ async function retryTranslateOn429<T>(
                 wrappedResult.message.includes("fetch error: 429:")
             ) {
                 let delay = defaultDelay;
-                const msec = wrappedResult.message.match(
+                const azureTime = wrappedResult.message.match(
                     /after (\d+) milliseconds/,
                 );
-                if (msec) {
-                    delay = parseInt(msec[1]) ?? defaultDelay;
+                const openaiTime = wrappedResult.message.match(
+                    /Please try again in (\d+\.\d*|\.\d+|\d+m)s./,
+                );
+                if (azureTime || openaiTime) {
+                    if (azureTime) {
+                        delay = parseInt(azureTime[1]);
+                    } else if (openaiTime) {
+                        delay = parseFloat(openaiTime[1]);
+                        if (!openaiTime[1].endsWith("m")) {
+                            delay *= 1000;
+                        }
+                    }
                 } else {
                     console_log(
                         `  [Couldn't find msec in '${wrappedResult.message}'`,
