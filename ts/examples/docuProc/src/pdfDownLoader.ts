@@ -26,6 +26,27 @@ interface ArxivPaper {
     journal_ref?: string;
 }
 
+const PAPER_CATALOG_PATH = path.join(__dirname, "papers","downloaded_papers.json");
+function loadDownloadedPapers(): Set<string> {
+    try {
+        if (fs.existsSync(PAPER_CATALOG_PATH)) {
+            const data = fs.readFileSync(PAPER_CATALOG_PATH, "utf8");
+            return new Set(JSON.parse(data));
+        }
+    } catch (error) {
+        console.error("Error loading downloaded papers catalog:", error);
+    }
+    return new Set();
+}
+
+function saveDownloadedPapers(downloadedPapers: Set<string>) {
+    try {
+        fs.writeFileSync(PAPER_CATALOG_PATH, JSON.stringify([...downloadedPapers], null, 2), "utf8");
+    } catch (error) {
+        console.error("Error saving downloaded papers catalog:", error);
+    }
+}
+
 export async function downloadArxivPapers(
     query: PdfDownloadQuery,
 ): Promise<any[] | undefined> {
@@ -77,8 +98,22 @@ export async function downloadArxivPapers(
             const papers: ArxivPaper[] = Array.isArray(entries)
                 ? entries
                 : [entries];
+        
+            if(papers.length > 0) {
+                const downloadedPapers = loadDownloadedPapers();
+                const newPapers = papers.filter(paper => {
+                    const paperId = paper.id;
+                    if (downloadedPapers.has(paperId)) {
+                        return false;
+                    }
+                    downloadedPapers.add(paperId);
+                    return true;
+                });
 
-            return papers;
+                await Promise.all(newPapers.map(async paper => await downloadArxivPaper(paper)));
+                saveDownloadedPapers(downloadedPapers);
+            }
+            return papers
         }
     } catch (error) {
         console.error("Error fetching arXiv papers:", error);
