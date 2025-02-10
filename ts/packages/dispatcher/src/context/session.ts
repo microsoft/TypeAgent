@@ -11,7 +11,7 @@ import ExifReader from "exifreader";
 import { AppAgentState, AppAgentStateOptions } from "./appAgentManager.js";
 import { cloneConfig, mergeConfig } from "./options.js";
 import { TokenCounter, TokenCounterData } from "aiclient";
-import { DispatcherName } from "./interactiveIO.js";
+import { DispatcherName } from "./dispatcher/dispatcherUtils.js";
 import { ConstructionProvider } from "../agentProvider/agentProvider.js";
 import { MultipleActionConfig } from "../translation/multipleActionSchema.js";
 

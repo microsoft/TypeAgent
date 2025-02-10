@@ -698,18 +698,22 @@ async function initialize() {
     });
 
     ipcMain.on("open-image-file", async () => {
-        // TODO: imeplement
-        const result = await dialog.showOpenDialog(mainWindow);
+        const result = await dialog.showOpenDialog(mainWindow, {
+            filters: [
+                {
+                    name: "Image files",
+                    extensions: ["png", "jpg", "jpeg", "gif"],
+                },
+            ],
+        });
+
         if (result && !result.canceled) {
             let paths = result.filePaths;
             if (paths && paths.length > 0) {
-                const content = readFileSync(paths[0], "utf-8").toString();
-                console.log(content);
-                return content;
+                const content = readFileSync(paths[0], "base64");
+                chatView.webContents.send("file-selected", paths[0], content);
             }
         }
-
-        return null;
     });
 
     ipcMain.on(

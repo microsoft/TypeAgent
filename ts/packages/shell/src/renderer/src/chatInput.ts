@@ -263,18 +263,6 @@ export class ChatInput {
             e.preventDefault();
         };
 
-        // this.fileInput = document.createElement("input");
-        // this.fileInput.type = "file";
-        // this.fileInput.classList.add("chat-message-hidden");
-        // this.fileInput.id = "image_upload";
-        // this.inputContainer.append(this.fileInput);
-        // this.fileInput.accept = "image/*,.jpg,.png,.gif";
-        // this.fileInput.onchange = () => {
-        //     if (this.fileInput.files && this.fileInput.files?.length > 0) {
-        //         this.loadImageFile(this.fileInput.files[0]);
-        //     }
-        // };
-
         this.micButton = document.createElement("button");
         this.micButton.appendChild(iconMicrophone());
         this.micButton.id = buttonId;
@@ -348,15 +336,27 @@ export class ChatInput {
         this.inputContainer.appendChild(this.sendButton);
     }
 
+    /**
+     * Loads the contents of the supplied image into the input text box.
+     * @param file The file whose contents to load
+     */
     async loadImageFile(file: File) {
         let buffer: ArrayBuffer = await file.arrayBuffer();
 
-        let dropImg: HTMLImageElement = document.createElement("img");
-        let mimeType = file.name
-            .toLowerCase()
-            .substring(file.name.lastIndexOf(".") + 1, file.name.length);
+        this.loadImageContent(file.name, _arrayBufferToBase64(buffer));
+    }
 
-        if (file.name.toLowerCase().endsWith(".jpg")) {
+    /**
+     * Creates and sets an image in the input text area.
+     * @param mimeType The mime type of the supplied image content
+     * @param content The base64 encoded image content
+     */
+    public async loadImageContent(fileName: string, content: string) {
+        let mimeType = fileName
+            .toLowerCase()
+            .substring(fileName.lastIndexOf(".") + 1, fileName.length);
+
+        if (fileName.toLowerCase().endsWith(".jpg")) {
             mimeType = "jpeg";
         }
 
@@ -365,13 +365,15 @@ export class ChatInput {
             "jpeg",
             "png",
         ]);
+
         if (!supportedMimeTypes.has(mimeType)) {
-            console.log(`Unsupported MIME type for '${file.name}'`);
+            console.log(`Unsupported MIME type for '${fileName}'`);
             this.textarea.getTextEntry().innerText = `Unsupported file type '${mimeType}'. Supported types: ${Array.from(supportedMimeTypes).toString()}`;
             return;
         }
-        dropImg.src =
-            `data:image/${mimeType};base64,` + _arrayBufferToBase64(buffer);
+
+        let dropImg: HTMLImageElement = document.createElement("img");
+        dropImg.src = `data:image/${mimeType};base64,` + content;
 
         dropImg.className = "chat-input-dropImage";
 

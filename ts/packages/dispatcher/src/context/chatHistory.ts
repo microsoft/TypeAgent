@@ -10,20 +10,20 @@ import { normalizeParamString, PromptEntity } from "agent-cache";
 type UserEntry = {
     role: "user";
     text: string;
-    id: RequestId;
+    id?: RequestId;
     attachments?: CachedImageWithDetails[] | undefined;
 };
 
 type AssistantEntry = {
     role: "assistant";
     text: string;
-    id: string | undefined;
+    id?: RequestId;
     sourceAppAgentName: string;
     entities?: Entity[] | undefined;
     additionalInstructions?: string[] | undefined;
 };
 
-type ChatHistoryEntry = UserEntry | AssistantEntry;
+export type ChatHistoryEntry = UserEntry | AssistantEntry;
 
 export interface ChatHistory {
     entries: ChatHistoryEntry[];

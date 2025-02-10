@@ -476,6 +476,12 @@ table.table-message td {
   margin-right: 8px;
 }
 
+.agent-name:hover .clickable {
+  cursor: pointer;
+  text-decoration: underline;
+  font-weight: bolder;
+}
+
 .agent-name[action-data]:hover:after {
   content: attr(action-data);
   position: absolute;
@@ -510,17 +516,8 @@ table.table-message td {
   right: 0;
 }
 
-.chat-message-explained[data-expl]:hover:after {
-  content: attr(data-expl);
-  position: absolute;
-  top: 0;
-  right: 0;
+.chat-message-action-data {
   white-space: nowrap;
-  background-color: lavender;
-  color: gray;
-  height: 100%;
-  border-radius: 5px;
-  margin-right: 5px;
   font-size: 80%;
 }
 
@@ -555,8 +552,8 @@ table.table-message td {
 }
 
 .chat-input-image {
-  max-width: 320px;
-  max-height: 320px;
+  max-width: 100%;
+  max-height: 100%;
   width: auto;
   height: auto;
   overflow: auto;

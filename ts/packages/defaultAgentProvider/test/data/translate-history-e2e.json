@@ -1,0 +1,14 @@
+[
+    {
+        "request": "play that song again",
+        "history": {
+            "user": "play some random songs",
+            "assistant": { "text": "Now playing: Soruwienf from album Wxifiel with artist Bnefisoe", "source": "player", "entities": [
+                {"name": "Soruwienf", "type": ["track", "song"], "uniqueId": "a"}, 
+                {"name": "Wxifiel", "type": ["album"], "uniqueId": "b"}, 
+                {"name": "Bnefisoe", "type": ["artist"], "uniqueId": "c"}
+            ]}
+        },
+        "action": {"translatorName": "player","actionName": "playTrack", "parameters": {"trackName": "Soruwienf", "albumName": "Wxifiel", "artists": ["Bnefisoe"]}}
+    }
+]

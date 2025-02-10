@@ -22,6 +22,7 @@ import { createWebSocket, webapi, webdispatcher } from "./webSocketAPI";
 import * as jose from "jose";
 import { AppAgentEvent } from "@typeagent/agent-sdk";
 import { ClientIO, Dispatcher } from "agent-dispatcher";
+import { swapContent } from "./setContent";
 
 export function getClientAPI(): ClientAPI {
     if (globalThis.api !== undefined) {
@@ -321,9 +322,31 @@ function addEvents(
                         lastSeparatorText!.innerText =
                             getDateDifferenceDescription(new Date(), timeStamp);
                     }
+
+                    // rewire up action-data click handler
+                    const nameDiv = div.querySelector(".agent-name.clickable");
+                    if (nameDiv != null) {
+                        const messageDiv = div.querySelector(
+                            ".chat-message-content",
+                        );
+
+                        if (messageDiv) {
+                            nameDiv.addEventListener("click", () => {
+                                swapContent(
+                                    nameDiv as HTMLSpanElement,
+                                    messageDiv as HTMLDivElement,
+                                );
+                            });
+                        }
+                    }
+
+                    // TODO: wire up any other functionality (player agent?)
                 }
             }
         }
+    });
+    api.onFileSelected((_, fileName: string, fileContent: string) => {
+        chatView.chatInput.loadImageContent(fileName, fileContent);
     });
 }
 

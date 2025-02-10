@@ -8,7 +8,10 @@ import {
     getFullActionName,
     normalizeParamString,
 } from "agent-cache";
-import { CommandHandlerContext } from "../context/commandHandlerContext.js";
+import {
+    CommandHandlerContext,
+    getCommandResult,
+} from "../context/commandHandlerContext.js";
 import registerDebug from "debug";
 import { getAppAgentName } from "../translation/agentTranslators.js";
 import {
@@ -40,12 +43,12 @@ import { getStorage } from "./storageImpl.js";
 import { IncrementalJsonValueCallBack } from "common-utils";
 import { ProfileNames } from "../utils/profileNames.js";
 import { conversation } from "knowledge-processor";
+import { makeClientIOMessage } from "../context/interactiveIO.js";
+import { UnknownAction } from "../context/dispatcher/schema/dispatcherActionSchema.js";
 import {
     DispatcherName,
-    makeClientIOMessage,
-} from "../context/interactiveIO.js";
-import { UnknownAction } from "../context/dispatcher/schema/dispatcherActionSchema.js";
-import { isUnknownAction } from "../context/dispatcher/dispatcherUtils.js";
+    isUnknownAction,
+} from "../context/dispatcher/dispatcherUtils.js";
 import { isPendingRequestAction } from "../translation/pendingRequest.js";
 import { translatePendingRequestAction } from "../translation/translateRequest.js";
 
@@ -552,12 +555,9 @@ export async function executeActions(
     context: ActionContext<CommandHandlerContext>,
 ) {
     const systemContext = context.sessionContext.agentContext;
-    if (systemContext.commandResult === undefined) {
-        systemContext.commandResult = {
-            actions: toFullActions(actions),
-        };
-    } else {
-        systemContext.commandResult.actions = toFullActions(actions);
+    const commandResult = getCommandResult(systemContext);
+    if (commandResult !== undefined) {
+        commandResult.actions = toFullActions(actions);
     }
 
     if (!(await canExecute(actions, context))) {

@@ -211,8 +211,18 @@ export function ensureCacheDir(instanceDir: string) {
     return dir;
 }
 
-export function getUserId() {
+let userid: string | undefined;
+export function getUserId(): string {
+    if (userid !== undefined) {
+        return userid;
+    }
+    const currentGlobalUserConfig = readGlobalUserConfig();
+    if (currentGlobalUserConfig !== undefined) {
+        userid = currentGlobalUserConfig.userid;
+        return userid;
+    }
     return lockUserData(() => {
-        return ensureGlobalUserConfig().userid;
+        userid = ensureGlobalUserConfig().userid;
+        return userid;
     });
 }

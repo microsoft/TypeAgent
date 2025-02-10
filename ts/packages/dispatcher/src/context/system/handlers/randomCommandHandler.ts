@@ -14,7 +14,7 @@ import {
     CommandHandlerTable,
 } from "@typeagent/agent-sdk/helpers/command";
 import { displayStatus } from "@typeagent/agent-sdk/helpers/display";
-import { DispatcherName } from "../../interactiveIO.js";
+import { DispatcherName } from "../../dispatcher/dispatcherUtils.js";
 import { getPackageFilePath } from "../../../utils/getPackageFilePath.js";
 
 export type UserRequestList = {
