@@ -84,7 +84,8 @@ export function indexOfNearest(
 }
 
 /**
- * Given a list of embeddings and a test embedding, return the ordinals of the nearest items
+ * Given a list of embeddings and a test embedding, return at most maxMatches ordinals
+ * of the nearest items that meet the provided minScore threshold
  * @param list
  * @param other
  * @param maxMatches
@@ -120,6 +121,33 @@ export function indexesOfNearest(
         }
     }
     return matches.byRank();
+}
+
+/**
+ * Given a list of embeddings and a test embedding, return ordinals
+ * of the nearest items that meet the provided minScore threshold
+ * @param list
+ * @param other
+ * @param similarityType
+ * @param minScore
+ * @returns
+ */
+export function indexesOfAllNearest(
+    list: Embedding[],
+    other: Embedding,
+    similarityType: SimilarityType,
+    minScore?: number,
+): ScoredItem[] {
+    minScore ??= 0;
+    const matches: ScoredItem[] = [];
+    for (let i = 0; i < list.length; ++i) {
+        const score: number = similarity(list[i], other, similarityType);
+        if (score >= minScore) {
+            matches.push({ item: i, score });
+        }
+    }
+    matches.sort((x, y) => y.score! - x.score!);
+    return matches;
 }
 
 export interface TopNList<T> {

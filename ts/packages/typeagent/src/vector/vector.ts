@@ -160,3 +160,11 @@ function divideInPlace(x: Vector, divisor: number): void {
         x[i] /= divisor;
     }
 }
+
+export function createMatrix(rowCount: number, colCount: number): number[][] {
+    const matrix: Array<number[]> = new Array<number[]>(rowCount);
+    for (let i = 0; i < rowCount; ++i) {
+        matrix[i] = new Array<number>(colCount);
+    }
+    return matrix;
+}

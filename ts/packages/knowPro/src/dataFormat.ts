@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { conversation } from "knowledge-processor";
+import { NormalizedEmbedding } from "typeagent";
 
 // an object that can provide a KnowledgeResponse structure
 export interface IKnowledgeSource {
@@ -124,14 +125,14 @@ export interface IConversationData<TMessage> {
 export type Term = {
     text: string;
     /**
-     * Optional additional score to use when this term matches
+     * Optional weighting for these matches
      */
-    score?: number | undefined;
+    weight?: number | undefined;
 };
 
 export interface ITermToRelatedTermsIndex {
     lookupTerm(termText: string): Term[] | undefined;
-    lookupTermFuzzy(termText: string): Promise<Term[] | undefined>;
+    get termEmbeddings(): ITermEmbeddingIndex | undefined;
     serialize(): ITermsToRelatedTermsIndexData;
     deserialize(data?: ITermsToRelatedTermsIndexData): void;
 }
@@ -151,11 +152,21 @@ export interface ITermsToRelatedTermsDataItem {
 }
 
 export interface ITermEmbeddingIndex {
-    lookupTermsFuzzy(
-        term: string,
+    lookupTerm(
+        text: string,
         maxMatches?: number,
         minScore?: number,
-    ): Promise<Term[] | undefined>;
+    ): Promise<Term[]>;
+    lookupTerms(
+        texts: string[],
+        maxMatches?: number,
+        minScore?: number,
+    ): Promise<Term[][]>;
+    lookupEmbeddings(
+        text: string,
+        maxMatches?: number,
+        minScore?: number,
+    ): Promise<[string, NormalizedEmbedding][] | undefined>;
     serialize(): ITextEmbeddingIndexData;
     deserialize(data: ITextEmbeddingIndexData): void;
 }
