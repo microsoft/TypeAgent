@@ -97,12 +97,13 @@ export class MatchAccumulator<T = any> {
         }
     }
 
-    public scaleScores(scoreScaler?: (match: Match<T>) => void) {
+    public calculateTotalScore(scoreScaler?: (match: Match<T>) => void) {
         scoreScaler ??= (m) => {
             if (m.relatedHitCount > 0) {
                 const avgScore = m.relatedScore / m.relatedHitCount;
                 const normalizedScore = Math.log(1 + avgScore);
                 m.score += normalizedScore;
+                //m.score += m.relatedScore;
             }
         };
         for (const match of this.getMatches()) {

@@ -111,7 +111,8 @@ export async function resolveRelatedTerms(
                 relatedTermsForSearchTerms[i];
         }
         //
-        // We need to prevent duplicate scoring.
+        // Due to fuzzy matching, a search term may end with related terms that overlap with those of other search terms.
+        // This causes scoring problems... duplicate/redundant scoring that can cause items to seem more relevant than they are
         // - The same related term can show up for different search terms but with different weights
         // - related terms may also already be present as search terms
         //
@@ -121,31 +122,37 @@ export async function resolveRelatedTerms(
 
 function dedupeRelatedTerms(searchTerms: SearchTerm[]) {
     const allSearchTerms = new TermSet();
-    const relatedWithMaxWeight = new TermSet();
+    const allRelatedTerms = new TermSet();
+    //
+    // Collect all unique search and related terms.
+    // We end up with {term, maximum weight for term} pairs
+    //
     searchTerms.forEach((st) => {
         allSearchTerms.add(st.term);
-        relatedWithMaxWeight.addOrUnion(st.relatedTerms);
+        allRelatedTerms.addOrUnion(st.relatedTerms);
     });
     for (const searchTerm of searchTerms) {
         if (searchTerm.relatedTerms && searchTerm.relatedTerms.length > 0) {
-            let nonDuplicateTerms: Term[] = [];
+            let uniqueRelatedForSearchTerm: Term[] = [];
             for (const candidateRelatedTerm of searchTerm.relatedTerms) {
                 if (allSearchTerms.has(candidateRelatedTerm)) {
                     // This related term is already a search term
                     continue;
                 }
-                // Related term is new. Only use it if it provides max weightf
+                // Each unique related term should be searched for
+                // only once, and (if there were duplicates) assigned the maximum weight assigned to that term
                 const termWithMaxWeight =
-                    relatedWithMaxWeight.get(candidateRelatedTerm);
+                    allRelatedTerms.get(candidateRelatedTerm);
                 if (
                     termWithMaxWeight !== undefined &&
                     termWithMaxWeight.weight === candidateRelatedTerm.weight
                 ) {
-                    nonDuplicateTerms.push(termWithMaxWeight);
-                    relatedWithMaxWeight.remove(candidateRelatedTerm);
+                    // Associate this related term with the current search term
+                    uniqueRelatedForSearchTerm.push(termWithMaxWeight);
+                    allRelatedTerms.remove(candidateRelatedTerm);
                 }
             }
-            searchTerm.relatedTerms = nonDuplicateTerms;
+            searchTerm.relatedTerms = uniqueRelatedForSearchTerm;
         }
     }
 }
@@ -276,7 +283,7 @@ export class TextEmbeddingIndex implements ITermEmbeddingIndex {
             minScore,
         );
         return matches.map((m) => {
-            return { text: this.textList[m.item], score: m.score };
+            return { text: this.textList[m.item], weight: m.score };
         });
     }
 
