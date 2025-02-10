@@ -39,7 +39,7 @@ export default class ExplainCommand extends Command {
     };
 
     static flags = {
-        translator: Flags.string({
+        schema: Flags.string({
             description: "Translator names",
             options: schemaNames,
             multiple: true,
@@ -72,8 +72,8 @@ export default class ExplainCommand extends Command {
 
     async run(): Promise<void> {
         const { args, flags } = await this.parse(ExplainCommand);
-        const schemas = flags.translator
-            ? Object.fromEntries(flags.translator.map((name) => [name, true]))
+        const schemas = flags.schema
+            ? Object.fromEntries(flags.schema.map((name) => [name, true]))
             : undefined;
 
         const command = ["@dispatcher explain"];

@@ -148,10 +148,10 @@ This command is used for explanation data management:
 
 Examples:
 
-1. Adding a single request to a new test data file. Note that a translator needs to be specified
+1. Adding a single request to a new test data file. Note that a schema needs to be specified
 
    ```bash
-   $ agent-cli data add -o blah.json "play some bach" --translator player
+   $ agent-cli data add -o blah.json "play some bach" --schema player
    Processing 1 inputs... Concurrency 40
    [player|v5] blah.json: Processing 1/1 (1 added)
    [1/1][ 19.062s] Generated: play some bach
@@ -195,7 +195,7 @@ Examples:
 
 ### Switching Translator and Explainer on command Line
 
-Most command on the CLI accept the `--translator` option to select the translator and `--explainer` option to select
+Most command on the CLI accept the `--schema` option to select the schema and `--explainer` option to select
 the explainer.
 
 ## Trademarks

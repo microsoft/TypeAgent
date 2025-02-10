@@ -17,6 +17,7 @@ import {
 import chalk from "chalk";
 import fs from "node:fs";
 import { getElapsedString } from "common-utils";
+import { getChatModelNames } from "aiclient";
 
 type TestResult = {
     request: string;
@@ -80,6 +81,7 @@ function summarizeResult(result: TestResultFile) {
     }
 }
 
+const modelNames = await getChatModelNames();
 const defaultAppAgentProviders = getDefaultAppAgentProviders(getInstanceDir());
 const schemaNames = getSchemaNamesForActionConfigProvider(
     await createActionConfigProvider(defaultAppAgentProviders),
@@ -96,10 +98,22 @@ export default class TestTranslateCommand extends Command {
         }),
     };
     static flags = {
-        translator: Flags.string({
+        schema: Flags.string({
             description: "Schema names",
             options: schemaNames,
             multiple: true,
+        }),
+        multiple: Flags.boolean({
+            description: "Include multiple action schema",
+            allowNo: true,
+        }),
+        model: Flags.string({
+            description: "Translation model to use",
+            options: modelNames,
+        }),
+        jsonSchema: Flags.boolean({
+            description: "Output JSON schema",
+            allowNo: true,
         }),
         concurrency: Flags.integer({
             char: "c",
@@ -114,7 +128,12 @@ export default class TestTranslateCommand extends Command {
             description: "Output test result file",
             required: true,
         }),
-        failed: Flags.boolean({
+        success: Flags.boolean({
+            char: "s",
+            description:
+                "Copy failed test data and rerun only successful tests from the test result file",
+        }),
+        fail: Flags.boolean({
             char: "f",
             description:
                 "Copy pass test data and rerun only failed tests from the test result file",
@@ -127,7 +146,6 @@ export default class TestTranslateCommand extends Command {
             description: "Summarize test result file",
         }),
         sample: Flags.integer({
-            char: "s",
             description: "number of sample to run",
         }),
     };
@@ -166,6 +184,7 @@ export default class TestTranslateCommand extends Command {
                 throw new Error("Result file is empty. No tests to rerun.");
             }
 
+            // determine repeat
             if (input.pass.length !== 0) {
                 repeat = input.pass[0].actions.length;
             } else {
@@ -177,16 +196,25 @@ export default class TestTranslateCommand extends Command {
                 }
             }
 
-            requests = input.fail.map((entry) => entry.request);
-            if (input.skipped) {
-                requests = requests.concat(input.skipped);
-            }
-            if (flags.failed) {
-                output.pass = input.pass;
+            const includeSuccess = flags.success || !flags.fail;
+            const includeFail = flags.fail || !flags.success;
+
+            if (includeFail) {
+                requests = input.fail.map((entry) => entry.request);
+                if (input.skipped) {
+                    requests = requests.concat(input.skipped);
+                }
             } else {
-                requests = input.pass
-                    .map((entry) => entry.request)
-                    .concat(requests);
+                requests = [];
+            }
+            if (includeSuccess) {
+                if (flags.failed) {
+                    output.pass = input.pass;
+                } else {
+                    requests = input.pass
+                        .map((entry) => entry.request)
+                        .concat(requests);
+                }
             }
 
             if (flags.repeat !== undefined && flags.repeat !== repeat) {
@@ -231,8 +259,8 @@ export default class TestTranslateCommand extends Command {
         if (flags.failed && flags.input !== undefined) {
             countStr = `${countStr} failed`;
         }
-        const schemas = flags.translator
-            ? Object.fromEntries(flags.translator.map((name) => [name, true]))
+        const schemas = flags.schema
+            ? Object.fromEntries(flags.schema.map((name) => [name, true]))
             : undefined;
         let failedTotal = 0;
         let noActions = 0;
@@ -251,13 +279,19 @@ export default class TestTranslateCommand extends Command {
         );
         const startTime = performance.now();
 
+        let executionTime = 0;
         async function worker() {
             const dispatcher = await createDispatcher("cli test translate", {
                 appAgentProviders: defaultAppAgentProviders,
                 schemas,
                 actions: null,
                 commands: { dispatcher: true },
-                translation: { history: { enabled: false } },
+                translation: {
+                    history: { enabled: false },
+                    model: flags.model,
+                    multiple: { enabled: flags.multiple },
+                    schema: { generation: { jsonSchema: flags.jsonSchema } },
+                },
                 explainer: { enabled: false },
                 cache: { enabled: false },
                 collectCommandResult: true,
@@ -266,11 +300,13 @@ export default class TestTranslateCommand extends Command {
                 const request = requests.shift()!;
 
                 const results: (FullAction[] | undefined)[] = [];
+                const time = performance.now();
                 for (let i = 0; i < repeat; i++) {
                     const commandResult =
                         await dispatcher.processCommand(request);
                     results.push(commandResult?.actions);
                 }
+                executionTime += performance.now() - time;
 
                 const expected = results[0];
                 let failed = false;
@@ -383,8 +419,18 @@ export default class TestTranslateCommand extends Command {
         printPart("Failed", output.fail.length, totalData);
         printPart("Skipped", output.skipped?.length ?? 0, totalData);
         console.log("=".repeat(60));
+        console.log(`Concurrency: ${concurrency}`);
+        const elapsed = endTime - startTime;
+        const elapsedPerRequest = elapsed / processed;
+        const elapsedPerCall = elapsedPerRequest / repeat;
         console.log(
-            `Time: ${getElapsedString(endTime - startTime)}, Average: ${getElapsedString((endTime - startTime) / processed)}`,
+            `Elapsed Time: ${getElapsedString(elapsed)}, Average: ${getElapsedString(elapsedPerRequest)} (${getElapsedString(elapsedPerCall)} per call)`,
+        );
+
+        const executionTimePerRequest = executionTime / processed;
+        const executionTimePerCall = executionTimePerRequest / repeat;
+        console.log(
+            `Execution Time: ${getElapsedString(executionTime)}, Average: ${getElapsedString(executionTimePerRequest)} (${getElapsedString(executionTimePerCall)} per call)`,
         );
     }
 }
