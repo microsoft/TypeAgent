@@ -66,11 +66,7 @@ function captureTokenStats(req: any, response: any): void {
 function createQueryContext(): QueryContext {
     const chatModel = openai.createChatModelDefault("spelunkerChat");
     chatModel.completionCallback = captureTokenStats;
-    const oracle = createTranslator<OracleSpecs>(
-        chatModel,
-        "oracleSchema.ts",
-        "OracleSpecs",
-    );
+
     const miniModel = openai.createChatModel(
         undefined, // "GPT_4_O_MINI" is slower than default model?!
         undefined,
@@ -78,6 +74,12 @@ function createQueryContext(): QueryContext {
         ["spelunkerMini"],
     );
     miniModel.completionCallback = captureTokenStats;
+
+    const oracle = createTranslator<OracleSpecs>(
+        chatModel,
+        "oracleSchema.ts",
+        "OracleSpecs",
+    );
     const chunkSelector = createTranslator<SelectorSpecs>(
         miniModel,
         "selectorSchema.ts",
@@ -88,6 +90,7 @@ function createQueryContext(): QueryContext {
         "summarizerSchema.ts",
         "SummarizerSpecs",
     );
+
     const databaseFolder = path.join(
         process.env.HOME ?? "/",
         ".typeagent",
@@ -99,6 +102,7 @@ function createQueryContext(): QueryContext {
         mode: 0o700,
     };
     fs.mkdirSync(databaseFolder, mkdirOptions);
+
     const databaseLocation = path.join(databaseFolder, "codeSearchDatabase.db");
     const database = undefined;
     return {
@@ -127,10 +131,60 @@ export async function searchCode(
 
     // 1. Create the database, chunkify all files in the focus folders, and store the chunks.
     //    Or use what's in the database if it looks up-to-date.
-    console_log(`[Step 1: Load database]`);
-    const db = await loadDatabase(context);
+    const db = await loadDatabaseAndChunks(context);
 
     // 2. Load all chunks from the database.
+    const allChunks = await loadAllChunksFromDatabase(db);
+
+    // 3. Ask a fast LLM for the most relevant chunk Ids, rank them, and keep the best ones.
+    const chunkDescs = await selectRelevantChunks(
+        context.queryContext!.chunkSelector,
+        allChunks,
+        input,
+    );
+    if (!chunkDescs.length) {
+        throw new Error("No chunks selected");
+    }
+
+    // 3a. Turn the selected chunkDescs back into real chunks.
+    const chunks = getRealChunks(chunkDescs, allChunks);
+
+    // 4. Construct a prompt from those chunks.
+    const prompt = constructPrompt(input, chunks);
+
+    // 5. Send the prompt to the oracle.
+    const wrappedResult = await queryOracle(context, prompt);
+    if (!wrappedResult.success) {
+        return createActionResultFromError(
+            `Failed to get an answer: ${wrappedResult.message}`,
+        );
+    }
+
+    // 6. Extract answer from result.
+    const result = wrappedResult.data;
+    const answer = result.answer;
+
+    // 7. Produce entities and an action result from the result.
+    const outputEntities = produceEntitiesFromResult(result, allChunks, db);
+    const resultEntity = createResultEntity(input, answer);
+
+    return createActionResultFromMarkdownDisplay(
+        answer,
+        outputEntities,
+        resultEntity,
+    );
+}
+
+async function loadDatabaseAndChunks(
+    context: SpelunkerContext,
+): Promise<sqlite.Database> {
+    console_log(`[Step 1: Load database]`);
+    return await loadDatabase(context);
+}
+
+async function loadAllChunksFromDatabase(
+    db: sqlite.Database,
+): Promise<Chunk[]> {
     console_log(`[Step 2: Load chunks from database]`);
     const allChunks: Chunk[] = [];
     const selectAllChunks = db.prepare(`SELECT * FROM chunks`);
@@ -167,21 +221,12 @@ export async function searchCode(
         allChunks.push(chunk);
     }
     console_log(`  [Loaded ${allChunks.length} chunks]`);
+    return allChunks;
+}
 
-    // 3. Ask a fast LLM for the most relevant chunks, rank them, and keep the best ones.
-    // The selection is done concurrently for real-time speed.
-    console_log(`[Step 3: Select most relevant chunks]`);
-    const chunks: Chunk[] = await selectChunks(context, allChunks, input);
-    if (!chunks.length) {
-        // TODO: Return an ActionResult with an error message
-        throw new Error("No chunks selected");
-    }
-
-    // 4. Construct a prompt from those chunks.
+function constructPrompt(input: string, chunks: Chunk[]): string {
     console_log(`[Step 4: Construct a prompt for the oracle]`);
-    // TODO: Prompt engineering
-    // TODO: Include summaries in the prompt
-    const prompt = `\
+    return `\
         Please answer the user question using the given context.
 
         User question: "${input}"
@@ -190,37 +235,26 @@ export async function searchCode(
 
         User question: "${input}"
         `;
-    // console_log(`[${prompt.slice(0, 1000)}]`);
+}
 
-    // 5. Send the prompt to the oracle.
+async function queryOracle(
+    context: SpelunkerContext,
+    prompt: string,
+): Promise<Result<any>> {
     console_log(`[Step 5: Ask the oracle]`);
-    const wrappedResult = await context.queryContext!.oracle.translate(prompt);
-    if (!wrappedResult.success) {
-        console_log(`  [Failure: ${wrappedResult.message}]`);
-        return createActionResultFromError(
-            `Failed to get an answer: ${wrappedResult.message}`,
-        );
-    }
+    return await context.queryContext!.oracle.translate(prompt);
+}
 
-    // 6. Extract answer from result.
+function produceEntitiesFromResult(
+    result: any,
+    allChunks: Chunk[],
+    db: sqlite.Database,
+): Entity[] {
     console_log(`  [Success:]`);
-    const result = wrappedResult.data;
-    // console_log(`[${JSON.stringify(result, undefined, 2).slice(0, 1000)}]`);
-    const answer = result.answer;
-    console_log(
-        `  [Got ${result.references.length} references; confidence is ${result.confidence}]`,
-    );
-    // console_log(`  [References: ${result.references.join(", ")}]`);
-    if (result.message) {
-        console_log(`  [*** Message: ${result.message} ***]`);
-    }
-
-    // 7. Produce entities and an action result from the result.
     const outputEntities: Entity[] = [];
     for (const ref of result.references) {
         const chunk = allChunks.find((c) => c.chunkId === ref);
         if (!chunk) continue;
-        // Need the first blob; blob.start + 1 gives the line number
         const blob = db
             .prepare(
                 `SELECT * FROM Blobs WHERE chunkId = ? ORDER BY start ASC LIMIT 1`,
@@ -232,28 +266,23 @@ export async function searchCode(
             type: ["code", chunk.treeName.replace(/Def$/, "").toLowerCase()],
             uniqueId: ref,
             additionalEntityText: `${chunk.fileName}#${blob.start + 1}`,
-            // TODO: Include summary and signature somehow?
         };
         outputEntities.push(entity);
-        // console_log(
-        //     `    [${entity.name} (${entity.type}) ${entity.uniqueId} ${entity.additionalEntityText}]`,
-        // );
     }
+    return outputEntities;
+}
 
-    const resultEntity: Entity = {
+function createResultEntity(input: string, answer: string): Entity {
+    return {
         name: `answer for ${input}`,
         type: ["text", "answer", "markdown"],
         uniqueId: "", // TODO
         additionalEntityText: answer,
     };
-    return createActionResultFromMarkdownDisplay(
-        answer,
-        outputEntities,
-        resultEntity,
-    );
 }
 
-async function selectChunks(
+// TODO: Is this still needed?
+export async function selectChunks(
     context: SpelunkerContext,
     allChunks: Chunk[],
     input: string,
@@ -329,8 +358,17 @@ async function selectRelevantChunks(
         console_log(`  [Failed to select chunks for ${chunks.length} chunks]`);
         return [];
     } else {
-        return result.chunks;
+        return result.chunkDescs;
     }
+}
+
+function getRealChunks(
+    chunkDescs: ChunkDescription[],
+    allChunks: Chunk[],
+): Chunk[] {
+    return chunkDescs
+        .map((desc) => allChunks.find((c) => c.chunkId === desc.chunkId))
+        .filter((c): c is Chunk => c !== undefined);
 }
 
 function prepareChunks(chunks: Chunk[]): string {
