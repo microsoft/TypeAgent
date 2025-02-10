@@ -2,13 +2,15 @@
 // Licensed under the MIT License.
 
 import {
-    createCalendarGraphClient,
-    CalendarClient,
     getNormalizedDateRange,
     getNormalizedDateTimes,
     getTimeZoneName,
-    GraphEntity,
     getUniqueLocalId,
+} from "common-utils";
+import {
+    createCalendarGraphClient,
+    CalendarClient,
+    GraphEntity,
     ErrorResponse,
 } from "graph-utils";
 import chalk from "chalk";

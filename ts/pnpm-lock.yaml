@@ -85,9 +85,15 @@ importers:
       code-processor:
         specifier: workspace:*
         version: link:../../packages/codeProcessor
+      common-utils:
+        specifier: workspace:*
+        version: link:../../packages/commonUtils
       dotenv:
         specifier: ^16.3.1
         version: 16.3.1
+      exifreader:
+        specifier: 4.23.5
+        version: 4.23.5
       interactive-app:
         specifier: workspace:*
         version: link:../../packages/interactiveApp
@@ -776,6 +782,9 @@ importers:
       chalk:
         specifier: ^5.3.0
         version: 5.3.0
+      common-utils:
+        specifier: workspace:*
+        version: link:../../commonUtils
       date-fns:
         specifier: ^4.1.0
         version: 4.1.0
@@ -1743,9 +1752,6 @@ importers:
       '@azure-rest/maps-search':
         specifier: ^2.0.0-beta.2
         version: 2.0.0-beta.2
-      '@azure/maps-search':
-        specifier: ^1.0.0-beta.2
-        version: 1.0.0-beta.2
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../agentSdk
@@ -1755,6 +1761,9 @@ importers:
       chalk:
         specifier: ^5.3.0
         version: 5.3.0
+      date-fns:
+        specifier: ^4.1.0
+        version: 4.1.0
       debug:
         specifier: ^4.4.0
         version: 4.4.0(supports-color@8.1.1)
@@ -2110,9 +2119,15 @@ importers:
       aiclient:
         specifier: workspace:*
         version: link:../aiclient
+      common-utils:
+        specifier: workspace:*
+        version: link:../commonUtils
       debug:
         specifier: ^4.4.0
         version: 4.4.0(supports-color@8.1.1)
+      exifreader:
+        specifier: 4.23.5
+        version: 4.23.5
       typeagent:
         specifier: workspace:*
         version: link:../typeagent
@@ -2717,11 +2732,6 @@ packages:
   '@azure/maps-common@1.0.0-beta.2':
     resolution: {integrity: sha512-PB9GlnfojcQ4nf9WXdQvWeAk7gm8P74o+Z5IHz5YLK/W+3vrNrmVVVuFpGOvCPrLjag50UinaZsMBtPtxoiobg==}
     engines: {node: '>=14.0.0'}
-
-  '@azure/maps-search@1.0.0-beta.2':
-    resolution: {integrity: sha512-l2tFiQP+jsRpJG6YtoFBuaiH1aYE9gewzAUQVzUf8KqqG+H7arUkfa7E2zA96nBg1b59TdPaDvWtcxL2ytiD3Q==}
-    engines: {node: '>=14.0.0'}
-    deprecated: Please use @azure-rest/maps-search
 
   '@azure/msal-browser@3.26.1':
     resolution: {integrity: sha512-y78sr9g61aCAH9fcLO1um+oHFXc1/5Ap88RIsUSuzkm0BHzFnN+PXGaQeuM1h5Qf5dTnWNOd6JqkskkMPAhh7Q==}
@@ -9942,19 +9952,6 @@ snapshots:
       '@azure/core-client': 1.9.1
       '@azure/core-lro': 2.7.2
       '@azure/core-rest-pipeline': 1.15.1
-    transitivePeerDependencies:
-      - supports-color
-
-  '@azure/maps-search@1.0.0-beta.2':
-    dependencies:
-      '@azure/core-auth': 1.7.1
-      '@azure/core-client': 1.9.1
-      '@azure/core-lro': 2.7.2
-      '@azure/core-rest-pipeline': 1.15.1
-      '@azure/core-tracing': 1.1.1
-      '@azure/logger': 1.1.1
-      '@azure/maps-common': 1.0.0-beta.2
-      tslib: 2.6.2
     transitivePeerDependencies:
       - supports-color
 
