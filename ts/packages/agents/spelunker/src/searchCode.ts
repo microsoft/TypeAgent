@@ -21,7 +21,13 @@ import {
 import { createActionResultFromError } from "@typeagent/agent-sdk/helpers/action";
 import { loadSchema } from "typeagent";
 
-import { Blob, Chunk, ChunkedFile, ChunkerErrorItem } from "./chunkSchema.js";
+import {
+    Blob,
+    Chunk,
+    ChunkedFile,
+    ChunkerErrorItem,
+    ChunkId,
+} from "./chunkSchema.js";
 import { OracleSpecs } from "./oracleSchema.js";
 import { chunkifyPythonFiles } from "./pythonChunker.js";
 import { ChunkDescription, SelectorSpecs } from "./selectorSchema.js";
@@ -180,7 +186,7 @@ export async function searchCode(
 
         User question: "${input}"
 
-        Context: ${prepareChunks(chunks, db)}
+        Context: ${prepareChunks(chunks)}
 
         User question: "${input}"
         `;
@@ -315,7 +321,7 @@ async function selectRelevantChunks(
     User question: "${input}"
 
     Chunks:
-    ${prepareChunks(chunks, undefined)}
+    ${prepareChunks(chunks)}
     `;
     // console_log(prompt);
     const result = await retryTranslateOn429(() => selector.translate(prompt));
@@ -327,10 +333,7 @@ async function selectRelevantChunks(
     }
 }
 
-function prepareChunks(
-    chunks: Chunk[],
-    db: sqlite.Database | undefined,
-): string {
+function prepareChunks(chunks: Chunk[]): string {
     chunks.sort(
         // Sort by file name and chunk ID (should order by line number)
         (a, b) => {
@@ -348,9 +351,6 @@ function prepareChunks(
     }
     let lastFn = "";
     let lineNo = 0;
-    const prepGetSummary = db?.prepare(
-        "SELECT language, summary, signature FROM Summaries WHERE chunkId = ?",
-    );
     for (const chunk of chunks) {
         if (chunk.fileName !== lastFn) {
             lastFn = chunk.fileName;
@@ -363,22 +363,7 @@ function prepareChunks(
         );
         for (const blob of chunk.blobs) {
             lineNo = blob.start;
-            let blobLines = blob.lines;
-            if (db && blob.breadcrumb) {
-                // TODO: Do this earlier, so keepBestChunks can use the adjusted chunk sizes.
-                const summaryRow: any = prepGetSummary?.get(blob.breadcrumb);
-                if (summaryRow) {
-                    const indent = blobLines[0]?.match(/^(\s*)/)?.[1] ?? "";
-                    blobLines = [
-                        `${indent}${languageCommentMap[summaryRow.language ?? "python"]} ${summaryRow.summary}\n`,
-                        `${indent}${summaryRow.signature} ...\n`,
-                    ];
-                    // console_log(
-                    //     `  [Replacing\n'''\n${blob.lines.join("")}'''\nwith\n'''\n${blobLines.join("")}\n''']`,
-                    // );
-                }
-            }
-            for (const line of blobLines) {
+            for (const line of blob.lines) {
                 lineNo += 1;
                 put(`${lineNo} ${line}`);
             }
@@ -387,6 +372,8 @@ function prepareChunks(
     return output.join("");
 }
 
+// TODO: Make the values two elements, comment start and comment end
+// (and then caller should ensure comment end doesn't occur in the comment text).
 const languageCommentMap: { [key: string]: string } = {
     python: "#",
     typescript: "//",
@@ -750,7 +737,7 @@ async function summarizeChunkSlice(
     Also include the signature of the chunk.
 
     Chunks:
-    ${prepareChunks(chunks, undefined)}
+    ${prepareChunks(chunks)}
     `;
     // console_log(prompt);
     const result = await retryTranslateOn429(() =>
@@ -767,9 +754,15 @@ async function summarizeChunkSlice(
     // console_log(`  [Received ${result.summaries.length} summaries]`);
     // Enter them into the database
     const db = context.queryContext!.database!;
-    const prepInsertSummary = db.prepare(`
-        INSERT OR REPLACE INTO Summaries (chunkId, language, summary, signature) VALUES (?, ?, ?, ?)
-    `);
+    const prepInsertSummary = db.prepare(
+        `INSERT OR REPLACE INTO Summaries (chunkId, language, summary, signature) VALUES (?, ?, ?, ?)`,
+    );
+    const prepGetBlobWithBreadcrumb = db.prepare(
+        `SELECT lines, breadcrumb FROM Blobs WHERE breadcrumb = ?`,
+    );
+    const prepUpdateBlob = db.prepare(
+        "UPDATE Blobs SET lines = ? WHERE breadcrumb = ?",
+    );
     let errors = 0;
     for (const summary of summarizeSpecs.summaries) {
         // console_log(summary);
@@ -782,7 +775,35 @@ async function summarizeChunkSlice(
             );
         } catch (error) {
             console_log(
-                `*** Db error for INSERT INTO Summaries ${JSON.stringify(summary)}: ${error}`,
+                `*** Db error for insert summary ${JSON.stringify(summary)}: ${error}`,
+            );
+            errors += 1;
+        }
+        try {
+            type BlobRowType = { lines: string; breadcrumb: ChunkId };
+            const blobRow: BlobRowType = prepGetBlobWithBreadcrumb.get(
+                summary.chunkId,
+            ) as any;
+            if (blobRow) {
+                let blobLines: string = blobRow.lines;
+                // Assume it doesn't start with a blank line /(^\s*\r?\n)*/
+                const indent = blobLines?.match(/^(\s*)\S/)?.[1] ?? ""; // Whitespace followed by non-whitespace
+                blobLines =
+                    `${indent}${languageCommentMap[summary.language ?? "python"]} ${summary.summary}\n` +
+                    `${indent}${summary.signature} ...\n`;
+                // console_log(
+                //     `  [Replacing\n'''\n${blobRow.lines}'''\nwith\n'''\n${blobLines}\n''']`,
+                // );
+                const res = prepUpdateBlob.run(blobLines, summary.chunkId);
+                if (res.changes !== 1) {
+                    console_log(
+                        `  [*** Failed to update blob lines for ${summary.chunkId}]`,
+                    );
+                }
+            }
+        } catch (error) {
+            console_log(
+                `*** Db error for update blob ${JSON.stringify(summary)}: ${error}`,
             );
             errors += 1;
         }
