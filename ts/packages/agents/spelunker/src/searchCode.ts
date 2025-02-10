@@ -701,7 +701,7 @@ function createDatabase(context: SpelunkerContext): sqlite.Database {
     return db;
 }
 
-export async function summarizeChunks(
+async function summarizeChunks(
     context: SpelunkerContext,
     chunks: Chunk[],
 ): Promise<void> {
