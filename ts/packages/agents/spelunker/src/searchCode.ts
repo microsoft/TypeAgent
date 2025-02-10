@@ -137,11 +137,7 @@ export async function searchCode(
     const allChunks = await loadAllChunksFromDatabase(db);
 
     // 3. Ask a fast LLM for the most relevant chunk Ids, rank them, and keep the best ones.
-    const chunks = await selectChunks(
-        context,
-        allChunks,
-        input,
-    );
+    const chunks = await selectChunks(context, allChunks, input);
     if (!chunks.length) {
         throw new Error("No chunks selected");
     }
@@ -283,7 +279,9 @@ export async function selectChunks(
     allChunks: Chunk[],
     input: string,
 ): Promise<Chunk[]> {
-    console_log(`[Step 3: Select relevant chunks from ${allChunks.length} chunks]`);
+    console_log(
+        `[Step 3: Select relevant chunks from ${allChunks.length} chunks]`,
+    );
     const promises: Promise<ChunkDescription[]>[] = [];
     const maxConcurrency =
         parseInt(process.env.AZURE_OPENAI_MAX_CONCURRENCY ?? "5") ?? 5;
