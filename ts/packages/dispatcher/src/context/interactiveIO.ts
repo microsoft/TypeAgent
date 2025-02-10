@@ -2,7 +2,10 @@
 // Licensed under the MIT License.
 
 import { TemplateEditConfig } from "../translation/actionTemplate.js";
-import { CommandHandlerContext } from "./commandHandlerContext.js";
+import {
+    CommandHandlerContext,
+    getCommandResult,
+} from "./commandHandlerContext.js";
 import {
     DisplayContent,
     DisplayAppendMode,
@@ -10,7 +13,6 @@ import {
 } from "@typeagent/agent-sdk";
 import { RequestMetrics } from "../utils/metrics.js";
 
-export const DispatcherName = "dispatcher";
 export type RequestId = string | undefined;
 
 export enum NotifyCommands {
@@ -88,12 +90,23 @@ export interface ClientIO {
 }
 
 export function makeClientIOMessage(
-    context: CommandHandlerContext | undefined,
+    context: CommandHandlerContext,
     message: DisplayContent,
     requestId: RequestId,
     source: string,
     actionIndex?: number,
 ): IAgentMessage {
+    if (
+        typeof message === "object" &&
+        !Array.isArray(message) &&
+        message.kind === "error"
+    ) {
+        const commandResult = getCommandResult(context);
+        if (commandResult !== undefined) {
+            commandResult.hasError = true;
+        }
+    }
+
     return {
         message,
         requestId,
@@ -101,7 +114,7 @@ export function makeClientIOMessage(
         actionIndex,
         metrics:
             requestId !== undefined
-                ? context?.metricsManager?.getMetrics(requestId)
+                ? context.metricsManager?.getMetrics(requestId)
                 : undefined,
     };
 }

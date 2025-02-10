@@ -1,12 +1,21 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { toStringSchemaType } from "./toString.js";
 import {
     SchemaTypeArray,
     SchemaTypeObject,
     SchemaType,
     ActionSchemaTypeDefinition,
 } from "./type.js";
+
+function errorName(name: string) {
+    return name === "" ? "Input" : `Field '${name}'`;
+}
+
+function indentMessage(message: string) {
+    return `${message.replace(/\n/g, "\n    ")}`;
+}
 
 export function validateSchema(
     name: string,
@@ -15,19 +24,29 @@ export function validateSchema(
     coerce: boolean = false, // coerce string to the right primitive type
 ) {
     if (actual === null) {
-        throw new Error(`'${name}' should not be null`);
+        throw new Error(`${errorName(name)} should not be null`);
     }
     switch (expected.type) {
         case "type-union": {
+            const errors: [SchemaType, Error][] = [];
             for (const type of expected.types) {
                 try {
                     validateSchema(name, type, actual, coerce);
                     return;
-                } catch (e) {
-                    // ignore
+                } catch (e: any) {
+                    errors.push([type, e]);
                 }
             }
-            throw new Error(`'${name}' does not match any union type`);
+            const messages = errors
+                .map(
+                    ([type, e], i) =>
+                        `\n-- Type: ${toStringSchemaType(type)}\n-- Error: ${indentMessage(e.message)}`,
+                )
+                .join("\n");
+
+            throw new Error(
+                `${errorName(name)} does not match any union type\n${messages}`,
+            );
         }
         case "type-reference":
             if (expected.definition !== undefined) {
@@ -37,7 +56,7 @@ export function validateSchema(
         case "object":
             if (typeof actual !== "object" || Array.isArray(actual)) {
                 throw new Error(
-                    `'${name}' is not an object, got ${Array.isArray(actual) ? "array" : typeof actual} instead`,
+                    `${errorName(name)} is not an object, got ${Array.isArray(actual) ? "array" : typeof actual} instead`,
                 );
             }
             validateObject(
@@ -50,7 +69,7 @@ export function validateSchema(
         case "array":
             if (!Array.isArray(actual)) {
                 throw new Error(
-                    `'${name}' is not an array, got ${typeof actual} instead`,
+                    `${errorName(name)} is not an array, got ${typeof actual} instead`,
                 );
             }
             validateArray(name, expected, actual, coerce);
@@ -58,7 +77,7 @@ export function validateSchema(
         case "string-union":
             if (typeof actual !== "string") {
                 throw new Error(
-                    `'${name}' is not a string, got ${typeof actual} instead`,
+                    `${errorName(name)} is not a string, got ${typeof actual} instead`,
                 );
             }
             if (!expected.typeEnum.includes(actual)) {
@@ -67,7 +86,7 @@ export function validateSchema(
                         ? `${expected.typeEnum[0]}`
                         : `one of ${expected.typeEnum.map((s) => `'${s}'`).join(",")}`;
                 throw new Error(
-                    `'${name}' is not ${expectedValues}, got ${actual} instead`,
+                    `${errorName(name)} is not ${expectedValues}, got ${actual} instead`,
                 );
             }
             break;
@@ -92,7 +111,7 @@ export function validateSchema(
                     }
                 }
                 throw new Error(
-                    `'${name}' is not a ${expected.type}, got ${typeof actual} instead`,
+                    `${errorName(name)} is not a ${expected.type}, got ${typeof actual} instead`,
                 );
             }
     }
@@ -131,7 +150,7 @@ function validateObject(
         const fullName = name ? `${name}.${fieldName}` : fieldName;
         if (actualValue === undefined) {
             if (!fieldInfo.optional) {
-                throw new Error(`Missing required property ${fullName}`);
+                throw new Error(`Missing required property '${fullName}'`);
             }
             continue;
         }
@@ -158,4 +177,8 @@ export function validateAction(
     coerce: boolean = false,
 ) {
     validateObject("", actionSchema.type, action, coerce, ["translatorName"]);
+}
+
+export function validateType(type: SchemaType, value: any) {
+    validateSchema("", type, value);
 }

@@ -66,6 +66,10 @@ export const webapi: ClientAPI = {
         // TODO: implement proper message rehydration on mobile
         fnMap.set("chat-history", callback);
     },
+    onFileSelected(callback) {
+        // TODO: implement image selection on mobile device
+        fnMap.set("file-selected", callback);
+    },
     registerClientIO(clientIO: ClientIO) {
         if (clientIORegistered) {
             throw new Error("ClientIO already registered");

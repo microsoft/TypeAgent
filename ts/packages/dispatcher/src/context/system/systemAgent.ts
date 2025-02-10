@@ -119,41 +119,35 @@ class HelpCommandHandler implements CommandHandler {
                 undefined,
                 context,
             );
-        } else {
-            const result = await resolveCommand(
-                params.args.command,
-                systemContext,
-            );
-
-            const command = getParsedCommand(result);
-            if (result.suffix.length !== 0) {
-                displayError(
-                    `ERROR: '${result.suffix}' is not a subcommand for '@${command}'`,
-                    context,
-                );
-            }
-
-            if (result.descriptor !== undefined) {
-                const defaultSubCommand =
-                    result.table !== undefined
-                        ? getDefaultSubCommandDescriptor(result.table)
-                        : undefined;
-
-                if (defaultSubCommand !== result.descriptor) {
-                    displayResult(
-                        getUsage(command, result.descriptor),
-                        context,
-                    );
-                    return;
-                }
-            }
-
-            if (result.table === undefined) {
-                throw new Error(`Unknown command '${params.args.command}'`);
-            }
-
-            printStructuredHandlerTableUsage(result.table, command, context);
+            return;
         }
+        const result = await resolveCommand(params.args.command, systemContext);
+
+        const command = getParsedCommand(result);
+        if (result.suffix.length !== 0) {
+            displayError(
+                `ERROR: '${result.suffix}' is not a subcommand for '@${command}'`,
+                context,
+            );
+        }
+
+        if (result.descriptor !== undefined) {
+            const defaultSubCommand =
+                result.table !== undefined
+                    ? getDefaultSubCommandDescriptor(result.table)
+                    : undefined;
+
+            if (defaultSubCommand !== result.descriptor) {
+                displayResult(getUsage(command, result.descriptor), context);
+                return;
+            }
+        }
+
+        if (result.table === undefined) {
+            throw new Error(`Unknown command '${params.args.command}'`);
+        }
+
+        printStructuredHandlerTableUsage(result.table, command, context);
     }
 }
 

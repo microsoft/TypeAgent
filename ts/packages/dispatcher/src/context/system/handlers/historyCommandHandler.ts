@@ -1,7 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ActionContext, ParsedCommandParams } from "@typeagent/agent-sdk";
+import {
+    ActionContext,
+    Entity,
+    ParsedCommandParams,
+} from "@typeagent/agent-sdk";
 import {
     CommandHandler,
     CommandHandlerNoParams,
@@ -9,8 +13,10 @@ import {
 } from "@typeagent/agent-sdk/helpers/command";
 import { displayResult } from "@typeagent/agent-sdk/helpers/display";
 import { CommandHandlerContext } from "../../commandHandlerContext.js";
+import { ChatHistoryEntry } from "../../chatHistory.js";
+import { ActionSchemaCreator as sc, validateType } from "action-schema";
 
-export class HistoryListCommandHandler implements CommandHandlerNoParams {
+class HistoryListCommandHandler implements CommandHandlerNoParams {
     public readonly description = "List history";
     public async run(context: ActionContext<CommandHandlerContext>) {
         const systemContext = context.sessionContext.agentContext;
@@ -27,7 +33,7 @@ export class HistoryListCommandHandler implements CommandHandlerNoParams {
     }
 }
 
-export class HistoryClearCommandHandler implements CommandHandlerNoParams {
+class HistoryClearCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Clear the history";
     public async run(context: ActionContext<CommandHandlerContext>) {
         const systemContext = context.sessionContext.agentContext;
@@ -39,7 +45,7 @@ export class HistoryClearCommandHandler implements CommandHandlerNoParams {
     }
 }
 
-export class HistoryDeleteCommandHandler implements CommandHandler {
+class HistoryDeleteCommandHandler implements CommandHandler {
     public readonly description =
         "Delete a specific message from the chat history";
     public readonly parameters = {
@@ -75,6 +81,118 @@ export class HistoryDeleteCommandHandler implements CommandHandler {
     }
 }
 
+type ChatHistoryInputAssistant = {
+    text: string;
+    source: string;
+    entities?: Entity[];
+};
+export type ChatHistoryInput = {
+    user: string;
+    assistant: ChatHistoryInputAssistant | ChatHistoryInputAssistant[];
+};
+
+function convertAssistantMessage(
+    entries: ChatHistoryEntry[],
+    message: ChatHistoryInputAssistant,
+) {
+    entries.push({
+        role: "assistant",
+        text: message.text,
+        sourceAppAgentName: message.source,
+        entities: message.entities,
+    });
+}
+
+function convertChatHistoryInputEntry(
+    entries: ChatHistoryEntry[],
+    message: ChatHistoryInput,
+) {
+    entries.push({
+        role: "user",
+        text: message.user,
+    });
+    const assistant = message.assistant;
+    if (Array.isArray(assistant)) {
+        assistant.forEach((m) => convertAssistantMessage(entries, m));
+    } else {
+        convertAssistantMessage(entries, assistant);
+    }
+}
+
+function getChatHistoryInput(
+    message: ChatHistoryInput | ChatHistoryInput[],
+): ChatHistoryEntry[] {
+    const entries: ChatHistoryEntry[] = [];
+    if (Array.isArray(message)) {
+        message.forEach((m) => convertChatHistoryInputEntry(entries, m));
+    } else {
+        convertChatHistoryInputEntry(entries, message);
+    }
+    return entries;
+}
+
+const assistantInputSchema = sc.obj({
+    text: sc.string(),
+    source: sc.string(),
+    entities: sc.optional(
+        sc.array(
+            sc.obj({
+                name: sc.string(),
+                type: sc.array(sc.string()),
+                uniqueId: sc.optional(sc.string()),
+            }),
+        ),
+    ),
+});
+
+const messageInputSchema = sc.obj({
+    user: sc.string(),
+    assistant: sc.union(assistantInputSchema, sc.array(assistantInputSchema)),
+});
+
+const chatHistoryInputSchema = sc.union(
+    messageInputSchema,
+    sc.array(messageInputSchema),
+);
+
+class HistoryInsertCommandHandler implements CommandHandler {
+    public readonly description = "Insert messages to chat history";
+    public readonly parameters = {
+        args: {
+            messages: {
+                description: "Chat history messages to insert",
+                type: "json",
+                implicitQuotes: true,
+            },
+        },
+    } as const;
+
+    public async run(
+        context: ActionContext<CommandHandlerContext>,
+        param: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const systemContext = context.sessionContext.agentContext;
+        const { messages } = param.args;
+
+        if (messages.length === 0) {
+            throw new Error("No messages to insert.");
+        }
+
+        validateType(chatHistoryInputSchema, messages);
+
+        systemContext.chatHistory.entries.push(
+            ...getChatHistoryInput(
+                messages as unknown as ChatHistoryInput | ChatHistoryInput[],
+            ),
+        );
+
+        displayResult(
+            `Inserted ${messages.length} messages to chat history. ${systemContext.chatHistory.entries.length} messages in total.`,
+            context,
+        );
+    }
+}
+
 export function getHistoryCommandHandlers(): CommandHandlerTable {
     return {
         description: "History commands",
@@ -83,6 +201,7 @@ export function getHistoryCommandHandlers(): CommandHandlerTable {
             list: new HistoryListCommandHandler(),
             clear: new HistoryClearCommandHandler(),
             delete: new HistoryDeleteCommandHandler(),
+            insert: new HistoryInsertCommandHandler(),
         },
     };
 }
