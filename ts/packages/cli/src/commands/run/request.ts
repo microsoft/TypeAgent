@@ -33,7 +33,7 @@ export default class RequestCommand extends Command {
     };
 
     static flags = {
-        translator: Flags.string({
+        schema: Flags.string({
             description: "Schema name",
             options: schemaNames,
             multiple: true,
@@ -57,8 +57,8 @@ export default class RequestCommand extends Command {
 
     async run(): Promise<void> {
         const { args, flags } = await this.parse(RequestCommand);
-        const schemas = flags.translator
-            ? Object.fromEntries(flags.translator.map((name) => [name, true]))
+        const schemas = flags.schema
+            ? Object.fromEntries(flags.schema.map((name) => [name, true]))
             : undefined;
         const dispatcher = await createDispatcher("cli run request", {
             appAgentProviders: defaultAppAgentProviders,

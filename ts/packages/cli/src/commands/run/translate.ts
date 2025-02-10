@@ -28,7 +28,7 @@ export default class TranslateCommand extends Command {
     };
 
     static flags = {
-        translator: Flags.string({
+        schema: Flags.string({
             description: "Translator name",
             options: schemaNames,
             multiple: true,
@@ -54,8 +54,8 @@ export default class TranslateCommand extends Command {
 
     async run(): Promise<void> {
         const { args, flags } = await this.parse(TranslateCommand);
-        const schemas = flags.translator
-            ? Object.fromEntries(flags.translator.map((name) => [name, true]))
+        const schemas = flags.schema
+            ? Object.fromEntries(flags.schema.map((name) => [name, true]))
             : undefined;
 
         await withConsoleClientIO(async (clientIO: ClientIO) => {

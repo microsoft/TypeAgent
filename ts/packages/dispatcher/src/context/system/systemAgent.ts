@@ -194,8 +194,8 @@ class ActionCommandHandler implements CommandHandler {
     public readonly description = "Execute an action";
     public readonly parameters = {
         args: {
-            translatorName: {
-                description: "Action translator name",
+            schemaName: {
+                description: "Action schema name",
             },
             actionName: {
                 description: "Action name",
@@ -214,22 +214,22 @@ class ActionCommandHandler implements CommandHandler {
         params: ParsedCommandParams<typeof this.parameters>,
     ) {
         const systemContext = context.sessionContext.agentContext;
-        const { translatorName, actionName } = params.args;
+        const { schemaName, actionName } = params.args;
         const actionSchemaFile =
-            systemContext.agents.tryGetActionSchemaFile(translatorName);
+            systemContext.agents.tryGetActionSchemaFile(schemaName);
         if (actionSchemaFile === undefined) {
-            throw new Error(`Invalid schema name ${translatorName}`);
+            throw new Error(`Invalid schema name ${schemaName}`);
         }
 
         const actionSchema = actionSchemaFile.actionSchemas.get(actionName);
         if (actionSchema === undefined) {
             throw new Error(
-                `Invalid action name ${actionName} for schema ${translatorName}`,
+                `Invalid action name ${actionName} for schema ${schemaName}`,
             );
         }
 
         const action: AppAction = {
-            translatorName,
+            translatorName: schemaName,
             actionName,
         };
 
@@ -260,12 +260,12 @@ class ActionCommandHandler implements CommandHandler {
             }
 
             if (name === "actionName") {
-                const translatorName = params.args?.translatorName;
-                if (translatorName === undefined) {
+                const schemaName = params.args?.schemaName;
+                if (schemaName === undefined) {
                     continue;
                 }
                 const actionSchemaFile =
-                    systemContext.agents.tryGetActionSchemaFile(translatorName);
+                    systemContext.agents.tryGetActionSchemaFile(schemaName);
                 if (actionSchemaFile === undefined) {
                     continue;
                 }
@@ -276,7 +276,7 @@ class ActionCommandHandler implements CommandHandler {
             if (name === "--parameters.") {
                 // complete the flag name for json properties
                 const action = {
-                    translatorName: params.args?.translatorName,
+                    translatorName: params.args?.schemaName,
                     actionName: params.args?.actionName,
                     parameters: params.flags?.parameters,
                 };
@@ -306,7 +306,7 @@ class ActionCommandHandler implements CommandHandler {
                 // complete the flag values for json properties
 
                 const action = {
-                    translatorName: params.args?.translatorName,
+                    translatorName: params.args?.schemaName,
                     actionName: params.args?.actionName,
                     parameters: params.flags?.parameters,
                 };
