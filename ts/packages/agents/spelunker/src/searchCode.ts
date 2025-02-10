@@ -137,17 +137,10 @@ export async function searchCode(
     const allChunks = await loadAllChunksFromDatabase(db);
 
     // 3. Ask a fast LLM for the most relevant chunk Ids, rank them, and keep the best ones.
-    const chunkDescs = await selectRelevantChunks(
-        context.queryContext!.chunkSelector,
-        allChunks,
-        input,
-    );
-    if (!chunkDescs.length) {
+    const chunks = await selectChunks(context, allChunks, input);
+    if (!chunks.length) {
         throw new Error("No chunks selected");
     }
-
-    // 3a. Turn the selected chunkDescs back into real chunks.
-    const chunks = getRealChunks(chunkDescs, allChunks);
 
     // 4. Construct a prompt from those chunks.
     const prompt = constructPrompt(input, chunks);
@@ -281,13 +274,14 @@ function createResultEntity(input: string, answer: string): Entity {
     };
 }
 
-// TODO: Is this still needed?
 export async function selectChunks(
     context: SpelunkerContext,
     allChunks: Chunk[],
     input: string,
 ): Promise<Chunk[]> {
-    console_log(`  [Starting chunk selection ...]`);
+    console_log(
+        `[Step 3: Select relevant chunks from ${allChunks.length} chunks]`,
+    );
     const promises: Promise<ChunkDescription[]>[] = [];
     const maxConcurrency =
         parseInt(process.env.AZURE_OPENAI_MAX_CONCURRENCY ?? "5") ?? 5;
@@ -360,15 +354,6 @@ async function selectRelevantChunks(
     } else {
         return result.chunkDescs;
     }
-}
-
-function getRealChunks(
-    chunkDescs: ChunkDescription[],
-    allChunks: Chunk[],
-): Chunk[] {
-    return chunkDescs
-        .map((desc) => allChunks.find((c) => c.chunkId === desc.chunkId))
-        .filter((c): c is Chunk => c !== undefined);
 }
 
 function prepareChunks(chunks: Chunk[]): string {
