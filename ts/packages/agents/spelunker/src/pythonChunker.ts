@@ -65,9 +65,13 @@ export async function chunkifyPythonFiles(
             }
         }
     }
-    return splitLargeFiles(results);
+    if (true) return results;
+    else return splitLargeFiles(results); // Alas, this breaks some things.
 }
 
+// *** Everything below here is potentially dead code.***
+
+// TODO: Tune these constants (count should be much larger, at least).
 const CHUNK_COUNT_LIMIT = 25; // How many chunks at most.
 const FILE_SIZE_LIMIT = 25000; // How many characters at most.
 
