@@ -255,9 +255,10 @@ async function selectChunks(
     console_log(`  [Starting chunk selection ...]`);
     const promises: Promise<ChunkDescription[]>[] = [];
     const maxConcurrency =
-        parseInt(process.env.AZURE_OPENAI_MAX_CONCURRENCY ?? "0") ?? 5;
+        parseInt(process.env.AZURE_OPENAI_MAX_CONCURRENCY ?? "5") ?? 5;
     const limiter = createLimiter(maxConcurrency);
-    const batches = makeBatches(allChunks, 250000); // TODO: Tune this more
+    const batchLimit = process.env.OPENAI_API_KEY ? 100000 : 250000; // TODO: tune
+    const batches = makeBatches(allChunks, batchLimit);
     console_log(
         `  [${batches.length} batches, maxConcurrency ${maxConcurrency}]`,
     );
@@ -285,7 +286,8 @@ async function selectChunks(
 
     allChunkDescs.sort((a, b) => b.relevance - a.relevance);
     // console_log(`  [${allChunks.map((c) => (c.relevance)).join(", ")}]`);
-    const chunks = keepBestChunks(allChunkDescs, allChunks, 200000); // TODO: Tune this more
+    const maxKeep = process.env.OPENAI_API_KEY ? 100000 : 200000; // TODO: tune
+    const chunks = keepBestChunks(allChunkDescs, allChunks, maxKeep);
     console_log(`  [Keeping ${chunks.length} chunks]`);
     // for (let i = 0; i < chunks.length; i++) {
     //     const chunk = chunks[i];
@@ -318,10 +320,7 @@ async function selectRelevantChunks(
     // console_log(prompt);
     const result = await retryTranslateOn429(() => selector.translate(prompt));
     if (!result) {
-        const chunkSummary = chunks
-            .map((c) => `${path.basename(c.fileName)}:${c.codeName}`)
-            .join(", ");
-        console_log(`  [Failed to select chunks for ${chunkSummary}]`);
+        console_log(`  [Failed to select chunks for ${chunks.length} chunks]`);
         return [];
     } else {
         return result.chunks;
@@ -523,7 +522,7 @@ async function loadDatabase(
 
     // 1a. Find all source files in the focus directories (locally, using a recursive walk).
     // TODO: Factor into simpler functions
-    console_log(`[Step 1a: Find source files (of supported languages)]`);
+    console_log(`[Step 1a: Find supported source files]`);
     const files: FileMtimeSize[] = [];
     for (let i = 0; i < context.focusFolders.length; i++) {
         files.push(...getAllSourceFiles(context.focusFolders[i]));
@@ -719,9 +718,7 @@ export async function summarizeChunks(
     context: SpelunkerContext,
     chunks: Chunk[],
 ): Promise<void> {
-    console_log(
-        `[Step 1c: Summarizing ${chunks.length} chunks (may take a while)]`,
-    );
+    console_log(`[Step 1c: Summarizing ${chunks.length} chunks]`);
     // NOTE: We cannot stuff the buffer, because the completion size
     // is limited to 4096 tokens, and we expect a certain number of
     // tokens per chunk. Experimentally, 40 chunks per job works great.
@@ -809,11 +806,21 @@ async function retryTranslateOn429<T>(
                 wrappedResult.message.includes("fetch error: 429:")
             ) {
                 let delay = defaultDelay;
-                const msec = wrappedResult.message.match(
+                const azureTime = wrappedResult.message.match(
                     /after (\d+) milliseconds/,
                 );
-                if (msec) {
-                    delay = parseInt(msec[1]) ?? defaultDelay;
+                const openaiTime = wrappedResult.message.match(
+                    /Please try again in (\d+\.\d*|\.\d+|\d+m)s./,
+                );
+                if (azureTime || openaiTime) {
+                    if (azureTime) {
+                        delay = parseInt(azureTime[1]);
+                    } else if (openaiTime) {
+                        delay = parseFloat(openaiTime[1]);
+                        if (!openaiTime[1].endsWith("m")) {
+                            delay *= 1000;
+                        }
+                    }
                 } else {
                     console_log(
                         `  [Couldn't find msec in '${wrappedResult.message}'`,
