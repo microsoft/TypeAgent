@@ -186,24 +186,29 @@ export default class TestTranslateCommand extends Command {
                 throw new Error("Result file is empty. No tests to rerun.");
             }
 
-            // determine repeat
-            if (input.pass.length !== 0) {
-                repeat = input.pass[0].actions.length;
-            } else {
-                const e = input.fail.find((e) => e.actions !== undefined);
-                if (e === undefined) {
-                    repeat = flags.repeat ?? defaultRepeat;
-                } else {
-                    repeat = e?.actions!.length;
-                }
-            }
-
-            if (flags.repeat !== undefined && flags.repeat !== repeat) {
-                throw new Error("Specified repeat doesn't match result file");
-            }
-
             const includeAll =
                 !flags.succeeded && !flags.failed && !flags.skipped;
+
+            if (includeAll) {
+                repeat = flags.repeat ?? defaultRepeat;
+            } else {
+                // determine repeat
+                if (input.pass.length !== 0) {
+                    repeat = input.pass[0].actions.length;
+                } else {
+                    const e = input.fail.find((e) => e.actions !== undefined);
+                    if (e === undefined) {
+                        repeat = flags.repeat ?? defaultRepeat;
+                    } else {
+                        repeat = e?.actions!.length;
+                    }
+                }
+                if (flags.repeat !== undefined && flags.repeat !== repeat) {
+                    throw new Error(
+                        "Specified repeat doesn't match result file",
+                    );
+                }
+            }
 
             if (includeAll || flags.succeeded) {
                 requests = requests.concat(
@@ -250,6 +255,10 @@ export default class TestTranslateCommand extends Command {
                 .map((entry) => entry.request);
         }
 
+        if (repeat <= 0) {
+            throw new Error("Repeat must be greater than 0");
+        }
+
         let countStr = requests.length.toString();
         if (flags.sample !== undefined) {
             output.skipped = [];
@@ -261,11 +270,9 @@ export default class TestTranslateCommand extends Command {
                     ),
                 );
             }
-            countStr = `${flags.sample}/${countStr}`;
+            countStr = `${requests.length}/${countStr}`;
         }
-        if (flags.failed && flags.input !== undefined) {
-            countStr = `${countStr} failed`;
-        }
+
         const schemas = flags.schema
             ? Object.fromEntries(flags.schema.map((name) => [name, true]))
             : undefined;
