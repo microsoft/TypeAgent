@@ -57,9 +57,13 @@ export interface QueryContext {
 }
 
 function captureTokenStats(req: any, response: any): void {
+    const inputTokens = response.usage.prompt_tokens;
+    const outputTokens = response.usage.completion_tokens;
+    const cost = inputTokens * 0.000005 + outputTokens * 0.000015;
     console_log(
-        `    [Tokens used: prompt=${response.usage.prompt_tokens}, ` +
-            `completion=${response.usage.completion_tokens}]`,
+        `    [Tokens used: prompt=${inputTokens}, ` +
+            `completion=${outputTokens}, ` +
+            `cost=\$${cost.toFixed(2)}]`,
     );
 }
 
