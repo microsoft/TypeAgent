@@ -211,7 +211,13 @@ class SearchQueryBuilder {
     private compilePropertyMatchPredicates(
         propertyTerms: PropertySearchTerm[],
     ) {
-        return propertyTerms.map((p) => new q.PropertyMatchPredicate(p));
+        return propertyTerms.map((p) => {
+            if (typeof p.propertyName !== "string") {
+                this.prepareSearchTerm(p.propertyName);
+            }
+            this.prepareSearchTerm(p.propertyValue);
+            return new q.PropertyMatchPredicate(p);
+        });
     }
 
     private compileWhere(filter: SearchFilter): q.IQuerySemanticRefPredicate[] {
@@ -224,24 +230,27 @@ class SearchQueryBuilder {
 
     private prepareSearchTerms(searchTerms: SearchTerm[]): void {
         for (const searchTerm of searchTerms) {
-            this.prepareTerm(searchTerm.term);
-            searchTerm.term.weight ??= this.defaultMatchWeight;
-            if (searchTerm.relatedTerms) {
-                searchTerm.relatedTerms.forEach((st) => {
-                    if (
-                        st.weight &&
-                        st.weight >= this.relatedIsExactThreshold
-                    ) {
-                        st.weight = this.defaultMatchWeight;
-                    }
-                    this.prepareTerm(st);
-                });
-            }
+            this.prepareSearchTerm(searchTerm);
         }
     }
 
-    private prepareTerm(term: Term) {
-        term.text = term.text.toLowerCase();
+    private prepareTerm(term: Term | undefined) {
+        if (term) {
+            term.text = term.text.toLowerCase();
+        }
+    }
+
+    private prepareSearchTerm(searchTerm: SearchTerm) {
+        this.prepareTerm(searchTerm.term);
+        searchTerm.term.weight ??= this.defaultMatchWeight;
+        if (searchTerm.relatedTerms) {
+            searchTerm.relatedTerms.forEach((st) => {
+                if (st.weight && st.weight >= this.relatedIsExactThreshold) {
+                    st.weight = this.defaultMatchWeight;
+                }
+                this.prepareTerm(st);
+            });
+        }
     }
 }
 
