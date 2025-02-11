@@ -304,7 +304,8 @@ export default class TestTranslateCommand extends Command {
         );
         const startTime = performance.now();
 
-        let executionTime = 0;
+        let totalExecTime = 0;
+        let maxExecTime = 0;
         async function worker() {
             const dispatcher = await createDispatcher("cli test translate", {
                 appAgentProviders: defaultAppAgentProviders,
@@ -332,14 +333,23 @@ export default class TestTranslateCommand extends Command {
                 const request = requests.shift()!;
 
                 const results: (FullAction[] | undefined)[] = [];
-                const time = performance.now();
+
+                let currentTotalExecTime = 0;
+                let currentMaxExecTime = 0;
                 for (let i = 0; i < repeat; i++) {
+                    const time = performance.now();
                     const commandResult =
                         await dispatcher.processCommand(request);
+                    const execTime = performance.now() - time;
+                    currentMaxExecTime = Math.max(currentMaxExecTime, execTime);
+                    currentTotalExecTime += execTime;
                     results.push(commandResult?.actions);
                 }
-                executionTime += performance.now() - time;
 
+                maxExecTime = Math.max(maxExecTime, currentMaxExecTime);
+                totalExecTime += currentTotalExecTime;
+
+                const timeStr = `${getElapsedString(currentTotalExecTime)} (${getElapsedString(currentTotalExecTime / repeat)}/call) Max: ${getElapsedString(currentMaxExecTime)}`;
                 const expected = results[0];
                 let failed = false;
                 for (let i = 1; i < results.length; i++) {
@@ -410,12 +420,12 @@ export default class TestTranslateCommand extends Command {
                     );
                 }
                 if (!failed) {
+                    let msg = "Passed";
                     if (expected === undefined) {
                         noActions++;
-                        print(chalk.green("Passed (no actions)"));
-                    } else {
-                        print(chalk.green("Passed"));
+                        msg = "Passed (no actions)";
                     }
+                    print(`${chalk.green(msg)} ${chalk.grey(timeStr)}`);
                 }
             }
             await dispatcher.close();
@@ -466,13 +476,13 @@ export default class TestTranslateCommand extends Command {
         const elapsedPerRequest = elapsed / processed;
         const elapsedPerCall = elapsedPerRequest / repeat;
         console.log(
-            `Elapsed Time: ${getElapsedString(elapsed)}, Average: ${getElapsedString(elapsedPerRequest)} (${getElapsedString(elapsedPerCall)} per call)`,
+            `Elapsed Time: ${getElapsedString(elapsed)}, Avg: ${getElapsedString(elapsedPerRequest)} (${getElapsedString(elapsedPerCall)}/call)`,
         );
 
-        const executionTimePerRequest = executionTime / processed;
+        const executionTimePerRequest = totalExecTime / processed;
         const executionTimePerCall = executionTimePerRequest / repeat;
         console.log(
-            `Execution Time: ${getElapsedString(executionTime)}, Average: ${getElapsedString(executionTimePerRequest)} (${getElapsedString(executionTimePerCall)} per call)`,
+            `Execution Time: ${getElapsedString(totalExecTime)}, Avg: ${getElapsedString(executionTimePerRequest)} (${getElapsedString(executionTimePerCall)}/call) Max: ${getElapsedString(maxExecTime)}`,
         );
     }
 }
