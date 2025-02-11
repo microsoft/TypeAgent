@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import jp from "jsonpath";
-import { ActionContext, SessionContext } from "@typeagent/agent-sdk";
+import { SessionContext } from "@typeagent/agent-sdk";
 import { Crossword } from "./schema/pageSchema.mjs";
 import { CrosswordPresence } from "./schema/pageFrame.mjs";
 import { createCrosswordPageTranslator } from "./translator.mjs";
@@ -99,15 +99,15 @@ export async function getBoardSchema(
 
 export async function handleCrosswordAction(
   action: any,
-  context: ActionContext<BrowserActionContext>,
+  context: SessionContext<BrowserActionContext>,
 ) {
   let message = "OK";
-  if (!context.sessionContext.agentContext.browserConnector) {
+  if (!context.agentContext.browserConnector) {
     throw new Error("No connection to browser session.");
   }
 
-  const browser = context.sessionContext.agentContext.browserConnector;
-  const crosswordState = context.sessionContext.agentContext.crossWordState;
+  const browser = context.agentContext.browserConnector;
+  const crosswordState = context.agentContext.crossWordState;
 
   if (crosswordState) {
     const actionName =
