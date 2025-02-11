@@ -114,8 +114,8 @@ class SearchQueryBuilder {
 
         this.validateAndPrepareSearchTerms(this.allSearchTerms);
         // For all individual SearchTerms created during query compilation, resolve any related terms
-        await this.resolveRelatedTerms(this.allSearchTerms);
-        await this.resolveRelatedTerms(this.allPredicateSearchTerms);
+        await this.resolveRelatedTerms(this.allSearchTerms, true);
+        await this.resolveRelatedTerms(this.allPredicateSearchTerms, false);
 
         return query;
     }
@@ -225,6 +225,21 @@ class SearchQueryBuilder {
         return predicates;
     }
 
+    private async resolveRelatedTerms(
+        searchTerms: SearchTerm[],
+        dedupe: boolean,
+    ) {
+        if (this.conversation.termToRelatedTermsIndex) {
+            await resolveRelatedTerms(
+                this.conversation.termToRelatedTermsIndex,
+                searchTerms,
+                dedupe,
+            );
+        }
+        // Ensure that the resolved terms are valid etc.
+        this.validateAndPrepareSearchTerms(searchTerms);
+    }
+
     private validateAndPrepareSearchTerms(searchTerms: SearchTerm[]): void {
         for (const searchTerm of searchTerms) {
             this.validateAndPrepareSearchTerm(searchTerm);
@@ -266,17 +281,6 @@ class SearchQueryBuilder {
             term.text = term.text.toLowerCase();
         }
         return true;
-    }
-
-    private async resolveRelatedTerms(searchTerms: SearchTerm[]) {
-        if (this.conversation.termToRelatedTermsIndex) {
-            await resolveRelatedTerms(
-                this.conversation.termToRelatedTermsIndex,
-                searchTerms,
-            );
-        }
-        // Ensure that the resolved terms are valid etc.
-        this.validateAndPrepareSearchTerms(searchTerms);
     }
 }
 

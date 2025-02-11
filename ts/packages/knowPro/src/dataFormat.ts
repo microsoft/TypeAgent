@@ -2,7 +2,6 @@
 // Licensed under the MIT License.
 
 import { conversation } from "knowledge-processor";
-import { NormalizedEmbedding } from "typeagent";
 
 // an object that can provide a KnowledgeResponse structure
 export interface IKnowledgeSource {
@@ -162,11 +161,6 @@ export interface ITermEmbeddingIndex {
         maxMatches?: number,
         minScore?: number,
     ): Promise<Term[][]>;
-    lookupEmbeddings(
-        text: string,
-        maxMatches?: number,
-        minScore?: number,
-    ): Promise<[string, NormalizedEmbedding][] | undefined>;
     serialize(): ITextEmbeddingIndexData;
     deserialize(data: ITextEmbeddingIndexData): void;
 }

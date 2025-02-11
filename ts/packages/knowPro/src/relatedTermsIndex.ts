@@ -74,9 +74,17 @@ export class TermToRelatedTermsMap {
     }
 }
 
+/**
+ * Give searchTerms, resolves related terms for those searchTerms that don't already have them
+ * Optionally ensures that related terms are not duplicated across search terms because this can
+ * skew how semantic references are scored during search
+ * @param relatedTermsIndex
+ * @param searchTerms
+ */
 export async function resolveRelatedTerms(
     relatedTermsIndex: ITermToRelatedTermsIndex,
     searchTerms: SearchTerm[],
+    dedupe: boolean = true,
 ): Promise<void> {
     const searchableTerms = new TermSet();
     const searchTermsNeedingRelated: SearchTerm[] = [];
@@ -108,6 +116,8 @@ export async function resolveRelatedTerms(
             searchTermsNeedingRelated[i].relatedTerms =
                 relatedTermsForSearchTerms[i];
         }
+    }
+    if (dedupe) {
         //
         // Due to fuzzy matching, a search term may end with related terms that overlap with those of other search terms.
         // This causes scoring problems... duplicate/redundant scoring that can cause items to seem more relevant than they are
