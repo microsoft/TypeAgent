@@ -343,6 +343,11 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
             };
         }, 0);
     }
+
+    public override clearMatches() {
+        super.clearMatches();
+        this.searchTermMatches.clear();
+    }
 }
 
 export class MessageAccumulator extends MatchAccumulator<IMessage> {}
@@ -365,10 +370,13 @@ export class TextRangeCollection {
         this.sorted = false;
     }
 
-    public addRanges(textRanges: TextRange[]) {
-        for (const range of textRanges) {
-            this.addRange(range);
+    public addRanges(textRanges: TextRange[] | TextRangeCollection) {
+        if (Array.isArray(textRanges)) {
+            this.ranges.push(...textRanges);
+        } else {
+            this.ranges.push(...textRanges.ranges);
         }
+        this.sorted = false;
     }
 
     public isInRange(rangeToMatch: TextRange): boolean {
