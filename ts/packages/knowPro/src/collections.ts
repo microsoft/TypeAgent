@@ -12,7 +12,7 @@ import {
     Term,
     TextRange,
 } from "./dataFormat.js";
-import { isInTextRange } from "./query.js";
+import { compareTextRange, isInTextRange } from "./query.js";
 
 export interface Match<T = any> {
     value: T;
@@ -355,7 +355,6 @@ export class MessageAccumulator extends MatchAccumulator<IMessage> {}
 export class TextRangeCollection {
     // Maintains ranges sorted by message index
     private ranges: TextRange[] = [];
-    private sorted: boolean = false;
 
     constructor() {}
 
@@ -363,29 +362,36 @@ export class TextRangeCollection {
         return this.ranges.length;
     }
 
-    public addRange(textRange: TextRange) {
+    public addRange(textRange: TextRange): boolean {
         // Future: merge ranges
-        //collections.insertIntoSorted(this.ranges, textRange, this.comparer);
-        this.ranges.push(textRange);
-        this.sorted = false;
+
+        // Is this text range already in this collection?
+        let pos = collections.binarySearch(
+            this.ranges,
+            textRange,
+            compareTextRange,
+        );
+        if (pos >= 0) {
+            // Already exists
+            return false;
+        }
+        this.ranges.splice(~pos, 0, textRange);
+        return true;
     }
 
     public addRanges(textRanges: TextRange[] | TextRangeCollection) {
         if (Array.isArray(textRanges)) {
-            this.ranges.push(...textRanges);
+            textRanges.forEach((t) => this.addRange(t));
         } else {
-            this.ranges.push(...textRanges.ranges);
+            textRanges.ranges.forEach((t) => this.addRange(t));
         }
-        this.sorted = false;
     }
 
     public isInRange(rangeToMatch: TextRange): boolean {
-        this.ensureSorted();
-
         let i = collections.binarySearchFirst(
             this.ranges,
             rangeToMatch,
-            this.comparer,
+            (x, y) => x.start.messageIndex - y.start.messageIndex,
         );
         if (i < 0) {
             return false;
@@ -401,17 +407,6 @@ export class TextRangeCollection {
             }
         }
         return false;
-    }
-
-    private ensureSorted() {
-        if (!this.sorted) {
-            this.ranges.sort(this.comparer);
-            this.sorted = true;
-        }
-    }
-
-    private comparer(x: TextRange, y: TextRange): number {
-        return x.start.messageIndex - y.start.messageIndex;
     }
 }
 

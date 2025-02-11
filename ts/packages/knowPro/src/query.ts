@@ -90,6 +90,21 @@ export const MaxTextLocation: TextLocation = {
     charIndex: Number.MAX_SAFE_INTEGER,
 };
 
+export function compareTextRange(x: TextRange, y: TextRange) {
+    let cmp = compareTextLocation(x.start, y.start);
+    if (cmp !== 0) {
+        return cmp;
+    }
+    if (x.end === undefined && y.end === undefined) {
+        return cmp;
+    }
+    cmp = compareTextLocation(
+        x.end ?? MaxTextLocation,
+        y.end ?? MaxTextLocation,
+    );
+    return cmp;
+}
+
 export function isInTextRange(
     outerRange: TextRange,
     innerRange: TextRange,
