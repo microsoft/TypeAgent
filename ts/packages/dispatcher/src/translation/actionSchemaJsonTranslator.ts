@@ -13,6 +13,7 @@ import {
     ActionSchemaGroup,
     GenerateSchemaOptions,
     generateActionJsonSchema,
+    generateActionJsonSchemaFunctions,
 } from "action-schema";
 import {
     createJsonTranslatorWithValidator,
@@ -37,15 +38,19 @@ function createActionSchemaJsonValidator<T extends TranslatedAction>(
 ): TypeAgentJsonValidator<T> {
     const schema = generateActionSchema(actionSchemaGroup, generateOptions);
     const generateJsonSchema = generateOptions?.jsonSchema ?? false;
-    const jsonSchema = generateJsonSchema
-        ? generateActionJsonSchema(actionSchemaGroup)
-        : undefined;
+    const jsonSchemaFunction = generateOptions?.jsonSchemaFunction ?? false;
+    const jsonSchema = jsonSchemaFunction
+        ? generateActionJsonSchemaFunctions(actionSchemaGroup)
+        : generateJsonSchema
+          ? generateActionJsonSchema(actionSchemaGroup)
+          : undefined;
+    const jsonSchemaValidate = generateOptions?.jsonSchemaValidate ?? false;
     return {
         getSchemaText: () => schema,
         getTypeName: () => actionSchemaGroup.entry.name,
         getJsonSchema: () => jsonSchema,
         validate(jsonObject: object): Result<T> {
-            const value: any = generateJsonSchema
+            const value: any = jsonSchema
                 ? (jsonObject as any).response
                 : jsonObject;
 
@@ -60,7 +65,9 @@ function createActionSchemaJsonValidator<T extends TranslatedAction>(
             }
 
             try {
-                validateAction(actionSchema, value);
+                if (jsonSchemaValidate) {
+                    validateAction(actionSchema, value);
+                }
                 // Return the unwrapped value with generateJsonSchema as the translated result
                 return success(value);
             } catch (e: any) {

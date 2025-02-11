@@ -90,7 +90,9 @@ type DispatcherConfig = {
             generation: {
                 enabled: boolean;
                 jsonSchema: boolean;
-                jsonSchemaWithTs: boolean; // only applies when jsonSchema is true
+                jsonSchemaFunction: boolean;
+                jsonSchemaWithTs: boolean; // only applies when jsonSchema or jsonSchemaFunction is true
+                jsonSchemaValidate: boolean; // only applies when jsonSchema or jsonSchemaFunction is true
             };
             optimize: {
                 enabled: boolean;
@@ -158,7 +160,9 @@ const defaultSessionConfig: SessionConfig = {
             generation: {
                 enabled: true,
                 jsonSchema: false,
-                jsonSchemaWithTs: true,
+                jsonSchemaFunction: false,
+                jsonSchemaWithTs: false,
+                jsonSchemaValidate: false,
             },
             optimize: {
                 enabled: false,

@@ -322,7 +322,7 @@ export class RequestCommandHandler implements CommandHandler {
             }
 
             const history = systemContext.session.getConfig().translation
-                .history
+                .history.enabled
                 ? getChatHistoryForTranslation(systemContext)
                 : undefined;
 

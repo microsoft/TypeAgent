@@ -45,6 +45,10 @@ export default class TranslateCommand extends Command {
             description: "Output JSON schema",
             allowNo: true,
         }),
+        jsonSchemaFunction: Flags.boolean({
+            description: "Output JSON schema function",
+            allowNo: true,
+        }),
     };
 
     static description = "Translate a request into action";
@@ -67,7 +71,12 @@ export default class TranslateCommand extends Command {
                 translation: {
                     model: flags.model,
                     multiple: { enabled: flags.multiple },
-                    schema: { generation: { jsonSchema: flags.jsonSchema } },
+                    schema: {
+                        generation: {
+                            jsonSchema: flags.jsonSchema,
+                            jsonSchemaFunction: flags.jsonSchemaFunction,
+                        },
+                    },
                 },
                 cache: { enabled: false },
                 clientIO,
