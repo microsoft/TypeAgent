@@ -19,7 +19,10 @@ export {
     generateActionSchema,
     generateSchemaTypeDefinition,
 } from "./generator.js";
-export { generateActionJsonSchema } from "./jsonSchemaGenerator.js";
+export {
+    generateActionJsonSchema,
+    generateActionJsonSchemaFunctions,
+} from "./jsonSchemaGenerator.js";
 export { validateAction } from "./validate.js";
 export { getParameterType, getParameterNames } from "./utils.js";
 

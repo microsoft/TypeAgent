@@ -115,6 +115,10 @@ export default class TestTranslateCommand extends Command {
             description: "Output JSON schema",
             allowNo: true,
         }),
+        jsonSchemaFunction: Flags.boolean({
+            description: "Output JSON schema function",
+            allowNo: true,
+        }),
         concurrency: Flags.integer({
             char: "c",
             description: "Number of concurrent requests (default to 4)",
@@ -301,10 +305,16 @@ export default class TestTranslateCommand extends Command {
                 actions: null,
                 commands: { dispatcher: true },
                 translation: {
+                    stream: false,
                     history: { enabled: false },
                     model: flags.model,
                     multiple: { enabled: flags.multiple },
-                    schema: { generation: { jsonSchema: flags.jsonSchema } },
+                    schema: {
+                        generation: {
+                            jsonSchema: flags.jsonSchema,
+                            jsonSchemaFunction: flags.jsonSchemaFunction,
+                        },
+                    },
                 },
                 explainer: { enabled: false },
                 cache: { enabled: false },
