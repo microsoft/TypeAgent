@@ -199,7 +199,7 @@ export class TermToRelatedTermsIndex implements ITermToRelatedTermsIndex {
                 this.termAliases.deserialize(data.relatedTermsData);
             }
             if (data.textEmbeddingData) {
-                this.termEmbeddingsIndex = new TextEmbeddingIndex(
+                this.termEmbeddingsIndex = new TermEmbeddingIndex(
                     this.settings.embeddingIndexSettings,
                 );
                 this.termEmbeddingsIndex.deserialize(data.textEmbeddingData);
@@ -233,7 +233,7 @@ export async function buildTermEmbeddingIndex(
         batch: collections.Slice<string>,
     ) => boolean,
 ): Promise<ITermEmbeddingIndex> {
-    const termIndex = new TextEmbeddingIndex(settings);
+    const termIndex = new TermEmbeddingIndex(settings);
     for (const slice of collections.slices(terms, batchSize)) {
         if (progressCallback && !progressCallback(terms, slice)) {
             break;
@@ -243,9 +243,9 @@ export async function buildTermEmbeddingIndex(
     return termIndex;
 }
 
-export class TextEmbeddingIndex implements ITermEmbeddingIndex {
-    private textList: string[];
-    private textEmbeddings: NormalizedEmbedding[];
+export class TextEmbeddingIndex {
+    public textList: string[];
+    public textEmbeddings: NormalizedEmbedding[];
 
     constructor(
         public settings: TextEmbeddingIndexSettings,
@@ -258,48 +258,41 @@ export class TextEmbeddingIndex implements ITermEmbeddingIndex {
         }
     }
 
-    public async add(terms: string | string[]): Promise<void> {
-        if (Array.isArray(terms)) {
+    public async add(texts: string | string[]): Promise<void> {
+        if (Array.isArray(texts)) {
             const embeddings = await generateTextEmbeddingsWithRetry(
                 this.settings.embeddingModel,
-                terms,
+                texts,
             );
-            for (let i = 0; i < terms.length; ++i) {
-                this.addTermEmbedding(terms[i], embeddings[i]);
+            for (let i = 0; i < texts.length; ++i) {
+                this.addTermEmbedding(texts[i], embeddings[i]);
             }
         } else {
             const embedding = await generateEmbedding(
                 this.settings.embeddingModel,
-                terms,
+                texts,
             );
-            this.addTermEmbedding(terms, embedding);
+            this.addTermEmbedding(texts, embedding);
         }
     }
 
-    public async lookupTerm(
+    public async getNearest(
         text: string | NormalizedEmbedding,
         maxMatches?: number,
         minScore?: number,
-    ): Promise<Term[]> {
+    ): Promise<ScoredItem[]> {
         const termEmbedding = await generateEmbedding(
             this.settings.embeddingModel,
             text,
         );
-        let matches = this.indexesOfNearestTerms(
-            termEmbedding,
-            maxMatches,
-            minScore,
-        );
-        return matches.map((m) => {
-            return { text: this.textList[m.item], weight: m.score };
-        });
+        return this.indexesOfNearestTerms(termEmbedding, maxMatches, minScore);
     }
 
-    public async lookupTerms(
+    public async getNearestMultiple(
         texts: string[],
         maxMatches?: number,
         minScore?: number,
-    ): Promise<Term[][]> {
+    ): Promise<ScoredItem[][]> {
         const termEmbeddings = await generateTextEmbeddings(
             this.settings.embeddingModel,
             texts,
@@ -307,7 +300,7 @@ export class TextEmbeddingIndex implements ITermEmbeddingIndex {
         const results = [];
         for (const embedding of termEmbeddings) {
             results.push(
-                await this.lookupTerm(embedding, maxMatches, minScore),
+                await this.getNearest(embedding, maxMatches, minScore),
             );
         }
         return results;
@@ -396,6 +389,50 @@ export class TextEmbeddingIndex implements ITermEmbeddingIndex {
             );
         }
         return matches;
+    }
+}
+
+export class TermEmbeddingIndex
+    extends TextEmbeddingIndex
+    implements ITermEmbeddingIndex
+{
+    constructor(
+        public settings: TextEmbeddingIndexSettings,
+        data?: ITextEmbeddingIndexData,
+    ) {
+        super(settings, data);
+    }
+
+    public async lookupTerm(
+        text: string,
+        maxMatches?: number,
+        minScore?: number,
+    ): Promise<Term[]> {
+        let matches = await super.getNearest(text, maxMatches, minScore);
+        return this.matchesToTerms(matches);
+    }
+
+    public async lookupTerms(
+        texts: string[],
+        maxMatches?: number,
+        minScore?: number,
+    ): Promise<Term[][]> {
+        const matchesList = await super.getNearestMultiple(
+            texts,
+            maxMatches,
+            minScore,
+        );
+        const results: Term[][] = [];
+        for (const matches of matchesList) {
+            results.push(this.matchesToTerms(matches));
+        }
+        return results;
+    }
+
+    private matchesToTerms(matches: ScoredItem[]): Term[] {
+        return matches.map((m) => {
+            return { text: this.textList[m.item], weight: m.score };
+        });
     }
 }
 
