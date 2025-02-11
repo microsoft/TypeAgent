@@ -54,7 +54,8 @@ export type SearchResult = {
 
 export type SearchFilter = {
     type?: KnowledgeType | undefined;
-    dateRange?: DateRange;
+    dateRange?: DateRange | undefined;
+    propertyScope?: PropertySearchTerm[] | undefined;
 };
 
 /**
@@ -129,13 +130,12 @@ class SearchQueryBuilder {
         minHitCount?: number,
     ) {
         let selectExpr = this.compileSelect(terms, propertyTerms, filter);
-        // Constrain the select with scopes
-        selectExpr = this.compileScope(selectExpr, filter?.dateRange);
-        if (filter !== undefined) {
-            // Further constrain with any filters
+        // Constrain the select with scopes and 'where'
+        if (filter) {
+            selectExpr = this.compileScope(selectExpr, filter);
             selectExpr = new q.WhereSemanticRefExpr(
                 selectExpr,
-                this.compileFilter(filter),
+                this.compileWhere(filter),
             );
         }
         // And lastly, select 'TopN' and group knowledge by type
@@ -154,7 +154,9 @@ class SearchQueryBuilder {
         // Select is a combination of ordinary search terms and property search terms
         let matchTermsExpr = this.compileSearchTerms(terms);
         if (propertyTerms) {
-            matchTermsExpr.push(...this.compilePropertyTerms(propertyTerms));
+            matchTermsExpr.push(
+                ...this.compilePropertySearchTerms(propertyTerms),
+            );
         }
         let selectExpr: q.IQueryOpExpr<SemanticRefAccumulator> =
             new q.MatchAllTermsExpr(matchTermsExpr);
@@ -171,7 +173,7 @@ class SearchQueryBuilder {
         return matchExpressions;
     }
 
-    private compilePropertyTerms(
+    private compilePropertySearchTerms(
         propertyTerms: PropertySearchTerm[],
     ): q.MatchTermExpr[] {
         const matchExpressions: q.MatchPropertyTermExpr[] = [];
@@ -187,20 +189,38 @@ class SearchQueryBuilder {
 
     private compileScope(
         termsMatchExpr: q.IQueryOpExpr<SemanticRefAccumulator>,
-        dateRange?: DateRange,
+        filter: SearchFilter,
     ): q.IQueryOpExpr<SemanticRefAccumulator> {
+        let scopeSelectors: q.IQuerySelectScopeExpr[] = [];
         // Always apply "tag match" scope... all text ranges that matched tags.. are in scope
-        termsMatchExpr = new q.ScopeExpr(
-            termsMatchExpr,
-            [new q.KnowledgeTypePredicate("tag")],
-            dateRange ? new q.TimestampScopeExpr(dateRange) : undefined,
-        );
-        return termsMatchExpr;
+        //scopePredicates.push(new q.KnowledgeTypePredicate("tag"));
+        scopeSelectors.push(new q.TagScopeExpr());
+        if (filter.propertyScope && filter.propertyScope.length > 0) {
+            scopeSelectors.push(
+                new q.PredicateScopeExpr(
+                    this.compilePropertyMatchPredicates(filter.propertyScope),
+                ),
+            );
+        }
+        if (filter.dateRange) {
+            scopeSelectors.push(new q.TimestampScopeExpr(filter.dateRange));
+        }
+        return new q.SelectScopeExpr(termsMatchExpr, scopeSelectors);
     }
 
-    private compileFilter(
-        filter: SearchFilter,
-    ): q.IQuerySemanticRefPredicate[] {
+    private compilePropertyMatchPredicates(
+        propertyTerms: PropertySearchTerm[],
+    ) {
+        return propertyTerms.map((p) => {
+            if (typeof p.propertyName !== "string") {
+                this.prepareSearchTerm(p.propertyName);
+            }
+            this.prepareSearchTerm(p.propertyValue);
+            return new q.PropertyMatchPredicate(p);
+        });
+    }
+
+    private compileWhere(filter: SearchFilter): q.IQuerySemanticRefPredicate[] {
         let predicates: q.IQuerySemanticRefPredicate[] = [];
         if (filter.type) {
             predicates.push(new q.KnowledgeTypePredicate(filter.type));
@@ -210,24 +230,27 @@ class SearchQueryBuilder {
 
     private prepareSearchTerms(searchTerms: SearchTerm[]): void {
         for (const searchTerm of searchTerms) {
-            this.prepareTerm(searchTerm.term);
-            searchTerm.term.weight ??= this.defaultMatchWeight;
-            if (searchTerm.relatedTerms) {
-                searchTerm.relatedTerms.forEach((st) => {
-                    if (
-                        st.weight &&
-                        st.weight >= this.relatedIsExactThreshold
-                    ) {
-                        st.weight = this.defaultMatchWeight;
-                    }
-                    this.prepareTerm(st);
-                });
-            }
+            this.prepareSearchTerm(searchTerm);
         }
     }
 
-    private prepareTerm(term: Term) {
-        term.text = term.text.toLowerCase();
+    private prepareTerm(term: Term | undefined) {
+        if (term) {
+            term.text = term.text.toLowerCase();
+        }
+    }
+
+    private prepareSearchTerm(searchTerm: SearchTerm) {
+        this.prepareTerm(searchTerm.term);
+        searchTerm.term.weight ??= this.defaultMatchWeight;
+        if (searchTerm.relatedTerms) {
+            searchTerm.relatedTerms.forEach((st) => {
+                if (st.weight && st.weight >= this.relatedIsExactThreshold) {
+                    st.weight = this.defaultMatchWeight;
+                }
+                this.prepareTerm(st);
+            });
+        }
     }
 }
 

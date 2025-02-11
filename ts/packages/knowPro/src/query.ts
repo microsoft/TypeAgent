@@ -13,7 +13,6 @@ import {
     Term,
     TextLocation,
     TextRange,
-    TimestampedTextRange,
 } from "./dataFormat.js";
 import { PropertySearchTerm, SearchTerm } from "./search.js";
 import {
@@ -90,6 +89,21 @@ export const MaxTextLocation: TextLocation = {
     chunkIndex: Number.MAX_SAFE_INTEGER,
     charIndex: Number.MAX_SAFE_INTEGER,
 };
+
+export function compareTextRange(x: TextRange, y: TextRange) {
+    let cmp = compareTextLocation(x.start, y.start);
+    if (cmp !== 0) {
+        return cmp;
+    }
+    if (x.end === undefined && y.end === undefined) {
+        return cmp;
+    }
+    cmp = compareTextLocation(
+        x.end ?? MaxTextLocation,
+        y.end ?? MaxTextLocation,
+    );
+    return cmp;
+}
 
 export function isInTextRange(
     outerRange: TextRange,
@@ -601,6 +615,19 @@ export interface IQuerySemanticRefPredicate {
     eval(context: QueryEvalContext, semanticRef: SemanticRef): boolean;
 }
 
+function matchPredicates(
+    context: QueryEvalContext,
+    predicates: IQuerySemanticRefPredicate[],
+    semanticRef: SemanticRef,
+) {
+    for (let i = 0; i < predicates.length; ++i) {
+        if (!predicates[i].eval(context, semanticRef)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 export class KnowledgeTypePredicate implements IQuerySemanticRefPredicate {
     constructor(public type: KnowledgeType) {}
 
@@ -659,32 +686,35 @@ export function searchTermMatchesAction(
                 action.verbs,
             );
         case "subject":
-            return searchTermMatchesText(
+            return entityNameMatch(
                 searchTerm.propertyValue,
                 action.subjectEntityName,
             );
         case "object":
-            return searchTermMatchesText(
+            return entityNameMatch(
                 searchTerm.propertyValue,
                 action.objectEntityName,
             );
         case "indirectObject":
-            return searchTermMatchesText(
+            return entityNameMatch(
                 searchTerm.propertyValue,
                 action.indirectObjectEntityName,
             );
     }
     return false;
+
+    function entityNameMatch(searchTerm: SearchTerm, entityValue: string) {
+        return (
+            entityValue !== "none" &&
+            searchTermMatchesText(searchTerm, entityValue)
+        );
+    }
 }
 
-export class ScopeExpr extends QueryOpExpr<SemanticRefAccumulator> {
+export class SelectScopeExpr extends QueryOpExpr<SemanticRefAccumulator> {
     constructor(
         public sourceExpr: IQueryOpExpr<SemanticRefAccumulator>,
-        // Predicates that look at matched semantic refs to determine what is in scope
-        public predicates: IQuerySemanticRefPredicate[],
-        public timeScopeExpr:
-            | IQueryOpExpr<TimestampedTextRange[]>
-            | undefined = undefined,
+        public scopeExpr: IQuerySelectScopeExpr[],
     ) {
         super();
     }
@@ -692,60 +722,92 @@ export class ScopeExpr extends QueryOpExpr<SemanticRefAccumulator> {
     public override eval(context: QueryEvalContext): SemanticRefAccumulator {
         let accumulator = this.sourceExpr.eval(context);
         // Scope => text ranges in scope
-        const scope = new TextRangeCollection();
-
-        // If we are scoping the conversation by time range, then collect
-        // text ranges in the given time range
-        if (this.timeScopeExpr) {
-            const timeRanges = this.timeScopeExpr.eval(context);
-            if (timeRanges) {
-                for (const timeRange of timeRanges) {
-                    scope.addRange(timeRange.range);
-                }
+        let textRangesInScope: TextRangeCollection | undefined;
+        for (let i = 0; i < this.scopeExpr.length; ++i) {
+            const rangesInScope = this.scopeExpr[i].eval(context, accumulator);
+            if (rangesInScope) {
+                textRangesInScope ??= new TextRangeCollection();
+                textRangesInScope?.addRanges(rangesInScope);
             }
         }
-
-        // Inspect all accumulated semantic refs using predicates.
-        // E.g. only look at ranges matching actions where X is a subject and Y an object
-        // The text ranges for matching refs give us the text ranges in scope
-        for (const inScopeRef of accumulator.getSemanticRefs(
-            context.semanticRefs,
-            (sr) => this.evalPredicates(context, this.predicates!, sr),
-        )) {
-            scope.addRange(inScopeRef.range);
-        }
-        if (scope.size > 0) {
-            // Select only those semantic refs that are in scope
-            accumulator = accumulator.getInScope(context.semanticRefs, scope);
+        if (textRangesInScope !== undefined) {
+            if (textRangesInScope.size > 0) {
+                // Select only those semantic refs that are in scope
+                accumulator = accumulator.getInScope(
+                    context.semanticRefs,
+                    textRangesInScope,
+                );
+            } else {
+                accumulator.clearMatches();
+            }
         }
         return accumulator;
     }
+}
 
-    private evalPredicates(
+export interface IQuerySelectScopeExpr {
+    eval(
         context: QueryEvalContext,
-        predicates: IQuerySemanticRefPredicate[],
-        semanticRef: SemanticRef,
-    ) {
-        for (let i = 0; i < predicates.length; ++i) {
-            if (predicates[i].eval(context, semanticRef)) {
-                return true;
+        semanticRefs: SemanticRefAccumulator,
+    ): TextRangeCollection | undefined;
+}
+
+export class TimestampScopeExpr implements IQuerySelectScopeExpr {
+    constructor(public dateRange: DateRange) {}
+
+    public eval(
+        context: QueryEvalContext,
+        semanticRefs: SemanticRefAccumulator,
+    ): TextRangeCollection | undefined {
+        const index = context.conversation.timestampIndex;
+        if (index) {
+            const timeRanges = index.lookupRange(this.dateRange);
+            const textRangesInScope = new TextRangeCollection();
+            for (const timeRange of timeRanges) {
+                textRangesInScope.addRange(timeRange.range);
             }
+            return textRangesInScope;
         }
-        return false;
+        return undefined;
     }
 }
 
-export class TimestampScopeExpr extends QueryOpExpr<TimestampedTextRange[]> {
-    constructor(public dateRange: DateRange) {
-        super();
-    }
+export class PredicateScopeExpr implements IQuerySelectScopeExpr {
+    constructor(public predicates: IQuerySemanticRefPredicate[]) {}
 
-    public override eval(context: QueryEvalContext): TimestampedTextRange[] {
-        const index = context.conversation.timestampIndex;
-        let ranges: TimestampedTextRange[] | undefined;
-        if (index !== undefined) {
-            ranges = index.lookupRange(this.dateRange);
+    public eval(
+        context: QueryEvalContext,
+        accumulator: SemanticRefAccumulator,
+    ): TextRangeCollection | undefined {
+        if (this.predicates && this.predicates.length > 0) {
+            const textRangesInScope = new TextRangeCollection();
+            for (const inScopeRef of accumulator.getSemanticRefs(
+                context.semanticRefs,
+                (sr) => matchPredicates(context, this.predicates, sr),
+            )) {
+                textRangesInScope.addRange(inScopeRef.range);
+            }
+            return textRangesInScope;
         }
-        return ranges ?? [];
+        return undefined;
+    }
+}
+
+export class TagScopeExpr implements IQuerySelectScopeExpr {
+    constructor() {}
+
+    public eval(
+        context: QueryEvalContext,
+        accumulator: SemanticRefAccumulator,
+    ): TextRangeCollection | undefined {
+        let textRangesInScope: TextRangeCollection | undefined;
+        for (const inScopeRef of accumulator.getSemanticRefs(
+            context.semanticRefs,
+            (sr) => sr.knowledgeType === "tag",
+        )) {
+            textRangesInScope ??= new TextRangeCollection();
+            textRangesInScope.addRange(inScopeRef.range);
+        }
+        return textRangesInScope;
     }
 }

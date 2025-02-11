@@ -205,6 +205,7 @@ export async function createKnowproCommands(
         );
         context.podcast.deserialize(data);
         context.conversation = context.podcast;
+        context.printer.conversation = context.conversation;
         context.printer.writePodcastInfo(context.podcast);
     }
 
@@ -217,6 +218,7 @@ export async function createKnowproCommands(
                 description ?? "Search current knowPro conversation by terms",
             options: {
                 maxToDisplay: argNum("Maximum matches to display", 25),
+                displayAsc: argBool("Display results in ascending order", true),
                 startMinute: argNum("Starting at minute."),
                 endMinute: argNum("Ending minute."),
                 exact: argBool("Only display exact matches", false),
@@ -253,7 +255,7 @@ export async function createKnowproCommands(
                 conversation,
                 terms,
                 propertyTermsFromNamedArgs(namedArgs, commandDef),
-                filterFromNamedArgs(namedArgs),
+                filterFromNamedArgs(namedArgs, commandDef),
                 undefined,
                 namedArgs.exact ? 1 : undefined,
             );
@@ -277,20 +279,48 @@ export async function createKnowproCommands(
         namedArgs: NamedArgs,
         commandDef: CommandMetadata,
     ): kp.PropertySearchTerm[] {
-        const keyValues = keyValuesFromNamedArgs(namedArgs, commandDef);
-        const propertySearchTerms: kp.PropertySearchTerm[] = [];
-        for (const propertyName of Object.keys(keyValues)) {
-            const propertyValue = keyValues[propertyName];
-            const propertySearchTerm = kp.propertySearchTermFromKeyValue(
-                propertyName,
-                propertyValue,
-            );
-            propertySearchTerms.push(propertySearchTerm);
-        }
-        return propertySearchTerms;
+        return createPropertyTerms(namedArgs, commandDef, undefined, (name) => {
+            if (name.startsWith("@")) {
+                return name.substring(1);
+            }
+            return name;
+        });
     }
 
-    function filterFromNamedArgs(namedArgs: NamedArgs) {
+    function propertyScopeTermsFromNamedArgs(
+        namedArgs: NamedArgs,
+        commandDef: CommandMetadata,
+    ): kp.PropertySearchTerm[] {
+        return createPropertyTerms(
+            namedArgs,
+            commandDef,
+            (name) => name.startsWith("@"),
+            (name) => name.substring(1),
+        );
+    }
+
+    function createPropertyTerms(
+        namedArgs: NamedArgs,
+        commandDef: CommandMetadata,
+        nameFilter?: (name: string) => boolean,
+        nameModifier?: (name: string) => string,
+    ): kp.PropertySearchTerm[] {
+        const keyValues = keyValuesFromNamedArgs(namedArgs, commandDef);
+        const propertyNames = nameFilter
+            ? Object.keys(keyValues).filter(nameFilter)
+            : Object.keys(keyValues);
+        return propertyNames.map((propertyName) =>
+            kp.propertySearchTermFromKeyValue(
+                nameModifier ? nameModifier(propertyName) : propertyName,
+                keyValues[propertyName],
+            ),
+        );
+    }
+
+    function filterFromNamedArgs(
+        namedArgs: NamedArgs,
+        commandDef: CommandMetadata,
+    ) {
         let filter: kp.SearchFilter = {
             type: namedArgs.ktype,
         };
@@ -308,6 +338,13 @@ export async function createKnowproCommands(
                     namedArgs.endMinute,
                 );
             }
+        }
+        const propertyScope = propertyScopeTermsFromNamedArgs(
+            namedArgs,
+            commandDef,
+        );
+        if (propertyScope.length > 0) {
+            filter.propertyScope = propertyScope;
         }
         return filter;
     }

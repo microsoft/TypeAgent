@@ -7,7 +7,7 @@ import { ChatPrinter } from "../chatPrinter.js";
 import chalk from "chalk";
 
 export class KnowProPrinter extends ChatPrinter {
-    constructor() {
+    constructor(public conversation: kp.IConversation | undefined = undefined) {
         super();
     }
 
@@ -18,12 +18,16 @@ export class KnowProPrinter extends ChatPrinter {
         }
     }
 
+    public writeMetadata(metadata: any) {
+        this.write("Metadata: ").writeJson(metadata);
+    }
+
     public writeMessage(message: kp.IMessage) {
         const prevColor = this.setForeColor(chalk.cyan);
         try {
             this.writeNameValue("Timestamp", message.timestamp);
             this.writeList(message.tags, { type: "csv", title: "Tags" });
-            this.write("Metadata: ").writeJson(message.metadata);
+            this.writeMetadata(message.metadata);
         } finally {
             this.setForeColor(prevColor);
         }
