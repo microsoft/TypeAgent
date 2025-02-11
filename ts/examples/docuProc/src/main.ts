@@ -9,15 +9,8 @@ import { fileURLToPath } from "url";
 
 // Local imports
 import { importAllFiles } from "./pdfImporter.js";
-import { interactiveQueryLoop } from "./pdfQNAInteractiveApp.js";
+import { interactiveDocQueryLoop } from "./pdfQNAInteractiveApp.js";
 import { ChunkyIndex } from "./pdfChunkyIndex.js";
-
-/*import {
-    downloadArxivPaper,
-    fetchArxivPapers,
-    extractTextChunksFromPdf,
-    printArxivPaperParsedData,
-} from "./docuProc.js";*/
 
 // Set __dirname to emulate old JS behavior
 const __filename = fileURLToPath(import.meta.url);
@@ -43,8 +36,6 @@ You can also use 'pnpm start' instead of 'node dist/main.js'.
 Actual args: '${process.argv[0]}' '${process.argv[1]}'
 `;
 
-await main();
-
 async function main(): Promise<void> {
     
     const helpFlags = ["-h", "--help", "-?", "--?"];
@@ -64,15 +55,13 @@ async function main(): Promise<void> {
 
     const files = parseCommandLine();
 
-    const homeDir = process.platform === "darwin" ? process.env.HOME || "" : "";
-    const databaseRootDir = path.join(homeDir, "/data/spelunker");
-
+    const databaseRootDir = path.join(__dirname, "/papers/docuproc-index");
     const chunkyIndex = await ChunkyIndex.createInstance(databaseRootDir);
 
     if (files.length > 0) {
         await importAllFiles(files, chunkyIndex, undefined, verbose);
     } else {
-        await interactiveQueryLoop(chunkyIndex, verbose);
+        await interactiveDocQueryLoop(chunkyIndex, verbose);
     }
 }
 
@@ -105,30 +94,5 @@ function parseCommandLine(): string[] {
     return files;
 }
 
-/*export async function downloadPaper(paper: any): Promise<void> {
-    console.log("Lets start processing your documents ...");
-    const papers: any[] | undefined = await fetchArxivPapers({
-        searchTerm: "transformer",
-        searchField: "title",
-        maxResults: 1,
-    });
-    if (papers !== undefined && papers.length > 0) {
-        console.log(`Found ${papers.length} papers`);
-        console.log("Downloading papers ...");
-        console.log("---------------------------------");
-
-        printArxivPaperParsedData(papers);
-        papers.forEach(async (paper) => {
-            try {
-                const pdfFilePath: string | undefined =
-                    await downloadArxivPaper(paper);
-                if (pdfFilePath !== undefined) {
-                    await extractTextChunksFromPdf(pdfFilePath);
-                }
-            } catch (error) {
-                console.error("Error downloading paper:", error);
-            }
-        });
-    }
-}*/
+await main();
   

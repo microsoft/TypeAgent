@@ -67,7 +67,7 @@ function writeHeading(
     writeColor(io, chalk.green, message);
 }
 
-export async function interactiveQueryLoop(
+export async function interactiveDocQueryLoop(
     chunkyIndex: ChunkyIndex,
     verbose = false,
 ): Promise<void> {
