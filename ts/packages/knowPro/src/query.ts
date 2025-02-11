@@ -388,14 +388,14 @@ export class MatchSearchTermExpr extends MatchTermExpr {
         relatedTerm?: Term,
     ) {
         if (relatedTerm === undefined) {
-            const semanticRefs = this.lookupTerm(context, term);
             if (!context.matchedTerms.has(term)) {
+                const semanticRefs = this.lookupTerm(context, term);
                 matches.addTermMatches(term, semanticRefs, true);
                 context.matchedTerms.add(term);
             }
         } else {
-            const semanticRefs = this.lookupTerm(context, relatedTerm);
             if (!context.matchedTerms.has(relatedTerm)) {
+                const semanticRefs = this.lookupTerm(context, relatedTerm);
                 matches.addTermMatches(
                     term,
                     semanticRefs,
@@ -510,20 +510,20 @@ export class MatchPropertyTermExpr extends MatchTermExpr {
             return;
         }
         if (relatedPropVal === undefined) {
-            const semanticRefs = propertyIndex.lookupProperty(
-                propName,
-                propVal.text,
-            );
             if (!context.matchedPropertyTerms.has(propName, propVal)) {
+                const semanticRefs = propertyIndex.lookupProperty(
+                    propName,
+                    propVal.text,
+                );
                 matches.addTermMatches(propVal, semanticRefs, true);
                 context.matchedPropertyTerms.add(propName, propVal);
             }
         } else {
-            const semanticRefs = propertyIndex.lookupProperty(
-                propName,
-                relatedPropVal.text,
-            );
             if (!context.matchedPropertyTerms.has(propName, relatedPropVal)) {
+                const semanticRefs = propertyIndex.lookupProperty(
+                    propName,
+                    relatedPropVal.text,
+                );
                 matches.addTermMatches(
                     propVal,
                     semanticRefs,
