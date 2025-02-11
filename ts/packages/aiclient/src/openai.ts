@@ -300,13 +300,15 @@ type ChatCompletion = {
     usage: CompletionUsageStats;
 };
 
+export type ToolCallOutput = {
+    name: string;
+    arguments: any;
+};
+
 type ToolCall = {
     id: string;
     type: "function";
-    function: {
-        name: string;
-        arguments: any;
-    };
+    function: ToolCallOutput;
 };
 
 type ChatCompletionChoice = {
@@ -528,14 +530,7 @@ function createAzureOpenAIChatModel(
             if (c.type !== "function") {
                 return error("Invalid tool call type");
             }
-
-            // Fake the response to look like structured output, see createActionSchemaJsonValidator
-            const parameters = c.function.arguments;
-            const result =
-                parameters === "{}"
-                    ? `{"response":{"actionName":"${c.function.name}"}}`
-                    : `{"response":{"actionName":"${c.function.name}","parameters":${parameters}}}`;
-            return success(result);
+            return success(JSON.stringify(c.function));
         }
         return success(data.choices[0].message?.content ?? "");
     }

@@ -13,7 +13,9 @@ import {
     ActionSchemaGroup,
     GenerateSchemaOptions,
     generateActionJsonSchema,
-    generateActionJsonSchemaFunctions,
+    generateActionActionFunctionJsonSchemas,
+    ActionObjectJsonSchema,
+    ActionFunctionJsonSchema,
 } from "action-schema";
 import {
     createJsonTranslatorWithValidator,
@@ -31,6 +33,21 @@ import {
 } from "./multipleActionSchema.js";
 import { ActionConfig } from "./actionConfig.js";
 import { ActionConfigProvider } from "./actionConfigProvider.js";
+import { openai } from "aiclient";
+
+function convertJsonSchemaOutput(
+    jsonObject: unknown,
+    jsonSchema: ActionObjectJsonSchema | ActionFunctionJsonSchema[],
+) {
+    if (Array.isArray(jsonSchema)) {
+        const toolCallOutput = jsonObject as openai.ToolCallOutput;
+        return {
+            actionName: toolCallOutput.name,
+            parameters: JSON.parse(toolCallOutput.arguments),
+        };
+    }
+    return (jsonObject as any).response;
+}
 
 function createActionSchemaJsonValidator<T extends TranslatedAction>(
     actionSchemaGroup: ActionSchemaGroup,
@@ -40,7 +57,7 @@ function createActionSchemaJsonValidator<T extends TranslatedAction>(
     const generateJsonSchema = generateOptions?.jsonSchema ?? false;
     const jsonSchemaFunction = generateOptions?.jsonSchemaFunction ?? false;
     const jsonSchema = jsonSchemaFunction
-        ? generateActionJsonSchemaFunctions(actionSchemaGroup)
+        ? generateActionActionFunctionJsonSchemas(actionSchemaGroup)
         : generateJsonSchema
           ? generateActionJsonSchema(actionSchemaGroup)
           : undefined;
@@ -49,22 +66,24 @@ function createActionSchemaJsonValidator<T extends TranslatedAction>(
         getSchemaText: () => schema,
         getTypeName: () => actionSchemaGroup.entry.name,
         getJsonSchema: () => jsonSchema,
-        validate(jsonObject: object): Result<T> {
-            const value: any = jsonSchema
-                ? (jsonObject as any).response
-                : jsonObject;
-
-            if (value.actionName === undefined) {
-                return error("Missing actionName property");
-            }
-            const actionSchema = actionSchemaGroup.actionSchemas.get(
-                value.actionName,
-            );
-            if (actionSchema === undefined) {
-                return error(`Unknown action name: ${value.actionName}`);
-            }
-
+        validate(jsonObject: unknown): Result<T> {
             try {
+                // Fix up the output when we are using jsonSchema.
+                const value: any =
+                    jsonSchema !== undefined
+                        ? convertJsonSchemaOutput(jsonObject, jsonSchema)
+                        : jsonObject;
+
+                if (value.actionName === undefined) {
+                    return error("Missing actionName property");
+                }
+                const actionSchema = actionSchemaGroup.actionSchemas.get(
+                    value.actionName,
+                );
+                if (actionSchema === undefined) {
+                    return error(`Unknown action name: ${value.actionName}`);
+                }
+
                 if (jsonSchemaValidate) {
                     validateAction(actionSchema, value);
                 }
