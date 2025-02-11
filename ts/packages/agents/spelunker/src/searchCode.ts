@@ -3,22 +3,20 @@
 
 import * as fs from "fs";
 import * as path from "path";
-import { createRequire } from "module";
 
-import Database, * as sqlite from "better-sqlite3";
+import * as sqlite from "better-sqlite3";
 
 import { createJsonTranslator, Result, TypeChatJsonTranslator } from "typechat";
 import { createTypeScriptJsonValidator } from "typechat/ts";
 
-import { ChatModel, openai } from "aiclient";
+import { ChatModel, EmbeddingModel, openai } from "aiclient";
 import { createLimiter } from "common-utils";
 
 import {
     ActionResult,
-    ActionResultSuccess,
     Entity,
 } from "@typeagent/agent-sdk";
-import { createActionResultFromError } from "@typeagent/agent-sdk/helpers/action";
+import { createActionResultFromMarkdownDisplay, createActionResultFromError } from "@typeagent/agent-sdk/helpers/action";
 import { loadSchema } from "typeagent";
 
 import {
@@ -34,10 +32,11 @@ import { ChunkDescription, SelectorSpecs } from "./selectorSchema.js";
 import { SpelunkerContext } from "./spelunkerActionHandler.js";
 import { SummarizerSpecs } from "./summarizerSchema.js";
 import { chunkifyTypeScriptFiles } from "./typescriptChunker.js";
+import { createDatabase } from "./databaseUtils.js";
 
 let epoch: number = 0;
 
-function console_log(...rest: any[]): void {
+export function console_log(...rest: any[]): void {
     if (!epoch) {
         epoch = Date.now();
         console.log(""); // Start new epoch with a blank line
@@ -48,8 +47,9 @@ function console_log(...rest: any[]): void {
 
 export interface QueryContext {
     chatModel: ChatModel;
-    oracle: TypeChatJsonTranslator<OracleSpecs>;
     miniModel: ChatModel;
+    embeddingModel: EmbeddingModel<ChunkId>;
+    oracle: TypeChatJsonTranslator<OracleSpecs>;
     chunkSelector: TypeChatJsonTranslator<SelectorSpecs>;
     chunkSummarizer: TypeChatJsonTranslator<SummarizerSpecs>;
     databaseLocation: string;
@@ -78,6 +78,8 @@ function createQueryContext(): QueryContext {
         ["spelunkerMini"],
     );
     miniModel.completionCallback = captureTokenStats;
+
+    const embeddingModel = openai.createEmbeddingModel("spelunkerEmbed");
 
     const oracle = createTranslator<OracleSpecs>(
         chatModel,
@@ -111,8 +113,9 @@ function createQueryContext(): QueryContext {
     const database = undefined;
     return {
         chatModel,
-        oracle,
         miniModel,
+        embeddingModel,
+        oracle,
         chunkSelector,
         chunkSummarizer,
         databaseLocation,
@@ -435,7 +438,7 @@ function createTranslator<T extends object>(
     return translator;
 }
 
-interface FileMtimeSize {
+export interface FileMtimeSize {
     file: string;
     mtime: number;
     size: number;
@@ -479,20 +482,6 @@ function getAllSourceFiles(dir: string): FileMtimeSize[] {
     }
 
     return results;
-}
-
-// Should be in actionHelpers.ts
-function createActionResultFromMarkdownDisplay(
-    literalText: string,
-    entities: Entity[] = [],
-    resultEntity?: Entity,
-): ActionResultSuccess {
-    return {
-        literalText,
-        entities,
-        resultEntity,
-        displayContent: { type: "markdown", content: literalText },
-    };
 }
 
 async function loadDatabase(
@@ -658,73 +647,6 @@ async function loadDatabase(
         await summarizeChunks(context, allChunks);
     }
 
-    return db;
-}
-
-const databaseSchema = `
-CREATE TABLE IF NOT EXISTS Files (
-    fileName TEXT PRIMARY KEY,
-    mtime FLOAT NOT NULL,
-    size INTEGER NOT NULL
-);
-CREATE TABLE IF NOT EXISTS Chunks (
-    chunkId TEXT PRIMARY KEY,
-    treeName TEXT NOT NULL,
-    codeName TEXT NOT NULL,
-    parentId TEXT KEY REFERENCES Chunks(chunkId), -- May be null
-    fileName TEXT KEY REFERENCES files(fileName) NOT NULL,
-    lineNo INTEGER NOT NULL -- 1-based
-);
-CREATE TABLE IF NOT EXISTS Blobs (
-    chunkId TEXT KEY REFERENCES Chunks(chunkId) NOT NULL,
-    start INTEGER NOT NULL, -- 0-based
-    lines TEXT NOT NULL,
-    breadcrumb TEXT -- Chunk ID or empty string or NULL
-);
-CREATE TABLE IF NOT EXISTS Summaries (
-    chunkId TEXT PRIMARY KEY REFERENCES Chunks(chunkId),
-    language TEXT, -- "python", "typescript", etc.
-    summary TEXT,
-    signature TEXT
-)
-`;
-
-function getDbOptions() {
-    if (process?.versions?.electron !== undefined) {
-        return undefined;
-    }
-    const r = createRequire(import.meta.url);
-    const betterSqlitePath = r.resolve("better-sqlite3/package.json");
-    const nativeBinding = path.join(
-        betterSqlitePath,
-        "../build/Release/better_sqlite3.n.node",
-    );
-    return { nativeBinding };
-}
-
-function createDatabase(context: SpelunkerContext): sqlite.Database {
-    if (!context.queryContext) {
-        context.queryContext = createQueryContext();
-    }
-    const loc = context.queryContext.databaseLocation;
-    const db0 = context.queryContext.database;
-    if (db0) {
-        console_log(`  [Using database at ${loc}]`);
-        return db0;
-    }
-    if (fs.existsSync(loc)) {
-        console_log(`  [Opening database at ${loc}]`);
-    } else {
-        console_log(`  [Creating database at ${loc}]`);
-    }
-    const db = new Database(loc, getDbOptions());
-    // Write-Ahead Logging, improving concurrency and performance
-    db.pragma("journal_mode = WAL");
-    // Fix permissions to be read/write only by the owner
-    fs.chmodSync(context.queryContext.databaseLocation, 0o600);
-    // Create all the tables we'll use
-    db.exec(databaseSchema);
-    context.queryContext.database = db;
     return db;
 }
 
