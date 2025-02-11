@@ -108,6 +108,10 @@ module.exports = {
                     to: "./extension",
                     noErrorOnMissing: true,
                 },
+                {
+                    from: path.join(srcDir, "sidepanel.html"),
+                    to: "./extension",
+                },
             ],
         }),
 

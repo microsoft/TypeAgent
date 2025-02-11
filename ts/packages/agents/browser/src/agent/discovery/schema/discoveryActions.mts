@@ -8,7 +8,7 @@ export type FindPageComponents = {
 export type FindUserActions = {
   actionName: "findUserActions";
   parameters: {
-    registerAgent: boolean;
+    registerAgent?: boolean;
     agentName?: string;
   };
 };
@@ -17,8 +17,20 @@ export type GetPageType = {
   actionName: "getPageType";
 };
 
+export type GetSiteType = {
+  actionName: "getSiteType";
+};
+
 export type SummarizePage = {
   actionName: "summarizePage";
+};
+
+export type InitializePageSchema = {
+  actionName: "initializePageSchema";
+  parameters: {
+    registerAgent?: boolean;
+    agentName?: string;
+  };
 };
 
 export type SaveUserActions = {
@@ -41,7 +53,9 @@ export type AddUserAction = {
 export type SchemaDiscoveryActions =
   | FindPageComponents
   | FindUserActions
+  | GetSiteType
   | GetPageType
+  | InitializePageSchema
   | SummarizePage
   | SaveUserActions
   | AddUserAction;

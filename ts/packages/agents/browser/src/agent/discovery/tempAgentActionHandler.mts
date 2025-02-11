@@ -26,6 +26,7 @@ export function createTempAgentForSchema(
         case "searchForProductAction":
         case "selectSearchResult":
           handleCommerceAction(action, context);
+          break;
         case "browseProductCategoriesAction":
           handleBrowseProductCategory(action);
           break;
@@ -90,7 +91,7 @@ export function createTempAgentForSchema(
   async function handleBrowseProductCategory(
     action: BrowseProductCategoriesAction,
   ) {
-    let linkText = action.parameters.categoryName
+    let linkText = action.parameters?.categoryName
       ? `link text ${action.parameters.categoryName}`
       : "";
     const link = (await getComponentFromPage(
