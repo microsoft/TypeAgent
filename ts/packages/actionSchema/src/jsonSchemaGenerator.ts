@@ -61,14 +61,14 @@ type JsonSchemaReference = {
     description?: string;
 };
 
-type JsonSchemaRoot = {
+export type ActionObjectJsonSchema = {
     name: string;
     description?: string;
     strict: true;
-    schema: JsonSchemaTop;
+    schema: JsonSchemaRoot;
 };
 
-type JsonSchemaTop = JsonSchema & { $defs?: Record<string, JsonSchema> }; // REVIEW should be JsonSchemaObject;
+type JsonSchemaRoot = JsonSchema & { $defs?: Record<string, JsonSchema> }; // REVIEW should be JsonSchemaObject;
 
 type JsonSchema =
     | JsonSchemaObject
@@ -161,7 +161,11 @@ function generateJsonSchemaTypeWithDefs(
     strict: boolean = true,
 ) {
     const pending: SchemaTypeDefinition[] = [];
-    const schema: JsonSchemaTop = generateJsonSchemaType(type, pending, strict);
+    const schema: JsonSchemaRoot = generateJsonSchemaType(
+        type,
+        pending,
+        strict,
+    );
     if (pending.length !== 0) {
         const $defs: Record<string, JsonSchema> = {};
         do {
@@ -186,8 +190,8 @@ function generateJsonSchemaTypeWithDefs(
 function generateJsonSchemaTypeDefinition(
     def: SchemaTypeDefinition,
     strict: boolean = true,
-): JsonSchemaRoot {
-    const root: JsonSchemaRoot = {
+): ActionObjectJsonSchema {
+    const root: ActionObjectJsonSchema = {
         name: def.name,
         strict: true,
         schema: generateJsonSchemaTypeWithDefs(def.type, strict),
@@ -205,28 +209,28 @@ export function generateActionJsonSchema(actionSchemaGroup: ActionSchemaGroup) {
     return generateJsonSchemaTypeDefinition(type);
 }
 
-type JsonSchemaFunctions = {
+export type ActionFunctionJsonSchema = {
     type: "function";
     function: {
         name: string;
         description?: string;
-        parameters?: JsonSchemaTop;
+        parameters?: JsonSchemaRoot;
         strict: true;
     };
 };
 
-export function generateActionJsonSchemaFunctions(
+export function generateActionActionFunctionJsonSchemas(
     actionSchemaGroup: ActionSchemaGroup,
     strict: boolean = true,
 ) {
     const entry = actionSchemaGroup.entry;
     const definitions: ActionSchemaEntryTypeDefinition[] = [entry];
-    const tools: JsonSchemaFunctions[] = [];
+    const tools: ActionFunctionJsonSchema[] = [];
     while (definitions.length !== 0) {
         const def = definitions.shift()!;
         switch (def.type.type) {
             case "object":
-                const tool: JsonSchemaFunctions = {
+                const tool: ActionFunctionJsonSchema = {
                     type: "function",
                     function: {
                         name: def.type.fields.actionName.type.typeEnum[0],

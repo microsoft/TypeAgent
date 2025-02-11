@@ -25,16 +25,26 @@ export type CompletionSettings = {
 export interface ChatModel extends TypeChatLanguageModel {
     completionSettings: CompletionSettings;
     completionCallback?: ((request: any, response: any) => void) | undefined;
+    /**
+     * Complete the prompt
+     * @param prompt prompt or prompt sections to complete
+     * @param jsonSchema optional json schema. If the json schema is an object, then it uses structured output. If the json schema is an array, then it is function calling.
+     */
     complete(
         prompt: string | PromptSection[],
-        jsonSchema?: JsonSchema,
+        jsonSchema?: JsonSchema | JsonSchema[],
     ): Promise<Result<string>>;
 }
 
 export interface ChatModelWithStreaming extends ChatModel {
+    /**
+     * Complete the prompt with streaming
+     * @param prompt prompt or prompt sections to complete
+     * @param jsonSchema optional json schema. If the json schema is an object, then it uses structured output. If the json schema is an array, then it is function calling.
+     */
     completeStream(
         prompt: string | PromptSection[],
-        jsonSchema?: JsonSchema,
+        jsonSchema?: JsonSchema | JsonSchema[],
     ): Promise<Result<AsyncIterableIterator<string>>>;
 }
 
