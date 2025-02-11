@@ -50,7 +50,7 @@ export default class ExplanationDataAddCommand extends Command {
                 "Batch processing, only save to file once the file is done",
             default: false,
         }),
-        translator: Flags.string({
+        schema: Flags.string({
             description: "Translator name",
             options: schemaNames,
         }),
@@ -110,11 +110,11 @@ export default class ExplanationDataAddCommand extends Command {
             ) {
                 existingData = await readTestData(flags.output);
                 if (
-                    flags.translator !== undefined &&
-                    flags.translator !== existingData.schemaName
+                    flags.schema !== undefined &&
+                    flags.schema !== existingData.schemaName
                 ) {
                     throw new Error(
-                        `Existing data is for translator '${existingData.schemaName}' but input is for translator '${flags.translator}'`,
+                        `Existing data is for schema '${existingData.schemaName}' but input is for schema '${flags.schema}'`,
                     );
                 }
 
@@ -147,7 +147,7 @@ export default class ExplanationDataAddCommand extends Command {
                         `${existingData.entries.length} existing entries loaded`,
                     );
                 }
-            } else if (flags.translator) {
+            } else if (flags.schema) {
                 const config = provider.getActionConfig(flags.schemaName);
                 const sourceHash =
                     provider.getActionSchemaFileForConfig(config).sourceHash;
@@ -159,7 +159,7 @@ export default class ExplanationDataAddCommand extends Command {
                 );
             } else {
                 throw new Error(
-                    `Translator name is not specified.  Please specify a translator name with --translator`,
+                    `Schema name is not specified.  Please specify a schema name with --schema`,
                 );
             }
 

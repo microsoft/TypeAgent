@@ -26,7 +26,7 @@ import { createTypeAgentRequestPrompt } from "../context/chatHistoryPrompt.js";
 import {
     composeActionSchema,
     composeSelectedActionSchema,
-    createActionJsonTranslatorFromSchemaDef,
+    createJsonTranslatorFromActionSchema,
 } from "./actionSchemaJsonTranslator.js";
 import {
     ActionSchemaTypeDefinition,
@@ -34,6 +34,7 @@ import {
     generateSchemaTypeDefinition,
     ActionSchemaObject,
     ActionSchemaCreator as sc,
+    GenerateSchemaOptions,
 } from "action-schema";
 import { ActionConfig } from "./actionConfig.js";
 import { ActionConfigProvider } from "./actionConfigProvider.js";
@@ -262,12 +263,11 @@ export function loadAgentJsonTranslator<
     multipleActionOptions: MultipleActionOptions,
     regenerateSchema: boolean = true,
     model?: string,
-    exact: boolean = true,
-    jsonSchema: boolean = false,
+    generateOptions?: GenerateSchemaOptions,
 ): TypeAgentTranslator<T> {
     const options = { model };
     const translator = regenerateSchema
-        ? createActionJsonTranslatorFromSchemaDef<T>(
+        ? createJsonTranslatorFromActionSchema<T>(
               "AllActions",
               composeActionSchema(
                   translatorName,
@@ -277,7 +277,7 @@ export function loadAgentJsonTranslator<
                   multipleActionOptions,
               ),
               options,
-              { exact, jsonSchema },
+              generateOptions,
           )
         : createJsonTranslatorFromSchemaDef<T>(
               "AllActions",
@@ -368,7 +368,7 @@ export function createTypeAgentTranslatorForSelectedActions<
     model?: string,
 ) {
     const options = { model };
-    const translator = createActionJsonTranslatorFromSchemaDef<T>(
+    const translator = createJsonTranslatorFromActionSchema<T>(
         "AllActions",
         composeSelectedActionSchema(
             definitions,

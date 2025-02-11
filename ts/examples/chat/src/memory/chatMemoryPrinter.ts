@@ -341,8 +341,7 @@ export class ChatMemoryPrinter extends ChatPrinter {
         fallback: boolean = false,
     ) {
         if (response.answer) {
-            const answer = response.answer;
-            //this.writeInColor(fallback ? chalk.gray : chalk.green, answer);
+            let answer = response.answer;
             this.writeInColor(chalk.green, answer);
         } else if (response.whyNoAnswer) {
             const answer = response.whyNoAnswer;

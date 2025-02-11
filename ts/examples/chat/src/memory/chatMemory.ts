@@ -42,8 +42,10 @@ import {
     getMessagesAndCount,
 } from "./common.js";
 import { createEmailCommands, createEmailMemory } from "./emailMemory.js";
+import { createImageMemory } from "./imageMemory.js";
 import { pathToFileURL } from "url";
 import { createPodcastCommands, createPodcastMemory } from "./podcastMemory.js";
+import { createImageCommands } from "./imageMemory.js";
 import { createKnowproCommands } from "./knowproMemory.js";
 
 export type Models = {
@@ -73,6 +75,7 @@ export type ChatContext = {
     searchMemory?: knowLib.conversation.ConversationManager;
     emailMemory: knowLib.conversation.ConversationManager;
     podcastMemory: knowLib.conversation.ConversationManager;
+    imageMemory: knowLib.conversation.ConversationManager;
 };
 
 export enum ReservedConversationNames {
@@ -81,6 +84,7 @@ export enum ReservedConversationNames {
     play = "play",
     search = "search",
     podcasts = "podcasts",
+    images = "images",
 }
 
 function isReservedConversation(context: ChatContext): boolean {
@@ -89,7 +93,8 @@ function isReservedConversation(context: ChatContext): boolean {
         context.conversationName === ReservedConversationNames.play ||
         context.conversationName === ReservedConversationNames.search ||
         context.conversationName === ReservedConversationNames.outlook ||
-        context.conversationName === ReservedConversationNames.podcasts
+        context.conversationName === ReservedConversationNames.podcasts ||
+        context.conversationName === ReservedConversationNames.images
     );
 }
 
@@ -104,6 +109,8 @@ function getReservedConversation(
             return context.emailMemory;
         case ReservedConversationNames.podcasts:
             return context.podcastMemory;
+        case ReservedConversationNames.images:
+            return context.imageMemory;
     }
     return undefined;
 }
@@ -204,6 +211,13 @@ export async function createChatMemoryContext(
             conversationSettings,
             true,
             false,
+            false,
+        ),
+        imageMemory: await createImageMemory(
+            models,
+            storePath,
+            conversationSettings,
+            true,
             false,
         ),
     };
@@ -327,6 +341,7 @@ export async function runChatMemory(): Promise<void> {
     };
     createEmailCommands(context, commands);
     createPodcastCommands(context, commands);
+    createImageCommands(context, commands);
     await createKnowproCommands(context, commands);
     addStandardHandlers(commands);
 

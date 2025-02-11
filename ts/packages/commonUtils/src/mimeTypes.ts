@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 export function getFileExtensionForMimeType(mime: string): string {
-    switch (mime) {
+    switch (mime.toLowerCase()) {
         case "image/png":
             return ".png";
         case "image/jpeg":
@@ -15,7 +15,7 @@ export function getFileExtensionForMimeType(mime: string): string {
 }
 
 export function getMimeTypeFromFileExtension(fileExtension: string): string {
-    switch (fileExtension) {
+    switch (fileExtension.toLowerCase()) {
         case ".css":
             return "text/css";
         case ".htm":
@@ -39,7 +39,7 @@ export function getMimeTypeFromFileExtension(fileExtension: string): string {
 }
 
 export function isImageMimeTypeSupported(mime: string): boolean {
-    switch (mime) {
+    switch (mime.toLowerCase()) {
         case "image/png":
         case "image/jpg":
         case "image/jpeg":
@@ -56,5 +56,5 @@ export function isImageFileType(fileExtension: string): boolean {
 
     const imageFileTypes: Set<string> = new Set<string>(["png", "jpg", "jpeg"]);
 
-    return imageFileTypes.has(fileExtension);
+    return imageFileTypes.has(fileExtension.toLowerCase());
 }

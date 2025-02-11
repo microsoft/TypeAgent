@@ -28,7 +28,9 @@
   },
   "dependencies": {
     "aiclient": "workspace:*",
+    "common-utils": "workspace:*",
     "debug": "^4.4.0",
+    "exifreader": "4.23.5",
     "typeagent": "workspace:*",
     "typechat": "^0.1.1"
   },
