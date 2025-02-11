@@ -482,7 +482,7 @@ function createAzureOpenAIChatModel(
                 ? [{ role: "user", content: prompt }]
                 : prompt;
 
-        const params: any = getParams(messages, jsonSchema);
+        const params = getParams(messages, jsonSchema);
         const result = await callJsonApi(
             headerResult.data,
             settings.endpoint,
