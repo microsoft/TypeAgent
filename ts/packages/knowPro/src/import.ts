@@ -22,10 +22,10 @@ import {
 } from "./conversationIndex.js";
 import { Result } from "typechat";
 import {
-    createTextEmbeddingIndexSettings,
     TermToRelatedTermsIndex,
     TermsToRelatedTermIndexSettings,
 } from "./relatedTermsIndex.js";
+import { createTextEmbeddingIndexSettings } from "./fuzzyIndex.js";
 import { TimestampToTextRangeIndex } from "./timestampIndex.js";
 import { addPropertiesToIndex, PropertyIndex } from "./propertyIndex.js";
 

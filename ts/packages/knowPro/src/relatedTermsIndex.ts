@@ -1,34 +1,26 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { openai, TextEmbeddingModel } from "aiclient";
-import {
-    generateEmbedding,
-    indexesOfNearest,
-    NormalizedEmbedding,
-    SimilarityType,
-    generateTextEmbeddingsWithRetry,
-    collections,
-    ScoredItem,
-    indexesOfAllNearest,
-    generateTextEmbeddings,
-} from "typeagent";
+import { collections, ScoredItem } from "typeagent";
 import {
     Term,
-    ITermEmbeddingIndex,
-    ITextEmbeddingDataItem,
     ITextEmbeddingIndexData,
     ITermsToRelatedTermsDataItem,
     ITermToRelatedTermsData,
     ITermToRelatedTermsIndex,
     ITermsToRelatedTermsIndexData,
+    ITermFuzzyIndex,
 } from "./dataFormat.js";
-import { createEmbeddingCache } from "knowledge-processor";
 import { SearchTerm } from "./search.js";
 import { isSearchTermWildcard } from "./query.js";
 import { TermSet } from "./collections.js";
+import {
+    TextEditDistanceIndex,
+    TextEmbeddingIndex,
+    TextEmbeddingIndexSettings,
+} from "./fuzzyIndex.js";
 
-export class TermToRelatedTermsMap {
+export class TermToRelatedTermsMap implements ITermFuzzyIndex {
     public map: collections.MultiMap<string, Term> = new collections.MultiMap();
 
     constructor() {}
@@ -51,8 +43,24 @@ export class TermToRelatedTermsMap {
         }
     }
 
-    public lookupTerm(term: string): Term[] | undefined {
+    public get(term: string): Term[] | undefined {
         return this.map.get(term);
+    }
+
+    public lookupTerm(term: string): Promise<Term[]> {
+        return Promise.resolve(this.map.get(term) ?? []);
+    }
+
+    public lookupTerms(
+        textArray: string[],
+        maxMatches?: number,
+        minScore?: number,
+    ): Promise<Term[][]> {
+        const matches: Term[][] = [];
+        for (const text of textArray) {
+            matches.push(this.map.get(text) ?? []);
+        }
+        return Promise.resolve(matches);
     }
 
     public serialize(): ITermToRelatedTermsData {
@@ -71,6 +79,74 @@ export class TermToRelatedTermsMap {
                 }
             }
         }
+    }
+}
+
+export type TermsToRelatedTermIndexSettings = {
+    embeddingIndexSettings: TextEmbeddingIndexSettings;
+};
+
+export class TermToRelatedTermsIndex implements ITermToRelatedTermsIndex {
+    private aliasMap: TermToRelatedTermsMap;
+    private editDistanceIndex: TermEditDistanceIndex | undefined;
+    private embeddingIndex: TermEmbeddingIndex | undefined;
+
+    constructor(public settings: TermsToRelatedTermIndexSettings) {
+        this.aliasMap = new TermToRelatedTermsMap();
+    }
+
+    public get aliases() {
+        return this.aliasMap;
+    }
+
+    public get termEditDistanceIndex() {
+        return this.editDistanceIndex;
+    }
+
+    public get termVectorIndex() {
+        return this.embeddingIndex;
+    }
+
+    public serialize(): ITermsToRelatedTermsIndexData {
+        return {
+            aliasData: this.aliasMap.serialize(),
+            textEmbeddingData: this.embeddingIndex?.serialize(),
+        };
+    }
+
+    public deserialize(data?: ITermsToRelatedTermsIndexData): void {
+        if (data) {
+            if (data.aliasData) {
+                this.aliasMap = new TermToRelatedTermsMap();
+                this.aliasMap.deserialize(data.aliasData);
+            }
+            if (data.textEmbeddingData) {
+                this.embeddingIndex = new TermEmbeddingIndex(
+                    this.settings.embeddingIndexSettings,
+                );
+                this.embeddingIndex.deserialize(data.textEmbeddingData);
+            }
+        }
+    }
+
+    public buildEditDistanceIndex(terms: string[]): void {
+        this.editDistanceIndex = new TermEditDistanceIndex(terms);
+    }
+
+    public async buildEmbeddingsIndex(
+        terms: string[],
+        batchSize: number = 8,
+        progressCallback?: (
+            terms: string[],
+            batch: collections.Slice<string>,
+        ) => boolean,
+    ): Promise<void> {
+        this.embeddingIndex = await buildTermEmbeddingIndex(
+            this.settings.embeddingIndexSettings,
+            terms,
+            batchSize,
+            progressCallback,
+        );
     }
 }
 
@@ -95,8 +171,12 @@ export async function resolveRelatedTerms(
         searchableTerms.addOrUnion(searchTerm.term);
         const termText = searchTerm.term.text;
         // Resolve any specific term to related term mappings
-        if (!searchTerm.relatedTerms || searchTerm.relatedTerms.length === 0) {
-            searchTerm.relatedTerms = relatedTermsIndex.lookupTerm(termText);
+        if (
+            relatedTermsIndex.aliases &&
+            (!searchTerm.relatedTerms || searchTerm.relatedTerms.length === 0)
+        ) {
+            searchTerm.relatedTerms =
+                await relatedTermsIndex.aliases.lookupTerm(termText);
         }
         // If no hard-coded mappings, lookup any fuzzy related terms
         // Future: do this in batch
@@ -105,11 +185,11 @@ export async function resolveRelatedTerms(
         }
     }
     if (
-        relatedTermsIndex.termEmbeddings &&
+        relatedTermsIndex.termVectorIndex &&
         searchTermsNeedingRelated.length > 0
     ) {
         const relatedTermsForSearchTerms =
-            await relatedTermsIndex.termEmbeddings.lookupTerms(
+            await relatedTermsIndex.termVectorIndex.lookupTerms(
                 searchTermsNeedingRelated.map((st) => st.term.text),
             );
         for (let i = 0; i < searchTermsNeedingRelated.length; ++i) {
@@ -165,65 +245,6 @@ function dedupeRelatedTerms(searchTerms: SearchTerm[]) {
     }
 }
 
-export type TermsToRelatedTermIndexSettings = {
-    embeddingIndexSettings: TextEmbeddingIndexSettings;
-};
-
-export class TermToRelatedTermsIndex implements ITermToRelatedTermsIndex {
-    public termAliases: TermToRelatedTermsMap;
-    public termEmbeddingsIndex: ITermEmbeddingIndex | undefined;
-
-    constructor(public settings: TermsToRelatedTermIndexSettings) {
-        this.termAliases = new TermToRelatedTermsMap();
-    }
-
-    public get termEmbeddings() {
-        return this.termEmbeddingsIndex;
-    }
-
-    public lookupTerm(termText: string): Term[] | undefined {
-        return this.termAliases.lookupTerm(termText);
-    }
-
-    public serialize(): ITermsToRelatedTermsIndexData {
-        return {
-            relatedTermsData: this.termAliases.serialize(),
-            textEmbeddingData: this.termEmbeddingsIndex?.serialize(),
-        };
-    }
-
-    public deserialize(data?: ITermsToRelatedTermsIndexData): void {
-        if (data) {
-            if (data.relatedTermsData) {
-                this.termAliases = new TermToRelatedTermsMap();
-                this.termAliases.deserialize(data.relatedTermsData);
-            }
-            if (data.textEmbeddingData) {
-                this.termEmbeddingsIndex = new TermEmbeddingIndex(
-                    this.settings.embeddingIndexSettings,
-                );
-                this.termEmbeddingsIndex.deserialize(data.textEmbeddingData);
-            }
-        }
-    }
-
-    public async buildEmbeddingsIndex(
-        terms: string[],
-        batchSize: number = 8,
-        progressCallback?: (
-            terms: string[],
-            batch: collections.Slice<string>,
-        ) => boolean,
-    ): Promise<void> {
-        this.termEmbeddingsIndex = await buildTermEmbeddingIndex(
-            this.settings.embeddingIndexSettings,
-            terms,
-            batchSize,
-            progressCallback,
-        );
-    }
-}
-
 export async function buildTermEmbeddingIndex(
     settings: TextEmbeddingIndexSettings,
     terms: string[],
@@ -232,7 +253,7 @@ export async function buildTermEmbeddingIndex(
         terms: string[],
         batch: collections.Slice<string>,
     ) => boolean,
-): Promise<ITermEmbeddingIndex> {
+): Promise<TermEmbeddingIndex> {
     const termIndex = new TermEmbeddingIndex(settings);
     for (const slice of collections.slices(terms, batchSize)) {
         if (progressCallback && !progressCallback(terms, slice)) {
@@ -243,153 +264,9 @@ export async function buildTermEmbeddingIndex(
     return termIndex;
 }
 
-export class TextEmbeddingIndex {
-    public textList: string[];
-    public textEmbeddings: NormalizedEmbedding[];
-
-    constructor(
-        public settings: TextEmbeddingIndexSettings,
-        data?: ITextEmbeddingIndexData,
-    ) {
-        this.textList = [];
-        this.textEmbeddings = [];
-        if (data !== undefined) {
-            this.deserialize(data);
-        }
-    }
-
-    public async add(texts: string | string[]): Promise<void> {
-        if (Array.isArray(texts)) {
-            const embeddings = await generateTextEmbeddingsWithRetry(
-                this.settings.embeddingModel,
-                texts,
-            );
-            for (let i = 0; i < texts.length; ++i) {
-                this.addTermEmbedding(texts[i], embeddings[i]);
-            }
-        } else {
-            const embedding = await generateEmbedding(
-                this.settings.embeddingModel,
-                texts,
-            );
-            this.addTermEmbedding(texts, embedding);
-        }
-    }
-
-    public async getNearest(
-        text: string | NormalizedEmbedding,
-        maxMatches?: number,
-        minScore?: number,
-    ): Promise<ScoredItem[]> {
-        const termEmbedding = await generateEmbedding(
-            this.settings.embeddingModel,
-            text,
-        );
-        return this.indexesOfNearestTerms(termEmbedding, maxMatches, minScore);
-    }
-
-    public async getNearestMultiple(
-        texts: string[],
-        maxMatches?: number,
-        minScore?: number,
-    ): Promise<ScoredItem[][]> {
-        const termEmbeddings = await generateTextEmbeddings(
-            this.settings.embeddingModel,
-            texts,
-        );
-        const results = [];
-        for (const embedding of termEmbeddings) {
-            results.push(
-                await this.getNearest(embedding, maxMatches, minScore),
-            );
-        }
-        return results;
-    }
-
-    public async lookupEmbeddings(
-        text: string,
-        maxMatches?: number,
-        minScore?: number,
-    ): Promise<[string, NormalizedEmbedding][] | undefined> {
-        const termEmbedding = await generateEmbedding(
-            this.settings.embeddingModel,
-            text,
-        );
-        let matches = this.indexesOfNearestTerms(
-            termEmbedding,
-            maxMatches,
-            minScore,
-        );
-        return matches.map((m) => {
-            return [this.textList[m.item], this.textEmbeddings[m.item]];
-        });
-    }
-
-    public remove(term: string): boolean {
-        const indexOf = this.textList.indexOf(term);
-        if (indexOf >= 0) {
-            this.textList.splice(indexOf, 1);
-            this.textEmbeddings.splice(indexOf, 1);
-            return true;
-        }
-        return false;
-    }
-
-    public deserialize(data: ITextEmbeddingIndexData): void {
-        if (data.embeddingData !== undefined) {
-            for (const item of data.embeddingData) {
-                this.addTermEmbedding(
-                    item.text,
-                    new Float32Array(item.embedding),
-                );
-            }
-        }
-    }
-
-    public serialize(): ITextEmbeddingIndexData {
-        const embeddingData: ITextEmbeddingDataItem[] = [];
-        for (let i = 0; i < this.textList.length; ++i) {
-            embeddingData.push({
-                text: this.textList[i],
-                embedding: Array.from<number>(this.textEmbeddings[i]),
-            });
-        }
-        return {
-            embeddingData,
-        };
-    }
-
-    private addTermEmbedding(term: string, embedding: NormalizedEmbedding) {
-        this.textList.push(term);
-        this.textEmbeddings.push(embedding);
-    }
-
-    private indexesOfNearestTerms(
-        termEmbedding: NormalizedEmbedding,
-        maxMatches?: number,
-        minScore?: number,
-    ): ScoredItem[] {
-        maxMatches ??= this.settings.maxMatches;
-        minScore ??= this.settings.minScore;
-        let matches: ScoredItem[];
-        if (maxMatches && maxMatches > 0) {
-            matches = indexesOfNearest(
-                this.textEmbeddings,
-                termEmbedding,
-                maxMatches,
-                SimilarityType.Dot,
-                minScore,
-            );
-        } else {
-            matches = indexesOfAllNearest(
-                this.textEmbeddings,
-                termEmbedding,
-                SimilarityType.Dot,
-                minScore,
-            );
-        }
-        return matches;
-    }
+export interface ITermEmbeddingIndex extends ITermFuzzyIndex {
+    serialize(): ITextEmbeddingIndexData;
+    deserialize(data: ITextEmbeddingIndexData): void;
 }
 
 export class TermEmbeddingIndex
@@ -431,27 +308,44 @@ export class TermEmbeddingIndex
 
     private matchesToTerms(matches: ScoredItem[]): Term[] {
         return matches.map((m) => {
-            return { text: this.textList[m.item], weight: m.score };
+            return { text: this.textArray[m.item], weight: m.score };
         });
     }
 }
 
-export type TextEmbeddingIndexSettings = {
-    embeddingModel: TextEmbeddingModel;
-    minScore: number;
-    maxMatches?: number | undefined;
-    retryMaxAttempts?: number;
-    retryPauseMs?: number;
-};
+export class TermEditDistanceIndex
+    extends TextEditDistanceIndex
+    implements ITermFuzzyIndex
+{
+    constructor(textArray: string[]) {
+        super(textArray);
+    }
 
-export function createTextEmbeddingIndexSettings(
-    maxMatches = 100,
-    minScore = 0.8,
-): TextEmbeddingIndexSettings {
-    return {
-        embeddingModel: createEmbeddingCache(openai.createEmbeddingModel(), 64),
-        minScore,
-        retryMaxAttempts: 2,
-        retryPauseMs: 2000,
-    };
+    public async lookupTerm(
+        text: string,
+        maxMatches?: number,
+        minScore?: number,
+    ): Promise<Term[]> {
+        const matches = await super.getNearest(text, maxMatches, minScore);
+        return this.matchesToTerms(matches);
+    }
+
+    public async lookupTerms(
+        textArray: string[],
+        maxMatches?: number,
+        minScore?: number,
+    ): Promise<Term[][]> {
+        const matches = await super.getNearestMultiple(
+            textArray,
+            maxMatches,
+            minScore,
+        );
+        return matches.map((m) => this.matchesToTerms(m));
+    }
+
+    private matchesToTerms(matches: ScoredItem<string>[]): Term[] {
+        return matches.map((m) => {
+            return { text: m.item, weight: m.score };
+        });
+    }
 }
