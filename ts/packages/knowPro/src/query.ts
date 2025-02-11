@@ -600,17 +600,17 @@ export interface IQuerySemanticRefPredicate {
     eval(context: QueryEvalContext, semanticRef: SemanticRef): boolean;
 }
 
-function evalSemanticRefPredicates(
+function matchPredicates(
     context: QueryEvalContext,
     predicates: IQuerySemanticRefPredicate[],
     semanticRef: SemanticRef,
 ) {
     for (let i = 0; i < predicates.length; ++i) {
-        if (predicates[i].eval(context, semanticRef)) {
-            return true;
+        if (!predicates[i].eval(context, semanticRef)) {
+            return false;
         }
     }
-    return false;
+    return true;
 }
 
 export class KnowledgeTypePredicate implements IQuerySemanticRefPredicate {
@@ -626,7 +626,7 @@ export class PropertyMatchPredicate implements IQuerySemanticRefPredicate {
 
     public eval(context: QueryEvalContext, semanticRef: SemanticRef): boolean {
         return (
-            searchTermMatchesEntity(this.searchTerm, semanticRef) &&
+            searchTermMatchesEntity(this.searchTerm, semanticRef) ||
             searchTermMatchesAction(this.searchTerm, semanticRef)
         );
     }
@@ -768,7 +768,7 @@ export class PredicateScopeExpr implements IQuerySelectScopeExpr {
             const textRangesInScope = new TextRangeCollection();
             for (const inScopeRef of accumulator.getSemanticRefs(
                 context.semanticRefs,
-                (sr) => evalSemanticRefPredicates(context, this.predicates, sr),
+                (sr) => matchPredicates(context, this.predicates, sr),
             )) {
                 textRangesInScope.addRange(inScopeRef.range);
             }
