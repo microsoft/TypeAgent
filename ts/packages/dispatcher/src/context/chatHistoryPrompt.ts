@@ -22,12 +22,21 @@ export function createTypeAgentRequestPrompt(
         }
     }
 
-    const prompts: string[] = [
-        `You are a service that translates user requests into JSON objects of type "${translator.validator.getTypeName()}" according to the following TypeScript definitions:`,
-        `\`\`\``,
-        translator.validator.getSchemaText(),
-        `\`\`\``,
-    ];
+    const prompts: string[] = [];
+    if (translator.validator.getSchemaText() === "") {
+        // If the schema is empty, we are skipping the type script schema because of json schema.
+        prompts.push(
+            `You are a service that translates user requests into JSON objects`,
+        );
+    } else {
+        prompts.push(
+            `You are a service that translates user requests into JSON objects of type "${translator.validator.getTypeName()}" according to the following TypeScript definitions:`,
+            `\`\`\``,
+            translator.validator.getSchemaText(),
+            `\`\`\``,
+        );
+    }
+
     if (context) {
         if (history !== undefined) {
             const promptSections: PromptSection[] = history.promptSections;

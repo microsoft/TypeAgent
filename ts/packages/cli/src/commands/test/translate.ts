@@ -128,15 +128,17 @@ export default class TestTranslateCommand extends Command {
             description: "Output test result file",
             required: true,
         }),
-        success: Flags.boolean({
-            char: "s",
+        succeeded: Flags.boolean({
             description:
                 "Copy failed test data and rerun only successful tests from the test result file",
         }),
-        fail: Flags.boolean({
-            char: "f",
+        failed: Flags.boolean({
             description:
                 "Copy pass test data and rerun only failed tests from the test result file",
+        }),
+        skipped: Flags.boolean({
+            description:
+                "Copy skipped test data and rerun only skipped tests from the test result file",
         }),
         input: Flags.string({
             char: "i",
@@ -167,7 +169,7 @@ export default class TestTranslateCommand extends Command {
         }
 
         const output: TestResultFile = { pass: [], fail: [] };
-        let requests: string[];
+        let requests: string[] = [];
         let repeat: number;
         if (flags.input) {
             if (argv.length !== 0) {
@@ -196,29 +198,34 @@ export default class TestTranslateCommand extends Command {
                 }
             }
 
-            const includeSuccess = flags.success || !flags.fail;
-            const includeFail = flags.fail || !flags.success;
-
-            if (includeFail) {
-                requests = input.fail.map((entry) => entry.request);
-                if (input.skipped) {
-                    requests = requests.concat(input.skipped);
-                }
-            } else {
-                requests = [];
-            }
-            if (includeSuccess) {
-                if (flags.failed) {
-                    output.pass = input.pass;
-                } else {
-                    requests = input.pass
-                        .map((entry) => entry.request)
-                        .concat(requests);
-                }
-            }
-
             if (flags.repeat !== undefined && flags.repeat !== repeat) {
                 throw new Error("Specified repeat doesn't match result file");
+            }
+
+            const includeAll =
+                !flags.succeeded && !flags.failed && !flags.skipped;
+
+            if (includeAll || flags.succeeded) {
+                requests = requests.concat(
+                    input.pass.map((entry) => entry.request),
+                );
+            } else {
+                output.pass = input.pass;
+            }
+            if (includeAll || flags.failed) {
+                requests = requests.concat(
+                    input.fail.map((entry) => entry.request),
+                );
+            } else {
+                output.fail = input.fail;
+            }
+
+            if (input.skipped !== undefined) {
+                if (includeAll || flags.skipped) {
+                    requests = requests.concat(input.skipped);
+                } else {
+                    output.skipped = input.skipped;
+                }
             }
         } else {
             repeat = flags.repeat ?? defaultRepeat;
@@ -270,7 +277,7 @@ export default class TestTranslateCommand extends Command {
         function print(msg: string) {
             processed++;
             console.log(
-                `[${processed.toString().padStart(totalStr.length)}/${totalStr}] ${chalk.yellow(`[Fail: ${failedTotal.toString().padStart(totalStr.length)} (${((failedTotal / processed) * 100).toFixed(2).padStart(5)}%)]`)} ${msg}`,
+                `${chalk.white(`[${processed.toString().padStart(totalStr.length)}/${totalStr}]`)} ${chalk.yellow(`[Fail: ${failedTotal.toString().padStart(totalStr.length)} (${((failedTotal / processed) * 100).toFixed(2).padStart(5)}%)]`)} ${msg}`,
             );
         }
         const concurrency = flags.concurrency ?? 4;
@@ -319,11 +326,21 @@ export default class TestTranslateCommand extends Command {
 
                         failedTotal++;
                         failed = true;
+                        print(
+                            chalk.red(
+                                `Failed to consistently generate actions`,
+                            ),
+                        );
                         break;
                     }
                     if (actual === undefined) {
                         failedTotal++;
                         failed = true;
+                        print(
+                            chalk.red(
+                                `Failed to consistently generate actions`,
+                            ),
+                        );
                         break;
                     }
                     if (actual.length !== expected.length) {

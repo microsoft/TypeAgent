@@ -5,6 +5,7 @@ import * as sc from "./creator.js";
 import {
     ActionSchemaEntryTypeDefinition,
     ActionSchemaGroup,
+    SchemaObjectField,
     SchemaType,
     SchemaTypeDefinition,
 } from "./type.js";
@@ -18,38 +19,46 @@ export function wrapTypeWithJsonSchema(
 
 type JsonSchemaObject = {
     type: "object";
+    description?: string;
     properties: Record<string, JsonSchema>;
     required: string[];
     additionalProperties: false;
 };
 type JsonSchemaArray = {
     type: "array";
+    description?: string;
     items: JsonSchema;
 };
 
 type JsonSchemaString = {
     type: "string";
+    description?: string;
     enum?: string[];
 };
 
 type JsonSchemaNumber = {
     type: "number";
+    description?: string;
 };
 
 type JsonSchemaBoolean = {
     type: "boolean";
-};
-
-type JsonSchemaUnion = {
-    anyOf: JsonSchema[];
+    description?: string;
 };
 
 type JsonSchemaNull = {
     type: "null";
+    description?: string;
+};
+
+type JsonSchemaUnion = {
+    anyOf: JsonSchema[];
+    description?: string;
 };
 
 type JsonSchemaReference = {
     $ref: string;
+    description?: string;
 };
 
 type JsonSchemaRoot = {
@@ -69,6 +78,14 @@ type JsonSchema =
     | JsonSchemaUnion
     | JsonSchemaReference;
 
+function fieldComments(field: SchemaObjectField): string | undefined {
+    const combined = [
+        ...(field.comments ?? []),
+        ...(field.trailingComments ?? []),
+    ];
+    return combined.length > 0 ? combined.join("\n") : undefined;
+}
+
 function generateJsonSchemaType(
     type: SchemaType,
     pending: SchemaTypeDefinition[],
@@ -79,10 +96,18 @@ function generateJsonSchemaType(
             return {
                 type: "object",
                 properties: Object.fromEntries(
-                    Object.entries(type.fields).map(([key, field]) => [
-                        key,
-                        generateJsonSchemaType(field.type, pending, strict),
-                    ]),
+                    Object.entries(type.fields).map(([key, field]) => {
+                        const fieldType = generateJsonSchemaType(
+                            field.type,
+                            pending,
+                            strict,
+                        );
+                        const comments = fieldComments(field);
+                        if (comments) {
+                            fieldType.description = comments;
+                        }
+                        return [key, fieldType];
+                    }),
                 ),
                 required: Object.keys(type.fields),
                 additionalProperties: false,
@@ -134,6 +159,9 @@ function generateJsonSchemaTypeDefinition(
         strict: true,
         schema: generateJsonSchemaType(def.type, pending, strict),
     };
+    if (def.comments) {
+        schema.schema.description = def.comments.join("\n");
+    }
 
     if (pending.length !== 0) {
         const $defs: Record<string, JsonSchema> = {};
@@ -147,6 +175,10 @@ function generateJsonSchemaTypeDefinition(
                 pending,
                 strict,
             );
+            if (definition.comments) {
+                $defs[definition.name].description =
+                    definition.comments.join("\n");
+            }
         } while (pending.length > 0);
         schema.schema.$defs = $defs;
     }
