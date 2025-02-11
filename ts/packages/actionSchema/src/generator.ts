@@ -124,14 +124,21 @@ export type GenerateSchemaOptions = {
     strict?: boolean; // default true
     exact?: boolean; // default false
     jsonSchema?: boolean; // default false
+    jsonSchemaWithTs?: boolean; // default false, applies only when jsonSchema is true.
 };
 
 export function generateSchemaTypeDefinition(
     definition: SchemaTypeDefinition,
     options?: GenerateSchemaOptions,
     order?: Map<string, number>,
-) {
+): string {
+    // wrap the action schema when json schema is active.
     const jsonSchema = options?.jsonSchema ?? false;
+    const includeTs = !jsonSchema || (options?.jsonSchemaWithTs ?? false);
+    if (!includeTs) {
+        return "";
+    }
+
     const strict = options?.strict ?? true;
     const exact = options?.exact ?? false;
     const emitted = new Map<

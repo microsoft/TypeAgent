@@ -70,7 +70,7 @@ function createActionSchemaJsonValidator<T extends TranslatedAction>(
     };
 }
 
-export function createActionJsonTranslatorFromSchemaDef<
+export function createJsonTranslatorFromActionSchema<
     T extends TranslatedAction,
 >(
     typeName: string,
