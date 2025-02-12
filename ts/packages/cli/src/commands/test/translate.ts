@@ -113,15 +113,16 @@ export default class TestTranslateCommand extends Command {
         }),
         jsonSchema: Flags.boolean({
             description: "Output JSON schema",
-            allowNo: true,
+            default: false,
         }),
         jsonSchemaFunction: Flags.boolean({
             description: "Output JSON schema function",
-            allowNo: true,
+            default: false,
             exclusive: ["jsonSchema"],
         }),
         jsonSchemaValidate: Flags.boolean({
             description: "Validate the output when JSON schema is enabled",
+            default: false,
             relationships: [
                 { type: "some", flags: ["jsonSchema", "jsonSchemaFunction"] },
             ],
@@ -160,6 +161,10 @@ export default class TestTranslateCommand extends Command {
         }),
         sample: Flags.integer({
             description: "number of sample to run",
+        }),
+        stream: Flags.boolean({
+            description: "Enable streaming",
+            default: false,
         }),
     };
     async run(): Promise<void> {
@@ -313,7 +318,7 @@ export default class TestTranslateCommand extends Command {
                 actions: null,
                 commands: { dispatcher: true },
                 translation: {
-                    stream: false,
+                    stream: flags.stream,
                     history: { enabled: false },
                     model: flags.model,
                     multiple: { enabled: flags.multiple },
