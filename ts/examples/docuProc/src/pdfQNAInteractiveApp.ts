@@ -107,7 +107,6 @@ export async function interactiveDocQueryLoop(
         return translator;
     }
 
-
     // Handle @download command.
     function downloadDef(): iapp.CommandMetadata {
         return {
@@ -145,7 +144,7 @@ export async function interactiveDocQueryLoop(
 
     function importDef(): iapp.CommandMetadata {
         return {
-            description: "Import a sinfle or multiple PDF files.",
+            description: "Import a single or multiple PDF files.",
             options: {
                 fileName: {
                     description:
