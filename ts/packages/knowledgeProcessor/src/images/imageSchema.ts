@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { PointOfInterest, ReverseGeocodeAddressLookup } from "common-utils";
+
 export type Image = {
     title: string;
     caption: string;
@@ -15,5 +17,8 @@ export type Image = {
     longitude?: number;
     altitude?: number;
 
-    metaData?: any | undefined;
+    exifData?: any | undefined;
+
+    nearbyPOI?: PointOfInterest[] | undefined,
+    reverseGeocode?: ReverseGeocodeAddressLookup[] | undefined
 };

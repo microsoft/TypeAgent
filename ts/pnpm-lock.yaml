@@ -76,6 +76,9 @@ importers:
 
   examples/chat:
     dependencies:
+      '@azure-rest/maps-search':
+        specifier: ^2.0.0-beta.2
+        version: 2.0.0-beta.2
       aiclient:
         specifier: workspace:*
         version: link:../../packages/aiclient
@@ -2116,6 +2119,9 @@ importers:
 
   packages/knowledgeProcessor:
     dependencies:
+      '@azure-rest/maps-search':
+        specifier: ^2.0.0-beta.2
+        version: 2.0.0-beta.2
       aiclient:
         specifier: workspace:*
         version: link:../aiclient

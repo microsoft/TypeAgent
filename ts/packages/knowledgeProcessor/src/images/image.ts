@@ -13,10 +13,10 @@ import {
     createConversationManager,
 } from "../conversation/conversationManager.js";
 import path from "path";
-import { createTypeChat, isDirectoryPath } from "typeagent";
+import { createTypeChat, isDirectoryPath, promptLib } from "typeagent";
 import { createEntitySearchOptions } from "../conversation/entities.js";
 import { Image } from "./imageSchema.js";
-import { KnowledgeResponse } from "../conversation/knowledgeSchema.js";
+import { ConcreteEntity, Facet, KnowledgeResponse } from "../conversation/knowledgeSchema.js";
 import fs from "node:fs";
 import ExifReader from "exifreader";
 import { PromptSection } from "typechat";
@@ -25,10 +25,12 @@ import {
     CachedImageWithDetails,
     getDateTakenFuzzy,
     getMimeType,
+    ImagePromptDetails,
     isImageFileType,
     parseDateString,
 } from "common-utils";
 import { KnowledgeExtractor } from "../conversation/knowledge.js";
+import { AddressOutput } from "@azure-rest/maps-search";
 
 /**
  * Creates an image memory
@@ -128,11 +130,13 @@ export async function imageToMessage(
         JSON.stringify(image),
     );
 
-    // const knowledge = getKnowledgeForImage(image, extractor);
-    // kr?.actions.push(...knowledge.actions);
-    // kr?.entities.push(...knowledge.entities);
-    // kr?.inverseActions.push(...knowledge.inverseActions);
-    // kr?.topics.push(...knowledge.topics);
+    const knowledge = getKnowledgeForImage(image, extractor);
+    kr?.actions.push(...knowledge.actions);
+    kr?.entities.push(...knowledge.entities);
+    kr?.inverseActions.push(...knowledge.inverseActions);
+    kr?.topics.push(...knowledge.topics);
+
+    // TODO: add actions for all extracted entities being photographed/contained by image
 
     return {
         header: `${image.fileName} - ${image.title}`,
@@ -147,13 +151,82 @@ export function getKnowledgeForImage(
     image: Image,
     extractor: KnowledgeExtractor,
 ): KnowledgeResponse {
-    // TODO: optimize
-    return {
-        entities: [{ name: image.fileName, type: ["file", "image"] }],
+
+    const imageEntity: ConcreteEntity = { 
+        name: image.fileName, 
+        type: ["file", "image"], 
+        facets: [ { name: "File Name", value: image.fileName } ] };
+
+    // EXIF data are facets of this image
+    for(let i = 0; i < image?.exifData.length; i++) {
+        imageEntity.facets!.push({
+            name: image?.exifData[0],
+            value: image?.exifData[1]
+        });
+    }
+
+    // create the return value
+    const retVal: KnowledgeResponse = {
+        entities: [ imageEntity ],
         actions: [],
         inverseActions: [],
         topics: [],
-    };
+    };    
+
+    // if we have POI those are also entities
+    if (image.nearbyPOI) {
+        for(let i = 0; i < image.nearbyPOI.length; i++) {
+            const poiEntity: ConcreteEntity = {
+                name: image.nearbyPOI[i].name!,
+                type: [...image.nearbyPOI[i].categories!, "PointOfInterest"],
+                facets: [ 
+                    { name: "address", value: image.nearbyPOI[i].freeFormAddress ?? "" },
+                    { name: "position", value: JSON.stringify(image.nearbyPOI[i].position) ?? "" },
+                    { name: "longitude", value: image.nearbyPOI[i].position?.longitude?.toString() ?? "" },
+                    { name: "latitude", value: image.nearbyPOI[i].position?.latitude?.toString() ?? "" }
+                ]
+            }
+
+            retVal.entities.push(poiEntity);
+        }
+    }
+
+    // reverse lookup addresses are also entities
+    if (image.reverseGeocode) {
+        for(let i = 0; i < image.reverseGeocode.length; i++) {
+
+            // only put in high confidence items or the first one
+            if((i == 0 || image.reverseGeocode[i].confidence == "High") && image.reverseGeocode[i].address !== undefined) {
+                const addrOutput: AddressOutput = image.reverseGeocode[i].address!;
+                const addrEntity: ConcreteEntity = {
+                    name: image.reverseGeocode[i].address!.formattedAddress ?? "",
+                    type: [ "address" ],
+                    facets: [
+                        { name: "addressLine", value: addrOutput.addressLine ?? "" },
+                        { name: "locality", value: addrOutput.locality ?? "" },
+                        { name: "neighborhood", value: addrOutput.neighborhood ?? "" },
+                        { name: "adminDistricts", value: JSON.stringify(addrOutput.adminDistricts) ?? "" },
+                        { name: "postalCode", value: addrOutput.postalCode ?? "" },
+                        { name: "countryName", value: addrOutput.countryRegion?.name ?? "" },
+                        { name: "countryISO", value: addrOutput.countryRegion?.ISO ?? "" },
+                        { name: "intersection", value: JSON.stringify(addrOutput.intersection) ?? "" },
+                    ]
+                }
+
+                retVal.entities.push(addrEntity);
+            }
+        }
+    }
+
+    // // Actions
+    // retVal.actions.push({
+    //     verbs: [ "taken", "pictured", "photographed" ],
+    //     verbTense: "past",
+    //     subjectEntityName: imageEntity.name,
+    //     objectEntityName
+    // })
+
+    return retVal;
 }
 
 const imageCaptionGeneratingSchema = `// An interface that describes an image in detail
@@ -199,7 +272,7 @@ export async function loadImage(
     const properties: string[][] = [];
     for (const tag of Object.keys(tags)) {
         if (tags[tag]) {
-            properties.push([tag, tags[tag].value]);
+            properties.push([tag, tags[tag].description]);
         }
     }
     const mimeType = getMimeType(path.extname(fileName));
@@ -222,21 +295,20 @@ export async function loadImage(
 
     try {
         const prompt: PromptSection[] = [];
-        const content: PromptSection = await addImagePromptContent(
+        const content: ImagePromptDetails = await addImagePromptContent(
             "user",
             loadedImage,
             true,
-            true,
-            true,
+            false,
+            false,
             true,
             true,
         );
-        //prompt.push(promptLib.dateTimePromptSection()); // Always include the current date and time. Makes the bot much smarter
-        prompt.push(content);
+        prompt.push(promptLib.dateTimePromptSection()); // Always include the current date and time. Makes the bot much smarter
+        prompt.push(content.promptSection!);
 
         const chatResponse = await caption.translate(
-            //    "Caption supplied images in no less than 250 words without making any assumptions, remain factual. Incorporate supplied EXIF and location data to make a better description and to give context to when and where the image was taken.",
-            "Caption supplied images in no less than 150 words without making any assumptions, remain factual.",
+            "Caption supplied images in no less than 200 words without making any assumptions, remain factual.",
             prompt,
         );
 
@@ -248,7 +320,9 @@ export async function loadImage(
                 height: chatResponse.data.height,
                 fileName: chatResponse.data.fileName,
                 dateTaken: chatResponse.data.dateTaken,
-                metaData: properties,
+                exifData: properties,
+                nearbyPOI: content.nearbyPOI,
+                reverseGeocode: content.reverseGeocode
             };
         } else {
             const err = `Unable to load ${fileName}. '${chatResponse.message}'`;
