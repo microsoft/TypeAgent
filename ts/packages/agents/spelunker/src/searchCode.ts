@@ -4,7 +4,7 @@
 import * as fs from "fs";
 import * as path from "path";
 
-import { Database } from "better-sqlite3";
+import * as sqlite from "better-sqlite3";
 import { createJsonTranslator, Result, TypeChatJsonTranslator } from "typechat";
 import { createTypeScriptJsonValidator } from "typechat/ts";
 
@@ -24,7 +24,7 @@ import {
     ChunkerErrorItem,
     ChunkId,
 } from "./chunkSchema.js";
-import { createDatabase } from "./databaseUtils.js";
+import { createDatabase, purgeFile } from "./databaseUtils.js";
 import { makeEmbeddingModel, loadEmbeddings } from "./embeddings.js";
 import { OracleSpecs } from "./oracleSchema.js";
 import { chunkifyPythonFiles } from "./pythonChunker.js";
@@ -52,7 +52,7 @@ export interface QueryContext {
     chunkSelector: TypeChatJsonTranslator<SelectorSpecs>;
     chunkSummarizer: TypeChatJsonTranslator<SummarizerSpecs>;
     databaseLocation: string;
-    database: Database | undefined;
+    database: sqlite.Database | undefined;
 }
 
 function captureTokenStats(req: any, response: any): void {
@@ -186,7 +186,9 @@ async function loadDatabaseAndChunks(context: SpelunkerContext): Promise<void> {
     await loadDatabase(context);
 }
 
-async function readAllChunksFromDatabase(db: Database): Promise<Chunk[]> {
+async function readAllChunksFromDatabase(
+    db: sqlite.Database,
+): Promise<Chunk[]> {
     console_log(`[Step 2: Load chunks from database]`);
     const allChunks: Chunk[] = [];
     const selectAllChunks = db.prepare(`SELECT * FROM chunks`);
@@ -250,7 +252,7 @@ async function queryOracle(
 function produceEntitiesFromResult(
     result: any,
     allChunks: Chunk[],
-    db: Database,
+    db: sqlite.Database,
 ): Entity[] {
     console_log(`  [Success:]`);
     const outputEntities: Entity[] = [];
@@ -412,7 +414,7 @@ const languageCommentMap: { [key: string]: string } = {
 };
 
 // TODO: Remove export once we're using summaries again.
-export function prepareSummaries(db: Database): string {
+export function prepareSummaries(db: sqlite.Database): string {
     const selectAllSummaries = db.prepare(`SELECT * FROM Summaries`);
     const summaryRows: any[] = selectAllSummaries.all();
     if (summaryRows.length > 100) {
@@ -637,42 +639,6 @@ async function loadDatabase(context: SpelunkerContext): Promise<void> {
 
     // 1d. Use a fast model to summarize all chunks.
     // await summarizeChunks(context, allChunks);
-}
-
-function purgeFile(db: Database, fileName: string): void {
-    const prepDeleteEmbeddings = db.prepare(`
-        DELETE FROM ChunkEmbeddings WHERE chunkId IN (
-            SELECT chunkId
-            FROM chunks
-            WHERE filename = ?
-        )
-    `);
-    const prepDeleteSummaries = db.prepare(`
-        DELETE FROM Summaries WHERE chunkId IN (
-            SELECT chunkId
-            FROM chunks
-            WHERE fileName = ?
-        )
-    `);
-    const prepDeleteBlobs = db.prepare(`
-        DELETE FROM Blobs WHERE chunkId IN (
-            SELECT chunkId
-            FROM chunks
-            WHERE filename = ?
-        )
-    `);
-    const prepDeleteChunks = db.prepare(
-        `DELETE FROM Chunks WHERE fileName = ?`,
-    );
-    const prepDeleteFiles = db.prepare(`DELETE FROM files WHERE fileName = ?`);
-
-    db.exec(`BEGIN TRANSACTION`);
-    prepDeleteSummaries.run(fileName);
-    prepDeleteBlobs.run(fileName);
-    prepDeleteEmbeddings.run(fileName);
-    prepDeleteChunks.run(fileName);
-    prepDeleteFiles.run(fileName);
-    db.exec(`COMMIT`);
 }
 
 export async function summarizeChunks(

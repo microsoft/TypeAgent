@@ -5,7 +5,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { createRequire } from "module";
 
-import Database from "better-sqlite3";
+import Database, * as sqlite from "better-sqlite3";
 
 import { SpelunkerContext } from "./spelunkerActionHandler.js";
 
@@ -80,4 +80,40 @@ export function createDatabase(context: SpelunkerContext): void {
     // Create all the tables we'll use
     db.exec(databaseSchema);
     context.queryContext.database = db;
+}
+
+export function purgeFile(db: sqlite.Database, fileName: string): void {
+    const prepDeleteEmbeddings = db.prepare(`
+        DELETE FROM ChunkEmbeddings WHERE chunkId IN (
+            SELECT chunkId
+            FROM chunks
+            WHERE filename = ?
+        )
+    `);
+    const prepDeleteSummaries = db.prepare(`
+        DELETE FROM Summaries WHERE chunkId IN (
+            SELECT chunkId
+            FROM chunks
+            WHERE fileName = ?
+        )
+    `);
+    const prepDeleteBlobs = db.prepare(`
+        DELETE FROM Blobs WHERE chunkId IN (
+            SELECT chunkId
+            FROM chunks
+            WHERE filename = ?
+        )
+    `);
+    const prepDeleteChunks = db.prepare(
+        `DELETE FROM Chunks WHERE fileName = ?`,
+    );
+    const prepDeleteFiles = db.prepare(`DELETE FROM files WHERE fileName = ?`);
+
+    db.exec(`BEGIN TRANSACTION`);
+    prepDeleteSummaries.run(fileName);
+    prepDeleteBlobs.run(fileName);
+    prepDeleteEmbeddings.run(fileName);
+    prepDeleteChunks.run(fileName);
+    prepDeleteFiles.run(fileName);
+    db.exec(`COMMIT`);
 }
