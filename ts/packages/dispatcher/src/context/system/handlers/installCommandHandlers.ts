@@ -49,7 +49,9 @@ export class InstallCommandHandler implements CommandHandler {
         }
         const packageJsonPath = path.join(fullPath, "package.json");
         if (!fs.existsSync(packageJsonPath)) {
-            throw new Error(`Agent path '${fullPath}' is not a NPM package. Missing 'package.json'`);
+            throw new Error(
+                `Agent path '${fullPath}' is not a NPM package. Missing 'package.json'`,
+            );
         }
 
         const moduleName = JSON.parse(
