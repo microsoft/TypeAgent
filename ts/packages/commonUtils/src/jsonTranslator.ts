@@ -294,7 +294,6 @@ export function createJsonTranslatorWithValidator<T extends object>(
                   callback(actualPropName, value, delta);
               }
             : (prop, value, delta) => {
-                  console.log(prop);
                   const prefix = "response.";
                   if (!prop.startsWith(prefix)) {
                       throw new Error(`Invalid property name: ${prop}`);

@@ -105,6 +105,7 @@ export default class TestTranslateCommand extends Command {
         }),
         multiple: Flags.boolean({
             description: "Include multiple action schema",
+            default: true, // follow DispatcherOptions default
             allowNo: true,
         }),
         model: Flags.string({
@@ -113,19 +114,25 @@ export default class TestTranslateCommand extends Command {
         }),
         jsonSchema: Flags.boolean({
             description: "Output JSON schema",
-            default: false,
+            default: false, // follow DispatcherOptions default
         }),
         jsonSchemaFunction: Flags.boolean({
             description: "Output JSON schema function",
-            default: false,
+            default: false, // follow DispatcherOptions default
             exclusive: ["jsonSchema"],
         }),
         jsonSchemaValidate: Flags.boolean({
             description: "Validate the output when JSON schema is enabled",
-            default: false,
+            default: true, // follow DispatcherOptions default
+            allowNo: true,
             relationships: [
                 { type: "some", flags: ["jsonSchema", "jsonSchemaFunction"] },
             ],
+        }),
+        stream: Flags.boolean({
+            description: "Enable streaming",
+            default: true, // follow DispatcherOptions default
+            allowNo: true,
         }),
         concurrency: Flags.integer({
             char: "c",
@@ -161,10 +168,6 @@ export default class TestTranslateCommand extends Command {
         }),
         sample: Flags.integer({
             description: "number of sample to run",
-        }),
-        stream: Flags.boolean({
-            description: "Enable streaming",
-            default: false,
         }),
     };
     async run(): Promise<void> {

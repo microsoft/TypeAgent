@@ -162,7 +162,7 @@ const defaultSessionConfig: SessionConfig = {
                 jsonSchema: false,
                 jsonSchemaFunction: false,
                 jsonSchemaWithTs: false,
-                jsonSchemaValidate: false,
+                jsonSchemaValidate: true,
             },
             optimize: {
                 enabled: false,
