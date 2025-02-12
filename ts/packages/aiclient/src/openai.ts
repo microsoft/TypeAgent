@@ -300,15 +300,13 @@ type ChatCompletion = {
     usage: CompletionUsageStats;
 };
 
-export type ToolCallOutput = {
-    name: string;
-    arguments: string;
-};
-
 type ToolCall = {
     id: string;
     type: "function";
-    function: ToolCallOutput;
+    function: {
+        name: string;
+        arguments: string;
+    };
 };
 
 type ChatCompletionChoice = {
