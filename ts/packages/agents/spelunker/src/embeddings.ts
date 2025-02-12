@@ -16,6 +16,10 @@ import { SpelunkerContext } from "./spelunkerActionHandler.js";
 export function makeEmbeddingModel(): TextEmbeddingModel {
     const apiSettings = openai.apiSettingsFromEnv(openai.ModelType.Embedding);
     apiSettings.maxRetryAttempts = 0;
+    const endpoint = process.env.AZURE_OPENAI_ENDPOINT_EMBEDDING_3_SMALL;
+    if (endpoint) {
+        apiSettings.endpoint = endpoint;
+    }
     const embeddingModel = openai.createEmbeddingModel(apiSettings);
     console_log(`[Max embedding batch size: ${embeddingModel.maxBatchSize}]`);
     return embeddingModel;
@@ -39,8 +43,7 @@ export async function loadEmbeddings(
     );
     const maxCharacters = 100000; // TODO: tune
     const batches = makeBatches(chunks, maxCharacters, model.maxBatchSize);
-    const maxConcurrency =
-        parseInt(process.env.AZURE_OPENAI_MAX_CONCURRENCY ?? "0") ?? 5;
+    const maxConcurrency = 2;
     console_log(
         `  [${batches.length} batches, maxConcurrency ${maxConcurrency}]`,
     );
