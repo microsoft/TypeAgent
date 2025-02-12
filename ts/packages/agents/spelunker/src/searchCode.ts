@@ -4,21 +4,18 @@
 import * as fs from "fs";
 import * as path from "path";
 
-import { Database, Statement } from "better-sqlite3";
-
+import { Database } from "better-sqlite3";
 import { createJsonTranslator, Result, TypeChatJsonTranslator } from "typechat";
 import { createTypeScriptJsonValidator } from "typechat/ts";
 
 import { ChatModel, openai, TextEmbeddingModel } from "aiclient";
 import { createLimiter } from "common-utils";
-
 import { ActionResult, Entity } from "@typeagent/agent-sdk";
 import {
     createActionResultFromMarkdownDisplay,
     createActionResultFromError,
 } from "@typeagent/agent-sdk/helpers/action";
-import { createNormalized, loadSchema } from "typeagent";
-import { NormalizedEmbedding } from "typeagent";
+import { loadSchema } from "typeagent";
 
 import {
     Blob,
@@ -27,14 +24,14 @@ import {
     ChunkerErrorItem,
     ChunkId,
 } from "./chunkSchema.js";
+import { createDatabase } from "./databaseUtils.js";
+import { makeEmbeddingModel, loadEmbeddings } from "./embeddings.js";
 import { OracleSpecs } from "./oracleSchema.js";
 import { chunkifyPythonFiles } from "./pythonChunker.js";
 import { ChunkDescription, SelectorSpecs } from "./selectorSchema.js";
 import { SpelunkerContext } from "./spelunkerActionHandler.js";
 import { SummarizerSpecs } from "./summarizerSchema.js";
 import { chunkifyTypeScriptFiles } from "./typescriptChunker.js";
-import { createDatabase } from "./databaseUtils.js";
-import { apiSettingsFromEnv } from "../../../aiclient/dist/openai.js";
 
 let epoch: number = 0;
 
@@ -83,10 +80,7 @@ function createQueryContext(): QueryContext {
     miniModel.completionCallback = captureTokenStats;
     miniModel.retryMaxAttempts = 0;
 
-    const apiSettings = apiSettingsFromEnv(openai.ModelType.Embedding);
-    apiSettings.maxRetryAttempts = 0;
-    const embeddingModel = openai.createEmbeddingModel(apiSettings);
-    console_log(`[Max embedding batch size: ${embeddingModel.maxBatchSize}]`);
+    const embeddingModel = makeEmbeddingModel();
 
     const oracle = createTranslator<OracleSpecs>(
         chatModel,
@@ -655,88 +649,10 @@ async function loadDatabase(context: SpelunkerContext): Promise<void> {
     }
 
     // 1c. Store all chunk embeddings.
-    // await loadEmbeddings(context, allChunks);
+    await loadEmbeddings(context, allChunks);
 
     // 1d. Use a fast model to summarize all chunks.
     // await summarizeChunks(context, allChunks);
-}
-
-export async function loadEmbeddings(
-    context: SpelunkerContext,
-    chunks: Chunk[],
-): Promise<void> {
-    const model = context.queryContext!.embeddingModel;
-    if (!model.generateEmbeddingBatch) {
-        console_log(`[This embedding model does not support batch operations]`); // TODO: Fix this
-        return;
-    }
-
-    console_log(`[Step 1c: Store chunk embeddings]`);
-    const generateEmbeddingBatch = model.generateEmbeddingBatch;
-    const db = context.queryContext!.database!;
-    const prepInsertEmbeddings = db.prepare(
-        `INSERT OR REPLACE INTO ChunkEmbeddings (chunkId, embedding) VALUES (?, ?)`,
-    );
-    const maxCharacters = 100000; // TODO: tune
-    const batches = makeBatches(chunks, maxCharacters, model.maxBatchSize);
-    const maxConcurrency =
-        parseInt(process.env.AZURE_OPENAI_MAX_CONCURRENCY ?? "0") ?? 5;
-    console_log(
-        `  [${batches.length} batches, maxConcurrency ${maxConcurrency}]`,
-    );
-    const limiter = createLimiter(maxConcurrency);
-    const promises: Promise<void>[] = [];
-    for (const batch of batches) {
-        const p = limiter(() =>
-            generateAndInsertEmbeddings(
-                generateEmbeddingBatch,
-                prepInsertEmbeddings,
-                batch,
-            ),
-        );
-        promises.push(p);
-    }
-    await Promise.all(promises);
-}
-
-async function generateAndInsertEmbeddings(
-    generateEmbeddingBatch: (a: string[]) => Promise<Result<number[][]>>,
-    prepInsertEmbeddings: Statement,
-    batch: Chunk[],
-): Promise<void> {
-    const t0 = new Date().getTime();
-    function blobText(chunk: Chunk): string {
-        const lines: string[] = [];
-        for (const blob of chunk.blobs) {
-            lines.push(...blob.lines);
-        }
-        const line = lines.join("").slice(0, 15000); // My best guess for 8192 tokens from code
-        return line || "(blank)";
-    }
-    const stringBatch = batch.map(blobText);
-    const data = await retryTranslateOn429(() =>
-        generateEmbeddingBatch(stringBatch),
-    );
-    if (data) {
-        for (let i = 0; i < data.length; i++) {
-            const chunk = batch[i];
-            const embedding: NormalizedEmbedding = createNormalized(data[i]);
-            prepInsertEmbeddings.run(chunk.chunkId, embedding);
-        }
-        const t1 = new Date().getTime();
-        const dtms = t1 - t0;
-        const dtStr =
-            dtms < 1000 ? `${dtms}ms` : `${(dtms / 1000).toFixed(3)}s`;
-        console_log(
-            `  [Generated and inserted embedding batch of ${batch.length} in ${dtStr}]`,
-        );
-    } else {
-        const t1 = new Date().getTime();
-        const dtms = t1 - t0;
-        const dtStr =
-            dtms < 1000 ? `${dtms}ms` : `${(dtms / 1000).toFixed(3)}s`;
-        console_log(`  [Failed to generate embedding batch in ${dtStr}]`);
-    }
 }
 
 export async function summarizeChunks(
@@ -849,7 +765,7 @@ async function summarizeChunkSlice(
     if (errors) console_log(`  [${errors} errors]`);
 }
 
-async function retryTranslateOn429<T>(
+export async function retryTranslateOn429<T>(
     translate: () => Promise<Result<T>>,
     retries: number = 3,
     defaultDelay: number = 5000,
@@ -917,7 +833,7 @@ function keepBestChunks(
     return chunks;
 }
 
-function makeBatches(
+export function makeBatches(
     chunks: Chunk[],
     batchSize: number, // In characters
     maxChunks: number, // How many chunks at most per batch
