@@ -173,9 +173,11 @@ class SearchQueryBuilder {
     private compilePropertySearchTerms(
         propertyTerms: PropertySearchTerm[],
     ): q.MatchTermExpr[] {
-        const matchExpressions: q.MatchPropertyTermExpr[] = [];
+        const matchExpressions: q.MatchPropertySearchTermExpr[] = [];
         for (const propertyTerm of propertyTerms) {
-            matchExpressions.push(new q.MatchPropertyTermExpr(propertyTerm));
+            matchExpressions.push(
+                new q.MatchPropertySearchTermExpr(propertyTerm),
+            );
             if (typeof propertyTerm.propertyName !== "string") {
                 this.allSearchTerms.push(propertyTerm.propertyName);
             }

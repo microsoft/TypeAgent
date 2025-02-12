@@ -14,7 +14,11 @@ import {
     TextLocation,
     TextRange,
 } from "./dataFormat.js";
-import { PropertySearchTerm, SearchTerm } from "./search.js";
+import {
+    KnowledgePropertyName,
+    PropertySearchTerm,
+    SearchTerm,
+} from "./search.js";
 import {
     Match,
     MatchAccumulator,
@@ -144,44 +148,6 @@ export function messageLength(message: IMessage): number {
     return length;
 }
 
-export function* lookupTermFiltered(
-    semanticRefIndex: ITermToSemanticRefIndex,
-    term: Term,
-    semanticRefs: SemanticRef[],
-    filter: (
-        semanticRefs: SemanticRef[],
-        scoredRef: ScoredSemanticRef,
-    ) => boolean,
-) {
-    const scoredRefs = semanticRefIndex.lookupTerm(term.text);
-    if (scoredRefs && scoredRefs.length > 0) {
-        for (const scoredRef of scoredRefs) {
-            if (filter(semanticRefs, scoredRef)) {
-                yield scoredRef;
-            }
-        }
-    }
-}
-
-export function* lookupTermFilterByType(
-    semanticRefIndex: ITermToSemanticRefIndex,
-    term: Term,
-    semanticRefs: SemanticRef[],
-    knowledgeType: KnowledgeType,
-) {
-    const scoredRefs = semanticRefIndex.lookupTerm(term.text);
-    if (scoredRefs && scoredRefs.length > 0) {
-        for (const scoredRef of scoredRefs) {
-            if (
-                semanticRefs[scoredRef.semanticRefIndex].knowledgeType ===
-                knowledgeType
-            ) {
-                yield scoredRef;
-            }
-        }
-    }
-}
-
 export function isSearchTermWildcard(searchTerm: SearchTerm): boolean {
     return searchTerm.term.text === "*";
 }
@@ -191,7 +157,7 @@ export function isSearchTermWildcard(searchTerm: SearchTerm): boolean {
  * Returns the term or related term that equals the given text
  * @param searchTerm
  * @param text
- * @returns
+ * @returns The term or related term that matched the text
  */
 export function getMatchingTermForText(
     searchTerm: SearchTerm,
@@ -217,7 +183,7 @@ export function getMatchingTermForText(
  * @param searchTerm
  * @param text
  */
-export function searchTermMatchesText(
+export function matchSearchTermToText(
     searchTerm: SearchTerm,
     text: string | undefined,
 ): boolean {
@@ -227,18 +193,127 @@ export function searchTermMatchesText(
     return false;
 }
 
-export function searchTermMatchesOneOfText(
+export function matchSearchTermToOneOfText(
     searchTerm: SearchTerm,
     texts: string[] | undefined,
 ): boolean {
     if (texts) {
         for (const text of texts) {
-            if (searchTermMatchesText(searchTerm, text)) {
+            if (matchSearchTermToText(searchTerm, text)) {
                 return true;
             }
         }
     }
     return false;
+}
+
+export function matchPropertySearchTermToEntity(
+    searchTerm: PropertySearchTerm,
+    semanticRef: SemanticRef,
+): boolean {
+    if (semanticRef.knowledgeType !== "entity") {
+        return false;
+    }
+    const entity = semanticRef.knowledge as conversation.ConcreteEntity;
+    switch (searchTerm.propertyName) {
+        default:
+            break;
+        case "type":
+            return matchSearchTermToOneOfText(
+                searchTerm.propertyValue,
+                entity.type,
+            );
+        case "name":
+            return matchSearchTermToText(searchTerm.propertyValue, entity.name);
+    }
+    return false;
+}
+
+export function matchPropertySearchTermToAction(
+    searchTerm: PropertySearchTerm,
+    semanticRef: SemanticRef,
+): boolean {
+    if (semanticRef.knowledgeType !== "action") {
+        return false;
+    }
+    const action = semanticRef.knowledge as conversation.Action;
+    switch (searchTerm.propertyName) {
+        default:
+            break;
+        case "verb":
+            return matchSearchTermToOneOfText(
+                searchTerm.propertyValue,
+                action.verbs,
+            );
+        case "subject":
+            return entityNameMatch(
+                searchTerm.propertyValue,
+                action.subjectEntityName,
+            );
+        case "object":
+            return entityNameMatch(
+                searchTerm.propertyValue,
+                action.objectEntityName,
+            );
+        case "indirectObject":
+            return entityNameMatch(
+                searchTerm.propertyValue,
+                action.indirectObjectEntityName,
+            );
+    }
+    return false;
+
+    function entityNameMatch(searchTerm: SearchTerm, entityValue: string) {
+        return (
+            entityValue !== "none" &&
+            matchSearchTermToText(searchTerm, entityValue)
+        );
+    }
+}
+
+export function matchPropertySearchTermToSemanticRef(
+    searchTerm: PropertySearchTerm,
+    semanticRef: SemanticRef,
+): boolean {
+    return (
+        matchPropertySearchTermToEntity(searchTerm, semanticRef) ||
+        matchPropertySearchTermToAction(searchTerm, semanticRef)
+    );
+}
+
+export function lookupTermFiltered(
+    semanticRefIndex: ITermToSemanticRefIndex,
+    term: Term,
+    semanticRefs: SemanticRef[],
+    filter: (semanticRef: SemanticRef, scoredRef: ScoredSemanticRef) => boolean,
+): ScoredSemanticRef[] | undefined {
+    const scoredRefs = semanticRefIndex.lookupTerm(term.text);
+    if (scoredRefs && scoredRefs.length > 0) {
+        return scoredRefs.filter((sr) =>
+            filter(semanticRefs[sr.semanticRefIndex], sr),
+        );
+    }
+    return undefined;
+}
+
+export function lookupPropertySearchTerm(
+    semanticRefIndex: ITermToSemanticRefIndex,
+    propertySearchTerm: PropertySearchTerm,
+    semanticRefs: SemanticRef[],
+): ScoredSemanticRef[] | undefined {
+    if (typeof propertySearchTerm.propertyName !== "string") {
+        throw new Error("Not supported");
+    }
+    return lookupTermFiltered(
+        semanticRefIndex,
+        propertySearchTerm.propertyValue.term,
+        semanticRefs,
+        (semanticRef) =>
+            matchPropertySearchTermToSemanticRef(
+                propertySearchTerm,
+                semanticRef,
+            ),
+    );
 }
 
 // Query eval expressions
@@ -414,17 +489,20 @@ export class MatchTagExpr extends MatchSearchTermExpr {
     constructor(public tagTerm: SearchTerm) {
         super(tagTerm);
     }
-    protected override lookupTerm(context: QueryEvalContext, term: Term) {
-        return lookupTermFilterByType(
+    protected override lookupTerm(
+        context: QueryEvalContext,
+        term: Term,
+    ): ScoredSemanticRef[] | undefined {
+        return lookupTermFiltered(
             context.semanticRefIndex,
             term,
             context.semanticRefs,
-            "tag",
+            (semanticRef) => semanticRef.knowledgeType === "tag",
         );
     }
 }
 
-export class MatchPropertyTermExpr extends MatchTermExpr {
+export class MatchPropertySearchTermExpr extends MatchTermExpr {
     constructor(public propertySearchTerm: PropertySearchTerm) {
         super();
     }
@@ -503,8 +581,8 @@ export class MatchPropertyTermExpr extends MatchTermExpr {
     private accumulateMatchesForPropertyValue(
         context: QueryEvalContext,
         matches: SemanticRefAccumulator,
-        propName: string,
-        propVal: Term,
+        propertyName: string,
+        propertyValue: Term,
         relatedPropVal?: Term,
     ): void {
         const propertyIndex = context.propertyIndex;
@@ -512,29 +590,69 @@ export class MatchPropertyTermExpr extends MatchTermExpr {
             return;
         }
         if (relatedPropVal === undefined) {
-            if (!context.matchedPropertyTerms.has(propName, propVal)) {
-                const semanticRefs = propertyIndex.lookupProperty(
-                    propName,
-                    propVal.text,
+            if (
+                !context.matchedPropertyTerms.has(propertyName, propertyValue)
+            ) {
+                const semanticRefs = this.lookupProperty(
+                    context,
+                    propertyName,
+                    propertyValue.text,
                 );
-                matches.addTermMatches(propVal, semanticRefs, true);
-                context.matchedPropertyTerms.add(propName, propVal);
+                matches.addTermMatches(propertyValue, semanticRefs, true);
+                context.matchedPropertyTerms.add(propertyName, propertyValue);
             }
         } else {
-            if (!context.matchedPropertyTerms.has(propName, relatedPropVal)) {
-                const semanticRefs = propertyIndex.lookupProperty(
-                    propName,
+            if (
+                !context.matchedPropertyTerms.has(propertyName, relatedPropVal)
+            ) {
+                const semanticRefs = this.lookupProperty(
+                    context,
+                    propertyName,
                     relatedPropVal.text,
                 );
                 matches.addTermMatches(
-                    propVal,
+                    propertyValue,
                     semanticRefs,
                     false,
                     relatedPropVal.weight,
                 );
-                context.matchedPropertyTerms.add(propName, relatedPropVal);
+                context.matchedPropertyTerms.add(propertyName, relatedPropVal);
             }
         }
+    }
+
+    private lookupProperty(
+        context: QueryEvalContext,
+        propertyName: string,
+        propertyValue: string,
+        useIndex: boolean = true,
+    ): ScoredSemanticRef[] | undefined {
+        if (useIndex && context.propertyIndex) {
+            return context.propertyIndex.lookupProperty(
+                propertyName,
+                propertyValue,
+            );
+        }
+        return this.lookupPropertyWithoutIndex(
+            context,
+            propertyName,
+            propertyValue,
+        );
+    }
+
+    private lookupPropertyWithoutIndex(
+        context: QueryEvalContext,
+        propertyName: string,
+        propertyValue: string,
+    ): ScoredSemanticRef[] | undefined {
+        return lookupPropertySearchTerm(
+            context.semanticRefIndex,
+            {
+                propertyName: propertyName as KnowledgePropertyName,
+                propertyValue: { term: { text: propertyValue } },
+            },
+            context.semanticRefs,
+        );
     }
 }
 
@@ -642,73 +760,9 @@ export class PropertyMatchPredicate implements IQuerySemanticRefPredicate {
     constructor(public searchTerm: PropertySearchTerm) {}
 
     public eval(context: QueryEvalContext, semanticRef: SemanticRef): boolean {
-        return (
-            searchTermMatchesEntity(this.searchTerm, semanticRef) ||
-            searchTermMatchesAction(this.searchTerm, semanticRef)
-        );
-    }
-}
-
-export function searchTermMatchesEntity(
-    searchTerm: PropertySearchTerm,
-    semanticRef: SemanticRef,
-) {
-    if (semanticRef.knowledgeType !== "entity") {
-        return false;
-    }
-    const entity = semanticRef.knowledge as conversation.ConcreteEntity;
-    switch (searchTerm.propertyName) {
-        default:
-            break;
-        case "type":
-            return searchTermMatchesOneOfText(
-                searchTerm.propertyValue,
-                entity.type,
-            );
-        case "name":
-            return searchTermMatchesText(searchTerm.propertyValue, entity.name);
-    }
-    return false;
-}
-
-export function searchTermMatchesAction(
-    searchTerm: PropertySearchTerm,
-    semanticRef: SemanticRef,
-): boolean {
-    if (semanticRef.knowledgeType !== "action") {
-        return false;
-    }
-    const action = semanticRef.knowledge as conversation.Action;
-    switch (searchTerm.propertyName) {
-        default:
-            break;
-        case "verb":
-            return searchTermMatchesOneOfText(
-                searchTerm.propertyValue,
-                action.verbs,
-            );
-        case "subject":
-            return entityNameMatch(
-                searchTerm.propertyValue,
-                action.subjectEntityName,
-            );
-        case "object":
-            return entityNameMatch(
-                searchTerm.propertyValue,
-                action.objectEntityName,
-            );
-        case "indirectObject":
-            return entityNameMatch(
-                searchTerm.propertyValue,
-                action.indirectObjectEntityName,
-            );
-    }
-    return false;
-
-    function entityNameMatch(searchTerm: SearchTerm, entityValue: string) {
-        return (
-            entityValue !== "none" &&
-            searchTermMatchesText(searchTerm, entityValue)
+        return matchPropertySearchTermToSemanticRef(
+            this.searchTerm,
+            semanticRef,
         );
     }
 }
