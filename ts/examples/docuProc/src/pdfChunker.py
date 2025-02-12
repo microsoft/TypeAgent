@@ -16,27 +16,20 @@ def install_tesseract():
     if is_tesseract_installed():
         print("Tesseract is already installed.")
         return
-
+    
     print("Installing Tesseract OCR...")
     try:
         if sys.platform == "win32":
-            tesseract_path = "C:\\Program Files\\Tesseract-OCR\\tesseract.exe"
-            if os.path.exists(tesseract_path):
-                print("Tesseract is installed but not in PATH. Consider adding it.")
-                return
-            
-            # Check if Chocolatey is available and install Tesseract
             try:
                 subprocess.check_output(["choco", "--version"], stderr=subprocess.DEVNULL)
-                print("Chocolatey found. Installing Tesseract using Chocolatey...")
                 subprocess.check_call(["choco", "install", "-y", "tesseract"])
-                return
+                return        
             except (subprocess.CalledProcessError, FileNotFoundError):
                 print("Chocolatey is not installed. Please install Tesseract manually from https://github.com/UB-Mannheim/tesseract.")
         elif sys.platform == "darwin":
-            subprocess.check_call(["brew", "install", "tesseract"])  # macOS (Homebrew)
+            subprocess.check_call(["brew", "install", "tesseract"])
         elif sys.platform.startswith("linux"):
-            subprocess.check_call(["sudo", "apt", "install", "-y", "tesseract-ocr"])  # Debian/Ubuntu
+            subprocess.check_call(["sudo", "apt", "install", "-y", "tesseract-ocr"])
         else:
             print("Unsupported OS: Please install Tesseract manually.")
     except subprocess.CalledProcessError as e:
@@ -69,93 +62,51 @@ from PIL import Image # type: ignore
 
 IdType = str
 
-import os
-import sys
-import json
-import subprocess
-import pdfplumber  #type: ignore
-import fitz  #type: ignore
-import pytesseract #type: ignore
-from PIL import Image #type: ignore
-from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
-
-# Ensure required dependencies are installed
-def install_dependencies():
-    required_packages = ["pdfplumber", "pymupdf", "pytesseract", "Pillow"]
-    for package in required_packages:
-        try:
-            __import__(package)
-        except ImportError:
-            print(f"Installing missing package: {package}...")
-            try:
-                subprocess.check_call([sys.executable, "-m", "pip", "install", "--user", package])
-            except subprocess.CalledProcessError as e:
-                print(f"Failed to install {package}: {e}")
-                sys.exit(1)  # Exit if installation fails
-
-install_dependencies()
-
 @dataclass
 class Blob:
-    """A sequence of text, table, or image data plus metadata."""
-    type: str  # "text", "table", "image"
-    content: Any  # Text (list of lines), table (list of lists), image path (str)
-    start: int  # Page number (0-based)
-    bbox: Optional[List[float]] = None  # Bounding box if applicable
-    img_path: Optional[str] = None  # Path to the image file
-
+    type: str
+    content: Any
+    start: int
+    bbox: Optional[List[float]] = None
+    img_path: Optional[str] = None
+    para_id: Optional[int] = None
+    
     def to_dict(self) -> Dict[str, Any]:
-        result = {
-            "type": self.type,
-            "content": self.content,
-            "start": self.start,
-        }
+        result = {"type": self.type, "content": self.content, "start": self.start}
         if self.bbox:
             result["bbox"] = self.bbox
         if self.img_path:
             result["img_path"] = self.img_path
+        if self.para_id is not None:
+            result["para_id"] = self.para_id
         return result
 
 @dataclass
 class Chunk:
-    """A chunk at any level of nesting (root, inner, leaf)."""
-    id: IdType
-    pageid: IdType
-    blobs: list[Blob]  # Blobs around the placeholders
-    parentId: IdType
-    children: list[IdType]  # len() is one less than len(blobs)
+    id: str
+    pageid: str
+    blobs: List[Blob]
+    parentId: str
+    children: List[str]
     
-    def to_dict(self) -> dict[str, object]:
-        return {
-            "id": self.id,
-            "pageid": self.pageid,
-            "blobs": self.blobs,
-            "parentId": self.parentId,
-            "children": self.children,
-        }
+    def to_dict(self) -> Dict[str, Any]:
+        return {"id": self.id, "pageid": self.pageid, "blobs": self.blobs, "parentId": self.parentId, "children": self.children}
+
 @dataclass
 class ChunkedFile:
-    """A file with chunks."""
-
     fileName: str
-    chunks: list[Chunk]
-
-    def to_dict(self) -> dict[str, object]:
-        return {
-            "fileName": self.fileName,
-            "chunks": self.chunks,
-        }
+    chunks: List[Chunk]
+    
+    def to_dict(self) -> Dict[str, Any]:
+        return {"fileName": self.fileName, "chunks": self.chunks}
 
 @dataclass
 class ErrorItem:
-    """An error item."""
-
     error: str
     fileName: str
-    output: str | None = None
-
-    def to_dict(self) -> dict[str, str]:
+    output: Optional[str] = None
+    
+    def to_dict(self) -> Dict[str, str]:
         result = {"error": self.error, "filename": self.fileName}
         if self.output:
             result["output"] = self.output
@@ -166,7 +117,7 @@ def custom_json(obj: object) -> dict[str, object]:
         return obj.to_dict()  # type: ignore
     else:
         raise TypeError(f"Cannot JSON serialize object of type {type(obj)}")
-
+    
 last_ts: datetime.datetime = datetime.datetime.now()
 
 def generate_id() -> IdType:
@@ -185,6 +136,7 @@ def generate_id() -> IdType:
         next_ts = last_ts + datetime.timedelta(microseconds=1)
     last_ts = next_ts
     return next_ts.strftime("%Y%m%d-%H%M%S.%f")
+
 class PDFChunker:
     def __init__(self, file_path: str, output_dir: str = "output"):
         self.file_path = file_path
@@ -196,31 +148,23 @@ class PDFChunker:
         for page_num, page in enumerate(pdf.pages):
             text = page.extract_text()
             if text:
-                lines = text.split("\n")
+                paragraphs = text.split("\n\n") if by_paragraph else [text]
                 chunk_id = generate_id()
-                if by_paragraph:
-                    paragraphs = text.split("\n\n")
-                    blobs = [Blob("text", para.split("\n"), page_num) for para in paragraphs]
-                else:
-                    blobs = [Blob("text", lines, page_num)]
+                blobs = [Blob("text", para.split("\n"), page_num, para_id=i) for i, para in enumerate(paragraphs)]
                 chunks.append(Chunk(chunk_id, str(page_num), blobs, "", []))
         return chunks
 
     def extract_tables(self, pdf) -> List[Chunk]:
         chunks = []
         for page_num, page in enumerate(pdf.pages):
-            tables = page.extract_tables()
-            for table in tables:
-                table_path = os.path.join(self.output_dir, f"table_{page_num}_{self.generate_id()}.csv")
+            for table in page.extract_tables():
+                table_path = os.path.join(self.output_dir, f"table_{page_num}_{generate_id()}.csv")
                 with open(table_path, "w", newline="") as f:
-                    writer = csv.writer(f)
-                    writer.writerows(table)
-                chunk_id = generate_id()
-                blobs = [Blob("table", table_path, page_num)]
-                chunks.append(Chunk(chunk_id, str(page_num), blobs, "", []))
+                    csv.writer(f).writerows(table)
+                chunks.append(Chunk(generate_id(), str(page_num), [Blob("table", table_path, page_num)], "", []))
         return chunks
 
-    def extract_images(self) -> list[Chunk]:
+    def extract_images(self) -> List[Chunk]:
         chunks = []
         doc = fitz.open(self.file_path)
         for page_num in range(len(doc)):
@@ -244,12 +188,8 @@ class PDFChunker:
                 except Exception as e:
                     print(f"Error performing OCR on {img_path}: {e}")
                     text = ""
-
-                chunk_id = generate_id()
-                blobs = [Blob("image", text.strip().split("\n"), page_num, bbox, img_path)]
-                chunks.append(Chunk(chunk_id, str(page_num), blobs, "", []))
+                chunks.append(Chunk(generate_id(), str(page_num), [Blob("image", text.strip().split("\n"), page_num, bbox, img_path=img_path)], "", []))
         return chunks
-
 
     def chunkify(self, by_paragraph: bool = True) -> ChunkedFile:
         with pdfplumber.open(self.file_path) as pdf:
