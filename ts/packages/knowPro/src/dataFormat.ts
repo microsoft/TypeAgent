@@ -130,9 +130,9 @@ export type Term = {
 };
 
 export interface ITermToRelatedTermsIndex {
-    get aliases(): ITermFuzzyIndex | undefined;
-    get termEditDistanceIndex(): ITermFuzzyIndex | undefined;
-    get termVectorIndex(): ITermFuzzyIndex | undefined;
+    get aliases(): ITermToRelatedTerms | undefined;
+    get termEditDistanceIndex(): ITermToRelatedTermsFuzzy | undefined;
+    get termVectorIndex(): ITermToRelatedTermsFuzzy | undefined;
     serialize(): ITermsToRelatedTermsIndexData;
     deserialize(data?: ITermsToRelatedTermsIndexData): void;
 }
@@ -151,16 +151,20 @@ export interface ITermsToRelatedTermsDataItem {
     relatedTerms: Term[];
 }
 
-export interface ITermFuzzyIndex {
+export interface ITermToRelatedTerms {
+    lookupTerm(text: string): Term[] | undefined;
+}
+
+export interface ITermToRelatedTermsFuzzy {
     lookupTerm(
         text: string,
         maxMatches?: number,
-        minScore?: number,
+        thresholdScore?: number,
     ): Promise<Term[]>;
     lookupTerms(
         textArray: string[],
         maxMatches?: number,
-        minScore?: number,
+        thresholdScore?: number,
     ): Promise<Term[][]>;
 }
 

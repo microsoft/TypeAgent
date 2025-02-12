@@ -196,13 +196,13 @@ export class TextEditDistanceIndex {
     public getNearest(
         text: string,
         maxMatches?: number,
-        minScore?: number,
+        maxEditDistance?: number,
     ): Promise<ScoredItem<string>[]> {
         const matches = nearestNeighborEditDistance(
             this.textArray,
             text,
             maxMatches,
-            minScore,
+            maxEditDistance,
         );
         return Promise.resolve(matches);
     }
@@ -210,14 +210,14 @@ export class TextEditDistanceIndex {
     public getNearestMultiple(
         textArray: string[],
         maxMatches?: number,
-        minScore?: number,
+        maxEditDistance?: number,
     ): Promise<ScoredItem<string>[][]> {
         const matches = textArray.map((text) =>
             nearestNeighborEditDistance(
                 this.textArray,
                 text,
                 maxMatches,
-                minScore,
+                maxEditDistance,
             ),
         );
         return Promise.resolve(matches);
@@ -228,24 +228,25 @@ export function nearestNeighborEditDistance(
     textList: string[] | IterableIterator<string>,
     other: string,
     maxMatches?: number,
-    minScore?: number,
+    maxEditDistance?: number,
 ): ScoredItem<string>[] {
-    minScore ??= 0;
+    maxEditDistance ??= 0;
     if (maxMatches !== undefined && maxMatches > 0) {
         const matches = createTopNList<string>(maxMatches);
         for (const text of textList) {
-            const score: number = levenshtein.get(text, other);
-            if (score >= minScore) {
-                matches.push(text, score);
+            const distance: number = levenshtein.get(text, other);
+            // We want to return those with an edit distance < than the min
+            if (distance <= maxEditDistance) {
+                matches.push(text, distance);
             }
         }
         return matches.byRank();
     } else {
         const matches: ScoredItem<string>[] = [];
         for (const text of textList) {
-            const score: number = levenshtein.get(text, other);
-            if (score >= minScore) {
-                matches.push({ item: text, score });
+            const distance: number = levenshtein.get(text, other);
+            if (distance <= maxEditDistance) {
+                matches.push({ item: text, score: distance });
             }
         }
         matches.sort((x, y) => y.score! - x.score!);

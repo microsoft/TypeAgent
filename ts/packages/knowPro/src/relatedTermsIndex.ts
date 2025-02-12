@@ -9,7 +9,8 @@ import {
     ITermToRelatedTermsData,
     ITermToRelatedTermsIndex,
     ITermsToRelatedTermsIndexData,
-    ITermFuzzyIndex,
+    ITermToRelatedTermsFuzzy,
+    ITermToRelatedTerms,
 } from "./dataFormat.js";
 import { SearchTerm } from "./search.js";
 import { isSearchTermWildcard } from "./query.js";
@@ -20,7 +21,7 @@ import {
     TextEmbeddingIndexSettings,
 } from "./fuzzyIndex.js";
 
-export class TermToRelatedTermsMap implements ITermFuzzyIndex {
+export class TermToRelatedTermsMap implements ITermToRelatedTerms {
     public map: collections.MultiMap<string, Term> = new collections.MultiMap();
 
     constructor() {}
@@ -43,24 +44,8 @@ export class TermToRelatedTermsMap implements ITermFuzzyIndex {
         }
     }
 
-    public get(term: string): Term[] | undefined {
+    public lookupTerm(term: string): Term[] | undefined {
         return this.map.get(term);
-    }
-
-    public lookupTerm(term: string): Promise<Term[]> {
-        return Promise.resolve(this.map.get(term) ?? []);
-    }
-
-    public lookupTerms(
-        textArray: string[],
-        maxMatches?: number,
-        minScore?: number,
-    ): Promise<Term[][]> {
-        const matches: Term[][] = [];
-        for (const text of textArray) {
-            matches.push(this.map.get(text) ?? []);
-        }
-        return Promise.resolve(matches);
     }
 
     public serialize(): ITermToRelatedTermsData {
@@ -176,7 +161,7 @@ export async function resolveRelatedTerms(
             (!searchTerm.relatedTerms || searchTerm.relatedTerms.length === 0)
         ) {
             searchTerm.relatedTerms =
-                await relatedTermsIndex.aliases.lookupTerm(termText);
+                relatedTermsIndex.aliases.lookupTerm(termText);
         }
         // If no hard-coded mappings, lookup any fuzzy related terms
         // Future: do this in batch
@@ -264,7 +249,7 @@ export async function buildTermEmbeddingIndex(
     return termIndex;
 }
 
-export interface ITermEmbeddingIndex extends ITermFuzzyIndex {
+export interface ITermEmbeddingIndex extends ITermToRelatedTermsFuzzy {
     serialize(): ITextEmbeddingIndexData;
     deserialize(data: ITextEmbeddingIndexData): void;
 }
@@ -315,7 +300,7 @@ export class TermEmbeddingIndex
 
 export class TermEditDistanceIndex
     extends TextEditDistanceIndex
-    implements ITermFuzzyIndex
+    implements ITermToRelatedTermsFuzzy
 {
     constructor(textArray: string[]) {
         super(textArray);
@@ -324,21 +309,25 @@ export class TermEditDistanceIndex
     public async lookupTerm(
         text: string,
         maxMatches?: number,
-        minScore?: number,
+        thresholdScore?: number,
     ): Promise<Term[]> {
-        const matches = await super.getNearest(text, maxMatches, minScore);
+        const matches = await super.getNearest(
+            text,
+            maxMatches,
+            thresholdScore,
+        );
         return this.matchesToTerms(matches);
     }
 
     public async lookupTerms(
         textArray: string[],
         maxMatches?: number,
-        minScore?: number,
+        thresholdScore?: number,
     ): Promise<Term[][]> {
         const matches = await super.getNearestMultiple(
             textArray,
             maxMatches,
-            minScore,
+            thresholdScore,
         );
         return matches.map((m) => this.matchesToTerms(m));
     }
