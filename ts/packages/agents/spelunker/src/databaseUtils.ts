@@ -9,7 +9,7 @@ import Database, * as sqlite from "better-sqlite3";
 
 import { SpelunkerContext } from "./spelunkerActionHandler.js";
 
-import { console_log } from "./searchCode.js";
+import { console_log } from "./logging.js";
 
 const databaseSchema = `
 CREATE TABLE IF NOT EXISTS Files (

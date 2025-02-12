@@ -3,7 +3,7 @@
 
 import { Result } from "typechat";
 
-import { console_log } from "./searchCode.js";
+import { console_log } from "./logging.js";
 
 export async function retryOn429<T>(
     translate: () => Promise<Result<T>>,

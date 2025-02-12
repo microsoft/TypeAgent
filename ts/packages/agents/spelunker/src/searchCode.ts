@@ -30,6 +30,7 @@ import {
     loadEmbeddings,
     preSelectChunks,
 } from "./embeddings.js";
+import { console_log, resetEpoch } from "./logging.js";
 import { OracleSpecs } from "./oracleSchema.js";
 import { chunkifyPythonFiles } from "./pythonChunker.js";
 import { retryOn429 } from "./retryLogic.js";
@@ -37,17 +38,6 @@ import { ChunkDescription, SelectorSpecs } from "./selectorSchema.js";
 import { SpelunkerContext } from "./spelunkerActionHandler.js";
 import { SummarizerSpecs } from "./summarizerSchema.js";
 import { chunkifyTypeScriptFiles } from "./typescriptChunker.js";
-
-let epoch: number = 0;
-
-export function console_log(...rest: any[]): void {
-    if (!epoch) {
-        epoch = Date.now();
-        console.log(""); // Start new epoch with a blank line
-    }
-    const t = Date.now();
-    console.log(((t - epoch) / 1000).toFixed(3).padStart(6), ...rest);
-}
 
 export interface QueryContext {
     chatModel: ChatModel;
@@ -134,7 +124,7 @@ export async function searchCode(
     context: SpelunkerContext,
     input: string,
 ): Promise<ActionResult> {
-    epoch = 0; // Reset logging clock
+    resetEpoch();
     console_log(`[searchCode question='${input}']`);
 
     // 0. Check if the focus is set.

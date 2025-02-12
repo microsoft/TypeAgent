@@ -10,8 +10,9 @@ import { createNormalized, dotProduct } from "typeagent";
 import { NormalizedEmbedding } from "typeagent";
 
 import { Chunk, ChunkId } from "./chunkSchema.js";
+import { console_log } from "./logging.js";
 import { retryOn429 } from "./retryLogic.js";
-import { console_log, makeBatches } from "./searchCode.js";
+import { makeBatches } from "./searchCode.js";
 import { SpelunkerContext } from "./spelunkerActionHandler.js";
 
 export function makeEmbeddingModel(): TextEmbeddingModel {
