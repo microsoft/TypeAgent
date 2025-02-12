@@ -103,6 +103,10 @@ export async function handleSchemaDiscoveryAction(
     const schema = await getDynamicSchema(actionNames);
     message += `\n =========== \n Discovered actions schema: \n ${schema} `;
 
+    const url = await browser.getPageUrl();
+    const hostName = new URL(url!).hostname.replace(/\./g, "_");
+    const agentName = `temp_${hostName}`;
+
     if (action.parameters.registerAgent) {
       const manifest: AppAgentManifest = {
         emojiChar: "🚧",
@@ -116,8 +120,12 @@ export async function handleSchemaDiscoveryAction(
 
       // register agent after request is processed to avoid a deadlock
       setTimeout(async () => {
+        try {
+          await context.removeDynamicAgent(agentName);
+        } catch {}
+
         await context.addDynamicAgent(
-          "tempPageSchema",
+          agentName,
           manifest,
           createTempAgentForSchema(browser, agent, context),
         );
