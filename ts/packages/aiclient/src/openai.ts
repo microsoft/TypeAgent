@@ -300,6 +300,17 @@ type ChatCompletion = {
     usage: CompletionUsageStats;
 };
 
+export type ToolCallOutput = {
+    name: string;
+    arguments: any;
+};
+
+type ToolCall = {
+    id: string;
+    type: "function";
+    function: ToolCallOutput;
+};
+
 type ChatCompletionChoice = {
     message?: ChatContent;
     content_filter_results?: FilterResult | FilterError;
@@ -320,6 +331,7 @@ type ChatCompletionDelta = {
 
 type ChatContent = {
     content?: string | null;
+    tool_calls?: ToolCall[];
     role: "assistant";
 };
 
@@ -438,11 +450,18 @@ function createAzureOpenAIChatModel(
                     `Json schema not supported by model '${settings.modelName}'`,
                 );
             }
-            if (params.response_format?.type === "json_object") {
-                params.response_format = {
-                    type: "json_schema",
-                    json_schema: jsonSchema,
-                };
+            if (Array.isArray(jsonSchema)) {
+                // function calling
+                params.tools = jsonSchema;
+                params.tool_choice = "required";
+                params.parallel_tool_calls = false;
+            } else {
+                if (params.response_format?.type === "json_object") {
+                    params.response_format = {
+                        type: "json_schema",
+                        json_schema: jsonSchema,
+                    };
+                }
             }
         }
         return params;
@@ -463,7 +482,7 @@ function createAzureOpenAIChatModel(
                 ? [{ role: "user", content: prompt }]
                 : prompt;
 
-        const params: any = getParams(messages, jsonSchema);
+        const params = getParams(messages, jsonSchema);
         const result = await callJsonApi(
             headerResult.data,
             settings.endpoint,
@@ -476,7 +495,6 @@ function createAzureOpenAIChatModel(
         if (!result.success) {
             return result;
         }
-
         const data = result.data as ChatCompletion;
         if (!data.choices || data.choices.length === 0) {
             return error("No choices returned");
@@ -500,6 +518,20 @@ function createAzureOpenAIChatModel(
             TokenCounter.getInstance().add(data.usage, tags);
         } catch {}
 
+        if (Array.isArray(jsonSchema)) {
+            const tool_calls = data.choices[0].message?.tool_calls;
+            if (tool_calls === undefined) {
+                return error("No tool_calls returned");
+            }
+            if (tool_calls.length !== 1) {
+                return error("Invalid number of tool_calls");
+            }
+            const c = tool_calls[0];
+            if (c.type !== "function") {
+                return error("Invalid tool call type");
+            }
+            return success(JSON.stringify(c.function));
+        }
         return success(data.choices[0].message?.content ?? "");
     }
 

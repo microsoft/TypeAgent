@@ -115,6 +115,17 @@ export default class TestTranslateCommand extends Command {
             description: "Output JSON schema",
             allowNo: true,
         }),
+        jsonSchemaFunction: Flags.boolean({
+            description: "Output JSON schema function",
+            allowNo: true,
+            exclusive: ["jsonSchema"],
+        }),
+        jsonSchemaValidate: Flags.boolean({
+            description: "Validate the output when JSON schema is enabled",
+            relationships: [
+                { type: "some", flags: ["jsonSchema", "jsonSchemaFunction"] },
+            ],
+        }),
         concurrency: Flags.integer({
             char: "c",
             description: "Number of concurrent requests (default to 4)",
@@ -186,24 +197,29 @@ export default class TestTranslateCommand extends Command {
                 throw new Error("Result file is empty. No tests to rerun.");
             }
 
-            // determine repeat
-            if (input.pass.length !== 0) {
-                repeat = input.pass[0].actions.length;
-            } else {
-                const e = input.fail.find((e) => e.actions !== undefined);
-                if (e === undefined) {
-                    repeat = flags.repeat ?? defaultRepeat;
-                } else {
-                    repeat = e?.actions!.length;
-                }
-            }
-
-            if (flags.repeat !== undefined && flags.repeat !== repeat) {
-                throw new Error("Specified repeat doesn't match result file");
-            }
-
             const includeAll =
                 !flags.succeeded && !flags.failed && !flags.skipped;
+
+            if (includeAll) {
+                repeat = flags.repeat ?? defaultRepeat;
+            } else {
+                // determine repeat
+                if (input.pass.length !== 0) {
+                    repeat = input.pass[0].actions.length;
+                } else {
+                    const e = input.fail.find((e) => e.actions !== undefined);
+                    if (e === undefined) {
+                        repeat = flags.repeat ?? defaultRepeat;
+                    } else {
+                        repeat = e?.actions!.length;
+                    }
+                }
+                if (flags.repeat !== undefined && flags.repeat !== repeat) {
+                    throw new Error(
+                        "Specified repeat doesn't match result file",
+                    );
+                }
+            }
 
             if (includeAll || flags.succeeded) {
                 requests = requests.concat(
@@ -250,6 +266,10 @@ export default class TestTranslateCommand extends Command {
                 .map((entry) => entry.request);
         }
 
+        if (repeat <= 0) {
+            throw new Error("Repeat must be greater than 0");
+        }
+
         let countStr = requests.length.toString();
         if (flags.sample !== undefined) {
             output.skipped = [];
@@ -261,11 +281,9 @@ export default class TestTranslateCommand extends Command {
                     ),
                 );
             }
-            countStr = `${flags.sample}/${countStr}`;
+            countStr = `${requests.length}/${countStr}`;
         }
-        if (flags.failed && flags.input !== undefined) {
-            countStr = `${countStr} failed`;
-        }
+
         const schemas = flags.schema
             ? Object.fromEntries(flags.schema.map((name) => [name, true]))
             : undefined;
@@ -286,7 +304,8 @@ export default class TestTranslateCommand extends Command {
         );
         const startTime = performance.now();
 
-        let executionTime = 0;
+        let totalExecTime = 0;
+        let maxExecTime = 0;
         async function worker() {
             const dispatcher = await createDispatcher("cli test translate", {
                 appAgentProviders: defaultAppAgentProviders,
@@ -294,10 +313,17 @@ export default class TestTranslateCommand extends Command {
                 actions: null,
                 commands: { dispatcher: true },
                 translation: {
+                    stream: false,
                     history: { enabled: false },
                     model: flags.model,
                     multiple: { enabled: flags.multiple },
-                    schema: { generation: { jsonSchema: flags.jsonSchema } },
+                    schema: {
+                        generation: {
+                            jsonSchema: flags.jsonSchema,
+                            jsonSchemaFunction: flags.jsonSchemaFunction,
+                            jsonSchemaValidate: flags.jsonSchemaValidate,
+                        },
+                    },
                 },
                 explainer: { enabled: false },
                 cache: { enabled: false },
@@ -307,14 +333,23 @@ export default class TestTranslateCommand extends Command {
                 const request = requests.shift()!;
 
                 const results: (FullAction[] | undefined)[] = [];
-                const time = performance.now();
+
+                let currentTotalExecTime = 0;
+                let currentMaxExecTime = 0;
                 for (let i = 0; i < repeat; i++) {
+                    const time = performance.now();
                     const commandResult =
                         await dispatcher.processCommand(request);
+                    const execTime = performance.now() - time;
+                    currentMaxExecTime = Math.max(currentMaxExecTime, execTime);
+                    currentTotalExecTime += execTime;
                     results.push(commandResult?.actions);
                 }
-                executionTime += performance.now() - time;
 
+                maxExecTime = Math.max(maxExecTime, currentMaxExecTime);
+                totalExecTime += currentTotalExecTime;
+
+                const timeStr = `${getElapsedString(currentTotalExecTime)} (${getElapsedString(currentTotalExecTime / repeat)}/call) Max: ${getElapsedString(currentMaxExecTime)}`;
                 const expected = results[0];
                 let failed = false;
                 for (let i = 1; i < results.length; i++) {
@@ -385,12 +420,12 @@ export default class TestTranslateCommand extends Command {
                     );
                 }
                 if (!failed) {
+                    let msg = "Passed";
                     if (expected === undefined) {
                         noActions++;
-                        print(chalk.green("Passed (no actions)"));
-                    } else {
-                        print(chalk.green("Passed"));
+                        msg = "Passed (no actions)";
                     }
+                    print(`${chalk.green(msg)} ${chalk.grey(timeStr)}`);
                 }
             }
             await dispatcher.close();
@@ -441,13 +476,13 @@ export default class TestTranslateCommand extends Command {
         const elapsedPerRequest = elapsed / processed;
         const elapsedPerCall = elapsedPerRequest / repeat;
         console.log(
-            `Elapsed Time: ${getElapsedString(elapsed)}, Average: ${getElapsedString(elapsedPerRequest)} (${getElapsedString(elapsedPerCall)} per call)`,
+            `Elapsed Time: ${getElapsedString(elapsed)}, Avg: ${getElapsedString(elapsedPerRequest)} (${getElapsedString(elapsedPerCall)}/call)`,
         );
 
-        const executionTimePerRequest = executionTime / processed;
+        const executionTimePerRequest = totalExecTime / processed;
         const executionTimePerCall = executionTimePerRequest / repeat;
         console.log(
-            `Execution Time: ${getElapsedString(executionTime)}, Average: ${getElapsedString(executionTimePerRequest)} (${getElapsedString(executionTimePerCall)} per call)`,
+            `Execution Time: ${getElapsedString(totalExecTime)}, Avg: ${getElapsedString(executionTimePerRequest)} (${getElapsedString(executionTimePerCall)}/call) Max: ${getElapsedString(maxExecTime)}`,
         );
     }
 }

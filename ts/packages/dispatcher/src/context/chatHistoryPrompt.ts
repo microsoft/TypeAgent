@@ -14,7 +14,7 @@ export function createTypeAgentRequestPrompt(
     request: string,
     history: HistoryContext | undefined,
     attachments: CachedImageWithDetails[] | undefined,
-    context: boolean = true,
+    context: boolean = true, // set to false to totally remove any context information (e.g. today's date), not just history
 ) {
     if (attachments !== undefined && attachments?.length > 0) {
         if (request.length == 0) {

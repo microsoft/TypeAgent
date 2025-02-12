@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ActionContext, AppAgentManifest } from "@typeagent/agent-sdk";
+import { AppAgentManifest, SessionContext } from "@typeagent/agent-sdk";
 import { BrowserActionContext } from "../actionHandler.mjs";
 import { BrowserConnector } from "../browserConnector.mjs";
 import { createDiscoveryPageTranslator } from "./translator.mjs";
@@ -21,30 +21,34 @@ import { SchemaDiscoveryActions } from "./schema/discoveryActions.mjs";
 
 export async function handleSchemaDiscoveryAction(
   action: SchemaDiscoveryActions,
-  context: ActionContext<BrowserActionContext>,
+  context: SessionContext<BrowserActionContext>,
 ) {
   let message = "OK";
-  if (!context.sessionContext.agentContext.browserConnector) {
+  let actionData: any;
+  if (!context.agentContext.browserConnector) {
     throw new Error("No connection to browser session.");
   }
 
-  const browser: BrowserConnector =
-    context.sessionContext.agentContext.browserConnector;
+  const browser: BrowserConnector = context.agentContext.browserConnector;
 
   const agent = await createDiscoveryPageTranslator("GPT_4_O_MINI");
 
   switch (action.actionName) {
+    case "initializePageSchema":
     case "findUserActions":
-      await handleFindUserActions(action);
+      actionData = await handleFindUserActions(action);
       break;
     case "summarizePage":
-      await handleGetPageSummary(action);
+      actionData = await handleGetPageSummary(action);
       break;
     case "findPageComponents":
-      await handleGetPageComponents(action);
+      actionData = await handleGetPageComponents(action);
       break;
     case "getPageType":
-      await handleGetPageType(action);
+      actionData = await handleGetPageType(action);
+      break;
+    case "getSiteType":
+      actionData = await handleGetSiteType(action);
       break;
   }
 
@@ -112,7 +116,7 @@ export async function handleSchemaDiscoveryAction(
 
       // register agent after request is processed to avoid a deadlock
       setTimeout(async () => {
-        await context.sessionContext.addDynamicAgent(
+        await context.addDynamicAgent(
           "tempPageSchema",
           manifest,
           createTempAgentForSchema(browser, agent, context),
@@ -207,7 +211,7 @@ export async function handleSchemaDiscoveryAction(
   async function handleGetPageType(action: any) {
     const htmlFragments = await browser.getHtmlFragments();
 
-    const timerName = `Getting page layout`;
+    const timerName = `Getting page type`;
     console.time(timerName);
     const response = await agent.getPageType(
       undefined,
@@ -216,17 +220,44 @@ export async function handleSchemaDiscoveryAction(
     );
 
     if (!response.success) {
-      console.error("Attempt to get page layout failed");
+      console.error("Attempt to get page type failed");
       console.error(response.message);
       message = "Action could not be completed";
       return;
     }
 
     console.timeEnd(timerName);
-    message = "Page layout: \n" + JSON.stringify(response.data, null, 2);
+    message = "Page type: \n" + JSON.stringify(response.data, null, 2);
 
     return response.data;
   }
 
-  return message;
+  async function handleGetSiteType(action: any) {
+    const htmlFragments = await browser.getHtmlFragments();
+
+    const timerName = `Getting website category`;
+    console.time(timerName);
+    const response = await agent.getSiteType(
+      undefined,
+      htmlFragments,
+      undefined,
+    );
+
+    if (!response.success) {
+      console.error("Attempt to get page website category failed");
+      console.error(response.message);
+      message = "Action could not be completed";
+      return;
+    }
+
+    console.timeEnd(timerName);
+    message = "Website Category: \n" + JSON.stringify(response.data, null, 2);
+
+    return response.data;
+  }
+
+  return {
+    displayText: message,
+    data: actionData,
+  };
 }
