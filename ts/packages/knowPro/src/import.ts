@@ -7,8 +7,6 @@ import {
     IKnowledgeSource,
     SemanticRef,
     IConversationData,
-    ITimestampToTextRangeIndex,
-    IPropertyToSemanticRefIndex,
 } from "./dataFormat.js";
 import { conversation, split } from "knowledge-processor";
 import { collections, dateTime, getFileName, readAllText } from "typeagent";
@@ -26,8 +24,16 @@ import {
     TermsToRelatedTermIndexSettings,
 } from "./relatedTermsIndex.js";
 import { createTextEmbeddingIndexSettings } from "./fuzzyIndex.js";
-import { TimestampToTextRangeIndex } from "./timestampIndex.js";
-import { addPropertiesToIndex, PropertyIndex } from "./propertyIndex.js";
+import {
+    ITimestampToTextRangeIndex,
+    TimestampToTextRangeIndex,
+} from "./timestampIndex.js";
+import {
+    addPropertiesToIndex,
+    IPropertyToSemanticRefIndex,
+    PropertyIndex,
+} from "./propertyIndex.js";
+import { ISecondaryConversationIndexes } from "./search.js";
 
 // metadata for podcast messages
 export class PodcastMessageMeta implements IKnowledgeSource {
@@ -117,7 +123,9 @@ export function createPodcastSettings(): PodcastSettings {
     };
 }
 
-export class Podcast implements IConversation<PodcastMessageMeta> {
+export class Podcast
+    implements IConversation<PodcastMessageMeta>, ISecondaryConversationIndexes
+{
     public settings: PodcastSettings;
     constructor(
         public nameTag: string,

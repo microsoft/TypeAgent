@@ -9,8 +9,10 @@ import {
     ScoredSemanticRef,
     Term,
 } from "./dataFormat.js";
+import { IPropertyToSemanticRefIndex } from "./propertyIndex.js";
 import * as q from "./query.js";
 import { resolveRelatedTerms } from "./relatedTermsIndex.js";
+import { ITimestampToTextRangeIndex } from "./timestampIndex.js";
 
 export type SearchTerm = {
     /**
@@ -64,6 +66,11 @@ export type SearchOptions = {
     usePropertyIndex?: boolean | undefined;
     useTimestampIndex?: boolean | undefined;
 };
+
+export interface ISecondaryConversationIndexes {
+    propertyToSemanticRefIndex: IPropertyToSemanticRefIndex | undefined;
+    timestampIndex?: ITimestampToTextRangeIndex | undefined;
+}
 /**
  * Searches conversation for terms
  */
@@ -84,14 +91,15 @@ export async function searchConversation(
         filter,
         options,
     );
+    const secondaryIndexes: ISecondaryConversationIndexes = conversation as any;
     const queryResults = query.eval(
         new q.QueryEvalContext(
             conversation,
             options?.usePropertyIndex
-                ? conversation.propertyToSemanticRefIndex
+                ? secondaryIndexes.propertyToSemanticRefIndex
                 : undefined,
             options?.useTimestampIndex
-                ? conversation.timestampIndex
+                ? secondaryIndexes.timestampIndex
                 : undefined,
         ),
     );
