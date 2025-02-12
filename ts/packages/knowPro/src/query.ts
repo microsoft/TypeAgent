@@ -25,6 +25,7 @@ import {
 } from "./collections.js";
 import { PropertyNames } from "./propertyIndex.js";
 import { conversation } from "knowledge-processor";
+import { collections } from "typeagent";
 
 export function isConversationSearchable(conversation: IConversation): boolean {
     return (
@@ -196,12 +197,13 @@ export function getMatchingTermForText(
     searchTerm: SearchTerm,
     text: string,
 ): Term | undefined {
-    if (text === searchTerm.term.text) {
+    // Do case-INSENSITIVE comparisons, since stored entities may have different case
+    if (collections.stringEquals(text, searchTerm.term.text, false)) {
         return searchTerm.term;
     }
     if (searchTerm.relatedTerms && searchTerm.relatedTerms.length > 0) {
         for (const relatedTerm of searchTerm.relatedTerms) {
-            if (text === relatedTerm.text) {
+            if (collections.stringEquals(text, relatedTerm.text, false)) {
                 return relatedTerm;
             }
         }
@@ -388,14 +390,14 @@ export class MatchSearchTermExpr extends MatchTermExpr {
         relatedTerm?: Term,
     ) {
         if (relatedTerm === undefined) {
-            const semanticRefs = this.lookupTerm(context, term);
             if (!context.matchedTerms.has(term)) {
+                const semanticRefs = this.lookupTerm(context, term);
                 matches.addTermMatches(term, semanticRefs, true);
                 context.matchedTerms.add(term);
             }
         } else {
-            const semanticRefs = this.lookupTerm(context, relatedTerm);
             if (!context.matchedTerms.has(relatedTerm)) {
+                const semanticRefs = this.lookupTerm(context, relatedTerm);
                 matches.addTermMatches(
                     term,
                     semanticRefs,
@@ -510,20 +512,20 @@ export class MatchPropertyTermExpr extends MatchTermExpr {
             return;
         }
         if (relatedPropVal === undefined) {
-            const semanticRefs = propertyIndex.lookupProperty(
-                propName,
-                propVal.text,
-            );
             if (!context.matchedPropertyTerms.has(propName, propVal)) {
+                const semanticRefs = propertyIndex.lookupProperty(
+                    propName,
+                    propVal.text,
+                );
                 matches.addTermMatches(propVal, semanticRefs, true);
                 context.matchedPropertyTerms.add(propName, propVal);
             }
         } else {
-            const semanticRefs = propertyIndex.lookupProperty(
-                propName,
-                relatedPropVal.text,
-            );
             if (!context.matchedPropertyTerms.has(propName, relatedPropVal)) {
+                const semanticRefs = propertyIndex.lookupProperty(
+                    propName,
+                    relatedPropVal.text,
+                );
                 matches.addTermMatches(
                     propVal,
                     semanticRefs,

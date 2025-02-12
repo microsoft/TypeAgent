@@ -2,7 +2,6 @@
 // Licensed under the MIT License.
 
 import { conversation } from "knowledge-processor";
-import { NormalizedEmbedding } from "typeagent";
 
 // an object that can provide a KnowledgeResponse structure
 export interface IKnowledgeSource {
@@ -131,14 +130,15 @@ export type Term = {
 };
 
 export interface ITermToRelatedTermsIndex {
-    lookupTerm(termText: string): Term[] | undefined;
-    get termEmbeddings(): ITermEmbeddingIndex | undefined;
+    get aliases(): ITermToRelatedTerms | undefined;
+    get termEditDistanceIndex(): ITermToRelatedTermsFuzzy | undefined;
+    get termVectorIndex(): ITermToRelatedTermsFuzzy | undefined;
     serialize(): ITermsToRelatedTermsIndexData;
     deserialize(data?: ITermsToRelatedTermsIndexData): void;
 }
 
 export interface ITermsToRelatedTermsIndexData {
-    relatedTermsData?: ITermToRelatedTermsData | undefined;
+    aliasData?: ITermToRelatedTermsData | undefined;
     textEmbeddingData?: ITextEmbeddingIndexData | undefined;
 }
 
@@ -151,24 +151,21 @@ export interface ITermsToRelatedTermsDataItem {
     relatedTerms: Term[];
 }
 
-export interface ITermEmbeddingIndex {
+export interface ITermToRelatedTerms {
+    lookupTerm(text: string): Term[] | undefined;
+}
+
+export interface ITermToRelatedTermsFuzzy {
     lookupTerm(
         text: string,
         maxMatches?: number,
-        minScore?: number,
+        thresholdScore?: number,
     ): Promise<Term[]>;
     lookupTerms(
-        texts: string[],
+        textArray: string[],
         maxMatches?: number,
-        minScore?: number,
+        thresholdScore?: number,
     ): Promise<Term[][]>;
-    lookupEmbeddings(
-        text: string,
-        maxMatches?: number,
-        minScore?: number,
-    ): Promise<[string, NormalizedEmbedding][] | undefined>;
-    serialize(): ITextEmbeddingIndexData;
-    deserialize(data: ITextEmbeddingIndexData): void;
 }
 
 export interface ITextEmbeddingIndexData {

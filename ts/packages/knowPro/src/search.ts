@@ -85,9 +85,11 @@ export async function searchConversation(
 }
 
 class SearchQueryBuilder {
-    // All SearchTerms injected which compiling the 'select' portion of the query
+    // All SearchTerms used which compiling the 'select' portion of the query
     // We will them expand these search terms by also including related terms
     private allSearchTerms: SearchTerm[] = [];
+    // All search terms used while compiling predicates in the query
+    private allPredicateSearchTerms: SearchTerm[] = [];
 
     constructor(
         public conversation: IConversation,
@@ -110,15 +112,10 @@ class SearchQueryBuilder {
             minHitCount,
         );
 
-        this.prepareSearchTerms(this.allSearchTerms);
         // For all individual SearchTerms created during query compilation, resolve any related terms
-        if (this.conversation.termToRelatedTermsIndex) {
-            await resolveRelatedTerms(
-                this.conversation.termToRelatedTermsIndex,
-                this.allSearchTerms,
-            );
-        }
-        this.prepareSearchTerms(this.allSearchTerms);
+        await this.resolveRelatedTerms(this.allSearchTerms, true);
+        await this.resolveRelatedTerms(this.allPredicateSearchTerms, false);
+
         return query;
     }
 
@@ -193,7 +190,6 @@ class SearchQueryBuilder {
     ): q.IQueryOpExpr<SemanticRefAccumulator> {
         let scopeSelectors: q.IQuerySelectScopeExpr[] = [];
         // Always apply "tag match" scope... all text ranges that matched tags.. are in scope
-        //scopePredicates.push(new q.KnowledgeTypePredicate("tag"));
         scopeSelectors.push(new q.TagScopeExpr());
         if (filter.propertyScope && filter.propertyScope.length > 0) {
             scopeSelectors.push(
@@ -213,9 +209,9 @@ class SearchQueryBuilder {
     ) {
         return propertyTerms.map((p) => {
             if (typeof p.propertyName !== "string") {
-                this.prepareSearchTerm(p.propertyName);
+                this.allPredicateSearchTerms.push(p.propertyName);
             }
-            this.prepareSearchTerm(p.propertyValue);
+            this.allPredicateSearchTerms.push(p.propertyValue);
             return new q.PropertyMatchPredicate(p);
         });
     }
@@ -228,29 +224,63 @@ class SearchQueryBuilder {
         return predicates;
     }
 
-    private prepareSearchTerms(searchTerms: SearchTerm[]): void {
+    private async resolveRelatedTerms(
+        searchTerms: SearchTerm[],
+        dedupe: boolean,
+    ) {
+        this.validateAndPrepareSearchTerms(searchTerms);
+        if (this.conversation.termToRelatedTermsIndex) {
+            await resolveRelatedTerms(
+                this.conversation.termToRelatedTermsIndex,
+                searchTerms,
+                dedupe,
+            );
+        }
+        // Ensure that the resolved terms are valid etc.
+        this.validateAndPrepareSearchTerms(searchTerms);
+    }
+
+    private validateAndPrepareSearchTerms(searchTerms: SearchTerm[]): void {
         for (const searchTerm of searchTerms) {
-            this.prepareSearchTerm(searchTerm);
+            this.validateAndPrepareSearchTerm(searchTerm);
         }
     }
 
-    private prepareTerm(term: Term | undefined) {
+    private validateAndPrepareSearchTerm(searchTerm: SearchTerm): boolean {
+        if (!this.validateAndPrepareTerm(searchTerm.term)) {
+            return false;
+        }
+        searchTerm.term.weight ??= this.defaultMatchWeight;
+        if (searchTerm.relatedTerms) {
+            for (const relatedTerm of searchTerm.relatedTerms) {
+                if (!this.validateAndPrepareTerm(relatedTerm)) {
+                    return false;
+                }
+                if (
+                    relatedTerm.weight &&
+                    relatedTerm.weight >= this.relatedIsExactThreshold
+                ) {
+                    relatedTerm.weight = this.defaultMatchWeight;
+                }
+            }
+            searchTerm.relatedTerms.forEach((st) => {});
+        }
+        return true;
+    }
+
+    /**
+     * Currently, just changes the case of a term
+     *  But here, we may do other things like:
+     * - Check for noise terms
+     * - Do additional rewriting
+     * - Additional checks that *reject* certain search terms
+     * Return false if the term should be rejected
+     */
+    private validateAndPrepareTerm(term: Term | undefined): boolean {
         if (term) {
             term.text = term.text.toLowerCase();
         }
-    }
-
-    private prepareSearchTerm(searchTerm: SearchTerm) {
-        this.prepareTerm(searchTerm.term);
-        searchTerm.term.weight ??= this.defaultMatchWeight;
-        if (searchTerm.relatedTerms) {
-            searchTerm.relatedTerms.forEach((st) => {
-                if (st.weight && st.weight >= this.relatedIsExactThreshold) {
-                    st.weight = this.defaultMatchWeight;
-                }
-                this.prepareTerm(st);
-            });
-        }
+        return true;
     }
 }
 
