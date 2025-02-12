@@ -27,10 +27,10 @@ export class TokenProvider {
     constructor(
         private readonly clientId: string,
         private readonly clientSecret: string,
-        private readonly redirectPort: string,
+        private readonly redirectPort: number,
         private readonly scopes: string[],
         private readonly tokenCachePersistence?: TokenCachePersistence,
-    ) {}
+    ) { }
 
     private getAxiosRequestConfig(
         authorization: boolean = false,
@@ -173,7 +173,7 @@ export class TokenProvider {
             });
         });
         const server = await new Promise<Server>((resolve, reject) => {
-            const server = app.listen(this.redirectPort, () => {
+            const server = app.listen(this.redirectPort, "127.0.0.1", () => {
                 resolve(server);
             });
         });
@@ -187,7 +187,7 @@ export class TokenProvider {
     }
 
     private getRedirectUrl() {
-        return `http://localhost:${this.redirectPort}/callback`;
+        return `http://127.0.0.1:${this.redirectPort}/callback`;
     }
 
     private async loadRefreshToken() {
@@ -202,7 +202,7 @@ export class TokenProvider {
                     const tokenCache: TokenCache = JSON.parse(tokenCacheString);
                     this.userRefreshToken = tokenCache.refreshToken;
                 }
-            } catch (e) {}
+            } catch (e) { }
         }
         return this.userRefreshToken;
     }
