@@ -508,6 +508,13 @@ async function loadDatabase(context: SpelunkerContext): Promise<void> {
             WHERE filename = ?
         )
     `);
+    const prepDeleteEmbeddings = db.prepare(`
+        DELETE FROM ChunkEmbeddings WHERE chunkId IN (
+            SELECT chunkId
+            FROM chunks
+            WHERE filename = ?
+        )
+    `);
     const prepDeleteChunks = db.prepare(
         `DELETE FROM Chunks WHERE fileName = ?`,
     );
@@ -571,6 +578,7 @@ async function loadDatabase(context: SpelunkerContext): Promise<void> {
         for (const file of filesToDelete) {
             // console_log(`  [Deleting ${file} from database]`);
             db.exec(`BEGIN TRANSACTION`);
+            prepDeleteEmbeddings.run(file);
             prepDeleteSummaries.run(file);
             prepDeleteBlobs.run(file);
             prepDeleteChunks.run(file);
@@ -781,15 +789,19 @@ export async function retryTranslateOn429<T>(
                 wrappedResult.message.includes("fetch error: 429:")
             ) {
                 let delay = defaultDelay;
+                const embeddingTime = wrappedResult.message.match(
+                    /Try again in (\d+) seconds/,
+                );
                 const azureTime = wrappedResult.message.match(
                     /after (\d+) milliseconds/,
                 );
                 const openaiTime = wrappedResult.message.match(
                     /Please try again in (\d+\.\d*|\.\d+|\d+m)s./,
                 );
-                // Embeddings say: "Try again in 60 seconds."
-                if (azureTime || openaiTime) {
-                    if (azureTime) {
+                if (embeddingTime || azureTime || openaiTime) {
+                    if (embeddingTime) {
+                        delay = parseInt(embeddingTime[1]) * 1000;
+                    } else if (azureTime) {
                         delay = parseInt(azureTime[1]);
                     } else if (openaiTime) {
                         delay = parseFloat(openaiTime[1]);

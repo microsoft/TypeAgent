@@ -65,14 +65,6 @@ async function generateAndInsertEmbeddings(
     batch: Chunk[],
 ): Promise<void> {
     const t0 = new Date().getTime();
-    function blobText(chunk: Chunk): string {
-        const lines: string[] = [];
-        for (const blob of chunk.blobs) {
-            lines.push(...blob.lines);
-        }
-        const line = lines.join("").slice(0, 15000); // My best guess for 8192 tokens from code
-        return line || "(blank)";
-    }
     const stringBatch = batch.map(blobText);
     const data = await retryTranslateOn429(() =>
         generateEmbeddingBatch(stringBatch),
@@ -97,4 +89,14 @@ async function generateAndInsertEmbeddings(
             dtms < 1000 ? `${dtms}ms` : `${(dtms / 1000).toFixed(3)}s`;
         console_log(`  [Failed to generate embedding batch in ${dtStr}]`);
     }
+}
+
+function blobText(chunk: Chunk): string {
+    const lines: string[] = [];
+    for (const blob of chunk.blobs) {
+        lines.push(...blob.lines);
+    }
+    // Keep only alphanumerical words; everything else is removed (hoping to reduce the cost)
+    const line = lines.join("").replace(/\W+/g, " ").slice(0, 20000); // Assuming average 2.5 chars per token
+    return line || "(blank)";
 }
