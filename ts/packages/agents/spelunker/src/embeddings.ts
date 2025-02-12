@@ -10,7 +10,8 @@ import { createNormalized, dotProduct } from "typeagent";
 import { NormalizedEmbedding } from "typeagent";
 
 import { Chunk, ChunkId } from "./chunkSchema.js";
-import { console_log, makeBatches, retryTranslateOn429 } from "./searchCode.js";
+import { retryOn429 } from "./retryLogic.js";
+import { console_log, makeBatches } from "./searchCode.js";
 import { SpelunkerContext } from "./spelunkerActionHandler.js";
 
 export function makeEmbeddingModel(): TextEmbeddingModel {
@@ -71,9 +72,7 @@ async function generateAndInsertEmbeddings(
 ): Promise<void> {
     const t0 = new Date().getTime();
     const stringBatch = batch.map(blobText);
-    const data = await retryTranslateOn429(() =>
-        generateEmbeddingBatch(stringBatch),
-    );
+    const data = await retryOn429(() => generateEmbeddingBatch(stringBatch));
     if (data) {
         for (let i = 0; i < data.length; i++) {
             const chunk = batch[i];
@@ -157,7 +156,7 @@ async function getEmbedding(
     context: SpelunkerContext,
     query: string,
 ): Promise<NormalizedEmbedding | undefined> {
-    const rawEmbedding = await retryTranslateOn429(() =>
+    const rawEmbedding = await retryOn429(() =>
         context.queryContext!.embeddingModel!.generateEmbedding(query),
     );
     return rawEmbedding ? createNormalized(rawEmbedding) : undefined;
