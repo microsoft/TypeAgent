@@ -215,7 +215,7 @@ export function matchPropertySearchTermToEntity(
         return false;
     }
     const entity = semanticRef.knowledge as conversation.ConcreteEntity;
-    switch (searchTerm.propertyName) {
+    switch (<string>searchTerm.propertyName) {
         default:
             break;
         case "type":
@@ -225,6 +225,47 @@ export function matchPropertySearchTermToEntity(
             );
         case "name":
             return matchSearchTermToText(searchTerm.propertyValue, entity.name);
+
+        case "facet.name":
+            return matchPropertyNameToFacetName(
+                searchTerm.propertyValue,
+                entity,
+            );
+
+        case "facet.value":
+            return matchPropertyValueToFacetValue(
+                searchTerm.propertyValue,
+                entity,
+            );
+    }
+    return false;
+}
+
+function matchPropertyNameToFacetName(
+    propertyValue: SearchTerm,
+    entity: conversation.ConcreteEntity,
+) {
+    if (entity.facets && entity.facets.length > 0) {
+        for (const facet of entity.facets) {
+            if (matchSearchTermToText(propertyValue, facet.name)) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+function matchPropertyValueToFacetValue(
+    propertyValue: SearchTerm,
+    entity: conversation.ConcreteEntity,
+) {
+    if (entity.facets && entity.facets.length > 0) {
+        for (const facet of entity.facets) {
+            const facetValue = conversation.knowledgeValueToString(facet.value);
+            if (matchSearchTermToText(propertyValue, facetValue)) {
+                return true;
+            }
+        }
     }
     return false;
 }
@@ -625,7 +666,7 @@ export class MatchPropertySearchTermExpr extends MatchTermExpr {
         context: QueryEvalContext,
         propertyName: string,
         propertyValue: string,
-        useIndex: boolean = true,
+        useIndex: boolean = false,
     ): ScoredSemanticRef[] | undefined {
         if (useIndex && context.propertyIndex) {
             return context.propertyIndex.lookupProperty(
