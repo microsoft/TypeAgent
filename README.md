@@ -76,13 +76,19 @@ See the [instructions](./ts/README.md) in the TypeScript code [directory](./ts) 
 
 ## Developers
 
+### Custom Dispatcher Agents
+
+For developer that are interested develop custom agents to show up in our [Agent Shell](./ts/packages/shell) example and explore using the [Agent Dispatcher](./ts/packages/dispatcher/) to route action to the custom agents, [Agent Shell](./ts/packages/shell) example allow additional agent to be installed/registered to extent functionality. The `Echo` agent [tutorial](./docs/tutorial/agent.md) is a starting point to create a plugin agent, and [Agent SDK](./ts/packages/agentSdk/) provides the details of the interface between [Agent Dispatcher](./ts/packages/dispatcher) and the agent.
+
+### Developing TypeAgent
+
+For developer who wants to modify TypeAgent and contribute to our repo.
+
 Microsoft TypeAgent Repo is a mono-repo, with components organized with the following root folders based on language used.
 
 - [`ts`](./ts) TypeScript code ([Readme](./ts/README.md))
 - [`python`](./python) Python code ([Readme](./python/README.md))
 - [`dotnet`](./dotnet) Dotnet (C#) code ([Readme](./dotnet/README.md))
-
-For developer who want to experiment with TypeAgent and see how typed action schema drives actions, the [Agent Shell](./ts/packages/shell) example allow additional agent to be installed/registered to extent functionality. The `Echo` agent [tutorial](./docs/tutorial/agent.md) is a starting point to create a plugin agent, and [Agent SDK](./ts/packages/agentSdk/) provides the details of the interface between [Dispatcher](./ts/packages/dispatcher) and the agent.
 
 ## Contributing
 
