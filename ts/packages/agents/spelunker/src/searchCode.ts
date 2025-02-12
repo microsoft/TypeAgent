@@ -494,31 +494,6 @@ async function loadDatabase(context: SpelunkerContext): Promise<void> {
     }
     const db = context.queryContext!.database!;
 
-    const prepDeleteSummaries = db.prepare(`
-        DELETE FROM Summaries WHERE chunkId IN (
-            SELECT chunkId
-            FROM chunks
-            WHERE fileName = ?
-        )
-    `);
-    const prepDeleteBlobs = db.prepare(`
-        DELETE FROM Blobs WHERE chunkId IN (
-            SELECT chunkId
-            FROM chunks
-            WHERE filename = ?
-        )
-    `);
-    const prepDeleteEmbeddings = db.prepare(`
-        DELETE FROM ChunkEmbeddings WHERE chunkId IN (
-            SELECT chunkId
-            FROM chunks
-            WHERE filename = ?
-        )
-    `);
-    const prepDeleteChunks = db.prepare(
-        `DELETE FROM Chunks WHERE fileName = ?`,
-    );
-    const prepDeleteFiles = db.prepare(`DELETE FROM files WHERE fileName = ?`);
     const prepInsertFiles = db.prepare(
         `INSERT OR REPLACE INTO Files (fileName, mtime, size) VALUES (?, ?, ?)`,
     );
@@ -551,6 +526,7 @@ async function loadDatabase(context: SpelunkerContext): Promise<void> {
             size: fileRow.size,
         });
     }
+    const filesToInsert: FileMtimeSize[] = [];
     for (const file of files) {
         const dbStat = filesInDb.get(file.file);
         if (
@@ -561,7 +537,7 @@ async function loadDatabase(context: SpelunkerContext): Promise<void> {
             // console_log(`  [Need to update ${file} (mtime/size mismatch)]`);
             filesToDo.push(file.file);
             // TODO: Make this insert part of the transaction for this file
-            prepInsertFiles.run(file.file, file.mtime, file.size);
+            filesToInsert.push(file);
             filesInDb.set(file.file, {
                 file: file.file,
                 mtime: file.mtime,
@@ -577,13 +553,7 @@ async function loadDatabase(context: SpelunkerContext): Promise<void> {
         console_log(`  [Deleting ${filesToDelete.length} files from database]`);
         for (const file of filesToDelete) {
             // console_log(`  [Deleting ${file} from database]`);
-            db.exec(`BEGIN TRANSACTION`);
-            prepDeleteEmbeddings.run(file);
-            prepDeleteSummaries.run(file);
-            prepDeleteBlobs.run(file);
-            prepDeleteChunks.run(file);
-            prepDeleteFiles.run(file);
-            db.exec(`COMMIT`);
+            purgeFile(db, file);
         }
     }
 
@@ -623,10 +593,16 @@ async function loadDatabase(context: SpelunkerContext): Promise<void> {
     );
     const allChunks: Chunk[] = [];
     for (const chunkedFile of allChunkedFiles) {
+        purgeFile(db, chunkedFile.fileName);
         db.exec(`BEGIN TRANSACTION`);
-        prepDeleteSummaries.run(chunkedFile.fileName);
-        prepDeleteBlobs.run(chunkedFile.fileName);
-        prepDeleteChunks.run(chunkedFile.fileName);
+        const file = filesToInsert.find((f) => f.file === chunkedFile.fileName);
+        if (!file) {
+            console_log(
+                `  [*** File ${chunkedFile.fileName} is missing from filesToInsert]`,
+            );
+            continue;
+        }
+        prepInsertFiles.run(file.file, file.mtime, file.size);
         for (const chunk of chunkedFile.chunks) {
             allChunks.push(chunk);
             prepInsertChunks.run(
@@ -661,6 +637,42 @@ async function loadDatabase(context: SpelunkerContext): Promise<void> {
 
     // 1d. Use a fast model to summarize all chunks.
     // await summarizeChunks(context, allChunks);
+}
+
+function purgeFile(db: Database, fileName: string): void {
+    const prepDeleteEmbeddings = db.prepare(`
+        DELETE FROM ChunkEmbeddings WHERE chunkId IN (
+            SELECT chunkId
+            FROM chunks
+            WHERE filename = ?
+        )
+    `);
+    const prepDeleteSummaries = db.prepare(`
+        DELETE FROM Summaries WHERE chunkId IN (
+            SELECT chunkId
+            FROM chunks
+            WHERE fileName = ?
+        )
+    `);
+    const prepDeleteBlobs = db.prepare(`
+        DELETE FROM Blobs WHERE chunkId IN (
+            SELECT chunkId
+            FROM chunks
+            WHERE filename = ?
+        )
+    `);
+    const prepDeleteChunks = db.prepare(
+        `DELETE FROM Chunks WHERE fileName = ?`,
+    );
+    const prepDeleteFiles = db.prepare(`DELETE FROM files WHERE fileName = ?`);
+
+    db.exec(`BEGIN TRANSACTION`);
+    prepDeleteSummaries.run(fileName);
+    prepDeleteBlobs.run(fileName);
+    prepDeleteEmbeddings.run(fileName);
+    prepDeleteChunks.run(fileName);
+    prepDeleteFiles.run(fileName);
+    db.exec(`COMMIT`);
 }
 
 export async function summarizeChunks(
