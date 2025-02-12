@@ -7,7 +7,7 @@ These are very unformed thoughts.
 Directly after chunking, add embeddings for all chunks, just based on the code alone.
 (Yes I know that's pretty lame, but it's what we can do without summarizing all chunks.)
 
-Whenever a question is asked, *first* search the embeddings for _k_ nearest neighbors,
+Whenever a question is asked, _first_ search the embeddings for _k_ nearest neighbors,
 where _k_ is pretty large (maybe start with 1000).
 Then pass those chunks on to the usual AI-driven selection process.
 
@@ -24,7 +24,7 @@ Do we still need summaries if we do this? How would they be used?
 - After we've got `allChunks` filled (with all the chunks), batch compute and insert
   embeddings for each chunks into the vectore store.
 - When prepping for a question, instead of sending all chunks off for selection,
-  get the query's embedding and request a generous k nearest neighbors, and send *those*
+  get the query's embedding and request a generous k nearest neighbors, and send _those_
   off to the selection process. Let's start with _k_=1000, and then see if reducing it
   by half or doubling by two makes much of a difference.
 - The rest is the same.
