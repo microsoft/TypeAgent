@@ -58,6 +58,11 @@ export type SearchFilter = {
     propertyScope?: PropertySearchTerm[] | undefined;
 };
 
+export type SearchOptions = {
+    maxMatches?: number | undefined;
+    minHitCount?: number | undefined;
+    usePropertyIndex?: boolean | undefined;
+};
 /**
  * Searches conversation for terms
  */
@@ -66,8 +71,7 @@ export async function searchConversation(
     searchTerms: SearchTerm[],
     propertyTerms?: PropertySearchTerm[],
     filter?: SearchFilter,
-    maxMatches?: number,
-    minHitCount?: number,
+    options?: SearchOptions,
 ): Promise<Map<KnowledgeType, SearchResult> | undefined> {
     if (!q.isConversationSearchable(conversation)) {
         return undefined;
@@ -77,10 +81,16 @@ export async function searchConversation(
         searchTerms,
         propertyTerms,
         filter,
-        maxMatches,
-        minHitCount,
+        options,
     );
-    const queryResults = query.eval(new q.QueryEvalContext(conversation));
+    const queryResults = query.eval(
+        new q.QueryEvalContext(
+            conversation,
+            options?.usePropertyIndex
+                ? conversation.propertyToSemanticRefIndex
+                : undefined,
+        ),
+    );
     return toGroupedSearchResults(queryResults);
 }
 
@@ -101,15 +111,14 @@ class SearchQueryBuilder {
         terms: SearchTerm[],
         propertyTerms?: PropertySearchTerm[],
         filter?: SearchFilter,
-        maxMatches?: number,
-        minHitCount?: number,
+        options?: SearchOptions,
     ) {
         let query = this.compileQuery(
             terms,
             propertyTerms,
             filter,
-            maxMatches,
-            minHitCount,
+            options?.maxMatches,
+            options?.minHitCount,
         );
 
         // For all individual SearchTerms created during query compilation, resolve any related terms
@@ -126,7 +135,7 @@ class SearchQueryBuilder {
         maxMatches?: number,
         minHitCount?: number,
     ) {
-        let selectExpr = this.compileSelect(terms, propertyTerms, filter);
+        let selectExpr = this.compileSelect(terms, propertyTerms);
         // Constrain the select with scopes and 'where'
         if (filter) {
             selectExpr = this.compileScope(selectExpr, filter);
@@ -146,7 +155,6 @@ class SearchQueryBuilder {
     private compileSelect(
         terms: SearchTerm[],
         propertyTerms?: PropertySearchTerm[],
-        filter?: SearchFilter,
     ) {
         // Select is a combination of ordinary search terms and property search terms
         let matchTermsExpr = this.compileSearchTerms(terms);

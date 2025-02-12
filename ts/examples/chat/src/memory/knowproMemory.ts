@@ -222,6 +222,10 @@ export async function createKnowproCommands(
                 startMinute: argNum("Starting at minute."),
                 endMinute: argNum("Ending minute."),
                 exact: argBool("Only display exact matches", false),
+                usePropertyIndex: argBool(
+                    "Use property index while searching",
+                    false,
+                ),
             },
         };
         if (kType === undefined) {
@@ -256,8 +260,10 @@ export async function createKnowproCommands(
                 terms,
                 propertyTermsFromNamedArgs(namedArgs, commandDef),
                 filterFromNamedArgs(namedArgs, commandDef),
-                undefined,
-                namedArgs.exact ? 1 : undefined,
+                {
+                    minHitCount: namedArgs.exact ? 1 : undefined,
+                    usePropertyIndex: namedArgs.usePropertyIndex,
+                },
             );
             if (matches === undefined || matches.size === 0) {
                 context.printer.writeLine("No matches");

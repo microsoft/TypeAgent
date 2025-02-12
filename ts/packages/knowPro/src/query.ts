@@ -5,6 +5,7 @@ import {
     DateRange,
     IConversation,
     IMessage,
+    IPropertyToSemanticRefIndex,
     ITermToSemanticRefIndex,
     KnowledgeType,
     ScoredSemanticRef,
@@ -368,7 +369,15 @@ export class QueryEvalContext {
     public matchedTerms = new TermSet();
     public matchedPropertyTerms = new PropertyTermSet();
 
-    constructor(public conversation: IConversation) {
+    constructor(
+        public conversation: IConversation,
+        /**
+         * If a property index is available, the query processor will use it
+         */
+        public propertyIndex:
+            | IPropertyToSemanticRefIndex
+            | undefined = undefined,
+    ) {
         if (!isConversationSearchable(conversation)) {
             throw new Error(
                 `${conversation.nameTag} is not initialized and cannot be searched`,
@@ -382,10 +391,6 @@ export class QueryEvalContext {
 
     public get semanticRefs() {
         return this.conversation.semanticRefs!;
-    }
-
-    public get propertyIndex() {
-        return this.conversation.propertyToSemanticRefIndex;
     }
 
     public getSemanticRef(semanticRefIndex: SemanticRefIndex): SemanticRef {
@@ -626,10 +631,6 @@ export class MatchPropertySearchTermExpr extends MatchTermExpr {
         propertyValue: Term,
         relatedPropVal?: Term,
     ): void {
-        const propertyIndex = context.propertyIndex;
-        if (!propertyIndex) {
-            return;
-        }
         if (relatedPropVal === undefined) {
             if (
                 !context.matchedPropertyTerms.has(propertyName, propertyValue)
@@ -666,9 +667,8 @@ export class MatchPropertySearchTermExpr extends MatchTermExpr {
         context: QueryEvalContext,
         propertyName: string,
         propertyValue: string,
-        useIndex: boolean = false,
     ): ScoredSemanticRef[] | undefined {
-        if (useIndex && context.propertyIndex) {
+        if (context.propertyIndex) {
             return context.propertyIndex.lookupProperty(
                 propertyName,
                 propertyValue,
