@@ -1,10 +1,8 @@
 # Building Agents for TypeAgent Dispatcher
 
-TypeAgent [Shell](../../ts/packages/shell) and [CLI](../../ts/packages/cli) are built using [Dispatcher](../../ts/packages/dispatcher). It has an configurable and extensible architecture that allow new agents to plug into the system.
+TypeAgent [Shell](../../ts/packages/shell) and [CLI](../../ts/packages/cli) are built using [Agent Dispatcher](../../ts/packages/dispatcher). It has an configurable and extensible architecture that allow customs agents to plug into the system. The TypeAgent repo includes several example [agents](../../ts/packages/agents/). **Application agents** can be built **_outside_** the TypeAgent repo by using the [Agent SDK](../../ts/packages/agentSdk/README.md). These agents can be packaged as npm packages and surface them in the [Shell](../../ts/packages/shell) and [CLI](../../ts/packages/cli).
 
-The TypeAgent repo includes several example [agents](../../ts/packages/agents/). **Application agents** can be built **_outside_** the TypeAgent repo by using the [Agent SDK](../../ts/packages/agentSdk/README.md). These agents can be packaged as npm packages and surface them in the [Shell](../../ts/packages/shell) and [CLI](../../ts/packages/cli).
-
-This document describes how you can build your own application agents.
+This document describes how to build a custom application agent as an independent local NPM package **_outside of the repo_** that works with a locally built TypeAgent [Shell](../../ts/packages/shell) or [CLI](../../ts/packages/cli)
 
 ## Prerequisites
 
@@ -13,17 +11,17 @@ Begin by exploring the following:
 - **Agent SDK**: Read about the architecture of the [**Agent SDK**](../../ts/packages/agentSdk/README.md).
 - **Example Agents**:
   - Review agents under the [agents](../../ts/packages/agents) directory. The [List](../../ts/packages/agents/list/) agent provides a good example and template for building an agent.
-  - The [Echo](../../ts/examples/agentExamples/echo/) agent illustrates the basics of building your own external application agents.
+  - The [Echo](../../ts/examples/agentExamples/echo/) agent illustrates the basics of building your own custom application agents.
 
-## Steps to build an `Echo` agent:
+## Steps to build an `Echo` agent outside of the repo
 
-For the rest of the documentation, we will assume that the external agent is named **echo**. The echo agent performs a single action: echos any input back to the user.
+For the rest of the documentation, we will assume that the custom agent is named **echo**. The echo agent performs a single action: echos any input back to the user.
 
-You can see the end result of this tutorial in [Echo](../../ts/examples/agentExamples/echo/) with some modification (NOTE: The only difference is the @typeagent/agent-sdk dependency)
+You can see the end result of this tutorial in [Echo](../../ts/examples/agentExamples/echo/) with some modification (NOTE: The only difference is the `@typeagent/agent-sdk` dependency)
 
 ### Step 1: Create and author the `Echo` agent package
 
-Follow the following steps to create the `Echo` agent packages manually. Start by create a directory `echo`. Then populate the directory with the following content:
+Follow the following steps to create the `Echo` agent packages manually. Start by create a directory `echo` **_outside_** of the TypeAgent repo. Then populate the directory with the following content:
 
 **package.json** [package.json](../../ts/examples/agentExamples/echo/package.json) :
 
@@ -53,6 +51,36 @@ The `package.json` contains references to **handler** and **manifest** files in 
   "devDependencies": {
     "rimraf": "^5.0.5",
     "typescript": "^5.4.2"
+  }
+}
+```
+
+**Typescript build config file** [`tsconfig.json`](../../ts/examples/agentExamples/echo/tsconfig.json)
+
+```json
+{
+  "compilerOptions": {
+    "composite": true,
+    "target": "es2021",
+    "lib": ["es2021"],
+    "module": "node16",
+    "declaration": true,
+    "declarationMap": true,
+    "esModuleInterop": true,
+    "exactOptionalPropertyTypes": true,
+    "forceConsistentCasingInFileNames": true,
+    "incremental": true,
+    "noEmitOnError": true,
+    "noUnusedLocals": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "sourceMap": true,
+    "rootDir": "./src",
+    "outDir": "./dist"
+  },
+  "include": ["./src/**/*"],
+  "ts-node": {
+    "esm": true
   }
 }
 ```
@@ -133,36 +161,6 @@ async function executeEchoAction(
 
     default:
       return createActionResultFromError("Unable to process the action");
-  }
-}
-```
-
-**Typescript build config file** [`tsconfig.json`](../../ts/examples/agentExamples/echo/tsconfig.json)
-
-```json
-{
-  "compilerOptions": {
-    "composite": true,
-    "target": "es2021",
-    "lib": ["es2021"],
-    "module": "node16",
-    "declaration": true,
-    "declarationMap": true,
-    "esModuleInterop": true,
-    "exactOptionalPropertyTypes": true,
-    "forceConsistentCasingInFileNames": true,
-    "incremental": true,
-    "noEmitOnError": true,
-    "noUnusedLocals": true,
-    "skipLibCheck": true,
-    "strict": true,
-    "sourceMap": true,
-    "rootDir": "./src",
-    "outDir": "./dist"
-  },
-  "include": ["./src/**/*"],
-  "ts-node": {
-    "esm": true
   }
 }
 ```
