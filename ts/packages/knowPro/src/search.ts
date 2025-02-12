@@ -62,6 +62,7 @@ export type SearchOptions = {
     maxMatches?: number | undefined;
     minHitCount?: number | undefined;
     usePropertyIndex?: boolean | undefined;
+    useTimestampIndex?: boolean | undefined;
 };
 /**
  * Searches conversation for terms
@@ -88,6 +89,9 @@ export async function searchConversation(
             conversation,
             options?.usePropertyIndex
                 ? conversation.propertyToSemanticRefIndex
+                : undefined,
+            options?.useTimestampIndex
+                ? conversation.timestampIndex
                 : undefined,
         ),
     );
