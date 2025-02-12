@@ -180,7 +180,7 @@ export type TextEmbeddingIndexSettings = {
 
 export function createTextEmbeddingIndexSettings(
     maxMatches = 100,
-    minScore = 0.8,
+    minScore = 0.85,
 ): TextEmbeddingIndexSettings {
     return {
         embeddingModel: createEmbeddingCache(openai.createEmbeddingModel(), 64),

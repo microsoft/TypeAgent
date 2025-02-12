@@ -116,6 +116,9 @@ export class KnowProPrinter extends ChatPrinter {
         this.writeLine(
             `Displaying ${maxToDisplay} matches of total ${semanticRefMatches.length}`,
         );
+        if (this.sortAsc) {
+            this.writeLine(`Sorted in ascending order (lowest first)`);
+        }
         const displayItems = semanticRefMatches.slice(0, maxToDisplay);
         for (let i = 0; i < displayItems.length; ++i) {
             let pos = this.sortAsc ? displayItems.length - (i + 1) : i;

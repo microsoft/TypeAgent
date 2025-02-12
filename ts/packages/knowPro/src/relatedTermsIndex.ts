@@ -145,7 +145,7 @@ export class TermToRelatedTermsIndex implements ITermToRelatedTermsIndex {
 export async function resolveRelatedTerms(
     relatedTermsIndex: ITermToRelatedTermsIndex,
     searchTerms: SearchTerm[],
-    dedupe: boolean = true,
+    ensureSingleOccurrence: boolean = true,
 ): Promise<void> {
     const searchableTerms = new TermSet();
     const searchTermsNeedingRelated: SearchTerm[] = [];
@@ -182,28 +182,33 @@ export async function resolveRelatedTerms(
                 relatedTermsForSearchTerms[i];
         }
     }
-    if (dedupe) {
-        //
-        // Due to fuzzy matching, a search term may end with related terms that overlap with those of other search terms.
-        // This causes scoring problems... duplicate/redundant scoring that can cause items to seem more relevant than they are
-        // - The same related term can show up for different search terms but with different weights
-        // - related terms may also already be present as search terms
-        //
-        dedupeRelatedTerms(searchTerms);
-    }
+    //
+    // Due to fuzzy matching, a search term may end with related terms that overlap with those of other search terms.
+    // This causes scoring problems... duplicate/redundant scoring that can cause items to seem more relevant than they are
+    // - The same related term can show up for different search terms but with different weights
+    // - related terms may also already be present as search terms
+    //
+    dedupeRelatedTerms(searchTerms, ensureSingleOccurrence);
 }
 
-function dedupeRelatedTerms(searchTerms: SearchTerm[]) {
+function dedupeRelatedTerms(
+    searchTerms: SearchTerm[],
+    ensureSingleOccurrence: boolean,
+) {
     const allSearchTerms = new TermSet();
-    const allRelatedTerms = new TermSet();
+    let allRelatedTerms: TermSet | undefined;
     //
     // Collect all unique search and related terms.
     // We end up with {term, maximum weight for term} pairs
     //
-    searchTerms.forEach((st) => {
-        allSearchTerms.add(st.term);
-        allRelatedTerms.addOrUnion(st.relatedTerms);
-    });
+    searchTerms.forEach((st) => allSearchTerms.add(st.term));
+    if (ensureSingleOccurrence) {
+        allRelatedTerms = new TermSet();
+        searchTerms.forEach((st) =>
+            allRelatedTerms!.addOrUnion(st.relatedTerms),
+        );
+    }
+
     for (const searchTerm of searchTerms) {
         if (searchTerm.relatedTerms && searchTerm.relatedTerms.length > 0) {
             let uniqueRelatedForSearchTerm: Term[] = [];
@@ -212,17 +217,21 @@ function dedupeRelatedTerms(searchTerms: SearchTerm[]) {
                     // This related term is already a search term
                     continue;
                 }
-                // Each unique related term should be searched for
-                // only once, and (if there were duplicates) assigned the maximum weight assigned to that term
-                const termWithMaxWeight =
-                    allRelatedTerms.get(candidateRelatedTerm);
-                if (
-                    termWithMaxWeight !== undefined &&
-                    termWithMaxWeight.weight === candidateRelatedTerm.weight
-                ) {
-                    // Associate this related term with the current search term
-                    uniqueRelatedForSearchTerm.push(termWithMaxWeight);
-                    allRelatedTerms.remove(candidateRelatedTerm);
+                if (ensureSingleOccurrence && allRelatedTerms) {
+                    // Each unique related term should be searched for
+                    // only once, and (if there were duplicates) assigned the maximum weight assigned to that term
+                    const termWithMaxWeight =
+                        allRelatedTerms.get(candidateRelatedTerm);
+                    if (
+                        termWithMaxWeight !== undefined &&
+                        termWithMaxWeight.weight === candidateRelatedTerm.weight
+                    ) {
+                        // Associate this related term with the current search term
+                        uniqueRelatedForSearchTerm.push(termWithMaxWeight);
+                        allRelatedTerms.remove(candidateRelatedTerm);
+                    }
+                } else {
+                    uniqueRelatedForSearchTerm.push(candidateRelatedTerm);
                 }
             }
             searchTerm.relatedTerms = uniqueRelatedForSearchTerm;

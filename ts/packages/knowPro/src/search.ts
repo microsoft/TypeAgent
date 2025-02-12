@@ -112,7 +112,6 @@ class SearchQueryBuilder {
             minHitCount,
         );
 
-        this.validateAndPrepareSearchTerms(this.allSearchTerms);
         // For all individual SearchTerms created during query compilation, resolve any related terms
         await this.resolveRelatedTerms(this.allSearchTerms, true);
         await this.resolveRelatedTerms(this.allPredicateSearchTerms, false);
@@ -229,6 +228,7 @@ class SearchQueryBuilder {
         searchTerms: SearchTerm[],
         dedupe: boolean,
     ) {
+        this.validateAndPrepareSearchTerms(searchTerms);
         if (this.conversation.termToRelatedTermsIndex) {
             await resolveRelatedTerms(
                 this.conversation.termToRelatedTermsIndex,
