@@ -44,6 +44,11 @@ export async function createTokenProvider(storage?: Storage) {
         throw new Error("SPOTIFY_APP_PORT not set");
     }
 
+    const port = parseInt(defaultPort);
+    if (port.toString() !== defaultPort) {
+        throw new Error(`SPOTIFY_APP_PORT has invalid port number ${defaultPort}`)
+    }
+
     // Legacy: clean up old files
     if (storage && (await storage.exists("token.json"))) {
         await storage.delete("token.json");
@@ -56,7 +61,7 @@ export async function createTokenProvider(storage?: Storage) {
     return new TokenProvider(
         baseClientId,
         baseClientSecret,
-        defaultPort,
+        port,
         scopes,
         refreshTokenStorage,
     );
