@@ -2,14 +2,17 @@
 // Licensed under the MIT License.
 
 import { collections, dateTime } from "typeagent";
-import {
-    DateRange,
-    IMessage,
-    ITimestampToTextRangeIndex,
-    MessageIndex,
-    TimestampedTextRange,
-} from "./dataFormat.js";
+import { DateRange, IMessage, MessageIndex, TextRange } from "./dataFormat.js";
 import { textRangeFromLocation } from "./conversationIndex.js";
+
+export type TimestampedTextRange = {
+    timestamp: string;
+    range: TextRange;
+};
+
+export interface ITimestampToTextRangeIndex {
+    lookupRange(dateRange: DateRange): TimestampedTextRange[];
+}
 
 /**
  * An index of timestamp => TextRanges.

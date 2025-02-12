@@ -119,10 +119,15 @@ export class KnowProPrinter extends ChatPrinter {
         if (this.sortAsc) {
             this.writeLine(`Sorted in ascending order (lowest first)`);
         }
-        const displayItems = semanticRefMatches.slice(0, maxToDisplay);
-        for (let i = 0; i < displayItems.length; ++i) {
-            let pos = this.sortAsc ? displayItems.length - (i + 1) : i;
-            this.writeScoredRef(pos, displayItems[pos], semanticRefs);
+        const matchesToDisplay = semanticRefMatches.slice(0, maxToDisplay);
+        for (let i = 0; i < matchesToDisplay.length; ++i) {
+            let pos = this.sortAsc ? matchesToDisplay.length - (i + 1) : i;
+            this.writeScoredRef(
+                pos,
+                matchesToDisplay.length,
+                matchesToDisplay[pos],
+                semanticRefs,
+            );
         }
 
         return this;
@@ -130,13 +135,14 @@ export class KnowProPrinter extends ChatPrinter {
 
     private writeScoredRef(
         matchNumber: number,
+        totalMatches: number,
         scoredRef: kp.ScoredSemanticRef,
         semanticRefs: kp.SemanticRef[],
     ) {
         const semanticRef = semanticRefs[scoredRef.semanticRefIndex];
         this.writeInColor(
             chalk.green,
-            `#${matchNumber + 1}: <${scoredRef.semanticRefIndex}> ${semanticRef.knowledgeType} [${scoredRef.score}]`,
+            `#${matchNumber + 1} / ${totalMatches}: <${scoredRef.semanticRefIndex}> ${semanticRef.knowledgeType} [${scoredRef.score}]`,
         );
         this.writeSemanticRef(semanticRef);
         this.writeLine();

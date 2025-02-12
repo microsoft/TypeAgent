@@ -2,12 +2,24 @@
 // Licensed under the MIT License.
 
 import {
-    IPropertyToSemanticRefIndex,
     ScoredSemanticRef,
     SemanticRef,
     SemanticRefIndex,
 } from "./dataFormat.js";
 import { conversation } from "knowledge-processor";
+
+export interface IPropertyToSemanticRefIndex {
+    getValues(): string[];
+    addProperty(
+        propertyName: string,
+        value: string,
+        semanticRefIndex: SemanticRefIndex | ScoredSemanticRef,
+    ): void;
+    lookupProperty(
+        propertyName: string,
+        value: string,
+    ): ScoredSemanticRef[] | undefined;
+}
 
 export enum PropertyNames {
     EntityName = "name",

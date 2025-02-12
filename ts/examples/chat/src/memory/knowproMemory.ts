@@ -12,6 +12,7 @@ import {
     NamedArgs,
     parseNamedArguments,
     ProgressBar,
+    StopWatch,
 } from "interactive-app";
 import { ChatContext } from "./chatMemory.js";
 import { ChatModel } from "aiclient";
@@ -226,6 +227,10 @@ export async function createKnowproCommands(
                     "Use property index while searching",
                     false,
                 ),
+                useTimestampIndex: argBool(
+                    "Use timestamp index while searching",
+                    false,
+                ),
             },
         };
         if (kType === undefined) {
@@ -255,6 +260,8 @@ export async function createKnowproCommands(
                 `Searching ${conversation.nameTag}...`,
             );
 
+            const timer = new StopWatch();
+            timer.start();
             const matches = await kp.searchConversation(
                 conversation,
                 terms,
@@ -265,18 +272,19 @@ export async function createKnowproCommands(
                     usePropertyIndex: namedArgs.usePropertyIndex,
                 },
             );
-            if (matches === undefined || matches.size === 0) {
+            timer.stop();
+            if (matches && matches.size > 0) {
+                context.printer.writeLine();
+                context.printer.writeSearchResults(
+                    conversation,
+                    matches,
+                    namedArgs.maxToDisplay,
+                );
+            } else {
                 context.printer.writeLine("No matches");
-                return;
             }
-            context.printer.writeLine();
-            context.printer.writeSearchResults(
-                conversation,
-                matches,
-                namedArgs.maxToDisplay,
-            );
+            context.printer.writeTiming(chalk.gray, timer);
         } else {
-            ``;
             context.printer.writeError("Conversation is not indexed");
         }
     }

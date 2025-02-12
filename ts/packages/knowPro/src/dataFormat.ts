@@ -49,19 +49,6 @@ export interface ITermToSemanticRefIndex {
     lookupTerm(term: string): ScoredSemanticRef[] | undefined;
 }
 
-export interface IPropertyToSemanticRefIndex {
-    getValues(): string[];
-    addProperty(
-        propertyName: string,
-        value: string,
-        semanticRefIndex: SemanticRefIndex | ScoredSemanticRef,
-    ): void;
-    lookupProperty(
-        propertyName: string,
-        value: string,
-    ): ScoredSemanticRef[] | undefined;
-}
-
 export type KnowledgeType = "entity" | "action" | "topic" | "tag";
 export type Knowledge =
     | conversation.ConcreteEntity
@@ -88,9 +75,7 @@ export interface IConversation<TMeta extends IKnowledgeSource = any> {
     messages: IMessage<TMeta>[];
     semanticRefs: SemanticRef[] | undefined;
     semanticRefIndex?: ITermToSemanticRefIndex | undefined;
-    propertyToSemanticRefIndex: IPropertyToSemanticRefIndex | undefined;
     termToRelatedTermsIndex?: ITermToRelatedTermsIndex | undefined;
-    timestampIndex?: ITimestampToTextRangeIndex | undefined;
 }
 
 export type MessageIndex = number;
@@ -182,12 +167,3 @@ export type DateRange = {
     start: Date;
     end?: Date | undefined;
 };
-
-export type TimestampedTextRange = {
-    timestamp: string;
-    range: TextRange;
-};
-
-export interface ITimestampToTextRangeIndex {
-    lookupRange(dateRange: DateRange): TimestampedTextRange[];
-}

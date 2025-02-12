@@ -5,7 +5,6 @@ import {
     DateRange,
     IConversation,
     IMessage,
-    IPropertyToSemanticRefIndex,
     ITermToSemanticRefIndex,
     KnowledgeType,
     ScoredSemanticRef,
@@ -28,9 +27,11 @@ import {
     TermSet,
     TextRangeCollection,
 } from "./collections.js";
-import { PropertyNames } from "./propertyIndex.js";
+import { IPropertyToSemanticRefIndex, PropertyNames } from "./propertyIndex.js";
 import { conversation } from "knowledge-processor";
 import { collections } from "typeagent";
+import { textRangeFromLocation } from "./conversationIndex.js";
+import { ITimestampToTextRangeIndex } from "./timestampIndex.js";
 
 export function isConversationSearchable(conversation: IConversation): boolean {
     return (
@@ -132,7 +133,7 @@ export function compareDates(x: Date, y: Date): number {
     return x.getTime() - y.getTime();
 }
 
-export function isDateInRange(outerRange: DateRange, date: Date): boolean {
+export function isInDateRange(outerRange: DateRange, date: Date): boolean {
     // outer start must be <= date
     // date must be <= outer end
     let cmpStart = compareDates(outerRange.start, date);
@@ -372,10 +373,16 @@ export class QueryEvalContext {
     constructor(
         public conversation: IConversation,
         /**
-         * If a property index is available, the query processor will use it
+         * If a property secondary index is available, the query processor will use it
          */
         public propertyIndex:
             | IPropertyToSemanticRefIndex
+            | undefined = undefined,
+        /**
+         * If a timestamp secondary index is available, the query processor will use it
+         */
+        public timestampIndex:
+            | ITimestampToTextRangeIndex
             | undefined = undefined,
     ) {
         if (!isConversationSearchable(conversation)) {
@@ -850,22 +857,40 @@ export interface IQuerySelectScopeExpr {
 }
 
 export class TimestampScopeExpr implements IQuerySelectScopeExpr {
-    constructor(public dateRange: DateRange) {}
+    constructor(public dateRangeInScope: DateRange) {}
 
-    public eval(
-        context: QueryEvalContext,
-        semanticRefs: SemanticRefAccumulator,
-    ): TextRangeCollection | undefined {
-        const index = context.conversation.timestampIndex;
-        if (index) {
-            const timeRanges = index.lookupRange(this.dateRange);
-            const textRangesInScope = new TextRangeCollection();
+    public eval(context: QueryEvalContext): TextRangeCollection | undefined {
+        const textRangesInScope = new TextRangeCollection();
+        if (context.timestampIndex) {
+            const timeRanges = context.timestampIndex.lookupRange(
+                this.dateRangeInScope,
+            );
             for (const timeRange of timeRanges) {
                 textRangesInScope.addRange(timeRange.range);
             }
             return textRangesInScope;
+        } else {
+            const messages = context.conversation.messages;
+            for (
+                let messageIndex = 0;
+                messageIndex < messages.length;
+                ++messageIndex
+            ) {
+                const message = messages[messageIndex];
+                if (
+                    message.timestamp &&
+                    isInDateRange(
+                        this.dateRangeInScope,
+                        new Date(message.timestamp),
+                    )
+                ) {
+                    textRangesInScope.addRange(
+                        textRangeFromLocation(messageIndex),
+                    );
+                }
+            }
         }
-        return undefined;
+        return textRangesInScope;
     }
 }
 
