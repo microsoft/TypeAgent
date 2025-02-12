@@ -4,20 +4,21 @@
 import * as fs from "fs";
 import * as path from "path";
 
-import * as sqlite from "better-sqlite3";
+import { Database, Statement } from "better-sqlite3";
 
 import { createJsonTranslator, Result, TypeChatJsonTranslator } from "typechat";
 import { createTypeScriptJsonValidator } from "typechat/ts";
 
-import { ChatModel, EmbeddingModel, openai } from "aiclient";
+import { ChatModel, openai, TextEmbeddingModel } from "aiclient";
 import { createLimiter } from "common-utils";
 
+import { ActionResult, Entity } from "@typeagent/agent-sdk";
 import {
-    ActionResult,
-    Entity,
-} from "@typeagent/agent-sdk";
-import { createActionResultFromMarkdownDisplay, createActionResultFromError } from "@typeagent/agent-sdk/helpers/action";
-import { loadSchema } from "typeagent";
+    createActionResultFromMarkdownDisplay,
+    createActionResultFromError,
+} from "@typeagent/agent-sdk/helpers/action";
+import { createNormalized, loadSchema } from "typeagent";
+import { NormalizedEmbedding } from "typeagent";
 
 import {
     Blob,
@@ -33,6 +34,7 @@ import { SpelunkerContext } from "./spelunkerActionHandler.js";
 import { SummarizerSpecs } from "./summarizerSchema.js";
 import { chunkifyTypeScriptFiles } from "./typescriptChunker.js";
 import { createDatabase } from "./databaseUtils.js";
+import { apiSettingsFromEnv } from "../../../aiclient/dist/openai.js";
 
 let epoch: number = 0;
 
@@ -48,12 +50,12 @@ export function console_log(...rest: any[]): void {
 export interface QueryContext {
     chatModel: ChatModel;
     miniModel: ChatModel;
-    embeddingModel: EmbeddingModel<ChunkId>;
+    embeddingModel: TextEmbeddingModel;
     oracle: TypeChatJsonTranslator<OracleSpecs>;
     chunkSelector: TypeChatJsonTranslator<SelectorSpecs>;
     chunkSummarizer: TypeChatJsonTranslator<SummarizerSpecs>;
     databaseLocation: string;
-    database: sqlite.Database | undefined;
+    database: Database | undefined;
 }
 
 function captureTokenStats(req: any, response: any): void {
@@ -70,16 +72,21 @@ function captureTokenStats(req: any, response: any): void {
 function createQueryContext(): QueryContext {
     const chatModel = openai.createChatModelDefault("spelunkerChat");
     chatModel.completionCallback = captureTokenStats;
+    chatModel.retryMaxAttempts = 0;
 
     const miniModel = openai.createChatModel(
-        undefined, // "GPT_4_O_MINI" is slower than default model?!
+        "GPT_4_O_MINI", // "GPT_4_O_MINI" is slower than default model?!
         undefined,
         undefined,
         ["spelunkerMini"],
     );
     miniModel.completionCallback = captureTokenStats;
+    miniModel.retryMaxAttempts = 0;
 
-    const embeddingModel = openai.createEmbeddingModel("spelunkerEmbed");
+    const apiSettings = apiSettingsFromEnv(openai.ModelType.Embedding);
+    apiSettings.maxRetryAttempts = 0;
+    const embeddingModel = openai.createEmbeddingModel(apiSettings);
+    console_log(`[Max embedding batch size: ${embeddingModel.maxBatchSize}]`);
 
     const oracle = createTranslator<OracleSpecs>(
         chatModel,
@@ -98,7 +105,7 @@ function createQueryContext(): QueryContext {
     );
 
     const databaseFolder = path.join(
-        process.env.HOME ?? "/",
+        process.env.HOME ?? "",
         ".typeagent",
         "agents",
         "spelunker",
@@ -138,10 +145,15 @@ export async function searchCode(
 
     // 1. Create the database, chunkify all files in the focus folders, and store the chunks.
     //    Or use what's in the database if it looks up-to-date.
-    const db = await loadDatabaseAndChunks(context);
+    if (!context.queryContext) {
+        context.queryContext = createQueryContext();
+    }
+    await createDatabase(context);
+    await loadDatabaseAndChunks(context);
+    const db = context.queryContext!.database!;
 
     // 2. Load all chunks from the database.
-    const allChunks = await loadAllChunksFromDatabase(db);
+    const allChunks = await readAllChunksFromDatabase(db);
 
     // 3. Ask a fast LLM for the most relevant chunk Ids, rank them, and keep the best ones.
     const chunks = await selectChunks(context, allChunks, input);
@@ -175,16 +187,12 @@ export async function searchCode(
     );
 }
 
-async function loadDatabaseAndChunks(
-    context: SpelunkerContext,
-): Promise<sqlite.Database> {
+async function loadDatabaseAndChunks(context: SpelunkerContext): Promise<void> {
     console_log(`[Step 1: Load database]`);
-    return await loadDatabase(context);
+    await loadDatabase(context);
 }
 
-async function loadAllChunksFromDatabase(
-    db: sqlite.Database,
-): Promise<Chunk[]> {
+async function readAllChunksFromDatabase(db: Database): Promise<Chunk[]> {
     console_log(`[Step 2: Load chunks from database]`);
     const allChunks: Chunk[] = [];
     const selectAllChunks = db.prepare(`SELECT * FROM chunks`);
@@ -248,7 +256,7 @@ async function queryOracle(
 function produceEntitiesFromResult(
     result: any,
     allChunks: Chunk[],
-    db: sqlite.Database,
+    db: Database,
 ): Entity[] {
     console_log(`  [Success:]`);
     const outputEntities: Entity[] = [];
@@ -294,7 +302,7 @@ export async function selectChunks(
         parseInt(process.env.AZURE_OPENAI_MAX_CONCURRENCY ?? "5") ?? 5;
     const limiter = createLimiter(maxConcurrency);
     const batchLimit = process.env.OPENAI_API_KEY ? 100000 : 250000; // TODO: tune
-    const batches = makeBatches(allChunks, batchLimit);
+    const batches = makeBatches(allChunks, batchLimit, 200); // TODO: tune
     console_log(
         `  [${batches.length} batches, maxConcurrency ${maxConcurrency}]`,
     );
@@ -410,7 +418,7 @@ const languageCommentMap: { [key: string]: string } = {
 };
 
 // TODO: Remove export once we're using summaries again.
-export function prepareSummaries(db: sqlite.Database): string {
+export function prepareSummaries(db: Database): string {
     const selectAllSummaries = db.prepare(`SELECT * FROM Summaries`);
     const summaryRows: any[] = selectAllSummaries.all();
     if (summaryRows.length > 100) {
@@ -484,13 +492,13 @@ function getAllSourceFiles(dir: string): FileMtimeSize[] {
     return results;
 }
 
-async function loadDatabase(
-    context: SpelunkerContext,
-): Promise<sqlite.Database> {
+// TODO: Break into multiple functions.
+// Notably the part that compares files in the database and files on disk.
+async function loadDatabase(context: SpelunkerContext): Promise<void> {
     if (!context.queryContext) {
         context.queryContext = createQueryContext();
     }
-    const db = createDatabase(context);
+    const db = context.queryContext!.database!;
 
     const prepDeleteSummaries = db.prepare(`
         DELETE FROM Summaries WHERE chunkId IN (
@@ -581,7 +589,7 @@ async function loadDatabase(
         console_log(
             `  [No files to update out of ${files.length}, yay cache!]`,
         );
-        return db;
+        return;
     }
 
     // 1b. Chunkify all new files (without LLM help).
@@ -641,20 +649,101 @@ async function loadDatabase(
     console_log(
         `  [Chunked ${allChunkedFiles.length} files into ${allChunks.length} chunks]`,
     );
-
-    // 1c. Use a fast model to summarize all chunks.
-    if (allChunks.length) {
-        await summarizeChunks(context, allChunks);
+    if (!allChunks.length) {
+        console_log(`  [No chunks to load]`);
+        return;
     }
 
-    return db;
+    // 1c. Store all chunk embeddings.
+    // await loadEmbeddings(context, allChunks);
+
+    // 1d. Use a fast model to summarize all chunks.
+    // await summarizeChunks(context, allChunks);
 }
 
-async function summarizeChunks(
+export async function loadEmbeddings(
     context: SpelunkerContext,
     chunks: Chunk[],
 ): Promise<void> {
-    console_log(`[Step 1c: Summarizing ${chunks.length} chunks]`);
+    const model = context.queryContext!.embeddingModel;
+    if (!model.generateEmbeddingBatch) {
+        console_log(`[This embedding model does not support batch operations]`); // TODO: Fix this
+        return;
+    }
+
+    console_log(`[Step 1c: Store chunk embeddings]`);
+    const generateEmbeddingBatch = model.generateEmbeddingBatch;
+    const db = context.queryContext!.database!;
+    const prepInsertEmbeddings = db.prepare(
+        `INSERT OR REPLACE INTO ChunkEmbeddings (chunkId, embedding) VALUES (?, ?)`,
+    );
+    const maxCharacters = 100000; // TODO: tune
+    const batches = makeBatches(chunks, maxCharacters, model.maxBatchSize);
+    const maxConcurrency =
+        parseInt(process.env.AZURE_OPENAI_MAX_CONCURRENCY ?? "0") ?? 5;
+    console_log(
+        `  [${batches.length} batches, maxConcurrency ${maxConcurrency}]`,
+    );
+    const limiter = createLimiter(maxConcurrency);
+    const promises: Promise<void>[] = [];
+    for (const batch of batches) {
+        const p = limiter(() =>
+            generateAndInsertEmbeddings(
+                generateEmbeddingBatch,
+                prepInsertEmbeddings,
+                batch,
+            ),
+        );
+        promises.push(p);
+    }
+    await Promise.all(promises);
+}
+
+async function generateAndInsertEmbeddings(
+    generateEmbeddingBatch: (a: string[]) => Promise<Result<number[][]>>,
+    prepInsertEmbeddings: Statement,
+    batch: Chunk[],
+): Promise<void> {
+    const t0 = new Date().getTime();
+    function blobText(chunk: Chunk): string {
+        const lines: string[] = [];
+        for (const blob of chunk.blobs) {
+            lines.push(...blob.lines);
+        }
+        const line = lines.join("").slice(0, 15000); // My best guess for 8192 tokens from code
+        return line || "(blank)";
+    }
+    const stringBatch = batch.map(blobText);
+    const data = await retryTranslateOn429(() =>
+        generateEmbeddingBatch(stringBatch),
+    );
+    if (data) {
+        for (let i = 0; i < data.length; i++) {
+            const chunk = batch[i];
+            const embedding: NormalizedEmbedding = createNormalized(data[i]);
+            prepInsertEmbeddings.run(chunk.chunkId, embedding);
+        }
+        const t1 = new Date().getTime();
+        const dtms = t1 - t0;
+        const dtStr =
+            dtms < 1000 ? `${dtms}ms` : `${(dtms / 1000).toFixed(3)}s`;
+        console_log(
+            `  [Generated and inserted embedding batch of ${batch.length} in ${dtStr}]`,
+        );
+    } else {
+        const t1 = new Date().getTime();
+        const dtms = t1 - t0;
+        const dtStr =
+            dtms < 1000 ? `${dtms}ms` : `${(dtms / 1000).toFixed(3)}s`;
+        console_log(`  [Failed to generate embedding batch in ${dtStr}]`);
+    }
+}
+
+export async function summarizeChunks(
+    context: SpelunkerContext,
+    chunks: Chunk[],
+): Promise<void> {
+    console_log(`[Step 1d: Summarizing ${chunks.length} chunks]`);
     // NOTE: We cannot stuff the buffer, because the completion size
     // is limited to 4096 tokens, and we expect a certain number of
     // tokens per chunk. Experimentally, 40 chunks per job works great.
@@ -782,6 +871,7 @@ async function retryTranslateOn429<T>(
                 const openaiTime = wrappedResult.message.match(
                     /Please try again in (\d+\.\d*|\.\d+|\d+m)s./,
                 );
+                // Embeddings say: "Try again in 60 seconds."
                 if (azureTime || openaiTime) {
                     if (azureTime) {
                         delay = parseInt(azureTime[1]);
@@ -793,14 +883,14 @@ async function retryTranslateOn429<T>(
                     }
                 } else {
                     console_log(
-                        `  [Couldn't find msec in '${wrappedResult.message}'`,
+                        `      [Couldn't find msec in '${wrappedResult.message}'`,
                     );
                 }
                 console_log(`    [Retry on 429 error: sleep ${delay} ms]`);
                 await new Promise((resolve) => setTimeout(resolve, delay));
                 continue;
             }
-            console_log(`  [${wrappedResult.message}]`);
+            console_log(`    [Giving up: ${wrappedResult.message}]`);
             return undefined;
         }
     } while (!wrappedResult.success);
@@ -830,6 +920,7 @@ function keepBestChunks(
 function makeBatches(
     chunks: Chunk[],
     batchSize: number, // In characters
+    maxChunks: number, // How many chunks at most per batch
 ): Chunk[][] {
     const batches: Chunk[][] = [];
     let batch: Chunk[] = [];
@@ -837,20 +928,23 @@ function makeBatches(
     function flush(): void {
         batches.push(batch);
         console_log(
-            `    [Batch ${batches.length} has ${batch.length} chunks and ${size} bytes]`,
+            `    [Batch ${batches.length} has ${batch.length} chunks and ${size} characters]`,
         );
         batch = [];
         size = 0;
     }
     for (const chunk of chunks) {
         const chunkSize = getChunkSize(chunk);
-        if (size + chunkSize > batchSize && batch.length) {
+        if (
+            size &&
+            (size + chunkSize > batchSize || batch.length >= maxChunks)
+        ) {
             flush();
         }
         batch.push(chunk);
         size += chunkSize;
     }
-    if (batch.length) {
+    if (size) {
         flush();
     }
     return batches;

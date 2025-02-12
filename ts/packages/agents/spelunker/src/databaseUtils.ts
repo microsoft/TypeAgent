@@ -5,7 +5,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { createRequire } from "module";
 
-import Database, * as sqlite from "better-sqlite3";
+import Database from "better-sqlite3";
 
 import { SpelunkerContext } from "./spelunkerActionHandler.js";
 
@@ -36,7 +36,11 @@ CREATE TABLE IF NOT EXISTS Summaries (
     language TEXT, -- "python", "typescript", etc.
     summary TEXT,
     signature TEXT
-)
+);
+CREATE TABLE IF NOT EXISTS ChunkEmbeddings (
+    chunkId TEXT PRIMARY KEY REFERENCES Chunks(chunkId),
+    embedding BLOB NOT NULL
+);
 `;
 
 function getDbOptions() {
@@ -52,20 +56,21 @@ function getDbOptions() {
     return { nativeBinding };
 }
 
-export function createDatabase(context: SpelunkerContext): sqlite.Database {
+export function createDatabase(context: SpelunkerContext): void {
     if (!context.queryContext) {
-        throw new Error("context.queryContext must be set before calling createDatabase");
+        throw new Error(
+            "context.queryContext must be set before calling createDatabase",
+        );
     }
     const loc = context.queryContext.databaseLocation;
-    const db0 = context.queryContext.database;
-    if (db0) {
-        console_log(`  [Using database at ${loc}]`);
-        return db0;
+    if (context.queryContext.database) {
+        console_log(`[Using database at ${loc}]`);
+        return;
     }
     if (fs.existsSync(loc)) {
-        console_log(`  [Opening database at ${loc}]`);
+        console_log(`[Opening database at ${loc}]`);
     } else {
-        console_log(`  [Creating database at ${loc}]`);
+        console_log(`[Creating database at ${loc}]`);
     }
     const db = new Database(loc, getDbOptions());
     // Write-Ahead Logging, improving concurrency and performance
@@ -75,5 +80,4 @@ export function createDatabase(context: SpelunkerContext): sqlite.Database {
     // Create all the tables we'll use
     db.exec(databaseSchema);
     context.queryContext.database = db;
-    return db;
 }
