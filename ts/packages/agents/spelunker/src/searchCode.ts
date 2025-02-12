@@ -75,7 +75,7 @@ function createQueryContext(): QueryContext {
     chatModel.retryMaxAttempts = 0;
 
     const miniModel = openai.createChatModel(
-        "GPT_4_O_MINI", // "GPT_4_O_MINI" is slower than default model?!
+        undefined, // "GPT_4_O_MINI" is slower than default model?!
         undefined,
         undefined,
         ["spelunkerMini"],
