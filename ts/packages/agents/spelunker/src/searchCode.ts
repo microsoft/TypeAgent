@@ -25,7 +25,11 @@ import {
     ChunkId,
 } from "./chunkSchema.js";
 import { createDatabase, purgeFile } from "./databaseUtils.js";
-import { makeEmbeddingModel, loadEmbeddings } from "./embeddings.js";
+import {
+    makeEmbeddingModel,
+    loadEmbeddings,
+    preSelectChunks,
+} from "./embeddings.js";
 import { OracleSpecs } from "./oracleSchema.js";
 import { chunkifyPythonFiles } from "./pythonChunker.js";
 import { ChunkDescription, SelectorSpecs } from "./selectorSchema.js";
@@ -293,6 +297,12 @@ export async function selectChunks(
     console_log(
         `[Step 3: Select relevant chunks from ${allChunks.length} chunks]`,
     );
+    console_log(`[Step 3a: Pre-select with fuzzy matching]`);
+    const nearestChunkIds = await preSelectChunks(context, input, 1000);
+    allChunks = allChunks.filter((c) => nearestChunkIds.includes(c.chunkId));
+    console_log(`  [Pre-selected ${allChunks.length} chunks]`);
+
+    console_log(`[Step 3b: Narrow those down with LLM]`);
     const promises: Promise<ChunkDescription[]>[] = [];
     const maxConcurrency =
         parseInt(process.env.AZURE_OPENAI_MAX_CONCURRENCY ?? "5") ?? 5;

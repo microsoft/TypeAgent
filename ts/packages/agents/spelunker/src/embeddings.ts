@@ -6,10 +6,10 @@ import { Result } from "typechat";
 
 import { openai, TextEmbeddingModel } from "aiclient";
 import { createLimiter } from "common-utils";
-import { createNormalized } from "typeagent";
+import { createNormalized, dotProduct } from "typeagent";
 import { NormalizedEmbedding } from "typeagent";
 
-import { Chunk } from "./chunkSchema.js";
+import { Chunk, ChunkId } from "./chunkSchema.js";
 import { console_log, makeBatches, retryTranslateOn429 } from "./searchCode.js";
 import { SpelunkerContext } from "./spelunkerActionHandler.js";
 
@@ -43,7 +43,9 @@ export async function loadEmbeddings(
     );
     const maxCharacters = 100000; // TODO: tune
     const batches = makeBatches(chunks, maxCharacters, model.maxBatchSize);
-    const maxConcurrency = 2;
+    // const maxConcurrency =
+    //     parseInt(process.env.AZURE_OPENAI_MAX_CONCURRENCY ?? "5") ?? 5;
+    const maxConcurrency = 2; // Seems we can do no better, given the low quota.
     console_log(
         `  [${batches.length} batches, maxConcurrency ${maxConcurrency}]`,
     );
@@ -102,4 +104,66 @@ function blobText(chunk: Chunk): string {
     // Keep only alphanumerical words; everything else is removed (hoping to reduce the cost)
     const line = lines.join("").replace(/\W+/g, " ").slice(0, 20000); // Assuming average 2.5 chars per token
     return line || "(blank)";
+}
+
+export async function preSelectChunks(
+    context: SpelunkerContext,
+    input: string,
+    maxChunks = 1000,
+): Promise<ChunkId[]> {
+    const db = context.queryContext!.database!;
+    const tt0 = new Date().getTime();
+    const queryEmbedding = await getEmbedding(context, input);
+    const tt1 = new Date().getTime();
+    const tail = !queryEmbedding ? " (failure)" : "";
+    console_log(
+        `  [Embedding input of ${input.length} characters took ${((tt1 - tt0) / 1000).toFixed(3)} seconds${tail}]`,
+    );
+    if (!queryEmbedding) return [];
+
+    const prepAllEmbeddings = db.prepare(
+        `SELECT chunkId, embedding FROM ChunkEmbeddings`,
+    );
+    const t0 = new Date().getTime();
+    const allEmbeddingRows: {
+        chunkId: ChunkId;
+        embedding: Buffer;
+    }[] = prepAllEmbeddings.all() as any[];
+    const embeddings = allEmbeddingRows.map((row) =>
+        deserialize(row.embedding),
+    );
+    const t1 = new Date().getTime();
+    console_log(
+        `  [Read ${embeddings.length} embeddings in ${((t1 - t0) / 1000).toFixed(3)} seconds]`,
+    );
+
+    const similarities: { chunkId: ChunkId; score: number }[] = [];
+    for (let i = 0; i < embeddings.length; i++) {
+        const chunkId = allEmbeddingRows[i].chunkId;
+        const score = dotProduct(embeddings[i], queryEmbedding);
+        similarities.push({ chunkId, score });
+    }
+    similarities.sort((a, b) => b.score - a.score);
+    similarities.splice(maxChunks);
+    const chunkIds = similarities.map((s) => s.chunkId);
+    const t2 = new Date().getTime();
+    console_log(
+        `  [Found ${chunkIds.length} nearest neighbors in ${((t2 - t1) / 1000).toFixed(3)} seconds]`,
+    );
+    return chunkIds;
+}
+
+async function getEmbedding(
+    context: SpelunkerContext,
+    query: string,
+): Promise<NormalizedEmbedding | undefined> {
+    const rawEmbedding = await retryTranslateOn429(() =>
+        context.queryContext!.embeddingModel!.generateEmbedding(query),
+    );
+    return rawEmbedding ? createNormalized(rawEmbedding) : undefined;
+}
+
+// Copied from vectorTable.ts
+function deserialize(embedding: Buffer): Float32Array {
+    return new Float32Array(embedding.buffer);
 }
