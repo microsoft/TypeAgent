@@ -1,14 +1,54 @@
 [
-    {
-        "request": "play that song again",
-        "history": {
-            "user": "play some random songs",
-            "assistant": { "text": "Now playing: Soruwienf from album Wxifiel with artist Bnefisoe", "source": "player", "entities": [
-                {"name": "Soruwienf", "type": ["track", "song"], "uniqueId": "a"}, 
-                {"name": "Wxifiel", "type": ["album"], "uniqueId": "b"}, 
-                {"name": "Bnefisoe", "type": ["artist"], "uniqueId": "c"}
-            ]}
+    [
+        {
+            "request": "play Soruwienf from album Wxifiel by artist Bnefisoe",
+            "action": { "translatorName": "player","actionName": "playTrack", "parameters": {"trackName": "Soruwienf", "albumName": "Wxifiel", "artists": ["Bnefisoe"]}},       
+            "history": { 
+                "text": "Now playing: Soruwienf from album Wxifiel with artist Bnefisoe", 
+                "source": "player", 
+                "entities": [
+                    {"name": "Soruwienf", "type": ["track", "song"], "uniqueId": "a"}, 
+                    {"name": "Wxifiel", "type": ["album"], "uniqueId": "b"}, 
+                    {"name": "Bnefisoe", "type": ["artist"], "uniqueId": "c"}
+                ]
+            }
         },
-        "action": {"translatorName": "player","actionName": "playTrack", "parameters": {"trackName": "Soruwienf", "albumName": "Wxifiel", "artists": ["Bnefisoe"]}}
-    }
+        {
+            "request": "play that song again",
+            "action": {"translatorName": "player","actionName": "playTrack", "parameters": {"trackName": "Soruwienf", "albumName": "Wxifiel", "artists": ["Bnefisoe"]}}
+        }        
+    ],
+    [
+        {
+            "request": "look up the ingredient for shepherd's pie for me please",
+            "action": {
+                "translatorName": "chat",
+                "actionName": "lookupAndGenerateResponse",
+                "parameters": {
+                    "originalRequest": "look up the ingredient for shepherd's pie for me please",                    
+                    "internetLookups": [ "shepherd's pie ingredients" ]
+                }
+            },
+            "history": { 
+                "text": "- Ground beef or lamb\n- Onions\n- Carrots\n- Peas\n- Worcestershire sauce\n- Beef broth\n- Mashed potatoes\n- Butter\n", 
+                "source": "chat", 
+                "entities": [
+                    { "name": "shepherd's pie", "type": ["food"] },
+                    { "name": "Ground beef", "type": ["ingredient"] },
+                    { "name": "lamb", "type": ["ingredient"]},
+                    { "name": "Onions", "type": ["ingredient"]},
+                    { "name": "Carrots", "type": ["ingredient"]},
+                    { "name": "Peas", "type": ["ingredient"]},
+                    { "name": "Worcestershire sauce", "type": ["ingredient"]},
+                    { "name": "Beef broth", "type": ["ingredient"]},
+                    { "name": "Mashed potatoes", "type": ["ingredient"]},
+                    { "name": "Butter", "type": ["ingredient"]}
+                ]
+            }            
+        },
+        {        
+            "request": "add them to the grocery list",
+            "action": { "translatorName": "list","actionName": "addItems", "parameters": { "items": [ "Ground beef", "lamb", "Onions", "Carrots", "Peas", "Worcestershire sauce", "Beef broth", "Mashed potatoes", "Butter" ], "listName": "grocery"}} 
+        }
+    ]  
 ]
