@@ -1324,8 +1324,8 @@ async function sendActionToAgent(action: AppAction) {
                     }),
                 );
 
-                const handler = (event: any) => {
-                    const text = event.data.toString();
+                const handler = async (event: any) => {
+                    const text = await event.data.text();
                     const data = JSON.parse(text);
                     if (data.id == callId && data.result) {
                         webSocket.removeEventListener("message", handler);
@@ -1525,6 +1525,17 @@ chrome.runtime.onMessage.addListener(
                     sendResponse({ schema: schemaResult });
                     break;
                 }
+                case "registerTempSchema": {
+                    const schemaResult = await sendActionToAgent({
+                        actionName: "initializePageSchema",
+                        parameters: {
+                            registerAgent: true,
+                        },
+                    });
+
+                    sendResponse({ schema: schemaResult });
+                    break;
+                }
             }
         };
 
@@ -1542,6 +1553,11 @@ chrome.runtime.onInstalled.addListener(() => {
     chrome.contextMenus.create({
         title: "Clear crossword cache",
         id: "clearCrosswordPageCache",
+    });
+
+    // Add separator
+    chrome.contextMenus.create({
+        type: "separator",
     });
 
     chrome.contextMenus.create({
