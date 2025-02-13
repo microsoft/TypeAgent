@@ -46,7 +46,7 @@ export async function searchCode(
         context.queryContext = createQueryContext();
     }
     await createDatabase(context);
-    await loadDatabaseAndChunks(context);
+    await loadDatabase(context);
     const db = context.queryContext!.database!;
 
     // 2. Load all chunks from the database.
@@ -82,11 +82,6 @@ export async function searchCode(
         outputEntities,
         resultEntity,
     );
-}
-
-async function loadDatabaseAndChunks(context: SpelunkerContext): Promise<void> {
-    console_log(`[Step 1: Load database]`);
-    await loadDatabase(context);
 }
 
 async function readAllChunksFromDatabase(
@@ -325,6 +320,7 @@ function getAllSourceFiles(dir: string): FileMtimeSize[] {
 // TODO: Break into multiple functions.
 // Notably the part that compares files in the database and files on disk.
 async function loadDatabase(context: SpelunkerContext): Promise<void> {
+    console_log(`[Step 1: Load database]`);
     if (!context.queryContext) {
         context.queryContext = createQueryContext();
     }
