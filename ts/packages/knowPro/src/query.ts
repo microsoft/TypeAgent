@@ -816,7 +816,7 @@ export class PropertyMatchPredicate implements IQuerySemanticRefPredicate {
     }
 }
 
-export class SelectScopeExpr extends QueryOpExpr<SemanticRefAccumulator> {
+export class SelectInScopeExpr extends QueryOpExpr<SemanticRefAccumulator> {
     constructor(
         public sourceExpr: IQueryOpExpr<SemanticRefAccumulator>,
         public scopeExpr: IQuerySelectScopeExpr[],
@@ -827,23 +827,22 @@ export class SelectScopeExpr extends QueryOpExpr<SemanticRefAccumulator> {
     public override eval(context: QueryEvalContext): SemanticRefAccumulator {
         let accumulator = this.sourceExpr.eval(context);
         // Scope => text ranges in scope
-        let textRangesInScope: TextRangeCollection | undefined;
-        for (let i = 0; i < this.scopeExpr.length; ++i) {
+        for (
+            let i = 0;
+            i < this.scopeExpr.length && accumulator.size > 0;
+            ++i
+        ) {
             const rangesInScope = this.scopeExpr[i].eval(context, accumulator);
             if (rangesInScope) {
-                textRangesInScope ??= new TextRangeCollection();
-                textRangesInScope?.addRanges(rangesInScope);
-            }
-        }
-        if (textRangesInScope !== undefined) {
-            if (textRangesInScope.size > 0) {
-                // Select only those semantic refs that are in scope
-                accumulator = accumulator.getInScope(
-                    context.semanticRefs,
-                    textRangesInScope,
-                );
-            } else {
-                accumulator.clearMatches();
+                if (rangesInScope.size > 0) {
+                    // Select only those semantic refs that are in scope
+                    accumulator = accumulator.getInScope(
+                        context.semanticRefs,
+                        rangesInScope,
+                    );
+                } else {
+                    accumulator.clearMatches();
+                }
             }
         }
         return accumulator;
