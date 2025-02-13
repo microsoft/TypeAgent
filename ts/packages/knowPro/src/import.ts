@@ -25,10 +25,8 @@ import {
     TermsToRelatedTermIndexSettings,
 } from "./relatedTermsIndex.js";
 import { createTextEmbeddingIndexSettings } from "./fuzzyIndex.js";
-import {
-    ITimestampToTextRangeIndex,
-    TimestampToTextRangeIndex,
-} from "./timestampIndex.js";
+import { TimestampToTextRangeIndex } from "./timestampIndex.js";
+import { ITimestampToTextRangeIndex } from "./search.js";
 import { addPropertiesToIndex, PropertyIndex } from "./propertyIndex.js";
 import { IPropertyToSemanticRefIndex } from "./search.js";
 import { ISecondaryConversationIndexes } from "./search.js";

@@ -9,10 +9,10 @@ import {
     ScoredSemanticRef,
     SemanticRefIndex,
     Term,
+    TextRange,
 } from "./dataFormat.js";
 import * as q from "./query.js";
 import { resolveRelatedTerms } from "./relatedTermsIndex.js";
-import { ITimestampToTextRangeIndex } from "./timestampIndex.js";
 
 export type SearchTerm = {
     /**
@@ -67,6 +67,17 @@ export type SearchOptions = {
     useTimestampIndex?: boolean | undefined;
 };
 
+/**
+ * Secondary indexes are currently optional, allowing us to experiment
+ */
+export interface ISecondaryConversationIndexes {
+    propertyToSemanticRefIndex: IPropertyToSemanticRefIndex | undefined;
+    timestampIndex?: ITimestampToTextRangeIndex | undefined;
+}
+
+/**
+ * Allows for faster retrieval of name, value properties
+ */
 export interface IPropertyToSemanticRefIndex {
     getValues(): string[];
     addProperty(
@@ -80,10 +91,18 @@ export interface IPropertyToSemanticRefIndex {
     ): ScoredSemanticRef[] | undefined;
 }
 
-export interface ISecondaryConversationIndexes {
-    propertyToSemanticRefIndex: IPropertyToSemanticRefIndex | undefined;
-    timestampIndex?: ITimestampToTextRangeIndex | undefined;
+export type TimestampedTextRange = {
+    timestamp: string;
+    range: TextRange;
+};
+
+/**
+ * Return text ranges in the given date range
+ */
+export interface ITimestampToTextRangeIndex {
+    lookupRange(dateRange: DateRange): TimestampedTextRange[];
 }
+
 /**
  * Searches conversation for terms
  */

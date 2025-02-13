@@ -32,7 +32,7 @@ import { IPropertyToSemanticRefIndex } from "./search.js";
 import { conversation } from "knowledge-processor";
 import { collections } from "typeagent";
 import { textRangeFromLocation } from "./conversationIndex.js";
-import { ITimestampToTextRangeIndex } from "./timestampIndex.js";
+import { ITimestampToTextRangeIndex } from "./search.js";
 
 export function isConversationSearchable(conversation: IConversation): boolean {
     return (
