@@ -266,7 +266,7 @@ export async function createKnowproCommands(
                 conversation,
                 terms,
                 propertyTermsFromNamedArgs(namedArgs, commandDef),
-                filterFromNamedArgs(namedArgs, commandDef),
+                whenFilterFromNamedArgs(namedArgs, commandDef),
                 {
                     minHitCount: namedArgs.exact ? 1 : undefined,
                     usePropertyIndex: namedArgs.usePropertyIndex,
@@ -289,26 +289,27 @@ export async function createKnowproCommands(
         }
     }
 
+    const scopePrefix = "%";
     function propertyTermsFromNamedArgs(
         namedArgs: NamedArgs,
         commandDef: CommandMetadata,
     ): kp.PropertySearchTerm[] {
         return createPropertyTerms(namedArgs, commandDef, undefined, (name) => {
-            if (name.startsWith("@")) {
+            if (name.startsWith(scopePrefix)) {
                 return name.substring(1);
             }
             return name;
         });
     }
 
-    function propertyScopeTermsFromNamedArgs(
+    function scopingTermsFromNamedArgs(
         namedArgs: NamedArgs,
         commandDef: CommandMetadata,
     ): kp.PropertySearchTerm[] {
         return createPropertyTerms(
             namedArgs,
             commandDef,
-            (name) => name.startsWith("@"),
+            (name) => name.startsWith(scopePrefix),
             (name) => name.substring(1),
         );
     }
@@ -338,44 +339,33 @@ export async function createKnowproCommands(
             }
         }
         return propertySearchTerms;
-        /*
-        return propertyNames.map((propertyName) =>
-            kp.propertySearchTermFromKeyValue(
-                nameModifier ? nameModifier(propertyName) : propertyName,
-                keyValues[propertyName],
-            ),
-        );
-        */
     }
 
-    function filterFromNamedArgs(
+    function whenFilterFromNamedArgs(
         namedArgs: NamedArgs,
         commandDef: CommandMetadata,
-    ) {
-        let filter: kp.SearchFilter = {
-            type: namedArgs.ktype,
+    ): kp.WhenFilter {
+        let filter: kp.WhenFilter = {
+            knowledgeType: namedArgs.ktype,
         };
         const dateRange = kp.getTimeRangeForConversation(context.podcast!);
         if (dateRange && namedArgs.startMinute >= 0) {
-            filter.dateRange = {
+            filter.inDateRange = {
                 start: dateTime.addMinutesToDate(
                     dateRange.start,
                     namedArgs.startMinute,
                 ),
             };
             if (namedArgs.endMinute) {
-                filter.dateRange.end = dateTime.addMinutesToDate(
+                filter.inDateRange.end = dateTime.addMinutesToDate(
                     dateRange.start,
                     namedArgs.endMinute,
                 );
             }
         }
-        const propertyScope = propertyScopeTermsFromNamedArgs(
-            namedArgs,
-            commandDef,
-        );
-        if (propertyScope.length > 0) {
-            filter.propertyScope = propertyScope;
+        const scopingTerms = scopingTermsFromNamedArgs(namedArgs, commandDef);
+        if (scopingTerms.length > 0) {
+            filter.scopingTerms = scopingTerms;
         }
         return filter;
     }

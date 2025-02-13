@@ -398,7 +398,8 @@ export class TextRangeCollection {
         for (; i < this.ranges.length; ++i) {
             const range = this.ranges[i];
             if (range.start.messageIndex > rangeToMatch.start.messageIndex) {
-                // We are at a range whose start is > rangeToMatch. Stop
+                // We are at a range whose start is > rangeToMatch.
+                // We could stop, but there
                 break;
             }
             if (isInTextRange(range, rangeToMatch)) {

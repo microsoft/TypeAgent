@@ -53,10 +53,10 @@ export type SearchResult = {
     semanticRefMatches: ScoredSemanticRef[];
 };
 
-export type SearchFilter = {
-    type?: KnowledgeType | undefined;
-    dateRange?: DateRange | undefined;
-    propertyScope?: PropertySearchTerm[] | undefined;
+export type WhenFilter = {
+    knowledgeType?: KnowledgeType | undefined;
+    inDateRange?: DateRange | undefined;
+    scopingTerms?: PropertySearchTerm[] | undefined;
 };
 
 export type SearchOptions = {
@@ -73,7 +73,7 @@ export async function searchConversation(
     conversation: IConversation,
     searchTerms: SearchTerm[],
     propertyTerms?: PropertySearchTerm[],
-    filter?: SearchFilter,
+    filter?: WhenFilter,
     options?: SearchOptions,
 ): Promise<Map<KnowledgeType, SearchResult> | undefined> {
     if (!q.isConversationSearchable(conversation)) {
@@ -118,7 +118,7 @@ class SearchQueryBuilder {
     public async compile(
         terms: SearchTerm[],
         propertyTerms?: PropertySearchTerm[],
-        filter?: SearchFilter,
+        filter?: WhenFilter,
         options?: SearchOptions,
     ) {
         let query = this.compileQuery(
@@ -139,7 +139,7 @@ class SearchQueryBuilder {
     public async compileQuery(
         terms: SearchTerm[],
         propertyTerms?: PropertySearchTerm[],
-        filter?: SearchFilter,
+        filter?: WhenFilter,
         maxMatches?: number,
         minHitCount?: number,
     ) {
@@ -204,22 +204,22 @@ class SearchQueryBuilder {
 
     private compileScope(
         termsMatchExpr: q.IQueryOpExpr<SemanticRefAccumulator>,
-        filter: SearchFilter,
+        filter: WhenFilter,
     ): q.IQueryOpExpr<SemanticRefAccumulator> {
         let scopeSelectors: q.IQuerySelectScopeExpr[] = [];
         // Always apply "tag match" scope... all text ranges that matched tags.. are in scope
         scopeSelectors.push(new q.TagScopeExpr());
-        if (filter.propertyScope && filter.propertyScope.length > 0) {
+        if (filter.scopingTerms && filter.scopingTerms.length > 0) {
             scopeSelectors.push(
                 new q.PredicateScopeExpr(
-                    this.compilePropertyMatchPredicates(filter.propertyScope),
+                    this.compilePropertyMatchPredicates(filter.scopingTerms),
                 ),
             );
         }
-        if (filter.dateRange) {
-            scopeSelectors.push(new q.TimestampScopeExpr(filter.dateRange));
+        if (filter.inDateRange) {
+            scopeSelectors.push(new q.TimestampScopeExpr(filter.inDateRange));
         }
-        return new q.SelectScopeExpr(termsMatchExpr, scopeSelectors);
+        return new q.SelectInScopeExpr(termsMatchExpr, scopeSelectors);
     }
 
     private compilePropertyMatchPredicates(
@@ -234,10 +234,10 @@ class SearchQueryBuilder {
         });
     }
 
-    private compileWhere(filter: SearchFilter): q.IQuerySemanticRefPredicate[] {
+    private compileWhere(filter: WhenFilter): q.IQuerySemanticRefPredicate[] {
         let predicates: q.IQuerySemanticRefPredicate[] = [];
-        if (filter.type) {
-            predicates.push(new q.KnowledgeTypePredicate(filter.type));
+        if (filter.knowledgeType) {
+            predicates.push(new q.KnowledgeTypePredicate(filter.knowledgeType));
         }
         return predicates;
     }
