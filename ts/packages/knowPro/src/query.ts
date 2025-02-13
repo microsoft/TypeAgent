@@ -354,9 +354,15 @@ export function lookupPropertySearchTerm(
     if (typeof propertySearchTerm.propertyName !== "string") {
         throw new Error("Not supported");
     }
+    // Since we are only matching propertyValue.term
+    const valueTerm = propertySearchTerm.propertyValue.term;
+    propertySearchTerm = {
+        propertyName: propertySearchTerm.propertyName,
+        propertyValue: { term: valueTerm },
+    };
     return lookupTermFiltered(
         semanticRefIndex,
-        propertySearchTerm.propertyValue.term,
+        valueTerm,
         semanticRefs,
         (semanticRef) =>
             matchPropertySearchTermToSemanticRef(
