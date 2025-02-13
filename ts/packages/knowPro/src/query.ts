@@ -214,7 +214,10 @@ export function matchPropertySearchTermToEntity(
     searchTerm: PropertySearchTerm,
     semanticRef: SemanticRef,
 ): boolean {
-    if (semanticRef.knowledgeType !== "entity") {
+    if (
+        semanticRef.knowledgeType !== "entity" ||
+        typeof searchTerm.propertyName !== "string"
+    ) {
         return false;
     }
     const entity = semanticRef.knowledge as conversation.ConcreteEntity;
@@ -277,7 +280,10 @@ export function matchPropertySearchTermToAction(
     searchTerm: PropertySearchTerm,
     semanticRef: SemanticRef,
 ): boolean {
-    if (semanticRef.knowledgeType !== "action") {
+    if (
+        semanticRef.knowledgeType !== "action" ||
+        typeof searchTerm.propertyName !== "string"
+    ) {
         return false;
     }
     const action = semanticRef.knowledge as conversation.Action;

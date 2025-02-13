@@ -41,7 +41,9 @@ export type KnowledgePropertyName =
     | "subject"
     | "object"
     | "indirectObject"
-    | "tag";
+    | "tag"
+    | "facet.name"
+    | "facet.value";
 
 export type PropertySearchTerm = {
     propertyName: KnowledgePropertyName | SearchTerm;
@@ -319,6 +321,8 @@ export function propertySearchTermFromKeyValue(
         case "object":
         case "indirectObject":
         case "tag":
+        case "facet.name":
+        case "facet.value":
             propertyName = key;
             break;
     }
