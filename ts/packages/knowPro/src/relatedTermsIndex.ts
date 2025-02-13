@@ -88,7 +88,7 @@ export class TermToRelatedTermsIndex implements ITermToRelatedTermsIndex {
         return this.editDistanceIndex;
     }
 
-    public get termVectorIndex() {
+    public get fuzzyIndex() {
         return this.embeddingIndex;
     }
 
@@ -168,12 +168,9 @@ export async function resolveRelatedTerms(
             searchTermsNeedingRelated.push(searchTerm);
         }
     }
-    if (
-        relatedTermsIndex.termVectorIndex &&
-        searchTermsNeedingRelated.length > 0
-    ) {
+    if (relatedTermsIndex.fuzzyIndex && searchTermsNeedingRelated.length > 0) {
         const relatedTermsForSearchTerms =
-            await relatedTermsIndex.termVectorIndex.lookupTerms(
+            await relatedTermsIndex.fuzzyIndex.lookupTerms(
                 searchTermsNeedingRelated.map((st) => st.term.text),
             );
         for (let i = 0; i < searchTermsNeedingRelated.length; ++i) {

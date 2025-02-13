@@ -49,7 +49,7 @@ export interface IConversationSecondaryIndexes {
  */
 export interface ITermToRelatedTermsIndex {
     get aliases(): ITermToRelatedTerms | undefined;
-    get termVectorIndex(): ITermToRelatedTermsFuzzy | undefined;
+    get fuzzyIndex(): ITermToRelatedTermsFuzzy | undefined;
     serialize(): ITermsToRelatedTermsIndexData;
     deserialize(data?: ITermsToRelatedTermsIndexData): void;
 }
