@@ -97,17 +97,16 @@ export class MatchAccumulator<T = any> {
         }
     }
 
-    public calculateTotalScore(scoreScaler?: (match: Match<T>) => void) {
-        scoreScaler ??= (m) => {
-            if (m.relatedHitCount > 0) {
-                const avgScore = m.relatedScore / m.relatedHitCount;
-                const normalizedScore = Math.log(1 + avgScore);
-                m.score += normalizedScore;
-                //m.score += m.relatedScore;
-            }
-        };
+    public calculateTotalScore(): void {
         for (const match of this.getMatches()) {
-            scoreScaler(match);
+            if (match.relatedHitCount > 0) {
+                // Smooth the impact of multiple related term matches
+                // If we just add up scores, a larger number of moderately related
+                // but noisy matches can overwhelm a small # of highly related matches... etc
+                const avgScore = match.relatedScore / match.relatedHitCount;
+                const normalizedScore = Math.log(1 + avgScore);
+                match.score += normalizedScore;
+            }
         }
     }
 
