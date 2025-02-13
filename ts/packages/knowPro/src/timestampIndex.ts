@@ -21,7 +21,7 @@ export class TimestampToTextRangeIndex implements ITimestampToTextRangeIndex {
     constructor(messages: IMessage[]) {
         this.ranges = [];
         for (let i = 0; i < messages.length; ++i) {
-            this.addMessage(messages[i], i);
+            this.insertTimestamp(i, messages[i].timestamp, false);
         }
         this.ranges.sort(this.compareTimestampedRange);
     }
@@ -46,15 +46,22 @@ export class TimestampToTextRangeIndex implements ITimestampToTextRangeIndex {
         );
     }
 
-    private addMessage(
-        message: IMessage,
+    public addTimestamp(
         messageIndex: MessageIndex,
-        inOrder = false,
+        timestamp: string,
     ): boolean {
-        if (!message.timestamp) {
+        return this.insertTimestamp(messageIndex, timestamp, true);
+    }
+
+    private insertTimestamp(
+        messageIndex: MessageIndex,
+        timestamp: string | undefined,
+        inOrder: boolean,
+    ) {
+        if (!timestamp) {
             return false;
         }
-        const timestampDate = new Date(message.timestamp);
+        const timestampDate = new Date(timestamp);
         const entry: TimestampedTextRange = {
             range: textRangeFromLocation(messageIndex),
             // This string is formatted to be lexically sortable

@@ -7,6 +7,7 @@ import {
     DateRange,
     TextRange,
     Term,
+    MessageIndex,
 } from "./dataFormat.js";
 
 /**
@@ -43,6 +44,7 @@ export type TimestampedTextRange = {
  * Return text ranges in the given date range
  */
 export interface ITimestampToTextRangeIndex {
+    addTimestamp(messageIndex: MessageIndex, timestamp: string): boolean;
     lookupRange(dateRange: DateRange): TimestampedTextRange[];
 }
 
