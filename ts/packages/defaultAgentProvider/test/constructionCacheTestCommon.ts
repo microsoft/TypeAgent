@@ -9,7 +9,7 @@ import fs from "node:fs";
 import {
     getCacheFactory,
     convertTestDataToExplanationData,
-    readTestData,
+    readExplanationTestData,
     createActionConfigProvider,
     createSchemaInfoProvider,
 } from "agent-dispatcher/internal";
@@ -66,7 +66,7 @@ const dataFiles =
 // Sort by file name to make the test result deterministic.
 const inputs = await Promise.all(
     (await glob(dataFiles)).sort().map(async (f) => {
-        return [await readTestData(f), f] as const;
+        return [await readExplanationTestData(f), f] as const;
     }),
 );
 

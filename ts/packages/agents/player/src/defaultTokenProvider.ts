@@ -46,7 +46,9 @@ export async function createTokenProvider(storage?: Storage) {
 
     const port = parseInt(defaultPort);
     if (port.toString() !== defaultPort) {
-        throw new Error(`SPOTIFY_APP_PORT has invalid port number ${defaultPort}`)
+        throw new Error(
+            `SPOTIFY_APP_PORT has invalid port number ${defaultPort}`,
+        );
     }
 
     // Legacy: clean up old files

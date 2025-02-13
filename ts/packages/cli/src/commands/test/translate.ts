@@ -5,7 +5,7 @@ import { Args, Command, Flags } from "@oclif/core";
 import { fromJsonActions, toFullActions, FullAction } from "agent-cache";
 import { createDispatcher } from "agent-dispatcher";
 import {
-    readTestData,
+    readExplanationTestData,
     getSchemaNamesForActionConfigProvider,
     createActionConfigProvider,
     getInstanceDir,
@@ -260,7 +260,7 @@ export default class TestTranslateCommand extends Command {
 
             const inputs = await Promise.all(
                 files.map(async (file) => {
-                    return { file, data: await readTestData(file) };
+                    return { file, data: await readExplanationTestData(file) };
                 }),
             );
 

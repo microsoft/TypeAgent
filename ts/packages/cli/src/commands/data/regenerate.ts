@@ -5,14 +5,14 @@ import fs from "node:fs";
 import { Args, Command, Flags } from "@oclif/core";
 import chalk from "chalk";
 import {
-    generateTestDataFiles,
-    readTestData,
-    printTestDataStats,
-    TestDataEntry,
-    FailedTestDataEntry,
+    generateExplanationTestDataFiles,
+    readExplanationTestData,
+    printExplanationTestDataStats,
+    ExplanationTestDataEntry,
+    FailedExplanationTestDataEntry,
     getCacheFactory,
     GenerateDataInput,
-    getEmptyTestData,
+    getEmptyExplanationTestData,
     convertTestDataToExplanationData,
     createActionConfigProvider,
     createSchemaInfoProvider,
@@ -222,7 +222,7 @@ export default class ExplanationDataRegenerateCommand extends Command {
         }
         const inputs = await Promise.all(
             files.map(async (file) => {
-                return { file, data: await readTestData(file) };
+                return { file, data: await readExplanationTestData(file) };
             }),
         );
 
@@ -257,14 +257,14 @@ export default class ExplanationDataRegenerateCommand extends Command {
 
         if (flags.output) {
             // Combine the data to the output now
-            const failed: FailedTestDataEntry[] = [];
+            const failed: FailedExplanationTestDataEntry[] = [];
 
             const targetSchemaName = pending[0].data.schemaName;
             const config = provider.getActionConfig(targetSchemaName);
             const sourceHash =
                 provider.getActionSchemaFileForConfig(config).sourceHash;
 
-            const combinedData = getEmptyTestData(
+            const combinedData = getEmptyExplanationTestData(
                 targetSchemaName,
                 sourceHash,
                 explainerOverride ?? pending[0].data.explainerName,
@@ -386,7 +386,11 @@ export default class ExplanationDataRegenerateCommand extends Command {
         for (const { file, data } of pending) {
             const inputs: (string | RequestAction)[] = [];
             if (!flags.none && !flags.constructions) {
-                const filter = (e: TestDataEntry | FailedTestDataEntry) => {
+                const filter = (
+                    e:
+                        | ExplanationTestDataEntry
+                        | FailedExplanationTestDataEntry,
+                ) => {
                     if (flags.resume) {
                         if ((e as any).message !== "Not processed") {
                             return undefined;
@@ -529,7 +533,7 @@ export default class ExplanationDataRegenerateCommand extends Command {
                 outputFile: flags.output ?? file,
             });
         }
-        const results = await generateTestDataFiles(
+        const results = await generateExplanationTestDataFiles(
             dataInput,
             provider,
             !flags.batch,
@@ -570,7 +574,7 @@ export default class ExplanationDataRegenerateCommand extends Command {
 
         console.log("=".repeat(80));
         const elapsedMs = performance.now() - startTime;
-        printTestDataStats(results, "Total ");
+        printExplanationTestDataStats(results, "Total ");
         console.log(`Total Elapsed Time: ${getElapsedString(elapsedMs)}`);
     }
 }
