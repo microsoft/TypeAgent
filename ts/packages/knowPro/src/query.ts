@@ -14,11 +14,8 @@ import {
     TextLocation,
     TextRange,
 } from "./dataFormat.js";
-import {
-    KnowledgePropertyName,
-    PropertySearchTerm,
-    SearchTerm,
-} from "./search.js";
+import { KnowledgePropertyName, PropertySearchTerm } from "./search.js";
+import { SearchTerm } from "./dataFormat.js";
 import {
     Match,
     MatchAccumulator,
@@ -461,7 +458,6 @@ export class MatchTermsOrExpr extends QueryOpExpr<SemanticRefAccumulator> {
     public override eval(context: QueryEvalContext): SemanticRefAccumulator {
         const allMatches = new SemanticRefAccumulator();
         context.clearMatchedTerms();
-        context.matchedTerms.clear();
         for (const matchExpr of this.searchTermExpressions) {
             matchExpr.accumulateMatches(context, allMatches);
         }

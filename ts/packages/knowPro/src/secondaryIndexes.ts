@@ -58,6 +58,10 @@ export interface ITermToRelatedTermsIndex {
     deserialize(data?: ITermsToRelatedTermsIndexData): void;
 }
 
+export interface ITermToRelatedTerms {
+    lookupTerm(text: string): Term[] | undefined;
+}
+
 export interface ITermToRelatedTermsFuzzy {
     lookupTerm(
         text: string,
@@ -83,10 +87,6 @@ export interface ITermToRelatedTermsData {
 export interface ITermsToRelatedTermsDataItem {
     termText: string;
     relatedTerms: Term[];
-}
-
-export interface ITermToRelatedTerms {
-    lookupTerm(text: string): Term[] | undefined;
 }
 
 export interface ITextEmbeddingIndexData {

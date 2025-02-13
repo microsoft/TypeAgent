@@ -12,7 +12,7 @@ import {
     ITermToRelatedTermsFuzzy,
     ITermToRelatedTerms,
 } from "./secondaryIndexes.js";
-import { SearchTerm } from "./search.js";
+import { SearchTerm } from "./dataFormat.js";
 import { isSearchTermWildcard } from "./query.js";
 import { TermSet } from "./collections.js";
 import {

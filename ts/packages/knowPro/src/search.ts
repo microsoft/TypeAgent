@@ -7,25 +7,41 @@ import {
     IConversation,
     KnowledgeType,
     ScoredSemanticRef,
+    SearchTerm,
     Term,
 } from "./dataFormat.js";
 import * as q from "./query.js";
 import { resolveRelatedTerms } from "./relatedTermsIndex.js";
 import { IConversationSecondaryIndexes } from "./secondaryIndexes.js";
 
-export type SearchTerm = {
+/**
+ * Well known knowledge properties
+ */
+export type KnowledgePropertyName =
+    | "name" // the name of an entity
+    | "type" // the type of an entity
+    | "verb" // the verb of an action
+    | "subject" // the subject of an action
+    | "object" // the object of an action
+    | "indirectObject" // The indirectObject of an action
+    | "tag"; // Tag
+
+export type PropertySearchTerm = {
     /**
-     * Term being searched for
+     * You can either match a well known property name
+     * Or you can provide a searchTerm for the propertyName.
+     * E.g. to match hue(red)
+     *  - propertyName as SearchTerm, set to 'hue'
+     *  - propertyValue as SearchTerm, set to 'red'
+     * You can also supply related terms for each.
+     * E.g you could include "color" as a related term for the propertyName "hue". Or 'crimson' for red.
+     * The the query processor can also related terms using a related terms secondary index, if one is available
      */
-    term: Term;
-    /**
-     * Additional terms related to term.
-     * These can be supplied from synonym tables and so on
-     */
-    relatedTerms?: Term[] | undefined;
+    propertyName: KnowledgePropertyName | SearchTerm;
+    propertyValue: SearchTerm;
 };
 
-export function createSearchTerm(text: string, score?: number): SearchTerm {
+function createSearchTerm(text: string, score?: number): SearchTerm {
     return {
         term: {
             text,
@@ -33,27 +49,6 @@ export function createSearchTerm(text: string, score?: number): SearchTerm {
         },
     };
 }
-
-export type KnowledgePropertyName =
-    | "name"
-    | "type"
-    | "verb"
-    | "subject"
-    | "object"
-    | "indirectObject"
-    | "tag"
-    | "facet.name"
-    | "facet.value";
-
-export type PropertySearchTerm = {
-    propertyName: KnowledgePropertyName | SearchTerm;
-    propertyValue: SearchTerm;
-};
-
-export type SearchResult = {
-    termMatches: Set<string>;
-    semanticRefMatches: ScoredSemanticRef[];
-};
 
 export type WhenFilter = {
     knowledgeType?: KnowledgeType | undefined;
@@ -67,6 +62,11 @@ export type SearchOptions = {
     exactMatch?: boolean | undefined;
     usePropertyIndex?: boolean | undefined;
     useTimestampIndex?: boolean | undefined;
+};
+
+export type SearchResult = {
+    termMatches: Set<string>;
+    semanticRefMatches: ScoredSemanticRef[];
 };
 
 /**
@@ -322,8 +322,6 @@ export function propertySearchTermFromKeyValue(
         case "object":
         case "indirectObject":
         case "tag":
-        case "facet.name":
-        case "facet.value":
             propertyName = key;
             break;
     }
