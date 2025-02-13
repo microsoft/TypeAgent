@@ -65,6 +65,16 @@ export class MatchAccumulator<T = any> {
         }
     }
 
+    public getMaxHitCount(): number {
+        let maxHitCount = 0;
+        for (const match of this.matches.values()) {
+            if (match.hitCount > maxHitCount) {
+                maxHitCount = match.hitCount;
+            }
+        }
+        return maxHitCount;
+    }
+
     public add(value: T, score: number, isExactMatch: boolean) {
         const existingMatch = this.getMatch(value);
         if (existingMatch) {
@@ -156,6 +166,10 @@ export class MatchAccumulator<T = any> {
         }
     }
 
+    public getWithHitCount(minHitCount: number): Match<T>[] {
+        return [...this.matchesWithMinHitCount(minHitCount)];
+    }
+
     public *getMatches(
         predicate?: (match: Match<T>) => boolean,
     ): IterableIterator<Match<T>> {
@@ -177,6 +191,12 @@ export class MatchAccumulator<T = any> {
         const topN = this.getTopNScoring(maxMatches, minHitCount);
         this.setMatches(topN, true);
         return topN.length;
+    }
+
+    public selectWithHitCount(minHitCount: number): number {
+        const matches = this.getWithHitCount(minHitCount);
+        this.setMatches(matches);
+        return matches.length;
     }
 
     private matchesWithMinHitCount(

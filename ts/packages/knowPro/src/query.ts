@@ -444,7 +444,11 @@ export class SelectTopNExpr<T extends MatchAccumulator> extends QueryOpExpr<T> {
     }
 }
 
-export class MatchAllTermsExpr extends QueryOpExpr<SemanticRefAccumulator> {
+/**
+ * Evaluates all child search term expressions
+ * Returns their accumulated scored matches
+ */
+export class MatchTermsOrExpr extends QueryOpExpr<SemanticRefAccumulator> {
     constructor(public searchTermExpressions: MatchTermExpr[]) {
         super();
     }
@@ -457,6 +461,20 @@ export class MatchAllTermsExpr extends QueryOpExpr<SemanticRefAccumulator> {
             matchExpr.accumulateMatches(context, allMatches);
         }
         allMatches.calculateTotalScore();
+        return allMatches;
+    }
+}
+
+export class MatchTermsAndExpr extends MatchTermsOrExpr {
+    constructor(public searchTermExpressions: MatchTermExpr[]) {
+        super(searchTermExpressions);
+    }
+
+    public override eval(context: QueryEvalContext): SemanticRefAccumulator {
+        // Get all possible matches, scored.
+        const allMatches = super.eval(context);
+        // The *and* is now the matches that had hitcount == searchTermsExpressions.length
+        allMatches.selectWithHitCount(this.searchTermExpressions.length);
         return allMatches;
     }
 }
@@ -857,7 +875,7 @@ export interface IQueryTextRangeSelector {
     ): TextRangeCollection | undefined;
 }
 
-export class TimestampScopeExpr implements IQueryTextRangeSelector {
+export class TextRangesInDateRangeSelector implements IQueryTextRangeSelector {
     constructor(public dateRangeInScope: DateRange) {}
 
     public eval(context: QueryEvalContext): TextRangeCollection | undefined {
@@ -895,7 +913,7 @@ export class TimestampScopeExpr implements IQueryTextRangeSelector {
     }
 }
 
-export class PredicateScopeExpr implements IQueryTextRangeSelector {
+export class TextRangesPredicateSelector implements IQueryTextRangeSelector {
     constructor(public predicates: IQuerySemanticRefPredicate[]) {}
 
     public eval(
@@ -916,7 +934,7 @@ export class PredicateScopeExpr implements IQueryTextRangeSelector {
     }
 }
 
-export class TagScopeExpr implements IQueryTextRangeSelector {
+export class TextRangesWithTagSelector implements IQueryTextRangeSelector {
     constructor() {}
 
     public eval(

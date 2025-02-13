@@ -174,7 +174,7 @@ class SearchQueryBuilder {
             );
         }
         let selectExpr: q.IQueryOpExpr<SemanticRefAccumulator> =
-            new q.MatchAllTermsExpr(matchTermsExpr);
+            new q.MatchTermsOrExpr(matchTermsExpr);
 
         return selectExpr;
     }
@@ -210,16 +210,18 @@ class SearchQueryBuilder {
     ): q.IQueryOpExpr<SemanticRefAccumulator> {
         let scopeSelectors: q.IQueryTextRangeSelector[] = [];
         // Always apply "tag match" scope... all text ranges that matched tags.. are in scope
-        scopeSelectors.push(new q.TagScopeExpr());
+        scopeSelectors.push(new q.TextRangesWithTagSelector());
         if (filter.scopingTerms && filter.scopingTerms.length > 0) {
             scopeSelectors.push(
-                new q.PredicateScopeExpr(
+                new q.TextRangesPredicateSelector(
                     this.compilePropertyMatchPredicates(filter.scopingTerms),
                 ),
             );
         }
         if (filter.inDateRange) {
-            scopeSelectors.push(new q.TimestampScopeExpr(filter.inDateRange));
+            scopeSelectors.push(
+                new q.TextRangesInDateRangeSelector(filter.inDateRange),
+            );
         }
         return new q.SelectInScopeExpr(termsMatchExpr, scopeSelectors);
     }
