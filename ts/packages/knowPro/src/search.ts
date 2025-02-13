@@ -63,7 +63,7 @@ export type WhenFilter = {
 
 export type SearchOptions = {
     maxMatches?: number | undefined;
-    minHitCount?: number | undefined;
+    matchAllTerms?: boolean | undefined;
     usePropertyIndex?: boolean | undefined;
     useTimestampIndex?: boolean | undefined;
 };
@@ -123,13 +123,7 @@ class SearchQueryBuilder {
         filter?: WhenFilter,
         options?: SearchOptions,
     ) {
-        let query = this.compileQuery(
-            terms,
-            propertyTerms,
-            filter,
-            options?.maxMatches,
-            options?.minHitCount,
-        );
+        let query = this.compileQuery(terms, propertyTerms, filter, options);
 
         // For all individual SearchTerms created during query compilation, resolve any related terms
         await this.resolveRelatedTerms(this.allSearchTerms, true);
@@ -142,10 +136,9 @@ class SearchQueryBuilder {
         terms: SearchTerm[],
         propertyTerms?: PropertySearchTerm[],
         filter?: WhenFilter,
-        maxMatches?: number,
-        minHitCount?: number,
+        options?: SearchOptions,
     ) {
-        let selectExpr = this.compileSelect(terms, propertyTerms);
+        let selectExpr = this.compileSelect(terms, propertyTerms, options);
         // Constrain the select with scopes and 'where'
         if (filter) {
             selectExpr = this.compileScope(selectExpr, filter);
@@ -157,14 +150,14 @@ class SearchQueryBuilder {
         // And lastly, select 'TopN' and group knowledge by type
         return new q.SelectTopNKnowledgeGroupExpr(
             new q.GroupByKnowledgeTypeExpr(selectExpr),
-            maxMatches,
-            minHitCount,
+            options?.maxMatches,
         );
     }
 
     private compileSelect(
         terms: SearchTerm[],
         propertyTerms?: PropertySearchTerm[],
+        options?: SearchOptions,
     ) {
         // Select is a combination of ordinary search terms and property search terms
         let matchTermsExpr = this.compileSearchTerms(terms);
@@ -173,8 +166,10 @@ class SearchQueryBuilder {
                 ...this.compilePropertySearchTerms(propertyTerms),
             );
         }
-        let selectExpr: q.IQueryOpExpr<SemanticRefAccumulator> =
-            new q.MatchTermsOrExpr(matchTermsExpr);
+        const useAnd = options?.matchAllTerms ?? false;
+        let selectExpr: q.IQueryOpExpr<SemanticRefAccumulator> = useAnd
+            ? new q.MatchTermsAndExpr(matchTermsExpr)
+            : new q.MatchTermsOrExpr(matchTermsExpr);
 
         return selectExpr;
     }

@@ -379,7 +379,6 @@ export interface IQueryOpExpr<T> {
 }
 
 export class QueryEvalContext {
-    private matchedTermText = new Set<string>();
     public matchedTerms = new TermSet();
     public matchedPropertyTerms = new PropertyTermSet();
 
@@ -423,7 +422,7 @@ export class QueryEvalContext {
     }
 
     public clearMatchedTerms() {
-        this.matchedTermText.clear();
+        this.matchedTerms.clear();
         this.matchedPropertyTerms.clear();
     }
 }
@@ -471,14 +470,22 @@ export class MatchTermsOrExpr extends QueryOpExpr<SemanticRefAccumulator> {
     }
 }
 
-export class MatchTermsAndExpr extends MatchTermsOrExpr {
+export class MatchTermsAndExpr extends QueryOpExpr<SemanticRefAccumulator> {
     constructor(public searchTermExpressions: MatchTermExpr[]) {
-        super(searchTermExpressions);
+        super();
     }
 
     public override eval(context: QueryEvalContext): SemanticRefAccumulator {
-        // Get all possible matches, scored.
-        const allMatches = super.eval(context);
+        const allMatches = new SemanticRefAccumulator();
+        context.clearMatchedTerms();
+        for (const matchExpr of this.searchTermExpressions) {
+            const matches = matchExpr.eval(context);
+            if (matches !== undefined) {
+                matches.ensureHitCount();
+                allMatches.addUnion(matches);
+            }
+        }
+        allMatches.calculateTotalScore();
         // The *and* is now the matches that had hitcount == searchTermsExpressions.length
         allMatches.selectWithHitCount(this.searchTermExpressions.length);
         return allMatches;

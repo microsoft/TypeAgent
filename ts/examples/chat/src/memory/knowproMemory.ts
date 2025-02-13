@@ -222,7 +222,7 @@ export async function createKnowproCommands(
                 displayAsc: argBool("Display results in ascending order", true),
                 startMinute: argNum("Starting at minute."),
                 endMinute: argNum("Ending minute."),
-                exact: argBool("Only display exact matches", false),
+                matchAll: argBool("Must match all terms", false),
                 usePropertyIndex: argBool(
                     "Use property index while searching",
                     false,
@@ -268,7 +268,7 @@ export async function createKnowproCommands(
                 propertyTermsFromNamedArgs(namedArgs, commandDef),
                 whenFilterFromNamedArgs(namedArgs, commandDef),
                 {
-                    minHitCount: namedArgs.exact ? 1 : undefined,
+                    matchAllTerms: namedArgs.matchAll,
                     usePropertyIndex: namedArgs.usePropertyIndex,
                 },
             );

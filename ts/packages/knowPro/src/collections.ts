@@ -107,6 +107,20 @@ export class MatchAccumulator<T = any> {
         }
     }
 
+    public addUnion(other: MatchAccumulator) {
+        for (const otherMatch of other.getMatches()) {
+            const existingMatch = this.getMatch(otherMatch.value);
+            if (existingMatch) {
+                existingMatch.hitCount += otherMatch.hitCount;
+                existingMatch.score += otherMatch.score;
+                existingMatch.relatedHitCount += otherMatch.relatedHitCount;
+                existingMatch.relatedScore += otherMatch.relatedScore;
+            } else {
+                this.setMatch(otherMatch);
+            }
+        }
+    }
+
     public calculateTotalScore(): void {
         for (const match of this.getMatches()) {
             if (match.relatedHitCount > 0) {
@@ -116,6 +130,14 @@ export class MatchAccumulator<T = any> {
                 const avgScore = match.relatedScore / match.relatedHitCount;
                 const normalizedScore = Math.log(1 + avgScore);
                 match.score += normalizedScore;
+            }
+        }
+    }
+
+    public ensureHitCount(): void {
+        for (const match of this.getMatches()) {
+            if (match.hitCount <= 0) {
+                match.hitCount = 1;
             }
         }
     }
@@ -195,7 +217,7 @@ export class MatchAccumulator<T = any> {
 
     public selectWithHitCount(minHitCount: number): number {
         const matches = this.getWithHitCount(minHitCount);
-        this.setMatches(matches);
+        this.setMatches(matches, true);
         return matches.length;
     }
 
@@ -234,34 +256,6 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
                 );
             }
             this.searchTermMatches.add(searchTerm.text);
-        }
-    }
-
-    public updateTermMatches(
-        searchTerm: Term,
-        scoredRefs:
-            | ScoredSemanticRef[]
-            | IterableIterator<ScoredSemanticRef>
-            | undefined,
-        isExactMatch: boolean,
-        weight?: number,
-    ) {
-        if (scoredRefs) {
-            weight ??= searchTerm.weight ?? 1;
-            for (const scoredRef of scoredRefs) {
-                const existingMatch = this.getMatch(scoredRef.semanticRefIndex);
-                if (existingMatch) {
-                    this.updateExisting(
-                        existingMatch,
-                        scoredRef.score * weight,
-                        isExactMatch,
-                    );
-                } else {
-                    throw new Error(
-                        `No existing match for ${searchTerm.text} Id: ${scoredRef.semanticRefIndex}`,
-                    );
-                }
-            }
         }
     }
 
@@ -339,27 +333,6 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
             }
         }
         return accumulator;
-    }
-
-    public selectKnowledge<T extends Knowledge>(
-        semanticRefs: SemanticRef[],
-        knowledgeType: KnowledgeType,
-        predicate?: KnowledgePredicate<T> | undefined,
-    ): void {
-        if (predicate) {
-            const selectedMatches = [
-                ...this.getMatchesOfType<T>(
-                    semanticRefs,
-                    knowledgeType,
-                    predicate,
-                ),
-            ];
-            if (selectedMatches.length > 0) {
-                this.setMatches(selectedMatches);
-                return;
-            }
-        }
-        this.clearMatches();
     }
 
     public toScoredSemanticRefs(): ScoredSemanticRef[] {
