@@ -89,10 +89,10 @@ export default class ExplanationDataAddCommand extends Command {
 
         const inputs = flags.input
             ? (
-                await Promise.all(
-                    flags.input.map((input) => readLineData(input)),
-                )
-            ).flat()
+                  await Promise.all(
+                      flags.input.map((input) => readLineData(input)),
+                  )
+              ).flat()
             : [];
 
         if (args.request) {

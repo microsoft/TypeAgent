@@ -399,7 +399,7 @@ export default class TestTranslateCommand extends Command {
                     for (let i = 0; i < actual.length; i++) {
                         if (
                             actual[i].translatorName !==
-                            expected[i].translatorName ||
+                                expected[i].translatorName ||
                             actual[i].actionName !== expected[i].actionName
                         ) {
                             print(

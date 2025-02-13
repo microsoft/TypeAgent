@@ -349,9 +349,9 @@ class ConstructionImportCommandHandler implements CommandHandler {
             args.file !== undefined
                 ? await expandPaths(args.file)
                 : await getImportTranslationFiles(
-                    systemContext,
-                    flags.extended,
-                );
+                      systemContext,
+                      flags.extended,
+                  );
 
         if (inputs.length === 0) {
             if (args.file === undefined) {

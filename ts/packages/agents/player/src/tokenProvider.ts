@@ -30,7 +30,7 @@ export class TokenProvider {
         private readonly redirectPort: number,
         private readonly scopes: string[],
         private readonly tokenCachePersistence?: TokenCachePersistence,
-    ) { }
+    ) {}
 
     private getAxiosRequestConfig(
         authorization: boolean = false,
@@ -202,7 +202,7 @@ export class TokenProvider {
                     const tokenCache: TokenCache = JSON.parse(tokenCacheString);
                     this.userRefreshToken = tokenCache.refreshToken;
                 }
-            } catch (e) { }
+            } catch (e) {}
         }
         return this.userRefreshToken;
     }

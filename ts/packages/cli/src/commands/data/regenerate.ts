@@ -202,8 +202,8 @@ export default class ExplanationDataRegenerateCommand extends Command {
 
         const builtinConstructionConfig = flags.builtin
             ? getDefaultConstructionProvider().getBuiltinConstructionConfig(
-                flags.builtin,
-            )
+                  flags.builtin,
+              )
             : undefined;
 
         let files;
@@ -229,8 +229,8 @@ export default class ExplanationDataRegenerateCommand extends Command {
         const explainerFilter = flags.explainer;
         let pending = explainerFilter
             ? inputs.filter((e) =>
-                explainerFilter.includes(e.data.explainerName),
-            )
+                  explainerFilter.includes(e.data.explainerName),
+              )
             : inputs;
 
         if (pending.length === 0) {
@@ -386,7 +386,11 @@ export default class ExplanationDataRegenerateCommand extends Command {
         for (const { file, data } of pending) {
             const inputs: (string | RequestAction)[] = [];
             if (!flags.none && !flags.constructions) {
-                const filter = (e: ExplanationTestDataEntry | FailedExplanationTestDataEntry) => {
+                const filter = (
+                    e:
+                        | ExplanationTestDataEntry
+                        | FailedExplanationTestDataEntry,
+                ) => {
                     if (flags.resume) {
                         if ((e as any).message !== "Not processed") {
                             return undefined;
@@ -469,10 +473,10 @@ export default class ExplanationDataRegenerateCommand extends Command {
 
                     const requestAction = e.action
                         ? new RequestAction(
-                            e.request,
-                            fromJsonActions(e.action),
-                            history,
-                        )
+                              e.request,
+                              fromJsonActions(e.action),
+                              history,
+                          )
                         : undefined;
 
                     if (flags.validate) {

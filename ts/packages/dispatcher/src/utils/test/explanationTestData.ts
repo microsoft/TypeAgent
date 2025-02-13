@@ -268,8 +268,8 @@ function toExceptionMessage(e: any) {
         ? typeof e.cause === "string"
             ? e.cause
             : typeof e.cause === "object"
-                ? e.cause.message
-                : undefined
+              ? e.cause.message
+              : undefined
         : undefined;
     return `Exception: ${e.message}${suffix ? `: ${suffix}` : ""}`;
 }
@@ -323,15 +323,15 @@ function getSafeExplainFn(
 
 type AddResult =
     | {
-        success: true;
-        elapsedMs: number;
-        entry: ExplanationTestDataEntry;
-    }
+          success: true;
+          elapsedMs: number;
+          entry: ExplanationTestDataEntry;
+      }
     | {
-        success: false;
-        elapsedMs: number;
-        entry: FailedExplanationTestDataEntry;
-    };
+          success: false;
+          elapsedMs: number;
+          entry: FailedExplanationTestDataEntry;
+      };
 
 function getGenerateTestDataFn(
     schemaName: string,
@@ -348,7 +348,9 @@ function getGenerateTestDataFn(
         tags: string[] | undefined,
     ): Promise<AddResult> => {
         const startTime = performance.now();
-        const toFailedResult = (entry: FailedExplanationTestDataEntry): AddResult => {
+        const toFailedResult = (
+            entry: FailedExplanationTestDataEntry,
+        ): AddResult => {
             return {
                 success: false,
                 elapsedMs: performance.now() - startTime,
@@ -546,7 +548,8 @@ async function generateTestDataFile(
             testData.entries.push(entry);
             console.log(
                 chalk.grey(
-                    `${statusPrefix} Generated${outputType}: ${entry.request}${attempts != 1 ? ` (+${attempts - 1} corrections)` : ""
+                    `${statusPrefix} Generated${outputType}: ${entry.request}${
+                        attempts != 1 ? ` (+${attempts - 1} corrections)` : ""
                     }`,
                 ),
             );
@@ -656,8 +659,8 @@ export function printExplanationTestDataStats(
     const failedStr =
         totalFailed !== 0
             ? chalk.red(
-                ` ${totalFailed} (${((totalFailed / totalEntries) * 100).toFixed(3)}%) failed.`,
-            )
+                  ` ${totalFailed} (${((totalFailed / totalEntries) * 100).toFixed(3)}%) failed.`,
+              )
             : "";
     console.log(
         `${prefix}Result: ${totalSuccess}/${totalEntries} entries, ${totalAttempt} attempts (${(
