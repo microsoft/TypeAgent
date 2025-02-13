@@ -104,6 +104,11 @@ export interface IConversationData<TMessage> {
     semanticIndexData?: ITermToSemanticRefIndexData | undefined;
 }
 
+export type DateRange = {
+    start: Date;
+    end?: Date | undefined;
+};
+
 export type Term = {
     text: string;
     /**
@@ -112,9 +117,14 @@ export type Term = {
     weight?: number | undefined;
 };
 
-export type DateRange = {
-    start: Date;
-    end?: Date | undefined;
+export type SearchTerm = {
+    /**
+     * Term being searched for
+     */
+    term: Term;
+    /**
+     * Additional terms related to term.
+     * These can be supplied from synonym tables and so on
+     */
+    relatedTerms?: Term[] | undefined;
 };
-
-// See secondaryIndex.ts for (optional) secondaryIndex interfaces & types

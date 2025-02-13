@@ -14,11 +14,8 @@ import {
     TextLocation,
     TextRange,
 } from "./dataFormat.js";
-import {
-    KnowledgePropertyName,
-    PropertySearchTerm,
-    SearchTerm,
-} from "./search.js";
+import { KnowledgePropertyName, PropertySearchTerm } from "./search.js";
+import { SearchTerm } from "./dataFormat.js";
 import {
     Match,
     MatchAccumulator,
