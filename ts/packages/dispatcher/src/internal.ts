@@ -7,16 +7,16 @@ export { getCacheFactory } from "./utils/cacheFactory.js";
 export {
     GenerateTestDataResult,
     GenerateDataInput,
-    generateTestDataFiles,
-    TestData,
+    generateExplanationTestDataFiles,
+    ExplanationTestData,
     readLineData,
-    getEmptyTestData,
-    readTestData,
-    printTestDataStats,
-    TestDataEntry,
-    FailedTestDataEntry,
+    getEmptyExplanationTestData,
+    readExplanationTestData,
+    printExplanationTestDataStats,
+    ExplanationTestDataEntry,
+    FailedExplanationTestDataEntry,
     convertTestDataToExplanationData,
-} from "./utils/test/testData.js";
+} from "./utils/test/explanationTestData.js";
 
 export { getAssistantSelectionSchemas } from "./translation/unknownSwitcher.js";
 export { getActionSchema } from "./translation/actionSchemaFileCache.js";

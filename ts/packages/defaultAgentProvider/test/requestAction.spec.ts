@@ -2,14 +2,14 @@
 // Licensed under the MIT License.
 
 import { getPackageFilePath } from "../src/utils/getPackageFilePath.js";
-import { readTestData } from "agent-dispatcher/internal";
+import { readExplanationTestData } from "agent-dispatcher/internal";
 import { RequestAction, fromJsonActions } from "agent-cache";
 import { glob } from "glob";
 
 const dataFiles = ["test/data/explanations/**/**/*.json"];
 
 const inputs = await Promise.all(
-    (await glob(dataFiles)).map((f) => readTestData(getPackageFilePath(f))),
+    (await glob(dataFiles)).map((f) => readExplanationTestData(getPackageFilePath(f))),
 );
 
 const testInput = inputs.flatMap((f) =>
