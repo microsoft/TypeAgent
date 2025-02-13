@@ -28,11 +28,11 @@ import {
     TextRangeCollection,
 } from "./collections.js";
 import { PropertyNames } from "./propertyIndex.js";
-import { IPropertyToSemanticRefIndex } from "./search.js";
+import { IPropertyToSemanticRefIndex } from "./secondaryIndexes.js";
 import { conversation } from "knowledge-processor";
 import { collections } from "typeagent";
 import { textRangeFromLocation } from "./conversationIndex.js";
-import { ITimestampToTextRangeIndex } from "./search.js";
+import { ITimestampToTextRangeIndex } from "./secondaryIndexes.js";
 
 export function isConversationSearchable(conversation: IConversation): boolean {
     return (

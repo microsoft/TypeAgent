@@ -2,8 +2,8 @@
 // Licensed under the MIT License.
 
 import { collections, ScoredItem } from "typeagent";
+import { Term } from "./dataFormat.js";
 import {
-    Term,
     ITextEmbeddingIndexData,
     ITermsToRelatedTermsDataItem,
     ITermToRelatedTermsData,
@@ -11,7 +11,7 @@ import {
     ITermsToRelatedTermsIndexData,
     ITermToRelatedTermsFuzzy,
     ITermToRelatedTerms,
-} from "./dataFormat.js";
+} from "./secondaryIndexes.js";
 import { SearchTerm } from "./search.js";
 import { isSearchTermWildcard } from "./query.js";
 import { TermSet } from "./collections.js";
@@ -138,7 +138,7 @@ export class TermToRelatedTermsIndex implements ITermToRelatedTermsIndex {
 /**
  * Give searchTerms, resolves related terms for those searchTerms that don't already have them
  * Optionally ensures that related terms are not duplicated across search terms because this can
- * skew how semantic references are scored during search
+ * skew how semantic references are scored during search (over-counting)
  * @param relatedTermsIndex
  * @param searchTerms
  */
@@ -163,8 +163,7 @@ export async function resolveRelatedTerms(
             searchTerm.relatedTerms =
                 relatedTermsIndex.aliases.lookupTerm(termText);
         }
-        // If no hard-coded mappings, lookup any fuzzy related terms
-        // Future: do this in batch
+        // If no hard-coded mappings, add this to the list of things for which we do fuzzy retrieval
         if (!searchTerm.relatedTerms || searchTerm.relatedTerms.length === 0) {
             searchTermsNeedingRelated.push(searchTerm);
         }

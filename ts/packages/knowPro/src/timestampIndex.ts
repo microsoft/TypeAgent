@@ -4,7 +4,10 @@
 import { collections, dateTime } from "typeagent";
 import { DateRange, IMessage, MessageIndex } from "./dataFormat.js";
 import { textRangeFromLocation } from "./conversationIndex.js";
-import { ITimestampToTextRangeIndex, TimestampedTextRange } from "./search.js";
+import {
+    ITimestampToTextRangeIndex,
+    TimestampedTextRange,
+} from "./secondaryIndexes.js";
 
 /**
  * An index of timestamp => TextRanges.

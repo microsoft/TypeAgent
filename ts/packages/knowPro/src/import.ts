@@ -26,10 +26,13 @@ import {
 } from "./relatedTermsIndex.js";
 import { createTextEmbeddingIndexSettings } from "./fuzzyIndex.js";
 import { TimestampToTextRangeIndex } from "./timestampIndex.js";
-import { ITimestampToTextRangeIndex } from "./search.js";
+import {
+    ITermsToRelatedTermsIndexData,
+    ITimestampToTextRangeIndex,
+} from "./secondaryIndexes.js";
 import { addPropertiesToIndex, PropertyIndex } from "./propertyIndex.js";
-import { IPropertyToSemanticRefIndex } from "./search.js";
-import { ISecondaryConversationIndexes } from "./search.js";
+import { IPropertyToSemanticRefIndex } from "./secondaryIndexes.js";
+import { IConversationSecondaryIndexes } from "./secondaryIndexes.js";
 
 // metadata for podcast messages
 export class PodcastMessageMeta implements IKnowledgeSource {
@@ -120,7 +123,7 @@ export function createPodcastSettings(): PodcastSettings {
 }
 
 export class Podcast
-    implements IConversation<PodcastMessageMeta>, ISecondaryConversationIndexes
+    implements IConversation<PodcastMessageMeta>, IConversationSecondaryIndexes
 {
     public settings: PodcastSettings;
     constructor(
@@ -309,7 +312,9 @@ export class Podcast
     }
 }
 
-export interface PodcastData extends IConversationData<PodcastMessage> {}
+export interface PodcastData extends IConversationData<PodcastMessage> {
+    relatedTermsIndexData?: ITermsToRelatedTermsIndexData | undefined;
+}
 
 export async function importPodcast(
     transcriptFilePath: string,

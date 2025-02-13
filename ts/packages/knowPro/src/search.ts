@@ -7,12 +7,11 @@ import {
     IConversation,
     KnowledgeType,
     ScoredSemanticRef,
-    SemanticRefIndex,
     Term,
-    TextRange,
 } from "./dataFormat.js";
 import * as q from "./query.js";
 import { resolveRelatedTerms } from "./relatedTermsIndex.js";
+import { IConversationSecondaryIndexes } from "./secondaryIndexes.js";
 
 export type SearchTerm = {
     /**
@@ -68,42 +67,6 @@ export type SearchOptions = {
 };
 
 /**
- * Secondary indexes are currently optional, allowing us to experiment
- */
-export interface ISecondaryConversationIndexes {
-    propertyToSemanticRefIndex: IPropertyToSemanticRefIndex | undefined;
-    timestampIndex?: ITimestampToTextRangeIndex | undefined;
-}
-
-/**
- * Allows for faster retrieval of name, value properties
- */
-export interface IPropertyToSemanticRefIndex {
-    getValues(): string[];
-    addProperty(
-        propertyName: string,
-        value: string,
-        semanticRefIndex: SemanticRefIndex | ScoredSemanticRef,
-    ): void;
-    lookupProperty(
-        propertyName: string,
-        value: string,
-    ): ScoredSemanticRef[] | undefined;
-}
-
-export type TimestampedTextRange = {
-    timestamp: string;
-    range: TextRange;
-};
-
-/**
- * Return text ranges in the given date range
- */
-export interface ITimestampToTextRangeIndex {
-    lookupRange(dateRange: DateRange): TimestampedTextRange[];
-}
-
-/**
  * Searches conversation for terms
  */
 export async function searchConversation(
@@ -116,14 +79,14 @@ export async function searchConversation(
     if (!q.isConversationSearchable(conversation)) {
         return undefined;
     }
-    const queryBuilder = new SearchQueryBuilder(conversation);
+    const secondaryIndexes: IConversationSecondaryIndexes = conversation as any;
+    const queryBuilder = new SearchQueryBuilder(conversation, secondaryIndexes);
     const query = await queryBuilder.compile(
         searchTerms,
         propertyTerms,
         filter,
         options,
     );
-    const secondaryIndexes: ISecondaryConversationIndexes = conversation as any;
     const queryResults = query.eval(
         new q.QueryEvalContext(
             conversation,
@@ -147,6 +110,7 @@ class SearchQueryBuilder {
 
     constructor(
         public conversation: IConversation,
+        public secondaryIndexes?: IConversationSecondaryIndexes | undefined,
         public defaultMatchWeight: number = 100,
         public relatedIsExactThreshold: number = 0.95,
     ) {}
@@ -283,9 +247,9 @@ class SearchQueryBuilder {
         dedupe: boolean,
     ) {
         this.validateAndPrepareSearchTerms(searchTerms);
-        if (this.conversation.termToRelatedTermsIndex) {
+        if (this.secondaryIndexes?.termToRelatedTermsIndex) {
             await resolveRelatedTerms(
-                this.conversation.termToRelatedTermsIndex,
+                this.secondaryIndexes.termToRelatedTermsIndex,
                 searchTerms,
                 dedupe,
             );
