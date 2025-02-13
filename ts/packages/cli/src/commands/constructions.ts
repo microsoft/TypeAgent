@@ -3,7 +3,7 @@
 
 import { Args, Command, Flags } from "@oclif/core";
 import {
-    readTestData,
+    readExplanationTestData,
     getCacheFactory,
     convertTestDataToExplanationData,
     createActionConfigProvider,
@@ -42,7 +42,7 @@ export default class ConstructionsCommand extends Command {
     async run(): Promise<void> {
         const { args, flags } = await this.parse(ConstructionsCommand);
 
-        const testDataFile = await readTestData(args.input);
+        const testDataFile = await readExplanationTestData(args.input);
 
         const agentCache = getCacheFactory().create(
             testDataFile.explainerName,

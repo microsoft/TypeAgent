@@ -5,11 +5,11 @@ import { Args, Flags, Command } from "@oclif/core";
 import fs from "node:fs";
 import {
     readLineData,
-    readTestData,
-    TestData,
-    generateTestDataFiles,
-    printTestDataStats,
-    getEmptyTestData,
+    readExplanationTestData,
+    ExplanationTestData,
+    generateExplanationTestDataFiles,
+    printExplanationTestDataStats,
+    getEmptyExplanationTestData,
     getCacheFactory,
     createActionConfigProvider,
     getSchemaNamesForActionConfigProvider,
@@ -102,13 +102,13 @@ export default class ExplanationDataAddCommand extends Command {
             inputs.push(args.request);
         }
         if (inputs.length !== 0) {
-            let existingData: TestData;
+            let existingData: ExplanationTestData;
             if (
                 !flags.overwrite &&
                 flags.output &&
                 fs.existsSync(flags.output)
             ) {
-                existingData = await readTestData(flags.output);
+                existingData = await readExplanationTestData(flags.output);
                 if (
                     flags.schema !== undefined &&
                     flags.schema !== existingData.schemaName
@@ -152,7 +152,7 @@ export default class ExplanationDataAddCommand extends Command {
                 const sourceHash =
                     provider.getActionSchemaFileForConfig(config).sourceHash;
                 // Create an empty existing data.
-                existingData = getEmptyTestData(
+                existingData = getEmptyExplanationTestData(
                     flags.schemaName,
                     sourceHash,
                     flags.explainer ?? getDefaultExplainerName(),
@@ -172,7 +172,7 @@ export default class ExplanationDataAddCommand extends Command {
                 `Processing ${inputs.length} inputs... Concurrency ${concurrency}`,
             );
             const startTime = performance.now();
-            const testData = await generateTestDataFiles(
+            const testData = await generateExplanationTestDataFiles(
                 [
                     {
                         inputs,
@@ -187,7 +187,7 @@ export default class ExplanationDataAddCommand extends Command {
                 false,
             );
             const elapsedTime = (performance.now() - startTime) / 1000;
-            printTestDataStats(testData);
+            printExplanationTestDataStats(testData);
             console.log(`Total Elapsed Time: ${elapsedTime.toFixed(3)}s`);
 
             if (!flags.output) {
@@ -197,10 +197,10 @@ export default class ExplanationDataAddCommand extends Command {
         } else {
             console.log(chalk.yellow("No request specified. Nothing added."));
             if (flags.output && fs.existsSync(flags.output)) {
-                printTestDataStats([
+                printExplanationTestDataStats([
                     {
                         fileName: flags.output,
-                        testData: await readTestData(flags.output),
+                        testData: await readExplanationTestData(flags.output),
                         elapsedMs: 0,
                     },
                 ]);

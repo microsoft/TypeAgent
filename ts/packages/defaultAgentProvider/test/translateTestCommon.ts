@@ -43,7 +43,6 @@ export async function defineTranslateTest(name: string, dataFiles: string[]) {
                         appAgentProviders: defaultAppAgentProviders,
                         actions: null,
                         commands: { dispatcher: true },
-                        translation: { history: { enabled: false } },
                         explainer: { enabled: false },
                         cache: { enabled: false },
                         collectCommandResult: true,
@@ -51,6 +50,15 @@ export async function defineTranslateTest(name: string, dataFiles: string[]) {
                 );
             }
             dispatchers = await Promise.all(dispatcherP);
+        });
+        beforeEach(async () => {
+            await Promise.all(
+                dispatchers.map(async (dispatcher) => {
+                    const result =
+                        await dispatcher.processCommand("@history clear");
+                    expect(result?.hasError).toBeFalsy();
+                }),
+            );
         });
         it.each(inputs)(`${name} '$request'`, async (test) => {
             const requests = Array.isArray(test) ? test : [test];

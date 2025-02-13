@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { Args, Command } from "@oclif/core";
-import { readTestData } from "agent-dispatcher/internal";
+import { readExplanationTestData } from "agent-dispatcher/internal";
 
 export default class ExplanationDataListCommand extends Command {
     static args = {
@@ -15,7 +15,7 @@ export default class ExplanationDataListCommand extends Command {
 
     async run(): Promise<void> {
         const { args } = await this.parse(ExplanationDataListCommand);
-        const data = await readTestData(args.file!);
+        const data = await readExplanationTestData(args.file!);
         for (const entry of data.entries) {
             console.log(entry.request);
         }
