@@ -111,32 +111,39 @@ export async function preSelectChunks(
     input: string,
     maxChunks = 1000,
 ): Promise<ChunkId[]> {
+    const ta0 = new Date().getTime();
     const db = context.queryContext!.database!;
-    const tt0 = new Date().getTime();
-    const queryEmbedding = await getEmbedding(context, input);
-    const tt1 = new Date().getTime();
-    const tail = !queryEmbedding ? " (failure)" : "";
-    console_log(
-        `  [Embedding input of ${input.length} characters took ${((tt1 - tt0) / 1000).toFixed(3)} seconds${tail}]`,
-    );
-    if (!queryEmbedding) return [];
-
     const prepAllEmbeddings = db.prepare(
         `SELECT chunkId, embedding FROM ChunkEmbeddings`,
     );
-    const t0 = new Date().getTime();
     const allEmbeddingRows: {
         chunkId: ChunkId;
         embedding: Buffer;
     }[] = prepAllEmbeddings.all() as any[];
-    const embeddings = allEmbeddingRows.map((row) =>
-        deserialize(row.embedding),
-    );
-    const t1 = new Date().getTime();
+    const ta1 = new Date().getTime();
     console_log(
-        `  [Read ${embeddings.length} embeddings in ${((t1 - t0) / 1000).toFixed(3)} seconds]`,
+        `  [Read ${allEmbeddingRows.length} embeddings in ${((ta1 - ta0) / 1000).toFixed(3)} seconds]`,
     );
+    if (allEmbeddingRows.length <= maxChunks) {
+        console_log(`  [Returning all ${allEmbeddingRows.length} chunk IDs]`);
+        return allEmbeddingRows.map((row) => row.chunkId);
+    }
 
+    const tb0 = new Date().getTime();
+    const queryEmbedding = await getEmbedding(context, input);
+    const tb1 = new Date().getTime();
+    const tail = !queryEmbedding ? " (failure)" : "";
+    console_log(
+        `  [Embedding input of ${input.length} characters took ${((tb1 - tb0) / 1000).toFixed(3)} seconds${tail}]`,
+    );
+    if (!queryEmbedding) {
+        return [];
+    }
+
+    const embeddings = allEmbeddingRows.map(
+        (row) => new Float32Array(row.embedding),
+    );
+    const tc0 = new Date().getTime();
     const similarities: { chunkId: ChunkId; score: number }[] = [];
     for (let i = 0; i < embeddings.length; i++) {
         const chunkId = allEmbeddingRows[i].chunkId;
@@ -146,9 +153,9 @@ export async function preSelectChunks(
     similarities.sort((a, b) => b.score - a.score);
     similarities.splice(maxChunks);
     const chunkIds = similarities.map((s) => s.chunkId);
-    const t2 = new Date().getTime();
+    const tc1 = new Date().getTime();
     console_log(
-        `  [Found ${chunkIds.length} nearest neighbors in ${((t2 - t1) / 1000).toFixed(3)} seconds]`,
+        `  [Found ${chunkIds.length} nearest neighbors in ${((tc1 - tc0 - ta1) / 1000).toFixed(3)} seconds]`,
     );
     return chunkIds;
 }
@@ -157,13 +164,8 @@ async function getEmbedding(
     context: SpelunkerContext,
     query: string,
 ): Promise<NormalizedEmbedding | undefined> {
-    const rawEmbedding = await retryOn429(() =>
+    const rawEmbedding: number[] | undefined = await retryOn429(() =>
         context.queryContext!.embeddingModel!.generateEmbedding(query),
     );
     return rawEmbedding ? createNormalized(rawEmbedding) : undefined;
-}
-
-// Copied from vectorTable.ts
-function deserialize(embedding: Buffer): Float32Array {
-    return new Float32Array(embedding.buffer);
 }
