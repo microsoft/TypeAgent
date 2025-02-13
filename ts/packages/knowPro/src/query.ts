@@ -214,7 +214,10 @@ export function matchPropertySearchTermToEntity(
     searchTerm: PropertySearchTerm,
     semanticRef: SemanticRef,
 ): boolean {
-    if (semanticRef.knowledgeType !== "entity") {
+    if (
+        semanticRef.knowledgeType !== "entity" ||
+        typeof searchTerm.propertyName !== "string"
+    ) {
         return false;
     }
     const entity = semanticRef.knowledge as conversation.ConcreteEntity;
@@ -277,7 +280,10 @@ export function matchPropertySearchTermToAction(
     searchTerm: PropertySearchTerm,
     semanticRef: SemanticRef,
 ): boolean {
-    if (semanticRef.knowledgeType !== "action") {
+    if (
+        semanticRef.knowledgeType !== "action" ||
+        typeof searchTerm.propertyName !== "string"
+    ) {
         return false;
     }
     const action = semanticRef.knowledge as conversation.Action;
@@ -348,9 +354,15 @@ export function lookupPropertySearchTerm(
     if (typeof propertySearchTerm.propertyName !== "string") {
         throw new Error("Not supported");
     }
+    // Since we are only matching propertyValue.term
+    const valueTerm = propertySearchTerm.propertyValue.term;
+    propertySearchTerm = {
+        propertyName: propertySearchTerm.propertyName,
+        propertyValue: { term: valueTerm },
+    };
     return lookupTermFiltered(
         semanticRefIndex,
-        propertySearchTerm.propertyValue.term,
+        valueTerm,
         semanticRefs,
         (semanticRef) =>
             matchPropertySearchTermToSemanticRef(
@@ -367,7 +379,6 @@ export interface IQueryOpExpr<T> {
 }
 
 export class QueryEvalContext {
-    private matchedTermText = new Set<string>();
     public matchedTerms = new TermSet();
     public matchedPropertyTerms = new PropertyTermSet();
 
@@ -411,7 +422,7 @@ export class QueryEvalContext {
     }
 
     public clearMatchedTerms() {
-        this.matchedTermText.clear();
+        this.matchedTerms.clear();
         this.matchedPropertyTerms.clear();
     }
 }
@@ -438,7 +449,11 @@ export class SelectTopNExpr<T extends MatchAccumulator> extends QueryOpExpr<T> {
     }
 }
 
-export class MatchAllTermsExpr extends QueryOpExpr<SemanticRefAccumulator> {
+/**
+ * Evaluates all child search term expressions
+ * Returns their accumulated scored matches
+ */
+export class MatchTermsOrExpr extends QueryOpExpr<SemanticRefAccumulator> {
     constructor(public searchTermExpressions: MatchTermExpr[]) {
         super();
     }
@@ -451,6 +466,28 @@ export class MatchAllTermsExpr extends QueryOpExpr<SemanticRefAccumulator> {
             matchExpr.accumulateMatches(context, allMatches);
         }
         allMatches.calculateTotalScore();
+        return allMatches;
+    }
+}
+
+export class MatchTermsAndExpr extends QueryOpExpr<SemanticRefAccumulator> {
+    constructor(public searchTermExpressions: MatchTermExpr[]) {
+        super();
+    }
+
+    public override eval(context: QueryEvalContext): SemanticRefAccumulator {
+        const allMatches = new SemanticRefAccumulator();
+        context.clearMatchedTerms();
+        for (const matchExpr of this.searchTermExpressions) {
+            const matches = matchExpr.eval(context);
+            if (matches !== undefined) {
+                matches.ensureHitCount();
+                allMatches.addUnion(matches);
+            }
+        }
+        allMatches.calculateTotalScore();
+        // The *and* is now the matches that had hitcount == searchTermsExpressions.length
+        allMatches.selectWithHitCount(this.searchTermExpressions.length);
         return allMatches;
     }
 }
@@ -819,44 +856,39 @@ export class PropertyMatchPredicate implements IQuerySemanticRefPredicate {
 export class SelectInScopeExpr extends QueryOpExpr<SemanticRefAccumulator> {
     constructor(
         public sourceExpr: IQueryOpExpr<SemanticRefAccumulator>,
-        public scopeExpr: IQuerySelectScopeExpr[],
+        public rangeSelectors: IQueryTextRangeSelector[],
     ) {
         super();
     }
 
     public override eval(context: QueryEvalContext): SemanticRefAccumulator {
-        let accumulator = this.sourceExpr.eval(context);
+        let accumulatedSemanticRefs = this.sourceExpr.eval(context);
         // Scope => text ranges in scope
-        for (
-            let i = 0;
-            i < this.scopeExpr.length && accumulator.size > 0;
-            ++i
-        ) {
-            const rangesInScope = this.scopeExpr[i].eval(context, accumulator);
-            if (rangesInScope) {
-                if (rangesInScope.size > 0) {
-                    // Select only those semantic refs that are in scope
-                    accumulator = accumulator.getInScope(
-                        context.semanticRefs,
-                        rangesInScope,
-                    );
-                } else {
-                    accumulator.clearMatches();
-                }
+        // Collect all possible text rang. The ranges may overlap, may not agree.
+        // What we want to ensure is that if any of the
+        const rangeCollection: TextRangeCollection[] = [];
+        for (const selector of this.rangeSelectors) {
+            const range = selector.eval(context, accumulatedSemanticRefs);
+            if (range) {
+                rangeCollection.push(range);
             }
         }
-        return accumulator;
+        accumulatedSemanticRefs = accumulatedSemanticRefs.getMatchesInScope(
+            context.semanticRefs,
+            rangeCollection,
+        );
+        return accumulatedSemanticRefs;
     }
 }
 
-export interface IQuerySelectScopeExpr {
+export interface IQueryTextRangeSelector {
     eval(
         context: QueryEvalContext,
         semanticRefs: SemanticRefAccumulator,
     ): TextRangeCollection | undefined;
 }
 
-export class TimestampScopeExpr implements IQuerySelectScopeExpr {
+export class TextRangesInDateRangeSelector implements IQueryTextRangeSelector {
     constructor(public dateRangeInScope: DateRange) {}
 
     public eval(context: QueryEvalContext): TextRangeCollection | undefined {
@@ -894,7 +926,7 @@ export class TimestampScopeExpr implements IQuerySelectScopeExpr {
     }
 }
 
-export class PredicateScopeExpr implements IQuerySelectScopeExpr {
+export class TextRangesPredicateSelector implements IQueryTextRangeSelector {
     constructor(public predicates: IQuerySemanticRefPredicate[]) {}
 
     public eval(
@@ -915,7 +947,7 @@ export class PredicateScopeExpr implements IQuerySelectScopeExpr {
     }
 }
 
-export class TagScopeExpr implements IQuerySelectScopeExpr {
+export class TextRangesWithTagSelector implements IQueryTextRangeSelector {
     constructor() {}
 
     public eval(

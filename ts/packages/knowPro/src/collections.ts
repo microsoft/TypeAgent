@@ -65,6 +65,16 @@ export class MatchAccumulator<T = any> {
         }
     }
 
+    public getMaxHitCount(): number {
+        let maxHitCount = 0;
+        for (const match of this.matches.values()) {
+            if (match.hitCount > maxHitCount) {
+                maxHitCount = match.hitCount;
+            }
+        }
+        return maxHitCount;
+    }
+
     public add(value: T, score: number, isExactMatch: boolean) {
         const existingMatch = this.getMatch(value);
         if (existingMatch) {
@@ -97,6 +107,20 @@ export class MatchAccumulator<T = any> {
         }
     }
 
+    public addUnion(other: MatchAccumulator) {
+        for (const otherMatch of other.getMatches()) {
+            const existingMatch = this.getMatch(otherMatch.value);
+            if (existingMatch) {
+                existingMatch.hitCount += otherMatch.hitCount;
+                existingMatch.score += otherMatch.score;
+                existingMatch.relatedHitCount += otherMatch.relatedHitCount;
+                existingMatch.relatedScore += otherMatch.relatedScore;
+            } else {
+                this.setMatch(otherMatch);
+            }
+        }
+    }
+
     public calculateTotalScore(): void {
         for (const match of this.getMatches()) {
             if (match.relatedHitCount > 0) {
@@ -106,6 +130,14 @@ export class MatchAccumulator<T = any> {
                 const avgScore = match.relatedScore / match.relatedHitCount;
                 const normalizedScore = Math.log(1 + avgScore);
                 match.score += normalizedScore;
+            }
+        }
+    }
+
+    public ensureHitCount(): void {
+        for (const match of this.getMatches()) {
+            if (match.hitCount <= 0) {
+                match.hitCount = 1;
             }
         }
     }
@@ -156,6 +188,10 @@ export class MatchAccumulator<T = any> {
         }
     }
 
+    public getWithHitCount(minHitCount: number): Match<T>[] {
+        return [...this.matchesWithMinHitCount(minHitCount)];
+    }
+
     public *getMatches(
         predicate?: (match: Match<T>) => boolean,
     ): IterableIterator<Match<T>> {
@@ -177,6 +213,12 @@ export class MatchAccumulator<T = any> {
         const topN = this.getTopNScoring(maxMatches, minHitCount);
         this.setMatches(topN, true);
         return topN.length;
+    }
+
+    public selectWithHitCount(minHitCount: number): number {
+        const matches = this.getWithHitCount(minHitCount);
+        this.setMatches(matches, true);
+        return matches.length;
     }
 
     private matchesWithMinHitCount(
@@ -217,34 +259,6 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
         }
     }
 
-    public updateTermMatches(
-        searchTerm: Term,
-        scoredRefs:
-            | ScoredSemanticRef[]
-            | IterableIterator<ScoredSemanticRef>
-            | undefined,
-        isExactMatch: boolean,
-        weight?: number,
-    ) {
-        if (scoredRefs) {
-            weight ??= searchTerm.weight ?? 1;
-            for (const scoredRef of scoredRefs) {
-                const existingMatch = this.getMatch(scoredRef.semanticRefIndex);
-                if (existingMatch) {
-                    this.updateExisting(
-                        existingMatch,
-                        scoredRef.score * weight,
-                        isExactMatch,
-                    );
-                } else {
-                    throw new Error(
-                        `No existing match for ${searchTerm.text} Id: ${scoredRef.semanticRefIndex}`,
-                    );
-                }
-            }
-        }
-    }
-
     public override getSortedByScore(
         minHitCount?: number,
     ): Match<SemanticRefIndex>[] {
@@ -261,7 +275,7 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
     public *getSemanticRefs(
         semanticRefs: SemanticRef[],
         predicate?: (semanticRef: SemanticRef) => boolean,
-    ) {
+    ): IterableIterator<SemanticRef> {
         for (const match of this.getMatches()) {
             const semanticRef = semanticRefs[match.value];
             if (predicate === undefined || predicate(semanticRef))
@@ -303,35 +317,22 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
         return groups;
     }
 
-    public getInScope(semanticRefs: SemanticRef[], scope: TextRangeCollection) {
+    public getMatchesInScope(
+        semanticRefs: SemanticRef[],
+        textRangesInScope: TextRangeCollection[],
+    ) {
         const accumulator = new SemanticRefAccumulator(this.searchTermMatches);
         for (const match of this.getMatches()) {
-            if (scope.isInRange(semanticRefs[match.value].range)) {
+            if (
+                isInAllTextRanges(
+                    textRangesInScope,
+                    semanticRefs[match.value].range,
+                )
+            ) {
                 accumulator.setMatch(match);
             }
         }
         return accumulator;
-    }
-
-    public selectKnowledge<T extends Knowledge>(
-        semanticRefs: SemanticRef[],
-        knowledgeType: KnowledgeType,
-        predicate?: KnowledgePredicate<T> | undefined,
-    ): void {
-        if (predicate) {
-            const selectedMatches = [
-                ...this.getMatchesOfType<T>(
-                    semanticRefs,
-                    knowledgeType,
-                    predicate,
-                ),
-            ];
-            if (selectedMatches.length > 0) {
-                this.setMatches(selectedMatches);
-                return;
-            }
-        }
-        this.clearMatches();
     }
 
     public toScoredSemanticRefs(): ScoredSemanticRef[] {
@@ -408,6 +409,21 @@ export class TextRangeCollection {
         }
         return false;
     }
+}
+
+/**
+ * Return false if inner range is not in ALL the given ranges
+ */
+function isInAllTextRanges(
+    ranges: TextRangeCollection[],
+    innerRange: TextRange,
+): boolean {
+    for (const outerRange of ranges) {
+        if (!outerRange.isInRange(innerRange)) {
+            return false;
+        }
+    }
+    return true;
 }
 
 export class TermSet {
