@@ -10,6 +10,15 @@ import {
 } from "./dataFormat.js";
 
 /**
+ * Optional secondary indexes that can help the query processor produce better results, but are not required
+ */
+export interface IConversationSecondaryIndexes {
+    termToRelatedTermsIndex?: ITermToRelatedTermsIndex | undefined;
+    propertyToSemanticRefIndex: IPropertyToSemanticRefIndex | undefined;
+    timestampIndex?: ITimestampToTextRangeIndex | undefined;
+}
+
+/**
  * Allows for faster retrieval of name, value properties
  */
 export interface IPropertyToSemanticRefIndex {
@@ -24,6 +33,7 @@ export interface IPropertyToSemanticRefIndex {
         value: string,
     ): ScoredSemanticRef[] | undefined;
 }
+
 export type TimestampedTextRange = {
     timestamp: string;
     range: TextRange;
@@ -34,15 +44,6 @@ export type TimestampedTextRange = {
  */
 export interface ITimestampToTextRangeIndex {
     lookupRange(dateRange: DateRange): TimestampedTextRange[];
-}
-
-/**
- * Secondary indexes are currently optional, allowing us to experiment
- */
-export interface IConversationSecondaryIndexes {
-    termToRelatedTermsIndex?: ITermToRelatedTermsIndex | undefined;
-    propertyToSemanticRefIndex: IPropertyToSemanticRefIndex | undefined;
-    timestampIndex?: ITimestampToTextRangeIndex | undefined;
 }
 
 /**
