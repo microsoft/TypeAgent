@@ -7,9 +7,9 @@ import {
     IConversation,
     KnowledgeType,
     ScoredSemanticRef,
+    SemanticRefIndex,
     Term,
 } from "./dataFormat.js";
-import { IPropertyToSemanticRefIndex } from "./propertyIndex.js";
 import * as q from "./query.js";
 import { resolveRelatedTerms } from "./relatedTermsIndex.js";
 import { ITimestampToTextRangeIndex } from "./timestampIndex.js";
@@ -66,6 +66,19 @@ export type SearchOptions = {
     usePropertyIndex?: boolean | undefined;
     useTimestampIndex?: boolean | undefined;
 };
+
+export interface IPropertyToSemanticRefIndex {
+    getValues(): string[];
+    addProperty(
+        propertyName: string,
+        value: string,
+        semanticRefIndex: SemanticRefIndex | ScoredSemanticRef,
+    ): void;
+    lookupProperty(
+        propertyName: string,
+        value: string,
+    ): ScoredSemanticRef[] | undefined;
+}
 
 export interface ISecondaryConversationIndexes {
     propertyToSemanticRefIndex: IPropertyToSemanticRefIndex | undefined;

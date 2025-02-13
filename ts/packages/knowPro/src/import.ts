@@ -29,11 +29,8 @@ import {
     ITimestampToTextRangeIndex,
     TimestampToTextRangeIndex,
 } from "./timestampIndex.js";
-import {
-    addPropertiesToIndex,
-    IPropertyToSemanticRefIndex,
-    PropertyIndex,
-} from "./propertyIndex.js";
+import { addPropertiesToIndex, PropertyIndex } from "./propertyIndex.js";
+import { IPropertyToSemanticRefIndex } from "./search.js";
 import { ISecondaryConversationIndexes } from "./search.js";
 
 // metadata for podcast messages

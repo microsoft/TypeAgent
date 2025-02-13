@@ -27,7 +27,8 @@ import {
     TermSet,
     TextRangeCollection,
 } from "./collections.js";
-import { IPropertyToSemanticRefIndex, PropertyNames } from "./propertyIndex.js";
+import { PropertyNames } from "./propertyIndex.js";
+import { IPropertyToSemanticRefIndex } from "./search.js";
 import { conversation } from "knowledge-processor";
 import { collections } from "typeagent";
 import { textRangeFromLocation } from "./conversationIndex.js";
