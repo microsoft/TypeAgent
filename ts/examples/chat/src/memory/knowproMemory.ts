@@ -223,6 +223,7 @@ export async function createKnowproCommands(
                 startMinute: argNum("Starting at minute."),
                 endMinute: argNum("Ending minute."),
                 matchAll: argBool("Must match all terms", false),
+                exact: argBool("Exact match only. No related terms", false),
                 usePropertyIndex: argBool(
                     "Use property index while searching",
                     false,
@@ -269,6 +270,7 @@ export async function createKnowproCommands(
                 whenFilterFromNamedArgs(namedArgs, commandDef),
                 {
                     matchAllTerms: namedArgs.matchAll,
+                    exactMatch: namedArgs.exact,
                     usePropertyIndex: namedArgs.usePropertyIndex,
                 },
             );

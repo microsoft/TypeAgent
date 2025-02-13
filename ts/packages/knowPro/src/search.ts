@@ -64,6 +64,7 @@ export type WhenFilter = {
 export type SearchOptions = {
     maxMatches?: number | undefined;
     matchAllTerms?: boolean | undefined;
+    exactMatch?: boolean | undefined;
     usePropertyIndex?: boolean | undefined;
     useTimestampIndex?: boolean | undefined;
 };
@@ -125,9 +126,12 @@ class SearchQueryBuilder {
     ) {
         let query = this.compileQuery(terms, propertyTerms, filter, options);
 
-        // For all individual SearchTerms created during query compilation, resolve any related terms
-        await this.resolveRelatedTerms(this.allSearchTerms, true);
-        await this.resolveRelatedTerms(this.allPredicateSearchTerms, false);
+        const exactMatch = options?.exactMatch ?? false;
+        if (!exactMatch) {
+            // For all individual SearchTerms created during query compilation, resolve any related terms
+            await this.resolveRelatedTerms(this.allSearchTerms, true);
+            await this.resolveRelatedTerms(this.allPredicateSearchTerms, false);
+        }
 
         return query;
     }
