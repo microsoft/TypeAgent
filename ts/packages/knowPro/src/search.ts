@@ -28,11 +28,14 @@ export type KnowledgePropertyName =
 
 export type PropertySearchTerm = {
     /**
-     * You can either match a well known property name precisely OR fuzzily.
-     * E.g. hue == red, est propertyName = hue and propertyValue to red
-     * To also match related terms, you can supply related terms OR allow
-     * the query processor to resolve them automatically.
-     * E.g you could include "color" as a related term for the propertyName "hue"
+     * You can either match a well known property name
+     * Or you can provide a searchTerm for the propertyName.
+     * E.g. to match hue(red)
+     *  - propertyName as SearchTerm, set to 'hue'
+     *  - propertyValue as SearchTerm, set to 'red'
+     * You can also supply related terms for each.
+     * E.g you could include "color" as a related term for the propertyName "hue". Or 'crimson' for red.
+     * The the query processor can also related terms using a related terms secondary index, if one is available
      */
     propertyName: KnowledgePropertyName | SearchTerm;
     propertyValue: SearchTerm;
