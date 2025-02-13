@@ -116,3 +116,5 @@ export type DateRange = {
     start: Date;
     end?: Date | undefined;
 };
+
+// See secondaryIndex.ts for (optional) secondaryIndex interfaces & types

@@ -28,16 +28,17 @@ export type TimestampedTextRange = {
     timestamp: string;
     range: TextRange;
 };
+
 /**
  * Return text ranges in the given date range
  */
-
 export interface ITimestampToTextRangeIndex {
     lookupRange(dateRange: DateRange): TimestampedTextRange[];
-} /**
+}
+
+/**
  * Secondary indexes are currently optional, allowing us to experiment
  */
-
 export interface IConversationSecondaryIndexes {
     termToRelatedTermsIndex?: ITermToRelatedTermsIndex | undefined;
     propertyToSemanticRefIndex: IPropertyToSemanticRefIndex | undefined;
