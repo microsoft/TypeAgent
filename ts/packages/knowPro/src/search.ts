@@ -208,7 +208,7 @@ class SearchQueryBuilder {
         termsMatchExpr: q.IQueryOpExpr<SemanticRefAccumulator>,
         filter: WhenFilter,
     ): q.IQueryOpExpr<SemanticRefAccumulator> {
-        let scopeSelectors: q.IQuerySelectScopeExpr[] = [];
+        let scopeSelectors: q.IQueryTextRangeSelector[] = [];
         // Always apply "tag match" scope... all text ranges that matched tags.. are in scope
         scopeSelectors.push(new q.TagScopeExpr());
         if (filter.scopingTerms && filter.scopingTerms.length > 0) {

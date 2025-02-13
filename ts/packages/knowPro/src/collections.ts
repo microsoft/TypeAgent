@@ -261,7 +261,7 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
     public *getSemanticRefs(
         semanticRefs: SemanticRef[],
         predicate?: (semanticRef: SemanticRef) => boolean,
-    ) {
+    ): IterableIterator<SemanticRef> {
         for (const match of this.getMatches()) {
             const semanticRef = semanticRefs[match.value];
             if (predicate === undefined || predicate(semanticRef))
@@ -303,10 +303,18 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
         return groups;
     }
 
-    public getInScope(semanticRefs: SemanticRef[], scope: TextRangeCollection) {
+    public getMatchesInScope(
+        semanticRefs: SemanticRef[],
+        textRangesInScope: TextRangeCollection[],
+    ) {
         const accumulator = new SemanticRefAccumulator(this.searchTermMatches);
         for (const match of this.getMatches()) {
-            if (scope.isInRange(semanticRefs[match.value].range)) {
+            if (
+                isInAllTextRanges(
+                    textRangesInScope,
+                    semanticRefs[match.value].range,
+                )
+            ) {
                 accumulator.setMatch(match);
             }
         }
@@ -408,6 +416,21 @@ export class TextRangeCollection {
         }
         return false;
     }
+}
+
+/**
+ * Return false if inner range is not in ALL the given ranges
+ */
+function isInAllTextRanges(
+    ranges: TextRangeCollection[],
+    innerRange: TextRange,
+): boolean {
+    for (const outerRange of ranges) {
+        if (!outerRange.isInRange(innerRange)) {
+            return false;
+        }
+    }
+    return true;
 }
 
 export class TermSet {
