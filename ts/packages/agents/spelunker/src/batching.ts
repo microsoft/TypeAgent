@@ -3,6 +3,7 @@
 
 import { Chunk } from "./chunkSchema.js";
 import { console_log } from "./logging.js";
+import { ChunkDescription } from "./selectorSchema.js";
 
 export function makeBatches(
     chunks: Chunk[],
@@ -37,7 +38,27 @@ export function makeBatches(
     return batches;
 }
 
-export function getChunkSize(chunk: Chunk): number {
+export function keepBestChunks(
+    chunkDescs: ChunkDescription[], // Sorted by descending relevance
+    allChunks: Chunk[],
+    batchSize: number, // In characters
+): Chunk[] {
+    const chunks: Chunk[] = [];
+    let size = 0;
+    for (const chunkDesc of chunkDescs) {
+        const chunk = allChunks.find((c) => c.chunkId === chunkDesc.chunkId);
+        if (!chunk) continue;
+        const chunkSize = getChunkSize(chunk);
+        if (size + chunkSize > batchSize && chunks.length) {
+            break;
+        }
+        chunks.push(chunk);
+        size += chunkSize;
+    }
+    return chunks;
+}
+
+function getChunkSize(chunk: Chunk): number {
     // This is all an approximation
     let size = chunk.fileName.length + 50;
     for (const blob of chunk.blobs) {

@@ -14,7 +14,7 @@ import {
     createActionResultFromError,
 } from "@typeagent/agent-sdk/helpers/action";
 
-import { getChunkSize, makeBatches } from "./batching.js";
+import { keepBestChunks, makeBatches } from "./batching.js";
 import {
     Blob,
     Chunk,
@@ -650,24 +650,4 @@ async function summarizeChunkSlice(
         }
     }
     if (errors) console_log(`  [${errors} errors]`);
-}
-
-function keepBestChunks(
-    chunkDescs: ChunkDescription[], // Sorted by descending relevance
-    allChunks: Chunk[],
-    batchSize: number, // In characters
-): Chunk[] {
-    const chunks: Chunk[] = [];
-    let size = 0;
-    for (const chunkDesc of chunkDescs) {
-        const chunk = allChunks.find((c) => c.chunkId === chunkDesc.chunkId);
-        if (!chunk) continue;
-        const chunkSize = getChunkSize(chunk);
-        if (size + chunkSize > batchSize && chunks.length) {
-            break;
-        }
-        chunks.push(chunk);
-        size += chunkSize;
-    }
-    return chunks;
 }
