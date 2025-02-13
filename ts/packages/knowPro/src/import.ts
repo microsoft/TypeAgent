@@ -7,6 +7,7 @@ import {
     IKnowledgeSource,
     SemanticRef,
     IConversationData,
+    Term,
 } from "./dataFormat.js";
 import { conversation, split } from "knowledge-processor";
 import { collections, dateTime, getFileName, readAllText } from "typeagent";
@@ -24,16 +25,14 @@ import {
     TermsToRelatedTermIndexSettings,
 } from "./relatedTermsIndex.js";
 import { createTextEmbeddingIndexSettings } from "./fuzzyIndex.js";
+import { TimestampToTextRangeIndex } from "./timestampIndex.js";
 import {
+    ITermsToRelatedTermsIndexData,
     ITimestampToTextRangeIndex,
-    TimestampToTextRangeIndex,
-} from "./timestampIndex.js";
-import {
-    addPropertiesToIndex,
-    IPropertyToSemanticRefIndex,
-    PropertyIndex,
-} from "./propertyIndex.js";
-import { ISecondaryConversationIndexes } from "./search.js";
+} from "./secondaryIndexes.js";
+import { addPropertiesToIndex, PropertyIndex } from "./propertyIndex.js";
+import { IPropertyToSemanticRefIndex } from "./secondaryIndexes.js";
+import { IConversationSecondaryIndexes } from "./secondaryIndexes.js";
 
 // metadata for podcast messages
 export class PodcastMessageMeta implements IKnowledgeSource {
@@ -124,7 +123,7 @@ export function createPodcastSettings(): PodcastSettings {
 }
 
 export class Podcast
-    implements IConversation<PodcastMessageMeta>, ISecondaryConversationIndexes
+    implements IConversation<PodcastMessageMeta>, IConversationSecondaryIndexes
 {
     public settings: PodcastSettings;
     constructor(
@@ -222,6 +221,7 @@ export class Podcast
     }
 
     public buildSecondaryIndexes() {
+        this.buildParticipantAliases();
         this.buildPropertyIndex();
         this.buildTimestampIndex();
     }
@@ -267,9 +267,54 @@ export class Podcast
     private buildTimestampIndex(): void {
         this.timestampIndex = new TimestampToTextRangeIndex(this.messages);
     }
+
+    private buildParticipantAliases(): void {
+        if (this.termToRelatedTermsIndex) {
+            const nameToAliasMap = this.collectParticipantAliases();
+            for (const name of nameToAliasMap.keys()) {
+                const relatedTerms: Term[] = nameToAliasMap
+                    .get(name)!
+                    .map((alias) => {
+                        return { text: alias };
+                    });
+                this.termToRelatedTermsIndex.aliases.addRelatedTerm(
+                    name,
+                    relatedTerms,
+                );
+            }
+        }
+    }
+
+    private collectParticipantAliases() {
+        const aliases: collections.MultiMap<string, string> =
+            new collections.MultiMap();
+        for (const message of this.messages) {
+            const metadata = message.metadata;
+            collectName(metadata.speaker);
+            for (const listener of metadata.listeners) {
+                collectName(listener);
+            }
+        }
+
+        function collectName(participantName: string | undefined) {
+            if (participantName) {
+                participantName = participantName.toLowerCase();
+                const parsedName =
+                    conversation.splitParticipantName(participantName);
+                if (parsedName && parsedName.firstName && parsedName.lastName) {
+                    // If participantName is a full name, then associate firstName with the full name
+                    aliases.addUnique(parsedName.firstName, participantName);
+                    aliases.addUnique(participantName, parsedName.firstName);
+                }
+            }
+        }
+        return aliases;
+    }
 }
 
-export interface PodcastData extends IConversationData<PodcastMessage> {}
+export interface PodcastData extends IConversationData<PodcastMessage> {
+    relatedTermsIndexData?: ITermsToRelatedTermsIndexData | undefined;
+}
 
 export async function importPodcast(
     transcriptFilePath: string,

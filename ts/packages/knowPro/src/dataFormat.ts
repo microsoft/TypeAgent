@@ -75,7 +75,6 @@ export interface IConversation<TMeta extends IKnowledgeSource = any> {
     messages: IMessage<TMeta>[];
     semanticRefs: SemanticRef[] | undefined;
     semanticRefIndex?: ITermToSemanticRefIndex | undefined;
-    termToRelatedTermsIndex?: ITermToRelatedTermsIndex | undefined;
 }
 
 export type MessageIndex = number;
@@ -103,7 +102,6 @@ export interface IConversationData<TMessage> {
     tags: string[];
     semanticRefs: SemanticRef[];
     semanticIndexData?: ITermToSemanticRefIndexData | undefined;
-    relatedTermsIndexData?: ITermsToRelatedTermsIndexData | undefined;
 }
 
 export type Term = {
@@ -114,56 +112,9 @@ export type Term = {
     weight?: number | undefined;
 };
 
-export interface ITermToRelatedTermsIndex {
-    get aliases(): ITermToRelatedTerms | undefined;
-    get termEditDistanceIndex(): ITermToRelatedTermsFuzzy | undefined;
-    get termVectorIndex(): ITermToRelatedTermsFuzzy | undefined;
-    serialize(): ITermsToRelatedTermsIndexData;
-    deserialize(data?: ITermsToRelatedTermsIndexData): void;
-}
-
-export interface ITermsToRelatedTermsIndexData {
-    aliasData?: ITermToRelatedTermsData | undefined;
-    textEmbeddingData?: ITextEmbeddingIndexData | undefined;
-}
-
-export interface ITermToRelatedTermsData {
-    relatedTerms?: ITermsToRelatedTermsDataItem[] | undefined;
-}
-
-export interface ITermsToRelatedTermsDataItem {
-    termText: string;
-    relatedTerms: Term[];
-}
-
-export interface ITermToRelatedTerms {
-    lookupTerm(text: string): Term[] | undefined;
-}
-
-export interface ITermToRelatedTermsFuzzy {
-    lookupTerm(
-        text: string,
-        maxMatches?: number,
-        thresholdScore?: number,
-    ): Promise<Term[]>;
-    lookupTerms(
-        textArray: string[],
-        maxMatches?: number,
-        thresholdScore?: number,
-    ): Promise<Term[][]>;
-}
-
-export interface ITextEmbeddingIndexData {
-    modelName?: string | undefined;
-    embeddingData?: ITextEmbeddingDataItem[] | undefined;
-}
-
-export interface ITextEmbeddingDataItem {
-    text: string;
-    embedding: number[];
-}
-
 export type DateRange = {
     start: Date;
     end?: Date | undefined;
 };
+
+// See secondaryIndex.ts for (optional) secondaryIndex interfaces & types

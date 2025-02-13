@@ -15,7 +15,7 @@ import {
 import {
     ITextEmbeddingIndexData,
     ITextEmbeddingDataItem,
-} from "./dataFormat.js";
+} from "./secondaryIndexes.js";
 import { openai, TextEmbeddingModel } from "aiclient";
 import * as levenshtein from "fast-levenshtein";
 import { createEmbeddingCache } from "knowledge-processor";

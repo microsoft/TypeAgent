@@ -7,19 +7,7 @@ import {
     SemanticRefIndex,
 } from "./dataFormat.js";
 import { conversation } from "knowledge-processor";
-
-export interface IPropertyToSemanticRefIndex {
-    getValues(): string[];
-    addProperty(
-        propertyName: string,
-        value: string,
-        semanticRefIndex: SemanticRefIndex | ScoredSemanticRef,
-    ): void;
-    lookupProperty(
-        propertyName: string,
-        value: string,
-    ): ScoredSemanticRef[] | undefined;
-}
+import { IPropertyToSemanticRefIndex } from "./secondaryIndexes.js";
 
 export enum PropertyNames {
     EntityName = "name",

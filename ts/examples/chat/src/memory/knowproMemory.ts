@@ -323,12 +323,29 @@ export async function createKnowproCommands(
         const propertyNames = nameFilter
             ? Object.keys(keyValues).filter(nameFilter)
             : Object.keys(keyValues);
+        const propertySearchTerms: kp.PropertySearchTerm[] = [];
+        for (const propertyName of propertyNames) {
+            const allValues = splitTermValues(keyValues[propertyName]);
+            for (const value of allValues) {
+                propertySearchTerms.push(
+                    kp.propertySearchTermFromKeyValue(
+                        nameModifier
+                            ? nameModifier(propertyName)
+                            : propertyName,
+                        value,
+                    ),
+                );
+            }
+        }
+        return propertySearchTerms;
+        /*
         return propertyNames.map((propertyName) =>
             kp.propertySearchTermFromKeyValue(
                 nameModifier ? nameModifier(propertyName) : propertyName,
                 keyValues[propertyName],
             ),
         );
+        */
     }
 
     function filterFromNamedArgs(
@@ -487,10 +504,7 @@ export async function createKnowproCommands(
 export function parseQueryTerms(args: string[]): kp.SearchTerm[] {
     const queryTerms: kp.SearchTerm[] = [];
     for (const arg of args) {
-        let allTermStrings = knowLib.split(arg, ";", {
-            trim: true,
-            removeEmpty: true,
-        });
+        let allTermStrings = splitTermValues(arg);
         if (allTermStrings.length > 0) {
             allTermStrings = allTermStrings.map((t) => t.toLowerCase());
             const queryTerm: kp.SearchTerm = {
@@ -506,4 +520,12 @@ export function parseQueryTerms(args: string[]): kp.SearchTerm[] {
         }
     }
     return queryTerms;
+}
+
+function splitTermValues(term: string): string[] {
+    let allTermStrings = knowLib.split(term, ";", {
+        trim: true,
+        removeEmpty: true,
+    });
+    return allTermStrings;
 }
