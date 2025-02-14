@@ -222,7 +222,7 @@ export async function createKnowproCommands(
                 displayAsc: argBool("Display results in ascending order", true),
                 startMinute: argNum("Starting at minute."),
                 endMinute: argNum("Ending minute."),
-                matchAll: argBool("Must match all terms", false),
+                andTerms: argBool("'And' all terms. Default is 'or", false),
                 exact: argBool("Exact match only. No related terms", false),
                 usePropertyIndex: argBool(
                     "Use property index while searching",
@@ -254,7 +254,6 @@ export async function createKnowproCommands(
             args,
             commandDef,
         );
-        const terms = parseQueryTerms(termArgs);
         if (conversation.semanticRefIndex && conversation.semanticRefs) {
             context.printer.writeInColor(
                 chalk.cyan,
@@ -265,11 +264,14 @@ export async function createKnowproCommands(
             timer.start();
             const matches = await kp.searchConversation(
                 conversation,
-                terms,
-                propertyTermsFromNamedArgs(namedArgs, commandDef),
+                createSearchGroup(
+                    termArgs,
+                    namedArgs,
+                    commandDef,
+                    namedArgs.andTerms,
+                ),
                 whenFilterFromNamedArgs(namedArgs, commandDef),
                 {
-                    matchAllTerms: namedArgs.matchAll,
                     exactMatch: namedArgs.exact,
                     usePropertyIndex: namedArgs.usePropertyIndex,
                 },
@@ -289,6 +291,20 @@ export async function createKnowproCommands(
         } else {
             context.printer.writeError("Conversation is not indexed");
         }
+    }
+
+    function createSearchGroup(
+        termArgs: string[],
+        namedArgs: NamedArgs,
+        commandDef: CommandMetadata,
+        andTerms: boolean = false,
+    ): kp.SearchTermGroup {
+        const searchTerms = parseQueryTerms(termArgs);
+        const propertyTerms = propertyTermsFromNamedArgs(namedArgs, commandDef);
+        return {
+            booleanOp: andTerms ? "and" : "or",
+            terms: [...searchTerms, ...propertyTerms],
+        };
     }
 
     const scopePrefix = "%";

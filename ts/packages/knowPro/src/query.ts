@@ -15,7 +15,7 @@ import {
     TextRange,
 } from "./dataFormat.js";
 import { KnowledgePropertyName, PropertySearchTerm } from "./search.js";
-import { SearchTerm } from "./dataFormat.js";
+import { SearchTerm } from "./search.js";
 import {
     Match,
     MatchAccumulator,
@@ -159,7 +159,7 @@ export function isSearchTermWildcard(searchTerm: SearchTerm): boolean {
  * @param text
  * @returns The term or related term that matched the text
  */
-export function getMatchingTermForText(
+function getMatchingTermForText(
     searchTerm: SearchTerm,
     text: string,
 ): Term | undefined {
@@ -183,7 +183,7 @@ export function getMatchingTermForText(
  * @param searchTerm
  * @param text
  */
-export function matchSearchTermToText(
+function matchSearchTermToText(
     searchTerm: SearchTerm,
     text: string | undefined,
 ): boolean {
@@ -193,12 +193,12 @@ export function matchSearchTermToText(
     return false;
 }
 
-export function matchSearchTermToOneOfText(
+function matchSearchTermToOneOfText(
     searchTerm: SearchTerm,
-    texts: string[] | undefined,
+    textArray: string[] | undefined,
 ): boolean {
-    if (texts) {
-        for (const text of texts) {
+    if (textArray) {
+        for (const text of textArray) {
             if (matchSearchTermToText(searchTerm, text)) {
                 return true;
             }
@@ -207,7 +207,7 @@ export function matchSearchTermToOneOfText(
     return false;
 }
 
-export function matchPropertySearchTermToEntity(
+function matchPropertySearchTermToEntity(
     searchTerm: PropertySearchTerm,
     semanticRef: SemanticRef,
 ): boolean {
@@ -273,7 +273,7 @@ function matchPropertyValueToFacetValue(
     return false;
 }
 
-export function matchPropertySearchTermToAction(
+function matchPropertySearchTermToAction(
     searchTerm: PropertySearchTerm,
     semanticRef: SemanticRef,
 ): boolean {
@@ -472,19 +472,34 @@ export class MatchTermsAndExpr extends QueryOpExpr<SemanticRefAccumulator> {
     }
 
     public override eval(context: QueryEvalContext): SemanticRefAccumulator {
-        const allMatches = new SemanticRefAccumulator();
+        let allMatches: SemanticRefAccumulator | undefined;
         context.clearMatchedTerms();
-        for (const matchExpr of this.searchTermExpressions) {
-            const matches = matchExpr.eval(context);
-            if (matches !== undefined) {
-                matches.ensureHitCount();
-                allMatches.addUnion(matches);
+        let iTerm = 0;
+        // Loop over each search term, intersecting the returned results...
+        for (; iTerm < this.searchTermExpressions.length; ++iTerm) {
+            const termMatches = this.searchTermExpressions[iTerm].eval(context);
+            if (termMatches === undefined || termMatches.size === 0) {
+                // We can't possibly have an 'and'
+                break;
+            }
+            if (allMatches === undefined) {
+                allMatches = termMatches;
+            } else {
+                allMatches.addIntersect(termMatches);
             }
         }
-        allMatches.calculateTotalScore();
-        // The *and* is now the matches that had hitcount == searchTermsExpressions.length
-        allMatches.selectWithHitCount(this.searchTermExpressions.length);
-        return allMatches;
+        if (allMatches) {
+            if (iTerm === this.searchTermExpressions.length) {
+                allMatches.calculateTotalScore();
+                allMatches.selectWithHitCount(
+                    this.searchTermExpressions.length,
+                );
+            } else {
+                // And is not possible
+                allMatches.clearMatches();
+            }
+        }
+        return allMatches ?? new SemanticRefAccumulator();
     }
 }
 
@@ -500,7 +515,10 @@ export class MatchTermExpr extends QueryOpExpr<
     ): SemanticRefAccumulator | undefined {
         const matches = new SemanticRefAccumulator();
         this.accumulateMatches(context, matches);
-        return matches.size > 0 ? matches : undefined;
+        if (matches.size > 0) {
+            return matches;
+        }
+        return undefined;
     }
 
     public accumulateMatches(
@@ -519,7 +537,7 @@ export class MatchSearchTermExpr extends MatchTermExpr {
     public override accumulateMatches(
         context: QueryEvalContext,
         matches: SemanticRefAccumulator,
-    ) {
+    ): void {
         // Match the search term
         this.accumulateMatchesForTerm(context, matches, this.searchTerm.term);
         // And any related terms
