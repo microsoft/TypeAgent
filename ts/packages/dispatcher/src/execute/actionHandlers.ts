@@ -1,7 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ExecutableAction, FullAction, getFullActionName } from "agent-cache";
+import {
+    ExecutableAction,
+    FullAction,
+    getFullActionName,
+    normalizeParamString,
+} from "agent-cache";
 import {
     CommandHandlerContext,
     getCommandResult,
@@ -473,14 +478,21 @@ async function canExecute(
     return true;
 }
 
+type EntityValue = PromptEntity | undefined;
+type EntityField = EntityValue | EntityObject | EntityField[];
+interface EntityObject {
+    [key: string]: EntityValue | EntityField;
+}
+
 function getParameterObjectEntities(
     appAgentName: string,
     obj: Record<string, any>,
     resultEntityMap: Map<string, PromptEntity>,
     promptEntityMap: Map<string, PromptEntity> | undefined,
+    promptNameEntityMap: Map<string, PromptEntity | PromptEntity[]> | undefined,
 ) {
     let hasEntity = false;
-    const entities: any = Array.isArray(obj) ? [] : {};
+    const entities: EntityObject | EntityField[] = Array.isArray(obj) ? [] : {};
     for (const [k, v] of Object.entries(obj)) {
         const entity = getParameterEntities(
             appAgentName,
@@ -489,10 +501,11 @@ function getParameterObjectEntities(
             v,
             resultEntityMap,
             promptEntityMap,
+            promptNameEntityMap,
         );
         if (entity !== undefined) {
             hasEntity = true;
-            entities[k] = entity;
+            (entities as any)[k] = entity;
         }
     }
     return hasEntity ? entities : undefined;
@@ -504,7 +517,8 @@ function resolveParameterEntity(
     value: any,
     resultEntityMap: Map<string, PromptEntity>,
     promptEntityMap: Map<string, PromptEntity> | undefined,
-) {
+    promptNameEntityMap: Map<string, PromptEntity | PromptEntity[]> | undefined,
+): EntityValue | undefined {
     const resultEntity = resultEntityMap.get(value);
     if (resultEntity !== undefined) {
         return resultEntity;
@@ -513,10 +527,15 @@ function resolveParameterEntity(
     if (entity !== undefined) {
         // fix up the action to the actual entity name
         obj[key] = entity.name;
+        return entity;
     }
 
-    return entity;
+    // LLM like to correct/change casing.  Normalize entity name for look up.
+    const nameEntity = promptNameEntityMap?.get(normalizeParamString(value));
+    // TODO: If there are multiple match, ignore for now.
+    return Array.isArray(nameEntity) ? undefined : nameEntity;
 }
+
 function getParameterEntities(
     appAgentName: string,
     obj: any,
@@ -524,7 +543,8 @@ function getParameterEntities(
     value: any,
     resultEntityMap: Map<string, PromptEntity>,
     promptEntityMap: Map<string, PromptEntity> | undefined,
-) {
+    promptNameEntityMap: Map<string, PromptEntity | PromptEntity[]> | undefined,
+): EntityField | undefined {
     switch (typeof value) {
         case "undefined":
             return;
@@ -535,10 +555,17 @@ function getParameterEntities(
                 value,
                 resultEntityMap,
                 promptEntityMap,
+                promptNameEntityMap,
             );
 
-            return entity?.sourceAppAgentName === appAgentName
-                ? entity
+            return entity
+                ? Array.isArray(entity)
+                    ? entity.filter(
+                          (e) => e.sourceAppAgentName === appAgentName,
+                      )
+                    : entity.sourceAppAgentName === appAgentName
+                      ? entity
+                      : undefined
                 : undefined;
         case "function":
             throw new Error("Function is not supported as an action value");
@@ -549,6 +576,7 @@ function getParameterEntities(
                       value,
                       resultEntityMap,
                       promptEntityMap,
+                      promptNameEntityMap,
                   )
                 : undefined;
     }
@@ -557,27 +585,49 @@ function getParameterEntities(
 type PendingAction = {
     executableAction: ExecutableAction;
     promptEntityMap: Map<string, PromptEntity> | undefined;
+    promptNameEntityMap: Map<string, PromptEntity | PromptEntity[]> | undefined;
 };
 
 function toPromptEntityMap(entities: PromptEntity[] | undefined) {
     return entities
         ? new Map<string, PromptEntity>(
-              entities.map(
-                  (entity, i) =>
-                      // LLM like to correct/change casing.  Normalize entity name for look up.
-                      [`\${entity-${i}}`, entity] as const,
-              ),
+              entities.map((entity, i) => [`\${entity-${i}}`, entity] as const),
           )
         : undefined;
 }
+
+function toPromptEntityNameMap(entities: PromptEntity[] | undefined) {
+    if (entities === undefined) {
+        return undefined;
+    }
+    const map = new Map<string, PromptEntity | PromptEntity[]>();
+    for (const entity of entities) {
+        // LLM like to correct/change casing.  Normalize entity name for look up.
+        const name = normalizeParamString(entity.name);
+        const existing = map.get(name);
+        if (existing === undefined) {
+            map.set(name, entity);
+            continue;
+        }
+        if (Array.isArray(existing)) {
+            existing.push(entity);
+        } else {
+            map.set(name, [existing, entity]);
+        }
+    }
+    return map;
+}
+
 function toPendingActions(
     actions: ExecutableAction[],
     entities: PromptEntity[] | undefined,
 ): PendingAction[] {
     const promptEntityMap = toPromptEntityMap(entities);
+    const promptNameEntityMap = toPromptEntityNameMap(entities);
     return Array.from(actions).map((executableAction) => ({
         executableAction,
         promptEntityMap,
+        promptNameEntityMap,
     }));
 }
 
@@ -590,15 +640,20 @@ export async function executeActions(
     const commandResult = getCommandResult(systemContext);
     if (commandResult !== undefined) {
         const promptEntityMap = toPromptEntityMap(entities);
+        const promptNameEntityMap = toPromptEntityNameMap(entities);
         commandResult.actions = actions.map((a) => {
             if (a.action.parameters) {
                 const action = { ...a.action };
-                action.entities = getParameterObjectEntities(
+                const entities = getParameterObjectEntities(
                     getAppAgentName(action.translatorName),
                     action.parameters!,
                     new Map(),
                     promptEntityMap,
+                    promptNameEntityMap,
                 );
+                if (entities) {
+                    action.entities = entities as any;
+                }
                 return action;
             }
             return a.action;
@@ -614,7 +669,8 @@ export async function executeActions(
     const actionQueue: PendingAction[] = toPendingActions(actions, entities);
 
     while (actionQueue.length !== 0) {
-        const { executableAction, promptEntityMap } = actionQueue.shift()!;
+        const { executableAction, promptEntityMap, promptNameEntityMap } =
+            actionQueue.shift()!;
         const action = executableAction.action;
         if (isPendingRequestAction(action)) {
             const translationResult = await translatePendingRequestAction(
@@ -637,12 +693,16 @@ export async function executeActions(
         }
         const appAgentName = getAppAgentName(action.translatorName);
         if (action.parameters) {
-            action.entities = getParameterObjectEntities(
+            const entities = getParameterObjectEntities(
                 appAgentName,
                 action.parameters,
                 resultEntityMap,
                 promptEntityMap,
+                promptNameEntityMap,
             );
+            if (entities) {
+                action.entities = entities as any;
+            }
         }
         const result = await executeAction(
             executableAction,
