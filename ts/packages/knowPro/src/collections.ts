@@ -98,7 +98,7 @@ export class MatchAccumulator<T = any> {
             } else {
                 this.setMatch({
                     value,
-                    hitCount: 0,
+                    hitCount: 1,
                     score: 0,
                     relatedHitCount: 1,
                     relatedScore: score,
@@ -131,27 +131,6 @@ export class MatchAccumulator<T = any> {
                 const normalizedScore = Math.log(1 + avgScore);
                 match.score += normalizedScore;
             }
-        }
-    }
-
-    public ensureHitCount(): void {
-        for (const match of this.getMatches()) {
-            if (match.hitCount <= 0) {
-                match.hitCount = 1;
-            }
-        }
-    }
-
-    protected updateExisting(
-        existingMatch: Match,
-        newScore: number,
-        isExactMatch: boolean,
-    ): void {
-        if (isExactMatch) {
-            existingMatch.hitCount++;
-            existingMatch.score += newScore;
-        } else if (existingMatch.relatedScore < newScore) {
-            existingMatch.relatedScore = newScore;
         }
     }
 

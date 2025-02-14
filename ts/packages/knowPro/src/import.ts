@@ -220,12 +220,6 @@ export class Podcast
         }
     }
 
-    public buildSecondaryIndexes() {
-        this.buildParticipantAliases();
-        this.buildPropertyIndex();
-        this.buildTimestampIndex();
-    }
-
     public serialize(): PodcastData {
         return {
             nameTag: this.nameTag,
@@ -252,6 +246,12 @@ export class Podcast
             );
         }
         this.buildSecondaryIndexes();
+    }
+
+    private buildSecondaryIndexes() {
+        this.buildParticipantAliases();
+        this.buildPropertyIndex();
+        this.buildTimestampIndex();
     }
 
     private buildPropertyIndex() {
