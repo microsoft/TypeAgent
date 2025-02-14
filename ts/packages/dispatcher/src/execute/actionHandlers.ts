@@ -1,12 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import {
-    ExecutableAction,
-    FullAction,
-    getFullActionName,
-    normalizeParamString,
-} from "agent-cache";
+import { ExecutableAction, FullAction, getFullActionName } from "agent-cache";
 import {
     CommandHandlerContext,
     getCommandResult,
@@ -270,18 +265,19 @@ async function executeAction(
     actionIndex: number,
 ): Promise<ActionResult> {
     const action = executableAction.action;
-    const translatorName = action.translatorName;
-
-    if (translatorName === undefined) {
-        throw new Error(`Cannot execute action without translator name.`);
+    if (debugActions.enabled) {
+        debugActions(
+            `Executing action: ${JSON.stringify(action, undefined, 2)}`,
+        );
     }
 
+    const schemaName = action.translatorName;
     const systemContext = context.sessionContext.agentContext;
-    const appAgentName = getAppAgentName(translatorName);
+    const appAgentName = getAppAgentName(schemaName);
     const appAgent = systemContext.agents.getAppAgent(appAgentName);
 
     // Update the last action translator.
-    systemContext.lastActionSchemaName = translatorName;
+    systemContext.lastActionSchemaName = schemaName;
 
     if (appAgent.executeAction === undefined) {
         throw new Error(
@@ -289,11 +285,6 @@ async function executeAction(
         );
     }
 
-    if (debugActions.enabled) {
-        debugActions(
-            `Executing action: ${JSON.stringify(action, undefined, 2)}`,
-        );
-    }
     // Reuse the same streaming action context if one is available.
 
     const { actionContext, closeActionContext } =
@@ -368,7 +359,7 @@ async function executeAction(
         }
         if (result.dynamicDisplayId !== undefined) {
             systemContext.clientIO.setDynamicDisplay(
-                translatorName,
+                schemaName,
                 systemContext.requestId,
                 actionIndex,
                 result.dynamicDisplayId,
@@ -482,8 +473,54 @@ async function canExecute(
     return true;
 }
 
+function getParameterObjectEntities(
+    appAgentName: string,
+    obj: Record<string, any>,
+    resultEntityMap: Map<string, PromptEntity>,
+    promptEntityMap: Map<string, PromptEntity> | undefined,
+) {
+    let hasEntity = false;
+    const entities: any = Array.isArray(obj) ? [] : {};
+    for (const [k, v] of Object.entries(obj)) {
+        const entity = getParameterEntities(
+            appAgentName,
+            obj,
+            k,
+            v,
+            resultEntityMap,
+            promptEntityMap,
+        );
+        if (entity !== undefined) {
+            hasEntity = true;
+            entities[k] = entity;
+        }
+    }
+    return hasEntity ? entities : undefined;
+}
+
+function resolveParameterEntity(
+    obj: Record<string, any>,
+    key: string,
+    value: any,
+    resultEntityMap: Map<string, PromptEntity>,
+    promptEntityMap: Map<string, PromptEntity> | undefined,
+) {
+    const resultEntity = resultEntityMap.get(value);
+    if (resultEntity !== undefined) {
+        return resultEntity;
+    }
+    const entity = promptEntityMap?.get(value);
+    if (entity !== undefined) {
+        // fix up the action to the actual entity name
+        obj[key] = entity.name;
+    }
+
+    return entity;
+}
 function getParameterEntities(
     appAgentName: string,
+    obj: any,
+    key: string,
     value: any,
     resultEntityMap: Map<string, PromptEntity>,
     promptEntityMap: Map<string, PromptEntity> | undefined,
@@ -492,35 +529,28 @@ function getParameterEntities(
         case "undefined":
             return;
         case "string":
-            // LLM like to correct/change casing.  Normalize for look up.
-            const normalizedValue = normalizeParamString(value);
-            const entity =
-                resultEntityMap.get(normalizedValue) ??
-                promptEntityMap?.get(normalizedValue);
+            const entity = resolveParameterEntity(
+                obj,
+                key,
+                value,
+                resultEntityMap,
+                promptEntityMap,
+            );
+
             return entity?.sourceAppAgentName === appAgentName
                 ? entity
                 : undefined;
         case "function":
             throw new Error("Function is not supported as an action value");
         case "object":
-            if (value === null) {
-                return undefined;
-            }
-            let hasEntity = false;
-            const entities: any = Array.isArray(value) ? [] : {};
-            for (const [key, v] of Object.entries(value)) {
-                const entity = getParameterEntities(
-                    appAgentName,
-                    v,
-                    resultEntityMap,
-                    promptEntityMap,
-                );
-                if (entity !== undefined) {
-                    hasEntity = true;
-                    entities[key] = entity;
-                }
-            }
-            return hasEntity ? entities : undefined;
+            return value
+                ? getParameterObjectEntities(
+                      appAgentName,
+                      value,
+                      resultEntityMap,
+                      promptEntityMap,
+                  )
+                : undefined;
     }
 }
 
@@ -533,9 +563,9 @@ function toPromptEntityMap(entities: PromptEntity[] | undefined) {
     return entities
         ? new Map<string, PromptEntity>(
               entities.map(
-                  (entity) =>
+                  (entity, i) =>
                       // LLM like to correct/change casing.  Normalize entity name for look up.
-                      [normalizeParamString(entity.name), entity] as const,
+                      [`\${entity-${i}}`, entity] as const,
               ),
           )
         : undefined;
@@ -560,14 +590,18 @@ export async function executeActions(
     const commandResult = getCommandResult(systemContext);
     if (commandResult !== undefined) {
         const promptEntityMap = toPromptEntityMap(entities);
-        commandResult.actions = actions.map(({ action }) => {
-            action.entities = getParameterEntities(
-                getAppAgentName(action.translatorName),
-                action.parameters,
-                new Map(),
-                promptEntityMap,
-            );
-            return action;
+        commandResult.actions = actions.map((a) => {
+            if (a.action.parameters) {
+                const action = { ...a.action };
+                action.entities = getParameterObjectEntities(
+                    getAppAgentName(action.translatorName),
+                    action.parameters!,
+                    new Map(),
+                    promptEntityMap,
+                );
+                return action;
+            }
+            return a.action;
         });
     }
 
@@ -602,12 +636,14 @@ export async function executeActions(
             continue;
         }
         const appAgentName = getAppAgentName(action.translatorName);
-        action.entities = getParameterEntities(
-            appAgentName,
-            action.parameters,
-            resultEntityMap,
-            promptEntityMap,
-        );
+        if (action.parameters) {
+            action.entities = getParameterObjectEntities(
+                appAgentName,
+                action.parameters,
+                resultEntityMap,
+                promptEntityMap,
+            );
+        }
         const result = await executeAction(
             executableAction,
             context,
@@ -615,13 +651,10 @@ export async function executeActions(
         );
         if (result.error === undefined) {
             if (result.resultEntity && executableAction.resultEntityId) {
-                resultEntityMap.set(
-                    normalizeParamString(executableAction.resultEntityId),
-                    {
-                        ...result.resultEntity,
-                        sourceAppAgentName: appAgentName,
-                    },
-                );
+                resultEntityMap.set(executableAction.resultEntityId, {
+                    ...result.resultEntity,
+                    sourceAppAgentName: appAgentName,
+                });
             }
         }
         actionIndex++;

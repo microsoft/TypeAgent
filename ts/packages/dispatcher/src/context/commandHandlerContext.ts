@@ -366,7 +366,9 @@ export async function initializeCommandHandlerContext(
             lastActionSchemaName: DispatcherName,
             translatorCache: new Map<string, TypeAgentTranslator>(),
             currentScriptDir: process.cwd(),
-            chatHistory: createChatHistory(),
+            chatHistory: createChatHistory(
+                session.getConfig().execution.history,
+            ),
             logger,
             serviceHost,
             metricsManager: metrics ? new RequestMetricsManager() : undefined,

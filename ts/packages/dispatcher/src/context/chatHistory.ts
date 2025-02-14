@@ -27,6 +27,7 @@ export type ChatHistoryEntry = UserEntry | AssistantEntry;
 
 export interface ChatHistory {
     entries: ChatHistoryEntry[];
+    enable(value: boolean): void;
     getTopKEntities(k: number): PromptEntity[];
     addUserEntry(
         text: string,
@@ -44,8 +45,12 @@ export interface ChatHistory {
     getPromptSections(): PromptSection[];
 }
 
-export function createChatHistory(): ChatHistory {
+export function createChatHistory(init: boolean): ChatHistory {
+    let enabled = init;
     return {
+        enable(value: boolean) {
+            enabled = value;
+        },
         entries: [],
         getPromptSections(maxChars = 2000) {
             const sections: PromptSection[] = [];
@@ -139,12 +144,14 @@ export function createChatHistory(): ChatHistory {
             id: string | undefined,
             attachments?: CachedImageWithDetails[],
         ): void {
-            this.entries.push({
-                role: "user",
-                text,
-                id,
-                attachments,
-            });
+            if (enabled) {
+                this.entries.push({
+                    role: "user",
+                    text,
+                    id,
+                    attachments,
+                });
+            }
         },
         addAssistantEntry(
             text: string,
@@ -153,14 +160,16 @@ export function createChatHistory(): ChatHistory {
             entities?: Entity[],
             additionalInstructions?: string[],
         ): void {
-            this.entries.push({
-                role: "assistant",
-                text,
-                id,
-                sourceAppAgentName,
-                entities: structuredClone(entities), // make a copy so that it doesn't get modified by others later.
-                additionalInstructions,
-            });
+            if (enabled) {
+                this.entries.push({
+                    role: "assistant",
+                    text,
+                    id,
+                    sourceAppAgentName,
+                    entities: structuredClone(entities), // make a copy so that it doesn't get modified by others later.
+                    additionalInstructions,
+                });
+            }
         },
         getTopKEntities(k: number): PromptEntity[] {
             const uniqueEntities = new Map<string, PromptEntity[]>();
@@ -174,13 +183,15 @@ export function createChatHistory(): ChatHistory {
                 for (const entity of entry.entities) {
                     // Multiple entities may have the same name ('Design meeting') but different
                     // entity instances. E.g. {Design meeting, on 9/12} vs {Design meeting, on 9/19}
-                    // Add index the name if there are conflicts.
 
                     // LLM like to correct/change casing.  Normalize for look up.
                     const normalizedName = normalizeParamString(entity.name);
                     const uniqueIndex = `${normalizedName}.${entity.type}`;
                     let existing = uniqueEntities.get(uniqueIndex);
-                    let promptEntity: PromptEntity;
+                    const promptEntity: PromptEntity = {
+                        ...entity,
+                        sourceAppAgentName: entry.sourceAppAgentName,
+                    };
                     if (existing) {
                         if (
                             existing.some(
@@ -194,22 +205,8 @@ export function createChatHistory(): ChatHistory {
                             continue;
                         }
 
-                        if (existing.length === 1) {
-                            // Add index to the first one.
-                            existing[0].name = `${existing[0].name}v1`;
-                        }
-
-                        promptEntity = {
-                            ...entity,
-                            name: `${entity.name}v${existing.length + 1}`,
-                            sourceAppAgentName: entry.sourceAppAgentName,
-                        };
                         existing.push(promptEntity);
                     } else {
-                        promptEntity = {
-                            ...entity,
-                            sourceAppAgentName: entry.sourceAppAgentName,
-                        };
                         uniqueEntities.set(uniqueIndex, [promptEntity]);
                     }
                     result.push(promptEntity);

@@ -100,6 +100,9 @@ type DispatcherConfig = {
             };
         };
     };
+    execution: {
+        history: boolean;
+    };
     explainer: {
         enabled: boolean;
         model: string;
@@ -169,6 +172,9 @@ const defaultSessionConfig: SessionConfig = {
                 numInitialActions: 5,
             },
         },
+    },
+    execution: {
+        history: true,
     },
     explainer: {
         enabled: true,
