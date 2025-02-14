@@ -47,7 +47,7 @@ export function createTypeAgentRequestPrompt(
                     );
                     prompts.push(
                         JSON.stringify(
-                            promptEntities.reverse().map((entity, i) => ({
+                            promptEntities.map((entity, i) => ({
                                 id: `\${entity-${i}}`,
                                 name: entity.name,
                                 type: entity.type,

@@ -215,7 +215,7 @@ export function createChatHistory(init: boolean): ChatHistory {
                     found++;
                     // Continue to finish all the entity for this entry even when we have enough
                 }
-                result.push(promptEntities);
+                result.unshift(promptEntities);
                 // Stop if we have more then enough
                 if (found >= k) {
                     break;
