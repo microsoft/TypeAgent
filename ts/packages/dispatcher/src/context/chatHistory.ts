@@ -173,13 +173,15 @@ export function createChatHistory(init: boolean): ChatHistory {
         },
         getTopKEntities(k: number): PromptEntity[] {
             const uniqueEntities = new Map<string, PromptEntity[]>();
-            const result: PromptEntity[] = [];
+            let found = 0;
+            const result: PromptEntity[][] = [];
             // loop over entries from last to first
             for (let i = this.entries.length - 1; i >= 0; i--) {
                 const entry = this.entries[i];
                 if (entry.role === "user" || entry.entities === undefined) {
                     continue;
                 }
+                const promptEntities: PromptEntity[] = [];
                 for (const entity of entry.entities) {
                     // Multiple entities may have the same name ('Design meeting') but different
                     // entity instances. E.g. {Design meeting, on 9/12} vs {Design meeting, on 9/19}
@@ -209,13 +211,17 @@ export function createChatHistory(init: boolean): ChatHistory {
                     } else {
                         uniqueEntities.set(uniqueIndex, [promptEntity]);
                     }
-                    result.push(promptEntity);
-                    if (result.length >= k) {
-                        break;
-                    }
+                    promptEntities.push(promptEntity);
+                    found++;
+                    // Continue to finish all the entity for this entry even when we have enough
+                }
+                result.push(promptEntities);
+                // Stop if we have more then enough
+                if (found >= k) {
+                    break;
                 }
             }
-            return result;
+            return result.flat();
         },
     };
 }
