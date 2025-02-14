@@ -72,16 +72,18 @@
                         ],
                         "uniqueId": "b"
                     },
-                    "artists": [{
-                        "sourceAppAgentName": "player",
-                        "name": "Bnefisoe",
-                        "type": [
-                            "artist"
-                        ],
-                        "uniqueId": "c"                    
-                    }]
+                    "artists": [
+                        {
+                            "sourceAppAgentName": "player",
+                            "name": "Bnefisoe",
+                            "type": [
+                                "artist"
+                            ],
+                            "uniqueId": "c"
+                        }
+                    ]
                 }
-            }  
+            }
         }
     ],
     [
@@ -264,7 +266,7 @@
                             "list"
                         ]
                     }
-                }    
+                }
             }
         }
     ]
