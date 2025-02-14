@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { PointOfInterest, ReverseGeocodeAddressLookup } from "common-utils";
+import type { PointOfInterest, ReverseGeocodeAddressLookup } from "common-utils";
 
 export type Image = {
     title: string;

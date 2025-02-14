@@ -16,7 +16,7 @@ import path from "path";
 import { createTypeChat, isDirectoryPath, promptLib } from "typeagent";
 import { createEntitySearchOptions } from "../conversation/entities.js";
 import { Image } from "./imageSchema.js";
-import { ConcreteEntity, Facet, KnowledgeResponse } from "../conversation/knowledgeSchema.js";
+import { ConcreteEntity, KnowledgeResponse } from "../conversation/knowledgeSchema.js";
 import fs from "node:fs";
 import ExifReader from "exifreader";
 import { PromptSection } from "typechat";
@@ -131,12 +131,55 @@ export async function imageToMessage(
     );
 
     const knowledge = getKnowledgeForImage(image, extractor);
-    kr?.actions.push(...knowledge.actions);
-    kr?.entities.push(...knowledge.entities);
-    kr?.inverseActions.push(...knowledge.inverseActions);
-    kr?.topics.push(...knowledge.topics);
+    kr!.actions = kr!.actions.concat(knowledge.actions);
+    kr!.entities = kr!.entities.concat(knowledge.entities);
+    kr!.inverseActions = kr!.inverseActions.concat(knowledge.inverseActions);
+    kr!.topics = kr!.topics.concat(knowledge.topics);
 
     // TODO: add actions for all extracted entities being photographed/contained by image
+    if (kr?.entities) {
+        for(let i = 0; i < kr?.entities.length; i++) {
+            
+            // each extracted entity "is in" the image
+            // and all such entities are "contained by" the image
+            kr.actions.push({
+                verbs: [ "is in" ],
+                verbTense: "present",
+                subjectEntityName: "none",
+                objectEntityName: kr.entities[i].name,
+                indirectObjectEntityName: knowledge.entities[0].name, // the image name
+                params: [],
+                subjectEntityFacet: undefined
+            });
+
+            kr.actions.push({
+                verbs: [ "contains" ],
+                verbTense: "present",
+                subjectEntityName: "none",
+                objectEntityName: knowledge.entities[0].name,
+                indirectObjectEntityName: kr.entities[i].name, // the image name
+                params: [],
+                subjectEntityFacet: undefined
+            });            
+
+            // retVal.actions.push({
+            //     verbs: [ "taken", "pictured", "photographed" ],
+            //     verbTense: "past",
+            //     subjectEntityName: imageEntity.name,
+            //     objectEntityName
+            // })
+            // "actions": [  
+            //     {  
+            //         "verbs": ["hike"],  
+            //         "verbTense": "present",  
+            //         "subjectEntityName": "none",  
+            //         "objectEntityName": "hiking trail",  
+            //         "indirectObjectEntityName": "none"  
+            //     }  
+            // ],              
+        }
+    }
+
 
     return {
         header: `${image.fileName} - ${image.title}`,
@@ -159,10 +202,12 @@ export function getKnowledgeForImage(
 
     // EXIF data are facets of this image
     for(let i = 0; i < image?.exifData.length; i++) {
-        imageEntity.facets!.push({
-            name: image?.exifData[0],
-            value: image?.exifData[1]
-        });
+        if (image?.exifData[i] !== undefined && image?.exifData[i][1] !== undefined) {
+            imageEntity.facets!.push({
+                name: image?.exifData[i][0],
+                value: image?.exifData[i][1]
+            });
+        }
     }
 
     // create the return value
@@ -213,18 +258,47 @@ export function getKnowledgeForImage(
                     ]
                 }
 
+                // make the address an entity
                 retVal.entities.push(addrEntity);
+
+                // now make an entity for all of the different parts of teh address
+                if (addrOutput.addressLine) {
+                    retVal.entities.push({ name: addrOutput.locality ?? "", type: [ "locality", "place" ] });
+                }
+                if (addrOutput.neighborhood) {
+                    retVal.entities.push({ name: addrOutput.neighborhood ?? "", type: [ "neighborhood", "place" ] });
+                }
+                if (addrOutput.adminDistricts) {
+                    for(let i = 0; i < addrOutput.adminDistricts.length; i++) {
+                        retVal.entities.push({ 
+                            name: addrOutput.adminDistricts[i].name ?? "", type: [ "district", "place" ], 
+                            facets: [ { name: "shortName", value: addrOutput.adminDistricts[i].shortName ?? "" } ]
+                        });
+                    }
+                }
+                if (addrOutput.postalCode) {
+                    retVal.entities.push({ name: addrOutput.postalCode ?? "", type: [ "postalCode", "place" ] });
+                }
+                if (addrOutput.countryRegion) {
+                    retVal.entities.push({ 
+                        name: addrOutput.countryRegion.name ?? "", type: [ "country", "place" ], 
+                        facets: [ { name: "ISO", value: addrOutput.countryRegion.ISO ?? "" } ]
+                    });
+                }
+                if (addrOutput.intersection) {
+                    retVal.entities.push({ name: addrOutput.intersection.displayName ?? "", type: [ "intersection", "place" ] });
+                }                                                                                
             }
         }
     }
 
-    // // Actions
+    // actions
     // retVal.actions.push({
     //     verbs: [ "taken", "pictured", "photographed" ],
     //     verbTense: "past",
     //     subjectEntityName: imageEntity.name,
     //     objectEntityName
-    // })
+    // })    
 
     return retVal;
 }

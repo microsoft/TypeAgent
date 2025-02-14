@@ -34,6 +34,7 @@ type KnowProContext = {
     basePath: string;
     printer: KnowProPrinter;
     podcast?: kp.Podcast | undefined;
+    images?: kp.ImageCollection | undefined;
     conversation?: kp.IConversation | undefined;
 };
 
@@ -57,9 +58,15 @@ export async function createKnowproCommands(
     commands.kpEntities = entities;
     commands.kpPodcastBuildIndex = podcastBuildIndex;
 
+    commands.kpImages = showImages;
+    commands.kpImageImport = imageImport;
+
+
     /*----------------
      * COMMANDS
      *---------------*/
+
+    ////////////////// Podcast Commands //////////////////
     function showMessagesDef(): CommandMetadata {
         return {
             description: "Show all messages",
@@ -209,6 +216,70 @@ export async function createKnowproCommands(
         context.printer.writePodcastInfo(context.podcast);
     }
 
+    ////////////////// Image Commands //////////////////
+    function showImagesDef(): CommandMetadata {
+        return {
+            description: "Show all images",
+            options: {
+                maxMessages: argNum("Maximum images to display"),
+            },
+        };
+    }
+    commands.kpPodcastMessages.metadata = "Show all images";
+    async function showImages(args: string[]) {
+        const conversation = ensureConversationLoaded();
+        if (!conversation) {
+            return;
+        }
+        const namedArgs = parseNamedArguments(args, showImagesDef());
+        const messages =
+            namedArgs.maxMessages > 0
+                ? conversation.messages.slice(0, namedArgs.maxMessages)
+                : conversation.messages;
+        messages.forEach((m) => context.printer.writeMessage(m));
+    }
+
+    function imageImportDef(): CommandMetadata {
+        return {
+            description: "Create knowPro image index",
+            args: {
+                filePath: arg("File path to an image file or folder"),
+            },
+            options: {
+                knowLedge: argBool("Index knowledge", true),
+                related: argBool("Index related terms", true),
+                indexFilePath: arg("Output path for index file"),
+                maxMessages: argNum("Maximum images to index"),
+            },
+        };
+    }
+    commands.kpPodcastImport.metadata = podcastImportDef();
+    async function imageImport(args: string[]): Promise<void> {
+        const namedArgs = parseNamedArguments(args, imageImportDef());
+        if (!fs.existsSync(namedArgs.filePath)) {
+            context.printer.writeError(`${namedArgs.filePath} not found`);
+            return;
+        }
+        context.images = await kp.importImageCollection(namedArgs.filePath);
+        context.conversation = context.images;
+        context.printer.writeLine("Imported images:");
+        context.printer.writePodcastInfo(context.images);
+
+        if (!namedArgs.index) {
+            return;
+        }
+
+        // Build index
+        await podcastBuildIndex(namedArgs);
+        // Save the index
+        namedArgs.filePath = sourcePathToIndexPath(
+            namedArgs.filePath,
+            namedArgs.indexFilePath,
+        );
+        await podcastSave(namedArgs);
+    }
+
+    ////////////////// Miscellaneous Commands //////////////////
     function searchTermsDef(
         description?: string,
         kType?: kp.KnowledgeType,
