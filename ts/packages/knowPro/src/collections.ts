@@ -111,14 +111,27 @@ export class MatchAccumulator<T = any> {
         for (const otherMatch of other.getMatches()) {
             const existingMatch = this.getMatch(otherMatch.value);
             if (existingMatch) {
-                existingMatch.hitCount += otherMatch.hitCount;
-                existingMatch.score += otherMatch.score;
-                existingMatch.relatedHitCount += otherMatch.relatedHitCount;
-                existingMatch.relatedScore += otherMatch.relatedScore;
+                this.combineMatches(existingMatch, otherMatch);
             } else {
                 this.setMatch(otherMatch);
             }
         }
+    }
+
+    public addIntersect(other: MatchAccumulator) {
+        for (const otherMatch of other.getMatches()) {
+            const existingMatch = this.getMatch(otherMatch.value);
+            if (existingMatch) {
+                this.combineMatches(existingMatch, otherMatch);
+            }
+        }
+    }
+
+    private combineMatches(match: Match, other: Match) {
+        match.hitCount += other.hitCount;
+        match.score += other.score;
+        match.relatedHitCount += other.relatedHitCount;
+        match.relatedScore += other.relatedScore;
     }
 
     public calculateTotalScore(): void {

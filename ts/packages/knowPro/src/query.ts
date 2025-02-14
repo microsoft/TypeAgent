@@ -472,18 +472,34 @@ export class MatchTermsAndExpr extends QueryOpExpr<SemanticRefAccumulator> {
     }
 
     public override eval(context: QueryEvalContext): SemanticRefAccumulator {
-        const allMatches = new SemanticRefAccumulator();
+        let allMatches: SemanticRefAccumulator | undefined;
         context.clearMatchedTerms();
-        for (const matchExpr of this.searchTermExpressions) {
-            const matches = matchExpr.eval(context);
-            if (matches !== undefined) {
-                allMatches.addUnion(matches);
+        let iTerm = 0;
+        // Loop over each search term, intersecting the returned results...
+        for (; iTerm < this.searchTermExpressions.length; ++iTerm) {
+            const termMatches = this.searchTermExpressions[iTerm].eval(context);
+            if (termMatches === undefined || termMatches.size === 0) {
+                // We can't possibly have an 'and'
+                break;
+            }
+            if (allMatches === undefined) {
+                allMatches = termMatches;
+            } else {
+                allMatches.addIntersect(termMatches);
             }
         }
-        allMatches.calculateTotalScore();
-        // The *and* is now the matches that had hitcount == searchTermsExpressions.length
-        allMatches.selectWithHitCount(this.searchTermExpressions.length);
-        return allMatches;
+        if (allMatches) {
+            if (iTerm === this.searchTermExpressions.length) {
+                allMatches.calculateTotalScore();
+                allMatches.selectWithHitCount(
+                    this.searchTermExpressions.length,
+                );
+            } else {
+                // And is not possible
+                allMatches.clearMatches();
+            }
+        }
+        return allMatches ?? new SemanticRefAccumulator();
     }
 }
 
