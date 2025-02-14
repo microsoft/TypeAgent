@@ -618,6 +618,29 @@ function toPromptEntityNameMap(entities: PromptEntity[] | undefined) {
     return map;
 }
 
+function resolveEntities(
+    action: TypeAgentAction<FullAction>,
+    promptEntityMap: Map<string, PromptEntity> | undefined,
+    promptNameEntityMap: Map<string, PromptEntity | PromptEntity[]> | undefined,
+    duplicate: boolean,
+) {
+    if (action.parameters === undefined) {
+        return action;
+    }
+    const result = duplicate ? { ...action } : action;
+    const entities = getParameterObjectEntities(
+        getAppAgentName(action.translatorName),
+        action.parameters!,
+        new Map(),
+        promptEntityMap,
+        promptNameEntityMap,
+    );
+    if (entities !== undefined) {
+        result.entities = entities as any;
+    }
+    return result;
+}
+
 function toPendingActions(
     actions: ExecutableAction[],
     entities: PromptEntity[] | undefined,
@@ -641,23 +664,9 @@ export async function executeActions(
     if (commandResult !== undefined) {
         const promptEntityMap = toPromptEntityMap(entities);
         const promptNameEntityMap = toPromptEntityNameMap(entities);
-        commandResult.actions = actions.map((a) => {
-            if (a.action.parameters) {
-                const action = { ...a.action };
-                const entities = getParameterObjectEntities(
-                    getAppAgentName(action.translatorName),
-                    action.parameters!,
-                    new Map(),
-                    promptEntityMap,
-                    promptNameEntityMap,
-                );
-                if (entities) {
-                    action.entities = entities as any;
-                }
-                return action;
-            }
-            return a.action;
-        });
+        commandResult.actions = actions.map(({ action }) =>
+            resolveEntities(action, promptEntityMap, promptNameEntityMap, true),
+        );
     }
 
     if (!(await canExecute(actions, context))) {
@@ -692,18 +701,7 @@ export async function executeActions(
             continue;
         }
         const appAgentName = getAppAgentName(action.translatorName);
-        if (action.parameters) {
-            const entities = getParameterObjectEntities(
-                appAgentName,
-                action.parameters,
-                resultEntityMap,
-                promptEntityMap,
-                promptNameEntityMap,
-            );
-            if (entities) {
-                action.entities = entities as any;
-            }
-        }
+        resolveEntities(action, promptEntityMap, promptNameEntityMap, false);
         const result = await executeAction(
             executableAction,
             context,
