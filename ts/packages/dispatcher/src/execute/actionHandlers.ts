@@ -518,7 +518,7 @@ function resolveParameterEntity(
     resultEntityMap: Map<string, PromptEntity>,
     promptEntityMap: Map<string, PromptEntity> | undefined,
     promptNameEntityMap: Map<string, PromptEntity | PromptEntity[]> | undefined,
-): EntityValue | undefined {
+) {
     const resultEntity = resultEntityMap.get(value);
     if (resultEntity !== undefined) {
         return resultEntity;
@@ -531,9 +531,7 @@ function resolveParameterEntity(
     }
 
     // LLM like to correct/change casing.  Normalize entity name for look up.
-    const nameEntity = promptNameEntityMap?.get(normalizeParamString(value));
-    // TODO: If there are multiple match, ignore for now.
-    return Array.isArray(nameEntity) ? undefined : nameEntity;
+    return promptNameEntityMap?.get(normalizeParamString(value));
 }
 
 function getParameterEntities(
@@ -558,15 +556,19 @@ function getParameterEntities(
                 promptNameEntityMap,
             );
 
-            return entity
-                ? Array.isArray(entity)
-                    ? entity.filter(
-                          (e) => e.sourceAppAgentName === appAgentName,
-                      )
-                    : entity.sourceAppAgentName === appAgentName
-                      ? entity
-                      : undefined
-                : undefined;
+            if (entity === undefined) {
+                return undefined;
+            }
+            if (!Array.isArray(entity)) {
+                return entity.sourceAppAgentName === appAgentName
+                    ? entity
+                    : undefined;
+            }
+            const matched = entity.filter(
+                (e) => e.sourceAppAgentName === appAgentName,
+            );
+            // TODO: If there are multiple match, ignore for now.
+            return matched.length === 1 ? matched[0] : undefined;
         case "function":
             throw new Error("Function is not supported as an action value");
         case "object":
