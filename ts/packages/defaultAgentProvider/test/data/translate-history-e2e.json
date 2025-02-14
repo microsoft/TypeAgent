@@ -1,14 +1,273 @@
 [
-    {
-        "request": "play that song again",
-        "history": {
-            "user": "play some random songs",
-            "assistant": { "text": "Now playing: Soruwienf from album Wxifiel with artist Bnefisoe", "source": "player", "entities": [
-                {"name": "Soruwienf", "type": ["track", "song"], "uniqueId": "a"}, 
-                {"name": "Wxifiel", "type": ["album"], "uniqueId": "b"}, 
-                {"name": "Bnefisoe", "type": ["artist"], "uniqueId": "c"}
-            ]}
+    [
+        {
+            "request": "play Soruwienf from album Wxifiel by artist Bnefisoe",
+            "action": {
+                "translatorName": "player",
+                "actionName": "playTrack",
+                "parameters": {
+                    "trackName": "Soruwienf",
+                    "albumName": "Wxifiel",
+                    "artists": [
+                        "Bnefisoe"
+                    ]
+                }
+            },
+            "history": {
+                "text": "Now playing: Soruwienf from album Wxifiel with artist Bnefisoe",
+                "source": "player",
+                "entities": [
+                    {
+                        "name": "Soruwienf",
+                        "type": [
+                            "track",
+                            "song"
+                        ],
+                        "uniqueId": "a"
+                    },
+                    {
+                        "name": "Wxifiel",
+                        "type": [
+                            "album"
+                        ],
+                        "uniqueId": "b"
+                    },
+                    {
+                        "name": "Bnefisoe",
+                        "type": [
+                            "artist"
+                        ],
+                        "uniqueId": "c"
+                    }
+                ]
+            }
         },
-        "action": {"translatorName": "player","actionName": "playTrack", "parameters": {"trackName": "Soruwienf", "albumName": "Wxifiel", "artists": ["Bnefisoe"]}}
-    }
+        {
+            "request": "play that song again",
+            "action": {
+                "translatorName": "player",
+                "actionName": "playTrack",
+                "parameters": {
+                    "trackName": "Soruwienf",
+                    "albumName": "Wxifiel",
+                    "artists": [
+                        "Bnefisoe"
+                    ]
+                },
+                "entities": {
+                    "trackName": {
+                        "sourceAppAgentName": "player",
+                        "name": "Soruwienf",
+                        "type": [
+                            "track",
+                            "song"
+                        ],
+                        "uniqueId": "a"
+                    },
+                    "albumName": {
+                        "sourceAppAgentName": "player",
+                        "name": "Wxifiel",
+                        "type": [
+                            "album"
+                        ],
+                        "uniqueId": "b"
+                    },
+                    "artists": [
+                        {
+                            "sourceAppAgentName": "player",
+                            "name": "Bnefisoe",
+                            "type": [
+                                "artist"
+                            ],
+                            "uniqueId": "c"
+                        }
+                    ]
+                }
+            }
+        }
+    ],
+    [
+        {
+            "request": "look up the ingredient for shepherd's pie for me please",
+            "action": {
+                "translatorName": "chat",
+                "actionName": "lookupAndGenerateResponse",
+                "parameters": {
+                    "originalRequest": "look up the ingredient for shepherd's pie for me please",
+                    "internetLookups": [
+                        "shepherd's pie ingredients"
+                    ]
+                }
+            },
+            "history": {
+                "text": "- Ground beef or lamb\n- Onions\n- Carrots\n- Peas\n- Worcestershire sauce\n- Beef broth\n- Mashed potatoes\n- Butter\n",
+                "source": "chat",
+                "entities": [
+                    {
+                        "name": "shepherd's pie",
+                        "type": [
+                            "food"
+                        ]
+                    },
+                    {
+                        "name": "Ground beef",
+                        "type": [
+                            "ingredient"
+                        ]
+                    },
+                    {
+                        "name": "lamb",
+                        "type": [
+                            "ingredient"
+                        ]
+                    },
+                    {
+                        "name": "Onions",
+                        "type": [
+                            "ingredient"
+                        ]
+                    },
+                    {
+                        "name": "Carrots",
+                        "type": [
+                            "ingredient"
+                        ]
+                    },
+                    {
+                        "name": "Peas",
+                        "type": [
+                            "ingredient"
+                        ]
+                    },
+                    {
+                        "name": "Worcestershire sauce",
+                        "type": [
+                            "ingredient"
+                        ]
+                    },
+                    {
+                        "name": "Beef broth",
+                        "type": [
+                            "ingredient"
+                        ]
+                    },
+                    {
+                        "name": "Mashed potatoes",
+                        "type": [
+                            "ingredient"
+                        ]
+                    },
+                    {
+                        "name": "Butter",
+                        "type": [
+                            "ingredient"
+                        ]
+                    }
+                ]
+            }
+        },
+        {
+            "request": "add them to the grocery list",
+            "action": {
+                "translatorName": "list",
+                "actionName": "addItems",
+                "parameters": {
+                    "items": [
+                        "Ground beef",
+                        "lamb",
+                        "Onions",
+                        "Carrots",
+                        "Peas",
+                        "Worcestershire sauce",
+                        "Beef broth",
+                        "Mashed potatoes",
+                        "Butter"
+                    ],
+                    "listName": "grocery"
+                }
+            },
+            "history": {
+                "text": "Added items: Ground meat,Onions,Carrots,Peas,Worcestershire sauce,Beef broth,Mashed potatoes,cheese to list grocery",
+                "source": "list",
+                "entities": [
+                    {
+                        "name": "grocery",
+                        "type": [
+                            "list"
+                        ]
+                    },
+                    {
+                        "name": "Ground meat",
+                        "type": [
+                            "item"
+                        ]
+                    },
+                    {
+                        "name": "Onions",
+                        "type": [
+                            "item"
+                        ]
+                    },
+                    {
+                        "name": "Carrots",
+                        "type": [
+                            "item"
+                        ]
+                    },
+                    {
+                        "name": "Peas",
+                        "type": [
+                            "item"
+                        ]
+                    },
+                    {
+                        "name": "Worcestershire sauce",
+                        "type": [
+                            "item"
+                        ]
+                    },
+                    {
+                        "name": "Beef broth",
+                        "type": [
+                            "item"
+                        ]
+                    },
+                    {
+                        "name": "Mashed potatoes",
+                        "type": [
+                            "item"
+                        ]
+                    },
+                    {
+                        "name": "cheese",
+                        "type": [
+                            "item"
+                        ]
+                    }
+                ]
+            }
+        },
+        {
+            "request": "don't need the potatoes",
+            "action": {
+                "translatorName": "list",
+                "actionName": "removeItems",
+                "parameters": {
+                    "items": [
+                        "Mashed potatoes"
+                    ],
+                    "listName": "grocery"
+                },
+                "entities": {
+                    "listName": {
+                        "name": "grocery",
+                        "sourceAppAgentName": "list",
+                        "type": [
+                            "list"
+                        ]
+                    }
+                }
+            }
+        }
+    ]
 ]

@@ -18,12 +18,13 @@
         padding: 10px;
       }
       pre {
-        white-space: pre-wrap;
         background: #f8f8f8;
         padding: 10px;
-        border: 1px solid #ddd;
-        height: 300px;
+        border-radius: 5px;
         overflow: auto;
+      }
+      code {
+        font-size: 14px;
       }
       .button-row {
         display: flex;
@@ -33,11 +34,12 @@
   </head>
   <body>
     <button id="refreshSchema">Refresh Schema</button>
-    <pre id="schemaText"></pre>
+    <pre><code id="schemaText" class="language-json">Loading...</code></pre>
     <div class="button-row">
       <button id="editSchema">Edit</button>
       <button id="saveSchema">Save</button>
       <button id="trySchema">Try it out</button>
     </div>
+    <script src="sidepanel.js"></script>
   </body>
 </html>
