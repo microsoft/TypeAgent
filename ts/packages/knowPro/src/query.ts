@@ -15,7 +15,7 @@ import {
     TextRange,
 } from "./dataFormat.js";
 import { KnowledgePropertyName, PropertySearchTerm } from "./search.js";
-import { SearchTerm } from "./dataFormat.js";
+import { SearchTerm } from "./search.js";
 import {
     Match,
     MatchAccumulator,

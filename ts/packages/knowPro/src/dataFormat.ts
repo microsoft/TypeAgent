@@ -117,14 +117,6 @@ export type Term = {
     weight?: number | undefined;
 };
 
-export type SearchTerm = {
-    /**
-     * Term being searched for
-     */
-    term: Term;
-    /**
-     * Additional terms related to term.
-     * These can be supplied from synonym tables and so on
-     */
-    relatedTerms?: Term[] | undefined;
-};
+// Also see:
+// - secondaryIndex.ts for optional secondary interfaces
+// - search.ts for search interfaces.

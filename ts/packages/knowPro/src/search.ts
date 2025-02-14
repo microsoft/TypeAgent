@@ -7,12 +7,34 @@ import {
     IConversation,
     KnowledgeType,
     ScoredSemanticRef,
-    SearchTerm,
     Term,
 } from "./dataFormat.js";
 import * as q from "./query.js";
 import { resolveRelatedTerms } from "./relatedTermsIndex.js";
 import { IConversationSecondaryIndexes } from "./secondaryIndexes.js";
+
+export type SearchTerm = {
+    /**
+     * Term being searched for
+     */
+    term: Term;
+    /**
+     * Additional terms related to term.
+     * These can be supplied from synonym tables and so on
+     */
+    relatedTerms?: Term[] | undefined;
+};
+
+/**
+ * A Group of search terms
+ */
+export type SearchTermGroup = {
+    /**
+     * And will enforce that all terms match
+     */
+    booleanOp: "and" | "or";
+    terms: (SearchTerm | PropertySearchTerm)[];
+};
 
 /**
  * Well known knowledge properties
@@ -28,22 +50,18 @@ export type KnowledgePropertyName =
 
 export type PropertySearchTerm = {
     /**
-     * You can either match a well known property name
-     * Or you can provide a searchTerm for the propertyName.
-     * E.g. to match hue(red)
-     *  - propertyName as SearchTerm, set to 'hue'
-     *  - propertyValue as SearchTerm, set to 'red'
-     * You can also supply related terms for each.
-     * E.g you could include "color" as a related term for the propertyName "hue". Or 'crimson' for red.
+     * PropertySearch terms let you matched named property, values
+     * - You can  match a well known property name (name("Bach") type("book"))
+     * - Or you can provide a SearchTerm as a propertyName.
+     *   E.g. to match hue(red)
+     *      - propertyName as SearchTerm, set to 'hue'
+     *      - propertyValue as SearchTerm, set to 'red'
+     * SearchTerms can included related terms
+     *   E.g you could include "color" as a related term for the propertyName "hue". Or 'crimson' for red.
      * The the query processor can also related terms using a related terms secondary index, if one is available
      */
     propertyName: KnowledgePropertyName | SearchTerm;
     propertyValue: SearchTerm;
-};
-
-export type SearchTermGroup = {
-    booleanOp: "and" | "or";
-    terms: (SearchTerm | PropertySearchTerm)[];
 };
 
 function createSearchTerm(text: string, score?: number): SearchTerm {
