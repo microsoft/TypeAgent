@@ -15,7 +15,8 @@
   "scripts": {
     "build": "npm run tsc",
     "copy-data": "copyfiles \"data/**/*\" dist",
-    "postbuild": "pnpm run copy-data && copyfiles -u 1 \"src/**/*Schema.ts\" \"src/**/*.txt\" \"src/*.py\" \"data/**/*\" dist && rimraf --glob 'copyfiles-*.done.build.log'",
+    "install-python-deps": "python3 -m pip install -qq -r requirements.txt",
+    "postbuild": "pnpm run copy-data && copyfiles -u 1 \"src/**/*Schema.ts\" \"src/**/*.txt\" \"src/*.py\" \"data/**/*\" dist && rimraf --glob 'copyfiles-*.done.build.log' && && npm run install-python-deps",
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log dist/data",
     "prettier": "prettier --check . --ignore-path ../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
