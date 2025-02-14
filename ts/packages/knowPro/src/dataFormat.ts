@@ -106,6 +106,7 @@ export interface IConversationData<TMessage> {
 
 export type DateRange = {
     start: Date;
+    // Inclusive
     end?: Date | undefined;
 };
 

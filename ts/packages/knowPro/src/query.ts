@@ -7,6 +7,7 @@ import {
     IMessage,
     ITermToSemanticRefIndex,
     KnowledgeType,
+    MessageIndex,
     ScoredSemanticRef,
     SemanticRef,
     SemanticRefIndex,
@@ -28,7 +29,6 @@ import { PropertyNames } from "./propertyIndex.js";
 import { IPropertyToSemanticRefIndex } from "./secondaryIndexes.js";
 import { conversation } from "knowledge-processor";
 import { collections } from "typeagent";
-import { textRangeFromLocation } from "./conversationIndex.js";
 import { ITimestampToTextRangeIndex } from "./secondaryIndexes.js";
 
 export function isConversationSearchable(conversation: IConversation): boolean {
@@ -38,35 +38,10 @@ export function isConversationSearchable(conversation: IConversation): boolean {
     );
 }
 
-export function textRangeForConversation(
-    conversation: IConversation,
-): TextRange {
-    const messages = conversation.messages;
-    return {
-        start: { messageIndex: 0 },
-        end: { messageIndex: messages.length - 1 },
-    };
-}
-
 export type TimestampRange = {
     start: string;
     end?: string | undefined;
 };
-
-export function timestampRangeForConversation(
-    conversation: IConversation,
-): TimestampRange | undefined {
-    const messages = conversation.messages;
-    const start = messages[0].timestamp;
-    const end = messages[messages.length - 1].timestamp;
-    if (start !== undefined) {
-        return {
-            start,
-            end,
-        };
-    }
-    return undefined;
-}
 
 /**
  * Returns:
@@ -121,7 +96,9 @@ export function isInTextRange(
         return cmpStart <= 0;
     }
     let cmpEnd = compareTextLocation(
-        innerRange.end ?? MaxTextLocation,
+        // innerRange.end must be < outerRange end (assume innerRange.end > innerRange.start)
+        // if no innerRange.end, then innerRange.start must be < outerRange.end
+        innerRange.end ?? innerRange.start,
         outerRange.end ?? MaxTextLocation,
     );
     return cmpStart <= 0 && cmpEnd < 0;
@@ -138,6 +115,37 @@ export function isInDateRange(outerRange: DateRange, date: Date): boolean {
     let cmpEnd =
         outerRange.end !== undefined ? compareDates(date, outerRange.end) : -1;
     return cmpStart <= 0 && cmpEnd <= 0;
+}
+
+export function getTextRangeForDateRange(
+    conversation: IConversation,
+    dateRange: DateRange,
+): TextRange | undefined {
+    const messages = conversation.messages;
+    let rangeStartIndex: MessageIndex = -1;
+    let rangeEndIndex = rangeStartIndex;
+    for (let messageIndex = 0; messageIndex < messages.length; ++messageIndex) {
+        const message = messages[messageIndex];
+        if (message.timestamp) {
+            if (isInDateRange(dateRange, new Date(message.timestamp))) {
+                if (rangeStartIndex < 0) {
+                    rangeStartIndex = messageIndex;
+                }
+                rangeEndIndex = messageIndex;
+            } else {
+                if (rangeStartIndex >= 0) {
+                    break;
+                }
+            }
+        }
+    }
+    if (rangeStartIndex >= 0) {
+        return {
+            start: { messageIndex: rangeStartIndex },
+            end: { messageIndex: rangeEndIndex + 1 },
+        };
+    }
+    return undefined;
 }
 
 export function messageLength(message: IMessage): number {
@@ -908,32 +916,20 @@ export class TextRangesInDateRangeSelector implements IQueryTextRangeSelector {
     public eval(context: QueryEvalContext): TextRangeCollection | undefined {
         const textRangesInScope = new TextRangeCollection();
         if (context.timestampIndex) {
-            const timeRanges = context.timestampIndex.lookupRange(
+            const textRanges = context.timestampIndex.lookupRange(
                 this.dateRangeInScope,
             );
-            for (const timeRange of timeRanges) {
+            for (const timeRange of textRanges) {
                 textRangesInScope.addRange(timeRange.range);
             }
             return textRangesInScope;
         } else {
-            const messages = context.conversation.messages;
-            for (
-                let messageIndex = 0;
-                messageIndex < messages.length;
-                ++messageIndex
-            ) {
-                const message = messages[messageIndex];
-                if (
-                    message.timestamp &&
-                    isInDateRange(
-                        this.dateRangeInScope,
-                        new Date(message.timestamp),
-                    )
-                ) {
-                    textRangesInScope.addRange(
-                        textRangeFromLocation(messageIndex),
-                    );
-                }
+            const textRange = getTextRangeForDateRange(
+                context.conversation,
+                this.dateRangeInScope,
+            );
+            if (textRange !== undefined) {
+                textRangesInScope.addRange(textRange);
             }
         }
         return textRangesInScope;

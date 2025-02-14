@@ -380,6 +380,9 @@ export class TextRangeCollection {
     }
 
     public isInRange(rangeToMatch: TextRange): boolean {
+        if (this.ranges.length === 0) {
+            return false;
+        }
         // Find the first text range with messageIndex == rangeToMatch.start.messageIndex
         let i = collections.binarySearchFirst(
             this.ranges,
@@ -389,10 +392,13 @@ export class TextRangeCollection {
         if (i < 0) {
             return false;
         }
+        if (i == this.ranges.length) {
+            i--;
+        }
         // Now loop over all text ranges that start at rangeToMatch.start.messageIndex
         for (; i < this.ranges.length; ++i) {
             const range = this.ranges[i];
-            if (range.start.messageIndex !== rangeToMatch.start.messageIndex) {
+            if (range.start.messageIndex > rangeToMatch.start.messageIndex) {
                 break;
             }
             if (isInTextRange(range, rangeToMatch)) {
