@@ -33,8 +33,8 @@
                 "text": "- Ground beef or lamb\n- Onions\n- Carrots\n- Peas\n- Worcestershire sauce\n- Beef broth\n- Mashed potatoes\n- Butter\n", 
                 "source": "chat", 
                 "entities": [
-                    { "name": "shepherd's pie", "type": ["food"] },
-                    { "name": "Ground beef", "type": ["ingredient"] },
+                    { "name": "shepherd's pie", "type": ["food"]},
+                    { "name": "Ground beef", "type": ["ingredient"]},
                     { "name": "lamb", "type": ["ingredient"]},
                     { "name": "Onions", "type": ["ingredient"]},
                     { "name": "Carrots", "type": ["ingredient"]},
@@ -48,7 +48,30 @@
         },
         {        
             "request": "add them to the grocery list",
-            "action": { "translatorName": "list","actionName": "addItems", "parameters": { "items": [ "Ground beef", "lamb", "Onions", "Carrots", "Peas", "Worcestershire sauce", "Beef broth", "Mashed potatoes", "Butter" ], "listName": "grocery"}} 
+            "action": { "translatorName": "list","actionName": "addItems", "parameters": { "items": [ "Ground beef", "lamb", "Onions", "Carrots", "Peas", "Worcestershire sauce", "Beef broth", "Mashed potatoes", "Butter" ], "listName": "grocery"}},
+            "history": {
+                "text": "Added items: Ground meat,Onions,Carrots,Peas,Worcestershire sauce,Beef broth,Mashed potatoes,cheese to list grocery",
+                "source": "list",
+                "entities": [
+                    { "name": "grocery", "type": ["list"]},
+                    { "name": "Ground meat", "type": ["item"]},
+                    { "name": "Onions", "type": ["item"]},
+                    { "name": "Carrots", "type": ["item"]},
+                    { "name": "Peas", "type": ["item"]},
+                    { "name": "Worcestershire sauce", "type": ["item"]},
+                    { "name": "Beef broth", "type": ["item"]},
+                    { "name": "Mashed potatoes", "type": ["item"]},
+                    { "name": "cheese", "type": ["item"]}
+                ]
+            }
+        },
+        {
+            "request": "don't need the potatoes",
+            "action": {
+                "translatorName": "list",
+                "actionName": "removeItems",
+                "parameters": { "items": [ "Mashed potatoes" ], "listName": "grocery" }
+            }
         }
     ]  
 ]
