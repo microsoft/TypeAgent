@@ -54,6 +54,7 @@ export async function defineTranslateTest(name: string, dataFiles: string[]) {
                         appAgentProviders: defaultAppAgentProviders,
                         actions: null,
                         commands: { dispatcher: true },
+                        execution: { history: false }, // don't generate chat history, the test manually imports them
                         explainer: { enabled: false },
                         cache: { enabled: false },
                         collectCommandResult: true,
