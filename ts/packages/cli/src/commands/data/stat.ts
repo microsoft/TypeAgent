@@ -6,7 +6,7 @@ import chalk from "chalk";
 import { CorrectionRecord } from "agent-cache";
 import {
     getCacheFactory,
-    readTestData,
+    readExplanationTestData,
     getSchemaNamesForActionConfigProvider,
     createActionConfigProvider,
     getInstanceDir,
@@ -157,7 +157,7 @@ export default class ExplanationDataStatCommmand extends Command {
         }),
     };
     static flags = {
-        translator: Flags.string({
+        schema: Flags.string({
             description: "Filter by translator",
             options: schemaNames,
             multiple: true,
@@ -289,10 +289,9 @@ export default class ExplanationDataStatCommmand extends Command {
         };
         for (const file of files) {
             try {
-                const data = await readTestData(file);
+                const data = await readExplanationTestData(file);
                 if (
-                    (flags.translator &&
-                        !flags.translator.includes(data.schemaName)) ||
+                    (flags.schema && !flags.schema.includes(data.schemaName)) ||
                     (flags.explainer &&
                         !flags.explainer.includes(data.explainerName))
                 ) {

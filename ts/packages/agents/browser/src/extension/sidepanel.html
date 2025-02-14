@@ -1,0 +1,45 @@
+<!doctype html>
+<!-- Copyright (c) Microsoft Corporation.
+ Licensed under the MIT License. -->
+
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Schema Inspector</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        padding: 10px;
+      }
+      button {
+        width: 100%;
+        margin-bottom: 10px;
+        padding: 10px;
+      }
+      pre {
+        background: #f8f8f8;
+        padding: 10px;
+        border-radius: 5px;
+        overflow: auto;
+      }
+      code {
+        font-size: 14px;
+      }
+      .button-row {
+        display: flex;
+        gap: 10px;
+      }
+    </style>
+  </head>
+  <body>
+    <button id="refreshSchema">Refresh Schema</button>
+    <pre><code id="schemaText" class="language-json">Loading...</code></pre>
+    <div class="button-row">
+      <button id="editSchema">Edit</button>
+      <button id="saveSchema">Save</button>
+      <button id="trySchema">Try it out</button>
+    </div>
+    <script src="sidepanel.js"></script>
+  </body>
+</html>

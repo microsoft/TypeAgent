@@ -23,6 +23,7 @@ module.exports = {
         ),
         "electron/webTypeAgentMain": path.join(srcDir, "webTypeAgentMain.ts"),
         "extension/serviceWorker": path.join(srcDir, "serviceWorker.ts"),
+        "extension/sidepanel": path.join(srcDir, "sidepanel.ts"),
         "extension/uiEventsDispatcher": path.join(
             srcDir,
             "uiEventsDispatcher.ts",
@@ -107,6 +108,10 @@ module.exports = {
                     from: "../../../.env",
                     to: "./extension",
                     noErrorOnMissing: true,
+                },
+                {
+                    from: path.join(srcDir, "sidepanel.html"),
+                    to: "./extension",
                 },
             ],
         }),

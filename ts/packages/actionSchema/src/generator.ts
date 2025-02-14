@@ -124,14 +124,27 @@ export type GenerateSchemaOptions = {
     strict?: boolean; // default true
     exact?: boolean; // default false
     jsonSchema?: boolean; // default false
+    jsonSchemaFunction?: boolean; // default false
+    jsonSchemaWithTs?: boolean; // default false, applies only when jsonSchema or jsonSchemaFunction is true.
+    jsonSchemaValidate?: boolean; //default false, applies only when jsonSchema or jsonSchemaFunction is true.
 };
 
+function isJsonSchemaEnabled(options?: GenerateSchemaOptions): boolean {
+    return options?.jsonSchema === true || options?.jsonSchemaFunction === true;
+}
 export function generateSchemaTypeDefinition(
     definition: SchemaTypeDefinition,
     options?: GenerateSchemaOptions,
     order?: Map<string, number>,
-) {
-    const jsonSchema = options?.jsonSchema ?? false;
+): string {
+    // wrap the action schema when json schema is active.
+    const jsonSchema = isJsonSchemaEnabled(options);
+
+    const includeTs = !jsonSchema || (options?.jsonSchemaWithTs ?? false);
+    if (!includeTs) {
+        return "";
+    }
+
     const strict = options?.strict ?? true;
     const exact = options?.exact ?? false;
     const emitted = new Map<
@@ -185,7 +198,7 @@ export function generateActionSchema(
     options?: GenerateSchemaOptions,
 ): string {
     return generateSchemaTypeDefinition(
-        options?.jsonSchema
+        isJsonSchemaEnabled(options)
             ? wrapTypeWithJsonSchema(actionSchemaGroup.entry)
             : actionSchemaGroup.entry,
         options,

@@ -12,12 +12,14 @@ import {
     Term,
     TextRange,
 } from "./dataFormat.js";
-import { isInTextRange } from "./query.js";
+import { compareTextRange, isInTextRange } from "./query.js";
 
 export interface Match<T = any> {
     value: T;
     score: number;
-    exactHitCount: number;
+    hitCount: number;
+    relatedScore: number;
+    relatedHitCount: number;
 }
 
 /**
@@ -63,29 +65,85 @@ export class MatchAccumulator<T = any> {
         }
     }
 
+    public getMaxHitCount(): number {
+        let maxHitCount = 0;
+        for (const match of this.matches.values()) {
+            if (match.hitCount > maxHitCount) {
+                maxHitCount = match.hitCount;
+            }
+        }
+        return maxHitCount;
+    }
+
     public add(value: T, score: number, isExactMatch: boolean) {
         const existingMatch = this.getMatch(value);
         if (existingMatch) {
-            this.updateExisting(existingMatch, score, isExactMatch);
+            //this.updateExisting(existingMatch, score, isExactMatch);
+            if (isExactMatch) {
+                existingMatch.hitCount++;
+                existingMatch.score += score;
+            } else {
+                existingMatch.relatedHitCount++;
+                existingMatch.relatedScore += score;
+            }
         } else {
-            this.setMatch({
-                value,
-                exactHitCount: isExactMatch ? 1 : 0,
-                score,
-            });
+            if (isExactMatch) {
+                this.setMatch({
+                    value,
+                    hitCount: 1,
+                    score,
+                    relatedHitCount: 0,
+                    relatedScore: 0,
+                });
+            } else {
+                this.setMatch({
+                    value,
+                    hitCount: 1,
+                    score: 0,
+                    relatedHitCount: 1,
+                    relatedScore: score,
+                });
+            }
         }
     }
 
-    protected updateExisting(
-        existingMatch: Match,
-        newScore: number,
-        isExactMatch: boolean,
-    ): void {
-        if (isExactMatch) {
-            existingMatch.exactHitCount++;
-            existingMatch.score += newScore;
-        } else if (existingMatch.score < newScore) {
-            existingMatch.score = newScore;
+    public addUnion(other: MatchAccumulator) {
+        for (const otherMatch of other.getMatches()) {
+            const existingMatch = this.getMatch(otherMatch.value);
+            if (existingMatch) {
+                this.combineMatches(existingMatch, otherMatch);
+            } else {
+                this.setMatch(otherMatch);
+            }
+        }
+    }
+
+    public addIntersect(other: MatchAccumulator) {
+        for (const otherMatch of other.getMatches()) {
+            const existingMatch = this.getMatch(otherMatch.value);
+            if (existingMatch) {
+                this.combineMatches(existingMatch, otherMatch);
+            }
+        }
+    }
+
+    private combineMatches(match: Match, other: Match) {
+        match.hitCount += other.hitCount;
+        match.score += other.score;
+        match.relatedHitCount += other.relatedHitCount;
+        match.relatedScore += other.relatedScore;
+    }
+
+    public calculateTotalScore(): void {
+        for (const match of this.getMatches()) {
+            if (match.relatedHitCount > 0) {
+                // Smooth the impact of multiple related term matches
+                // If we just add up scores, a larger number of moderately related
+                // but noisy matches can overwhelm a small # of highly related matches... etc
+                const avgScore = match.relatedScore / match.relatedHitCount;
+                const normalizedScore = Math.log(1 + avgScore);
+                match.score += normalizedScore;
+            }
         }
     }
 
@@ -122,6 +180,10 @@ export class MatchAccumulator<T = any> {
         }
     }
 
+    public getWithHitCount(minHitCount: number): Match<T>[] {
+        return [...this.matchesWithMinHitCount(minHitCount)];
+    }
+
     public *getMatches(
         predicate?: (match: Match<T>) => boolean,
     ): IterableIterator<Match<T>> {
@@ -145,11 +207,17 @@ export class MatchAccumulator<T = any> {
         return topN.length;
     }
 
+    public selectWithHitCount(minHitCount: number): number {
+        const matches = this.getWithHitCount(minHitCount);
+        this.setMatches(matches, true);
+        return matches.length;
+    }
+
     private matchesWithMinHitCount(
         minHitCount: number | undefined,
     ): IterableIterator<Match<T>> {
         return minHitCount !== undefined && minHitCount > 0
-            ? this.getMatches((m) => m.exactHitCount >= minHitCount)
+            ? this.getMatches((m) => m.hitCount >= minHitCount)
             : this.matches.values();
     }
 }
@@ -168,46 +236,18 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
             | IterableIterator<ScoredSemanticRef>
             | undefined,
         isExactMatch: boolean,
-        scoreBoost?: number,
+        weight?: number,
     ) {
         if (scoredRefs) {
-            scoreBoost ??= searchTerm.score ?? 0;
+            weight ??= searchTerm.weight ?? 1;
             for (const scoredRef of scoredRefs) {
                 this.add(
                     scoredRef.semanticRefIndex,
-                    scoredRef.score + scoreBoost,
+                    scoredRef.score * weight,
                     isExactMatch,
                 );
             }
             this.searchTermMatches.add(searchTerm.text);
-        }
-    }
-
-    public updateTermMatches(
-        searchTerm: Term,
-        scoredRefs:
-            | ScoredSemanticRef[]
-            | IterableIterator<ScoredSemanticRef>
-            | undefined,
-        isExactMatch: boolean,
-        scoreBoost?: number,
-    ) {
-        if (scoredRefs) {
-            scoreBoost ??= searchTerm.score ?? 0;
-            for (const scoredRef of scoredRefs) {
-                const existingMatch = this.getMatch(scoredRef.semanticRefIndex);
-                if (existingMatch) {
-                    this.updateExisting(
-                        existingMatch,
-                        scoredRef.score + scoreBoost,
-                        isExactMatch,
-                    );
-                } else {
-                    throw new Error(
-                        `No existing match for ${searchTerm.text} Id: ${scoredRef.semanticRefIndex}`,
-                    );
-                }
-            }
         }
     }
 
@@ -227,7 +267,7 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
     public *getSemanticRefs(
         semanticRefs: SemanticRef[],
         predicate?: (semanticRef: SemanticRef) => boolean,
-    ) {
+    ): IterableIterator<SemanticRef> {
         for (const match of this.getMatches()) {
             const semanticRef = semanticRefs[match.value];
             if (predicate === undefined || predicate(semanticRef))
@@ -269,35 +309,22 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
         return groups;
     }
 
-    public getInScope(semanticRefs: SemanticRef[], scope: TextRangeCollection) {
+    public getMatchesInScope(
+        semanticRefs: SemanticRef[],
+        textRangesInScope: TextRangeCollection[],
+    ) {
         const accumulator = new SemanticRefAccumulator(this.searchTermMatches);
         for (const match of this.getMatches()) {
-            if (scope.isInRange(semanticRefs[match.value].range)) {
+            if (
+                isInAllTextRanges(
+                    textRangesInScope,
+                    semanticRefs[match.value].range,
+                )
+            ) {
                 accumulator.setMatch(match);
             }
         }
         return accumulator;
-    }
-
-    public selectKnowledge<T extends Knowledge>(
-        semanticRefs: SemanticRef[],
-        knowledgeType: KnowledgeType,
-        predicate?: KnowledgePredicate<T> | undefined,
-    ): void {
-        if (predicate) {
-            const selectedMatches = [
-                ...this.getMatchesOfType<T>(
-                    semanticRefs,
-                    knowledgeType,
-                    predicate,
-                ),
-            ];
-            if (selectedMatches.length > 0) {
-                this.setMatches(selectedMatches);
-                return;
-            }
-        }
-        this.clearMatches();
     }
 
     public toScoredSemanticRefs(): ScoredSemanticRef[] {
@@ -308,6 +335,11 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
             };
         }, 0);
     }
+
+    public override clearMatches() {
+        super.clearMatches();
+        this.searchTermMatches.clear();
+    }
 }
 
 export class MessageAccumulator extends MatchAccumulator<IMessage> {}
@@ -315,7 +347,6 @@ export class MessageAccumulator extends MatchAccumulator<IMessage> {}
 export class TextRangeCollection {
     // Maintains ranges sorted by message index
     private ranges: TextRange[] = [];
-    private sorted: boolean = false;
 
     constructor() {}
 
@@ -323,34 +354,45 @@ export class TextRangeCollection {
         return this.ranges.length;
     }
 
-    public addRange(textRange: TextRange) {
+    public addRange(textRange: TextRange): boolean {
         // Future: merge ranges
-        //collections.insertIntoSorted(this.ranges, textRange, this.comparer);
-        this.ranges.push(textRange);
-        this.sorted = false;
+
+        // Is this text range already in this collection?
+        let pos = collections.binarySearch(
+            this.ranges,
+            textRange,
+            compareTextRange,
+        );
+        if (pos >= 0) {
+            // Already exists
+            return false;
+        }
+        this.ranges.splice(~pos, 0, textRange);
+        return true;
     }
 
-    public addRanges(textRanges: TextRange[]) {
-        for (const range of textRanges) {
-            this.addRange(range);
+    public addRanges(textRanges: TextRange[] | TextRangeCollection) {
+        if (Array.isArray(textRanges)) {
+            textRanges.forEach((t) => this.addRange(t));
+        } else {
+            textRanges.ranges.forEach((t) => this.addRange(t));
         }
     }
 
     public isInRange(rangeToMatch: TextRange): boolean {
-        this.ensureSorted();
-
+        // Find the first text range with messageIndex == rangeToMatch.start.messageIndex
         let i = collections.binarySearchFirst(
             this.ranges,
             rangeToMatch,
-            this.comparer,
+            (x, y) => x.start.messageIndex - y.start.messageIndex,
         );
         if (i < 0) {
             return false;
         }
+        // Now loop over all text ranges that start at rangeToMatch.start.messageIndex
         for (; i < this.ranges.length; ++i) {
             const range = this.ranges[i];
-            if (range.start.messageIndex > rangeToMatch.start.messageIndex) {
-                // We are at a range whose start is > rangeToMatch. Stop
+            if (range.start.messageIndex !== rangeToMatch.start.messageIndex) {
                 break;
             }
             if (isInTextRange(range, rangeToMatch)) {
@@ -359,39 +401,64 @@ export class TextRangeCollection {
         }
         return false;
     }
+}
 
-    private ensureSorted() {
-        if (!this.sorted) {
-            this.ranges.sort(this.comparer);
-            this.sorted = true;
+/**
+ * Return false if inner range is not in ALL the given ranges
+ */
+function isInAllTextRanges(
+    ranges: TextRangeCollection[],
+    innerRange: TextRange,
+): boolean {
+    for (const outerRange of ranges) {
+        if (!outerRange.isInRange(innerRange)) {
+            return false;
         }
     }
-
-    private comparer(x: TextRange, y: TextRange): number {
-        return x.start.messageIndex - y.start.messageIndex;
-    }
+    return true;
 }
 
 export class TermSet {
-    constructor(private terms: Map<string, Term> = new Map()) {}
-
-    public add(term: Term) {
-        const existingTerm = this.terms.get(term.text);
-        if (!existingTerm) {
-            this.terms.set(term.text, term);
+    private terms: Map<string, Term> = new Map();
+    constructor(terms?: Term[]) {
+        if (terms) {
+            this.addOrUnion(terms);
         }
     }
 
-    public addOrUnion(term: Term) {
+    public get size() {
+        return this.terms.size;
+    }
+
+    public add(term: Term): boolean {
         const existingTerm = this.terms.get(term.text);
         if (existingTerm) {
-            const existingScore = existingTerm.score ?? 0;
-            const newScore = term.score ?? 0;
-            if (existingScore < newScore) {
-                existingTerm.score = newScore;
+            return false;
+        }
+        this.terms.set(term.text, term);
+        return true;
+    }
+
+    public addOrUnion(terms: Term | Term[] | undefined) {
+        if (terms === undefined) {
+            return;
+        }
+        if (Array.isArray(terms)) {
+            for (const term of terms) {
+                this.addOrUnion(term);
             }
         } else {
-            this.terms.set(term.text, term);
+            const term = terms;
+            const existingTerm = this.terms.get(term.text);
+            if (existingTerm) {
+                const existingScore = existingTerm.weight ?? 0;
+                const newScore = term.weight ?? 0;
+                if (existingScore < newScore) {
+                    existingTerm.weight = newScore;
+                }
+            } else {
+                this.terms.set(term.text, term);
+            }
         }
     }
 
@@ -401,12 +468,23 @@ export class TermSet {
             : this.terms.get(term.text);
     }
 
+    public getWeight(term: Term): number | undefined {
+        return this.terms.get(term.text)?.weight;
+    }
+
     public has(term: Term): boolean {
         return this.terms.has(term.text);
     }
 
+    public remove(term: Term) {
+        this.terms.delete(term.text);
+    }
     public clear(): void {
         this.terms.clear();
+    }
+
+    public values() {
+        return this.terms.values();
     }
 }
 

@@ -3,7 +3,6 @@
 
 import {
     ExecutableAction,
-    toFullActions,
     FullAction,
     getFullActionName,
     normalizeParamString,
@@ -530,11 +529,8 @@ type PendingAction = {
     promptEntityMap: Map<string, PromptEntity> | undefined;
 };
 
-function toPendingActions(
-    actions: ExecutableAction[],
-    entities: PromptEntity[] | undefined,
-): PendingAction[] {
-    const promptEntityMap = entities
+function toPromptEntityMap(entities: PromptEntity[] | undefined) {
+    return entities
         ? new Map<string, PromptEntity>(
               entities.map(
                   (entity) =>
@@ -543,6 +539,12 @@ function toPendingActions(
               ),
           )
         : undefined;
+}
+function toPendingActions(
+    actions: ExecutableAction[],
+    entities: PromptEntity[] | undefined,
+): PendingAction[] {
+    const promptEntityMap = toPromptEntityMap(entities);
     return Array.from(actions).map((executableAction) => ({
         executableAction,
         promptEntityMap,
@@ -557,7 +559,16 @@ export async function executeActions(
     const systemContext = context.sessionContext.agentContext;
     const commandResult = getCommandResult(systemContext);
     if (commandResult !== undefined) {
-        commandResult.actions = toFullActions(actions);
+        const promptEntityMap = toPromptEntityMap(entities);
+        commandResult.actions = actions.map(({ action }) => {
+            action.entities = getParameterEntities(
+                getAppAgentName(action.translatorName),
+                action.parameters,
+                new Map(),
+                promptEntityMap,
+            );
+            return action;
+        });
     }
 
     if (!(await canExecute(actions, context))) {

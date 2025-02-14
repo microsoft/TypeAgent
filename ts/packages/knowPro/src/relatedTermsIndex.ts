@@ -1,31 +1,27 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { openai, TextEmbeddingModel } from "aiclient";
+import { collections, ScoredItem } from "typeagent";
+import { Term } from "./dataFormat.js";
 import {
-    generateEmbedding,
-    indexesOfNearest,
-    NormalizedEmbedding,
-    SimilarityType,
-    generateTextEmbeddingsWithRetry,
-    collections,
-    dotProduct,
-} from "typeagent";
-import {
-    Term,
-    ITermEmbeddingIndex,
-    ITextEmbeddingDataItem,
     ITextEmbeddingIndexData,
     ITermsToRelatedTermsDataItem,
     ITermToRelatedTermsData,
     ITermToRelatedTermsIndex,
     ITermsToRelatedTermsIndexData,
-} from "./dataFormat.js";
-import { createEmbeddingCache } from "knowledge-processor";
+    ITermToRelatedTermsFuzzy,
+    ITermToRelatedTerms,
+} from "./secondaryIndexes.js";
 import { SearchTerm } from "./search.js";
 import { isSearchTermWildcard } from "./query.js";
+import { TermSet } from "./collections.js";
+import {
+    TextEditDistanceIndex,
+    TextEmbeddingIndex,
+    TextEmbeddingIndexSettings,
+} from "./fuzzyIndex.js";
 
-export class TermToRelatedTermsMap {
+export class TermToRelatedTermsMap implements ITermToRelatedTerms {
     public map: collections.MultiMap<string, Term> = new collections.MultiMap();
 
     constructor() {}
@@ -71,73 +67,55 @@ export class TermToRelatedTermsMap {
     }
 }
 
-export async function resolveRelatedTerms(
-    relatedTermsIndex: ITermToRelatedTermsIndex,
-    searchTerms: SearchTerm[],
-): Promise<void> {
-    for (const searchTerm of searchTerms) {
-        if (isSearchTermWildcard(searchTerm)) {
-            continue;
-        }
-        const termText = searchTerm.term.text;
-        // Resolve any specific term to related term mappings
-        if (!searchTerm.relatedTerms || searchTerm.relatedTerms.length === 0) {
-            searchTerm.relatedTerms = relatedTermsIndex.lookupTerm(termText);
-        }
-        // If no hard-coded mappings, lookup any fuzzy related terms
-        // Future: do this in batch
-        if (!searchTerm.relatedTerms || searchTerm.relatedTerms.length === 0) {
-            searchTerm.relatedTerms =
-                await relatedTermsIndex.lookupTermFuzzy(termText);
-        }
-    }
-}
-
 export type TermsToRelatedTermIndexSettings = {
     embeddingIndexSettings: TextEmbeddingIndexSettings;
 };
 
 export class TermToRelatedTermsIndex implements ITermToRelatedTermsIndex {
-    public termAliases: TermToRelatedTermsMap;
-    public termEmbeddingsIndex: ITermEmbeddingIndex | undefined;
+    private aliasMap: TermToRelatedTermsMap;
+    private editDistanceIndex: TermEditDistanceIndex | undefined;
+    private embeddingIndex: TermEmbeddingIndex | undefined;
 
     constructor(public settings: TermsToRelatedTermIndexSettings) {
-        this.termAliases = new TermToRelatedTermsMap();
+        this.aliasMap = new TermToRelatedTermsMap();
     }
 
-    public lookupTerm(termText: string): Term[] | undefined {
-        return this.termAliases.lookupTerm(termText);
+    public get aliases() {
+        return this.aliasMap;
     }
 
-    public async lookupTermFuzzy(
-        termText: string,
-    ): Promise<Term[] | undefined> {
-        if (this.termEmbeddingsIndex) {
-            return await this.termEmbeddingsIndex.lookupTermsFuzzy(termText);
-        }
-        return undefined;
+    public get termEditDistanceIndex() {
+        return this.editDistanceIndex;
+    }
+
+    public get fuzzyIndex() {
+        return this.embeddingIndex;
     }
 
     public serialize(): ITermsToRelatedTermsIndexData {
         return {
-            relatedTermsData: this.termAliases.serialize(),
-            textEmbeddingData: this.termEmbeddingsIndex?.serialize(),
+            aliasData: this.aliasMap.serialize(),
+            textEmbeddingData: this.embeddingIndex?.serialize(),
         };
     }
 
     public deserialize(data?: ITermsToRelatedTermsIndexData): void {
         if (data) {
-            if (data.relatedTermsData) {
-                this.termAliases = new TermToRelatedTermsMap();
-                this.termAliases.deserialize(data.relatedTermsData);
+            if (data.aliasData) {
+                this.aliasMap = new TermToRelatedTermsMap();
+                this.aliasMap.deserialize(data.aliasData);
             }
             if (data.textEmbeddingData) {
-                this.termEmbeddingsIndex = new TermEmbeddingIndex(
+                this.embeddingIndex = new TermEmbeddingIndex(
                     this.settings.embeddingIndexSettings,
                 );
-                this.termEmbeddingsIndex.deserialize(data.textEmbeddingData);
+                this.embeddingIndex.deserialize(data.textEmbeddingData);
             }
         }
+    }
+
+    public buildEditDistanceIndex(terms: string[]): void {
+        this.editDistanceIndex = new TermEditDistanceIndex(terms);
     }
 
     public async buildEmbeddingsIndex(
@@ -148,12 +126,112 @@ export class TermToRelatedTermsIndex implements ITermToRelatedTermsIndex {
             batch: collections.Slice<string>,
         ) => boolean,
     ): Promise<void> {
-        this.termEmbeddingsIndex = await buildTermEmbeddingIndex(
+        this.embeddingIndex = await buildTermEmbeddingIndex(
             this.settings.embeddingIndexSettings,
             terms,
             batchSize,
             progressCallback,
         );
+    }
+}
+
+/**
+ * Give searchTerms, resolves related terms for those searchTerms that don't already have them
+ * Optionally ensures that related terms are not duplicated across search terms because this can
+ * skew how semantic references are scored during search (over-counting)
+ * @param relatedTermsIndex
+ * @param searchTerms
+ */
+export async function resolveRelatedTerms(
+    relatedTermsIndex: ITermToRelatedTermsIndex,
+    searchTerms: SearchTerm[],
+    ensureSingleOccurrence: boolean = true,
+): Promise<void> {
+    const searchableTerms = new TermSet();
+    const searchTermsNeedingRelated: SearchTerm[] = [];
+    for (const searchTerm of searchTerms) {
+        if (isSearchTermWildcard(searchTerm)) {
+            continue;
+        }
+        searchableTerms.addOrUnion(searchTerm.term);
+        const termText = searchTerm.term.text;
+        // Resolve any specific term to related term mappings
+        if (
+            relatedTermsIndex.aliases &&
+            (!searchTerm.relatedTerms || searchTerm.relatedTerms.length === 0)
+        ) {
+            searchTerm.relatedTerms =
+                relatedTermsIndex.aliases.lookupTerm(termText);
+        }
+        // If no hard-coded mappings, add this to the list of things for which we do fuzzy retrieval
+        if (!searchTerm.relatedTerms || searchTerm.relatedTerms.length === 0) {
+            searchTermsNeedingRelated.push(searchTerm);
+        }
+    }
+    if (relatedTermsIndex.fuzzyIndex && searchTermsNeedingRelated.length > 0) {
+        const relatedTermsForSearchTerms =
+            await relatedTermsIndex.fuzzyIndex.lookupTerms(
+                searchTermsNeedingRelated.map((st) => st.term.text),
+            );
+        for (let i = 0; i < searchTermsNeedingRelated.length; ++i) {
+            searchTermsNeedingRelated[i].relatedTerms =
+                relatedTermsForSearchTerms[i];
+        }
+    }
+    //
+    // Due to fuzzy matching, a search term may end with related terms that overlap with those of other search terms.
+    // This causes scoring problems... duplicate/redundant scoring that can cause items to seem more relevant than they are
+    // - The same related term can show up for different search terms but with different weights
+    // - related terms may also already be present as search terms
+    //
+    dedupeRelatedTerms(searchTerms, ensureSingleOccurrence);
+}
+
+function dedupeRelatedTerms(
+    searchTerms: SearchTerm[],
+    ensureSingleOccurrence: boolean,
+) {
+    const allSearchTerms = new TermSet();
+    let allRelatedTerms: TermSet | undefined;
+    //
+    // Collect all unique search and related terms.
+    // We end up with {term, maximum weight for term} pairs
+    //
+    searchTerms.forEach((st) => allSearchTerms.add(st.term));
+    if (ensureSingleOccurrence) {
+        allRelatedTerms = new TermSet();
+        searchTerms.forEach((st) =>
+            allRelatedTerms!.addOrUnion(st.relatedTerms),
+        );
+    }
+
+    for (const searchTerm of searchTerms) {
+        if (searchTerm.relatedTerms && searchTerm.relatedTerms.length > 0) {
+            let uniqueRelatedForSearchTerm: Term[] = [];
+            for (const candidateRelatedTerm of searchTerm.relatedTerms) {
+                if (allSearchTerms.has(candidateRelatedTerm)) {
+                    // This related term is already a search term
+                    continue;
+                }
+                if (ensureSingleOccurrence && allRelatedTerms) {
+                    // Each unique related term should be searched for
+                    // only once, and (if there were duplicates) assigned the maximum weight assigned to that term
+                    const termWithMaxWeight =
+                        allRelatedTerms.get(candidateRelatedTerm);
+                    if (
+                        termWithMaxWeight !== undefined &&
+                        termWithMaxWeight.weight === candidateRelatedTerm.weight
+                    ) {
+                        // Associate this related term with the current search term
+                        uniqueRelatedForSearchTerm.push(termWithMaxWeight);
+                        allRelatedTerms.remove(candidateRelatedTerm);
+                    }
+                } else {
+                    uniqueRelatedForSearchTerm.push(candidateRelatedTerm);
+                }
+            }
+            searchTerm.relatedTerms = uniqueRelatedForSearchTerm;
+        }
     }
 }
 
@@ -165,7 +243,7 @@ export async function buildTermEmbeddingIndex(
         terms: string[],
         batch: collections.Slice<string>,
     ) => boolean,
-): Promise<ITermEmbeddingIndex> {
+): Promise<TermEmbeddingIndex> {
     const termIndex = new TermEmbeddingIndex(settings);
     for (const slice of collections.slices(terms, batchSize)) {
         if (progressCallback && !progressCallback(terms, slice)) {
@@ -176,138 +254,92 @@ export async function buildTermEmbeddingIndex(
     return termIndex;
 }
 
-export class TermEmbeddingIndex implements ITermEmbeddingIndex {
-    private termText: string[];
-    private termEmbeddings: NormalizedEmbedding[];
+export interface ITermEmbeddingIndex extends ITermToRelatedTermsFuzzy {
+    serialize(): ITextEmbeddingIndexData;
+    deserialize(data: ITextEmbeddingIndexData): void;
+}
 
+export class TermEmbeddingIndex
+    extends TextEmbeddingIndex
+    implements ITermEmbeddingIndex
+{
     constructor(
         public settings: TextEmbeddingIndexSettings,
         data?: ITextEmbeddingIndexData,
     ) {
-        this.termText = [];
-        this.termEmbeddings = [];
-        if (data !== undefined) {
-            this.deserialize(data);
-        }
+        super(settings, data);
     }
 
-    public async add(terms: string | string[]): Promise<void> {
-        if (Array.isArray(terms)) {
-            const embeddings = await generateTextEmbeddingsWithRetry(
-                this.settings.embeddingModel,
-                terms,
-            );
-            for (let i = 0; i < terms.length; ++i) {
-                this.addTermEmbedding(terms[i], embeddings[i]);
-            }
-        } else {
-            const embedding = await generateEmbedding(
-                this.settings.embeddingModel,
-                terms,
-            );
-            this.addTermEmbedding(terms, embedding);
-        }
-    }
-
-    public async lookupTermsFuzzy(
-        term: string,
+    public async lookupTerm(
+        text: string,
         maxMatches?: number,
         minScore?: number,
-    ): Promise<Term[] | undefined> {
-        const termEmbedding = await generateEmbedding(
-            this.settings.embeddingModel,
-            term,
-        );
-        maxMatches ??= this.settings.maxMatches;
-        minScore ??= this.settings.minScore;
-        if (maxMatches && maxMatches > 0) {
-            const matches = indexesOfNearest(
-                this.termEmbeddings,
-                termEmbedding,
-                maxMatches,
-                SimilarityType.Dot,
-                minScore,
-            );
-            return matches.map((m) => {
-                return { text: this.termText[m.item], score: m.score };
-            });
-        } else {
-            return this.indexesOfNearestTerms(termEmbedding, minScore);
-        }
+    ): Promise<Term[]> {
+        let matches = await super.getNearest(text, maxMatches, minScore);
+        return this.matchesToTerms(matches);
     }
 
-    public remove(term: string): boolean {
-        const indexOf = this.termText.indexOf(term);
-        if (indexOf >= 0) {
-            this.termText.splice(indexOf, 1);
-            this.termEmbeddings.splice(indexOf, 1);
-            return true;
-        }
-        return false;
-    }
-
-    public deserialize(data: ITextEmbeddingIndexData): void {
-        if (data.embeddingData !== undefined) {
-            for (const item of data.embeddingData) {
-                this.addTermEmbedding(
-                    item.text,
-                    new Float32Array(item.embedding),
-                );
-            }
-        }
-    }
-
-    public serialize(): ITextEmbeddingIndexData {
-        const embeddingData: ITextEmbeddingDataItem[] = [];
-        for (let i = 0; i < this.termText.length; ++i) {
-            embeddingData.push({
-                text: this.termText[i],
-                embedding: Array.from<number>(this.termEmbeddings[i]),
-            });
-        }
-        return {
-            embeddingData,
-        };
-    }
-
-    private addTermEmbedding(term: string, embedding: NormalizedEmbedding) {
-        this.termText.push(term);
-        this.termEmbeddings.push(embedding);
-    }
-
-    private indexesOfNearestTerms(
-        other: NormalizedEmbedding,
+    public async lookupTerms(
+        texts: string[],
+        maxMatches?: number,
         minScore?: number,
-    ): Term[] {
-        minScore ??= 0;
-        const matches: Term[] = [];
-        for (let i = 0; i < this.termEmbeddings.length; ++i) {
-            const score: number = dotProduct(this.termEmbeddings[i], other);
-            if (score >= minScore) {
-                matches.push({ text: this.termText[i], score });
-            }
+    ): Promise<Term[][]> {
+        const matchesList = await super.getNearestMultiple(
+            texts,
+            maxMatches,
+            minScore,
+        );
+        const results: Term[][] = [];
+        for (const matches of matchesList) {
+            results.push(this.matchesToTerms(matches));
         }
-        matches.sort((x, y) => y.score! - x.score!);
-        return matches;
+        return results;
+    }
+
+    private matchesToTerms(matches: ScoredItem[]): Term[] {
+        return matches.map((m) => {
+            return { text: this.textArray[m.item], weight: m.score };
+        });
     }
 }
 
-export type TextEmbeddingIndexSettings = {
-    embeddingModel: TextEmbeddingModel;
-    minScore: number;
-    maxMatches?: number | undefined;
-    retryMaxAttempts?: number;
-    retryPauseMs?: number;
-};
+export class TermEditDistanceIndex
+    extends TextEditDistanceIndex
+    implements ITermToRelatedTermsFuzzy
+{
+    constructor(textArray: string[]) {
+        super(textArray);
+    }
 
-export function createTextEmbeddingIndexSettings(
-    maxMatches = 100,
-    minScore = 0.8,
-): TextEmbeddingIndexSettings {
-    return {
-        embeddingModel: createEmbeddingCache(openai.createEmbeddingModel(), 64),
-        minScore,
-        retryMaxAttempts: 2,
-        retryPauseMs: 2000,
-    };
+    public async lookupTerm(
+        text: string,
+        maxMatches?: number,
+        thresholdScore?: number,
+    ): Promise<Term[]> {
+        const matches = await super.getNearest(
+            text,
+            maxMatches,
+            thresholdScore,
+        );
+        return this.matchesToTerms(matches);
+    }
+
+    public async lookupTerms(
+        textArray: string[],
+        maxMatches?: number,
+        thresholdScore?: number,
+    ): Promise<Term[][]> {
+        const matches = await super.getNearestMultiple(
+            textArray,
+            maxMatches,
+            thresholdScore,
+        );
+        return matches.map((m) => this.matchesToTerms(m));
+    }
+
+    private matchesToTerms(matches: ScoredItem<string>[]): Term[] {
+        return matches.map((m) => {
+            return { text: m.item, weight: m.score };
+        });
+    }
 }

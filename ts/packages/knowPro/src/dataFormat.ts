@@ -49,19 +49,6 @@ export interface ITermToSemanticRefIndex {
     lookupTerm(term: string): ScoredSemanticRef[] | undefined;
 }
 
-export interface IPropertyToSemanticRefIndex {
-    getValues(): string[];
-    addProperty(
-        propertyName: string,
-        value: string,
-        semanticRefIndex: SemanticRefIndex | ScoredSemanticRef,
-    ): void;
-    lookupProperty(
-        propertyName: string,
-        value: string,
-    ): ScoredSemanticRef[] | undefined;
-}
-
 export type KnowledgeType = "entity" | "action" | "topic" | "tag";
 export type Knowledge =
     | conversation.ConcreteEntity
@@ -88,9 +75,6 @@ export interface IConversation<TMeta extends IKnowledgeSource = any> {
     messages: IMessage<TMeta>[];
     semanticRefs: SemanticRef[] | undefined;
     semanticRefIndex?: ITermToSemanticRefIndex | undefined;
-    propertyToSemanticRefIndex: IPropertyToSemanticRefIndex | undefined;
-    termToRelatedTermsIndex?: ITermToRelatedTermsIndex | undefined;
-    timestampIndex?: ITimestampToTextRangeIndex | undefined;
 }
 
 export type MessageIndex = number;
@@ -118,56 +102,6 @@ export interface IConversationData<TMessage> {
     tags: string[];
     semanticRefs: SemanticRef[];
     semanticIndexData?: ITermToSemanticRefIndexData | undefined;
-    relatedTermsIndexData?: ITermsToRelatedTermsIndexData | undefined;
-}
-
-export type Term = {
-    text: string;
-    /**
-     * Optional additional score to use when this term matches
-     */
-    score?: number | undefined;
-};
-
-export interface ITermToRelatedTermsIndex {
-    lookupTerm(termText: string): Term[] | undefined;
-    lookupTermFuzzy(termText: string): Promise<Term[] | undefined>;
-    serialize(): ITermsToRelatedTermsIndexData;
-    deserialize(data?: ITermsToRelatedTermsIndexData): void;
-}
-
-export interface ITermsToRelatedTermsIndexData {
-    relatedTermsData?: ITermToRelatedTermsData | undefined;
-    textEmbeddingData?: ITextEmbeddingIndexData | undefined;
-}
-
-export interface ITermToRelatedTermsData {
-    relatedTerms?: ITermsToRelatedTermsDataItem[] | undefined;
-}
-
-export interface ITermsToRelatedTermsDataItem {
-    termText: string;
-    relatedTerms: Term[];
-}
-
-export interface ITermEmbeddingIndex {
-    lookupTermsFuzzy(
-        term: string,
-        maxMatches?: number,
-        minScore?: number,
-    ): Promise<Term[] | undefined>;
-    serialize(): ITextEmbeddingIndexData;
-    deserialize(data: ITextEmbeddingIndexData): void;
-}
-
-export interface ITextEmbeddingIndexData {
-    modelName?: string | undefined;
-    embeddingData?: ITextEmbeddingDataItem[] | undefined;
-}
-
-export interface ITextEmbeddingDataItem {
-    text: string;
-    embedding: number[];
 }
 
 export type DateRange = {
@@ -175,11 +109,14 @@ export type DateRange = {
     end?: Date | undefined;
 };
 
-export type TimestampedTextRange = {
-    timestamp: string;
-    range: TextRange;
+export type Term = {
+    text: string;
+    /**
+     * Optional weighting for these matches
+     */
+    weight?: number | undefined;
 };
 
-export interface ITimestampToTextRangeIndex {
-    lookupRange(dateRange: DateRange): TimestampedTextRange[];
-}
+// Also see:
+// - secondaryIndex.ts for optional secondary interfaces
+// - search.ts for search interfaces.

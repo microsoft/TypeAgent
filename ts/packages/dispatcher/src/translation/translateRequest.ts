@@ -73,8 +73,13 @@ export function getTranslatorForSchema(
         config.multiple,
         config.schema.generation.enabled,
         config.model,
-        !config.schema.optimize.enabled,
-        config.schema.generation.jsonSchema,
+        {
+            exact: !config.schema.optimize.enabled,
+            jsonSchema: config.schema.generation.jsonSchema,
+            jsonSchemaFunction: config.schema.generation.jsonSchemaFunction,
+            jsonSchemaWithTs: config.schema.generation.jsonSchemaWithTs,
+            jsonSchemaValidate: config.schema.generation.jsonSchemaValidate,
+        },
     );
     context.translatorCache.set(translatorName, newTranslator);
     return newTranslator;

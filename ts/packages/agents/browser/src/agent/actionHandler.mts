@@ -167,6 +167,23 @@ async function updateBrowserContext(
               );
               break;
             }
+
+            case "initializePageSchema": {
+              const discoveryResult = await handleSchemaDiscoveryAction(
+                {
+                  actionName: data.method,
+                  parameters: data.params,
+                },
+                context,
+              );
+
+              webSocket.send(
+                JSON.stringify({
+                  id: data.id,
+                  result: discoveryResult.data,
+                }),
+              );
+            }
           }
         }
       });
@@ -208,13 +225,22 @@ async function executeBrowserAction(
       if (action.translatorName === "browser.paleoBioDb") {
         schemaName = "browser.paleoBioDb";
       } else if (action.translatorName === "browser.crossword") {
-        const crosswordResult = await handleCrosswordAction(action, context);
+        const crosswordResult = await handleCrosswordAction(
+          action,
+          context.sessionContext,
+        );
         return createActionResult(crosswordResult);
       } else if (action.translatorName === "browser.commerce") {
-        const commerceResult = await handleCommerceAction(action, context);
+        const commerceResult = await handleCommerceAction(
+          action,
+          context.sessionContext,
+        );
         return createActionResult(commerceResult);
       } else if (action.translatorName === "browser.instacart") {
-        const instacartResult = await handleInstacartAction(action, context);
+        const instacartResult = await handleInstacartAction(
+          action,
+          context.sessionContext,
+        );
 
         return createActionResult(
           instacartResult.displayText,
@@ -226,9 +252,10 @@ async function executeBrowserAction(
       } else if (action.translatorName === "browser.schemaFinder") {
         const discoveryResult = await handleSchemaDiscoveryAction(
           action,
-          context,
+          context.sessionContext,
         );
-        return createActionResult(discoveryResult);
+
+        return createActionResult(discoveryResult.displayText);
       }
 
       await connector?.sendActionToBrowser(action, schemaName);

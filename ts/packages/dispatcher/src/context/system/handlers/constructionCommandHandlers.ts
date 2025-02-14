@@ -11,8 +11,8 @@ import {
 } from "../../commandHandlerContext.js";
 import {
     convertTestDataToExplanationData,
-    readTestData,
-} from "../../../utils/test/testData.js";
+    readExplanationTestData,
+} from "../../../utils/test/explanationTestData.js";
 import { ConstructionStore, printImportConstructionResult } from "agent-cache";
 import { getSessionConstructionDirPath } from "../../session.js";
 import { askYesNoWithContext } from "../../interactiveIO.js";
@@ -369,7 +369,7 @@ class ConstructionImportCommandHandler implements CommandHandler {
             inputs.map(async (input) => {
                 return {
                     file: input,
-                    data: await readTestData(input),
+                    data: await readExplanationTestData(input),
                 };
             }),
         );

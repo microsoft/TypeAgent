@@ -5,11 +5,11 @@ import { Args, Flags, Command } from "@oclif/core";
 import fs from "node:fs";
 import {
     readLineData,
-    readTestData,
-    TestData,
-    generateTestDataFiles,
-    printTestDataStats,
-    getEmptyTestData,
+    readExplanationTestData,
+    ExplanationTestData,
+    generateExplanationTestDataFiles,
+    printExplanationTestDataStats,
+    getEmptyExplanationTestData,
     getCacheFactory,
     createActionConfigProvider,
     getSchemaNamesForActionConfigProvider,
@@ -50,7 +50,7 @@ export default class ExplanationDataAddCommand extends Command {
                 "Batch processing, only save to file once the file is done",
             default: false,
         }),
-        translator: Flags.string({
+        schema: Flags.string({
             description: "Translator name",
             options: schemaNames,
         }),
@@ -102,19 +102,19 @@ export default class ExplanationDataAddCommand extends Command {
             inputs.push(args.request);
         }
         if (inputs.length !== 0) {
-            let existingData: TestData;
+            let existingData: ExplanationTestData;
             if (
                 !flags.overwrite &&
                 flags.output &&
                 fs.existsSync(flags.output)
             ) {
-                existingData = await readTestData(flags.output);
+                existingData = await readExplanationTestData(flags.output);
                 if (
-                    flags.translator !== undefined &&
-                    flags.translator !== existingData.schemaName
+                    flags.schema !== undefined &&
+                    flags.schema !== existingData.schemaName
                 ) {
                     throw new Error(
-                        `Existing data is for translator '${existingData.schemaName}' but input is for translator '${flags.translator}'`,
+                        `Existing data is for schema '${existingData.schemaName}' but input is for schema '${flags.schema}'`,
                     );
                 }
 
@@ -147,19 +147,19 @@ export default class ExplanationDataAddCommand extends Command {
                         `${existingData.entries.length} existing entries loaded`,
                     );
                 }
-            } else if (flags.translator) {
+            } else if (flags.schema) {
                 const config = provider.getActionConfig(flags.schemaName);
                 const sourceHash =
                     provider.getActionSchemaFileForConfig(config).sourceHash;
                 // Create an empty existing data.
-                existingData = getEmptyTestData(
+                existingData = getEmptyExplanationTestData(
                     flags.schemaName,
                     sourceHash,
                     flags.explainer ?? getDefaultExplainerName(),
                 );
             } else {
                 throw new Error(
-                    `Translator name is not specified.  Please specify a translator name with --translator`,
+                    `Schema name is not specified.  Please specify a schema name with --schema`,
                 );
             }
 
@@ -172,7 +172,7 @@ export default class ExplanationDataAddCommand extends Command {
                 `Processing ${inputs.length} inputs... Concurrency ${concurrency}`,
             );
             const startTime = performance.now();
-            const testData = await generateTestDataFiles(
+            const testData = await generateExplanationTestDataFiles(
                 [
                     {
                         inputs,
@@ -187,7 +187,7 @@ export default class ExplanationDataAddCommand extends Command {
                 false,
             );
             const elapsedTime = (performance.now() - startTime) / 1000;
-            printTestDataStats(testData);
+            printExplanationTestDataStats(testData);
             console.log(`Total Elapsed Time: ${elapsedTime.toFixed(3)}s`);
 
             if (!flags.output) {
@@ -197,10 +197,10 @@ export default class ExplanationDataAddCommand extends Command {
         } else {
             console.log(chalk.yellow("No request specified. Nothing added."));
             if (flags.output && fs.existsSync(flags.output)) {
-                printTestDataStats([
+                printExplanationTestDataStats([
                     {
                         fileName: flags.output,
-                        testData: await readTestData(flags.output),
+                        testData: await readExplanationTestData(flags.output),
                         elapsedMs: 0,
                     },
                 ]);

@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ActionContext } from "@typeagent/agent-sdk";
+import { SessionContext } from "@typeagent/agent-sdk";
 import { BrowserActionContext } from "../actionHandler.mjs";
 import { BrowserConnector } from "../browserConnector.mjs";
 import { createInstacartPageTranslator } from "./translator.mjs";
@@ -14,15 +14,14 @@ import { setupPageActions } from "./pageActions.mjs";
 
 export async function handleInstacartAction(
   action: any,
-  context: ActionContext<BrowserActionContext>,
+  context: SessionContext<BrowserActionContext>,
 ) {
   let message = "OK";
-  if (!context.sessionContext.agentContext.browserConnector) {
+  if (!context.agentContext.browserConnector) {
     throw new Error("No connection to browser session.");
   }
 
-  const browser: BrowserConnector =
-    context.sessionContext.agentContext.browserConnector;
+  const browser: BrowserConnector = context.agentContext.browserConnector;
 
   const agent = await createInstacartPageTranslator("GPT_4_O_MINI");
 

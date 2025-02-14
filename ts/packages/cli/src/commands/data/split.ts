@@ -4,9 +4,9 @@
 import { Args, Command, Flags } from "@oclif/core";
 import chalk from "chalk";
 import {
-    TestData,
-    getEmptyTestData,
-    readTestData,
+    ExplanationTestData,
+    getEmptyExplanationTestData,
+    readExplanationTestData,
 } from "agent-dispatcher/internal";
 import fs from "node:fs";
 import path from "node:path";
@@ -33,7 +33,7 @@ export default class ExplanationDataSplitCommmand extends Command {
 
         const files = argv as string[];
         for (const file of files) {
-            const data = await readTestData(file);
+            const data = await readExplanationTestData(file);
             const failedCount = data.failed?.length ?? 0;
             const total = data.entries.length + failedCount;
             if (total <= flags.limit) {
@@ -45,14 +45,14 @@ export default class ExplanationDataSplitCommmand extends Command {
                 continue;
             }
 
-            const splitData: TestData[] = [];
+            const splitData: ExplanationTestData[] = [];
             let currEntry = 0;
             let currFailed = 0;
             while (
                 currEntry < data.entries.length ||
                 currFailed < failedCount
             ) {
-                const newData = getEmptyTestData(
+                const newData = getEmptyExplanationTestData(
                     data.schemaName,
                     data.sourceHash,
                     data.explainerName,

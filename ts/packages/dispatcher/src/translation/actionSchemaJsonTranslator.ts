@@ -13,6 +13,9 @@ import {
     ActionSchemaGroup,
     GenerateSchemaOptions,
     generateActionJsonSchema,
+    generateActionActionFunctionJsonSchemas,
+    ActionObjectJsonSchema,
+    ActionFunctionJsonSchema,
 } from "action-schema";
 import {
     createJsonTranslatorWithValidator,
@@ -31,36 +34,58 @@ import {
 import { ActionConfig } from "./actionConfig.js";
 import { ActionConfigProvider } from "./actionConfigProvider.js";
 
+function convertJsonSchemaOutput(
+    jsonObject: unknown,
+    jsonSchema: ActionObjectJsonSchema | ActionFunctionJsonSchema[],
+) {
+    if (Array.isArray(jsonSchema)) {
+        const result = jsonObject as any;
+        return {
+            actionName: result.name,
+            parameters: result.arguments,
+        };
+    }
+    return (jsonObject as any).response;
+}
+
 function createActionSchemaJsonValidator<T extends TranslatedAction>(
     actionSchemaGroup: ActionSchemaGroup,
     generateOptions?: GenerateSchemaOptions,
 ): TypeAgentJsonValidator<T> {
     const schema = generateActionSchema(actionSchemaGroup, generateOptions);
     const generateJsonSchema = generateOptions?.jsonSchema ?? false;
-    const jsonSchema = generateJsonSchema
-        ? generateActionJsonSchema(actionSchemaGroup)
-        : undefined;
+    const jsonSchemaFunction = generateOptions?.jsonSchemaFunction ?? false;
+    const jsonSchema = jsonSchemaFunction
+        ? generateActionActionFunctionJsonSchemas(actionSchemaGroup)
+        : generateJsonSchema
+          ? generateActionJsonSchema(actionSchemaGroup)
+          : undefined;
+    const jsonSchemaValidate = generateOptions?.jsonSchemaValidate ?? false;
     return {
         getSchemaText: () => schema,
         getTypeName: () => actionSchemaGroup.entry.name,
         getJsonSchema: () => jsonSchema,
-        validate(jsonObject: object): Result<T> {
-            const value: any = generateJsonSchema
-                ? (jsonObject as any).response
-                : jsonObject;
-
-            if (value.actionName === undefined) {
-                return error("Missing actionName property");
-            }
-            const actionSchema = actionSchemaGroup.actionSchemas.get(
-                value.actionName,
-            );
-            if (actionSchema === undefined) {
-                return error(`Unknown action name: ${value.actionName}`);
-            }
-
+        validate(jsonObject: unknown): Result<T> {
             try {
-                validateAction(actionSchema, value);
+                // Fix up the output when we are using jsonSchema.
+                const value: any =
+                    jsonSchema !== undefined
+                        ? convertJsonSchemaOutput(jsonObject, jsonSchema)
+                        : jsonObject;
+
+                if (value.actionName === undefined) {
+                    return error("Missing actionName property");
+                }
+                const actionSchema = actionSchemaGroup.actionSchemas.get(
+                    value.actionName,
+                );
+                if (actionSchema === undefined) {
+                    return error(`Unknown action name: ${value.actionName}`);
+                }
+
+                if (jsonSchemaValidate) {
+                    validateAction(actionSchema, value);
+                }
                 // Return the unwrapped value with generateJsonSchema as the translated result
                 return success(value);
             } catch (e: any) {
@@ -70,7 +95,7 @@ function createActionSchemaJsonValidator<T extends TranslatedAction>(
     };
 }
 
-export function createActionJsonTranslatorFromSchemaDef<
+export function createJsonTranslatorFromActionSchema<
     T extends TranslatedAction,
 >(
     typeName: string,

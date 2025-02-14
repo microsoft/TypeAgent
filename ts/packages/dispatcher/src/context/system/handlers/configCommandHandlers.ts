@@ -827,6 +827,23 @@ const configTranslationCommandHandlers: CommandHandlerTable = {
                                 );
                             },
                         ),
+                        jsonFunc: getToggleHandlerTable(
+                            "use generate json schema function if model supports it",
+                            async (context, enable: boolean) => {
+                                await changeContextConfig(
+                                    {
+                                        translation: {
+                                            schema: {
+                                                generation: {
+                                                    jsonSchemaFunction: enable,
+                                                },
+                                            },
+                                        },
+                                    },
+                                    context,
+                                );
+                            },
+                        ),
                     },
                 },
                 optimize: {

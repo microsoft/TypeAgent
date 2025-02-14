@@ -6,7 +6,7 @@ import path from "node:path";
 import os from "node:os";
 import child_process from "node:child_process";
 import { Args, Command } from "@oclif/core";
-import { readTestData } from "agent-dispatcher/internal";
+import { readExplanationTestData } from "agent-dispatcher/internal";
 
 export default class ExplanationDataDiffCommand extends Command {
     static args = {
@@ -39,7 +39,7 @@ export default class ExplanationDataDiffCommand extends Command {
             }
         };
 
-        const currData = await readTestData(args.file);
+        const currData = await readExplanationTestData(args.file);
         stripProperties(currData, properties);
 
         let prevData;
@@ -50,7 +50,7 @@ export default class ExplanationDataDiffCommand extends Command {
                 .toString();
             prevData = JSON.parse(prevVersion);
         } else {
-            prevData = await readTestData(args.diff);
+            prevData = await readExplanationTestData(args.diff);
         }
         stripProperties(prevData, properties);
 

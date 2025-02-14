@@ -14,19 +14,13 @@ import {
 import { createTypeScriptJsonValidator } from "typechat/ts";
 import { TypeChatConstraintsValidator } from "./constraints.js";
 import registerDebug from "debug";
-import { openai as ai, JsonSchema } from "aiclient";
+import { openai as ai, CompletionJsonSchema } from "aiclient";
 import {
     createIncrementalJsonParser,
     IncrementalJsonParser,
     IncrementalJsonValueCallBack,
 } from "./incrementalJsonParser.js";
-import { CachedImageWithDetails, extractRelevantExifTags } from "./image.js";
-import { apiSettingsFromEnv } from "../../aiclient/dist/openai.js";
-import {
-    exifGPSTagToLatLong,
-    findNearbyPointsOfInterest,
-    reverseGeocode,
-} from "./location.js";
+import { addImagePromptContent, CachedImageWithDetails } from "./image.js";
 
 export type InlineTranslatorSchemaDef = {
     kind: "inline";
@@ -175,54 +169,7 @@ async function attachAttachments(
 
     if (attachments && attachments.length > 0 && pp) {
         for (let i = 0; i < attachments.length; i++) {
-            pp.unshift({
-                role: "user",
-                content: [
-                    {
-                        type: "text",
-                        text: `File Name: ${attachments![i].storageLocation}`,
-                    },
-                    {
-                        type: "image_url",
-                        image_url: {
-                            url: attachments[i].image,
-                            detail: "high",
-                        },
-                    },
-                    {
-                        type: "text",
-                        text: `Image EXIF tags: \n${extractRelevantExifTags(attachments![i].exifTags)}`,
-                    },
-                    {
-                        type: "text",
-                        text: `Nearby Points of Interest: \n${JSON.stringify(
-                            await findNearbyPointsOfInterest(
-                                exifGPSTagToLatLong(
-                                    attachments![i].exifTags.GPSLatitude,
-                                    attachments![i].exifTags.GPSLatitudeRef,
-                                    attachments![i].exifTags.GPSLongitude,
-                                    attachments![i].exifTags.GPSLongitudeRef,
-                                ),
-                                apiSettingsFromEnv(),
-                            ),
-                        )}`,
-                    },
-                    {
-                        type: "text",
-                        text: `Reverse Geocode Results: \n${JSON.stringify(
-                            await reverseGeocode(
-                                exifGPSTagToLatLong(
-                                    attachments![i].exifTags.GPSLatitude,
-                                    attachments![i].exifTags.GPSLatitudeRef,
-                                    attachments![i].exifTags.GPSLongitude,
-                                    attachments![i].exifTags.GPSLongitudeRef,
-                                ),
-                                apiSettingsFromEnv(),
-                            ),
-                        )}`,
-                    },
-                ],
-            });
+            pp.unshift(await addImagePromptContent("user", attachments[i]));
         }
     }
 }
@@ -265,7 +212,7 @@ export interface TypeAgentJsonValidator<T extends object>
     getSchemaText: () => string;
     getTypeName: () => string;
     validate(jsonObject: object): Result<T>;
-    getJsonSchema?: () => JsonSchema | undefined;
+    getJsonSchema?: () => CompletionJsonSchema | undefined;
 }
 
 export function createJsonTranslatorWithValidator<T extends object>(
@@ -318,6 +265,44 @@ export function createJsonTranslatorWithValidator<T extends object>(
         translator.validateInstance = constraintsValidator.validateConstraints;
     }
 
+    // Patch up the property for json schema for stream.
+    // Non-streaming result is patched during validation.
+    function patchStreamCallback(prompt?: string | PromptSection[]) {
+        if (prompt === undefined) {
+            return;
+        }
+        const jsonSchema = validator.getJsonSchema?.();
+        if (jsonSchema === undefined) {
+            return;
+        }
+
+        const streamingParser = getStreamingParser(prompt);
+        if (streamingParser === undefined) {
+            return;
+        }
+        const callback = streamingParser.parser.callback;
+        streamingParser.parser.callback = Array.isArray(jsonSchema)
+            ? (prop, value, delta) => {
+                  let actualPropName = "actionName";
+                  if (prop !== "name") {
+                      const prefix = "arguments.";
+                      if (!prop.startsWith(prefix)) {
+                          throw new Error(`Invalid property name: ${prop}`);
+                      }
+                      actualPropName = `parameters.${prop.slice(prefix.length)}`;
+                  }
+                  callback(actualPropName, value, delta);
+              }
+            : (prop, value, delta) => {
+                  const prefix = "response.";
+                  if (!prop.startsWith(prefix)) {
+                      throw new Error(`Invalid property name: ${prop}`);
+                  }
+                  const actualPropName = prop.slice(prefix.length);
+                  callback(actualPropName, value, delta);
+              };
+    }
+
     const innerFn = translator.translate;
     const instructions = options?.instructions;
     if (!instructions) {
@@ -325,6 +310,7 @@ export function createJsonTranslatorWithValidator<T extends object>(
             request: string,
             promptPreamble?: string | PromptSection[],
         ) => {
+            patchStreamCallback(promptPreamble);
             const result = await innerFn(request, promptPreamble);
             debugResult(result);
             return result;
@@ -336,11 +322,11 @@ export function createJsonTranslatorWithValidator<T extends object>(
         request: string,
         promptPreamble?: string | PromptSection[],
     ) => {
+        patchStreamCallback(promptPreamble);
         const result = await innerFn(
             request,
             toPromptSections(instructions, promptPreamble),
         );
-
         debugResult(result);
         return result;
     };
