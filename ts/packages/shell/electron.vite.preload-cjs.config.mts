@@ -11,7 +11,7 @@ export default defineConfig({
             sourcemap: true,
             rollupOptions: {
                 input: {
-                    webview: resolve(__dirname, "./webView.ts"),
+                    webview: resolve(__dirname, "./src/preload/webView.ts"),
                 },
                 output: {
                     // For the CJS preload
