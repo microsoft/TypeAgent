@@ -156,10 +156,14 @@ class SearchQueryBuilder {
         filter?: WhenFilter,
         options?: SearchOptions,
     ) {
-        let selectExpr = this.compileSelect(termGroup, options);
+        let selectExpr = this.compileSelect(
+            termGroup,
+            filter ? this.compileOuterScope(filter) : undefined,
+            options,
+        );
         // Constrain the select with scopes and 'where'
         if (filter) {
-            selectExpr = this.compileScope(selectExpr, filter);
+            selectExpr = this.compileInnerScope(selectExpr, filter);
             selectExpr = new q.WhereSemanticRefExpr(
                 selectExpr,
                 this.compileWhere(filter),
@@ -172,14 +176,19 @@ class SearchQueryBuilder {
         );
     }
 
-    private compileSelect(termGroup: SearchTermGroup, options?: SearchOptions) {
+    private compileSelect(
+        termGroup: SearchTermGroup,
+        scopeExpr?: q.GetScopeExpr,
+        options?: SearchOptions,
+    ) {
         // Select is a combination of ordinary search terms and property search terms
-        let selectExpr = this.compileSearchGroup(termGroup);
+        let selectExpr = this.compileSearchGroup(termGroup, scopeExpr);
         return selectExpr;
     }
 
     private compileSearchGroup(
         searchGroup: SearchTermGroup,
+        scopeExpr?: q.GetScopeExpr,
     ): q.IQueryOpExpr<SemanticRefAccumulator> {
         const termExpressions: q.MatchTermExpr[] = [];
         for (const term of searchGroup.terms) {
@@ -195,27 +204,31 @@ class SearchQueryBuilder {
             }
         }
         return searchGroup.booleanOp === "and"
-            ? new q.MatchTermsAndExpr(termExpressions)
-            : new q.MatchTermsOrExpr(termExpressions);
+            ? new q.MatchTermsAndExpr(termExpressions, scopeExpr)
+            : new q.MatchTermsOrExpr(termExpressions, scopeExpr);
     }
 
-    private compileScope(
+    private compileOuterScope(filter: WhenFilter) {
+        let scopeSelectors: q.IQueryTextRangeSelector[] | undefined;
+        if (filter.inDateRange) {
+            scopeSelectors ??= [];
+            scopeSelectors.push(
+                new q.TextRangesInDateRangeSelector(filter.inDateRange),
+            );
+        }
+        return scopeSelectors ? new q.GetScopeExpr(scopeSelectors) : undefined;
+    }
+
+    private compileInnerScope(
         termsMatchExpr: q.IQueryOpExpr<SemanticRefAccumulator>,
         filter: WhenFilter,
     ): q.IQueryOpExpr<SemanticRefAccumulator> {
         let scopeSelectors: q.IQueryTextRangeSelector[] = [];
-        // Always apply "tag match" scope... all text ranges that matched tags.. are in scope
-        scopeSelectors.push(new q.TextRangesWithTagSelector());
         if (filter.scopingTerms && filter.scopingTerms.length > 0) {
             scopeSelectors.push(
                 new q.TextRangesPredicateSelector(
                     this.compilePropertyMatchPredicates(filter.scopingTerms),
                 ),
-            );
-        }
-        if (filter.inDateRange) {
-            scopeSelectors.push(
-                new q.TextRangesInDateRangeSelector(filter.inDateRange),
             );
         }
         return new q.SelectInScopeExpr(termsMatchExpr, scopeSelectors);

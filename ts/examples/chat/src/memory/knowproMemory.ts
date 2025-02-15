@@ -274,6 +274,7 @@ export async function createKnowproCommands(
                 {
                     exactMatch: namedArgs.exact,
                     usePropertyIndex: namedArgs.usePropertyIndex,
+                    useTimestampIndex: namedArgs.useTimestampIndex,
                 },
             );
             timer.stop();
