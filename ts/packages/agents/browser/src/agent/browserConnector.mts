@@ -5,222 +5,233 @@ import { AppAction, SessionContext } from "@typeagent/agent-sdk";
 import { BrowserActionContext } from "./actionHandler.mjs";
 
 export class BrowserConnector {
-  private webSocket: any;
+    private webSocket: any;
 
-  constructor(context: SessionContext<BrowserActionContext>) {
-    this.webSocket = context.agentContext.webSocket;
-  }
+    constructor(context: SessionContext<BrowserActionContext>) {
+        this.webSocket = context.agentContext.webSocket;
+    }
 
-  async sendActionToBrowser(action: AppAction, schemaName?: string) {
-    return new Promise<any | undefined>((resolve, reject) => {
-      if (this.webSocket) {
-        try {
-          const callId = new Date().getTime().toString();
-          if (!schemaName) {
-            schemaName = "browser";
-          }
+    async sendActionToBrowser(action: AppAction, schemaName?: string) {
+        return new Promise<any | undefined>((resolve, reject) => {
+            if (this.webSocket) {
+                try {
+                    const callId = new Date().getTime().toString();
+                    if (!schemaName) {
+                        schemaName = "browser";
+                    }
 
-          this.webSocket.send(
-            JSON.stringify({
-              id: callId,
-              method: `${schemaName}/${action.actionName}`,
-              params: action.parameters,
-            }),
-          );
+                    this.webSocket.send(
+                        JSON.stringify({
+                            id: callId,
+                            method: `${schemaName}/${action.actionName}`,
+                            params: action.parameters,
+                        }),
+                    );
 
-          const handler = (event: any) => {
-            const text = event.data.toString();
-            const data = JSON.parse(text);
-            if (data.id == callId && data.result) {
-              this.webSocket.removeEventListener("message", handler);
-              resolve(data.result);
+                    const handler = (event: any) => {
+                        const text = event.data.toString();
+                        const data = JSON.parse(text);
+                        if (data.id == callId && data.result) {
+                            this.webSocket.removeEventListener(
+                                "message",
+                                handler,
+                            );
+                            resolve(data.result);
+                        }
+                    };
+
+                    this.webSocket.addEventListener("message", handler);
+                } catch {
+                    console.log("Unable to contact browser backend.");
+                    reject(
+                        "Unable to contact browser backend (from connector).",
+                    );
+                }
+            } else {
+                throw new Error("No websocket connection.");
             }
-          };
+        });
+    }
 
-          this.webSocket.addEventListener("message", handler);
-        } catch {
-          console.log("Unable to contact browser backend.");
-          reject("Unable to contact browser backend (from connector).");
+    private async getPageDataFromBrowser(action: any) {
+        return new Promise<string | undefined>(async (resolve, reject) => {
+            const response = await this.sendActionToBrowser(action, "browser");
+            if (response.data) {
+                resolve(response.data);
+            } else {
+                resolve(undefined);
+            }
+        });
+    }
+
+    async getHtmlFragments(useTimestampIds?: boolean) {
+        const timeoutPromise = new Promise((f) => setTimeout(f, 120000));
+        const htmlAction = {
+            actionName: "getHTML",
+            parameters: {
+                fullHTML: false,
+                downloadAsFile: false,
+                extractText: false,
+                useTimestampIds: useTimestampIds,
+            },
+        };
+
+        const actionPromise = this.getPageDataFromBrowser(htmlAction);
+        const liveHtml = await Promise.race([actionPromise, timeoutPromise]);
+        if (liveHtml && Array.isArray(liveHtml)) {
+            return liveHtml;
         }
-      } else {
-        throw new Error("No websocket connection.");
-      }
-    });
-  }
 
-  private async getPageDataFromBrowser(action: any) {
-    return new Promise<string | undefined>(async (resolve, reject) => {
-      const response = await this.sendActionToBrowser(action, "browser");
-      if (response.data) {
-        resolve(response.data);
-      } else {
-        resolve(undefined);
-      }
-    });
-  }
-
-  async getHtmlFragments(useTimestampIds?: boolean) {
-    const timeoutPromise = new Promise((f) => setTimeout(f, 120000));
-    const htmlAction = {
-      actionName: "getHTML",
-      parameters: {
-        fullHTML: false,
-        downloadAsFile: false,
-        extractText: false,
-        useTimestampIds: useTimestampIds,
-      },
-    };
-
-    const actionPromise = this.getPageDataFromBrowser(htmlAction);
-    const liveHtml = await Promise.race([actionPromise, timeoutPromise]);
-    if (liveHtml && Array.isArray(liveHtml)) {
-      return liveHtml;
+        return [];
     }
 
-    return [];
-  }
+    async getFilteredHtmlFragments(
+        inputHtmlFragments: any[],
+        cssSelectorsToKeep: string[],
+    ) {
+        let htmlFragments: any[] = [];
+        const timeoutPromise = new Promise((f) => setTimeout(f, 5000));
+        const filterAction = {
+            actionName: "getFilteredHTMLFragments",
+            parameters: {
+                fragments: inputHtmlFragments,
+                cssSelectorsToKeep: cssSelectorsToKeep,
+            },
+        };
 
-  async getFilteredHtmlFragments(
-    inputHtmlFragments: any[],
-    cssSelectorsToKeep: string[],
-  ) {
-    let htmlFragments: any[] = [];
-    const timeoutPromise = new Promise((f) => setTimeout(f, 5000));
-    const filterAction = {
-      actionName: "getFilteredHTMLFragments",
-      parameters: {
-        fragments: inputHtmlFragments,
-        cssSelectorsToKeep: cssSelectorsToKeep,
-      },
-    };
+        const actionPromise = this.getPageDataFromBrowser(filterAction);
+        const result = await Promise.race([actionPromise, timeoutPromise]);
 
-    const actionPromise = this.getPageDataFromBrowser(filterAction);
-    const result = await Promise.race([actionPromise, timeoutPromise]);
+        if (result && Array.isArray(result)) {
+            htmlFragments = result;
+        }
 
-    if (result && Array.isArray(result)) {
-      htmlFragments = result;
+        return htmlFragments;
     }
 
-    return htmlFragments;
-  }
+    async getCurrentPageScreenshot() {
+        const timeoutPromise = new Promise((f) => setTimeout(f, 3000));
+        const screenshotAction = {
+            actionName: "captureScreenshot",
+            parameters: {
+                downloadAsFile: false,
+            },
+        };
 
-  async getCurrentPageScreenshot() {
-    const timeoutPromise = new Promise((f) => setTimeout(f, 3000));
-    const screenshotAction = {
-      actionName: "captureScreenshot",
-      parameters: {
-        downloadAsFile: false,
-      },
-    };
+        const actionPromise = this.getPageDataFromBrowser(screenshotAction);
+        let screenshot = "";
+        const liveScreenshot = await Promise.race([
+            actionPromise,
+            timeoutPromise,
+        ]);
 
-    const actionPromise = this.getPageDataFromBrowser(screenshotAction);
-    let screenshot = "";
-    const liveScreenshot = await Promise.race([actionPromise, timeoutPromise]);
+        if (liveScreenshot && typeof liveScreenshot == "string") {
+            screenshot = liveScreenshot;
+        }
 
-    if (liveScreenshot && typeof liveScreenshot == "string") {
-      screenshot = liveScreenshot;
+        return screenshot;
     }
 
-    return screenshot;
-  }
+    async getCurrentPageAnnotatedScreenshot() {
+        const timeoutPromise = new Promise((f) => setTimeout(f, 3000));
+        const screenshotAction = {
+            actionName: "captureAnnotatedScreenshot",
+            parameters: {
+                downloadAsFile: true,
+            },
+        };
 
-  async getCurrentPageAnnotatedScreenshot() {
-    const timeoutPromise = new Promise((f) => setTimeout(f, 3000));
-    const screenshotAction = {
-      actionName: "captureAnnotatedScreenshot",
-      parameters: {
-        downloadAsFile: true,
-      },
-    };
+        const actionPromise = this.getPageDataFromBrowser(screenshotAction);
+        let screenshot = "";
+        const liveScreenshot = await Promise.race([
+            actionPromise,
+            timeoutPromise,
+        ]);
 
-    const actionPromise = this.getPageDataFromBrowser(screenshotAction);
-    let screenshot = "";
-    const liveScreenshot = await Promise.race([actionPromise, timeoutPromise]);
+        if (liveScreenshot && typeof liveScreenshot == "string") {
+            screenshot = liveScreenshot;
+        }
 
-    if (liveScreenshot && typeof liveScreenshot == "string") {
-      screenshot = liveScreenshot;
+        return screenshot;
     }
 
-    return screenshot;
-  }
+    async getCurrentPageSchema(url: string | undefined) {
+        const timeoutPromise = new Promise((f) => setTimeout(f, 3000));
+        const action = {
+            actionName: "getPageSchema",
+            parameters: {
+                url: url,
+            },
+        };
 
-  async getCurrentPageSchema(url: string | undefined) {
-    const timeoutPromise = new Promise((f) => setTimeout(f, 3000));
-    const action = {
-      actionName: "getPageSchema",
-      parameters: {
-        url: url,
-      },
-    };
-
-    const actionPromise = this.getPageDataFromBrowser(action);
-    return Promise.race([actionPromise, timeoutPromise]);
-  }
-
-  async setCurrentPageSchema(url: string, data: any) {
-    const schemaAction = {
-      actionName: "setPageSchema",
-      parameters: {
-        url: url,
-        schema: data,
-      },
-    };
-
-    return this.sendActionToBrowser(schemaAction, "browser");
-  }
-
-  async getPageUrl() {
-    const action = {
-      actionName: "getPageUrl",
-    };
-
-    return this.getPageDataFromBrowser(action);
-  }
-
-  async clickOn(cssSelector: string) {
-    const clickAction = {
-      actionName: "clickOnElement",
-      parameters: {
-        cssSelector: cssSelector,
-      },
-    };
-    return this.sendActionToBrowser(clickAction);
-  }
-
-  async enterTextIn(textValue: string, cssSelector?: string) {
-    let actionName = cssSelector ? "enterTextInElement" : "enterTextOnPage";
-
-    const textAction = {
-      actionName: actionName,
-      parameters: {
-        value: textValue,
-        cssSelector: cssSelector,
-      },
-    };
-
-    return this.sendActionToBrowser(textAction);
-  }
-
-  async awaitPageLoad(timeout?: number) {
-    const action = {
-      actionName: "awaitPageLoad",
-    };
-
-    const actionPromise = this.sendActionToBrowser(action, "browser");
-    if (timeout) {
-      const timeoutPromise = new Promise((f) => setTimeout(f, timeout));
-      return Promise.race([actionPromise, timeoutPromise]);
-    } else {
-      return actionPromise;
-    }
-  }
-
-  async awaitPageInteraction(timeout?: number) {
-    if (!timeout) {
-      timeout = 400;
+        const actionPromise = this.getPageDataFromBrowser(action);
+        return Promise.race([actionPromise, timeoutPromise]);
     }
 
-    const timeoutPromise = new Promise((f) => setTimeout(f, timeout));
-    return timeoutPromise;
-  }
+    async setCurrentPageSchema(url: string, data: any) {
+        const schemaAction = {
+            actionName: "setPageSchema",
+            parameters: {
+                url: url,
+                schema: data,
+            },
+        };
+
+        return this.sendActionToBrowser(schemaAction, "browser");
+    }
+
+    async getPageUrl() {
+        const action = {
+            actionName: "getPageUrl",
+        };
+
+        return this.getPageDataFromBrowser(action);
+    }
+
+    async clickOn(cssSelector: string) {
+        const clickAction = {
+            actionName: "clickOnElement",
+            parameters: {
+                cssSelector: cssSelector,
+            },
+        };
+        return this.sendActionToBrowser(clickAction);
+    }
+
+    async enterTextIn(textValue: string, cssSelector?: string) {
+        let actionName = cssSelector ? "enterTextInElement" : "enterTextOnPage";
+
+        const textAction = {
+            actionName: actionName,
+            parameters: {
+                value: textValue,
+                cssSelector: cssSelector,
+            },
+        };
+
+        return this.sendActionToBrowser(textAction);
+    }
+
+    async awaitPageLoad(timeout?: number) {
+        const action = {
+            actionName: "awaitPageLoad",
+        };
+
+        const actionPromise = this.sendActionToBrowser(action, "browser");
+        if (timeout) {
+            const timeoutPromise = new Promise((f) => setTimeout(f, timeout));
+            return Promise.race([actionPromise, timeoutPromise]);
+        } else {
+            return actionPromise;
+        }
+    }
+
+    async awaitPageInteraction(timeout?: number) {
+        if (!timeout) {
+            timeout = 400;
+        }
+
+        const timeoutPromise = new Promise((f) => setTimeout(f, timeout));
+        return timeoutPromise;
+    }
 }

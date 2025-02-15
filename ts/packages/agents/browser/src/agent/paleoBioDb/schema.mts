@@ -2,26 +2,26 @@
 // Licensed under the MIT License.
 
 export type PaleoBioDbActions =
-  | ZoomIn
-  | ZoomOut
-  | ZoomReset
-  | SetGeologicTimescale
-  | SetTaxonomicGroup
-  | TogglePaleogeographyMap
-  | SetMapLocation
-  | PanMap
-  | ClearFilters;
+    | ZoomIn
+    | ZoomOut
+    | ZoomReset
+    | SetGeologicTimescale
+    | SetTaxonomicGroup
+    | TogglePaleogeographyMap
+    | SetMapLocation
+    | PanMap
+    | ClearFilters;
 
 export type ZoomIn = {
-  actionName: "zoomIn";
+    actionName: "zoomIn";
 };
 
 export type ZoomOut = {
-  actionName: "zoomOut";
+    actionName: "zoomOut";
 };
 
 export type ZoomReset = {
-  actionName: "zoomReset";
+    actionName: "zoomReset";
 };
 
 // Sets the geologic time for fossil records
@@ -35,10 +35,10 @@ export type ZoomReset = {
 // }
 // IMPORTANT: Correct any typos in the user's input
 export type SetGeologicTimescale = {
-  actionName: "setGeologicTimescale";
-  parameters: {
-    geologicTime: string; // The Geologic time e.g. Cenozoic, Mesozoic, Devonian etc.
-  };
+    actionName: "setGeologicTimescale";
+    parameters: {
+        geologicTime: string; // The Geologic time e.g. Cenozoic, Mesozoic, Devonian etc.
+    };
 };
 
 // This sets the taxonomic group used in the database
@@ -52,10 +52,10 @@ export type SetGeologicTimescale = {
 // }
 // IMPORTANT: Correct any typos in the user's input
 export type SetTaxonomicGroup = {
-  actionName: "setTaxonomicGroup";
-  parameters: {
-    taxa: string; // The taxonomic group e.g. Mollusca, Carnivora etc.
-  };
+    actionName: "setTaxonomicGroup";
+    parameters: {
+        taxa: string; // The taxonomic group e.g. Mollusca, Carnivora etc.
+    };
 };
 
 // This updates the visible map to center on the specified location
@@ -68,34 +68,34 @@ export type SetTaxonomicGroup = {
 //  }
 // }
 export type SetMapLocation = {
-  actionName: "setMapLocation";
-  parameters: {
-    locationName: string; // The name of the location
-  };
+    actionName: "setMapLocation";
+    parameters: {
+        locationName: string; // The name of the location
+    };
 };
 
 // This updates the map to show different continent states
 export type TogglePaleogeographyMap = {
-  actionName: "togglePaleogeographyMap";
-  parameters: {
-    on: boolean;
-  };
+    actionName: "togglePaleogeographyMap";
+    parameters: {
+        on: boolean;
+    };
 };
 
 export type PanMap = {
-  actionName: "panMap";
-  parameters: {
-    direction: PanDirections; // The direction to pan on the map.
-  };
+    actionName: "panMap";
+    parameters: {
+        direction: PanDirections; // The direction to pan on the map.
+    };
 };
 
 export type PanDirections = "up" | "down" | "left" | "right";
 
 export type ClearFilters = {
-  actionName: "clearFilters";
-  parameters: {
-    geologicTime: boolean;
-    taxa: boolean;
-    all: boolean;
-  };
+    actionName: "clearFilters";
+    parameters: {
+        geologicTime: boolean;
+        taxa: boolean;
+        all: boolean;
+    };
 };
