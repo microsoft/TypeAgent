@@ -24,8 +24,12 @@ import {
     SemanticRefAccumulator,
     TermSet,
     TextRangeCollection,
+    TextRangesInScope,
 } from "./collections.js";
-import { PropertyNames } from "./propertyIndex.js";
+import {
+    lookupPropertyInPropertyIndex,
+    PropertyNames,
+} from "./propertyIndex.js";
 import { IPropertyToSemanticRefIndex } from "./secondaryIndexes.js";
 import { conversation } from "knowledge-processor";
 import { collections } from "typeagent";
@@ -351,10 +355,25 @@ export function lookupTermFiltered(
     return undefined;
 }
 
-export function lookupPropertySearchTerm(
+export function lookupTerm(
+    semanticRefIndex: ITermToSemanticRefIndex,
+    term: Term,
+    semanticRefs: SemanticRef[],
+    rangesInScope?: TextRangesInScope,
+): ScoredSemanticRef[] | undefined {
+    if (rangesInScope) {
+        return lookupTermFiltered(semanticRefIndex, term, semanticRefs, (sr) =>
+            rangesInScope.isRangeInScope(sr.range),
+        );
+    }
+    return semanticRefIndex.lookupTerm(term.text);
+}
+
+export function lookupProperty(
     semanticRefIndex: ITermToSemanticRefIndex,
     propertySearchTerm: PropertySearchTerm,
     semanticRefs: SemanticRef[],
+    rangesInScope?: TextRangesInScope,
 ): ScoredSemanticRef[] | undefined {
     if (typeof propertySearchTerm.propertyName !== "string") {
         throw new Error("Not supported");
@@ -369,11 +388,18 @@ export function lookupPropertySearchTerm(
         semanticRefIndex,
         valueTerm,
         semanticRefs,
-        (semanticRef) =>
-            matchPropertySearchTermToSemanticRef(
-                propertySearchTerm,
-                semanticRef,
-            ),
+        (semanticRef) => {
+            const inScope = rangesInScope
+                ? rangesInScope.isRangeInScope(semanticRef.range)
+                : true;
+            return (
+                inScope &&
+                matchPropertySearchTermToSemanticRef(
+                    propertySearchTerm,
+                    semanticRef,
+                )
+            );
+        },
     );
 }
 
@@ -386,6 +412,7 @@ export interface IQueryOpExpr<T> {
 export class QueryEvalContext {
     public matchedTerms = new TermSet();
     public matchedPropertyTerms = new PropertyTermSet();
+    public textRangesInScope: TextRangesInScope | undefined;
 
     constructor(
         public conversation: IConversation,
@@ -407,6 +434,7 @@ export class QueryEvalContext {
                 `${conversation.nameTag} is not initialized and cannot be searched`,
             );
         }
+        this.textRangesInScope = new TextRangesInScope();
     }
 
     public get semanticRefIndex() {
@@ -454,19 +482,35 @@ export class SelectTopNExpr<T extends MatchAccumulator> extends QueryOpExpr<T> {
     }
 }
 
+export class MatchTermsBooleanExpr extends QueryOpExpr<SemanticRefAccumulator> {
+    constructor(public getScopeExpr?: GetScopeExpr | undefined) {
+        super();
+    }
+
+    protected beginMatch(context: QueryEvalContext) {
+        if (this.getScopeExpr) {
+            context.textRangesInScope = this.getScopeExpr.eval(context);
+        }
+        context.clearMatchedTerms();
+    }
+}
+
 /**
  * Evaluates all child search term expressions
  * Returns their accumulated scored matches
  */
-export class MatchTermsOrExpr extends QueryOpExpr<SemanticRefAccumulator> {
-    constructor(public searchTermExpressions: MatchTermExpr[]) {
-        super();
+export class MatchTermsOrExpr extends MatchTermsBooleanExpr {
+    constructor(
+        public termExpressions: MatchTermExpr[],
+        public getScopeExpr?: GetScopeExpr | undefined,
+    ) {
+        super(getScopeExpr);
     }
 
     public override eval(context: QueryEvalContext): SemanticRefAccumulator {
+        super.beginMatch(context);
         const allMatches = new SemanticRefAccumulator();
-        context.clearMatchedTerms();
-        for (const matchExpr of this.searchTermExpressions) {
+        for (const matchExpr of this.termExpressions) {
             matchExpr.accumulateMatches(context, allMatches);
         }
         allMatches.calculateTotalScore();
@@ -474,18 +518,22 @@ export class MatchTermsOrExpr extends QueryOpExpr<SemanticRefAccumulator> {
     }
 }
 
-export class MatchTermsAndExpr extends QueryOpExpr<SemanticRefAccumulator> {
-    constructor(public searchTermExpressions: MatchTermExpr[]) {
-        super();
+export class MatchTermsAndExpr extends MatchTermsBooleanExpr {
+    constructor(
+        public termExpressions: MatchTermExpr[],
+        public getScopeExpr?: GetScopeExpr | undefined,
+    ) {
+        super(getScopeExpr);
     }
 
     public override eval(context: QueryEvalContext): SemanticRefAccumulator {
+        super.beginMatch(context);
+
         let allMatches: SemanticRefAccumulator | undefined;
-        context.clearMatchedTerms();
         let iTerm = 0;
         // Loop over each search term, intersecting the returned results...
-        for (; iTerm < this.searchTermExpressions.length; ++iTerm) {
-            const termMatches = this.searchTermExpressions[iTerm].eval(context);
+        for (; iTerm < this.termExpressions.length; ++iTerm) {
+            const termMatches = this.termExpressions[iTerm].eval(context);
             if (termMatches === undefined || termMatches.size === 0) {
                 // We can't possibly have an 'and'
                 break;
@@ -497,11 +545,9 @@ export class MatchTermsAndExpr extends QueryOpExpr<SemanticRefAccumulator> {
             }
         }
         if (allMatches) {
-            if (iTerm === this.searchTermExpressions.length) {
+            if (iTerm === this.termExpressions.length) {
                 allMatches.calculateTotalScore();
-                allMatches.selectWithHitCount(
-                    this.searchTermExpressions.length,
-                );
+                allMatches.selectWithHitCount(this.termExpressions.length);
             } else {
                 // And is not possible
                 allMatches.clearMatches();
@@ -568,7 +614,12 @@ export class MatchSearchTermExpr extends MatchTermExpr {
         context: QueryEvalContext,
         term: Term,
     ): ScoredSemanticRef[] | IterableIterator<ScoredSemanticRef> | undefined {
-        return context.semanticRefIndex.lookupTerm(term.text);
+        return lookupTerm(
+            context.semanticRefIndex,
+            term,
+            context.semanticRefs,
+            context.textRangesInScope,
+        );
     }
 
     private accumulateMatchesForTerm(
@@ -595,23 +646,6 @@ export class MatchSearchTermExpr extends MatchTermExpr {
                 context.matchedTerms.add(relatedTerm);
             }
         }
-    }
-}
-
-export class MatchTagExpr extends MatchSearchTermExpr {
-    constructor(public tagTerm: SearchTerm) {
-        super(tagTerm);
-    }
-    protected override lookupTerm(
-        context: QueryEvalContext,
-        term: Term,
-    ): ScoredSemanticRef[] | undefined {
-        return lookupTermFiltered(
-            context.semanticRefIndex,
-            term,
-            context.semanticRefs,
-            (semanticRef) => semanticRef.knowledgeType === "tag",
-        );
     }
 }
 
@@ -736,9 +770,12 @@ export class MatchPropertySearchTermExpr extends MatchTermExpr {
         propertyValue: string,
     ): ScoredSemanticRef[] | undefined {
         if (context.propertyIndex) {
-            return context.propertyIndex.lookupProperty(
+            return lookupPropertyInPropertyIndex(
+                context.propertyIndex,
                 propertyName,
                 propertyValue,
+                context.semanticRefs,
+                context.textRangesInScope,
             );
         }
         return this.lookupPropertyWithoutIndex(
@@ -753,13 +790,31 @@ export class MatchPropertySearchTermExpr extends MatchTermExpr {
         propertyName: string,
         propertyValue: string,
     ): ScoredSemanticRef[] | undefined {
-        return lookupPropertySearchTerm(
+        return lookupProperty(
             context.semanticRefIndex,
             {
                 propertyName: propertyName as KnowledgePropertyName,
                 propertyValue: { term: { text: propertyValue } },
             },
             context.semanticRefs,
+            context.textRangesInScope,
+        );
+    }
+}
+
+export class MatchTagExpr extends MatchSearchTermExpr {
+    constructor(public tagTerm: SearchTerm) {
+        super(tagTerm);
+    }
+    protected override lookupTerm(
+        context: QueryEvalContext,
+        term: Term,
+    ): ScoredSemanticRef[] | undefined {
+        return lookupTermFiltered(
+            context.semanticRefIndex,
+            term,
+            context.semanticRefs,
+            (semanticRef) => semanticRef.knowledgeType === "tag",
         );
     }
 }
@@ -875,6 +930,23 @@ export class PropertyMatchPredicate implements IQuerySemanticRefPredicate {
     }
 }
 
+export class GetScopeExpr extends QueryOpExpr<TextRangesInScope> {
+    constructor(public rangeSelectors: IQueryTextRangeSelector[]) {
+        super();
+    }
+
+    public eval(context: QueryEvalContext): TextRangesInScope {
+        let rangesInScope = new TextRangesInScope();
+        for (const selector of this.rangeSelectors) {
+            const range = selector.eval(context);
+            if (range) {
+                rangesInScope.addTextRanges(range);
+            }
+        }
+        return rangesInScope;
+    }
+}
+
 export class SelectInScopeExpr extends QueryOpExpr<SemanticRefAccumulator> {
     constructor(
         public sourceExpr: IQueryOpExpr<SemanticRefAccumulator>,
@@ -884,29 +956,29 @@ export class SelectInScopeExpr extends QueryOpExpr<SemanticRefAccumulator> {
     }
 
     public override eval(context: QueryEvalContext): SemanticRefAccumulator {
-        let accumulatedSemanticRefs = this.sourceExpr.eval(context);
+        let semanticRefs = this.sourceExpr.eval(context);
         // Scope => text ranges in scope
         // Collect all possible text rang. The ranges may overlap, may not agree.
         // What we want to ensure is that if any of the
-        const rangeCollection: TextRangeCollection[] = [];
+        const rangesInScope = new TextRangesInScope();
         for (const selector of this.rangeSelectors) {
-            const range = selector.eval(context, accumulatedSemanticRefs);
+            const range = selector.eval(context, semanticRefs);
             if (range) {
-                rangeCollection.push(range);
+                rangesInScope.addTextRanges(range);
             }
         }
-        accumulatedSemanticRefs = accumulatedSemanticRefs.getMatchesInScope(
+        semanticRefs = semanticRefs.getMatchesInScope(
             context.semanticRefs,
-            rangeCollection,
+            rangesInScope,
         );
-        return accumulatedSemanticRefs;
+        return semanticRefs;
     }
 }
 
 export interface IQueryTextRangeSelector {
     eval(
         context: QueryEvalContext,
-        semanticRefs: SemanticRefAccumulator,
+        semanticRefs?: SemanticRefAccumulator | undefined,
     ): TextRangeCollection | undefined;
 }
 
@@ -941,11 +1013,14 @@ export class TextRangesPredicateSelector implements IQueryTextRangeSelector {
 
     public eval(
         context: QueryEvalContext,
-        accumulator: SemanticRefAccumulator,
+        semanticRefs?: SemanticRefAccumulator | undefined,
     ): TextRangeCollection | undefined {
+        if (!semanticRefs) {
+            return undefined;
+        }
         if (this.predicates && this.predicates.length > 0) {
             const textRangesInScope = new TextRangeCollection();
-            for (const inScopeRef of accumulator.getSemanticRefs(
+            for (const inScopeRef of semanticRefs.getSemanticRefs(
                 context.semanticRefs,
                 (sr) => matchPredicates(context, this.predicates, sr),
             )) {
@@ -962,10 +1037,10 @@ export class TextRangesWithTagSelector implements IQueryTextRangeSelector {
 
     public eval(
         context: QueryEvalContext,
-        accumulator: SemanticRefAccumulator,
+        semanticRefs: SemanticRefAccumulator,
     ): TextRangeCollection | undefined {
         let textRangesInScope: TextRangeCollection | undefined;
-        for (const inScopeRef of accumulator.getSemanticRefs(
+        for (const inScopeRef of semanticRefs.getSemanticRefs(
             context.semanticRefs,
             (sr) => sr.knowledgeType === "tag",
         )) {

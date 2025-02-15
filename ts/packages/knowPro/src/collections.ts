@@ -311,16 +311,11 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
 
     public getMatchesInScope(
         semanticRefs: SemanticRef[],
-        textRangesInScope: TextRangeCollection[],
+        rangesInScope: TextRangesInScope,
     ) {
         const accumulator = new SemanticRefAccumulator(this.searchTermMatches);
         for (const match of this.getMatches()) {
-            if (
-                isInAllTextRanges(
-                    textRangesInScope,
-                    semanticRefs[match.value].range,
-                )
-            ) {
+            if (rangesInScope.isRangeInScope(semanticRefs[match.value].range)) {
                 accumulator.setMatch(match);
             }
         }
@@ -409,19 +404,30 @@ export class TextRangeCollection {
     }
 }
 
-/**
- * Return false if inner range is not in ALL the given ranges
- */
-function isInAllTextRanges(
-    ranges: TextRangeCollection[],
-    innerRange: TextRange,
-): boolean {
-    for (const outerRange of ranges) {
-        if (!outerRange.isInRange(innerRange)) {
-            return false;
-        }
+export class TextRangesInScope {
+    constructor(
+        public textRanges: TextRangeCollection[] | undefined = undefined,
+    ) {}
+
+    public get hasRanges(): boolean {
+        return this.textRanges !== undefined;
     }
-    return true;
+
+    public addTextRanges(ranges: TextRangeCollection): void {
+        this.textRanges ??= [];
+        this.textRanges.push(ranges);
+    }
+
+    public isRangeInScope(range: TextRange): boolean {
+        if (this.textRanges !== undefined) {
+            for (const outerRange of this.textRanges) {
+                if (!outerRange.isInRange(range)) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
 }
 
 export class TermSet {
