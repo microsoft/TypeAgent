@@ -5,11 +5,11 @@ import { enumerateMicrophones } from "./speech";
 import {
     defaultSettings,
     ShellSettingsType,
-} from "../../main/shellSettingsType.js";
+} from "../../preload/shellSettingsType.js";
 import { ChatView } from "./chatView.js";
 import { getTTS, getTTSProviders, getTTSVoices } from "./tts/tts.js";
-import { DisplayType } from "../../preload/electronTypes";
 import { iconMoon, iconSun } from "./icon.js";
+import { DisplayType } from "@typeagent/agent-sdk";
 
 function addOption(
     select: HTMLSelectElement,

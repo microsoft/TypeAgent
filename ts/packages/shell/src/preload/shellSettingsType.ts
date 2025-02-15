@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
-import { DisplayType } from "../preload/electronTypes.js";
+
+import { DisplayType } from "@typeagent/agent-sdk";
 
 export type TTSSettings = {
     provider?: string;
