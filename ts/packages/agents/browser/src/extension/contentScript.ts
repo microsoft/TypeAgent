@@ -538,6 +538,211 @@ async function awaitPageIncrementalUpdates() {
     });
 }
 
+let recording = false;
+let recordedActions: any[] = [];
+let actionIndex = 1;
+
+function startRecording() {
+    if (recording) return;
+    recording = true;
+    recordedActions = [];
+    actionIndex = 1;
+
+    document.addEventListener("click", recordClick, true);
+    document.addEventListener("input", recordInput, true);
+    document.addEventListener("scroll", recordScroll, true);
+
+    saveRecordedActions();
+}
+
+// Stop recording and return data
+function stopRecording() {
+    recording = false;
+    document.removeEventListener("click", recordClick, true);
+    document.removeEventListener("input", recordInput, true);
+    document.removeEventListener("scroll", recordScroll, true);
+
+    captureAnnotatedScreenshot(() => {
+        const pageHTML = document.documentElement.outerHTML;
+        chrome.runtime.sendMessage({
+            type: "saveRecordedActionPageHTML",
+            html: pageHTML,
+        });
+
+        chrome.runtime.sendMessage({
+            type: "recordingStopped",
+            recordedActions,
+        });
+        chrome.storage.session.remove("recordedActions");
+    });
+}
+
+// Record click events
+function recordClick(event: MouseEvent) {
+    const target = event.target as HTMLElement;
+    if (!target) return;
+
+    const cssSelector = getCSSSelector(target);
+    const boundingBox = getBoundingBox(target);
+
+    recordedActions.push({
+        id: actionIndex++,
+        type: "click",
+        tag: target.tagName,
+        text: target.textContent?.trim(),
+        cssSelector,
+        boundingBox,
+        timestamp: Date.now(),
+    });
+
+    saveRecordedActions();
+}
+
+// Record text input events
+function recordInput(event: Event) {
+    const target = event.target as HTMLInputElement | HTMLTextAreaElement;
+    if (!target) return;
+
+    const cssSelector = getCSSSelector(target);
+    const boundingBox = getBoundingBox(target);
+
+    recordedActions.push({
+        id: actionIndex++,
+        type: "input",
+        tag: target.tagName,
+        value: target.value,
+        cssSelector,
+        boundingBox,
+        timestamp: Date.now(),
+    });
+
+    saveRecordedActions();
+}
+
+// Record scroll events
+function recordScroll() {
+    recordedActions.push({
+        id: actionIndex++,
+        type: "scroll",
+        scrollX: window.scrollX,
+        scrollY: window.scrollY,
+        timestamp: Date.now(),
+    });
+
+    saveRecordedActions();
+}
+
+function recordNavigation() {
+    captureAnnotatedScreenshot(() => {
+        const pageHTML = document.documentElement.outerHTML;
+        chrome.runtime.sendMessage({
+            type: "saveRecordedActionPageHTML",
+            html: pageHTML,
+        });
+    });
+
+    recordedActions.push({
+        id: actionIndex++,
+        type: "navigation",
+        url: window.location.href,
+        timestamp: Date.now(),
+    });
+
+    saveRecordedActions();
+}
+
+function captureAnnotatedScreenshot(callback: () => void) {
+    chrome.runtime.sendMessage({ type: "takeScreenshot" }, (screenshotUrl) => {
+        if (!screenshotUrl) {
+            console.error("Failed to capture screenshot");
+            return callback();
+        }
+
+        const img = new Image();
+        img.src = screenshotUrl;
+        img.onload = () => {
+            const canvas = document.createElement("canvas");
+            const ctx = canvas.getContext("2d")!;
+            canvas.width = img.width;
+            canvas.height = img.height;
+
+            ctx.drawImage(img, 0, 0);
+
+            recordedActions.forEach((action) => {
+                if (!action.boundingBox) return;
+
+                const { left, top, width, height } = action.boundingBox;
+                ctx.strokeStyle = "red";
+                ctx.lineWidth = 2;
+                ctx.strokeRect(left, top, width, height);
+
+                ctx.fillStyle = "red";
+                ctx.font = "bold 14px Arial";
+                ctx.fillText(
+                    `${action.id} ${action.type}`,
+                    left + width - 40,
+                    top - 5,
+                );
+            });
+
+            const annotatedScreenshot = canvas.toDataURL("image/png");
+            chrome.runtime.sendMessage({
+                action: "saveAnnotatedScreenshot",
+                screenshot: annotatedScreenshot,
+            });
+
+            callback();
+        };
+    });
+}
+
+function saveRecordedActions() {
+    chrome.storage.session.set({ recordedActions });
+}
+
+// Restore actions if page is refreshed
+chrome.storage.session.get("recordedActions", (data) => {
+    if (data.recordedActions) {
+        recordedActions = data.recordedActions;
+    }
+});
+
+// Detect navigation and push it as an action
+window.addEventListener("beforeunload", recordNavigation);
+window.addEventListener("popstate", recordNavigation);
+window.addEventListener("hashchange", recordNavigation);
+
+function getCSSSelector(element: HTMLElement): string {
+    if (element.id) {
+        return `#${element.id}`;
+    }
+
+    let path = [];
+    while (element && element.nodeType === Node.ELEMENT_NODE) {
+        let selector = element.tagName.toLowerCase();
+
+        if (element.className) {
+            selector += "." + element.className.trim().replace(/\s+/g, ".");
+        }
+
+        let siblingIndex = 1;
+        let sibling = element.previousElementSibling;
+        while (sibling) {
+            if (sibling.tagName === element.tagName) siblingIndex++;
+            sibling = sibling.previousElementSibling;
+        }
+        selector += `:nth-of-type(${siblingIndex})`;
+
+        path.unshift(selector);
+        element = element.parentElement!;
+    }
+    return path.join(" > ");
+}
+
+function getBoundingBox(element: HTMLElement): DOMRect {
+    return element.getBoundingClientRect();
+}
+
 function sendPaleoDbRequest(data: any) {
     document.dispatchEvent(
         new CustomEvent("toPaleoDbAutomation", { detail: data }),
@@ -708,6 +913,16 @@ async function handleScriptAction(
                 localStorage.removeItem("pageSchema");
             }
             sendResponse({});
+            break;
+        }
+        case "startRecording": {
+            startRecording();
+            sendResponse({});
+            break;
+        }
+        case "stopRecording": {
+            stopRecording();
+            sendResponse({ recordedActions });
             break;
         }
     }
