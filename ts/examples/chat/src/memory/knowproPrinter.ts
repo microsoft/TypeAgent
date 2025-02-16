@@ -199,6 +199,11 @@ export class KnowProPrinter extends ChatPrinter {
         return this;
     }
 
+    public writeImageCollectionInfo(imageCollection: kp.ImageCollection) {
+        this.write(`${imageCollection.nameTag}: ${imageCollection.messages.length} images.`);
+        return this;
+    }
+
     public writeIndexingResults(
         results: kp.ConversationIndexingResult,
         verbose = false,

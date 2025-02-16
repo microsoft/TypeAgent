@@ -25,6 +25,7 @@
   },
   "dependencies": {
     "aiclient": "workspace:*",
+    "common-utils": "workspace:*",
     "debug": "^4.4.0",
     "knowledge-processor": "workspace:*",
     "typeagent": "workspace:*",

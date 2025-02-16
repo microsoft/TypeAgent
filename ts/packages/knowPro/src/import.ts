@@ -10,8 +10,8 @@ import {
     ITimestampToTextRangeIndex,
     IPropertyToSemanticRefIndex,
 } from "./dataFormat.js";
-import { conversation, split } from "knowledge-processor";
-import { collections, dateTime, getFileName, readAllText } from "typeagent";
+import { conversation, split, image } from "knowledge-processor";
+import { collections, dateTime, getFileName, isDirectoryPath, readAllText } from "typeagent";
 import {
     ConversationIndex,
     addActionToIndex,
@@ -19,6 +19,7 @@ import {
     buildConversationIndex,
     addTopicToIndex,
     ConversationIndexingResult,
+    createKnowledgeModel,
 } from "./conversationIndex.js";
 import { Result } from "typechat";
 import {
@@ -28,6 +29,10 @@ import {
 } from "./relatedTermsIndex.js";
 import { TimestampToTextRangeIndex } from "./timestampIndex.js";
 import { addPropertiesToIndex, PropertyIndex } from "./propertyIndex.js";
+import fs from "node:fs";
+import path from "node:path";
+import { isImageFileType } from "common-utils";
+import { ChatModel } from "aiclient";
 
 // metadata for podcast messages
 export class PodcastMessageMeta implements IKnowledgeSource {
@@ -260,6 +265,8 @@ export class Podcast implements IConversation<PodcastMessageMeta> {
 
 export interface PodcastData extends IConversationData<PodcastMessage> {}
 
+export interface ImageCollectionData extends IConversationData<Image> {}
+
 export async function importPodcast(
     transcriptFilePath: string,
     podcastName?: string,
@@ -362,4 +369,193 @@ function randomDate(startHour = 14) {
     date.setMonth(Math.floor(Math.random() * 12));
     date.setDate(Math.floor(Math.random() * 28));
     return date;
+}
+
+export class Image implements IMessage<ImageMeta> {
+    public timestamp: string | undefined;
+    constructor(
+        public textChunks: string[],
+        public metadata: ImageMeta,
+        public tags: string[] = [],
+    ) {}
+}
+
+// metadata for images
+export class ImageMeta implements IKnowledgeSource {
+    constructor(public fileName: string, public image: image.Image) {}
+
+    getKnowledge() {
+        throw new Error("Not implemented!");
+
+        return {
+            entities: [],
+            actions: [],
+            inverseActions: [],
+            topics: []
+        }
+    }
+}
+
+export class ImageCollection implements IConversation<ImageMeta> {
+    public settings: PodcastSettings;
+    constructor(
+        public nameTag: string,
+        public messages: Image[],
+        public tags: string[] = [],
+        public semanticRefs: SemanticRef[] = [],
+        public semanticRefIndex: ConversationIndex | undefined = undefined,
+        public termToRelatedTermsIndex:
+            | TermToRelatedTermsIndex
+            | undefined = undefined,
+        public timestampIndex:
+            | ITimestampToTextRangeIndex
+            | undefined = undefined,
+        public propertyToSemanticRefIndex:
+            | IPropertyToSemanticRefIndex
+            | undefined = undefined,
+    ) { 
+        this.settings = createPodcastSettings();
+    }
+
+    public buildTimestampIndex(): void {
+        this.timestampIndex = new TimestampToTextRangeIndex(this.messages);
+    }
+
+    public buildPropertyIndex() {
+        if (this.semanticRefs && this.semanticRefs.length > 0) {
+            this.propertyToSemanticRefIndex = new PropertyIndex();
+            addPropertiesToIndex(
+                this.semanticRefs,
+                this.propertyToSemanticRefIndex,
+            );
+        }
+    }    
+       
+    public serialize(): ImageCollectionData {
+        return {
+            nameTag: this.nameTag,
+            messages: this.messages,
+            tags: this.tags,
+            semanticRefs: this.semanticRefs,
+            semanticIndexData: this.semanticRefIndex?.serialize(),
+            relatedTermsIndexData: this.termToRelatedTermsIndex?.serialize(),
+        };
+    }
+
+    public deserialize(data: ImageCollectionData): void {
+        if (data.semanticIndexData) {
+            this.semanticRefIndex = new ConversationIndex(
+                data.semanticIndexData,
+            );
+        }
+        if (data.relatedTermsIndexData) {
+            this.termToRelatedTermsIndex = new TermToRelatedTermsIndex(
+                this.settings.relatedTermIndexSettings,
+            );
+            this.termToRelatedTermsIndex.deserialize(
+                data.relatedTermsIndexData,
+            );
+        }
+        this.buildPropertyIndex();
+        this.buildTimestampIndex();
+    }    
+}
+
+/**
+ * Indexes the supplied image or images in the supplied folder.
+ *
+ * @param imagePath - The path to the image file or a folder containing images
+ * @param recursive - A flag indicating if the search should include subfolders
+ * @returns - The imported images as an image collection.
+ */
+export async function importImageCollection(
+    imagePath: string,
+    recursive: boolean = true
+): Promise<ImageCollection> {
+
+    let isDir = isDirectoryPath(imagePath);
+
+    if (!fs.existsSync(imagePath)) {
+        throw Error(`The supplied file or folder '${imagePath}' does not exist.`);
+    }
+
+    // const clock: StopWatch = new StopWatch();
+    // const tokenCountStart: CompletionUsageStats =
+    //     TokenCounter.getInstance().total;
+    
+    // create a model used to extract data from the images
+    const chatModel = createKnowledgeModel();
+
+    let images: Image[] = [];
+    if (isDir) {
+        images = await indexImages(imagePath, recursive, chatModel);
+    } else {
+        const img = await indexImage(imagePath, chatModel);
+        if (img !== undefined) {
+            images.push(img);
+        }
+    }
+
+    return new ImageCollection(
+        path.dirname(imagePath),
+        images
+    );
+}
+
+/**
+ * Imports images from the supplied folder.
+ * 
+ * @param sourcePath - The folder to import.
+ * @param recursive - A flag indicating whether or not subfolders are imported.
+ * @param chatModel - The model used to extract data from the image.
+ * @returns - The imported images from the supplied folder.
+ */
+async function indexImages(
+    sourcePath: string,
+    recursive: boolean,
+    chatModel: ChatModel
+): Promise<Image[]> {
+    // load files from the supplied directory
+    const fileNames = await fs.promises.readdir(sourcePath, {
+        recursive: true,
+    });
+
+    // index each image
+    const retVal: Image[] = []    
+    for (let i = 0; i < fileNames.length; i++) {
+        const fullFilePath: string = path.join(sourcePath, fileNames[i]);
+        //console.log(`${fullFilePath} [${i+1} of ${fileNames.length}] (estimated time remaining: ${clock.elapsedSeconds / (i + 1) * (fileNames.length - i)})`);
+        const img = await indexImage(fullFilePath, chatModel);
+
+        if (img !== undefined) {
+            retVal.push(img);
+        }
+    }
+
+    return retVal;
+}
+
+/**
+ * Imports the supplied image file (if it's an image)
+ * 
+ * @param fileName - The file to import
+ * @param chatModel - The model used to extract data from the image.
+ * @returns - The imported image.
+ */
+async function indexImage(fileName: string, chatModel: ChatModel): Promise<Image | undefined> {
+    if (!fs.existsSync(fileName)) {
+        console.log(`Could not find part of the file path '${fileName}'`);
+        return;
+    } else if (!isImageFileType(path.extname(fileName))) {
+        console.log(`Skipping '${fileName}', not a known image file.`);
+        return;
+    }
+
+    const img: image.Image | undefined = await image.loadImage(fileName, chatModel);
+
+    if (image !== undefined) {
+        return new Image([img!.title], new ImageMeta(fileName, img!));
+    }
+
+    return undefined;
 }

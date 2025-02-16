@@ -21,7 +21,7 @@ import { openai } from "aiclient";
 import { Result } from "typechat";
 import { async } from "typeagent";
 
-function createKnowledgeModel() {
+export function createKnowledgeModel() {
     const chatModelSettings = openai.apiSettingsFromEnv(
         openai.ModelType.Chat,
         undefined,

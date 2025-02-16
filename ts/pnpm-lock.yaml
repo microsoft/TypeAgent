@@ -2073,6 +2073,9 @@ importers:
       aiclient:
         specifier: workspace:*
         version: link:../aiclient
+      common-utils:
+        specifier: workspace:*
+        version: link:../commonUtils
       debug:
         specifier: ^4.4.0
         version: 4.4.0(supports-color@8.1.1)

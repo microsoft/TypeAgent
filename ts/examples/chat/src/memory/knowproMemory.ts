@@ -59,7 +59,10 @@ export async function createKnowproCommands(
     commands.kpPodcastBuildIndex = podcastBuildIndex;
 
     commands.kpImages = showImages;
-    commands.kpImageImport = imageImport;
+    commands.kpImageImport = imageImport;    
+    commands.kpImageCollectionSave = imagesSave;
+    commands.kpImageCollectionLoad = imagesLoad;
+    commands.kpImageCollectionBuildIndex = imagesBuildIndex;
 
 
     /*----------------
@@ -225,7 +228,7 @@ export async function createKnowproCommands(
             },
         };
     }
-    commands.kpPodcastMessages.metadata = "Show all images";
+    commands.kpImages.metadata = "Show all images";
     async function showImages(args: string[]) {
         const conversation = ensureConversationLoaded();
         if (!conversation) {
@@ -253,7 +256,7 @@ export async function createKnowproCommands(
             },
         };
     }
-    commands.kpPodcastImport.metadata = podcastImportDef();
+    commands.kpImageImport.metadata = imageImportDef();
     async function imageImport(args: string[]): Promise<void> {
         const namedArgs = parseNamedArguments(args, imageImportDef());
         if (!fs.existsSync(namedArgs.filePath)) {
@@ -263,20 +266,87 @@ export async function createKnowproCommands(
         context.images = await kp.importImageCollection(namedArgs.filePath);
         context.conversation = context.images;
         context.printer.writeLine("Imported images:");
-        context.printer.writePodcastInfo(context.images);
+        context.printer.writeImageCollectionInfo(context.images);
 
         if (!namedArgs.index) {
             return;
         }
 
-        // Build index
-        await podcastBuildIndex(namedArgs);
-        // Save the index
+        // Build the image collection index
+        await imagesBuildIndex(namedArgs);
+
+        // Save the image collection index
         namedArgs.filePath = sourcePathToIndexPath(
             namedArgs.filePath,
             namedArgs.indexFilePath,
         );
-        await podcastSave(namedArgs);
+        await imagesSave(namedArgs);
+    }
+
+    function imagesSaveDef(): CommandMetadata {
+        return {
+            description: "Save Image Collection",
+            args: {
+                filePath: argDestFile(),
+            },
+        };
+    }
+    
+    commands.kpPodcastSave.metadata = imagesSaveDef();
+    async function imagesSave(args: string[] | NamedArgs): Promise<void> {
+        const namedArgs = parseNamedArguments(args, imagesSaveDef());
+        if (!context.podcast) {
+            context.printer.writeError("No image collection loaded");
+            return;
+        }
+        context.printer.writeLine("Saving index");
+        context.printer.writeLine(namedArgs.filePath);
+        const cData = context.images?.serialize();
+        await ensureDir(path.dirname(namedArgs.filePath));
+        await writeJsonFile(namedArgs.filePath, cData);
+    }
+
+    function imagesLoadDef(): CommandMetadata {
+        return {
+            description: "Load knowPro image collection",
+            options: {
+                filePath: argSourceFile(),
+                name: arg("Image Collection Name"),
+            },
+        };
+    }
+
+    commands.kpPodcastLoad.metadata = imagesLoadDef();
+    async function imagesLoad(args: string[]): Promise<void> {
+        const namedArgs = parseNamedArguments(args, imagesLoadDef());
+        let imagesFilePath = namedArgs.filePath;
+        imagesFilePath ??= namedArgs.name
+            ? podcastNameToFilePath(namedArgs.name)
+            : undefined;
+        if (!imagesFilePath) {
+            context.printer.writeError("No filepath or name provided");
+            return;
+        }
+        if (!fs.existsSync(imagesFilePath)) {
+            context.printer.writeError(`${imagesFilePath} not found`);
+            return;
+        }
+
+        const data = await readJsonFile<kp.ImageCollectionData>(imagesFilePath);
+        if (!data) {
+            context.printer.writeError("Could not load image collection data");
+            return;
+        }
+        context.images = new kp.ImageCollection(
+            data.nameTag,
+            data.messages,
+            data.tags,
+            data.semanticRefs,
+        );
+        context.images.deserialize(data);
+        context.conversation = context.podcast;
+        context.printer.conversation = context.conversation;
+        context.printer.writeImageCollectionInfo(context.images);
     }
 
     ////////////////// Miscellaneous Commands //////////////////
@@ -509,6 +579,73 @@ export async function createKnowproCommands(
             progress.complete();
             context.printer.writeLine(
                 `Semantic Indexed ${context.podcast.semanticRefIndex.size} terms`,
+            );
+        }
+    }
+
+    function imageCollectionBuildIndexDef(): CommandMetadata {
+        return {
+            description: "Build image collection index",
+            options: {
+                knowLedge: argBool("Index knowledge", false),
+                related: argBool("Index related terms", false),
+                maxMessages: argNum("Maximum messages to index"),
+            },
+        };
+    }
+    commands.kpImageCollectionBuildIndex.metadata = imageCollectionBuildIndexDef();
+    async function imagesBuildIndex(
+        args: string[] | NamedArgs,
+    ): Promise<void> {
+        if (!context.images) {
+            context.printer.writeError("No image collection loaded");
+            return;
+        }
+        if (!context.images.semanticRefIndex) {
+            context.printer.writeError("Image collection is not indexed");
+            return;
+        }
+        const messageCount = context.images.messages.length;
+        if (messageCount === 0) {
+            return;
+        }
+
+        const namedArgs = parseNamedArguments(args, imageCollectionBuildIndexDef());
+        // Build index
+        context.printer.writeLine();
+        context.printer.writeLine("Building index");
+        if (namedArgs.knowledge) {
+            context.printer.writeLine("Building knowledge index");
+            const maxMessages = namedArgs.maxMessages ?? messageCount;
+            let progress = new ProgressBar(context.printer, maxMessages);
+            const indexResult = await context.images?.buildIndex(
+                (text, result) => {
+                    progress.advance();
+                    if (!result.success) {
+                        context.printer.writeError(
+                            `${result.message}\n${text}`,
+                        );
+                    }
+                    return progress.count < maxMessages;
+                },
+            );
+            progress.complete();
+            context.printer.writeLine(`Indexed ${maxMessages} items`);
+            context.printer.writeIndexingResults(indexResult);
+        }
+        if (namedArgs.related) {
+            context.printer.writeLine("Building semantic index");
+            const progress = new ProgressBar(
+                context.printer,
+                context.images?.semanticRefIndex.size,
+            );
+            await context.images?.buildRelatedTermsIndex(16, (terms, batch) => {
+                progress.advance(batch.value.length);
+                return true;
+            });
+            progress.complete();
+            context.printer.writeLine(
+                `Semantic Indexed ${context.images?.semanticRefIndex.size} terms`,
             );
         }
     }
