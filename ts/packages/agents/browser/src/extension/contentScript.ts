@@ -550,7 +550,8 @@ function startRecording() {
 
     document.addEventListener("click", recordClick, true);
     document.addEventListener("input", recordInput, true);
-    document.addEventListener("scroll", recordScroll, true);
+    // document.addEventListener("scroll", recordScroll, true);
+    document.addEventListener("keyup", recordTextEntry, true);
 
     saveRecordedActions();
 }
@@ -560,7 +561,8 @@ function stopRecording() {
     recording = false;
     document.removeEventListener("click", recordClick, true);
     document.removeEventListener("input", recordInput, true);
-    document.removeEventListener("scroll", recordScroll, true);
+    // document.removeEventListener("scroll", recordScroll, true);
+    document.removeEventListener("keyup", recordTextEntry, true);
 
     captureAnnotatedScreenshot(() => {
         const pageHTML = document.documentElement.outerHTML;
@@ -615,6 +617,25 @@ function recordInput(event: Event) {
         boundingBox,
         timestamp: Date.now(),
     });
+
+    saveRecordedActions();
+}
+
+function recordTextEntry(event: Event) {
+    const target = event.target as HTMLInputElement | HTMLTextAreaElement;
+    if (target.tagName === "INPUT" || target.tagName === "TEXTAREA") {
+        const action = {
+            id: actionIndex++,
+            type: "textInput",
+            timestamp: Date.now(),
+            tag: target.tagName,
+            selector: getCSSSelector(target),
+            boundingBox: getBoundingBox(target),
+            value: target.value, // Capture final text value
+        };
+
+        recordedActions.push(action);
+    }
 
     saveRecordedActions();
 }

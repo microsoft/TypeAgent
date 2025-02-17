@@ -85,28 +85,40 @@ function registerTempSchema() {
 function toggleActionForm() {
     const form = document.getElementById("actionForm")!;
     form.classList.toggle("hidden");
+    if (form.classList.contains("hidden")) {
+        (document.getElementById("actionName") as HTMLInputElement)!.value = "";
+        (document.getElementById(
+            "actionDescription",
+        ) as HTMLTextAreaElement)!.value = "";
+        document.getElementById("stepsTimelineContainer")!.innerHTML = "";
+    }
 }
 
 // Function to save user-defined actions
 async function saveUserAction() {
-    const actionName = (
-        document.getElementById("actionName") as HTMLInputElement
-    ).value.trim();
     const actionDescription = (
         document.getElementById("actionDescription") as HTMLTextAreaElement
     ).value.trim();
 
-    if (!actionName) {
-        alert("Action name is required!");
-        return;
-    }
+    const nameField = document.getElementById("actionName") as HTMLInputElement;
+    const actionName =
+        nameField.value != undefined
+            ? nameField.value.trim()
+            : prompt("Enter a name for this action:");
+
+    const stepsContainer = document.getElementById("stepsTimelineContainer")!;
+    const steps = JSON.parse(stepsContainer.dataset.steps || "[]");
 
     // Retrieve existing actions from localStorage
     const storedActions = localStorage.getItem("userActions");
     const actions = storedActions ? JSON.parse(storedActions) : [];
 
     // Add new action
-    actions.push({ name: actionName, description: actionDescription });
+    actions.push({
+        name: actionName,
+        description: actionDescription,
+        steps: steps,
+    });
 
     // Save back to localStorage
     localStorage.setItem("userActions", JSON.stringify(actions));
@@ -119,7 +131,7 @@ async function saveUserAction() {
 // Function to update user actions display
 async function updateUserActionsUI() {
     showRecordedActionScreenshot();
-    await showRecordedActionsTimeline();
+    await showUserDefinedActionsList();
 }
 
 function startRecording() {
@@ -128,6 +140,7 @@ function startRecording() {
 
     document.getElementById("recordAction")!.classList.add("hidden");
     document.getElementById("stopRecording")!.classList.remove("hidden");
+    document.getElementById("stepsTimelineContainer")!.dataset.steps = "";
 }
 
 // Function to stop recording
@@ -137,18 +150,12 @@ async function stopRecording() {
     });
 
     if (response && response.recordedActions) {
-        const nameField = document.getElementById(
-            "actionName",
-        ) as HTMLInputElement;
-        const actionName =
-            nameField.value != undefined
-                ? nameField.value
-                : prompt("Enter a name for this action:");
-        if (actionName) {
-            saveRecordedUserAction(actionName, response.recordedActions);
-            showRecordedActionScreenshot();
-            await showRecordedActionsTimeline();
-        }
+        const stepsContainer = document.getElementById(
+            "stepsTimelineContainer",
+        )!;
+        stepsContainer.classList.remove("hidden");
+        stepsContainer.dataset.steps = JSON.stringify(response.recordedActions);
+        renderTimelineSteps(response.recordedActions, "stepsTimelineContainer");
     }
 
     document.getElementById("recordAction")!.classList.remove("hidden");
@@ -165,19 +172,6 @@ async function cancelRecording() {
 
     const form = document.getElementById("actionForm")!;
     form.classList.add("hidden");
-}
-
-async function saveRecordedUserAction(actionName: string, actions: any[]) {
-    const storedActions = localStorage.getItem("userActions");
-    const userActions = storedActions ? JSON.parse(storedActions) : [];
-
-    userActions.push({ name: actionName, steps: actions });
-
-    // Save to localStorage
-    localStorage.setItem("userActions", JSON.stringify(userActions));
-
-    // Update UI
-    await updateUserActionsUI();
 }
 
 async function clearRecordedUserAction() {
@@ -253,36 +247,32 @@ function showRecordedActionScreenshot() {
     }
 }
 
-async function showRecordedActionsTimeline() {
-    const timelineContainer = document.getElementById(
-        "timelineContainer",
+async function showUserDefinedActionsList() {
+    const userActionsListContainer = document.getElementById(
+        "userActionsListContainer",
     ) as HTMLDivElement;
 
     // Fetch recorded actions
-    let actions = await chrome.runtime.sendMessage({
-        type: "getRecordedActions",
-    });
-    if (actions == undefined) {
-        const storedActions = localStorage.getItem("userActions");
-        if (storedActions) {
-            actions = storedActions ? JSON.parse(storedActions) : [];
-        }
-    }
-    timelineContainer.innerHTML = "";
+    const storedActions = localStorage.getItem("userActions");
+    const actions = storedActions ? JSON.parse(storedActions) : [];
+
+    userActionsListContainer.innerHTML = "";
 
     if (actions !== undefined && actions.length > 0) {
         actions.forEach((action: any, index: number) => {
             renderTimeline(action, index);
         });
     } else {
-        timelineContainer.innerHTML = "<p>No recorded actions.</p>";
+        userActionsListContainer.innerHTML = "<p>No user-defined actions.</p>";
     }
 }
 
 function renderTimeline(action: any, index: number) {
     const actionName = action.name;
 
-    const timelineContainer = document.getElementById("timelineContainer")!;
+    const userActionsListContainer = document.getElementById(
+        "userActionsListContainer",
+    )!;
 
     const timelineHeader = document.createElement("div");
     timelineHeader.classList.add("accordion-item");
@@ -294,7 +284,7 @@ function renderTimeline(action: any, index: number) {
                             ${actionName}
                         </button>
                     </h2>
-                    <div id="collapseAction${index}" class="accordion-collapse collapse" aria-labelledby="userActionheading${index}" data-bs-parent="#timelineContainer">
+                    <div id="collapseAction${index}" class="accordion-collapse collapse" aria-labelledby="userActionheading${index}" data-bs-parent="#userActionsListContainer">
                         <div class="accordion-body">
                             <div class="row">
                                 <div class="col-md-12">
@@ -327,7 +317,35 @@ function renderTimeline(action: any, index: number) {
         });
     }
 
-    timelineContainer.appendChild(timelineHeader);
+    userActionsListContainer.appendChild(timelineHeader);
+}
+
+function renderTimelineSteps(steps: any[], containerId: string) {
+    const userActionsListContainer = document.getElementById(containerId)!;
+    userActionsListContainer.innerHTML = `
+                    <div id="content">
+                        <ul class="timeline">
+                        </ul>
+                    </div>
+                `;
+
+    const stepsContainer =
+        userActionsListContainer.querySelector("ul.timeline")!;
+    if (steps != undefined && steps.length > 0) {
+        steps.forEach((step: any, index: number) => {
+            const card = document.createElement("li");
+            card.classList.add("event");
+            card.dataset.date = new Date(step.timestamp).toLocaleString();
+
+            card.innerHTML = `        
+            <h3>${index + 1}. ${step.type}</h3>
+            <p>Details.</p>
+            <pre class="card-text"><code class="language-json">${JSON.stringify(step, null, 2)}</code></pre>
+        `;
+
+            stepsContainer.appendChild(card);
+        });
+    }
 }
 
 document.addEventListener("DOMContentLoaded", () => {
