@@ -59,10 +59,10 @@ export async function createKnowproCommands(
     commands.kpPodcastBuildIndex = podcastBuildIndex;
 
     commands.kpImages = showImages;
-    commands.kpImageImport = imageImport;    
-    commands.kpImageCollectionSave = imagesSave;
-    commands.kpImageCollectionLoad = imagesLoad;
-    commands.kpImageCollectionBuildIndex = imagesBuildIndex;
+    commands.kpImagesImport = imagesImport;    
+    commands.kpImagesSave = imagesSave;
+    commands.kpImagesLoad = imagesLoad;
+    commands.kpImagesBuildIndex = imagesBuildIndex;
 
 
     /*----------------
@@ -99,7 +99,7 @@ export async function createKnowproCommands(
                 filePath: arg("File path to transcript file"),
             },
             options: {
-                knowLedge: argBool("Index knowledge", true),
+                knowledge: argBool("Index knowledge", true),
                 related: argBool("Index related terms", true),
                 indexFilePath: arg("Output path for index file"),
                 maxMessages: argNum("Maximum messages to index"),
@@ -124,6 +124,7 @@ export async function createKnowproCommands(
 
         // Build index
         await podcastBuildIndex(namedArgs);
+
         // Save the index
         namedArgs.filePath = sourcePathToIndexPath(
             namedArgs.filePath,
@@ -249,24 +250,24 @@ export async function createKnowproCommands(
                 filePath: arg("File path to an image file or folder"),
             },
             options: {
-                knowLedge: argBool("Index knowledge", true),
+                knowledge: argBool("Index knowledge", true),
                 related: argBool("Index related terms", true),
                 indexFilePath: arg("Output path for index file"),
                 maxMessages: argNum("Maximum images to index"),
             },
         };
     }
-    commands.kpImageImport.metadata = imageImportDef();
-    async function imageImport(args: string[]): Promise<void> {
+    commands.kpImagesImport.metadata = imageImportDef();
+    async function imagesImport(args: string[]): Promise<void> {
         const namedArgs = parseNamedArguments(args, imageImportDef());
         if (!fs.existsSync(namedArgs.filePath)) {
             context.printer.writeError(`${namedArgs.filePath} not found`);
             return;
         }
-        context.images = await kp.importImageCollection(namedArgs.filePath);
+        context.images = await kp.importImages(namedArgs.filePath);
         context.conversation = context.images;
         context.printer.writeLine("Imported images:");
-        context.printer.writeImageCollectionInfo(context.images);
+        context.printer.writeImageCollectionInfo(context.images!);
 
         if (!namedArgs.index) {
             return;
@@ -292,10 +293,10 @@ export async function createKnowproCommands(
         };
     }
     
-    commands.kpPodcastSave.metadata = imagesSaveDef();
+    commands.kpImagesSave.metadata = imagesSaveDef();
     async function imagesSave(args: string[] | NamedArgs): Promise<void> {
         const namedArgs = parseNamedArguments(args, imagesSaveDef());
-        if (!context.podcast) {
+        if (!context.images) {
             context.printer.writeError("No image collection loaded");
             return;
         }
@@ -316,7 +317,7 @@ export async function createKnowproCommands(
         };
     }
 
-    commands.kpPodcastLoad.metadata = imagesLoadDef();
+    commands.kpImagesLoad.metadata = imagesLoadDef();
     async function imagesLoad(args: string[]): Promise<void> {
         const namedArgs = parseNamedArguments(args, imagesLoadDef());
         let imagesFilePath = namedArgs.filePath;
@@ -465,7 +466,8 @@ export async function createKnowproCommands(
         let filter: kp.SearchFilter = {
             type: namedArgs.ktype,
         };
-        const dateRange = kp.getTimeRangeForConversation(context.podcast!);
+        const conv: kp.IConversation | undefined = context.podcast ?? context.images;
+        const dateRange = kp.getTimeRangeForConversation(conv!);
         if (dateRange && namedArgs.startMinute >= 0) {
             filter.dateRange = {
                 start: dateTime.addMinutesToDate(
@@ -520,7 +522,7 @@ export async function createKnowproCommands(
         return {
             description: "Build index",
             options: {
-                knowLedge: argBool("Index knowledge", false),
+                knowledge: argBool("Index knowledge", false),
                 related: argBool("Index related terms", false),
                 maxMessages: argNum("Maximum messages to index"),
             },
@@ -587,13 +589,13 @@ export async function createKnowproCommands(
         return {
             description: "Build image collection index",
             options: {
-                knowLedge: argBool("Index knowledge", false),
+                knowledge: argBool("Index knowledge", false),
                 related: argBool("Index related terms", false),
                 maxMessages: argNum("Maximum messages to index"),
             },
         };
     }
-    commands.kpImageCollectionBuildIndex.metadata = imageCollectionBuildIndexDef();
+    commands.kpImagesBuildIndex.metadata = imageCollectionBuildIndexDef();
     async function imagesBuildIndex(
         args: string[] | NamedArgs,
     ): Promise<void> {
@@ -601,10 +603,10 @@ export async function createKnowproCommands(
             context.printer.writeError("No image collection loaded");
             return;
         }
-        if (!context.images.semanticRefIndex) {
-            context.printer.writeError("Image collection is not indexed");
-            return;
-        }
+        // if (!context.images.semanticRefIndex) {
+        //     context.printer.writeError("Image collection is not indexed");
+        //     return;
+        // }
         const messageCount = context.images.messages.length;
         if (messageCount === 0) {
             return;
@@ -637,7 +639,7 @@ export async function createKnowproCommands(
             context.printer.writeLine("Building semantic index");
             const progress = new ProgressBar(
                 context.printer,
-                context.images?.semanticRefIndex.size,
+                context.images?.semanticRefIndex!.size,
             );
             await context.images?.buildRelatedTermsIndex(16, (terms, batch) => {
                 progress.advance(batch.value.length);
@@ -645,7 +647,7 @@ export async function createKnowproCommands(
             });
             progress.complete();
             context.printer.writeLine(
-                `Semantic Indexed ${context.images?.semanticRefIndex.size} terms`,
+                `Semantic Indexed ${context.images?.semanticRefIndex!.size} terms`,
             );
         }
     }
