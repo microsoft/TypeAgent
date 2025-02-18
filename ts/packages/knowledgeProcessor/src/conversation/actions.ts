@@ -583,11 +583,13 @@ export function actionToString(action: Action): string {
     return text;
 
     function appendEntityName(text: string, name: string): string {
+        if (text.length > 0) {
+            text += " ";
+        }
         if (isValidEntityName(name)) {
-            if (text.length > 0) {
-                text += " ";
-            }
-            text += name;
+            text += `<${name}>`;
+        } else {
+            text += "<>";
         }
         return text;
     }
