@@ -1,6 +1,6 @@
 # knowpro
 
-Working toward a shared understanding of the MVP for structured RAG.
+**Experimental prototype**: Working toward a shared understanding of the MVP for structured RAG.
 
 **Sample code** and early ideas that explore how to:
 

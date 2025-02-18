@@ -3,8 +3,6 @@
 
 import { PromptSection, Result, TypeChatLanguageModel } from "typechat";
 
-export type JsonSchema = any;
-
 /**
  * Translation settings for Chat models
  */
@@ -19,22 +17,58 @@ export type CompletionSettings = {
     seed?: number;
 };
 
+export type StructuredOutputJsonSchema = {
+    name: string;
+    description?: string;
+    strict?: true;
+    schema: any; // TODO: JsonSchemaType
+};
+
+export type FunctionCallingJsonSchema = {
+    type: "function";
+    function: {
+        name: string;
+        description?: string;
+        parameters?: any; // TODO: JsonSchemaType
+        strict?: true;
+    };
+};
+
+export type CompletionJsonSchema =
+    | StructuredOutputJsonSchema
+    | FunctionCallingJsonSchema[];
+
+export type FunctionCallingResult = {
+    function: string;
+    arguments: any;
+};
+
 /**
  * A TypeChat language model with greater control on settings
  */
 export interface ChatModel extends TypeChatLanguageModel {
     completionSettings: CompletionSettings;
     completionCallback?: ((request: any, response: any) => void) | undefined;
+    /**
+     * Complete the prompt
+     * @param prompt prompt or prompt sections to complete
+     * @param jsonSchema optional json schema. If the json schema is an object, then it uses structured output. If the json schema is an array, then it is function calling.
+     */
     complete(
         prompt: string | PromptSection[],
-        jsonSchema?: JsonSchema,
+        jsonSchema?: CompletionJsonSchema,
     ): Promise<Result<string>>;
 }
 
 export interface ChatModelWithStreaming extends ChatModel {
+    /**
+     * Complete the prompt with streaming
+     * @param prompt prompt or prompt sections to complete
+     * @param jsonSchema optional json schema. If the json schema is an object, then it uses structured output. If the json schema is an array, then it is function calling.
+     */
     completeStream(
         prompt: string | PromptSection[],
-        jsonSchema?: JsonSchema,
+        jsonSchema?: CompletionJsonSchema,
     ): Promise<Result<AsyncIterableIterator<string>>>;
 }
 

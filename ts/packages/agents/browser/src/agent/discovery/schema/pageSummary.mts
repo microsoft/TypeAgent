@@ -3,8 +3,8 @@
 
 // A description of the page, including layout information and summary of content.
 export type PageDescription = {
-  description: string;
-  features: string[];
-  entities: string[];
-  possibleUserAction: string[];
+    description: string;
+    features: string[];
+    entities: string[];
+    possibleUserAction: string[];
 };

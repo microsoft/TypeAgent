@@ -7,7 +7,8 @@ import { ChatPrinter } from "../chatPrinter.js";
 import chalk from "chalk";
 
 export class KnowProPrinter extends ChatPrinter {
-    constructor() {
+    public sortAsc: boolean = true;
+    constructor(public conversation: kp.IConversation | undefined = undefined) {
         super();
     }
 
@@ -18,12 +19,16 @@ export class KnowProPrinter extends ChatPrinter {
         }
     }
 
+    public writeMetadata(metadata: any) {
+        this.write("Metadata: ").writeJson(metadata);
+    }
+
     public writeMessage(message: kp.IMessage) {
         const prevColor = this.setForeColor(chalk.cyan);
         try {
             this.writeNameValue("Timestamp", message.timestamp);
             this.writeList(message.tags, { type: "csv", title: "Tags" });
-            this.write("Metadata: ").writeJson(message.metadata);
+            this.writeMetadata(message.metadata);
         } finally {
             this.setForeColor(prevColor);
         }
@@ -111,18 +116,36 @@ export class KnowProPrinter extends ChatPrinter {
         this.writeLine(
             `Displaying ${maxToDisplay} matches of total ${semanticRefMatches.length}`,
         );
-        for (let i = 0; i < maxToDisplay; ++i) {
-            const match = semanticRefMatches[i];
-            const semanticRef = semanticRefs[match.semanticRefIndex];
-
-            this.writeInColor(
-                chalk.green,
-                `#${i + 1}: <${match.semanticRefIndex}> ${semanticRef.knowledgeType} [${match.score}]`,
-            );
-            this.writeSemanticRef(semanticRef);
-            this.writeLine();
+        if (this.sortAsc) {
+            this.writeLine(`Sorted in ascending order (lowest first)`);
         }
+        const matchesToDisplay = semanticRefMatches.slice(0, maxToDisplay);
+        for (let i = 0; i < matchesToDisplay.length; ++i) {
+            let pos = this.sortAsc ? matchesToDisplay.length - (i + 1) : i;
+            this.writeScoredRef(
+                pos,
+                matchesToDisplay.length,
+                matchesToDisplay[pos],
+                semanticRefs,
+            );
+        }
+
         return this;
+    }
+
+    private writeScoredRef(
+        matchNumber: number,
+        totalMatches: number,
+        scoredRef: kp.ScoredSemanticRef,
+        semanticRefs: kp.SemanticRef[],
+    ) {
+        const semanticRef = semanticRefs[scoredRef.semanticRefIndex];
+        this.writeInColor(
+            chalk.green,
+            `#${matchNumber + 1} / ${totalMatches}: <${scoredRef.semanticRefIndex}> ${semanticRef.knowledgeType} [${scoredRef.score}]`,
+        );
+        this.writeSemanticRef(semanticRef);
+        this.writeLine();
     }
 
     public writeSearchResult(

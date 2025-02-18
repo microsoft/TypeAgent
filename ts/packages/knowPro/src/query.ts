@@ -7,15 +7,16 @@ import {
     IMessage,
     ITermToSemanticRefIndex,
     KnowledgeType,
+    MessageIndex,
     ScoredSemanticRef,
     SemanticRef,
     SemanticRefIndex,
     Term,
     TextLocation,
     TextRange,
-    TimestampedTextRange,
 } from "./dataFormat.js";
-import { PropertySearchTerm, SearchTerm } from "./search.js";
+import { KnowledgePropertyName, PropertySearchTerm } from "./search.js";
+import { SearchTerm } from "./search.js";
 import {
     Match,
     MatchAccumulator,
@@ -23,9 +24,16 @@ import {
     SemanticRefAccumulator,
     TermSet,
     TextRangeCollection,
+    TextRangesInScope,
 } from "./collections.js";
-import { PropertyNames } from "./propertyIndex.js";
+import {
+    lookupPropertyInPropertyIndex,
+    PropertyNames,
+} from "./propertyIndex.js";
+import { IPropertyToSemanticRefIndex } from "./secondaryIndexes.js";
 import { conversation } from "knowledge-processor";
+import { collections } from "typeagent";
+import { ITimestampToTextRangeIndex } from "./secondaryIndexes.js";
 
 export function isConversationSearchable(conversation: IConversation): boolean {
     return (
@@ -34,35 +42,10 @@ export function isConversationSearchable(conversation: IConversation): boolean {
     );
 }
 
-export function textRangeForConversation(
-    conversation: IConversation,
-): TextRange {
-    const messages = conversation.messages;
-    return {
-        start: { messageIndex: 0 },
-        end: { messageIndex: messages.length - 1 },
-    };
-}
-
 export type TimestampRange = {
     start: string;
     end?: string | undefined;
 };
-
-export function timestampRangeForConversation(
-    conversation: IConversation,
-): TimestampRange | undefined {
-    const messages = conversation.messages;
-    const start = messages[0].timestamp;
-    const end = messages[messages.length - 1].timestamp;
-    if (start !== undefined) {
-        return {
-            start,
-            end,
-        };
-    }
-    return undefined;
-}
 
 /**
  * Returns:
@@ -91,6 +74,21 @@ export const MaxTextLocation: TextLocation = {
     charIndex: Number.MAX_SAFE_INTEGER,
 };
 
+export function compareTextRange(x: TextRange, y: TextRange) {
+    let cmp = compareTextLocation(x.start, y.start);
+    if (cmp !== 0) {
+        return cmp;
+    }
+    if (x.end === undefined && y.end === undefined) {
+        return cmp;
+    }
+    cmp = compareTextLocation(
+        x.end ?? MaxTextLocation,
+        y.end ?? MaxTextLocation,
+    );
+    return cmp;
+}
+
 export function isInTextRange(
     outerRange: TextRange,
     innerRange: TextRange,
@@ -102,7 +100,9 @@ export function isInTextRange(
         return cmpStart <= 0;
     }
     let cmpEnd = compareTextLocation(
-        innerRange.end ?? MaxTextLocation,
+        // innerRange.end must be < outerRange end (assume innerRange.end > innerRange.start)
+        // if no innerRange.end, then innerRange.start must be < outerRange.end
+        innerRange.end ?? innerRange.start,
         outerRange.end ?? MaxTextLocation,
     );
     return cmpStart <= 0 && cmpEnd < 0;
@@ -112,7 +112,7 @@ export function compareDates(x: Date, y: Date): number {
     return x.getTime() - y.getTime();
 }
 
-export function isDateInRange(outerRange: DateRange, date: Date): boolean {
+export function isInDateRange(outerRange: DateRange, date: Date): boolean {
     // outer start must be <= date
     // date must be <= outer end
     let cmpStart = compareDates(outerRange.start, date);
@@ -121,50 +121,43 @@ export function isDateInRange(outerRange: DateRange, date: Date): boolean {
     return cmpStart <= 0 && cmpEnd <= 0;
 }
 
+export function getTextRangeForDateRange(
+    conversation: IConversation,
+    dateRange: DateRange,
+): TextRange | undefined {
+    const messages = conversation.messages;
+    let rangeStartIndex: MessageIndex = -1;
+    let rangeEndIndex = rangeStartIndex;
+    for (let messageIndex = 0; messageIndex < messages.length; ++messageIndex) {
+        const message = messages[messageIndex];
+        if (message.timestamp) {
+            if (isInDateRange(dateRange, new Date(message.timestamp))) {
+                if (rangeStartIndex < 0) {
+                    rangeStartIndex = messageIndex;
+                }
+                rangeEndIndex = messageIndex;
+            } else {
+                if (rangeStartIndex >= 0) {
+                    break;
+                }
+            }
+        }
+    }
+    if (rangeStartIndex >= 0) {
+        return {
+            start: { messageIndex: rangeStartIndex },
+            end: { messageIndex: rangeEndIndex + 1 },
+        };
+    }
+    return undefined;
+}
+
 export function messageLength(message: IMessage): number {
     let length = 0;
     for (const chunk of message.textChunks) {
         length += chunk.length;
     }
     return length;
-}
-
-export function* lookupTermFiltered(
-    semanticRefIndex: ITermToSemanticRefIndex,
-    term: Term,
-    semanticRefs: SemanticRef[],
-    filter: (
-        semanticRefs: SemanticRef[],
-        scoredRef: ScoredSemanticRef,
-    ) => boolean,
-) {
-    const scoredRefs = semanticRefIndex.lookupTerm(term.text);
-    if (scoredRefs && scoredRefs.length > 0) {
-        for (const scoredRef of scoredRefs) {
-            if (filter(semanticRefs, scoredRef)) {
-                yield scoredRef;
-            }
-        }
-    }
-}
-
-export function* lookupTermFilterByType(
-    semanticRefIndex: ITermToSemanticRefIndex,
-    term: Term,
-    semanticRefs: SemanticRef[],
-    knowledgeType: KnowledgeType,
-) {
-    const scoredRefs = semanticRefIndex.lookupTerm(term.text);
-    if (scoredRefs && scoredRefs.length > 0) {
-        for (const scoredRef of scoredRefs) {
-            if (
-                semanticRefs[scoredRef.semanticRefIndex].knowledgeType ===
-                knowledgeType
-            ) {
-                yield scoredRef;
-            }
-        }
-    }
 }
 
 export function isSearchTermWildcard(searchTerm: SearchTerm): boolean {
@@ -176,18 +169,19 @@ export function isSearchTermWildcard(searchTerm: SearchTerm): boolean {
  * Returns the term or related term that equals the given text
  * @param searchTerm
  * @param text
- * @returns
+ * @returns The term or related term that matched the text
  */
-export function getMatchingTermForText(
+function getMatchingTermForText(
     searchTerm: SearchTerm,
     text: string,
 ): Term | undefined {
-    if (text === searchTerm.term.text) {
+    // Do case-INSENSITIVE comparisons, since stored entities may have different case
+    if (collections.stringEquals(text, searchTerm.term.text, false)) {
         return searchTerm.term;
     }
     if (searchTerm.relatedTerms && searchTerm.relatedTerms.length > 0) {
         for (const relatedTerm of searchTerm.relatedTerms) {
-            if (text === relatedTerm.text) {
+            if (collections.stringEquals(text, relatedTerm.text, false)) {
                 return relatedTerm;
             }
         }
@@ -201,7 +195,7 @@ export function getMatchingTermForText(
  * @param searchTerm
  * @param text
  */
-export function searchTermMatchesText(
+function matchSearchTermToText(
     searchTerm: SearchTerm,
     text: string | undefined,
 ): boolean {
@@ -211,18 +205,207 @@ export function searchTermMatchesText(
     return false;
 }
 
-export function searchTermMatchesOneOfText(
+function matchSearchTermToOneOfText(
     searchTerm: SearchTerm,
-    texts: string[] | undefined,
+    textArray: string[] | undefined,
 ): boolean {
-    if (texts) {
-        for (const text of texts) {
-            if (searchTermMatchesText(searchTerm, text)) {
+    if (textArray) {
+        for (const text of textArray) {
+            if (matchSearchTermToText(searchTerm, text)) {
                 return true;
             }
         }
     }
     return false;
+}
+
+function matchPropertySearchTermToEntity(
+    searchTerm: PropertySearchTerm,
+    semanticRef: SemanticRef,
+): boolean {
+    if (
+        semanticRef.knowledgeType !== "entity" ||
+        typeof searchTerm.propertyName !== "string"
+    ) {
+        return false;
+    }
+    const entity = semanticRef.knowledge as conversation.ConcreteEntity;
+    switch (<string>searchTerm.propertyName) {
+        default:
+            break;
+        case "type":
+            return matchSearchTermToOneOfText(
+                searchTerm.propertyValue,
+                entity.type,
+            );
+        case "name":
+            return matchSearchTermToText(searchTerm.propertyValue, entity.name);
+
+        case "facet.name":
+            return matchPropertyNameToFacetName(
+                searchTerm.propertyValue,
+                entity,
+            );
+
+        case "facet.value":
+            return matchPropertyValueToFacetValue(
+                searchTerm.propertyValue,
+                entity,
+            );
+    }
+    return false;
+}
+
+function matchPropertyNameToFacetName(
+    propertyValue: SearchTerm,
+    entity: conversation.ConcreteEntity,
+) {
+    if (entity.facets && entity.facets.length > 0) {
+        for (const facet of entity.facets) {
+            if (matchSearchTermToText(propertyValue, facet.name)) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+function matchPropertyValueToFacetValue(
+    propertyValue: SearchTerm,
+    entity: conversation.ConcreteEntity,
+) {
+    if (entity.facets && entity.facets.length > 0) {
+        for (const facet of entity.facets) {
+            const facetValue = conversation.knowledgeValueToString(facet.value);
+            if (matchSearchTermToText(propertyValue, facetValue)) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+function matchPropertySearchTermToAction(
+    searchTerm: PropertySearchTerm,
+    semanticRef: SemanticRef,
+): boolean {
+    if (
+        semanticRef.knowledgeType !== "action" ||
+        typeof searchTerm.propertyName !== "string"
+    ) {
+        return false;
+    }
+    const action = semanticRef.knowledge as conversation.Action;
+    switch (searchTerm.propertyName) {
+        default:
+            break;
+        case "verb":
+            return matchSearchTermToOneOfText(
+                searchTerm.propertyValue,
+                action.verbs,
+            );
+        case "subject":
+            return entityNameMatch(
+                searchTerm.propertyValue,
+                action.subjectEntityName,
+            );
+        case "object":
+            return entityNameMatch(
+                searchTerm.propertyValue,
+                action.objectEntityName,
+            );
+        case "indirectObject":
+            return entityNameMatch(
+                searchTerm.propertyValue,
+                action.indirectObjectEntityName,
+            );
+    }
+    return false;
+
+    function entityNameMatch(searchTerm: SearchTerm, entityValue: string) {
+        return (
+            entityValue !== "none" &&
+            matchSearchTermToText(searchTerm, entityValue)
+        );
+    }
+}
+
+export function matchPropertySearchTermToSemanticRef(
+    searchTerm: PropertySearchTerm,
+    semanticRef: SemanticRef,
+): boolean {
+    return (
+        matchPropertySearchTermToEntity(searchTerm, semanticRef) ||
+        matchPropertySearchTermToAction(searchTerm, semanticRef)
+    );
+}
+
+export function lookupTermFiltered(
+    semanticRefIndex: ITermToSemanticRefIndex,
+    term: Term,
+    semanticRefs: SemanticRef[],
+    filter: (semanticRef: SemanticRef, scoredRef: ScoredSemanticRef) => boolean,
+): ScoredSemanticRef[] | undefined {
+    const scoredRefs = semanticRefIndex.lookupTerm(term.text);
+    if (scoredRefs && scoredRefs.length > 0) {
+        let filtered = scoredRefs.filter((sr) => {
+            const semanticRef = semanticRefs[sr.semanticRefIndex];
+            const result = filter(semanticRef, sr);
+            return result;
+        });
+        return filtered;
+    }
+    return undefined;
+}
+
+export function lookupTerm(
+    semanticRefIndex: ITermToSemanticRefIndex,
+    term: Term,
+    semanticRefs: SemanticRef[],
+    rangesInScope?: TextRangesInScope,
+): ScoredSemanticRef[] | undefined {
+    if (rangesInScope) {
+        // If rangesInScope has no actual text ranges, then lookups can't possibly match
+        return lookupTermFiltered(semanticRefIndex, term, semanticRefs, (sr) =>
+            rangesInScope.isRangeInScope(sr.range),
+        );
+    }
+    return semanticRefIndex.lookupTerm(term.text);
+}
+
+export function lookupProperty(
+    semanticRefIndex: ITermToSemanticRefIndex,
+    propertySearchTerm: PropertySearchTerm,
+    semanticRefs: SemanticRef[],
+    rangesInScope?: TextRangesInScope,
+): ScoredSemanticRef[] | undefined {
+    if (typeof propertySearchTerm.propertyName !== "string") {
+        throw new Error("Not supported");
+    }
+
+    // Since we are only matching propertyValue.term
+    const valueTerm = propertySearchTerm.propertyValue.term;
+    propertySearchTerm = {
+        propertyName: propertySearchTerm.propertyName,
+        propertyValue: { term: valueTerm },
+    };
+    return lookupTermFiltered(
+        semanticRefIndex,
+        valueTerm,
+        semanticRefs,
+        (semanticRef) => {
+            const inScope = rangesInScope
+                ? rangesInScope.isRangeInScope(semanticRef.range)
+                : true;
+            return (
+                inScope &&
+                matchPropertySearchTermToSemanticRef(
+                    propertySearchTerm,
+                    semanticRef,
+                )
+            );
+        },
+    );
 }
 
 // Query eval expressions
@@ -232,16 +415,31 @@ export interface IQueryOpExpr<T> {
 }
 
 export class QueryEvalContext {
-    private matchedTermText = new Set<string>();
     public matchedTerms = new TermSet();
     public matchedPropertyTerms = new PropertyTermSet();
+    public textRangesInScope: TextRangesInScope | undefined;
 
-    constructor(public conversation: IConversation) {
+    constructor(
+        public conversation: IConversation,
+        /**
+         * If a property secondary index is available, the query processor will use it
+         */
+        public propertyIndex:
+            | IPropertyToSemanticRefIndex
+            | undefined = undefined,
+        /**
+         * If a timestamp secondary index is available, the query processor will use it
+         */
+        public timestampIndex:
+            | ITimestampToTextRangeIndex
+            | undefined = undefined,
+    ) {
         if (!isConversationSearchable(conversation)) {
             throw new Error(
                 `${conversation.nameTag} is not initialized and cannot be searched`,
             );
         }
+        this.textRangesInScope = new TextRangesInScope();
     }
 
     public get semanticRefIndex() {
@@ -250,10 +448,6 @@ export class QueryEvalContext {
 
     public get semanticRefs() {
         return this.conversation.semanticRefs!;
-    }
-
-    public get propertyIndex() {
-        return this.conversation.propertyToSemanticRefIndex;
     }
 
     public getSemanticRef(semanticRefIndex: SemanticRefIndex): SemanticRef {
@@ -266,7 +460,7 @@ export class QueryEvalContext {
     }
 
     public clearMatchedTerms() {
-        this.matchedTermText.clear();
+        this.matchedTerms.clear();
         this.matchedPropertyTerms.clear();
     }
 }
@@ -293,20 +487,78 @@ export class SelectTopNExpr<T extends MatchAccumulator> extends QueryOpExpr<T> {
     }
 }
 
-export class MatchAllTermsExpr extends QueryOpExpr<SemanticRefAccumulator> {
-    constructor(public searchTermExpressions: MatchTermExpr[]) {
+export class MatchTermsBooleanExpr extends QueryOpExpr<SemanticRefAccumulator> {
+    constructor(public getScopeExpr?: GetScopeExpr | undefined) {
         super();
     }
 
-    public override eval(context: QueryEvalContext): SemanticRefAccumulator {
-        const allMatches = new SemanticRefAccumulator();
+    protected beginMatch(context: QueryEvalContext) {
+        if (this.getScopeExpr) {
+            context.textRangesInScope = this.getScopeExpr.eval(context);
+        }
         context.clearMatchedTerms();
-        context.matchedTerms.clear();
-        for (const matchExpr of this.searchTermExpressions) {
+    }
+}
+
+/**
+ * Evaluates all child search term expressions
+ * Returns their accumulated scored matches
+ */
+export class MatchTermsOrExpr extends MatchTermsBooleanExpr {
+    constructor(
+        public termExpressions: MatchTermExpr[],
+        public getScopeExpr?: GetScopeExpr | undefined,
+    ) {
+        super(getScopeExpr);
+    }
+
+    public override eval(context: QueryEvalContext): SemanticRefAccumulator {
+        super.beginMatch(context);
+        const allMatches = new SemanticRefAccumulator();
+        for (const matchExpr of this.termExpressions) {
             matchExpr.accumulateMatches(context, allMatches);
         }
         allMatches.calculateTotalScore();
         return allMatches;
+    }
+}
+
+export class MatchTermsAndExpr extends MatchTermsBooleanExpr {
+    constructor(
+        public termExpressions: MatchTermExpr[],
+        public getScopeExpr?: GetScopeExpr | undefined,
+    ) {
+        super(getScopeExpr);
+    }
+
+    public override eval(context: QueryEvalContext): SemanticRefAccumulator {
+        super.beginMatch(context);
+
+        let allMatches: SemanticRefAccumulator | undefined;
+        let iTerm = 0;
+        // Loop over each search term, intersecting the returned results...
+        for (; iTerm < this.termExpressions.length; ++iTerm) {
+            const termMatches = this.termExpressions[iTerm].eval(context);
+            if (termMatches === undefined || termMatches.size === 0) {
+                // We can't possibly have an 'and'
+                break;
+            }
+            if (allMatches === undefined) {
+                allMatches = termMatches;
+            } else {
+                allMatches.addIntersect(termMatches);
+            }
+        }
+        if (allMatches) {
+            if (iTerm === this.termExpressions.length) {
+                allMatches.calculateTotalScore();
+                allMatches.selectWithHitCount(this.termExpressions.length);
+            } else {
+                // And is not possible
+                allMatches.clearMatches();
+            }
+        }
+        return allMatches ?? new SemanticRefAccumulator();
     }
 }
 
@@ -322,7 +574,10 @@ export class MatchTermExpr extends QueryOpExpr<
     ): SemanticRefAccumulator | undefined {
         const matches = new SemanticRefAccumulator();
         this.accumulateMatches(context, matches);
-        return matches.size > 0 ? matches : undefined;
+        if (matches.size > 0) {
+            return matches;
+        }
+        return undefined;
     }
 
     public accumulateMatches(
@@ -341,7 +596,7 @@ export class MatchSearchTermExpr extends MatchTermExpr {
     public override accumulateMatches(
         context: QueryEvalContext,
         matches: SemanticRefAccumulator,
-    ) {
+    ): void {
         // Match the search term
         this.accumulateMatchesForTerm(context, matches, this.searchTerm.term);
         // And any related terms
@@ -364,7 +619,12 @@ export class MatchSearchTermExpr extends MatchTermExpr {
         context: QueryEvalContext,
         term: Term,
     ): ScoredSemanticRef[] | IterableIterator<ScoredSemanticRef> | undefined {
-        return context.semanticRefIndex.lookupTerm(term.text);
+        return lookupTerm(
+            context.semanticRefIndex,
+            term,
+            context.semanticRefs,
+            context.textRangesInScope,
+        );
     }
 
     private accumulateMatchesForTerm(
@@ -374,14 +634,14 @@ export class MatchSearchTermExpr extends MatchTermExpr {
         relatedTerm?: Term,
     ) {
         if (relatedTerm === undefined) {
-            const semanticRefs = this.lookupTerm(context, term);
             if (!context.matchedTerms.has(term)) {
+                const semanticRefs = this.lookupTerm(context, term);
                 matches.addTermMatches(term, semanticRefs, true);
                 context.matchedTerms.add(term);
             }
         } else {
-            const semanticRefs = this.lookupTerm(context, relatedTerm);
             if (!context.matchedTerms.has(relatedTerm)) {
+                const semanticRefs = this.lookupTerm(context, relatedTerm);
                 matches.addTermMatches(
                     term,
                     semanticRefs,
@@ -394,21 +654,7 @@ export class MatchSearchTermExpr extends MatchTermExpr {
     }
 }
 
-export class MatchTagExpr extends MatchSearchTermExpr {
-    constructor(public tagTerm: SearchTerm) {
-        super(tagTerm);
-    }
-    protected override lookupTerm(context: QueryEvalContext, term: Term) {
-        return lookupTermFilterByType(
-            context.semanticRefIndex,
-            term,
-            context.semanticRefs,
-            "tag",
-        );
-    }
-}
-
-export class MatchPropertyTermExpr extends MatchTermExpr {
+export class MatchPropertySearchTermExpr extends MatchTermExpr {
     constructor(public propertySearchTerm: PropertySearchTerm) {
         super();
     }
@@ -487,38 +733,94 @@ export class MatchPropertyTermExpr extends MatchTermExpr {
     private accumulateMatchesForPropertyValue(
         context: QueryEvalContext,
         matches: SemanticRefAccumulator,
-        propName: string,
-        propVal: Term,
+        propertyName: string,
+        propertyValue: Term,
         relatedPropVal?: Term,
     ): void {
-        const propertyIndex = context.propertyIndex;
-        if (!propertyIndex) {
-            return;
-        }
         if (relatedPropVal === undefined) {
-            const semanticRefs = propertyIndex.lookupProperty(
-                propName,
-                propVal.text,
-            );
-            if (!context.matchedPropertyTerms.has(propName, propVal)) {
-                matches.addTermMatches(propVal, semanticRefs, true);
-                context.matchedPropertyTerms.add(propName, propVal);
+            if (
+                !context.matchedPropertyTerms.has(propertyName, propertyValue)
+            ) {
+                const semanticRefs = this.lookupProperty(
+                    context,
+                    propertyName,
+                    propertyValue.text,
+                );
+                matches.addTermMatches(propertyValue, semanticRefs, true);
+                context.matchedPropertyTerms.add(propertyName, propertyValue);
             }
         } else {
-            const semanticRefs = propertyIndex.lookupProperty(
-                propName,
-                relatedPropVal.text,
-            );
-            if (!context.matchedPropertyTerms.has(propName, relatedPropVal)) {
+            if (
+                !context.matchedPropertyTerms.has(propertyName, relatedPropVal)
+            ) {
+                const semanticRefs = this.lookupProperty(
+                    context,
+                    propertyName,
+                    relatedPropVal.text,
+                );
                 matches.addTermMatches(
-                    propVal,
+                    propertyValue,
                     semanticRefs,
                     false,
                     relatedPropVal.weight,
                 );
-                context.matchedPropertyTerms.add(propName, relatedPropVal);
+                context.matchedPropertyTerms.add(propertyName, relatedPropVal);
             }
         }
+    }
+
+    private lookupProperty(
+        context: QueryEvalContext,
+        propertyName: string,
+        propertyValue: string,
+    ): ScoredSemanticRef[] | undefined {
+        if (context.propertyIndex) {
+            return lookupPropertyInPropertyIndex(
+                context.propertyIndex,
+                propertyName,
+                propertyValue,
+                context.semanticRefs,
+                context.textRangesInScope,
+            );
+        }
+        return this.lookupPropertyWithoutIndex(
+            context,
+            propertyName,
+            propertyValue,
+        );
+    }
+
+    private lookupPropertyWithoutIndex(
+        context: QueryEvalContext,
+        propertyName: string,
+        propertyValue: string,
+    ): ScoredSemanticRef[] | undefined {
+        return lookupProperty(
+            context.semanticRefIndex,
+            {
+                propertyName: propertyName as KnowledgePropertyName,
+                propertyValue: { term: { text: propertyValue } },
+            },
+            context.semanticRefs,
+            context.textRangesInScope,
+        );
+    }
+}
+
+export class MatchTagExpr extends MatchSearchTermExpr {
+    constructor(public tagTerm: SearchTerm) {
+        super(tagTerm);
+    }
+    protected override lookupTerm(
+        context: QueryEvalContext,
+        term: Term,
+    ): ScoredSemanticRef[] | undefined {
+        return lookupTermFiltered(
+            context.semanticRefIndex,
+            term,
+            context.semanticRefs,
+            (semanticRef) => semanticRef.knowledgeType === "tag",
+        );
     }
 }
 
@@ -601,6 +903,19 @@ export interface IQuerySemanticRefPredicate {
     eval(context: QueryEvalContext, semanticRef: SemanticRef): boolean;
 }
 
+function matchPredicates(
+    context: QueryEvalContext,
+    predicates: IQuerySemanticRefPredicate[],
+    semanticRef: SemanticRef,
+) {
+    for (let i = 0; i < predicates.length; ++i) {
+        if (!predicates[i].eval(context, semanticRef)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 export class KnowledgeTypePredicate implements IQuerySemanticRefPredicate {
     constructor(public type: KnowledgeType) {}
 
@@ -613,139 +928,149 @@ export class PropertyMatchPredicate implements IQuerySemanticRefPredicate {
     constructor(public searchTerm: PropertySearchTerm) {}
 
     public eval(context: QueryEvalContext, semanticRef: SemanticRef): boolean {
-        return (
-            searchTermMatchesEntity(this.searchTerm, semanticRef) ||
-            searchTermMatchesAction(this.searchTerm, semanticRef)
+        return matchPropertySearchTermToSemanticRef(
+            this.searchTerm,
+            semanticRef,
         );
     }
 }
 
-export function searchTermMatchesEntity(
-    searchTerm: PropertySearchTerm,
-    semanticRef: SemanticRef,
-) {
-    if (semanticRef.knowledgeType !== "entity") {
-        return false;
+export class GetScopeExpr extends QueryOpExpr<TextRangesInScope> {
+    constructor(public rangeSelectors: IQueryTextRangeSelector[]) {
+        super();
     }
-    const entity = semanticRef.knowledge as conversation.ConcreteEntity;
-    switch (searchTerm.propertyName) {
-        default:
-            break;
-        case "type":
-            return searchTermMatchesOneOfText(
-                searchTerm.propertyValue,
-                entity.type,
-            );
-        case "name":
-            return searchTermMatchesText(searchTerm.propertyValue, entity.name);
+
+    public eval(context: QueryEvalContext): TextRangesInScope {
+        let rangesInScope = new TextRangesInScope();
+        for (const selector of this.rangeSelectors) {
+            const range = selector.eval(context);
+            if (range) {
+                rangesInScope.addTextRanges(range);
+            }
+        }
+        return rangesInScope;
     }
-    return false;
 }
 
-export function searchTermMatchesAction(
-    searchTerm: PropertySearchTerm,
-    semanticRef: SemanticRef,
-): boolean {
-    if (semanticRef.knowledgeType !== "action") {
-        return false;
-    }
-    const action = semanticRef.knowledge as conversation.Action;
-    switch (searchTerm.propertyName) {
-        default:
-            break;
-        case "verb":
-            return searchTermMatchesOneOfText(
-                searchTerm.propertyValue,
-                action.verbs,
-            );
-        case "subject":
-            return searchTermMatchesText(
-                searchTerm.propertyValue,
-                action.subjectEntityName,
-            );
-        case "object":
-            return searchTermMatchesText(
-                searchTerm.propertyValue,
-                action.objectEntityName,
-            );
-        case "indirectObject":
-            return searchTermMatchesText(
-                searchTerm.propertyValue,
-                action.indirectObjectEntityName,
-            );
-    }
-    return false;
-}
-
-export class ScopeExpr extends QueryOpExpr<SemanticRefAccumulator> {
+export class SelectInScopeExpr extends QueryOpExpr<SemanticRefAccumulator> {
     constructor(
         public sourceExpr: IQueryOpExpr<SemanticRefAccumulator>,
-        // Predicates that look at matched semantic refs to determine what is in scope
-        public predicates: IQuerySemanticRefPredicate[],
-        public timeScopeExpr:
-            | IQueryOpExpr<TimestampedTextRange[]>
-            | undefined = undefined,
+        public rangeSelectors: IQueryTextRangeSelector[],
     ) {
         super();
     }
 
     public override eval(context: QueryEvalContext): SemanticRefAccumulator {
-        let accumulator = this.sourceExpr.eval(context);
+        let semanticRefs = this.sourceExpr.eval(context);
         // Scope => text ranges in scope
-        const scope = new TextRangeCollection();
-
-        // If we are scoping the conversation by time range, then collect
-        // text ranges in the given time range
-        if (this.timeScopeExpr) {
-            const timeRanges = this.timeScopeExpr.eval(context);
-            if (timeRanges) {
-                for (const timeRange of timeRanges) {
-                    scope.addRange(timeRange.range);
-                }
+        // Collect all possible text rang. The ranges may overlap, may not agree.
+        // What we want to ensure is that if any of the
+        const rangesInScope = new TextRangesInScope();
+        for (const selector of this.rangeSelectors) {
+            const range = selector.eval(context, semanticRefs);
+            if (range) {
+                rangesInScope.addTextRanges(range);
             }
         }
-
-        // Inspect all accumulated semantic refs using predicates.
-        // E.g. only look at ranges matching actions where X is a subject and Y an object
-        // The text ranges for matching refs give us the text ranges in scope
-        for (const inScopeRef of accumulator.getSemanticRefs(
+        semanticRefs = semanticRefs.getMatchesInScope(
             context.semanticRefs,
-            (sr) => this.evalPredicates(context, this.predicates!, sr),
-        )) {
-            scope.addRange(inScopeRef.range);
-        }
-        if (scope.size > 0) {
-            // Select only those semantic refs that are in scope
-            accumulator = accumulator.getInScope(context.semanticRefs, scope);
-        }
-        return accumulator;
-    }
-
-    private evalPredicates(
-        context: QueryEvalContext,
-        predicates: IQuerySemanticRefPredicate[],
-        semanticRef: SemanticRef,
-    ) {
-        for (let i = 0; i < predicates.length; ++i) {
-            if (predicates[i].eval(context, semanticRef)) {
-                return true;
-            }
-        }
-        return false;
+            rangesInScope,
+        );
+        return semanticRefs;
     }
 }
 
-export class TimestampScopeExpr extends QueryOpExpr<TimestampedTextRange[]> {
-    constructor(public dateRange: DateRange) {
-        super();
-    }
+export interface IQueryTextRangeSelector {
+    eval(
+        context: QueryEvalContext,
+        semanticRefs?: SemanticRefAccumulator | undefined,
+    ): TextRangeCollection | undefined;
+}
 
-    public override eval(context: QueryEvalContext): TimestampedTextRange[] {
-        const index = context.conversation.timestampIndex;
-        let ranges: TimestampedTextRange[] | undefined;
-        if (index !== undefined) {
-            ranges = index.lookupRange(this.dateRange);
+export class TextRangesInDateRangeSelector implements IQueryTextRangeSelector {
+    constructor(public dateRangeInScope: DateRange) {}
+
+    public eval(context: QueryEvalContext): TextRangeCollection | undefined {
+        const textRangesInScope = new TextRangeCollection();
+        if (context.timestampIndex) {
+            const textRanges = context.timestampIndex.lookupRange(
+                this.dateRangeInScope,
+            );
+            for (const timeRange of textRanges) {
+                textRangesInScope.addRange(timeRange.range);
+            }
+            return textRangesInScope;
+        } else {
+            const textRange = getTextRangeForDateRange(
+                context.conversation,
+                this.dateRangeInScope,
+            );
+            if (textRange !== undefined) {
+                textRangesInScope.addRange(textRange);
+            }
         }
-        return ranges ?? [];
+        return textRangesInScope;
+    }
+}
+
+export class TextRangesPredicateSelector implements IQueryTextRangeSelector {
+    constructor(public predicates: IQuerySemanticRefPredicate[]) {}
+
+    public eval(
+        context: QueryEvalContext,
+        semanticRefs?: SemanticRefAccumulator | undefined,
+    ): TextRangeCollection | undefined {
+        if (!semanticRefs) {
+            return undefined;
+        }
+        if (this.predicates && this.predicates.length > 0) {
+            const textRangesInScope = new TextRangeCollection();
+            for (const inScopeRef of semanticRefs.getSemanticRefs(
+                context.semanticRefs,
+                (sr) => matchPredicates(context, this.predicates, sr),
+            )) {
+                textRangesInScope.addRange(inScopeRef.range);
+            }
+            return textRangesInScope;
+        }
+        return undefined;
+    }
+}
+
+export class TextRangesWithTagSelector implements IQueryTextRangeSelector {
+    constructor() {}
+
+    public eval(
+        context: QueryEvalContext,
+        semanticRefs: SemanticRefAccumulator,
+    ): TextRangeCollection | undefined {
+        let textRangesInScope: TextRangeCollection | undefined;
+        for (const inScopeRef of semanticRefs.getSemanticRefs(
+            context.semanticRefs,
+            (sr) => sr.knowledgeType === "tag",
+        )) {
+            textRangesInScope ??= new TextRangeCollection();
+            textRangesInScope.addRange(inScopeRef.range);
+        }
+        return textRangesInScope;
+    }
+}
+
+export class TextRangesWithTermMatchesSelector
+    implements IQueryTextRangeSelector
+{
+    constructor(public sourceExpr: QueryOpExpr<SemanticRefAccumulator>) {}
+
+    public eval(context: QueryEvalContext): TextRangeCollection {
+        const matches = this.sourceExpr.eval(context);
+        const rangesInScope = new TextRangeCollection();
+        if (matches.size > 0) {
+            for (const match of matches.getMatches()) {
+                const semanticRef = context.getSemanticRef(match.value);
+                rangesInScope.addRange(semanticRef.range);
+            }
+            return rangesInScope;
+        }
+        return rangesInScope;
     }
 }

@@ -14,7 +14,7 @@ import {
 import { createTypeScriptJsonValidator } from "typechat/ts";
 import { TypeChatConstraintsValidator } from "./constraints.js";
 import registerDebug from "debug";
-import { openai as ai, JsonSchema } from "aiclient";
+import { openai as ai, CompletionJsonSchema } from "aiclient";
 import {
     createIncrementalJsonParser,
     IncrementalJsonParser,
@@ -212,7 +212,7 @@ export interface TypeAgentJsonValidator<T extends object>
     getSchemaText: () => string;
     getTypeName: () => string;
     validate(jsonObject: object): Result<T>;
-    getJsonSchema?: () => JsonSchema | undefined;
+    getJsonSchema?: () => CompletionJsonSchema | undefined;
 }
 
 export function createJsonTranslatorWithValidator<T extends object>(
@@ -265,6 +265,44 @@ export function createJsonTranslatorWithValidator<T extends object>(
         translator.validateInstance = constraintsValidator.validateConstraints;
     }
 
+    // Patch up the property for json schema for stream.
+    // Non-streaming result is patched during validation.
+    function patchStreamCallback(prompt?: string | PromptSection[]) {
+        if (prompt === undefined) {
+            return;
+        }
+        const jsonSchema = validator.getJsonSchema?.();
+        if (jsonSchema === undefined) {
+            return;
+        }
+
+        const streamingParser = getStreamingParser(prompt);
+        if (streamingParser === undefined) {
+            return;
+        }
+        const callback = streamingParser.parser.callback;
+        streamingParser.parser.callback = Array.isArray(jsonSchema)
+            ? (prop, value, delta) => {
+                  let actualPropName = "actionName";
+                  if (prop !== "name") {
+                      const prefix = "arguments.";
+                      if (!prop.startsWith(prefix)) {
+                          throw new Error(`Invalid property name: ${prop}`);
+                      }
+                      actualPropName = `parameters.${prop.slice(prefix.length)}`;
+                  }
+                  callback(actualPropName, value, delta);
+              }
+            : (prop, value, delta) => {
+                  const prefix = "response.";
+                  if (!prop.startsWith(prefix)) {
+                      throw new Error(`Invalid property name: ${prop}`);
+                  }
+                  const actualPropName = prop.slice(prefix.length);
+                  callback(actualPropName, value, delta);
+              };
+    }
+
     const innerFn = translator.translate;
     const instructions = options?.instructions;
     if (!instructions) {
@@ -272,6 +310,7 @@ export function createJsonTranslatorWithValidator<T extends object>(
             request: string,
             promptPreamble?: string | PromptSection[],
         ) => {
+            patchStreamCallback(promptPreamble);
             const result = await innerFn(request, promptPreamble);
             debugResult(result);
             return result;
@@ -283,11 +322,11 @@ export function createJsonTranslatorWithValidator<T extends object>(
         request: string,
         promptPreamble?: string | PromptSection[],
     ) => {
+        patchStreamCallback(promptPreamble);
         const result = await innerFn(
             request,
             toPromptSections(instructions, promptPreamble),
         );
-
         debugResult(result);
         return result;
     };

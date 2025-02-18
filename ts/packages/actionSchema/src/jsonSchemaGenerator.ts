@@ -61,12 +61,14 @@ type JsonSchemaReference = {
     description?: string;
 };
 
-type JsonSchemaRoot = {
+export type ActionObjectJsonSchema = {
     name: string;
     description?: string;
     strict: true;
-    schema: JsonSchema & { $defs?: Record<string, JsonSchema> }; // REVIEW should be JsonSchemaObject;
+    schema: JsonSchemaRoot;
 };
+
+type JsonSchemaRoot = JsonSchema & { $defs?: Record<string, JsonSchema> }; // REVIEW should be JsonSchemaObject;
 
 type JsonSchema =
     | JsonSchemaObject
@@ -83,7 +85,7 @@ function fieldComments(field: SchemaObjectField): string | undefined {
         ...(field.comments ?? []),
         ...(field.trailingComments ?? []),
     ];
-    return combined.length > 0 ? combined.join("\n") : undefined;
+    return combined.length > 0 ? combined.join("\n").trim() : undefined;
 }
 
 function generateJsonSchemaType(
@@ -103,8 +105,12 @@ function generateJsonSchemaType(
                             strict,
                         );
                         const comments = fieldComments(field);
-                        if (comments) {
-                            fieldType.description = comments;
+                        // BUG: missing comment on fields with type references.
+                        // See Issue https://github.com/OAI/OpenAPI-Specification/issues/1514
+                        if (field.type.type !== "type-reference") {
+                            if (comments) {
+                                fieldType.description = comments;
+                            }
                         }
                         return [key, fieldType];
                     }),
@@ -149,20 +155,17 @@ function generateJsonSchemaType(
             return { type: type.type };
     }
 }
-function generateJsonSchemaTypeDefinition(
-    def: SchemaTypeDefinition,
-    strict: boolean = true,
-): JsonSchemaRoot {
-    const pending: SchemaTypeDefinition[] = [];
-    const schema: JsonSchemaRoot = {
-        name: def.name,
-        strict: true,
-        schema: generateJsonSchemaType(def.type, pending, strict),
-    };
-    if (def.comments) {
-        schema.schema.description = def.comments.join("\n");
-    }
 
+function generateJsonSchemaTypeWithDefs(
+    type: SchemaType,
+    strict: boolean = true,
+) {
+    const pending: SchemaTypeDefinition[] = [];
+    const schema: JsonSchemaRoot = generateJsonSchemaType(
+        type,
+        pending,
+        strict,
+    );
     if (pending.length !== 0) {
         const $defs: Record<string, JsonSchema> = {};
         do {
@@ -180,13 +183,106 @@ function generateJsonSchemaTypeDefinition(
                     definition.comments.join("\n");
             }
         } while (pending.length > 0);
-        schema.schema.$defs = $defs;
+        schema.$defs = $defs;
     }
     return schema;
+}
+function generateJsonSchemaTypeDefinition(
+    def: SchemaTypeDefinition,
+    strict: boolean = true,
+): ActionObjectJsonSchema {
+    const root: ActionObjectJsonSchema = {
+        name: def.name,
+        strict: true,
+        schema: generateJsonSchemaTypeWithDefs(def.type, strict),
+    };
+    if (def.comments) {
+        root.schema.description = def.comments.join("\n");
+    }
+
+    return root;
 }
 
 export function generateActionJsonSchema(actionSchemaGroup: ActionSchemaGroup) {
     const type = wrapTypeWithJsonSchema(actionSchemaGroup.entry);
 
     return generateJsonSchemaTypeDefinition(type);
+}
+
+export type ActionFunctionJsonSchema = {
+    type: "function";
+    function: {
+        name: string;
+        description?: string;
+        parameters?: JsonSchemaRoot;
+        strict: true;
+    };
+};
+
+export function generateActionActionFunctionJsonSchemas(
+    actionSchemaGroup: ActionSchemaGroup,
+    strict: boolean = true,
+) {
+    const entry = actionSchemaGroup.entry;
+    const definitions: ActionSchemaEntryTypeDefinition[] = [entry];
+    const tools: ActionFunctionJsonSchema[] = [];
+    while (definitions.length !== 0) {
+        const def = definitions.shift()!;
+        switch (def.type.type) {
+            case "object":
+                const tool: ActionFunctionJsonSchema = {
+                    type: "function",
+                    function: {
+                        name: def.type.fields.actionName.type.typeEnum[0],
+                        strict: true,
+                    },
+                };
+
+                const parameters = def.type.fields.parameters;
+                if (parameters !== undefined) {
+                    tool.function.parameters = generateJsonSchemaTypeWithDefs(
+                        parameters.type,
+                        strict,
+                    );
+
+                    const comments = fieldComments(parameters);
+                    if (comments) {
+                        tool.function.description = comments;
+                    }
+                } else {
+                    tool.function.parameters = {
+                        type: "object",
+                        properties: {},
+                        required: [],
+                        additionalProperties: false,
+                    };
+                }
+                tools.push(tool);
+                break;
+            case "type-union":
+                for (const type of def.type.types) {
+                    if (type.definition === undefined) {
+                        if (strict && type.definition === undefined) {
+                            throw new Error(
+                                `Unresolved type reference: ${type.name}`,
+                            );
+                        }
+                        continue;
+                    }
+                    definitions.push(type.definition);
+                }
+                break;
+            case "type-reference":
+                if (def.type.definition) {
+                    definitions.push(def.type.definition);
+                } else if (strict) {
+                    throw new Error(
+                        `Unresolved type reference: ${def.type.name}`,
+                    );
+                }
+                break;
+        }
+    }
+
+    return tools;
 }

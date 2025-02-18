@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { AppAction } from "@typeagent/agent-sdk";
 import { WebSocketMessageV2 } from "../../../../commonUtils/dist/indexBrowser";
 import {
     isWebAgentMessage,
@@ -1309,6 +1310,40 @@ async function runSiteAction(schemaName: string, action: any) {
     return confirmationMessage;
 }
 
+async function sendActionToAgent(action: AppAction) {
+    return new Promise<any | undefined>((resolve, reject) => {
+        if (webSocket) {
+            try {
+                const callId = new Date().getTime().toString();
+
+                webSocket.send(
+                    JSON.stringify({
+                        id: callId,
+                        method: action.actionName,
+                        params: action.parameters,
+                    }),
+                );
+
+                const handler = async (event: any) => {
+                    const text = await event.data.text();
+                    const data = JSON.parse(text);
+                    if (data.id == callId && data.result) {
+                        webSocket.removeEventListener("message", handler);
+                        resolve(data.result);
+                    }
+                };
+
+                webSocket.addEventListener("message", handler);
+            } catch {
+                console.log("Unable to contact agent backend.");
+                reject("Unable to contact agent backend.");
+            }
+        } else {
+            throw new Error("No websocket connection.");
+        }
+    });
+}
+
 function showBadgeError() {
     chrome.action.setBadgeBackgroundColor({ color: "#F00" }, () => {
         chrome.action.setBadgeText({ text: "!" });
@@ -1462,7 +1497,7 @@ chrome.runtime.onMessageExternal.addListener(
 
 chrome.runtime.onMessage.addListener(
     (message: any, sender: chrome.runtime.MessageSender, sendResponse) => {
-        async () => {
+        const handleMessage = async () => {
             switch (message.type) {
                 case "initialize": {
                     console.log("Browser Agent Service Worker started");
@@ -1479,8 +1514,126 @@ chrome.runtime.onMessage.addListener(
                     sendResponse("Service worker initialize called");
                     break;
                 }
+                case "refreshSchema": {
+                    const schemaResult = await sendActionToAgent({
+                        actionName: "initializePageSchema",
+                        parameters: {
+                            registerAgent: false,
+                        },
+                    });
+
+                    sendResponse({ schema: schemaResult });
+                    break;
+                }
+                case "registerTempSchema": {
+                    const schemaResult = await sendActionToAgent({
+                        actionName: "initializePageSchema",
+                        parameters: {
+                            registerAgent: true,
+                        },
+                    });
+
+                    sendResponse({ schema: schemaResult });
+                    break;
+                }
+                case "startRecording": {
+                    const targetTab = await getActiveTab();
+                    const response = await chrome.tabs.sendMessage(
+                        targetTab.id!,
+                        {
+                            type: "startRecording",
+                        },
+                        { frameId: 0 }, // Limit action recording to the top frame for now
+                    );
+                    sendResponse({});
+                    break;
+                }
+                case "stopRecording": {
+                    const targetTab = await getActiveTab();
+                    const response = await chrome.tabs.sendMessage(
+                        targetTab.id!,
+                        {
+                            type: "stopRecording",
+                        },
+                        { frameId: 0 },
+                    );
+
+                    sendResponse(response);
+                    break;
+                }
+                case "takeScreenshot": {
+                    const screenshotUrl = await chrome.tabs.captureVisibleTab({
+                        format: "png",
+                    });
+
+                    sendResponse(screenshotUrl);
+                    break;
+                }
+                case "saveAnnotatedScreenshot": {
+                    await chrome.storage.local.set({
+                        annotatedScreenshot: message.screenshot,
+                    });
+                    sendResponse({});
+                    break;
+                }
+                case "getAnnotatedScreenshot": {
+                    const data = await chrome.storage.local.get(
+                        "annotatedScreenshot",
+                    );
+                    sendResponse(data.annotatedScreenshot);
+                    break;
+                }
+                case "saveRecordedActionPageHTML": {
+                    await chrome.storage.local.set({
+                        recordedActionPageHTML: message.html,
+                    });
+                    sendResponse({});
+                    break;
+                }
+                case "getRecordedActionPageHTML": {
+                    const data = await chrome.storage.local.get(
+                        "recordedActionPageHTML",
+                    );
+                    sendResponse(data.recordedActionPageHTML);
+                    break;
+                }
+                case "saveRecordedActions": {
+                    await chrome.storage.local.set({
+                        recordedActions: message.recordedActions,
+                    });
+                    sendResponse({});
+                    break;
+                }
+                case "recordingStopped": {
+                    await chrome.storage.local.set({
+                        recordedActions: message.recordedActions,
+                        recordedActionPageHTML: message.recordedActionPageHTML,
+                        annotatedScreenshot: message.recordedActionScreenshot,
+                    });
+
+                    sendResponse({});
+                    break;
+                }
+                case "getRecordedActions": {
+                    const data =
+                        await chrome.storage.local.get("recordedActions");
+                    sendResponse(data.recordedActions);
+                    break;
+                }
+                case "clearRecordedActions": {
+                    const data =
+                        await chrome.storage.local.get("recordedActions");
+                    if (data) {
+                        chrome.storage.local.remove("recordedActions");
+                    }
+                    sendResponse({});
+                    break;
+                }
             }
         };
+
+        handleMessage();
+        return true; // Important: indicates we'll send response asynchronously
     },
 );
 
@@ -1493,6 +1646,17 @@ chrome.runtime.onInstalled.addListener(() => {
     chrome.contextMenus.create({
         title: "Clear crossword cache",
         id: "clearCrosswordPageCache",
+    });
+
+    // Add separator
+    chrome.contextMenus.create({
+        type: "separator",
+        id: "menuSeparator",
+    });
+
+    chrome.contextMenus.create({
+        title: "Discover page Schema",
+        id: "discoverPageSchema",
     });
 });
 
@@ -1539,6 +1703,10 @@ chrome.contextMenus?.onClicked.addListener(
                     });
                 }
 
+                break;
+            }
+            case "discoverPageSchema": {
+                await chrome.sidePanel.open({ tabId: tab.id! });
                 break;
             }
         }

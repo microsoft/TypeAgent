@@ -46,12 +46,21 @@ export type IncrementalJsonValueCallBack = (
 ) => void;
 
 export function createIncrementalJsonParser(
-    cb: IncrementalJsonValueCallBack,
+    callback: IncrementalJsonValueCallBack,
     options?: {
         full?: boolean;
         partial?: boolean;
     },
 ) {
+    function tryCallBack(prop: string, value: any, delta?: string) {
+        try {
+            parser.callback(prop, value, delta);
+        } catch (e) {
+            // callback throw, just set it to error state and stop incremental parsing.
+            currentState = State.Error;
+        }
+    }
+
     // Literal value
     let currentLiteral: string = "";
     let literalDelta: string = "";
@@ -90,12 +99,12 @@ export function createIncrementalJsonParser(
             // finishing structures (object/array)
             if (options?.full) {
                 value = currentNested;
-                cb(props.join("."), value);
+                tryCallBack(props.join("."), value);
                 currentNested = nested.pop();
             }
         } else {
             reportStringDelta();
-            cb(props.join("."), value);
+            tryCallBack(props.join("."), value);
         }
 
         const lastProp = props.pop();
@@ -425,13 +434,14 @@ export function createIncrementalJsonParser(
                     currentState === State.LiteralStringUnicodeEscape) &&
                 !isPendingPropertyName()
             ) {
-                cb(props.join("."), currentLiteral, literalDelta);
+                tryCallBack(props.join("."), currentLiteral, literalDelta);
             }
         }
         literalDelta = "";
     }
     let currentState: State = State.Element;
-    return {
+    const parser = {
+        callback,
         parse: (chunk: string) => {
             if (currentState === State.Error) {
                 // Short circuit if we are in an error state
@@ -471,6 +481,7 @@ export function createIncrementalJsonParser(
             return false;
         },
     };
+    return parser;
 }
 
 export type IncrementalJsonParser = ReturnType<
