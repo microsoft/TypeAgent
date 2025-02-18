@@ -1543,7 +1543,9 @@ chrome.runtime.onMessage.addListener(
                         {
                             type: "startRecording",
                         },
+                        { frameId: 0 }, // Limit action recording to the top frame for now
                     );
+                    sendResponse({});
                     break;
                 }
                 case "stopRecording": {
@@ -1553,6 +1555,7 @@ chrome.runtime.onMessage.addListener(
                         {
                             type: "stopRecording",
                         },
+                        { frameId: 0 },
                     );
 
                     sendResponse(response);
@@ -1562,6 +1565,7 @@ chrome.runtime.onMessage.addListener(
                     const screenshotUrl = await chrome.tabs.captureVisibleTab({
                         format: "png",
                     });
+
                     sendResponse(screenshotUrl);
                     break;
                 }
@@ -1569,6 +1573,7 @@ chrome.runtime.onMessage.addListener(
                     await chrome.storage.local.set({
                         annotatedScreenshot: message.screenshot,
                     });
+                    sendResponse({});
                     break;
                 }
                 case "getAnnotatedScreenshot": {
@@ -1582,6 +1587,7 @@ chrome.runtime.onMessage.addListener(
                     await chrome.storage.local.set({
                         recordedActionPageHTML: message.html,
                     });
+                    sendResponse({});
                     break;
                 }
                 case "getRecordedActionPageHTML": {
@@ -1593,8 +1599,19 @@ chrome.runtime.onMessage.addListener(
                 }
                 case "saveRecordedActions": {
                     await chrome.storage.local.set({
-                        recordedActions: message.actions,
+                        recordedActions: message.recordedActions,
                     });
+                    sendResponse({});
+                    break;
+                }
+                case "recordingStopped": {
+                    await chrome.storage.local.set({
+                        recordedActions: message.recordedActions,
+                        recordedActionPageHTML: message.recordedActionPageHTML,
+                        annotatedScreenshot: message.recordedActionScreenshot,
+                    });
+
+                    sendResponse({});
                     break;
                 }
                 case "getRecordedActions": {

@@ -109,6 +109,9 @@ async function saveUserAction() {
     const stepsContainer = document.getElementById("stepsTimelineContainer")!;
     const steps = JSON.parse(stepsContainer.dataset.steps || "[]");
 
+    const screenshot = JSON.parse(stepsContainer.dataset.screenshot || "");
+    const html = JSON.parse(stepsContainer.dataset.html || "");
+
     // Retrieve existing actions from localStorage
     const storedActions = localStorage.getItem("userActions");
     const actions = storedActions ? JSON.parse(storedActions) : [];
@@ -117,7 +120,9 @@ async function saveUserAction() {
     actions.push({
         name: actionName,
         description: actionDescription,
-        steps: steps,
+        steps,
+        screenshot,
+        html,
     });
 
     // Save back to localStorage
@@ -130,17 +135,16 @@ async function saveUserAction() {
 
 // Function to update user actions display
 async function updateUserActionsUI() {
-    showRecordedActionScreenshot();
     await showUserDefinedActionsList();
 }
 
 function startRecording() {
     chrome.runtime.sendMessage({ type: "startRecording" });
-    alert("Recording started! Perform actions on the main page.");
-
     document.getElementById("recordAction")!.classList.add("hidden");
     document.getElementById("stopRecording")!.classList.remove("hidden");
     document.getElementById("stepsTimelineContainer")!.dataset.steps = "";
+    document.getElementById("stepsTimelineContainer")!.dataset.screenshot = "";
+    document.getElementById("stepsTimelineContainer")!.dataset.html = "";
 }
 
 // Function to stop recording
@@ -155,7 +159,19 @@ async function stopRecording() {
         )!;
         stepsContainer.classList.remove("hidden");
         stepsContainer.dataset.steps = JSON.stringify(response.recordedActions);
-        renderTimelineSteps(response.recordedActions, "stepsTimelineContainer");
+        stepsContainer.dataset.screenshot = JSON.stringify(
+            response.recordedActionScreenshot,
+        );
+        stepsContainer.dataset.html = JSON.stringify(
+            response.recordedActionHtml,
+        );
+
+        renderTimelineSteps(
+            response.recordedActions,
+            stepsContainer,
+            response.recordedActionScreenshot,
+            response.recordedActionHtml,
+        );
     }
 
     document.getElementById("recordAction")!.classList.remove("hidden");
@@ -183,68 +199,6 @@ async function clearRecordedUserAction() {
 
     // Update UI
     await updateUserActionsUI();
-}
-
-function showRecordedActionScreenshot() {
-    const screenshotContainer = document.getElementById(
-        "screenshotContainer",
-    ) as HTMLDivElement;
-    const downloadButton = document.getElementById(
-        "downloadScreenshot",
-    ) as HTMLButtonElement;
-    const downloadHTMLButton = document.getElementById(
-        "downloadHTML",
-    ) as HTMLButtonElement;
-
-    // Fetch the annotated screenshot from storage
-    chrome.runtime.sendMessage(
-        { type: "getAnnotatedScreenshot" },
-        (response) => {
-            if (response) {
-                const img = document.createElement("img");
-                img.src = response;
-                img.alt = "Annotated Screenshot";
-                img.style.width = "100%";
-                img.style.border = "1px solid #ccc";
-                img.style.borderRadius = "8px";
-                screenshotContainer.appendChild(img);
-
-                // Enable the download button
-                downloadButton.style.display = "block";
-                downloadButton.addEventListener("click", () =>
-                    downloadScreenshot(response),
-                );
-
-                // Enable download button
-                downloadHTMLButton.style.display = "block";
-                downloadHTMLButton.addEventListener("click", () =>
-                    downloadHTML(response),
-                );
-            } else {
-                screenshotContainer.innerText = "No screenshot available.";
-            }
-        },
-    );
-
-    // Function to download the screenshot
-    function downloadScreenshot(dataUrl: string) {
-        const link = document.createElement("a");
-        link.href = dataUrl;
-        link.download = "annotated_screenshot.png";
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-    }
-
-    function downloadHTML(html: string) {
-        const blob = new Blob([html], { type: "text/html" });
-        const link = document.createElement("a");
-        link.href = URL.createObjectURL(blob);
-        link.download = "captured_page.html";
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-    }
 }
 
 async function showUserDefinedActionsList() {
@@ -290,9 +244,7 @@ function renderTimeline(action: any, index: number) {
                                 <div class="col-md-12">
                                     <p><i> Action description </i></h6>
                                     <h6 class="card-title">Steps</h6>
-                                    <div id="content">
-                                        <ul class="timeline">
-                                        </ul>
+                                    <div id="Stepscontent">
                                     </div>
                                 </div>
                             </div>
@@ -300,32 +252,40 @@ function renderTimeline(action: any, index: number) {
                     </div>
                 `;
 
-    const stepsContainer = timelineHeader.querySelector("ul.timeline")!;
-    if (action.steps != undefined && action.steps.length > 0) {
-        action.steps.forEach((step: any, index: number) => {
-            const card = document.createElement("li");
-            card.classList.add("event");
-            card.dataset.date = new Date(step.timestamp).toLocaleString();
-
-            card.innerHTML = `        
-            <h3>${index + 1}. ${step.type}</h3>
-            <p>Details.</p>
-            <pre class="card-text"><code class="language-json">${JSON.stringify(step, null, 2)}</code></pre>
-        `;
-
-            stepsContainer.appendChild(card);
-        });
-    }
-
+    const stepsContainer = timelineHeader.querySelector(
+        "#Stepscontent",
+    )! as HTMLElement;
+    renderTimelineSteps(
+        action.steps,
+        stepsContainer,
+        action.screenshot,
+        action.html,
+    );
     userActionsListContainer.appendChild(timelineHeader);
 }
 
-function renderTimelineSteps(steps: any[], containerId: string) {
-    const userActionsListContainer = document.getElementById(containerId)!;
+function renderTimelineSteps(
+    steps: any[],
+    userActionsListContainer: HTMLElement,
+    screenshotData: string,
+    htmlData: string,
+) {
     userActionsListContainer.innerHTML = `
                     <div id="content">
                         <ul class="timeline">
                         </ul>
+                        <div id="stepsScreenshotContainer"></div>
+                    </div>
+                    <div class="d-flex gap-2 mt-3 float-end">
+                        <button id="downloadScreenshot" class="btn btn-sm btn-outline-primary" title="Download Image">
+                            <i class="bi bi-file-earmark-image"></i>
+                        </button>
+                        <button id="downloadHtml" class="btn btn-sm btn-outline-primary" title="Download HTML">
+                            <i class="bi bi-filetype-html"></i>
+                        </button>
+                        <button id="processAction" class="btn btn-sm btn-outline-primary" title="Process Action">
+                            <i class="bi bi-robot"></i>
+                        </button>
                     </div>
                 `;
 
@@ -345,6 +305,62 @@ function renderTimelineSteps(steps: any[], containerId: string) {
 
             stepsContainer.appendChild(card);
         });
+    }
+
+    const screenshotContainer = userActionsListContainer.querySelector(
+        "#stepsScreenshotContainer",
+    )!;
+
+    const downloadButton = userActionsListContainer.querySelector(
+        "#downloadScreenshot",
+    )! as HTMLElement;
+
+    const downloadHTMLButton = userActionsListContainer.querySelector(
+        "#downloadHtml",
+    )! as HTMLElement;
+
+    if (screenshotData) {
+        const img = document.createElement("img");
+        img.src = screenshotData;
+        img.alt = "Annotated Screenshot";
+        img.style.width = "100%";
+        img.style.border = "1px solid #ccc";
+        img.style.borderRadius = "8px";
+        screenshotContainer.appendChild(img);
+
+        // Enable the download button
+        downloadButton.style.display = "block";
+        downloadButton.addEventListener("click", () =>
+            downloadScreenshot(screenshotData),
+        );
+    }
+
+    if (htmlData) {
+        // Enable download button
+        downloadHTMLButton.style.display = "block";
+        downloadHTMLButton.addEventListener("click", () =>
+            downloadHTML(htmlData),
+        );
+    }
+
+    // Function to download the screenshot
+    function downloadScreenshot(dataUrl: string) {
+        const link = document.createElement("a");
+        link.href = dataUrl;
+        link.download = "annotated_screenshot.png";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+
+    function downloadHTML(html: string) {
+        const blob = new Blob([html], { type: "text/html" });
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = "captured_page.html";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
     }
 }
 

@@ -541,12 +541,19 @@ async function awaitPageIncrementalUpdates() {
 let recording = false;
 let recordedActions: any[] = [];
 let actionIndex = 1;
+let recordedActionHtml: string = "";
+let recordedActionScreenshot: string = "";
 
 function startRecording() {
     if (recording) return;
     recording = true;
     recordedActions = [];
     actionIndex = 1;
+
+    recordedActionHtml = "";
+    recordedActionScreenshot = "";
+
+    setIdsOnAllElements(0);
 
     document.addEventListener("click", recordClick, true);
     document.addEventListener("input", recordInput, true);
@@ -557,26 +564,32 @@ function startRecording() {
 }
 
 // Stop recording and return data
-function stopRecording() {
+async function stopRecording() {
     recording = false;
     document.removeEventListener("click", recordClick, true);
     document.removeEventListener("input", recordInput, true);
     // document.removeEventListener("scroll", recordScroll, true);
     document.removeEventListener("keyup", recordTextEntry, true);
 
-    captureAnnotatedScreenshot(() => {
-        const pageHTML = document.documentElement.outerHTML;
-        chrome.runtime.sendMessage({
-            type: "saveRecordedActionPageHTML",
-            html: pageHTML,
-        });
+    await captureAnnotatedScreenshot();
 
-        chrome.runtime.sendMessage({
-            type: "recordingStopped",
-            recordedActions,
-        });
-        chrome.storage.session.remove("recordedActions");
+    const pageHTML = getPageHTML(false, "", 0, false);
+    recordedActionHtml = pageHTML;
+
+    await chrome.runtime.sendMessage({
+        type: "saveRecordedActionPageHTML",
+        html: pageHTML,
     });
+
+    await chrome.runtime.sendMessage({
+        type: "recordingStopped",
+        recordedActions,
+        recordedActionScreenshot,
+        recordedActionHtml,
+    });
+    chrome.storage.session.remove("recordedActions");
+    chrome.storage.session.remove("recordedActionScreenshot");
+    chrome.storage.session.remove("recordedActionHtml");
 }
 
 // Record click events
@@ -653,13 +666,12 @@ function recordScroll() {
     saveRecordedActions();
 }
 
-function recordNavigation() {
-    captureAnnotatedScreenshot(() => {
-        const pageHTML = document.documentElement.outerHTML;
-        chrome.runtime.sendMessage({
-            type: "saveRecordedActionPageHTML",
-            html: pageHTML,
-        });
+async function recordNavigation() {
+    await captureAnnotatedScreenshot();
+    const pageHTML = getPageHTML(false, "", 0, false);
+    chrome.runtime.sendMessage({
+        type: "saveRecordedActionPageHTML",
+        html: pageHTML,
     });
 
     recordedActions.push({
@@ -672,59 +684,75 @@ function recordNavigation() {
     saveRecordedActions();
 }
 
-function captureAnnotatedScreenshot(callback: () => void) {
-    chrome.runtime.sendMessage({ type: "takeScreenshot" }, (screenshotUrl) => {
-        if (!screenshotUrl) {
-            console.error("Failed to capture screenshot");
-            return callback();
-        }
-
-        const img = new Image();
-        img.src = screenshotUrl;
-        img.onload = () => {
-            const canvas = document.createElement("canvas");
-            const ctx = canvas.getContext("2d")!;
-            canvas.width = img.width;
-            canvas.height = img.height;
-
-            ctx.drawImage(img, 0, 0);
-
-            recordedActions.forEach((action) => {
-                if (!action.boundingBox) return;
-
-                const { left, top, width, height } = action.boundingBox;
-                ctx.strokeStyle = "red";
-                ctx.lineWidth = 2;
-                ctx.strokeRect(left, top, width, height);
-
-                ctx.fillStyle = "red";
-                ctx.font = "bold 14px Arial";
-                ctx.fillText(
-                    `${action.id} ${action.type}`,
-                    left + width - 40,
-                    top - 5,
-                );
-            });
-
-            const annotatedScreenshot = canvas.toDataURL("image/png");
-            chrome.runtime.sendMessage({
-                action: "saveAnnotatedScreenshot",
-                screenshot: annotatedScreenshot,
-            });
-
-            callback();
-        };
+async function captureAnnotatedScreenshot() {
+    const screenshotUrl = await chrome.runtime.sendMessage({
+        type: "takeScreenshot",
     });
+
+    if (!screenshotUrl) {
+        console.error("Failed to capture screenshot");
+        return;
+    }
+
+    const img = new Image();
+    img.src = screenshotUrl;
+    img.onload = () => {
+        const canvas = document.createElement("canvas");
+        const ctx = canvas.getContext("2d")!;
+        canvas.width = img.width;
+        canvas.height = img.height;
+
+        ctx.drawImage(img, 0, 0);
+
+        recordedActions.forEach((action) => {
+            if (!action.boundingBox) return;
+
+            const { left, top, width, height } = action.boundingBox;
+            ctx.strokeStyle = "red";
+            ctx.lineWidth = 2;
+            ctx.strokeRect(left, top, width, height);
+
+            ctx.fillStyle = "red";
+            ctx.font = "bold 14px Arial";
+            var textWidth = ctx.measureText(action.cssSelector).width;
+
+            ctx.fillText(action.cssSelector, left + width - textWidth, top - 5);
+        });
+
+        const annotatedScreenshot = canvas.toDataURL("image/png");
+        chrome.runtime.sendMessage({
+            type: "saveAnnotatedScreenshot",
+            screenshot: annotatedScreenshot,
+        });
+
+        recordedActionScreenshot = annotatedScreenshot;
+    };
 }
 
 function saveRecordedActions() {
-    chrome.storage.session.set({ recordedActions });
+    chrome.storage.session.set({
+        recordedActions,
+        recordedActionScreenshot,
+        recordedActionHtml,
+    });
 }
 
 // Restore actions if page is refreshed
 chrome.storage.session.get("recordedActions", (data) => {
-    if (data.recordedActions) {
+    if (data !== undefined && data.recordedActions) {
         recordedActions = data.recordedActions;
+    }
+});
+
+chrome.storage.session.get("recordedActionScreenshot", (data) => {
+    if (data !== undefined && data.recordedActionScreenshot) {
+        recordedActionScreenshot = data.recordedActionScreenshot;
+    }
+});
+
+chrome.storage.session.get("recordedActionHtml", (data) => {
+    if (data !== undefined && data.recordedActionHtml) {
+        recordedActionHtml = data.recordedActionHtml;
     }
 });
 
@@ -942,8 +970,12 @@ async function handleScriptAction(
             break;
         }
         case "stopRecording": {
-            stopRecording();
-            sendResponse({ recordedActions });
+            await stopRecording();
+            sendResponse({
+                recordedActions,
+                recordedActionHtml,
+                recordedActionScreenshot,
+            });
             break;
         }
     }
