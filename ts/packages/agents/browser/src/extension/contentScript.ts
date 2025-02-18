@@ -703,6 +703,7 @@ async function captureAnnotatedScreenshot() {
         canvas.height = img.height;
 
         ctx.drawImage(img, 0, 0);
+        ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
 
         recordedActions.forEach((action) => {
             if (!action.boundingBox) return;
