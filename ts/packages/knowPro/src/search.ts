@@ -76,7 +76,6 @@ function createSearchTerm(text: string, score?: number): SearchTerm {
 export type WhenFilter = {
     knowledgeType?: KnowledgeType | undefined;
     inDateRange?: DateRange | undefined;
-    scopingTerms?: PropertySearchTerm[] | undefined;
 };
 
 export type SearchOptions = {
@@ -122,10 +121,10 @@ export async function searchConversation(
 
 class SearchQueryBuilder {
     // All SearchTerms used which compiling the 'select' portion of the query
-    // We will them expand these search terms by also including related terms
     private allSearchTerms: SearchTerm[] = [];
     // All search terms used while compiling predicates in the query
     private allPredicateSearchTerms: SearchTerm[] = [];
+    private allScopeSearchTerms: SearchTerm[] = [];
 
     constructor(
         public conversation: IConversation,
@@ -146,24 +145,24 @@ class SearchQueryBuilder {
             // For all individual SearchTerms created during query compilation, resolve any related terms
             await this.resolveRelatedTerms(this.allSearchTerms, true);
             await this.resolveRelatedTerms(this.allPredicateSearchTerms, false);
+            await this.resolveRelatedTerms(this.allScopeSearchTerms, false);
         }
 
         return query;
     }
 
     public async compileQuery(
-        termGroup: SearchTermGroup,
+        searchTermGroup: SearchTermGroup,
         filter?: WhenFilter,
         options?: SearchOptions,
     ) {
         let selectExpr = this.compileSelect(
-            termGroup,
-            filter ? this.compileOuterScope(filter) : undefined,
+            searchTermGroup,
+            filter ? this.compileScope(searchTermGroup, filter) : undefined,
             options,
         );
         // Constrain the select with scopes and 'where'
         if (filter) {
-            selectExpr = this.compileInnerScope(selectExpr, filter);
             selectExpr = new q.WhereSemanticRefExpr(
                 selectExpr,
                 this.compileWhere(filter),
@@ -182,58 +181,74 @@ class SearchQueryBuilder {
         options?: SearchOptions,
     ) {
         // Select is a combination of ordinary search terms and property search terms
-        let selectExpr = this.compileSearchGroup(termGroup, scopeExpr);
+        let [searchTermUsed, selectExpr] = this.compileSearchGroup(
+            termGroup,
+            scopeExpr,
+        );
+        this.allSearchTerms.push(...searchTermUsed);
         return selectExpr;
     }
 
     private compileSearchGroup(
         searchGroup: SearchTermGroup,
         scopeExpr?: q.GetScopeExpr,
-    ): q.IQueryOpExpr<SemanticRefAccumulator> {
+    ): [SearchTerm[], q.IQueryOpExpr<SemanticRefAccumulator>] {
+        const searchTermsUsed: SearchTerm[] = [];
         const termExpressions: q.MatchTermExpr[] = [];
         for (const term of searchGroup.terms) {
             if (isPropertyTerm(term)) {
                 termExpressions.push(new q.MatchPropertySearchTermExpr(term));
                 if (typeof term.propertyName !== "string") {
-                    this.allSearchTerms.push(term.propertyName);
+                    searchTermsUsed.push(term.propertyName);
                 }
-                this.allSearchTerms.push(term.propertyValue);
+                searchTermsUsed.push(term.propertyValue);
             } else {
                 termExpressions.push(new q.MatchSearchTermExpr(term));
-                this.allSearchTerms.push(term);
+                searchTermsUsed.push(term);
             }
         }
-        return searchGroup.booleanOp === "and"
-            ? new q.MatchTermsAndExpr(termExpressions, scopeExpr)
-            : new q.MatchTermsOrExpr(termExpressions, scopeExpr);
+        return [
+            searchTermsUsed,
+            searchGroup.booleanOp === "and"
+                ? new q.MatchTermsAndExpr(termExpressions, scopeExpr)
+                : new q.MatchTermsOrExpr(termExpressions, scopeExpr),
+        ];
     }
 
-    private compileOuterScope(filter: WhenFilter) {
+    private compileScope(searchGroup: SearchTermGroup, filter: WhenFilter) {
         let scopeSelectors: q.IQueryTextRangeSelector[] | undefined;
+        // First, use any provided date ranges to select scope
         if (filter.inDateRange) {
             scopeSelectors ??= [];
             scopeSelectors.push(
                 new q.TextRangesInDateRangeSelector(filter.inDateRange),
             );
         }
+        // Actions are inherently scope selecting. If any present in the query, use them
+        // to restrict scope
+        const actionTermsGroup =
+            this.getActionTermsFromSearchGroup(searchGroup);
+        if (actionTermsGroup) {
+            scopeSelectors ??= [];
+            const [searchTermsUsed, selectExpr] =
+                this.compileSearchGroup(actionTermsGroup);
+            scopeSelectors.push(
+                new q.TextRangesWithTermMatchesSelector(selectExpr),
+            );
+            this.allScopeSearchTerms.push(...searchTermsUsed);
+        }
         return scopeSelectors ? new q.GetScopeExpr(scopeSelectors) : undefined;
     }
 
-    private compileInnerScope(
-        termsMatchExpr: q.IQueryOpExpr<SemanticRefAccumulator>,
-        filter: WhenFilter,
-    ): q.IQueryOpExpr<SemanticRefAccumulator> {
-        let scopeSelectors: q.IQueryTextRangeSelector[] = [];
-        if (filter.scopingTerms && filter.scopingTerms.length > 0) {
-            scopeSelectors.push(
-                new q.TextRangesPredicateSelector(
-                    this.compilePropertyMatchPredicates(filter.scopingTerms),
-                ),
-            );
+    private compileWhere(filter: WhenFilter): q.IQuerySemanticRefPredicate[] {
+        let predicates: q.IQuerySemanticRefPredicate[] = [];
+        if (filter.knowledgeType) {
+            predicates.push(new q.KnowledgeTypePredicate(filter.knowledgeType));
         }
-        return new q.SelectInScopeExpr(termsMatchExpr, scopeSelectors);
+        return predicates;
     }
 
+    /*
     private compilePropertyMatchPredicates(
         propertyTerms: PropertySearchTerm[],
     ) {
@@ -245,13 +260,22 @@ class SearchQueryBuilder {
             return new q.PropertyMatchPredicate(p);
         });
     }
+    */
 
-    private compileWhere(filter: WhenFilter): q.IQuerySemanticRefPredicate[] {
-        let predicates: q.IQuerySemanticRefPredicate[] = [];
-        if (filter.knowledgeType) {
-            predicates.push(new q.KnowledgeTypePredicate(filter.knowledgeType));
+    private getActionTermsFromSearchGroup(
+        searchGroup: SearchTermGroup,
+    ): SearchTermGroup | undefined {
+        let actionGroup: SearchTermGroup | undefined;
+        for (const term of searchGroup.terms) {
+            if (isPropertyTerm(term) && isActionPropertyTerm(term)) {
+                actionGroup ??= {
+                    booleanOp: "and",
+                    terms: [],
+                };
+                actionGroup.terms.push(term);
+            }
         }
-        return predicates;
+        return actionGroup;
     }
 
     private async resolveRelatedTerms(
@@ -357,4 +381,18 @@ function isPropertyTerm(
     term: SearchTerm | PropertySearchTerm,
 ): term is PropertySearchTerm {
     return term.hasOwnProperty("propertyName");
+}
+
+function isActionPropertyTerm(term: PropertySearchTerm): boolean {
+    switch (term.propertyName) {
+        default:
+            break;
+        case "subject":
+        case "verb":
+        case "object":
+        case "indirectObject":
+            return true;
+    }
+
+    return false;
 }

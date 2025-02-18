@@ -308,36 +308,17 @@ export async function createKnowproCommands(
         };
     }
 
-    const scopePrefix = "%";
     function propertyTermsFromNamedArgs(
         namedArgs: NamedArgs,
         commandDef: CommandMetadata,
     ): kp.PropertySearchTerm[] {
-        return createPropertyTerms(namedArgs, commandDef, undefined, (name) => {
-            if (name.startsWith(scopePrefix)) {
-                return name.substring(1);
-            }
-            return name;
-        });
-    }
-
-    function scopingTermsFromNamedArgs(
-        namedArgs: NamedArgs,
-        commandDef: CommandMetadata,
-    ): kp.PropertySearchTerm[] {
-        return createPropertyTerms(
-            namedArgs,
-            commandDef,
-            (name) => name.startsWith(scopePrefix),
-            (name) => name.substring(1),
-        );
+        return createPropertyTerms(namedArgs, commandDef);
     }
 
     function createPropertyTerms(
         namedArgs: NamedArgs,
         commandDef: CommandMetadata,
         nameFilter?: (name: string) => boolean,
-        nameModifier?: (name: string) => string,
     ): kp.PropertySearchTerm[] {
         const keyValues = keyValuesFromNamedArgs(namedArgs, commandDef);
         const propertyNames = nameFilter
@@ -348,12 +329,7 @@ export async function createKnowproCommands(
             const allValues = splitTermValues(keyValues[propertyName]);
             for (const value of allValues) {
                 propertySearchTerms.push(
-                    kp.propertySearchTermFromKeyValue(
-                        nameModifier
-                            ? nameModifier(propertyName)
-                            : propertyName,
-                        value,
-                    ),
+                    kp.propertySearchTermFromKeyValue(propertyName, value),
                 );
             }
         }
@@ -381,10 +357,6 @@ export async function createKnowproCommands(
                     namedArgs.endMinute,
                 );
             }
-        }
-        const scopingTerms = scopingTermsFromNamedArgs(namedArgs, commandDef);
-        if (scopingTerms.length > 0) {
-            filter.scopingTerms = scopingTerms;
         }
         return filter;
     }
