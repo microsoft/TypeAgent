@@ -202,7 +202,7 @@ export async function selectChunks(
         parseInt(process.env.AZURE_OPENAI_MAX_CONCURRENCY ?? "5") ?? 5;
     const limiter = createLimiter(maxConcurrency);
     const batchLimit = process.env.OPENAI_API_KEY ? 100000 : 250000; // TODO: tune
-    const batches = makeBatches(allChunks, batchLimit, 200); // TODO: tune
+    const batches = makeBatches(allChunks, batchLimit, 60); // TODO: tune
     console_log(
         `  [${batches.length} batches, maxConcurrency ${maxConcurrency}]`,
     );

@@ -14,6 +14,7 @@ import { console_log } from "./logging.js";
 import { retryOn429 } from "./retryLogic.js";
 import { makeBatches } from "./batching.js";
 import { SpelunkerContext } from "./spelunkerActionHandler.js";
+import path from "path";
 
 export function makeEmbeddingModel(): TextEmbeddingModel {
     const apiSettings = openai.apiSettingsFromEnv(openai.ModelType.Embedding);
@@ -73,12 +74,16 @@ async function generateAndInsertEmbeddings(
 ): Promise<void> {
     const t0 = new Date().getTime();
     const stringBatch = batch.map(blobText);
-    const data = await retryOn429(() => generateEmbeddingBatch(stringBatch));
-    if (data) {
-        for (let i = 0; i < data.length; i++) {
+    const embeddings = await retryOn429(() =>
+        generateEmbeddingBatch(stringBatch),
+    );
+    if (embeddings) {
+        for (let i = 0; i < embeddings.length; i++) {
             const chunk = batch[i];
-            const embedding: NormalizedEmbedding = createNormalized(data[i]);
-            prepInsertEmbeddings.run(chunk.chunkId, embedding);
+            const embedding: NormalizedEmbedding = createNormalized(
+                embeddings[i],
+            );
+            prepInsertEmbeddings.run(chunk.chunkId, Buffer.from(embedding));
         }
         const t1 = new Date().getTime();
         const dtms = t1 - t0;
@@ -102,8 +107,18 @@ function blobText(chunk: Chunk): string {
         lines.push(...blob.lines);
     }
     // Keep only alphanumerical words; everything else is removed (hoping to reduce the cost)
-    const line = lines.join("").replace(/\W+/g, " ").slice(0, 20000); // Assuming average 2.5 chars per token
-    return line || "(blank)";
+    const fileName = shortenedFilename(chunk.fileName);
+    const line = lines.join("").replace(/\W+/g, " ").trim().slice(0, 20000); // Assuming average 2.5 chars per token
+    return `${fileName}\n${line}\n}`;
+}
+
+function shortenedFilename(fileName: string): string {
+    const prefix = process.env.HOME;
+    if (prefix && fileName.startsWith(prefix + path.sep)) {
+        return "~" + fileName.slice(prefix.length);
+    } else {
+        return fileName;
+    }
 }
 
 export async function preSelectChunks(
@@ -141,7 +156,7 @@ export async function preSelectChunks(
     }
 
     const embeddings = allEmbeddingRows.map(
-        (row) => new Float32Array(row.embedding),
+        (row) => new Float32Array(Buffer.from(row.embedding)),
     );
     const tc0 = new Date().getTime();
     const similarities: { chunkId: ChunkId; score: number }[] = [];
@@ -164,8 +179,20 @@ async function getEmbedding(
     context: SpelunkerContext,
     query: string,
 ): Promise<NormalizedEmbedding | undefined> {
-    const rawEmbedding: number[] | undefined = await retryOn429(() =>
-        context.queryContext!.embeddingModel!.generateEmbedding(query),
+    const model = context.queryContext!.embeddingModel!;
+    const generateEmbeddingBatch = model.generateEmbeddingBatch;
+    if (!generateEmbeddingBatch) {
+        console_log(`[This embedding model does not support batch operations]`); // TODO: Fix this
+        return undefined;
+    }
+
+    const rawEmbeddings: number[][] | undefined = await retryOn429(() =>
+        generateEmbeddingBatch([query]),
     );
+    const rawEmbedding = rawEmbeddings?.[0];
+    if (!rawEmbedding) {
+        console_log(`[Failed to generate embedding]`);
+        return undefined;
+    }
     return rawEmbedding ? createNormalized(rawEmbedding) : undefined;
 }
