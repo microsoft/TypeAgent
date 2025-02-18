@@ -1050,3 +1050,22 @@ export class TextRangesWithTagSelector implements IQueryTextRangeSelector {
         return textRangesInScope;
     }
 }
+
+export class TextRangesWithTermMatchesSelector
+    implements IQueryTextRangeSelector
+{
+    constructor(public sourceExpr: QueryOpExpr<SemanticRefAccumulator>) {}
+
+    public eval(context: QueryEvalContext): TextRangeCollection {
+        const matches = this.sourceExpr.eval(context);
+        const rangesInScope = new TextRangeCollection();
+        if (matches.size > 0) {
+            for (const match of matches.getMatches()) {
+                const semanticRef = context.getSemanticRef(match.value);
+                rangesInScope.addRange(semanticRef.range);
+            }
+            return rangesInScope;
+        }
+        return rangesInScope;
+    }
+}
