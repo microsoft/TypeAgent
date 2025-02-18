@@ -118,13 +118,19 @@ export class MatchAccumulator<T = any> {
         }
     }
 
-    public addIntersect(other: MatchAccumulator) {
-        for (const otherMatch of other.getMatches()) {
-            const existingMatch = this.getMatch(otherMatch.value);
-            if (existingMatch) {
-                this.combineMatches(existingMatch, otherMatch);
+    public intersect(
+        other: MatchAccumulator,
+        intersection?: MatchAccumulator,
+    ): MatchAccumulator {
+        intersection ??= new MatchAccumulator();
+        for (const thisMatch of this.getMatches()) {
+            const otherMatch = other.getMatch(thisMatch.value);
+            if (otherMatch) {
+                this.combineMatches(thisMatch, otherMatch);
+                intersection.setMatch(thisMatch);
             }
         }
+        return intersection;
     }
 
     private combineMatches(match: Match, other: Match) {
@@ -320,6 +326,14 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
             }
         }
         return accumulator;
+    }
+
+    public override intersect(
+        other: SemanticRefAccumulator,
+    ): SemanticRefAccumulator {
+        const intersection = new SemanticRefAccumulator();
+        super.intersect(other, intersection);
+        return intersection;
     }
 
     public toScoredSemanticRefs(): ScoredSemanticRef[] {

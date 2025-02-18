@@ -68,12 +68,6 @@ export function compareTextLocation(x: TextLocation, y: TextLocation): number {
     return (x.charIndex ?? 0) - (y.charIndex ?? 0);
 }
 
-export const MaxTextLocation: TextLocation = {
-    messageIndex: Number.MAX_SAFE_INTEGER,
-    chunkIndex: Number.MAX_SAFE_INTEGER,
-    charIndex: Number.MAX_SAFE_INTEGER,
-};
-
 export function compareTextRange(x: TextRange, y: TextRange) {
     let cmp = compareTextLocation(x.start, y.start);
     if (cmp !== 0) {
@@ -82,10 +76,7 @@ export function compareTextRange(x: TextRange, y: TextRange) {
     if (x.end === undefined && y.end === undefined) {
         return cmp;
     }
-    cmp = compareTextLocation(
-        x.end ?? MaxTextLocation,
-        y.end ?? MaxTextLocation,
-    );
+    cmp = compareTextLocation(x.end ?? x.start, y.end ?? y.start);
     return cmp;
 }
 
@@ -97,13 +88,14 @@ export function isInTextRange(
     // inner end must be < outerEnd (which is exclusive)
     let cmpStart = compareTextLocation(outerRange.start, innerRange.start);
     if (outerRange.end === undefined && innerRange.end === undefined) {
-        return cmpStart <= 0;
+        // Since both ends are undefined, we have an point location, not a range.
+        // Points must be equal
+        return cmpStart == 0;
     }
     let cmpEnd = compareTextLocation(
-        // innerRange.end must be < outerRange end (assume innerRange.end > innerRange.start)
-        // if no innerRange.end, then innerRange.start must be < outerRange.end
+        // innerRange.end must be < outerRange end
         innerRange.end ?? innerRange.start,
-        outerRange.end ?? MaxTextLocation,
+        outerRange.end ?? outerRange.start,
     );
     return cmpStart <= 0 && cmpEnd < 0;
 }
@@ -546,7 +538,7 @@ export class MatchTermsAndExpr extends MatchTermsBooleanExpr {
             if (allMatches === undefined) {
                 allMatches = termMatches;
             } else {
-                allMatches.addIntersect(termMatches);
+                allMatches = allMatches.intersect(termMatches);
             }
         }
         if (allMatches) {
@@ -1069,7 +1061,6 @@ export class TextRangesWithTermMatchesSelector
                 const semanticRef = context.getSemanticRef(match.value);
                 rangesInScope.addRange(semanticRef.range);
             }
-            return rangesInScope;
         }
         return rangesInScope;
     }
