@@ -348,9 +348,12 @@ export function lookupTermFiltered(
 ): ScoredSemanticRef[] | undefined {
     const scoredRefs = semanticRefIndex.lookupTerm(term.text);
     if (scoredRefs && scoredRefs.length > 0) {
-        return scoredRefs.filter((sr) =>
-            filter(semanticRefs[sr.semanticRefIndex], sr),
-        );
+        let filtered = scoredRefs.filter((sr) => {
+            const semanticRef = semanticRefs[sr.semanticRefIndex];
+            const result = filter(semanticRef, sr);
+            return result;
+        });
+        return filtered;
     }
     return undefined;
 }
@@ -362,6 +365,7 @@ export function lookupTerm(
     rangesInScope?: TextRangesInScope,
 ): ScoredSemanticRef[] | undefined {
     if (rangesInScope) {
+        // If rangesInScope has no actual text ranges, then lookups can't possibly match
         return lookupTermFiltered(semanticRefIndex, term, semanticRefs, (sr) =>
             rangesInScope.isRangeInScope(sr.range),
         );
@@ -378,6 +382,7 @@ export function lookupProperty(
     if (typeof propertySearchTerm.propertyName !== "string") {
         throw new Error("Not supported");
     }
+
     // Since we are only matching propertyValue.term
     const valueTerm = propertySearchTerm.propertyValue.term;
     propertySearchTerm = {
