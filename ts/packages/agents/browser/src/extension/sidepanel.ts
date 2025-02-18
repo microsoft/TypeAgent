@@ -4,52 +4,59 @@
 let recording = false;
 let recordedActions: any[] = [];
 
-function requestSchemaUpdate() {
+async function requestSchemaUpdate() {
     const schemaAccordion = document.getElementById(
         "schemaAccordion",
     ) as HTMLDivElement;
-    // const schemaText = document.getElementById("schemaText")!;
-    // schemaText.textContent = "Loading...";
     schemaAccordion.innerHTML = "<p>Loading...</p>";
 
-    chrome.runtime.sendMessage({ type: "refreshSchema" }, (response) => {
-        if (chrome.runtime.lastError) {
-            console.error("Error fetching schema:", chrome.runtime.lastError);
-            return;
-        }
-
-        if (response && response.schema && response.schema.actions) {
-            schemaAccordion.innerHTML = "";
-
-            response.schema.actions.forEach((action: any, index: number) => {
-                const { actionName, parameters } = action;
-                const paramsText = parameters
-                    ? JSON.stringify(parameters, null, 2)
-                    : "{}";
-
-                const accordionItem = document.createElement("div");
-                accordionItem.classList.add("accordion-item");
-
-                accordionItem.innerHTML = `
-                    <h2 class="accordion-header" id="heading${index}">
-                        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" 
-                            data-bs-target="#collapse${index}" aria-expanded="false" aria-controls="collapse${index}">
-                            ${actionName}
-                        </button>
-                    </h2>
-                    <div id="collapse${index}" class="accordion-collapse collapse" aria-labelledby="heading${index}" data-bs-parent="#schemaAccordion">
-                        <div class="accordion-body">
-                            <pre><code class="language-json">${paramsText}</code></pre>
-                        </div>
-                    </div>
-                `;
-
-                schemaAccordion.appendChild(accordionItem);
-            });
-        } else {
-            schemaAccordion.innerHTML = "<p>No schema found.</p>";
-        }
+    const response = await chrome.runtime.sendMessage({
+        type: "refreshSchema",
     });
+    if (chrome.runtime.lastError) {
+        console.error("Error fetching schema:", chrome.runtime.lastError);
+        return;
+    }
+
+    renderSchemaResults(response);
+}
+
+function renderSchemaResults(response: any) {
+    const schemaAccordion = document.getElementById(
+        "schemaAccordion",
+    ) as HTMLDivElement;
+
+    if (response && response.schema && response.schema.actions) {
+        schemaAccordion.innerHTML = "";
+
+        response.schema.actions.forEach((action: any, index: number) => {
+            const { actionName, parameters } = action;
+            const paramsText = parameters
+                ? JSON.stringify(parameters, null, 2)
+                : "{}";
+
+            const accordionItem = document.createElement("div");
+            accordionItem.classList.add("accordion-item");
+
+            accordionItem.innerHTML = `
+                <h2 class="accordion-header" id="heading${index}">
+                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" 
+                        data-bs-target="#collapse${index}" aria-expanded="false" aria-controls="collapse${index}">
+                        ${actionName}
+                    </button>
+                </h2>
+                <div id="collapse${index}" class="accordion-collapse collapse" aria-labelledby="heading${index}" data-bs-parent="#schemaAccordion">
+                    <div class="accordion-body">
+                        <pre><code class="language-json">${paramsText}</code></pre>
+                    </div>
+                </div>
+            `;
+
+            schemaAccordion.appendChild(accordionItem);
+        });
+    } else {
+        schemaAccordion.innerHTML = "<p>No schema found.</p>";
+    }
 }
 
 function copySchemaToClipboard() {
@@ -64,22 +71,21 @@ function copySchemaToClipboard() {
     });
 }
 
-function registerTempSchema() {
-    const schemaText = document.getElementById("schemaText")!;
-    schemaText.textContent = "Loading...";
+async function registerTempSchema() {
+    const schemaAccordion = document.getElementById(
+        "schemaAccordion",
+    ) as HTMLDivElement;
+    schemaAccordion.innerHTML = "<p>Loading...</p>";
 
-    chrome.runtime.sendMessage({ type: "registerTempSchema" }, (response) => {
-        if (chrome.runtime.lastError) {
-            console.error("Error fetching schema:", chrome.runtime.lastError);
-            return;
-        }
-
-        if (response && response.schema) {
-            schemaText.textContent = JSON.stringify(response.schema, null, 2);
-        } else {
-            schemaText.textContent = "Failed to fetch schema.";
-        }
+    const response = await chrome.runtime.sendMessage({
+        type: "registerTempSchema",
     });
+    if (chrome.runtime.lastError) {
+        console.error("Error fetching schema:", chrome.runtime.lastError);
+        return;
+    }
+
+    renderSchemaResults(response);
 }
 
 function toggleActionForm() {
