@@ -192,7 +192,7 @@ export async function selectChunks(
         `[Step 3: Select relevant chunks from ${allChunks.length} chunks]`,
     );
     console_log(`[Step 3a: Pre-select with fuzzy matching]`);
-    const nearestChunkIds = await preSelectChunks(context, input, 1000);
+    const nearestChunkIds = await preSelectChunks(context, input, 500);
     allChunks = allChunks.filter((c) => nearestChunkIds.includes(c.chunkId));
     console_log(`  [Pre-selected ${allChunks.length} chunks]`);
 
@@ -201,17 +201,19 @@ export async function selectChunks(
     const maxConcurrency =
         parseInt(process.env.AZURE_OPENAI_MAX_CONCURRENCY ?? "5") ?? 5;
     const limiter = createLimiter(maxConcurrency);
-    const batchLimit = process.env.OPENAI_API_KEY ? 100000 : 250000; // TODO: tune
+    const batchLimit = process.env.OPENAI_API_KEY ? 100000 : 100000; // TODO: tune
     const batches = makeBatches(allChunks, batchLimit, 60); // TODO: tune
     console_log(
         `  [${batches.length} batches, maxConcurrency ${maxConcurrency}]`,
     );
-    for (const batch of batches) {
+    for (let i = 0; i < batches.length; i++) {
+        const batch = batches[i];
         const p = limiter(() =>
             selectRelevantChunks(
                 context.queryContext!.chunkSelector,
                 batch,
                 input,
+                i,
             ),
         );
         promises.push(p);
@@ -230,7 +232,7 @@ export async function selectChunks(
 
     allChunkDescs.sort((a, b) => b.relevance - a.relevance);
     // console_log(`  [${allChunks.map((c) => (c.relevance)).join(", ")}]`);
-    const maxKeep = process.env.OPENAI_API_KEY ? 100000 : 200000; // TODO: tune
+    const maxKeep = process.env.OPENAI_API_KEY ? 100000 : 100000; // TODO: tune
     const chunks = keepBestChunks(allChunkDescs, allChunks, maxKeep);
     console_log(`  [Keeping ${chunks.length} chunks]`);
     // for (let i = 0; i < chunks.length; i++) {
@@ -247,6 +249,7 @@ async function selectRelevantChunks(
     selector: TypeChatJsonTranslator<SelectorSpecs>,
     chunks: Chunk[],
     input: string,
+    batchIndex: number,
 ): Promise<ChunkDescription[]> {
     // TODO: Prompt engineering
     const prompt = `\
@@ -264,7 +267,9 @@ async function selectRelevantChunks(
     // console_log(prompt);
     const result = await retryOn429(() => selector.translate(prompt));
     if (!result) {
-        console_log(`  [Failed to select chunks for ${chunks.length} chunks]`);
+        console_log(
+            `  [Failed to select chunks for batch ${batchIndex + 1} with ${chunks.length} chunks]`,
+        );
         return [];
     } else {
         return result.chunkDescs;

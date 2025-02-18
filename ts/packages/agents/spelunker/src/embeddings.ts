@@ -170,7 +170,7 @@ export async function preSelectChunks(
     const chunkIds = similarities.map((s) => s.chunkId);
     const tc1 = new Date().getTime();
     console_log(
-        `  [Found ${chunkIds.length} nearest neighbors in ${((tc1 - tc0 - ta1) / 1000).toFixed(3)} seconds]`,
+        `  [Found ${chunkIds.length} nearest neighbors in ${((tc1 - tc0) / 1000).toFixed(3)} seconds]`,
     );
     return chunkIds;
 }
