@@ -25,7 +25,8 @@ import {
     getCommandInterface,
 } from "@typeagent/agent-sdk/helpers/command";
 
-import { searchCode, QueryContext } from "./searchCode.js";
+import { searchCode } from "./searchCode.js";
+import { QueryContext } from "./queryContext.js";
 import { SpelunkerAction } from "./spelunkerSchema.js";
 
 class RequestCommandHandler implements CommandHandler {

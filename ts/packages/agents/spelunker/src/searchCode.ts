@@ -3,125 +3,36 @@
 
 import * as fs from "fs";
 import * as path from "path";
-import { createRequire } from "module";
 
-import Database, * as sqlite from "better-sqlite3";
+import * as sqlite from "better-sqlite3";
+import { Result, TypeChatJsonTranslator } from "typechat";
 
-import { createJsonTranslator, Result, TypeChatJsonTranslator } from "typechat";
-import { createTypeScriptJsonValidator } from "typechat/ts";
-
-import { ChatModel, openai } from "aiclient";
 import { createLimiter } from "common-utils";
-
+import { ActionResult, Entity } from "@typeagent/agent-sdk";
 import {
-    ActionResult,
-    ActionResultSuccess,
-    Entity,
-} from "@typeagent/agent-sdk";
-import { createActionResultFromError } from "@typeagent/agent-sdk/helpers/action";
-import { loadSchema } from "typeagent";
+    createActionResultFromMarkdownDisplay,
+    createActionResultFromError,
+} from "@typeagent/agent-sdk/helpers/action";
 
-import {
-    Blob,
-    Chunk,
-    ChunkedFile,
-    ChunkerErrorItem,
-    ChunkId,
-} from "./chunkSchema.js";
-import { OracleSpecs } from "./oracleSchema.js";
+import { keepBestChunks, makeBatches } from "./batching.js";
+import { Blob, Chunk, ChunkedFile, ChunkerErrorItem } from "./chunkSchema.js";
+import { createDatabase, purgeFile } from "./databaseUtils.js";
+import { loadEmbeddings, preSelectChunks } from "./embeddings.js";
+import { console_log, resetEpoch } from "./logging.js";
 import { chunkifyPythonFiles } from "./pythonChunker.js";
+import { createQueryContext } from "./queryContext.js";
+import { retryOn429 } from "./retryLogic.js";
 import { ChunkDescription, SelectorSpecs } from "./selectorSchema.js";
 import { SpelunkerContext } from "./spelunkerActionHandler.js";
-import { SummarizerSpecs } from "./summarizerSchema.js";
+import { prepareChunks } from "./summarizing.js";
 import { chunkifyTypeScriptFiles } from "./typescriptChunker.js";
-
-let epoch: number = 0;
-
-function console_log(...rest: any[]): void {
-    if (!epoch) {
-        epoch = Date.now();
-        console.log(""); // Start new epoch with a blank line
-    }
-    const t = Date.now();
-    console.log(((t - epoch) / 1000).toFixed(3).padStart(6), ...rest);
-}
-
-export interface QueryContext {
-    chatModel: ChatModel;
-    oracle: TypeChatJsonTranslator<OracleSpecs>;
-    miniModel: ChatModel;
-    chunkSelector: TypeChatJsonTranslator<SelectorSpecs>;
-    chunkSummarizer: TypeChatJsonTranslator<SummarizerSpecs>;
-    databaseLocation: string;
-    database: sqlite.Database | undefined;
-}
-
-function captureTokenStats(req: any, response: any): void {
-    console_log(
-        `    [Tokens used: prompt=${response.usage.prompt_tokens}, ` +
-            `completion=${response.usage.completion_tokens}]`,
-    );
-}
-
-function createQueryContext(): QueryContext {
-    const chatModel = openai.createChatModelDefault("spelunkerChat");
-    chatModel.completionCallback = captureTokenStats;
-
-    const miniModel = openai.createChatModel(
-        undefined, // "GPT_4_O_MINI" is slower than default model?!
-        undefined,
-        undefined,
-        ["spelunkerMini"],
-    );
-    miniModel.completionCallback = captureTokenStats;
-
-    const oracle = createTranslator<OracleSpecs>(
-        chatModel,
-        "oracleSchema.ts",
-        "OracleSpecs",
-    );
-    const chunkSelector = createTranslator<SelectorSpecs>(
-        miniModel,
-        "selectorSchema.ts",
-        "SelectorSpecs",
-    );
-    const chunkSummarizer = createTranslator<SummarizerSpecs>(
-        miniModel,
-        "summarizerSchema.ts",
-        "SummarizerSpecs",
-    );
-
-    const databaseFolder = path.join(
-        process.env.HOME ?? "/",
-        ".typeagent",
-        "agents",
-        "spelunker",
-    );
-    const mkdirOptions: fs.MakeDirectoryOptions = {
-        recursive: true,
-        mode: 0o700,
-    };
-    fs.mkdirSync(databaseFolder, mkdirOptions);
-
-    const databaseLocation = path.join(databaseFolder, "codeSearchDatabase.db");
-    const database = undefined;
-    return {
-        chatModel,
-        oracle,
-        miniModel,
-        chunkSelector,
-        chunkSummarizer,
-        databaseLocation,
-        database,
-    };
-}
 
 // Answer a question; called from request and from searchCode action
 export async function searchCode(
     context: SpelunkerContext,
     input: string,
 ): Promise<ActionResult> {
-    epoch = 0; // Reset logging clock
+    resetEpoch();
     console_log(`[searchCode question='${input}']`);
 
     // 0. Check if the focus is set.
@@ -131,10 +42,15 @@ export async function searchCode(
 
     // 1. Create the database, chunkify all files in the focus folders, and store the chunks.
     //    Or use what's in the database if it looks up-to-date.
-    const db = await loadDatabaseAndChunks(context);
+    if (!context.queryContext) {
+        context.queryContext = createQueryContext();
+    }
+    await createDatabase(context);
+    await loadDatabase(context);
+    const db = context.queryContext!.database!;
 
     // 2. Load all chunks from the database.
-    const allChunks = await loadAllChunksFromDatabase(db);
+    const allChunks = await readAllChunksFromDatabase(db);
 
     // 3. Ask a fast LLM for the most relevant chunk Ids, rank them, and keep the best ones.
     const chunks = await selectChunks(context, allChunks, input);
@@ -168,14 +84,7 @@ export async function searchCode(
     );
 }
 
-async function loadDatabaseAndChunks(
-    context: SpelunkerContext,
-): Promise<sqlite.Database> {
-    console_log(`[Step 1: Load database]`);
-    return await loadDatabase(context);
-}
-
-async function loadAllChunksFromDatabase(
+async function readAllChunksFromDatabase(
     db: sqlite.Database,
 ): Promise<Chunk[]> {
     console_log(`[Step 2: Load chunks from database]`);
@@ -282,21 +191,29 @@ export async function selectChunks(
     console_log(
         `[Step 3: Select relevant chunks from ${allChunks.length} chunks]`,
     );
+    console_log(`[Step 3a: Pre-select with fuzzy matching]`);
+    const nearestChunkIds = await preSelectChunks(context, input, 500);
+    allChunks = allChunks.filter((c) => nearestChunkIds.includes(c.chunkId));
+    console_log(`  [Pre-selected ${allChunks.length} chunks]`);
+
+    console_log(`[Step 3b: Narrow those down with LLM]`);
     const promises: Promise<ChunkDescription[]>[] = [];
     const maxConcurrency =
         parseInt(process.env.AZURE_OPENAI_MAX_CONCURRENCY ?? "5") ?? 5;
     const limiter = createLimiter(maxConcurrency);
-    const batchLimit = process.env.OPENAI_API_KEY ? 100000 : 250000; // TODO: tune
-    const batches = makeBatches(allChunks, batchLimit);
+    const batchLimit = process.env.OPENAI_API_KEY ? 100000 : 100000; // TODO: tune
+    const batches = makeBatches(allChunks, batchLimit, 60); // TODO: tune
     console_log(
         `  [${batches.length} batches, maxConcurrency ${maxConcurrency}]`,
     );
-    for (const batch of batches) {
+    for (let i = 0; i < batches.length; i++) {
+        const batch = batches[i];
         const p = limiter(() =>
             selectRelevantChunks(
                 context.queryContext!.chunkSelector,
                 batch,
                 input,
+                i,
             ),
         );
         promises.push(p);
@@ -315,7 +232,7 @@ export async function selectChunks(
 
     allChunkDescs.sort((a, b) => b.relevance - a.relevance);
     // console_log(`  [${allChunks.map((c) => (c.relevance)).join(", ")}]`);
-    const maxKeep = process.env.OPENAI_API_KEY ? 100000 : 200000; // TODO: tune
+    const maxKeep = process.env.OPENAI_API_KEY ? 100000 : 100000; // TODO: tune
     const chunks = keepBestChunks(allChunkDescs, allChunks, maxKeep);
     console_log(`  [Keeping ${chunks.length} chunks]`);
     // for (let i = 0; i < chunks.length; i++) {
@@ -332,6 +249,7 @@ async function selectRelevantChunks(
     selector: TypeChatJsonTranslator<SelectorSpecs>,
     chunks: Chunk[],
     input: string,
+    batchIndex: number,
 ): Promise<ChunkDescription[]> {
     // TODO: Prompt engineering
     const prompt = `\
@@ -347,91 +265,18 @@ async function selectRelevantChunks(
     ${prepareChunks(chunks)}
     `;
     // console_log(prompt);
-    const result = await retryTranslateOn429(() => selector.translate(prompt));
+    const result = await retryOn429(() => selector.translate(prompt));
     if (!result) {
-        console_log(`  [Failed to select chunks for ${chunks.length} chunks]`);
+        console_log(
+            `  [Failed to select chunks for batch ${batchIndex + 1} with ${chunks.length} chunks]`,
+        );
         return [];
     } else {
         return result.chunkDescs;
     }
 }
 
-function prepareChunks(chunks: Chunk[]): string {
-    chunks.sort(
-        // Sort by file name and chunk ID (should order by line number)
-        (a, b) => {
-            let cmp = a.fileName.localeCompare(b.fileName);
-            if (!cmp) {
-                cmp = a.lineNo - b.lineNo;
-            }
-            return cmp;
-        },
-    );
-    const output: string[] = [];
-    function put(line: string): void {
-        // console_log(line.trimEnd());
-        output.push(line);
-    }
-    let lastFn = "";
-    let lineNo = 0;
-    for (const chunk of chunks) {
-        if (chunk.fileName !== lastFn) {
-            lastFn = chunk.fileName;
-            lineNo = 0;
-            put("\n");
-            put(`** file=${chunk.fileName}\n`);
-        }
-        put(
-            `* chunkId=${chunk.chunkId} kind=${chunk.treeName} name=${chunk.codeName}\n`,
-        );
-        for (const blob of chunk.blobs) {
-            lineNo = blob.start;
-            for (const line of blob.lines) {
-                lineNo += 1;
-                put(`${lineNo} ${line}`);
-            }
-        }
-    }
-    return output.join("");
-}
-
-// TODO: Make the values two elements, comment start and comment end
-// (and then caller should ensure comment end doesn't occur in the comment text).
-const languageCommentMap: { [key: string]: string } = {
-    python: "#",
-    typescript: "//",
-};
-
-// TODO: Remove export once we're using summaries again.
-export function prepareSummaries(db: sqlite.Database): string {
-    const selectAllSummaries = db.prepare(`SELECT * FROM Summaries`);
-    const summaryRows: any[] = selectAllSummaries.all();
-    if (summaryRows.length > 100) {
-        console_log(`  [Over 100 summary rows, skipping summaries in prompt]`);
-        return "";
-    }
-    const lines: string[] = [];
-    for (const summaryRow of summaryRows) {
-        const comment = languageCommentMap[summaryRow.language] ?? "#";
-        lines.push("");
-        lines.push(`${comment} ${summaryRow.summary}`);
-        lines.push(summaryRow.signature);
-    }
-    return lines.join("\n");
-}
-
-function createTranslator<T extends object>(
-    model: ChatModel,
-    schemaFile: string,
-    typeName: string,
-): TypeChatJsonTranslator<T> {
-    const schema = loadSchema([schemaFile], import.meta.url);
-    const validator = createTypeScriptJsonValidator<T>(schema, typeName);
-    const translator = createJsonTranslator<T>(model, validator);
-    return translator;
-}
-
-interface FileMtimeSize {
+export interface FileMtimeSize {
     file: string;
     mtime: number;
     size: number;
@@ -477,46 +322,15 @@ function getAllSourceFiles(dir: string): FileMtimeSize[] {
     return results;
 }
 
-// Should be in actionHelpers.ts
-function createActionResultFromMarkdownDisplay(
-    literalText: string,
-    entities: Entity[] = [],
-    resultEntity?: Entity,
-): ActionResultSuccess {
-    return {
-        literalText,
-        entities,
-        resultEntity,
-        displayContent: { type: "markdown", content: literalText },
-    };
-}
-
-async function loadDatabase(
-    context: SpelunkerContext,
-): Promise<sqlite.Database> {
+// TODO: Break into multiple functions.
+// Notably the part that compares files in the database and files on disk.
+async function loadDatabase(context: SpelunkerContext): Promise<void> {
+    console_log(`[Step 1: Load database]`);
     if (!context.queryContext) {
         context.queryContext = createQueryContext();
     }
-    const db = createDatabase(context);
+    const db = context.queryContext!.database!;
 
-    const prepDeleteSummaries = db.prepare(`
-        DELETE FROM Summaries WHERE chunkId IN (
-            SELECT chunkId
-            FROM chunks
-            WHERE fileName = ?
-        )
-    `);
-    const prepDeleteBlobs = db.prepare(`
-        DELETE FROM Blobs WHERE chunkId IN (
-            SELECT chunkId
-            FROM chunks
-            WHERE filename = ?
-        )
-    `);
-    const prepDeleteChunks = db.prepare(
-        `DELETE FROM Chunks WHERE fileName = ?`,
-    );
-    const prepDeleteFiles = db.prepare(`DELETE FROM files WHERE fileName = ?`);
     const prepInsertFiles = db.prepare(
         `INSERT OR REPLACE INTO Files (fileName, mtime, size) VALUES (?, ?, ?)`,
     );
@@ -549,6 +363,7 @@ async function loadDatabase(
             size: fileRow.size,
         });
     }
+    const filesToInsert: FileMtimeSize[] = [];
     for (const file of files) {
         const dbStat = filesInDb.get(file.file);
         if (
@@ -559,7 +374,7 @@ async function loadDatabase(
             // console_log(`  [Need to update ${file} (mtime/size mismatch)]`);
             filesToDo.push(file.file);
             // TODO: Make this insert part of the transaction for this file
-            prepInsertFiles.run(file.file, file.mtime, file.size);
+            filesToInsert.push(file);
             filesInDb.set(file.file, {
                 file: file.file,
                 mtime: file.mtime,
@@ -575,12 +390,7 @@ async function loadDatabase(
         console_log(`  [Deleting ${filesToDelete.length} files from database]`);
         for (const file of filesToDelete) {
             // console_log(`  [Deleting ${file} from database]`);
-            db.exec(`BEGIN TRANSACTION`);
-            prepDeleteSummaries.run(file);
-            prepDeleteBlobs.run(file);
-            prepDeleteChunks.run(file);
-            prepDeleteFiles.run(file);
-            db.exec(`COMMIT`);
+            purgeFile(db, file);
         }
     }
 
@@ -588,7 +398,7 @@ async function loadDatabase(
         console_log(
             `  [No files to update out of ${files.length}, yay cache!]`,
         );
-        return db;
+        return;
     }
 
     // 1b. Chunkify all new files (without LLM help).
@@ -620,10 +430,16 @@ async function loadDatabase(
     );
     const allChunks: Chunk[] = [];
     for (const chunkedFile of allChunkedFiles) {
+        purgeFile(db, chunkedFile.fileName);
         db.exec(`BEGIN TRANSACTION`);
-        prepDeleteSummaries.run(chunkedFile.fileName);
-        prepDeleteBlobs.run(chunkedFile.fileName);
-        prepDeleteChunks.run(chunkedFile.fileName);
+        const file = filesToInsert.find((f) => f.file === chunkedFile.fileName);
+        if (!file) {
+            console_log(
+                `  [*** File ${chunkedFile.fileName} is missing from filesToInsert]`,
+            );
+            continue;
+        }
+        prepInsertFiles.run(file.file, file.mtime, file.size);
         for (const chunk of chunkedFile.chunks) {
             allChunks.push(chunk);
             prepInsertChunks.run(
@@ -648,293 +464,14 @@ async function loadDatabase(
     console_log(
         `  [Chunked ${allChunkedFiles.length} files into ${allChunks.length} chunks]`,
     );
-
-    // 1c. Use a fast model to summarize all chunks.
-    if (allChunks.length) {
-        await summarizeChunks(context, allChunks);
-    }
-
-    return db;
-}
-
-const databaseSchema = `
-CREATE TABLE IF NOT EXISTS Files (
-    fileName TEXT PRIMARY KEY,
-    mtime FLOAT NOT NULL,
-    size INTEGER NOT NULL
-);
-CREATE TABLE IF NOT EXISTS Chunks (
-    chunkId TEXT PRIMARY KEY,
-    treeName TEXT NOT NULL,
-    codeName TEXT NOT NULL,
-    parentId TEXT KEY REFERENCES Chunks(chunkId), -- May be null
-    fileName TEXT KEY REFERENCES files(fileName) NOT NULL,
-    lineNo INTEGER NOT NULL -- 1-based
-);
-CREATE TABLE IF NOT EXISTS Blobs (
-    chunkId TEXT KEY REFERENCES Chunks(chunkId) NOT NULL,
-    start INTEGER NOT NULL, -- 0-based
-    lines TEXT NOT NULL,
-    breadcrumb TEXT -- Chunk ID or empty string or NULL
-);
-CREATE TABLE IF NOT EXISTS Summaries (
-    chunkId TEXT PRIMARY KEY REFERENCES Chunks(chunkId),
-    language TEXT, -- "python", "typescript", etc.
-    summary TEXT,
-    signature TEXT
-)
-`;
-
-function getDbOptions() {
-    if (process?.versions?.electron !== undefined) {
-        return undefined;
-    }
-    const r = createRequire(import.meta.url);
-    const betterSqlitePath = r.resolve("better-sqlite3/package.json");
-    const nativeBinding = path.join(
-        betterSqlitePath,
-        "../build/Release/better_sqlite3.n.node",
-    );
-    return { nativeBinding };
-}
-
-function createDatabase(context: SpelunkerContext): sqlite.Database {
-    if (!context.queryContext) {
-        context.queryContext = createQueryContext();
-    }
-    const loc = context.queryContext.databaseLocation;
-    const db0 = context.queryContext.database;
-    if (db0) {
-        console_log(`  [Using database at ${loc}]`);
-        return db0;
-    }
-    if (fs.existsSync(loc)) {
-        console_log(`  [Opening database at ${loc}]`);
-    } else {
-        console_log(`  [Creating database at ${loc}]`);
-    }
-    const db = new Database(loc, getDbOptions());
-    // Write-Ahead Logging, improving concurrency and performance
-    db.pragma("journal_mode = WAL");
-    // Fix permissions to be read/write only by the owner
-    fs.chmodSync(context.queryContext.databaseLocation, 0o600);
-    // Create all the tables we'll use
-    db.exec(databaseSchema);
-    context.queryContext.database = db;
-    return db;
-}
-
-async function summarizeChunks(
-    context: SpelunkerContext,
-    chunks: Chunk[],
-): Promise<void> {
-    console_log(`[Step 1c: Summarizing ${chunks.length} chunks]`);
-    // NOTE: We cannot stuff the buffer, because the completion size
-    // is limited to 4096 tokens, and we expect a certain number of
-    // tokens per chunk. Experimentally, 40 chunks per job works great.
-    const maxConcurrency =
-        parseInt(process.env.AZURE_OPENAI_MAX_CONCURRENCY ?? "0") ?? 5;
-    let chunksPerJob = 40;
-    let numJobs = Math.ceil(chunks.length / chunksPerJob);
-    console_log(
-        `  [${chunksPerJob} chunks/job, ${numJobs} jobs, maxConcurrency ${maxConcurrency}]`,
-    );
-    const limiter = createLimiter(maxConcurrency);
-    const promises: Promise<void>[] = [];
-    for (let i = 0; i < chunks.length; i += chunksPerJob) {
-        const slice = chunks.slice(i, i + chunksPerJob);
-        promises.push(limiter(() => summarizeChunkSlice(context, slice)));
-    }
-    await Promise.all(promises);
-}
-
-async function summarizeChunkSlice(
-    context: SpelunkerContext,
-    chunks: Chunk[],
-): Promise<void> {
-    const summarizer = context.queryContext!.chunkSummarizer;
-    // TODO: Prompt engineering
-    const prompt = `\
-    Please summarize each of the given chunks.
-    A summary should be a one-line description of the chunk.
-    Also include the signature of the chunk.
-
-    Chunks:
-    ${prepareChunks(chunks)}
-    `;
-    // console_log(prompt);
-    const result = await retryTranslateOn429(() =>
-        summarizer.translate(prompt),
-    );
-    if (!result) {
-        console_log(
-            `  [Failed to summarize chunks for ${chunks.length} chunks]`,
-        );
+    if (!allChunks.length) {
+        console_log(`  [No chunks to load]`);
         return;
     }
 
-    const summarizeSpecs = result;
-    // console_log(`  [Received ${result.summaries.length} summaries]`);
-    // Enter them into the database
-    const db = context.queryContext!.database!;
-    const prepInsertSummary = db.prepare(
-        `INSERT OR REPLACE INTO Summaries (chunkId, language, summary, signature) VALUES (?, ?, ?, ?)`,
-    );
-    const prepGetBlobWithBreadcrumb = db.prepare(
-        `SELECT lines, breadcrumb FROM Blobs WHERE breadcrumb = ?`,
-    );
-    const prepUpdateBlob = db.prepare(
-        "UPDATE Blobs SET lines = ? WHERE breadcrumb = ?",
-    );
-    let errors = 0;
-    for (const summary of summarizeSpecs.summaries) {
-        // console_log(summary);
-        try {
-            prepInsertSummary.run(
-                summary.chunkId,
-                summary.language,
-                summary.summary,
-                summary.signature,
-            );
-        } catch (error) {
-            console_log(
-                `*** Db error for insert summary ${JSON.stringify(summary)}: ${error}`,
-            );
-            errors += 1;
-        }
-        try {
-            type BlobRowType = { lines: string; breadcrumb: ChunkId };
-            const blobRow: BlobRowType = prepGetBlobWithBreadcrumb.get(
-                summary.chunkId,
-            ) as any;
-            if (blobRow) {
-                let blobLines: string = blobRow.lines;
-                // Assume it doesn't start with a blank line /(^\s*\r?\n)*/
-                const indent = blobLines?.match(/^(\s*)\S/)?.[1] ?? ""; // Whitespace followed by non-whitespace
-                blobLines =
-                    `${indent}${languageCommentMap[summary.language ?? "python"]} ${summary.summary}\n` +
-                    `${indent}${summary.signature} ...\n`;
-                // console_log(
-                //     `  [Replacing\n'''\n${blobRow.lines}'''\nwith\n'''\n${blobLines}\n''']`,
-                // );
-                const res = prepUpdateBlob.run(blobLines, summary.chunkId);
-                if (res.changes !== 1) {
-                    console_log(
-                        `  [*** Failed to update blob lines for ${summary.chunkId}]`,
-                    );
-                }
-            }
-        } catch (error) {
-            console_log(
-                `*** Db error for update blob ${JSON.stringify(summary)}: ${error}`,
-            );
-            errors += 1;
-        }
-    }
-    if (errors) console_log(`  [${errors} errors]`);
-}
+    // 1c. Store all chunk embeddings.
+    await loadEmbeddings(context, allChunks);
 
-async function retryTranslateOn429<T>(
-    translate: () => Promise<Result<T>>,
-    retries: number = 3,
-    defaultDelay: number = 5000,
-): Promise<T | undefined> {
-    let wrappedResult: Result<T>;
-    do {
-        retries--;
-        wrappedResult = await translate();
-        // console_log(wrappedResult);
-        if (!wrappedResult.success) {
-            if (
-                retries > 0 &&
-                wrappedResult.message.includes("fetch error: 429:")
-            ) {
-                let delay = defaultDelay;
-                const azureTime = wrappedResult.message.match(
-                    /after (\d+) milliseconds/,
-                );
-                const openaiTime = wrappedResult.message.match(
-                    /Please try again in (\d+\.\d*|\.\d+|\d+m)s./,
-                );
-                if (azureTime || openaiTime) {
-                    if (azureTime) {
-                        delay = parseInt(azureTime[1]);
-                    } else if (openaiTime) {
-                        delay = parseFloat(openaiTime[1]);
-                        if (!openaiTime[1].endsWith("m")) {
-                            delay *= 1000;
-                        }
-                    }
-                } else {
-                    console_log(
-                        `  [Couldn't find msec in '${wrappedResult.message}'`,
-                    );
-                }
-                console_log(`    [Retry on 429 error: sleep ${delay} ms]`);
-                await new Promise((resolve) => setTimeout(resolve, delay));
-                continue;
-            }
-            console_log(`  [${wrappedResult.message}]`);
-            return undefined;
-        }
-    } while (!wrappedResult.success);
-    return wrappedResult.data;
-}
-
-function keepBestChunks(
-    chunkDescs: ChunkDescription[], // Sorted by descending relevance
-    allChunks: Chunk[],
-    batchSize: number, // In characters
-): Chunk[] {
-    const chunks: Chunk[] = [];
-    let size = 0;
-    for (const chunkDesc of chunkDescs) {
-        const chunk = allChunks.find((c) => c.chunkId === chunkDesc.chunkId);
-        if (!chunk) continue;
-        const chunkSize = getChunkSize(chunk);
-        if (size + chunkSize > batchSize && chunks.length) {
-            break;
-        }
-        chunks.push(chunk);
-        size += chunkSize;
-    }
-    return chunks;
-}
-
-function makeBatches(
-    chunks: Chunk[],
-    batchSize: number, // In characters
-): Chunk[][] {
-    const batches: Chunk[][] = [];
-    let batch: Chunk[] = [];
-    let size = 0;
-    function flush(): void {
-        batches.push(batch);
-        console_log(
-            `    [Batch ${batches.length} has ${batch.length} chunks and ${size} bytes]`,
-        );
-        batch = [];
-        size = 0;
-    }
-    for (const chunk of chunks) {
-        const chunkSize = getChunkSize(chunk);
-        if (size + chunkSize > batchSize && batch.length) {
-            flush();
-        }
-        batch.push(chunk);
-        size += chunkSize;
-    }
-    if (batch.length) {
-        flush();
-    }
-    return batches;
-}
-
-function getChunkSize(chunk: Chunk): number {
-    // This is all an approximation
-    let size = chunk.fileName.length + 50;
-    for (const blob of chunk.blobs) {
-        size += blob.lines.join("").length + 4 * blob.lines.length;
-    }
-    return size;
+    // 1d. Use a fast model to summarize all chunks.
+    // await summarizeChunks(context, allChunks);
 }
