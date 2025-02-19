@@ -116,7 +116,7 @@ CREATE TABLE Hashes (
 );
 CREATE TABLE Questions (
     questionId INTEGER PRIMARY KEY,
-    question TEXT NOT NULL
+    question TEXT NOT NULL UNIQUE
 );
 CREATE TABLE ManualScores (
     questionId INTEGER REFERENCES Questions(id),
@@ -141,10 +141,11 @@ def fill_in_hashes(dst_cur):
     count = 0
     # Fetch all chunks
     selection = dst_cur.execute("SELECT chunkId, codeName, parentId, fileName FROM Chunks")
+    # Use fetchall() because we reuse the cursor below
     for chunkid, codename, parentid, filename in selection.fetchall():
         if filename.startswith(os.getenv("HOME") + os.sep):
             filename = "~" + filename[len(os.getenv("HOME")) : ]
-        input = [filename]  # Start with the cleaned-up filename
+        input_lines = [filename]  # Start with the cleaned-up filename
 
         # Add the path from the root node
         path = [codename]
@@ -155,17 +156,20 @@ def fill_in_hashes(dst_cur):
             ).fetchone()
             path.append(cn)
         path.reverse()  # E.g. "module class method"
-        input.append(" ".join(path))
+        input_lines.append(" ".join(path))
 
         # Add the lines of all this chunk's blobs
-        for lines in dst_cur.execute(
+        for (lines,) in dst_cur.execute(
             "SELECT lines FROM Blobs WHERE chunkId = ? ORDER BY start", (chunkid,)
         ):
-            input.append(lines[0].rstrip())
+            input_lines.append(lines)
 
-        chunkhash = hashlib.md5("\n".join(input).encode()).hexdigest()
+        data = "\n".join(input_lines).encode()
+        chunkhash = hashlib.md5(data).hexdigest()
+        # input(f"{data.decode()}\n{chunkhash} --> ")
 
         # Update the table
+        # print(f"{chunkhash} {chunkid}")
         dst_cur.execute(
             "INSERT INTO Hashes (chunkHash, chunkId) VALUES (?, ?)",
             (chunkhash, chunkid),
