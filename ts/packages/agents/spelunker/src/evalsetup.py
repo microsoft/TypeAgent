@@ -1,9 +1,30 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
 """Script to set up an evaluation database for spelunker.
 
 Usage: evalsetup.py SOURCE EVALDIR
 
 By default SOURCE is ~/.typeagent/agents/spelunker/codeSearchDatabase.db,
-and EVALDIR ./test-data/evals/eval-1/.
+and EVALDIR ./test-data/evals/eval-1.
+
+EVALDIR is always a new directory; if the given directory already exists,
+we create a new directory name by adding -2, -3, etc.
+
+This script does the following:
+- Copy tables Files, Chunks, Blobs from source to destination
+- Create new tables EvalInfo, Hashes, Questions, ManualScores
+- Fill in Hashes table with chunk hashes
+
+Hashes are computed as follows:
+- The first line is the filename, with leading $HOME/ replaced by ~/
+- The second line is the path from the root node, e.g. "module class method"
+- The remaining lines are those of the Chunk's Blobs, in order
+
+These lines are joined with "\n", encoded to bytes, fed to md5(),
+and then hex-encoded. This design allows re-indexing the sample
+codebase, which assigns all new chunk IDs. (Although I don't have
+a tool to do this currently.)
 """
 
 import argparse
