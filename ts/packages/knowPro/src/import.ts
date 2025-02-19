@@ -384,20 +384,25 @@ export class Image implements IMessage<ImageMeta> {
 
 // metadata for images
 export class ImageMeta implements IKnowledgeSource {
-    constructor(public fileName: string, public image: image.Image) {}
+    constructor(public fileName: string, public img: image.Image) {}
 
     getKnowledge() {
         const imageEntity: conversation.ConcreteEntity = { 
-            name: this.image.fileName, 
+            name: `${path.basename(this.img.fileName)} - ${this.img.title}`, 
             type: ["file", "image"], 
-            facets: [ { name: "File Name", value: this.image.fileName } ] };
+            facets: [ 
+                { name: "File Name", value: this.img.fileName },
+                //{ name: "Title", value: this.image.title },
+                //{ name: "Caption", value: this.image.title },
+            ] 
+        };
     
         // EXIF data are facets of this image
-        for(let i = 0; i < this.image?.exifData.length; i++) {
-            if (this.image?.exifData[i] !== undefined && this.image?.exifData[i][1] !== undefined && this.image?.exifData[i][1].length > 0) {
+        for(let i = 0; i < this.img?.exifData.length; i++) {
+            if (this.img?.exifData[i] !== undefined && this.img?.exifData[i][1] !== undefined && this.img?.exifData[i][1] !== null && this.img?.exifData[i][1].length > 0) {
                 imageEntity.facets!.push({
-                    name: this.image?.exifData[i][0],
-                    value: this.image?.exifData[i][1]
+                    name: this.img?.exifData[i][0],
+                    value: this.img?.exifData[i][1]
                 });
             }
         }
@@ -410,22 +415,22 @@ export class ImageMeta implements IKnowledgeSource {
         entities.push(imageEntity);
 
         // if we have POI those are also entities
-        if (this.image.nearbyPOI) {
-            for(let i = 0; i < this.image.nearbyPOI.length; i++) {
+        if (this.img.nearbyPOI) {
+            for(let i = 0; i < this.img.nearbyPOI.length; i++) {
                 const poiEntity: conversation.ConcreteEntity = {
-                    name: this.image.nearbyPOI[i].name!,
-                    type: [...this.image.nearbyPOI[i].categories!, "PointOfInterest"],
+                    name: this.img.nearbyPOI[i].name!,
+                    type: [...this.img.nearbyPOI[i].categories!, "PointOfInterest"],
                     facets: []
                 }
 
-                if (this.image.nearbyPOI[i].freeFormAddress) {
-                    poiEntity.facets?.push({ name: "address", value: this.image.nearbyPOI[i].freeFormAddress!});
+                if (this.img.nearbyPOI[i].freeFormAddress) {
+                    poiEntity.facets?.push({ name: "address", value: this.img.nearbyPOI[i].freeFormAddress!});
                 }
 
-                if (this.image.nearbyPOI[i].position != undefined && this.image.nearbyPOI[i].position?.latitude != undefined && this.image.nearbyPOI[i].position?.longitude != undefined) {
-                    poiEntity.facets?.push({ name: "position", value: JSON.stringify(this.image.nearbyPOI[i].position)});
-                    poiEntity.facets?.push({ name: "longitude", value: this.image.nearbyPOI[i].position!.longitude!.toString()});
-                    poiEntity.facets?.push({ name: "latitude", value: this.image.nearbyPOI[i].position!.latitude!.toString()});
+                if (this.img.nearbyPOI[i].position != undefined && this.img.nearbyPOI[i].position?.latitude != undefined && this.img.nearbyPOI[i].position?.longitude != undefined) {
+                    poiEntity.facets?.push({ name: "position", value: JSON.stringify(this.img.nearbyPOI[i].position)});
+                    poiEntity.facets?.push({ name: "longitude", value: this.img.nearbyPOI[i].position!.longitude!.toString()});
+                    poiEntity.facets?.push({ name: "latitude", value: this.img.nearbyPOI[i].position!.latitude!.toString()});
                 }
 
                 entities.push(poiEntity);
@@ -433,22 +438,22 @@ export class ImageMeta implements IKnowledgeSource {
                 actions.push({
                     verbs: [ "near" ],
                     verbTense: "present",
-                    subjectEntityName: this.image.fileName,
-                    objectEntityName: this.image.nearbyPOI[i].name!,
+                    subjectEntityName: this.img.fileName,
+                    objectEntityName: this.img.nearbyPOI[i].name!,
                     indirectObjectEntityName: "ME" // TODO: image taker name
                 });
             }
         }
         
         // reverse lookup addresses are also entities
-        if (this.image.reverseGeocode) {
-            for(let i = 0; i < this.image.reverseGeocode.length; i++) {
+        if (this.img.reverseGeocode) {
+            for(let i = 0; i < this.img.reverseGeocode.length; i++) {
 
                 // only put in high confidence items or the first one
-                if((i == 0 || this.image.reverseGeocode[i].confidence == "High") && this.image.reverseGeocode[i].address !== undefined) {
-                    const addrOutput: AddressOutput = this.image.reverseGeocode[i].address!;
+                if((i == 0 || this.img.reverseGeocode[i].confidence == "High") && this.img.reverseGeocode[i].address !== undefined) {
+                    const addrOutput: AddressOutput = this.img.reverseGeocode[i].address!;
                     const addrEntity: conversation.ConcreteEntity = {
-                        name: this.image.reverseGeocode[i].address!.formattedAddress ?? "",
+                        name: this.img.reverseGeocode[i].address!.formattedAddress ?? "",
                         type: [ "address" ],
                         facets: []
                     }
@@ -746,7 +751,7 @@ async function indexImage(fileName: string, chatModel: ChatModel): Promise<Image
 
     const img: image.Image | undefined = await image.loadImage(fileName, chatModel);
 
-    if (image !== undefined) {
+    if (img !== undefined) {
         return new Image([img!.title, img!.caption], new ImageMeta(fileName, img!));
     }
 
