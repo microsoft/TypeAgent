@@ -34,6 +34,7 @@ import path from "node:path";
 import { isImageFileType } from "common-utils";
 import { ChatModel } from "aiclient";
 import { AddressOutput } from "@azure-rest/maps-search";
+import { ConcreteEntity } from "../../knowledgeProcessor/dist/conversation/knowledgeSchema.js";
 
 // metadata for podcast messages
 export class PodcastMessageMeta implements IKnowledgeSource {
@@ -471,10 +472,16 @@ export class ImageMeta implements IKnowledgeSource {
                     if (addrOutput.adminDistricts) {
                         addrEntity.facets?.push({ name: "district", value: JSON.stringify(addrOutput.adminDistricts)});
                         for(let i = 0; i < addrOutput.adminDistricts.length; i++) {                            
-                            entities.push({ 
+                            const e: ConcreteEntity = { 
                                 name: addrOutput.adminDistricts[i].name ?? "", type: [ "district", "place" ], 
-                                facets: [ { name: "shortName", value: addrOutput.adminDistricts[i].shortName ?? "" } ]
-                            });
+                                facets: []
+                            };
+
+                            if (addrOutput.adminDistricts[i].shortName) {
+                                e.facets?.push({ name: "shortName", value: addrOutput.adminDistricts[i].shortName!})
+                            }
+
+                            entities.push(e);
                         }
                     }
                     if (addrOutput.postalCode) {
@@ -650,7 +657,8 @@ export class ImageCollection implements IConversation<ImageMeta> {
  */
 export async function importImages(
     imagePath: string,
-    recursive: boolean = true
+    recursive: boolean = true,
+    callback?: (text: string, count: number, max: number) => void
 ): Promise<ImageCollection> {
 
     let isDir = isDirectoryPath(imagePath);
@@ -668,7 +676,7 @@ export async function importImages(
 
     let images: Image[] = [];
     if (isDir) {
-        images = await indexImages(imagePath, recursive, chatModel);
+        images = await indexImages(imagePath, recursive, chatModel, callback);
     } else {
         const img = await indexImage(imagePath, chatModel);
         if (img !== undefined) {
@@ -693,7 +701,8 @@ export async function importImages(
 async function indexImages(
     sourcePath: string,
     recursive: boolean,
-    chatModel: ChatModel
+    chatModel: ChatModel,
+    callback?: (text: string, count: number, max: number) => void
 ): Promise<Image[]> {
     // load files from the supplied directory
     const fileNames = await fs.promises.readdir(sourcePath, {
@@ -706,6 +715,10 @@ async function indexImages(
         const fullFilePath: string = path.join(sourcePath, fileNames[i]);
         //console.log(`${fullFilePath} [${i+1} of ${fileNames.length}] (estimated time remaining: ${clock.elapsedSeconds / (i + 1) * (fileNames.length - i)})`);
         const img = await indexImage(fullFilePath, chatModel);
+
+        if (callback) {
+            callback(fileNames[i], i, fileNames.length);
+        }
 
         if (img !== undefined) {
             retVal.push(img);

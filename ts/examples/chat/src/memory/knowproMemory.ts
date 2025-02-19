@@ -264,8 +264,18 @@ export async function createKnowproCommands(
             context.printer.writeError(`${namedArgs.filePath} not found`);
             return;
         }
-        context.images = await kp.importImages(namedArgs.filePath);
+        
+        let progress = new ProgressBar(context.printer, 165);
+        context.images = await kp.importImages(namedArgs.filePath, true, 
+            (text, _index, max) => {
+                progress.total = max;
+                progress.advance();
+                return progress.count < max;
+            }            
+        );
         context.conversation = context.images;
+        progress.complete();
+
         context.printer.writeLine("Imported images:");
         context.printer.writeImageCollectionInfo(context.images!);
 

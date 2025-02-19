@@ -335,10 +335,24 @@ export interface generateCaption {
     dateTaken: string;
 }
 
+/**
+ * 
+ * @param fileName The image file to load
+ * @param model The language model being used to describe the image.
+ * @param loadCachedDetails A flag indicating if cached image descriptions should be loaded if available.
+ * @returns The described image.
+ */
 export async function loadImage(
     fileName: string,
     model: ChatModel,
+    loadCachedDetails: boolean = true
 ): Promise<Image | undefined> {
+
+    const cachedFileName: string = fileName + ".eat";
+    if (loadCachedDetails && fs.existsSync(cachedFileName)) {
+        return JSON.parse(fs.readFileSync(cachedFileName, "utf8"));
+    }
+
     const buffer: Buffer = fs.readFileSync(fileName);
 
     // load EXIF properties
@@ -387,7 +401,7 @@ export async function loadImage(
         );
 
         if (chatResponse.success) {
-            return {
+            const retVal = {
                 title: chatResponse.data.title,
                 caption: chatResponse.data.caption,
                 width: chatResponse.data.width,
@@ -398,6 +412,13 @@ export async function loadImage(
                 nearbyPOI: content.nearbyPOI,
                 reverseGeocode: content.reverseGeocode
             };
+
+            // cache this information for possible reuse later
+            fs.writeFileSync(cachedFileName, JSON.stringify(retVal));
+
+            // return the image description
+            return retVal;
+
         } else {
             const err = `Unable to load ${fileName}. '${chatResponse.message}'`;
             console.error("\t" + err);
