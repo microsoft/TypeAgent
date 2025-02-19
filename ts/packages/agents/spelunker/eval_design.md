@@ -1,8 +1,5 @@
 # Spelunker design notes
 
-
-
-
 # Evaluation design
 
 ## Purpose of the eval
@@ -33,7 +30,7 @@ The proposed evaluation approach is thus:
 
 # Building the eval architecture
 
-- Sample codebase stored in test-data/sample-src/**/*.{py,ts}
+- Sample codebase stored in test-data/sample-src/\*_/_.{py,ts}
 - Permanently chunked into database at test-data/evals.db
   - Same schema as main db
   - Don't bother with summaries (they're probably totally obsolete)
@@ -64,16 +61,39 @@ We keep the tables `Files`, `Chunks` and `Blobs` **unchanged** from
 the full spelunker app. We run Spelunker with one question over our
 sample codebase and copy the database files to the eval directory.
 We then add more tables for the following purposes:
-- Eval metadata (creator, start timestamp, end scoring timestamp,
+
+- Eval info (start timestamp, end scoring timestamp,
   free format notes).
 - Table mapping hash to chunk ID.
-  (How to handle identical chunks in the same file????)
 - Table of test questions, with unique ID (1, 2, etc.).
-- Table for manual scores: (question ID, chunk hash, score (0/1), timestamp, username)
+- Table for manual scores: (question ID, chunk hash, score (0/1), timestamp)
 - Table for eval runs (schema TBD)
 
+### Hashing chunks
 
+We hash chunks so that we can keep the scores and eval run results
+even when the sample codebase is re-chunked for some reason
+(which assigns new chunks everywhere).
 
+However, sometimes unrelated hashes have the same text, e.g.
+```py
+    def __len__(self):
+        return len(self._data)
+```
+occurring in multiple classes written using the same design pattern.
+
+How to disambiguate? I propose to include the names of the containing
+chunk(s), up to the module root, and also the full filename of the
+file where the chunk occurs (in case there are very similar files).
+
+So, for example, the input to the hash function could be:
+```
+# <filename>
+# <great-grandparent> <grandparent> <parent>
+<text of chunk>
+```
+
+MD5 is a fine, fast hash function, since we're not worried about crypto.
 
 ## Manual scoring tool
 
