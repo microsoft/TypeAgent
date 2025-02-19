@@ -422,7 +422,8 @@ export async function loadImage(
         } else {
             const err = `Unable to load ${fileName}. '${chatResponse.message}'`;
             console.error("\t" + err);
-            throw new Error(err);
+            //throw new Error(err);
+            return undefined;
         }
     } catch {
         return undefined;
