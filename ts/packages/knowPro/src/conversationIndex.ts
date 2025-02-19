@@ -9,7 +9,7 @@ import {
     IConversation,
     IKnowledgeSource,
     SemanticRef,
-    ITopic,
+    Topic,
     TextRange,
     TextLocation,
     IMessage,
@@ -95,7 +95,7 @@ export function addEntityToIndex(
 }
 
 export function addTopicToIndex(
-    topic: ITopic,
+    topic: Topic,
     semanticRefs: SemanticRef[],
     semanticRefIndex: ITermToSemanticRefIndex,
     messageIndex: number,
@@ -171,7 +171,7 @@ export function addKnowledgeToIndex(
         );
     }
     for (const topic of knowledge.topics) {
-        const topicObj: ITopic = { text: topic };
+        const topicObj: Topic = { text: topic };
         addTopicToIndex(topicObj, semanticRefs, semanticRefIndex, messageIndex);
     }
 }

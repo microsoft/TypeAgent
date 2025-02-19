@@ -202,10 +202,7 @@ export class Podcast
 
     public async buildRelatedTermsIndex(
         batchSize: number = 8,
-        progressCallback?: (
-            terms: string[],
-            batch: collections.Slice<string>,
-        ) => boolean,
+        progressCallback?: (batch: string[], batchStartAt: number) => boolean,
     ): Promise<void> {
         if (this.semanticRefIndex) {
             this.termToRelatedTermsIndex = new TermToRelatedTermsIndex(
