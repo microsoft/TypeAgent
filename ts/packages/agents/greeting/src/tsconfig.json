@@ -8,5 +8,5 @@
   "include": ["./**/*"],
   "ts-node": {
     "esm": true
-  }
+  },
 }
