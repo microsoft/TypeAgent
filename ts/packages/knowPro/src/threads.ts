@@ -22,19 +22,41 @@ export type ScoredThreadIndex = {
     score: number;
 };
 
-export interface ITextToThreadIndexFuzzy {
+export interface IThreadDescriptionIndexFuzzy {
+    addThread(
+        description: string,
+        threadIndex: ThreadIndex | ScoredThreadIndex,
+    ): Promise<void>;
     lookupThread(
         text: string,
         maxMatches?: number,
         thresholdScore?: number,
-    ): Promise<ScoredThreadIndex[]>;
+    ): Promise<ScoredThreadIndex[] | undefined>;
 }
 
-export class TextToThreadIndexFuzzy implements ITextToThreadIndexFuzzy {
+export class ThreadDescriptionEmbeddingIndex
+    implements IThreadDescriptionIndexFuzzy
+{
+    private threads: ScoredThreadIndex[];
     private embeddingIndex: TextEmbeddingIndex;
 
     constructor(public settings: TextEmbeddingIndexSettings) {
+        this.threads = [];
         this.embeddingIndex = new TextEmbeddingIndex(settings);
+    }
+
+    public async addThread(
+        description: string,
+        threadIndex: ThreadIndex | ScoredThreadIndex,
+    ): Promise<void> {
+        if (typeof threadIndex === "number") {
+            threadIndex = {
+                threadIndex: threadIndex,
+                score: 1,
+            };
+        }
+        await this.embeddingIndex.addText(description);
+        this.threads.push(threadIndex);
     }
 
     public async lookupThread(
@@ -50,5 +72,15 @@ export class TextToThreadIndexFuzzy implements ITextToThreadIndexFuzzy {
         return matches.map((m) => {
             return { threadIndex: m.item, score: m.score };
         });
+    }
+
+    public removeThread(threadIndex: ThreadIndex) {
+        const indexOf = this.threads.findIndex(
+            (t) => t.threadIndex === threadIndex,
+        );
+        if (indexOf >= 0) {
+            this.threads.splice(indexOf, 1);
+            this.embeddingIndex.removeAt(indexOf);
+        }
     }
 }
