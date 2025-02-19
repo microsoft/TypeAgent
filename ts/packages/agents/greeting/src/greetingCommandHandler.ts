@@ -78,38 +78,35 @@ export class GreetingCommandHandler implements CommandHandlerNoParams {
 
     /**
      * Handle the @greeting command
-     * 
+     *
      * @param context The command context.
      */
     public async run(context: ActionContext) {
-
         // Initial output to let the user know the agent is thinking...
         displayStatus("...", context);
 
         const response = await this.getTypeChatResponse(context);
 
         if (response.success) {
-
             let action: GreetingAction = response.data as GreetingAction;
             let result: ActionResultSuccess | undefined = undefined;
             switch (action.actionName) {
                 case "personalizedGreetingAction":
-                    
-                    result = await handlePersonalizedGreetingAction(
+                    result = (await handlePersonalizedGreetingAction(
                         action as PersonalizedGreetingAction,
-                        context
-                    ) as ActionResultSuccess;
+                        context,
+                    )) as ActionResultSuccess;
 
-                    displayResult(result.literalText!, context);        
+                    displayResult(result.literalText!, context);
                     break;
 
                 // case "contextualGreetingAction":
-                
+
                 //     result = await handleContextualGreetingAction(
                 //         action as ContextualGreetingAction,
                 //     ) as ActionResultSuccess;
 
-                //     displayResult(result.literalText!, context);        
+                //     displayResult(result.literalText!, context);
                 //     break;
             }
         } else {
@@ -135,9 +132,9 @@ export class GreetingCommandHandler implements CommandHandlerNoParams {
         let completionSettings: CompletionSettings = {
             temperature: 1.0,
             // Max response tokens
-            max_tokens: 1000, 
+            max_tokens: 1000,
             // createChatModel will remove it if the model doesn't support it
-            response_format: { type: "json_object" }, 
+            response_format: { type: "json_object" },
         };
         const chatModel = openai.createChatModel(
             apiSettings,
@@ -150,9 +147,8 @@ export class GreetingCommandHandler implements CommandHandlerNoParams {
     }
 
     async getTypeChatResponse(
-        context: ActionContext
+        context: ActionContext,
     ): Promise<Result<GreetingAction>> {
-
         // Create Model instance
         let chatModel = this.createModel(true);
 
@@ -164,7 +160,7 @@ export class GreetingCommandHandler implements CommandHandlerNoParams {
         // create TypeChat object
         const chat = createTypeChat<GreetingAction>(
             chatModel,
-            personalizedGreetingSchema,//loadSchema(["greetingActionSchema.ts"]),
+            personalizedGreetingSchema, //loadSchema(["greetingActionSchema.ts"]),
             "GreetingAction",
             this.instructions,
             chatHistory,
@@ -181,9 +177,7 @@ export class GreetingCommandHandler implements CommandHandlerNoParams {
         );
 
         // make the request
-        const chatResponse = await chat.translate(
-            history.join("\n"),
-        );
+        const chatResponse = await chat.translate(history.join("\n"));
 
         return chatResponse;
     }
@@ -200,7 +194,7 @@ const handlers: CommandHandlerTable = {
 
 async function handlePersonalizedGreetingAction(
     greetingAction: PersonalizedGreetingAction,
-    context: ActionContext
+    context: ActionContext,
 ): Promise<ActionResult> {
     let result = createActionResult("Hi!");
     if (greetingAction.parameters !== undefined) {
@@ -223,11 +217,10 @@ async function handlePersonalizedGreetingAction(
         //     }
 
         // } else if (index == 0) {
-            result = createActionResult(
-                greetingAction.parameters.possibleGreetings[
-                    randomInt(0, count)
-                ].generatedGreeting,
-            );
+        result = createActionResult(
+            greetingAction.parameters.possibleGreetings[randomInt(0, count)]
+                .generatedGreeting,
+        );
         // } else {
         //     result = createActionResult(
         //         greetingAction.parameters.possibleGreetings[randomInt(0, count)]
@@ -284,16 +277,18 @@ async function getRecentChatHistory(context: ActionContext): Promise<string[]> {
     const chatHistory: string[] = [];
 
     if (conversationManager !== undefined) {
-        
         let searchResponse = await conversationManager.getSearchResponse(
-            "What were we talking about last?", 
-            [{ terms: ["last conversation"]}]
+            "What were we talking about last?",
+            [{ terms: ["last conversation"] }],
         );
         if (searchResponse && searchResponse.response?.hasHits()) {
-
-            chatHistory.push("The following is a summary of the last conversation:");
+            chatHistory.push(
+                "The following is a summary of the last conversation:",
+            );
             chatHistory.push("###");
-            chatHistory.push("Recent entities found in chat history, in order, most recent first:");
+            chatHistory.push(
+                "Recent entities found in chat history, in order, most recent first:",
+            );
             searchResponse.response?.entities.map((ee) => {
                 ee.entities?.map((e) => {
                     chatHistory.push(`${e.name} (${e.type})`);
@@ -319,7 +314,7 @@ async function getRecentChatHistory(context: ActionContext): Promise<string[]> {
                     "What were we talking about last?",
                     searchResponse,
                 );
-                console.log(matches);
+            console.log(matches);
         }
     }
 
