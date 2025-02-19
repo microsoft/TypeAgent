@@ -226,11 +226,11 @@ export async function createKnowproCommands(
                 exact: argBool("Exact match only. No related terms", false),
                 usePropertyIndex: argBool(
                     "Use property index while searching",
-                    false,
+                    true,
                 ),
                 useTimestampIndex: argBool(
                     "Use timestamp index while searching",
-                    false,
+                    true,
                 ),
             },
         };
@@ -391,7 +391,7 @@ export async function createKnowproCommands(
         return {
             description: "Build index",
             options: {
-                knowLedge: argBool("Index knowledge", false),
+                knowledge: argBool("Index knowledge", false),
                 related: argBool("Index related terms", false),
                 maxMessages: argNum("Maximum messages to index"),
             },
@@ -417,7 +417,9 @@ export async function createKnowproCommands(
         const namedArgs = parseNamedArguments(args, podcastBuildIndexDef());
         // Build index
         context.printer.writeLine();
-        context.printer.writeLine("Building index");
+        context.printer.writeLine(
+            `Build knowledge: ${namedArgs.knowledge}\nBuild related terms: ${namedArgs.related}\n`,
+        );
         if (namedArgs.knowledge) {
             context.printer.writeLine("Building knowledge index");
             const maxMessages = namedArgs.maxMessages ?? messageCount;
@@ -438,18 +440,18 @@ export async function createKnowproCommands(
             context.printer.writeIndexingResults(indexResult);
         }
         if (namedArgs.related) {
-            context.printer.writeLine("Building semantic index");
+            context.printer.writeLine("Building related terms index");
             const progress = new ProgressBar(
                 context.printer,
                 context.podcast.semanticRefIndex.size,
             );
-            await context.podcast.buildRelatedTermsIndex(16, (terms, batch) => {
-                progress.advance(batch.value.length);
+            await context.podcast.buildRelatedTermsIndex(16, (batch) => {
+                progress.advance(batch.length);
                 return true;
             });
             progress.complete();
             context.printer.writeLine(
-                `Semantic Indexed ${context.podcast.semanticRefIndex.size} terms`,
+                `Indexed ${context.podcast.semanticRefIndex.size} terms`,
             );
         }
     }

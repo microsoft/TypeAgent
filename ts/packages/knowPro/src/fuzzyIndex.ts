@@ -12,50 +12,42 @@ import {
     indexesOfAllNearest,
     createTopNList,
 } from "typeagent";
-import {
-    ITextEmbeddingIndexData,
-    ITextEmbeddingDataItem,
-} from "./secondaryIndexes.js";
 import { openai, TextEmbeddingModel } from "aiclient";
 import * as levenshtein from "fast-levenshtein";
 import { createEmbeddingCache } from "knowledge-processor";
 
 export class TextEmbeddingIndex {
-    // Store two separate but equal sized arrays.
-    // A array of text and an equivalent array of embeddings
-    public textArray: string[];
-    public embeddingArray: NormalizedEmbedding[];
+    private embeddings: NormalizedEmbedding[];
 
-    constructor(
-        public settings: TextEmbeddingIndexSettings,
-        data?: ITextEmbeddingIndexData,
-    ) {
-        this.textArray = [];
-        this.embeddingArray = [];
-        if (data !== undefined) {
-            this.deserialize(data);
-        }
+    constructor(public settings: TextEmbeddingIndexSettings) {
+        this.embeddings = [];
     }
 
-    public async add(texts: string | string[]): Promise<void> {
+    public async addText(texts: string | string[]): Promise<void> {
         if (Array.isArray(texts)) {
             const embeddings = await generateTextEmbeddingsWithRetry(
                 this.settings.embeddingModel,
                 texts,
             );
-            for (let i = 0; i < texts.length; ++i) {
-                this.addTextEmbedding(texts[i], embeddings[i]);
-            }
+            this.embeddings.push(...embeddings);
         } else {
             const embedding = await generateEmbedding(
                 this.settings.embeddingModel,
                 texts,
             );
-            this.addTextEmbedding(texts, embedding);
+            this.embeddings.push(embedding);
         }
     }
 
-    public async getNearest(
+    public get(pos: number): NormalizedEmbedding {
+        return this.embeddings[pos];
+    }
+
+    public add(embedding: NormalizedEmbedding): void {
+        this.embeddings.push(embedding);
+    }
+
+    public async getIndexesOfNearest(
         text: string | NormalizedEmbedding,
         maxMatches?: number,
         minScore?: number,
@@ -67,7 +59,7 @@ export class TextEmbeddingIndex {
         return this.indexesOfNearestText(textEmbedding, maxMatches, minScore);
     }
 
-    public async getNearestMultiple(
+    public async getIndexesOfNearestMultiple(
         textArray: string[],
         maxMatches?: number,
         minScore?: number,
@@ -79,68 +71,14 @@ export class TextEmbeddingIndex {
         const results = [];
         for (const embedding of textEmbeddings) {
             results.push(
-                await this.getNearest(embedding, maxMatches, minScore),
+                await this.getIndexesOfNearest(embedding, maxMatches, minScore),
             );
         }
         return results;
     }
 
-    public async lookupEmbeddings(
-        text: string,
-        maxMatches?: number,
-        minScore?: number,
-    ): Promise<[string, NormalizedEmbedding][] | undefined> {
-        const textEmbedding = await generateEmbedding(
-            this.settings.embeddingModel,
-            text,
-        );
-        let matches = this.indexesOfNearestText(
-            textEmbedding,
-            maxMatches,
-            minScore,
-        );
-        return matches.map((m) => {
-            return [this.textArray[m.item], this.embeddingArray[m.item]];
-        });
-    }
-
-    public remove(text: string): boolean {
-        const indexOf = this.textArray.indexOf(text);
-        if (indexOf >= 0) {
-            this.textArray.splice(indexOf, 1);
-            this.embeddingArray.splice(indexOf, 1);
-            return true;
-        }
-        return false;
-    }
-
-    public deserialize(data: ITextEmbeddingIndexData): void {
-        if (data.embeddingData !== undefined) {
-            for (const item of data.embeddingData) {
-                this.addTextEmbedding(
-                    item.text,
-                    new Float32Array(item.embedding),
-                );
-            }
-        }
-    }
-
-    public serialize(): ITextEmbeddingIndexData {
-        const embeddingData: ITextEmbeddingDataItem[] = [];
-        for (let i = 0; i < this.textArray.length; ++i) {
-            embeddingData.push({
-                text: this.textArray[i],
-                embedding: Array.from<number>(this.embeddingArray[i]),
-            });
-        }
-        return {
-            embeddingData,
-        };
-    }
-
-    private addTextEmbedding(text: string, embedding: NormalizedEmbedding) {
-        this.textArray.push(text);
-        this.embeddingArray.push(embedding);
+    public removeAt(pos: number): void {
+        this.embeddings.splice(pos, 1);
     }
 
     private indexesOfNearestText(
@@ -153,7 +91,7 @@ export class TextEmbeddingIndex {
         let matches: ScoredItem[];
         if (maxMatches && maxMatches > 0) {
             matches = indexesOfNearest(
-                this.embeddingArray,
+                this.embeddings,
                 textEmbedding,
                 maxMatches,
                 SimilarityType.Dot,
@@ -161,7 +99,7 @@ export class TextEmbeddingIndex {
             );
         } else {
             matches = indexesOfAllNearest(
-                this.embeddingArray,
+                this.embeddings,
                 textEmbedding,
                 SimilarityType.Dot,
                 minScore,
@@ -170,6 +108,32 @@ export class TextEmbeddingIndex {
         return matches;
     }
 }
+
+export function serializeEmbedding(embedding: NormalizedEmbedding): number[] {
+    return Array.from<number>(embedding);
+}
+
+export function deserializeEmbedding(array: number[]): NormalizedEmbedding {
+    return new Float32Array(array);
+}
+
+export async function addTextToEmbeddingIndex(
+    index: TextEmbeddingIndex,
+    textToIndex: string[],
+    batchSize: number,
+    progressCallback?: (batch: string[], batchStartAt: number) => boolean,
+): Promise<void> {
+    for (const batch of getIndexingBatches(textToIndex, batchSize)) {
+        if (
+            progressCallback &&
+            !progressCallback(batch.values, batch.startAt)
+        ) {
+            break;
+        }
+        await index.addText(batch.values);
+    }
+}
+
 export type TextEmbeddingIndexSettings = {
     embeddingModel: TextEmbeddingModel;
     minScore: number;
@@ -251,5 +215,23 @@ export function nearestNeighborEditDistance(
         }
         matches.sort((x, y) => y.score! - x.score!);
         return matches;
+    }
+}
+
+type TextIndexingBatch = {
+    startAt: number;
+    values: string[];
+};
+
+function* getIndexingBatches(
+    array: string[],
+    size: number,
+): IterableIterator<TextIndexingBatch> {
+    for (let i = 0; i < array.length; i += size) {
+        const batch = array.slice(i, i + size);
+        if (batch.length === 0) {
+            break;
+        }
+        yield { startAt: i, values: batch };
     }
 }

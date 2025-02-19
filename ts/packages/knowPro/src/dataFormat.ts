@@ -53,8 +53,8 @@ export type KnowledgeType = "entity" | "action" | "topic" | "tag";
 export type Knowledge =
     | conversation.ConcreteEntity
     | conversation.Action
-    | ITopic
-    | ITag;
+    | Topic
+    | Tag;
 
 export interface SemanticRef {
     semanticRefIndex: SemanticRefIndex;
@@ -63,11 +63,13 @@ export interface SemanticRef {
     knowledge: Knowledge;
 }
 
-export interface ITopic {
+export interface Topic {
     text: string;
 }
 
-export type ITag = ITopic;
+export interface Tag {
+    text: string;
+}
 
 export interface IConversation<TMeta extends IKnowledgeSource = any> {
     nameTag: string;
@@ -121,3 +123,4 @@ export type Term = {
 // Also see:
 // - secondaryIndex.ts for optional secondary interfaces
 // - search.ts for search interfaces.
+// - thread.ts for early ideas on threads
