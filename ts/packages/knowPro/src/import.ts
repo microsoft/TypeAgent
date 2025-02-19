@@ -7,8 +7,7 @@ import {
     IKnowledgeSource,
     SemanticRef,
     IConversationData,
-    ITimestampToTextRangeIndex,
-    IPropertyToSemanticRefIndex,
+    Term,
 } from "./dataFormat.js";
 import { conversation, split, image } from "knowledge-processor";
 import { collections, dateTime, getFileName, isDirectoryPath, readAllText } from "typeagent";
@@ -23,11 +22,15 @@ import {
 } from "./conversationIndex.js";
 import { Result } from "typechat";
 import {
-    createTextEmbeddingIndexSettings,
     TermToRelatedTermsIndex,
     TermsToRelatedTermIndexSettings,
 } from "./relatedTermsIndex.js";
+import { createTextEmbeddingIndexSettings } from "./fuzzyIndex.js";
 import { TimestampToTextRangeIndex } from "./timestampIndex.js";
+import {
+    ITermsToRelatedTermsIndexData,
+    ITimestampToTextRangeIndex,
+} from "./secondaryIndexes.js";
 import { addPropertiesToIndex, PropertyIndex } from "./propertyIndex.js";
 import fs from "node:fs";
 import path from "node:path";
@@ -35,6 +38,8 @@ import { isImageFileType } from "common-utils";
 import { ChatModel } from "aiclient";
 import { AddressOutput } from "@azure-rest/maps-search";
 import { ConcreteEntity } from "../../knowledgeProcessor/dist/conversation/knowledgeSchema.js";
+import { IPropertyToSemanticRefIndex } from "./secondaryIndexes.js";
+import { IConversationSecondaryIndexes } from "./secondaryIndexes.js";
 
 // metadata for podcast messages
 export class PodcastMessageMeta implements IKnowledgeSource {
@@ -124,7 +129,9 @@ export function createPodcastSettings(): PodcastSettings {
     };
 }
 
-export class Podcast implements IConversation<PodcastMessageMeta> {
+export class Podcast
+    implements IConversation<PodcastMessageMeta>, IConversationSecondaryIndexes
+{
     public settings: PodcastSettings;
     constructor(
         public nameTag: string,
@@ -145,7 +152,7 @@ export class Podcast implements IConversation<PodcastMessageMeta> {
         this.settings = createPodcastSettings();
     }
 
-    addMetadataToIndex() {
+    public addMetadataToIndex() {
         for (let i = 0; i < this.messages.length; i++) {
             const msg = this.messages[i];
             const knowlegeResponse = msg.metadata.getKnowledge();
@@ -196,19 +203,8 @@ export class Podcast implements IConversation<PodcastMessageMeta> {
     ): Promise<ConversationIndexingResult> {
         const result = await buildConversationIndex(this, progressCallback);
         this.addMetadataToIndex();
-        this.buildPropertyIndex();
-        this.buildTimestampIndex();
+        this.buildSecondaryIndexes();
         return result;
-    }
-
-    public buildPropertyIndex() {
-        if (this.semanticRefs && this.semanticRefs.length > 0) {
-            this.propertyToSemanticRefIndex = new PropertyIndex();
-            addPropertiesToIndex(
-                this.semanticRefs,
-                this.propertyToSemanticRefIndex,
-            );
-        }
     }
 
     public async buildRelatedTermsIndex(
@@ -229,10 +225,6 @@ export class Podcast implements IConversation<PodcastMessageMeta> {
                 progressCallback,
             );
         }
-    }
-
-    public buildTimestampIndex(): void {
-        this.timestampIndex = new TimestampToTextRangeIndex(this.messages);
     }
 
     public serialize(): PodcastData {
@@ -260,14 +252,76 @@ export class Podcast implements IConversation<PodcastMessageMeta> {
                 data.relatedTermsIndexData,
             );
         }
+        this.buildSecondaryIndexes();
+    }
+
+    private buildSecondaryIndexes() {
+        this.buildParticipantAliases();
         this.buildPropertyIndex();
         this.buildTimestampIndex();
     }
+
+    private buildPropertyIndex() {
+        if (this.semanticRefs && this.semanticRefs.length > 0) {
+            this.propertyToSemanticRefIndex = new PropertyIndex();
+            addPropertiesToIndex(
+                this.semanticRefs,
+                this.propertyToSemanticRefIndex,
+            );
+        }
+    }
+
+    private buildTimestampIndex(): void {
+        this.timestampIndex = new TimestampToTextRangeIndex(this.messages);
+    }
+
+    private buildParticipantAliases(): void {
+        if (this.termToRelatedTermsIndex) {
+            const nameToAliasMap = this.collectParticipantAliases();
+            for (const name of nameToAliasMap.keys()) {
+                const relatedTerms: Term[] = nameToAliasMap
+                    .get(name)!
+                    .map((alias) => {
+                        return { text: alias };
+                    });
+                this.termToRelatedTermsIndex.aliases.addRelatedTerm(
+                    name,
+                    relatedTerms,
+                );
+            }
+        }
+    }
+
+    private collectParticipantAliases() {
+        const aliases: collections.MultiMap<string, string> =
+            new collections.MultiMap();
+        for (const message of this.messages) {
+            const metadata = message.metadata;
+            collectName(metadata.speaker);
+            for (const listener of metadata.listeners) {
+                collectName(listener);
+            }
+        }
+
+        function collectName(participantName: string | undefined) {
+            if (participantName) {
+                participantName = participantName.toLowerCase();
+                const parsedName =
+                    conversation.splitParticipantName(participantName);
+                if (parsedName && parsedName.firstName && parsedName.lastName) {
+                    // If participantName is a full name, then associate firstName with the full name
+                    aliases.addUnique(parsedName.firstName, participantName);
+                    aliases.addUnique(participantName, parsedName.firstName);
+                }
+            }
+        }
+        return aliases;
+    }
 }
 
-export interface PodcastData extends IConversationData<PodcastMessage> {}
-
-export interface ImageCollectionData extends IConversationData<Image> {}
+export interface PodcastData extends IConversationData<PodcastMessage> {
+    relatedTermsIndexData?: ITermsToRelatedTermsIndexData | undefined;
+}
 
 export async function importPodcast(
     transcriptFilePath: string,

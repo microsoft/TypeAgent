@@ -33,17 +33,16 @@ import {
 } from "./multipleActionSchema.js";
 import { ActionConfig } from "./actionConfig.js";
 import { ActionConfigProvider } from "./actionConfigProvider.js";
-import { openai } from "aiclient";
 
 function convertJsonSchemaOutput(
     jsonObject: unknown,
     jsonSchema: ActionObjectJsonSchema | ActionFunctionJsonSchema[],
 ) {
     if (Array.isArray(jsonSchema)) {
-        const toolCallOutput = jsonObject as openai.ToolCallOutput;
+        const result = jsonObject as any;
         return {
-            actionName: toolCallOutput.name,
-            parameters: JSON.parse(toolCallOutput.arguments),
+            actionName: result.name,
+            parameters: result.arguments,
         };
     }
     return (jsonObject as any).response;

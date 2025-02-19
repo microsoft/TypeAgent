@@ -5,7 +5,7 @@ import { Args, Command, Flags } from "@oclif/core";
 import { fromJsonActions, toFullActions, FullAction } from "agent-cache";
 import { createDispatcher } from "agent-dispatcher";
 import {
-    readTestData,
+    readExplanationTestData,
     getSchemaNamesForActionConfigProvider,
     createActionConfigProvider,
     getInstanceDir,
@@ -105,6 +105,7 @@ export default class TestTranslateCommand extends Command {
         }),
         multiple: Flags.boolean({
             description: "Include multiple action schema",
+            default: true, // follow DispatcherOptions default
             allowNo: true,
         }),
         model: Flags.string({
@@ -113,18 +114,22 @@ export default class TestTranslateCommand extends Command {
         }),
         jsonSchema: Flags.boolean({
             description: "Output JSON schema",
-            allowNo: true,
+            default: false, // follow DispatcherOptions default
         }),
         jsonSchemaFunction: Flags.boolean({
             description: "Output JSON schema function",
-            allowNo: true,
+            default: false, // follow DispatcherOptions default
             exclusive: ["jsonSchema"],
         }),
         jsonSchemaValidate: Flags.boolean({
             description: "Validate the output when JSON schema is enabled",
-            relationships: [
-                { type: "some", flags: ["jsonSchema", "jsonSchemaFunction"] },
-            ],
+            default: true, // follow DispatcherOptions default
+            allowNo: true,
+        }),
+        stream: Flags.boolean({
+            description: "Enable streaming",
+            default: true, // follow DispatcherOptions default
+            allowNo: true,
         }),
         concurrency: Flags.integer({
             char: "c",
@@ -252,7 +257,7 @@ export default class TestTranslateCommand extends Command {
 
             const inputs = await Promise.all(
                 files.map(async (file) => {
-                    return { file, data: await readTestData(file) };
+                    return { file, data: await readExplanationTestData(file) };
                 }),
             );
 
@@ -313,7 +318,7 @@ export default class TestTranslateCommand extends Command {
                 actions: null,
                 commands: { dispatcher: true },
                 translation: {
-                    stream: false,
+                    stream: flags.stream,
                     history: { enabled: false },
                     model: flags.model,
                     multiple: { enabled: flags.multiple },

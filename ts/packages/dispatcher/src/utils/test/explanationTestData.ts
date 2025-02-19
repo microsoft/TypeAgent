@@ -30,7 +30,7 @@ import {
 } from "../../translation/multipleActionSchema.js";
 
 const testDataJSONVersion = 2;
-export type TestDataEntry<T extends object = object> =
+export type ExplanationTestDataEntry<T extends object = object> =
     ExplanationDataEntry<T> & {
         // Corrections for the explanation, or the error message if it failed.
         corrections?: CorrectionRecord<T>[] | undefined;
@@ -39,17 +39,17 @@ export type TestDataEntry<T extends object = object> =
         tags?: string[] | undefined;
     };
 
-export type TestData<T extends object = object> = {
+export type ExplanationTestData<T extends object = object> = {
     version: number;
     // TODO: Test data only support a single schema name for now.
     schemaName: string;
     sourceHash: string;
     explainerName: string;
-    entries: TestDataEntry<T>[];
-    failed?: FailedTestDataEntry<T>[] | undefined;
+    entries: ExplanationTestDataEntry<T>[];
+    failed?: FailedExplanationTestDataEntry<T>[] | undefined;
 };
 
-export type FailedTestDataEntry<T extends object = object> = {
+export type FailedExplanationTestDataEntry<T extends object = object> = {
     message: string;
     request: string;
     action?: JSONAction | JSONAction[] | undefined;
@@ -71,11 +71,11 @@ export async function readLineData(file: fs.PathLike | fs.promises.FileHandle) {
     return Array.from(new Set(data).keys());
 }
 
-export function getEmptyTestData(
+export function getEmptyExplanationTestData(
     schemaName: string,
     sourceHash: string,
     explainerName: string,
-): TestData {
+): ExplanationTestData {
     return {
         version: testDataJSONVersion,
         schemaName,
@@ -85,9 +85,9 @@ export function getEmptyTestData(
     };
 }
 
-export async function readTestData(
+export async function readExplanationTestData(
     file: fs.PathLike | fs.promises.FileHandle,
-): Promise<TestData> {
+): Promise<ExplanationTestData> {
     const mayBeTestData = JSON.parse(await fs.promises.readFile(file, "utf8"));
     if (
         mayBeTestData.schemaName === undefined ||
@@ -120,7 +120,7 @@ export async function readTestData(
 }
 
 export type GenerateTestDataResult = {
-    testData: TestData;
+    testData: ExplanationTestData;
     fileName: string | undefined;
     elapsedMs: number;
 };
@@ -133,7 +133,7 @@ type Pending = {
 };
 
 type InitialTestData = {
-    testData: TestData;
+    testData: ExplanationTestData;
     pending: Map<string, Pending>;
     outputFile: string | undefined;
     prefix: string;
@@ -144,14 +144,14 @@ type InitialTestData = {
 
 function getInitialTestData(
     inputs: (string | RequestAction)[],
-    existingData: TestData,
+    existingData: ExplanationTestData,
     overwrite: boolean,
     outputFile: string | undefined,
     prefix: string,
 ): InitialTestData {
     const tagsMap = new Map<string, string[]>();
-    const entries = new Map<string, TestDataEntry>();
-    const failedEntries = new Map<string, FailedTestDataEntry>();
+    const entries = new Map<string, ExplanationTestDataEntry>();
+    const failedEntries = new Map<string, FailedExplanationTestDataEntry>();
 
     const addTags = (request: string, tags: string[] | undefined) => {
         if (tags) {
@@ -236,7 +236,7 @@ function getInitialTestData(
 
 async function saveTestDataFile(
     file: string,
-    testData: TestData,
+    testData: ExplanationTestData,
     pending: Map<string, Pending>,
 ) {
     const saveData = { ...testData };
@@ -325,12 +325,12 @@ type AddResult =
     | {
           success: true;
           elapsedMs: number;
-          entry: TestDataEntry;
+          entry: ExplanationTestDataEntry;
       }
     | {
           success: false;
           elapsedMs: number;
-          entry: FailedTestDataEntry;
+          entry: FailedExplanationTestDataEntry;
       };
 
 function getGenerateTestDataFn(
@@ -348,7 +348,9 @@ function getGenerateTestDataFn(
         tags: string[] | undefined,
     ): Promise<AddResult> => {
         const startTime = performance.now();
-        const toFailedResult = (entry: FailedTestDataEntry): AddResult => {
+        const toFailedResult = (
+            entry: FailedExplanationTestDataEntry,
+        ): AddResult => {
             return {
                 success: false,
                 elapsedMs: performance.now() - startTime,
@@ -435,14 +437,14 @@ function getGenerateTestDataFn(
 
 export type GenerateDataInput = {
     inputs: (string | RequestAction)[];
-    existingData: TestData;
+    existingData: ExplanationTestData;
     outputFile: string | undefined;
 };
 // If outputFile is provided, the generate data will be save per request.
-export async function generateTestDataFiles(
+export async function generateExplanationTestDataFiles(
     data: {
         inputs: (string | RequestAction)[];
-        existingData: TestData;
+        existingData: ExplanationTestData;
         outputFile: string | undefined;
     }[],
     provider: ActionConfigProvider,
@@ -624,7 +626,7 @@ async function generateTestDataFile(
     return { testData, fileName: outputFile, elapsedMs: totalElapsedMs };
 }
 
-export function printTestDataStats(
+export function printExplanationTestDataStats(
     results: GenerateTestDataResult[],
     prefix = "",
 ) {
@@ -673,7 +675,7 @@ export function printTestDataStats(
 }
 
 export function convertTestDataToExplanationData(
-    testData: TestData,
+    testData: ExplanationTestData,
     outputFile?: string,
 ): ExplanationData {
     return {

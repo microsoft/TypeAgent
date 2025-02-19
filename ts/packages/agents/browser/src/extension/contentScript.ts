@@ -538,6 +538,261 @@ async function awaitPageIncrementalUpdates() {
     });
 }
 
+let recording = false;
+let recordedActions: any[] = [];
+let actionIndex = 1;
+let recordedActionHtml: string = "";
+let recordedActionScreenshot: string = "";
+
+function startRecording() {
+    if (recording) return;
+    recording = true;
+    recordedActions = [];
+    actionIndex = 1;
+
+    recordedActionHtml = "";
+    recordedActionScreenshot = "";
+
+    setIdsOnAllElements(0);
+
+    document.addEventListener("click", recordClick, true);
+    document.addEventListener("input", recordInput, true);
+    // document.addEventListener("scroll", recordScroll, true);
+    document.addEventListener("keyup", recordTextEntry, true);
+
+    saveRecordedActions();
+}
+
+// Stop recording and return data
+async function stopRecording() {
+    recording = false;
+    document.removeEventListener("click", recordClick, true);
+    document.removeEventListener("input", recordInput, true);
+    // document.removeEventListener("scroll", recordScroll, true);
+    document.removeEventListener("keyup", recordTextEntry, true);
+
+    await captureAnnotatedScreenshot();
+
+    const pageHTML = getPageHTML(false, "", 0, false);
+    recordedActionHtml = pageHTML;
+
+    await chrome.runtime.sendMessage({
+        type: "saveRecordedActionPageHTML",
+        html: pageHTML,
+    });
+
+    await chrome.runtime.sendMessage({
+        type: "recordingStopped",
+        recordedActions,
+        recordedActionScreenshot,
+        recordedActionHtml,
+    });
+    chrome.storage.session.remove("recordedActions");
+    chrome.storage.session.remove("recordedActionScreenshot");
+    chrome.storage.session.remove("recordedActionHtml");
+}
+
+// Record click events
+function recordClick(event: MouseEvent) {
+    const target = event.target as HTMLElement;
+    if (!target) return;
+
+    const cssSelector = getCSSSelector(target);
+    const boundingBox = getBoundingBox(target);
+
+    recordedActions.push({
+        id: actionIndex++,
+        type: "click",
+        tag: target.tagName,
+        text: target.textContent?.trim(),
+        cssSelector,
+        boundingBox,
+        timestamp: Date.now(),
+    });
+
+    saveRecordedActions();
+}
+
+// Record text input events
+function recordInput(event: Event) {
+    const target = event.target as HTMLInputElement | HTMLTextAreaElement;
+    if (!target) return;
+
+    const cssSelector = getCSSSelector(target);
+    const boundingBox = getBoundingBox(target);
+
+    recordedActions.push({
+        id: actionIndex++,
+        type: "input",
+        tag: target.tagName,
+        value: target.value,
+        cssSelector,
+        boundingBox,
+        timestamp: Date.now(),
+    });
+
+    saveRecordedActions();
+}
+
+function recordTextEntry(event: Event) {
+    const target = event.target as HTMLInputElement | HTMLTextAreaElement;
+    if (target.tagName === "INPUT" || target.tagName === "TEXTAREA") {
+        const action = {
+            id: actionIndex++,
+            type: "textInput",
+            timestamp: Date.now(),
+            tag: target.tagName,
+            selector: getCSSSelector(target),
+            boundingBox: getBoundingBox(target),
+            value: target.value, // Capture final text value
+        };
+
+        recordedActions.push(action);
+    }
+
+    saveRecordedActions();
+}
+
+// Record scroll events
+function recordScroll() {
+    recordedActions.push({
+        id: actionIndex++,
+        type: "scroll",
+        scrollX: window.scrollX,
+        scrollY: window.scrollY,
+        timestamp: Date.now(),
+    });
+
+    saveRecordedActions();
+}
+
+async function recordNavigation() {
+    await captureAnnotatedScreenshot();
+    const pageHTML = getPageHTML(false, "", 0, false);
+    chrome.runtime.sendMessage({
+        type: "saveRecordedActionPageHTML",
+        html: pageHTML,
+    });
+
+    recordedActions.push({
+        id: actionIndex++,
+        type: "navigation",
+        url: window.location.href,
+        timestamp: Date.now(),
+    });
+
+    saveRecordedActions();
+}
+
+async function captureAnnotatedScreenshot() {
+    const screenshotUrl = await chrome.runtime.sendMessage({
+        type: "takeScreenshot",
+    });
+
+    if (!screenshotUrl) {
+        console.error("Failed to capture screenshot");
+        return;
+    }
+
+    const img = new Image();
+    img.src = screenshotUrl;
+    img.onload = () => {
+        const canvas = document.createElement("canvas");
+        const ctx = canvas.getContext("2d")!;
+        canvas.width = img.width;
+        canvas.height = img.height;
+
+        ctx.drawImage(img, 0, 0);
+        ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+
+        recordedActions.forEach((action) => {
+            if (!action.boundingBox) return;
+
+            const { left, top, width, height } = action.boundingBox;
+            ctx.strokeStyle = "red";
+            ctx.lineWidth = 2;
+            ctx.strokeRect(left, top, width, height);
+
+            ctx.fillStyle = "red";
+            ctx.font = "bold 14px Arial";
+            var textWidth = ctx.measureText(action.cssSelector).width;
+
+            ctx.fillText(action.cssSelector, left + width - textWidth, top - 5);
+        });
+
+        const annotatedScreenshot = canvas.toDataURL("image/png");
+        chrome.runtime.sendMessage({
+            type: "saveAnnotatedScreenshot",
+            screenshot: annotatedScreenshot,
+        });
+
+        recordedActionScreenshot = annotatedScreenshot;
+    };
+}
+
+function saveRecordedActions() {
+    chrome.storage.session.set({
+        recordedActions,
+        recordedActionScreenshot,
+        recordedActionHtml,
+    });
+}
+
+// Restore actions if page is refreshed
+chrome.storage.session.get("recordedActions", (data) => {
+    if (data !== undefined && data.recordedActions) {
+        recordedActions = data.recordedActions;
+    }
+});
+
+chrome.storage.session.get("recordedActionScreenshot", (data) => {
+    if (data !== undefined && data.recordedActionScreenshot) {
+        recordedActionScreenshot = data.recordedActionScreenshot;
+    }
+});
+
+chrome.storage.session.get("recordedActionHtml", (data) => {
+    if (data !== undefined && data.recordedActionHtml) {
+        recordedActionHtml = data.recordedActionHtml;
+    }
+});
+
+// Detect navigation and push it as an action
+window.addEventListener("beforeunload", recordNavigation);
+window.addEventListener("popstate", recordNavigation);
+window.addEventListener("hashchange", recordNavigation);
+
+function getCSSSelector(element: HTMLElement): string {
+    if (element.id) {
+        return `#${element.id}`;
+    }
+
+    let path = [];
+    while (element && element.nodeType === Node.ELEMENT_NODE) {
+        let selector = element.tagName.toLowerCase();
+
+        if (element.className) {
+            selector += "." + element.className.trim().replace(/\s+/g, ".");
+        }
+
+        let siblingIndex = 1;
+        let sibling = element.previousElementSibling;
+        while (sibling) {
+            if (sibling.tagName === element.tagName) siblingIndex++;
+            sibling = sibling.previousElementSibling;
+        }
+        selector += `:nth-of-type(${siblingIndex})`;
+
+        path.unshift(selector);
+        element = element.parentElement!;
+    }
+    return path.join(" > ");
+}
+
+function getBoundingBox(element: HTMLElement): DOMRect {
+    return element.getBoundingClientRect();
+}
+
 function sendPaleoDbRequest(data: any) {
     document.dispatchEvent(
         new CustomEvent("toPaleoDbAutomation", { detail: data }),
@@ -708,6 +963,20 @@ async function handleScriptAction(
                 localStorage.removeItem("pageSchema");
             }
             sendResponse({});
+            break;
+        }
+        case "startRecording": {
+            startRecording();
+            sendResponse({});
+            break;
+        }
+        case "stopRecording": {
+            await stopRecording();
+            sendResponse({
+                recordedActions,
+                recordedActionHtml,
+                recordedActionScreenshot,
+            });
             break;
         }
     }

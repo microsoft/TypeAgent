@@ -2,12 +2,13 @@
 // Licensed under the MIT License.
 
 import {
-    IPropertyToSemanticRefIndex,
     ScoredSemanticRef,
     SemanticRef,
     SemanticRefIndex,
 } from "./dataFormat.js";
 import { conversation } from "knowledge-processor";
+import { IPropertyToSemanticRefIndex } from "./secondaryIndexes.js";
+import { TextRangesInScope } from "./collections.js";
 
 export enum PropertyNames {
     EntityName = "name",
@@ -188,6 +189,24 @@ export class PropertyIndex implements IPropertyToSemanticRefIndex {
     private termTextToNameValue(termText: string): [string, string] {
         return splitPropertyTermText(termText);
     }
+}
+
+export function lookupPropertyInPropertyIndex(
+    propertyIndex: IPropertyToSemanticRefIndex,
+    propertyName: string,
+    propertyValue: string,
+    semanticRefs: SemanticRef[],
+    rangesInScope?: TextRangesInScope,
+): ScoredSemanticRef[] | undefined {
+    let scoredRefs = propertyIndex.lookupProperty(propertyName, propertyValue);
+    if (scoredRefs && scoredRefs.length > 0 && rangesInScope) {
+        scoredRefs = scoredRefs.filter((sr) =>
+            rangesInScope.isRangeInScope(
+                semanticRefs[sr.semanticRefIndex].range,
+            ),
+        );
+    }
+    return scoredRefs;
 }
 
 const PropertyDelimiter = "@@";

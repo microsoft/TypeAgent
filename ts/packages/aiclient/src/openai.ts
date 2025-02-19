@@ -8,7 +8,7 @@ import {
     ChatModelWithStreaming,
     ImageModel,
     ImageGeneration,
-    JsonSchema,
+    CompletionJsonSchema,
 } from "./models";
 import { callApi, callJsonApi, FetchThrottler } from "./restClient";
 import { getEnvSetting } from "./common";
@@ -300,15 +300,13 @@ type ChatCompletion = {
     usage: CompletionUsageStats;
 };
 
-export type ToolCallOutput = {
-    name: string;
-    arguments: any;
-};
-
 type ToolCall = {
     id: string;
     type: "function";
-    function: ToolCallOutput;
+    function: {
+        name: string;
+        arguments: string;
+    };
 };
 
 type ChatCompletionChoice = {
@@ -323,15 +321,17 @@ type ChatCompletionChunk = {
     usage?: CompletionUsageStats;
 };
 
+type ToolCallDelta = { index: number } & ToolCall;
+
 type ChatCompletionDelta = {
-    delta: ChatContent;
+    delta: ChatContent<ToolCallDelta>;
     content_filter_results?: FilterResult | FilterError;
     finish_reason?: string;
 };
 
-type ChatContent = {
+type ChatContent<ToolCallType = ToolCall> = {
     content?: string | null;
-    tool_calls?: ToolCall[];
+    tool_calls?: ToolCallType[];
     role: "assistant";
 };
 
@@ -435,7 +435,7 @@ function createAzureOpenAIChatModel(
 
     function getParams(
         messages: PromptSection[],
-        jsonSchema?: JsonSchema,
+        jsonSchema?: CompletionJsonSchema,
         additionalParams?: any,
     ) {
         const params: any = {
@@ -468,7 +468,7 @@ function createAzureOpenAIChatModel(
     }
     async function complete(
         prompt: string | PromptSection[],
-        jsonSchema?: JsonSchema,
+        jsonSchema?: CompletionJsonSchema,
     ): Promise<Result<string>> {
         verifyPromptLength(settings, prompt);
 
@@ -530,14 +530,19 @@ function createAzureOpenAIChatModel(
             if (c.type !== "function") {
                 return error("Invalid tool call type");
             }
-            return success(JSON.stringify(c.function));
+            return success(
+                JSON.stringify({
+                    name: c.function.name,
+                    arguments: JSON.parse(c.function.arguments),
+                }),
+            );
         }
         return success(data.choices[0].message?.content ?? "");
     }
 
     async function completeStream(
         prompt: string | PromptSection[],
-        jsonSchema?: JsonSchema,
+        jsonSchema?: CompletionJsonSchema,
     ): Promise<Result<AsyncIterableIterator<string>>> {
         verifyPromptLength(settings, prompt);
 
@@ -598,15 +603,50 @@ function createAzureOpenAIChatModel(
                                 });
                             }
                         } catch {}
+                        if (Array.isArray(jsonSchema)) {
+                            fullResponseText += "}";
+                            yield "}";
+                        }
                         break;
                     }
                     const data = JSON.parse(evt.data) as ChatCompletionChunk;
                     if (verifyContentSafety(data)) {
                         if (data.choices && data.choices.length > 0) {
-                            const delta = data.choices[0].delta?.content ?? "";
-                            if (delta) {
-                                fullResponseText += delta;
-                                yield delta;
+                            if (Array.isArray(jsonSchema)) {
+                                const delta = data.choices[0].delta.tool_calls;
+                                if (delta) {
+                                    for (const d of delta) {
+                                        if (d.index !== 0) {
+                                            throw new Error(
+                                                "Invalid number of tool_calls",
+                                            );
+                                        }
+                                        if (fullResponseText === "") {
+                                            if (d.type !== "function") {
+                                                throw new Error(
+                                                    "Invalid tool call type",
+                                                );
+                                            }
+                                            if (!d.function.name) {
+                                                throw new Error(
+                                                    "Invalid function name",
+                                                );
+                                            }
+                                            fullResponseText = `{"name":"${d.function.name}","arguments":${d.function.arguments ?? ""}`;
+                                            yield fullResponseText;
+                                        } else {
+                                            const result = d.function.arguments;
+                                            fullResponseText += result;
+                                            yield result;
+                                        }
+                                    }
+                                }
+                            } else {
+                                const delta = data.choices[0].delta.content;
+                                if (delta) {
+                                    fullResponseText += delta;
+                                    yield delta;
+                                }
                             }
                         }
                         if (data.usage) {

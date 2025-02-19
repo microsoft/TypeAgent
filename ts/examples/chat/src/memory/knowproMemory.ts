@@ -12,6 +12,7 @@ import {
     NamedArgs,
     parseNamedArguments,
     ProgressBar,
+    StopWatch,
 } from "interactive-app";
 import { ChatContext } from "./chatMemory.js";
 import { ChatModel } from "aiclient";
@@ -373,7 +374,16 @@ export async function createKnowproCommands(
                 displayAsc: argBool("Display results in ascending order", true),
                 startMinute: argNum("Starting at minute."),
                 endMinute: argNum("Ending minute."),
-                exact: argBool("Only display exact matches", false),
+                andTerms: argBool("'And' all terms. Default is 'or", false),
+                exact: argBool("Exact match only. No related terms", false),
+                usePropertyIndex: argBool(
+                    "Use property index while searching",
+                    false,
+                ),
+                useTimestampIndex: argBool(
+                    "Use timestamp index while searching",
+                    false,
+                ),
             },
         };
         if (kType === undefined) {
@@ -396,108 +406,110 @@ export async function createKnowproCommands(
             args,
             commandDef,
         );
-        const terms = parseQueryTerms(termArgs);
         if (conversation.semanticRefIndex && conversation.semanticRefs) {
             context.printer.writeInColor(
                 chalk.cyan,
                 `Searching ${conversation.nameTag}...`,
             );
 
+            const timer = new StopWatch();
+            timer.start();
             const matches = await kp.searchConversation(
                 conversation,
-                terms,
-                propertyTermsFromNamedArgs(namedArgs, commandDef),
-                filterFromNamedArgs(namedArgs, commandDef),
-                undefined,
-                namedArgs.exact ? 1 : undefined,
+                createSearchGroup(
+                    termArgs,
+                    namedArgs,
+                    commandDef,
+                    namedArgs.andTerms,
+                ),
+                whenFilterFromNamedArgs(namedArgs, commandDef),
+                {
+                    exactMatch: namedArgs.exact,
+                    usePropertyIndex: namedArgs.usePropertyIndex,
+                    useTimestampIndex: namedArgs.useTimestampIndex,
+                },
             );
-            if (matches === undefined || matches.size === 0) {
+            timer.stop();
+            if (matches && matches.size > 0) {
+                context.printer.writeLine();
+                context.printer.writeSearchResults(
+                    conversation,
+                    matches,
+                    namedArgs.maxToDisplay,
+                );
+            } else {
                 context.printer.writeLine("No matches");
-                return;
             }
-            context.printer.writeLine();
-            context.printer.writeSearchResults(
-                conversation,
-                matches,
-                namedArgs.maxToDisplay,
-            );
+            context.printer.writeTiming(chalk.gray, timer);
         } else {
-            ``;
             context.printer.writeError("Conversation is not indexed");
         }
+    }
+
+    function createSearchGroup(
+        termArgs: string[],
+        namedArgs: NamedArgs,
+        commandDef: CommandMetadata,
+        andTerms: boolean = false,
+    ): kp.SearchTermGroup {
+        const searchTerms = parseQueryTerms(termArgs);
+        const propertyTerms = propertyTermsFromNamedArgs(namedArgs, commandDef);
+        return {
+            booleanOp: andTerms ? "and" : "or",
+            terms: [...searchTerms, ...propertyTerms],
+        };
     }
 
     function propertyTermsFromNamedArgs(
         namedArgs: NamedArgs,
         commandDef: CommandMetadata,
     ): kp.PropertySearchTerm[] {
-        return createPropertyTerms(namedArgs, commandDef, undefined, (name) => {
-            if (name.startsWith("@")) {
-                return name.substring(1);
-            }
-            return name;
-        });
-    }
-
-    function propertyScopeTermsFromNamedArgs(
-        namedArgs: NamedArgs,
-        commandDef: CommandMetadata,
-    ): kp.PropertySearchTerm[] {
-        return createPropertyTerms(
-            namedArgs,
-            commandDef,
-            (name) => name.startsWith("@"),
-            (name) => name.substring(1),
-        );
+        return createPropertyTerms(namedArgs, commandDef);
     }
 
     function createPropertyTerms(
         namedArgs: NamedArgs,
         commandDef: CommandMetadata,
         nameFilter?: (name: string) => boolean,
-        nameModifier?: (name: string) => string,
     ): kp.PropertySearchTerm[] {
         const keyValues = keyValuesFromNamedArgs(namedArgs, commandDef);
         const propertyNames = nameFilter
             ? Object.keys(keyValues).filter(nameFilter)
             : Object.keys(keyValues);
-        return propertyNames.map((propertyName) =>
-            kp.propertySearchTermFromKeyValue(
-                nameModifier ? nameModifier(propertyName) : propertyName,
-                keyValues[propertyName],
-            ),
-        );
+        const propertySearchTerms: kp.PropertySearchTerm[] = [];
+        for (const propertyName of propertyNames) {
+            const allValues = splitTermValues(keyValues[propertyName]);
+            for (const value of allValues) {
+                propertySearchTerms.push(
+                    kp.propertySearchTermFromKeyValue(propertyName, value),
+                );
+            }
+        }
+        return propertySearchTerms;
     }
 
-    function filterFromNamedArgs(
+    function whenFilterFromNamedArgs(
         namedArgs: NamedArgs,
         commandDef: CommandMetadata,
-    ) {
-        let filter: kp.SearchFilter = {
-            type: namedArgs.ktype,
+    ): kp.WhenFilter {
+        let filter: kp.WhenFilter = {
+            knowledgeType: namedArgs.ktype,
         };
         const conv: kp.IConversation | undefined = context.podcast ?? context.images;
         const dateRange = kp.getTimeRangeForConversation(conv!);
         if (dateRange && namedArgs.startMinute >= 0) {
-            filter.dateRange = {
+            filter.inDateRange = {
                 start: dateTime.addMinutesToDate(
                     dateRange.start,
                     namedArgs.startMinute,
                 ),
             };
             if (namedArgs.endMinute) {
-                filter.dateRange.end = dateTime.addMinutesToDate(
+                filter.inDateRange.end = dateTime.addMinutesToDate(
                     dateRange.start,
                     namedArgs.endMinute,
                 );
             }
-        }
-        const propertyScope = propertyScopeTermsFromNamedArgs(
-            namedArgs,
-            commandDef,
-        );
-        if (propertyScope.length > 0) {
-            filter.propertyScope = propertyScope;
         }
         return filter;
     }
@@ -693,10 +705,7 @@ export async function createKnowproCommands(
 export function parseQueryTerms(args: string[]): kp.SearchTerm[] {
     const queryTerms: kp.SearchTerm[] = [];
     for (const arg of args) {
-        let allTermStrings = knowLib.split(arg, ";", {
-            trim: true,
-            removeEmpty: true,
-        });
+        let allTermStrings = splitTermValues(arg);
         if (allTermStrings.length > 0) {
             allTermStrings = allTermStrings.map((t) => t.toLowerCase());
             const queryTerm: kp.SearchTerm = {
@@ -712,4 +721,12 @@ export function parseQueryTerms(args: string[]): kp.SearchTerm[] {
         }
     }
     return queryTerms;
+}
+
+function splitTermValues(term: string): string[] {
+    let allTermStrings = knowLib.split(term, ";", {
+        trim: true,
+        removeEmpty: true,
+    });
+    return allTermStrings;
 }

@@ -35,6 +35,7 @@ export default class TranslateCommand extends Command {
         }),
         multiple: Flags.boolean({
             description: "Include multiple action schema",
+            default: true, // follow DispatcherOptions default
             allowNo: true,
         }),
         model: Flags.string({
@@ -43,18 +44,17 @@ export default class TranslateCommand extends Command {
         }),
         jsonSchema: Flags.boolean({
             description: "Output JSON schema",
-            allowNo: true,
+            default: false, // follow DispatcherOptions default
         }),
         jsonSchemaFunction: Flags.boolean({
             description: "Output JSON schema function",
-            allowNo: true,
+            default: false, // follow DispatcherOptions default
             exclusive: ["jsonSchema"],
         }),
         jsonSchemaValidate: Flags.boolean({
             description: "Validate the output when JSON schema is enabled",
-            relationships: [
-                { type: "some", flags: ["jsonSchema", "jsonSchemaFunction"] },
-            ],
+            default: true, // follow DispatcherOptions default
+            allowNo: true,
         }),
     };
 

@@ -2,7 +2,6 @@
 // Licensed under the MIT License.
 
 import { conversation } from "knowledge-processor";
-import { NormalizedEmbedding } from "typeagent";
 
 // an object that can provide a KnowledgeResponse structure
 export interface IKnowledgeSource {
@@ -50,19 +49,6 @@ export interface ITermToSemanticRefIndex {
     lookupTerm(term: string): ScoredSemanticRef[] | undefined;
 }
 
-export interface IPropertyToSemanticRefIndex {
-    getValues(): string[];
-    addProperty(
-        propertyName: string,
-        value: string,
-        semanticRefIndex: SemanticRefIndex | ScoredSemanticRef,
-    ): void;
-    lookupProperty(
-        propertyName: string,
-        value: string,
-    ): ScoredSemanticRef[] | undefined;
-}
-
 export type KnowledgeType = "entity" | "action" | "topic" | "tag";
 export type Knowledge =
     | conversation.ConcreteEntity
@@ -89,9 +75,6 @@ export interface IConversation<TMeta extends IKnowledgeSource = any> {
     messages: IMessage<TMeta>[];
     semanticRefs: SemanticRef[] | undefined;
     semanticRefIndex?: ITermToSemanticRefIndex | undefined;
-    propertyToSemanticRefIndex: IPropertyToSemanticRefIndex | undefined;
-    termToRelatedTermsIndex?: ITermToRelatedTermsIndex | undefined;
-    timestampIndex?: ITimestampToTextRangeIndex | undefined;
 }
 
 export type MessageIndex = number;
@@ -119,8 +102,13 @@ export interface IConversationData<TMessage> {
     tags: string[];
     semanticRefs: SemanticRef[];
     semanticIndexData?: ITermToSemanticRefIndexData | undefined;
-    relatedTermsIndexData?: ITermsToRelatedTermsIndexData | undefined;
 }
+
+export type DateRange = {
+    start: Date;
+    // Inclusive
+    end?: Date | undefined;
+};
 
 export type Term = {
     text: string;
@@ -130,67 +118,6 @@ export type Term = {
     weight?: number | undefined;
 };
 
-export interface ITermToRelatedTermsIndex {
-    lookupTerm(termText: string): Term[] | undefined;
-    get termEmbeddings(): ITermEmbeddingIndex | undefined;
-    serialize(): ITermsToRelatedTermsIndexData;
-    deserialize(data?: ITermsToRelatedTermsIndexData): void;
-}
-
-export interface ITermsToRelatedTermsIndexData {
-    relatedTermsData?: ITermToRelatedTermsData | undefined;
-    textEmbeddingData?: ITextEmbeddingIndexData | undefined;
-}
-
-export interface ITermToRelatedTermsData {
-    relatedTerms?: ITermsToRelatedTermsDataItem[] | undefined;
-}
-
-export interface ITermsToRelatedTermsDataItem {
-    termText: string;
-    relatedTerms: Term[];
-}
-
-export interface ITermEmbeddingIndex {
-    lookupTerm(
-        text: string,
-        maxMatches?: number,
-        minScore?: number,
-    ): Promise<Term[]>;
-    lookupTerms(
-        texts: string[],
-        maxMatches?: number,
-        minScore?: number,
-    ): Promise<Term[][]>;
-    lookupEmbeddings(
-        text: string,
-        maxMatches?: number,
-        minScore?: number,
-    ): Promise<[string, NormalizedEmbedding][] | undefined>;
-    serialize(): ITextEmbeddingIndexData;
-    deserialize(data: ITextEmbeddingIndexData): void;
-}
-
-export interface ITextEmbeddingIndexData {
-    modelName?: string | undefined;
-    embeddingData?: ITextEmbeddingDataItem[] | undefined;
-}
-
-export interface ITextEmbeddingDataItem {
-    text: string;
-    embedding: number[];
-}
-
-export type DateRange = {
-    start: Date;
-    end?: Date | undefined;
-};
-
-export type TimestampedTextRange = {
-    timestamp: string;
-    range: TextRange;
-};
-
-export interface ITimestampToTextRangeIndex {
-    lookupRange(dateRange: DateRange): TimestampedTextRange[];
-}
+// Also see:
+// - secondaryIndex.ts for optional secondary interfaces
+// - search.ts for search interfaces.

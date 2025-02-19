@@ -1,13 +1,10 @@
 {
   "extends": "@electron-toolkit/tsconfig/tsconfig.web.json",
-  "include": [
-    "src/renderer/**/*.ts",
-    "src/preload/*.d.ts",
-    "src/preload/electronTypes.ts"
-  ],
+  "include": ["src/renderer/**/*.ts", "src/preload/*"],
   "compilerOptions": {
     "incremental": true,
     "noEmit": true,
-    "moduleResolution": "bundler"
+    "moduleResolution": "bundler",
+    "types": []
   }
 }

@@ -2,8 +2,10 @@
 // Licensed under the MIT License.
 
 import { ElectronAPI } from "@electron-toolkit/preload";
-import { ShellSettings } from "../main/shellSettings.js";
-import { Dispatcher, ClientIO } from "agent-dispatcher";
+import type { ShellSettingsType } from "./shellSettingsType.js";
+import type { Dispatcher, ClientIO } from "agent-dispatcher";
+
+export type { ShellSettingsType };
 
 export type SpeechToken = {
     token: string;
@@ -24,8 +26,6 @@ export type SetSettingFunction = (name: string, value: any) => void;
 export interface ClientSettingsProvider {
     set: SetSettingFunction | null;
 }
-
-export type DisplayType = "html" | "iframe" | "text" | "markdown";
 
 export type ClientActions =
     | "show-camera"
@@ -69,7 +69,7 @@ export interface ClientAPI {
     onSettingsChanged(
         callback: (
             e: Electron.IpcRendererEvent,
-            settings: ShellSettings,
+            settings: ShellSettingsType,
         ) => void,
     ): void;
     onChatHistory(

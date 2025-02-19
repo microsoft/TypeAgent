@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { ClientIO } from "agent-dispatcher";
-import { ClientAPI, SpeechToken } from "../../preload/electronTypes";
+import { ClientAPI, SpeechToken } from "../../preload/electronTypes.js";
 import { createClientIORpcServer } from "agent-dispatcher/rpc/clientio/server";
 import { createGenericChannel } from "agent-rpc/channel";
 import { createDispatcherRpcClient } from "agent-dispatcher/rpc/dispatcher/client";

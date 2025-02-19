@@ -11,14 +11,16 @@ import { createDispatcher, Dispatcher } from "agent-dispatcher";
 import { ChatHistoryInput } from "agent-dispatcher/internal";
 import { FullAction } from "agent-cache";
 
-type TranslateTestRequest = {
+type TranslateTestStep = {
     request: string;
     action: string | string[] | FullAction | FullAction[];
-    history?: ChatHistoryInput | ChatHistoryInput[];
     match?: "exact" | "partial"; // default to "exact"
+    // History insertion after translation (if any)
+    history?: ChatHistoryInput | ChatHistoryInput[];
 };
-type TranslateTestEntry = TranslateTestRequest | TranslateTestRequest[];
+type TranslateTestEntry = TranslateTestStep | TranslateTestStep[];
 type TranslateTestFile = TranslateTestEntry[];
+
 const repeat = 5;
 const defaultAppAgentProviders = getDefaultAppAgentProviders(undefined);
 
@@ -33,6 +35,15 @@ export async function defineTranslateTest(name: string, dataFiles: string[]) {
         )
     ).flat();
 
+    const inputsWithName = inputs.map(
+        (i) =>
+            [
+                Array.isArray(i)
+                    ? i.map((i) => i.request).join("|")
+                    : i.request,
+                i,
+            ] as const,
+    );
     describe(`${name} action stability`, () => {
         let dispatchers: Dispatcher[];
         beforeAll(async () => {
@@ -43,7 +54,7 @@ export async function defineTranslateTest(name: string, dataFiles: string[]) {
                         appAgentProviders: defaultAppAgentProviders,
                         actions: null,
                         commands: { dispatcher: true },
-                        translation: { history: { enabled: false } },
+                        execution: { history: false }, // don't generate chat history, the test manually imports them
                         explainer: { enabled: false },
                         cache: { enabled: false },
                         collectCommandResult: true,
@@ -52,23 +63,22 @@ export async function defineTranslateTest(name: string, dataFiles: string[]) {
             }
             dispatchers = await Promise.all(dispatcherP);
         });
-        it.each(inputs)(`${name} '$request'`, async (test) => {
-            const requests = Array.isArray(test) ? test : [test];
+        beforeEach(async () => {
             await Promise.all(
                 dispatchers.map(async (dispatcher) => {
-                    for (const {
-                        request,
-                        history,
-                        action,
-                        match,
-                    } of requests) {
-                        if (history !== undefined) {
-                            const insertResult =
-                                await dispatcher.processCommand(
-                                    `@history insert ${JSON.stringify(history)}`,
-                                );
-                            expect(insertResult?.hasError).toBeFalsy();
-                        }
+                    const result =
+                        await dispatcher.processCommand("@history clear");
+                    expect(result?.hasError).toBeFalsy();
+                }),
+            );
+        });
+        it.each(inputsWithName)(`${name} %p`, async (_, test) => {
+            const steps = Array.isArray(test) ? test : [test];
+            await Promise.all(
+                dispatchers.map(async (dispatcher) => {
+                    for (const step of steps) {
+                        const { request, action, match, history } = step;
+
                         const result = await dispatcher.processCommand(request);
                         expect(result?.hasError).toBeFalsy();
 
@@ -98,6 +108,14 @@ export async function defineTranslateTest(name: string, dataFiles: string[]) {
                                     expect(action).toEqual(expected);
                                 }
                             }
+                        }
+
+                        if (history !== undefined) {
+                            const insertResult =
+                                await dispatcher.processCommand(
+                                    `@history insert ${JSON.stringify({ user: request, assistant: history })}`,
+                                );
+                            expect(insertResult?.hasError).toBeFalsy();
                         }
                     }
                 }),
