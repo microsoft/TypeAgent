@@ -52,7 +52,7 @@ export function createPdfDocumenter(model: ChatModel): PdfFileDocumenter {
 
         for (const pageid in pageChunksMap) {
             const { pageChunk, blocks } = pageChunksMap[pageid];
-            let text = `***: Document the following Page (ID: ${pageChunk.id}, Page: ${pageChunk.pageid}):\n`;
+            let text = `***: Document the following Page (Id: ${pageChunk.id}, Page: ${pageChunk.pageid}):\n`;
             
             let pageImageBase64 = "";
             const pageImageBlob = pageChunk.blobs.find(blob => blob.blob_type === "page_image" && blob.img_path);
@@ -62,7 +62,7 @@ export function createPdfDocumenter(model: ChatModel): PdfFileDocumenter {
             }
             
             for (const block of blocks) {
-                const blockIdentifier = `Chunk: ${block.id}, Page: ${block.pageid}`;
+                const blockIdentifier = `Chunk Id: ${block.id}, Page: ${block.pageid}`;
                 for (const blob of block.blobs) {
                     if (blob.blob_type === "text" && Array.isArray(blob.content)) {
                         text += `Text Content (${blockIdentifier}):\n`;
@@ -82,7 +82,7 @@ export function createPdfDocumenter(model: ChatModel): PdfFileDocumenter {
             const request =
                 "Summarize the given document sections based on the extracted content and page image.\n" +
                 "For text, provide a concise summary of the main points.\n" +
-                "For tables, describe their contents and significance.\n" +
+                //"For tables, describe their contents and significance.\n" +
                 "For images, infer their purpose based on the context.\n" +
                 "Include a high-level summary of the entire page based on the extracted image and text.\n" +
                 "Also fill in the lists of keywords, tags, synonyms, and dependencies.\n";

@@ -5,11 +5,12 @@
 // and the pdfChunker.py script is in the dist directory.
 
 import { exec } from "child_process";
-import path from "path";
+import path, { resolve } from "path";
 import { fileURLToPath } from "url";
 import { promisify } from "util";
 
 import { PdfDocChunk } from "./pdfDocChunkSchema.js";
+
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -59,8 +60,10 @@ export async function chunkifyPdfFiles(
         success = false;
     try {
         const chunkerPath = path.join(__dirname, "pdfChunker.py");
+        const absChunkerPath = resolve(chunkerPath);
+        const absFilenames = filenames.map(f => `"${path.join(__dirname, f)}"`);
         let { stdout, stderr } = await execPromise(
-            `python3 -X utf8 ${chunkerPath} ${filenames.join(" ")}`,
+            `python3 -X utf8 "${absChunkerPath}" ${absFilenames.join(" ")}`,
             { maxBuffer: 64 * 1024 * 1024 }, // Super large buffer
         );
         output = stdout;

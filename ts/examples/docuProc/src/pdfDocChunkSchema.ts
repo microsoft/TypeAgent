@@ -3,10 +3,15 @@
 
 // Extracted information for a chunk of text.
 export interface PdfDocChunk{
+
+    // Optional file identifier for this chunk.
+    fileName?: string;
+
     // Optional identifier for this chunk.
-    chunkid: string;
+    chunkid?: string;
 
     // If the chunk contains a text blob with a title, this is the title.
+    // or come up with a section name
     sectionName?: string;
 
     // One paragraph summary of the chunk.

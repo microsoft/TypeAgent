@@ -289,17 +289,20 @@ class PDFChunker:
             table_chunks = self.extract_tables(pdf, page_chunks=page_chunks)
             image_chunks = self.extract_images(page_chunks)
         all_chunks = text_chunks + table_chunks + image_chunks
-        return ChunkedFile(self.file_path, all_chunks)
+        return all_chunks
 
-    def save_json(self, output_path: str):
-        chunked_file = self.chunkify()
+    def save_json(self, output_path: str) -> list[Chunk] | ErrorItem:
+        all_chunks = self.chunkify()
+        if (all_chunks is None) or isinstance(all_chunks, ErrorItem):
+            return all_chunks
+        chunked_file = ChunkedFile(self.file_path, all_chunks)
         with open(output_path, "w") as f:
             print(json.dumps(chunked_file, default=custom_json, indent=2))
-            json.dump(chunked_file, f, default=custom_json, indent=2)
+        return all_chunks
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: python chunker.py FILE [FILE] ...")
+        print("Usage: python3 -X utf8 pdfChunker.py FILE [FILE] ...")
         return 2
 
     output_json = "pdf-chunked-output.json"
@@ -316,11 +319,16 @@ def main():
                 continue
             
             chunker = PDFChunker(filename)
-            chunker.save_json(output_json)
+            result = chunker.save_json(output_json)
+            if isinstance(result, ErrorItem):
+                items.append(result)
+            else:
+                chunks = [chunk for chunk in result if chunk.blobs]
+                items.append(ChunkedFile(filename, chunks))
         except IOError as err:
             items.append(ErrorItem(str(err), filename))
 
-    #print(json.dumps(items, default=custom_json, indent=2))
+    print(json.dumps(items, default=custom_json, indent=2))
     return 0
 
 if __name__ == "__main__":
