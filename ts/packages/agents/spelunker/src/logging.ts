@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 let epoch: number = 0;
 
 export function resetEpoch(): void {
