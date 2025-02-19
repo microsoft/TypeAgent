@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import path from "path";
+
 import ts from "typescript";
 
 import { tsCode } from "code-processor";
@@ -12,7 +14,7 @@ import {
     ChunkedFile,
     ChunkerErrorItem,
 } from "./chunkSchema.js";
-import path from "path";
+import { console_log } from "./logging.js";
 
 let last_ts = Date.now() * 1000;
 export function generate_id(): ChunkId {
@@ -27,10 +29,10 @@ export function generate_id(): ChunkId {
 export async function chunkifyTypeScriptFiles(
     fileNames: string[],
 ): Promise<(ChunkedFile | ChunkerErrorItem)[]> {
-    // console.log("========================================================");
+    // console_log("========================================================");
     const results: (ChunkedFile | ChunkerErrorItem)[] = [];
     for (const fileName of fileNames) {
-        // console.log(fileName);
+        // console_log(fileName);
         const sourceFile: ts.SourceFile = await tsCode.loadSourceFile(fileName);
 
         const baseName = path.basename(fileName);
@@ -76,7 +78,7 @@ export async function chunkifyTypeScriptFiles(
                     ts.isFunctionDeclaration(childNode) ||
                     ts.isClassDeclaration(childNode)
                 ) {
-                    // console.log(
+                    // console_log(
                     //     ts.SyntaxKind[childNode.kind],
                     //     tsCode.getStatementName(childNode),
                     // );
@@ -156,7 +158,7 @@ function spliceBlobs(parentChunk: Chunk, childChunk: Chunk): void {
         blobs.push({ start: startBefore, lines: linesBefore });
     }
     const sig: string = signature(childChunk);
-    // console.log("signature", sig);
+    // console_log("signature", sig);
     if (sig) {
         blobs.push({
             start: childBlob.start,
@@ -209,7 +211,7 @@ function makeBlobs(
         startPos = lineStarts[startLoc.line + 1];
         startLoc = sourceFile.getLineAndCharacterOfPosition(startPos);
     }
-    // console.log(
+    // console_log(
     //     `Start and end: ${startPos}=${startLoc.line + 1}:${startLoc.character}, ` +
     //         `${endPos}=${endLoc.line + 1}:${endLoc.character}`,
     // );
@@ -217,7 +219,7 @@ function makeBlobs(
         startPos = lineStarts[startLoc.line + 1];
         startLoc = sourceFile.getLineAndCharacterOfPosition(startPos);
     }
-    // console.log(
+    // console_log(
     //     `Updated start: ${startPos}=${startLoc.line + 1}:${startLoc.character}`,
     // );
     const lines: string[] = [];
@@ -229,7 +231,7 @@ function makeBlobs(
     while (lines && !lines[lines.length - 1].trim()) {
         lines.pop();
     }
-    // console.log(lines.slice(0, 3), "...", lines.slice(-3));
+    // console_log(lines.slice(0, 3), "...", lines.slice(-3));
     if (!lines.length) {
         return [];
     }
@@ -251,6 +253,6 @@ export class Testing {
             "./packages/agents/spelunker/src/pythonChunker.ts",
         ];
         const results = await chunkifyTypeScriptFiles(fileNames);
-        console.log(JSON.stringify(results, null, 2));
+        console_log(JSON.stringify(results, null, 2));
     }
 }

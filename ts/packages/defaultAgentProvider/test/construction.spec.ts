@@ -7,7 +7,7 @@ dotenv.config({ path: new URL("../../../../.env", import.meta.url) });
 import {
     createSchemaInfoProvider,
     getCacheFactory,
-    readTestData,
+    readExplanationTestData,
     createActionConfigProvider,
 } from "agent-dispatcher/internal";
 import { fromJsonActions, RequestAction } from "agent-cache";
@@ -17,7 +17,7 @@ import { glob } from "glob";
 const dataFiles = ["test/data/explanations/**/v5/*.json"];
 
 const inputs = await Promise.all(
-    (await glob(dataFiles)).map((f) => readTestData(f)),
+    (await glob(dataFiles)).map((f) => readExplanationTestData(f)),
 );
 
 const testInput = inputs.flatMap((f) =>

@@ -14,5 +14,9 @@
     {
         "request": "look up information about Oregon and write a poem using what you found",
         "action": ["chat.lookupAndGenerateResponse", "dispatcher.pendingRequestAction"]
+    },
+    {
+        "request": "look up the recipe for tarte a l'oignan and add the ingredients to my grocery list",
+        "action": ["chat.lookupAndGenerateResponse", "dispatcher.pendingRequestAction"]
     }
 ]

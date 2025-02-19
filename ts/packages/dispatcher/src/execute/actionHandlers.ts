@@ -3,7 +3,6 @@
 
 import {
     ExecutableAction,
-    toFullActions,
     FullAction,
     getFullActionName,
     normalizeParamString,
@@ -271,18 +270,19 @@ async function executeAction(
     actionIndex: number,
 ): Promise<ActionResult> {
     const action = executableAction.action;
-    const translatorName = action.translatorName;
-
-    if (translatorName === undefined) {
-        throw new Error(`Cannot execute action without translator name.`);
+    if (debugActions.enabled) {
+        debugActions(
+            `Executing action: ${JSON.stringify(action, undefined, 2)}`,
+        );
     }
 
+    const schemaName = action.translatorName;
     const systemContext = context.sessionContext.agentContext;
-    const appAgentName = getAppAgentName(translatorName);
+    const appAgentName = getAppAgentName(schemaName);
     const appAgent = systemContext.agents.getAppAgent(appAgentName);
 
     // Update the last action translator.
-    systemContext.lastActionSchemaName = translatorName;
+    systemContext.lastActionSchemaName = schemaName;
 
     if (appAgent.executeAction === undefined) {
         throw new Error(
@@ -290,11 +290,6 @@ async function executeAction(
         );
     }
 
-    if (debugActions.enabled) {
-        debugActions(
-            `Executing action: ${JSON.stringify(action, undefined, 2)}`,
-        );
-    }
     // Reuse the same streaming action context if one is available.
 
     const { actionContext, closeActionContext } =
@@ -369,7 +364,7 @@ async function executeAction(
         }
         if (result.dynamicDisplayId !== undefined) {
             systemContext.clientIO.setDynamicDisplay(
-                translatorName,
+                schemaName,
                 systemContext.requestId,
                 actionIndex,
                 result.dynamicDisplayId,
@@ -483,69 +478,181 @@ async function canExecute(
     return true;
 }
 
-function getParameterEntities(
+type EntityValue = PromptEntity | undefined;
+type EntityField = EntityValue | EntityObject | EntityField[];
+interface EntityObject {
+    [key: string]: EntityValue | EntityField;
+}
+
+function getParameterObjectEntities(
     appAgentName: string,
+    obj: Record<string, any>,
+    resultEntityMap: Map<string, PromptEntity>,
+    promptEntityMap: Map<string, PromptEntity> | undefined,
+    promptNameEntityMap: Map<string, PromptEntity | PromptEntity[]> | undefined,
+) {
+    let hasEntity = false;
+    const entities: EntityObject | EntityField[] = Array.isArray(obj) ? [] : {};
+    for (const [k, v] of Object.entries(obj)) {
+        const entity = getParameterEntities(
+            appAgentName,
+            obj,
+            k,
+            v,
+            resultEntityMap,
+            promptEntityMap,
+            promptNameEntityMap,
+        );
+        if (entity !== undefined) {
+            hasEntity = true;
+            (entities as any)[k] = entity;
+        }
+    }
+    return hasEntity ? entities : undefined;
+}
+
+function resolveParameterEntity(
+    obj: Record<string, any>,
+    key: string,
     value: any,
     resultEntityMap: Map<string, PromptEntity>,
     promptEntityMap: Map<string, PromptEntity> | undefined,
+    promptNameEntityMap: Map<string, PromptEntity | PromptEntity[]> | undefined,
 ) {
+    const resultEntity = resultEntityMap.get(value);
+    if (resultEntity !== undefined) {
+        return resultEntity;
+    }
+    const entity = promptEntityMap?.get(value);
+    if (entity !== undefined) {
+        // fix up the action to the actual entity name
+        obj[key] = entity.name;
+        return entity;
+    }
+
+    // LLM like to correct/change casing.  Normalize entity name for look up.
+    return promptNameEntityMap?.get(normalizeParamString(value));
+}
+
+function getParameterEntities(
+    appAgentName: string,
+    obj: any,
+    key: string,
+    value: any,
+    resultEntityMap: Map<string, PromptEntity>,
+    promptEntityMap: Map<string, PromptEntity> | undefined,
+    promptNameEntityMap: Map<string, PromptEntity | PromptEntity[]> | undefined,
+): EntityField | undefined {
     switch (typeof value) {
         case "undefined":
             return;
         case "string":
-            // LLM like to correct/change casing.  Normalize for look up.
-            const normalizedValue = normalizeParamString(value);
-            const entity =
-                resultEntityMap.get(normalizedValue) ??
-                promptEntityMap?.get(normalizedValue);
-            return entity?.sourceAppAgentName === appAgentName
-                ? entity
-                : undefined;
+            const entity = resolveParameterEntity(
+                obj,
+                key,
+                value,
+                resultEntityMap,
+                promptEntityMap,
+                promptNameEntityMap,
+            );
+
+            if (entity === undefined) {
+                return undefined;
+            }
+            if (!Array.isArray(entity)) {
+                return entity.sourceAppAgentName === appAgentName
+                    ? entity
+                    : undefined;
+            }
+            const matched = entity.filter(
+                (e) => e.sourceAppAgentName === appAgentName,
+            );
+            // TODO: If there are multiple match, ignore for now.
+            return matched.length === 1 ? matched[0] : undefined;
         case "function":
             throw new Error("Function is not supported as an action value");
         case "object":
-            if (value === null) {
-                return undefined;
-            }
-            let hasEntity = false;
-            const entities: any = Array.isArray(value) ? [] : {};
-            for (const [key, v] of Object.entries(value)) {
-                const entity = getParameterEntities(
-                    appAgentName,
-                    v,
-                    resultEntityMap,
-                    promptEntityMap,
-                );
-                if (entity !== undefined) {
-                    hasEntity = true;
-                    entities[key] = entity;
-                }
-            }
-            return hasEntity ? entities : undefined;
+            return value
+                ? getParameterObjectEntities(
+                      appAgentName,
+                      value,
+                      resultEntityMap,
+                      promptEntityMap,
+                      promptNameEntityMap,
+                  )
+                : undefined;
     }
 }
 
 type PendingAction = {
     executableAction: ExecutableAction;
     promptEntityMap: Map<string, PromptEntity> | undefined;
+    promptNameEntityMap: Map<string, PromptEntity | PromptEntity[]> | undefined;
 };
+
+function toPromptEntityMap(entities: PromptEntity[] | undefined) {
+    return entities
+        ? new Map<string, PromptEntity>(
+              entities.map((entity, i) => [`\${entity-${i}}`, entity] as const),
+          )
+        : undefined;
+}
+
+function toPromptEntityNameMap(entities: PromptEntity[] | undefined) {
+    if (entities === undefined) {
+        return undefined;
+    }
+    const map = new Map<string, PromptEntity | PromptEntity[]>();
+    for (const entity of entities) {
+        // LLM like to correct/change casing.  Normalize entity name for look up.
+        const name = normalizeParamString(entity.name);
+        const existing = map.get(name);
+        if (existing === undefined) {
+            map.set(name, entity);
+            continue;
+        }
+        if (Array.isArray(existing)) {
+            existing.push(entity);
+        } else {
+            map.set(name, [existing, entity]);
+        }
+    }
+    return map;
+}
+
+function resolveEntities(
+    action: TypeAgentAction<FullAction>,
+    promptEntityMap: Map<string, PromptEntity> | undefined,
+    promptNameEntityMap: Map<string, PromptEntity | PromptEntity[]> | undefined,
+    duplicate: boolean,
+) {
+    if (action.parameters === undefined) {
+        return action;
+    }
+    const result = duplicate ? { ...action } : action;
+    const entities = getParameterObjectEntities(
+        getAppAgentName(action.translatorName),
+        action.parameters!,
+        new Map(),
+        promptEntityMap,
+        promptNameEntityMap,
+    );
+    if (entities !== undefined) {
+        result.entities = entities as any;
+    }
+    return result;
+}
 
 function toPendingActions(
     actions: ExecutableAction[],
     entities: PromptEntity[] | undefined,
 ): PendingAction[] {
-    const promptEntityMap = entities
-        ? new Map<string, PromptEntity>(
-              entities.map(
-                  (entity) =>
-                      // LLM like to correct/change casing.  Normalize entity name for look up.
-                      [normalizeParamString(entity.name), entity] as const,
-              ),
-          )
-        : undefined;
+    const promptEntityMap = toPromptEntityMap(entities);
+    const promptNameEntityMap = toPromptEntityNameMap(entities);
     return Array.from(actions).map((executableAction) => ({
         executableAction,
         promptEntityMap,
+        promptNameEntityMap,
     }));
 }
 
@@ -557,7 +664,11 @@ export async function executeActions(
     const systemContext = context.sessionContext.agentContext;
     const commandResult = getCommandResult(systemContext);
     if (commandResult !== undefined) {
-        commandResult.actions = toFullActions(actions);
+        const promptEntityMap = toPromptEntityMap(entities);
+        const promptNameEntityMap = toPromptEntityNameMap(entities);
+        commandResult.actions = actions.map(({ action }) =>
+            resolveEntities(action, promptEntityMap, promptNameEntityMap, true),
+        );
     }
 
     if (!(await canExecute(actions, context))) {
@@ -569,7 +680,8 @@ export async function executeActions(
     const actionQueue: PendingAction[] = toPendingActions(actions, entities);
 
     while (actionQueue.length !== 0) {
-        const { executableAction, promptEntityMap } = actionQueue.shift()!;
+        const { executableAction, promptEntityMap, promptNameEntityMap } =
+            actionQueue.shift()!;
         const action = executableAction.action;
         if (isPendingRequestAction(action)) {
             const translationResult = await translatePendingRequestAction(
@@ -591,12 +703,7 @@ export async function executeActions(
             continue;
         }
         const appAgentName = getAppAgentName(action.translatorName);
-        action.entities = getParameterEntities(
-            appAgentName,
-            action.parameters,
-            resultEntityMap,
-            promptEntityMap,
-        );
+        resolveEntities(action, promptEntityMap, promptNameEntityMap, false);
         const result = await executeAction(
             executableAction,
             context,
@@ -604,13 +711,10 @@ export async function executeActions(
         );
         if (result.error === undefined) {
             if (result.resultEntity && executableAction.resultEntityId) {
-                resultEntityMap.set(
-                    normalizeParamString(executableAction.resultEntityId),
-                    {
-                        ...result.resultEntity,
-                        sourceAppAgentName: appAgentName,
-                    },
-                );
+                resultEntityMap.set(executableAction.resultEntityId, {
+                    ...result.resultEntity,
+                    sourceAppAgentName: appAgentName,
+                });
             }
         }
         actionIndex++;

@@ -6,7 +6,7 @@ import chalk from "chalk";
 import { CorrectionRecord } from "agent-cache";
 import {
     getCacheFactory,
-    readTestData,
+    readExplanationTestData,
     getSchemaNamesForActionConfigProvider,
     createActionConfigProvider,
     getInstanceDir,
@@ -289,7 +289,7 @@ export default class ExplanationDataStatCommmand extends Command {
         };
         for (const file of files) {
             try {
-                const data = await readTestData(file);
+                const data = await readExplanationTestData(file);
                 if (
                     (flags.schema && !flags.schema.includes(data.schemaName)) ||
                     (flags.explainer &&

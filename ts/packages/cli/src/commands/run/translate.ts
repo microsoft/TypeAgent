@@ -55,9 +55,6 @@ export default class TranslateCommand extends Command {
             description: "Validate the output when JSON schema is enabled",
             default: true, // follow DispatcherOptions default
             allowNo: true,
-            relationships: [
-                { type: "some", flags: ["jsonSchema", "jsonSchemaFunction"] },
-            ],
         }),
     };
 

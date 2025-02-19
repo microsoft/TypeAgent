@@ -23,6 +23,7 @@ module.exports = {
         ),
         "electron/webTypeAgentMain": path.join(srcDir, "webTypeAgentMain.ts"),
         "extension/serviceWorker": path.join(srcDir, "serviceWorker.ts"),
+        "extension/sidepanel": path.join(srcDir, "sidepanel.ts"),
         "extension/uiEventsDispatcher": path.join(
             srcDir,
             "uiEventsDispatcher.ts",
@@ -111,6 +112,14 @@ module.exports = {
                 {
                     from: path.join(srcDir, "sidepanel.html"),
                     to: "./extension",
+                },
+                {
+                    from: "node_modules/bootstrap/dist/css/bootstrap.min.css",
+                    to: "./extension/vendor/bootstrap/bootstrap.min.css",
+                },
+                {
+                    from: "node_modules/bootstrap/dist/js/bootstrap.bundle.min.js",
+                    to: "./extension/vendor/bootstrap/bootstrap.bundle.min.js",
                 },
             ],
         }),
