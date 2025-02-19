@@ -36,8 +36,10 @@ import { IConversationSecondaryIndexes } from "./secondaryIndexes.js";
 
 // metadata for podcast messages
 export class PodcastMessageMeta implements IKnowledgeSource {
-    constructor(public speaker: string | undefined) {}
-    listeners: string[] = [];
+    public listeners: string[] = [];
+
+    constructor(public speaker?: string | undefined) {}
+
     getKnowledge() {
         if (this.speaker === undefined) {
             return {
@@ -96,7 +98,7 @@ function assignMessageListeners(
 }
 
 export class PodcastMessage implements IMessage<PodcastMessageMeta> {
-    timestamp: string | undefined;
+    public timestamp: string | undefined;
     constructor(
         public textChunks: string[],
         public metadata: PodcastMessageMeta,

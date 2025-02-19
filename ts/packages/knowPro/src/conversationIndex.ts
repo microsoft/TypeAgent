@@ -241,6 +241,32 @@ export async function buildConversationIndex<TMeta extends IKnowledgeSource>(
     return indexingResult;
 }
 
+export function addToConversationIndex<TMeta extends IKnowledgeSource>(
+    convo: IConversation<TMeta>,
+    messages: IMessage<TMeta>[],
+    knowledgeResponses: conversation.KnowledgeResponse[],
+): void {
+    if (convo.semanticRefIndex === undefined) {
+        convo.semanticRefIndex = new ConversationIndex();
+    }
+    if (convo.semanticRefs === undefined) {
+        convo.semanticRefs = [];
+    }
+    for (let i = 0; i < messages.length; i++) {
+        const messageIndex: MessageIndex = convo.messages.length;
+        convo.messages.push(messages[i]);
+        const knowledge = knowledgeResponses[i];
+        if (knowledge) {
+            addKnowledgeToIndex(
+                convo.semanticRefs,
+                convo.semanticRefIndex,
+                messageIndex,
+                knowledge,
+            );
+        }
+    }
+}
+
 /**
  * Notes:
  *  Case-insensitive

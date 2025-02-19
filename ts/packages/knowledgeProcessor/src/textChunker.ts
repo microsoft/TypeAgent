@@ -35,7 +35,7 @@ export function split(
 }
 
 export function splitIntoLines(text: string, options?: SplitOptions): string[] {
-    return split(text, /\r?\n/);
+    return split(text, /\r?\n/, options);
 }
 
 export function splitIntoWords(text: string, options?: SplitOptions): string[] {
