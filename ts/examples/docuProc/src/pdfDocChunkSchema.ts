@@ -2,25 +2,23 @@
 // Licensed under the MIT License.
 
 // Extracted information for a chunk of text.
-export type PdfDocChunk = {
-    // Optional file identifier for this chunk.
-    fileName?: string;
+export interface PdfDocChunk{
+    // Optional identifier for this chunk.
+    chunkid: string;
 
-    // paragraph number in the file
-    paraNumber?: number;
+    // If the chunk contains a text blob with a title, this is the title.
+    sectionName?: string;
 
-    name: string;
-
-    // One paragraph summary of the pdf chunk.
-    // Concise and informative.
+    // One paragraph summary of the chunk.
+    // Concise, informative, but enough to undersatnd the paragraph .
     summary: string;
 
-    // Propose keywords/phrases capturing the chunk's highlights,
-    // context, and notable topics. Make them concise but descriptive,
+    // Propose keywords/phrases capturing the chunk's key concepts,
+    // context, and notable traits. Make them concise but descriptive,
     // ensuring users can find these points with common queries or synonyms.
     keywords?: string[];
 
-    // Optional high-level labels (e.g., "transformer", "algorithm").
+    // Optional high-level labels (e.g., "algorithmic", "I/O").
     tags?: string[];
 
     // Additional synonyms or related domain concepts.
@@ -28,8 +26,9 @@ export type PdfDocChunk = {
 
     // References to other chunks or external files.
     dependencies?: string[];
-};
+}
 
 export type PdfFileDocumentation = {
     chunkDocs?: PdfDocChunk[];
 };
+

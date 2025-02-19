@@ -209,9 +209,9 @@ export async function interactiveDocQueryLoop(
         for (const chunkId of splitArgs) {
             const chunk = await chunkyIndex.chunkFolder.get(chunkId);
             if (chunk) {
-                const chunkDocs = chunk.docs?.chunkDocs ?? [];
+                //const chunkDocs = chunk.docs ?? [];
                 writeNote(io, `\nCHUNK ID: ${chunkId}`);
-                for (const chunkDoc of chunkDocs) {
+                /*for (const chunkDoc of chunkDocs) {
                     for (const [name, _] of chunkyIndex.allIndexes()) {
                         if (name == "summaries") {
                             if (chunkDoc.summary) {
@@ -241,7 +241,7 @@ export async function interactiveDocQueryLoop(
                     }
                 }
                 writeNote(io, "CODE:");
-                writeChunkLines(chunk, io, 100);
+                writeChunkLines(chunk, io, 100);*/
             } else {
                 writeNote(io, `[Chunk ID ${chunkId} not found]`);
             }
@@ -987,10 +987,10 @@ function reportQuery(
         `\nAnswer (confidence ${answer.confidence.toFixed(3).replace(/0+$/, "")}):`,
     );
 
-    writeMain(io, wordWrap(answer.answer));
+    writeMain(io, answer.answer);
 
     if (answer.message) {
-        writeWarning(io, "\n" + wordWrap(`Message: ${answer.message}`));
+        writeWarning(io, "\n" + "Message: ${answer.message}");
     }
     if (answer.references.length) {
         writeNote(
@@ -1065,10 +1065,7 @@ Use the preceding conversation items as context for the user query given later.
             fileName: chunk.fileName,
             chunkId: chunk.id,
             blobs: chunk.blobs,
-            summary: chunk.docs?.chunkDocs
-                ?.filter((cd) => cd.summary)
-                .map((cd) => cd.summary)
-                .join("\n"),
+            summary: chunk.docs?.summary,
         };
         preamble.push({ role: "user", content: JSON.stringify(chunkData) });
     }
@@ -1088,87 +1085,13 @@ function makeAnyPrompt(
     return preamble;
 }
 
-function writeChunkLines(
+export function writeChunkLines(
     chunk: Chunk,
     io: iapp.InteractiveIo,
     lineBudget = 10,
 ): void {
     // TODO: limit how much we write per blob too (if there are multiple).
-    outer: for (const blob of chunk.blobs) {
-        for (let i = 0; i < blob.lines.length; i++) {
-            if (lineBudget-- <= 0) {
-                writeNote(io, "   ...");
-                break outer;
-            }
-            writeMain(
-                io,
-                `${(1 + blob.start + i).toString().padStart(6)}: ${blob.lines[i].trimEnd()}`,
-            );
-        }
-    }
+    writeMain(io, `\nCHUNK ID: ${chunk.id}`);
+    writeMain(io, `Content: ${chunk.blobs[0].content}`);
 }
 
-// Wrap long lines.
-export function wordWrap(text: string, wrapLength: number = 80): string {
-    let inCodeBlock = false;
-    const lines: string[] = [];
-    const prefixRegex = /^\s*((-|\*|\d+\.)\s+)?/;
-    for (let line of text.split(/[ ]*\r?\n/)) {
-        if (line.startsWith("```")) inCodeBlock = !inCodeBlock; // TODO: Colorize code blocks.
-        if (line.length <= wrapLength || inCodeBlock) {
-            // The whole line is deemed to fit.
-            lines.push(line);
-            continue;
-        }
-        // We must try to break.
-        const prefixLength = prefixRegex.exec(line)?.[0]?.length ?? 0;
-        const indent = " ".repeat(prefixLength);
-        while (line.length > wrapLength) {
-            const shortenedLine = line.slice(0, wrapLength + 1);
-            let index = shortenedLine.lastIndexOf(" ");
-            if (index <= prefixLength) {
-                index = line.indexOf(" ", wrapLength);
-                if (index < 0) break; // The rest of the line is one "word".
-            }
-            lines.push(line.slice(0, index).trimEnd());
-            line = indent + line.slice(index + 1).trimStart();
-        }
-        lines.push(line);
-    }
-    return lines.join("\n");
-}
-
-export function testWordWrap(): void {
-    const sampleText = `\
-This is a long line that should be wrapped at some point. It's not clear where.
-    This is another long line but it is also indented. Let's make sure the breaks are also indented.
-    - This is a bullet point that should be wrapped at some point. It's not clear where.
-    12. This is a numbered point that should be wrapped at some point. It's not clear where.
-\`\`\`python
-def generate_id() -> IdType:
-    """Generate a new unique ID.
-
-    IDs are really timestamps formatted as YYYY_MM_DD-HH_MM_SS.UUUUUU,
-    where UUUUUU is microseconds.
-
-    To ensure IDs are unique, if the next timestamp isn't greater than the last one,
-    we add 1 usec to the last one. This has the advantage of "gracefully" handling
-    time going backwards.
-    """
-    global last_ts
-    next_ts = datetime.datetime.now()  # Local time, for now
-    if next_ts <= last_ts:
-        next_ts = last_ts + datetime.timedelta(microseconds=1)
-    last_ts = next_ts
-    return next_ts.strftime("%Y%m%d-%H%M%S.%f")
-\`\`\`
-This is a short line.
-  * A short bullet.
-  * Another short one.
-    A short indented line.
-End.
-`;
-    console.log(wordWrap(sampleText, 40));
-}
-
-// testWordWrap();

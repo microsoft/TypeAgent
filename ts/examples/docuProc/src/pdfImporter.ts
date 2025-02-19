@@ -9,8 +9,8 @@ import * as knowLib from "knowledge-processor";
 import { asyncArray } from "typeagent";
 
 import * as iapp from "interactive-app";
-import { ChunkyIndex, IndexNames } from "./pdfChunkyIndex.js";
-import { PdfDocChunk, PdfFileDocumentation } from "./pdfDocChunkSchema.js";
+import { ChunkyIndex } from "./pdfChunkyIndex.js";
+import { PdfFileDocumentation } from "./pdfDocChunkSchema.js";
 import {
     Chunk,
     ChunkedFile,
@@ -94,7 +94,7 @@ async function importPdfFiles(
             for (const chunk of chunkedFile.chunks) {
                 numBlobs += chunk.blobs.length;
                 for (const blob of chunk.blobs) {
-                    numLines += blob.lines.length;
+                    numLines += blob.content.split("\n").length;
                 }
             }
         }
@@ -223,21 +223,19 @@ async function embedChunk(
     io: iapp.InteractiveIo | undefined,
     verbose = false,
 ): Promise<void> {
-    const t0 = Date.now();
+    //const t0 = Date.now();
     const lineCount = chunk.blobs.reduce(
-        (acc, blob) => acc + blob.lines.length,
+        (acc, blob) => acc + blob.content.split("\n").length,
         0,
     );
+    console.log("Line count:", lineCount);
     await exponentialBackoff(io, chunkyIndex.chunkFolder.put, chunk, chunk.id);
 
     const summaries: string[] = [];
-    const chunkDocs: PdfDocChunk[] = chunk.docs?.chunkDocs ?? [];
-    for (const chunkDoc of chunkDocs) {
-        summaries.push(chunkDoc.summary);
-    }
-    const combinedSummaries = summaries.join("\n").trimEnd();
+    summaries.push(chunk.docs?.summary ?? "");
+    //const combinedSummaries = summaries.join("\n").trimEnd();
 
-    for (const chunkDoc of chunkDocs) {
+    /*for (const chunkDoc of chunkDocs) {
         for (const indexName of IndexNames) {
             let data: string[];
             if (indexName == "summaries") {
@@ -260,10 +258,10 @@ async function embedChunk(
                 `in ${((t1 - t0) * 0.001).toFixed(3)} seconds for ${chunk.fileName}]`,
             chalk.gray,
         );
-    }
+    }*/
 }
 
-async function writeToIndex(
+export async function writeToIndex(
     io: iapp.InteractiveIo | undefined,
     chunkId: ChunkId,
     phrases: string[] | undefined, // List of summaries, keywords, tags, etc. in chunk
@@ -274,7 +272,7 @@ async function writeToIndex(
     }
 }
 
-async function exponentialBackoff<T extends any[], R>(
+export async function exponentialBackoff<T extends any[], R>(
     io: iapp.InteractiveIo | undefined,
     callable: (...args: T) => Promise<R>,
     ...args: T

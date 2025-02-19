@@ -8,82 +8,117 @@ import { createTypeScriptJsonValidator } from "typechat/ts";
 
 import { PdfFileDocumentation } from "./pdfDocChunkSchema.js";
 import { Chunk } from "./pdfChunker.js";
+import fs from "fs";
 
-// For various reasons we want to index chunks separately,
-// but we want to produce their documentation in the context of the whole file.
-// FileDocumenter.document(chunks) produces documentation comments
-// and then assigns each comment to the appropriate chunk.
 
 // Document an entire file and assign comments to chunks.
 
-export interface FileDocumenter {
+export interface PdfFileDocumenter {
     document(chunks: Chunk[]): Promise<PdfFileDocumentation>;
 }
 
-export function createFileDocumenter(model: ChatModel): FileDocumenter {
-    const fileDocTranslator = createFileDocTranslator(model);
+export function createPdfDocumenter(model: ChatModel): PdfFileDocumenter {
+    const pdfDocTranslator = createPdfFileDocTranslator(model);
     return {
         document,
     };
 
+    function convertImageToBase64(imagePath: string): string {
+        try {
+            const imageBuffer = fs.readFileSync(imagePath);
+            return `data:image/png;base64,${imageBuffer.toString('base64')}`;
+        } catch (error) {
+            console.error(`Error converting image to base64: ${error}`);
+            return "";
+        }
+    }
+
     async function document(chunks: Chunk[]): Promise<PdfFileDocumentation> {
-        let text = "";
+        const pageChunksMap: Record<string, { pageChunk: Chunk; blocks: Chunk[] }> = {};
+        
+        // Organize chunks by page
         for (const chunk of chunks) {
-            text += `***: Docmument the following ${chunk.treeName}:\n`;
-            for (const blob of chunk.blobs) {
-                for (let i = 0; i < blob.lines.length; i++) {
-                    text += `[${blob.start + i + 1}]: ${blob.lines[i]}\n`;
-                }
+            if (!chunk.parentId) {
+                pageChunksMap[chunk.pageid] = { pageChunk: chunk, blocks: [] };
             }
         }
-        const request =
-            "Document the given Python code, its purpose, and any relevant details.\n" +
-            "The code has (non-contiguous) line numbers, e.g.: `[1]: def foo():`\n" +
-            "There are also marker lines, e.g.: `***: Document the following FuncDef`\n" +
-            "Write a concise paragraph for EACH marker.\n" +
-            "For example, the comment could be:\n" +
-            "```\n" +
-            "Method C.foo finds the most twisted anagram for a word.\n" +
-            "It uses various heuristics to rank a word's twistedness'.\n" +
-            "```\n" +
-            "Also fill in the lists of keywords, tags, synonyms, and dependencies.\n";
-        const result = await fileDocTranslator.translate(request, text);
 
-        // Now assign each comment to its chunk.
-        if (result.success) {
-            const fileDocs: PdfFileDocumentation = result.data;
-            // Assign each comment to its chunk.
-            for (const chunkDoc of fileDocs.chunkDocs ?? []) {
-                console.log(chunkDoc.name);
-                for (const chunk of chunks) {
-                    for (const blob of chunk.blobs) {
+        // Associate blocks with their corresponding page
+        for (const chunk of chunks) {
+            if (chunk.parentId && pageChunksMap[chunk.pageid]) {
+                pageChunksMap[chunk.pageid].blocks.push(chunk);
+            }
+        }
 
-                        console.log(blob);
-                        // Reminder: blob.start is 0-based, comment.lineNumber is 1-based.
-                        /*if (
-                            !blob.breadcrumb &&
-                            blob.start < chunkDoc.lineNumber &&
-                            chunkDoc.lineNumber <=
-                                blob.start + blob.lines.length
-                        ) {
-                            const chunkDocs = chunk?.docs?.chunkDocs ?? [];
-                            chunkDocs.push(chunkDoc);
-                            chunk.docs = { chunkDocs };
-                        }*/
+        for (const pageid in pageChunksMap) {
+            const { pageChunk, blocks } = pageChunksMap[pageid];
+            let text = `***: Document the following Page (ID: ${pageChunk.id}, Page: ${pageChunk.pageid}):\n`;
+            
+            let pageImageBase64 = "";
+            const pageImageBlob = pageChunk.blobs.find(blob => blob.blob_type === "page_image" && blob.img_path);
+            if (pageImageBlob) {
+                pageImageBase64 = convertImageToBase64(pageImageBlob.img_path!);
+                text += `Page Image: ${pageImageBase64}\n`;
+            }
+            
+            for (const block of blocks) {
+                const blockIdentifier = `Chunk: ${block.id}, Page: ${block.pageid}`;
+                for (const blob of block.blobs) {
+                    if (blob.blob_type === "text" && Array.isArray(blob.content)) {
+                        text += `Text Content (${blockIdentifier}):\n`;
+                        for (let i = 0; i < blob.content.length; i++) {
+                            text += `[${blob.start + i + 1}]: ${blob.content[i]}\n`;
+                        }
+                    } else if (blob.blob_type === "table") {
+                        text += `Table Data (${blockIdentifier}):\n`;
+                        text += `CSV Path: ${blob.content}\n`;
+                    } else if (blob.blob_type === "image") {
+                        text += `Image (${blockIdentifier}):\n`;
+                        text += `Image Path: ${blob.img_path}\n`;
                     }
                 }
             }
-            return fileDocs;
-        } else {
-            throw new Error(result.message);
+            
+            const request =
+                "Summarize the given document sections based on the extracted content and page image.\n" +
+                "For text, provide a concise summary of the main points.\n" +
+                "For tables, describe their contents and significance.\n" +
+                "For images, infer their purpose based on the context.\n" +
+                "Include a high-level summary of the entire page based on the extracted image and text.\n" +
+                "Also fill in the lists of keywords, tags, synonyms, and dependencies.\n";
+            
+            const result = await pdfDocTranslator.translate(request, text);
+            
+            if (result.success) {
+                const fileDocs: PdfFileDocumentation = result.data;
+                const chunkDocs = fileDocs.chunkDocs ?? [];
+                 
+                let iDoc = 0;
+                for (const chunk of chunks) {
+                    if (chunk.parentId === "" && !chunk.parentId || chunk.children.length === 0) {
+                        chunk.docs = chunkDocs[iDoc++];
+                    }
+                    else {
+                        for (const blobid of chunk.children) {
+                            const blob = chunk.children.find(cid => cid === blobid);
+                            if (blob !== undefined) {
+                                chunk.docs = chunkDocs[iDoc++];
+                            }
+                        }
+                    }
+                }
+                
+            } else {
+            }
         }
+        return { chunkDocs: chunks.map(chunk => chunk.docs) } as PdfFileDocumentation;
     }
 }
 
-function createFileDocTranslator(
+function createPdfFileDocTranslator(
     model: ChatModel,
 ): TypeChatJsonTranslator<PdfFileDocumentation> {
-    const typeName = "FileDocumentation";
+    const typeName = "PdfFileDocumentation";
     const schema = loadSchema(["pdfDocChunkSchema.ts"], import.meta.url);
     const validator = createTypeScriptJsonValidator<PdfFileDocumentation>(
         schema,

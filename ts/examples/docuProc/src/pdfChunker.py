@@ -15,20 +15,26 @@ import datetime
 import csv
 from dataclasses import dataclass
 from typing import List, Dict, Any, Optional
+from pathlib import Path
 
 IdType = str
 
 @dataclass
 class Blob:
-    type: str
-    content: Any
-    start: int
+    """Stores text, table, or image data plus metadata."""
+    blob_type: str  # e.g. "text", "table", "image"
+    content: Any  # e.g. list of lines, or path to a CSV
+    start: int  # Page number (0-based)
     bbox: Optional[List[float]] = None
     img_path: Optional[str] = None
     para_id: Optional[int] = None
-    
+
     def to_dict(self) -> Dict[str, Any]:
-        result = {"type": self.type, "content": self.content, "start": self.start}
+        result = {
+            "blob_type": self.blob_type,
+            "content": self.content,
+            "start": self.start
+        }
         if self.bbox:
             result["bbox"] = self.bbox
         if self.img_path:
@@ -37,24 +43,37 @@ class Blob:
             result["para_id"] = self.para_id
         return result
 
+
 @dataclass
 class Chunk:
+    """A chunk at any level of nesting (e.g., a page, a paragraph, a table)."""
     id: str
     pageid: str
     blobs: List[Blob]
     parentId: str
     children: List[str]
-    
+
     def to_dict(self) -> Dict[str, Any]:
-        return {"id": self.id, "pageid": self.pageid, "blobs": self.blobs, "parentId": self.parentId, "children": self.children}
+        return {
+            "id": self.id,
+            "pageid": self.pageid,
+            "blobs": [blob.to_dict() for blob in self.blobs],
+            "parentId": self.parentId,
+            "children": self.children
+        }
+
 
 @dataclass
 class ChunkedFile:
+    """A file with chunks."""
     fileName: str
     chunks: List[Chunk]
-    
+
     def to_dict(self) -> Dict[str, Any]:
-        return {"fileName": self.fileName, "chunks": self.chunks}
+        return {
+            "fileName": self.fileName,
+            "chunks": [chunk.to_dict() for chunk in self.chunks]
+        }
 
 @dataclass
 class ErrorItem:
@@ -93,70 +112,132 @@ def generate_id() -> IdType:
     last_ts = next_ts
     return next_ts.strftime("%Y%m%d-%H%M%S.%f")
 
+def get_FNameWithoutExtension(file_path: str) -> str:
+    return Path(file_path).stem
+
 class PDFChunker:
     def __init__(self, file_path: str, output_dir: str = "output"):
         self.file_path = file_path
-        self.output_dir = output_dir
-        os.makedirs(output_dir, exist_ok=True)
+        self.pdf_name = get_FNameWithoutExtension(file_path)
+        self.output_dir = Path(output_dir) / self.pdf_name
+        self.output_dir.mkdir(parents=True, exist_ok=True)
 
-    def extract_text_chunks(self) -> tuple[list[Chunk], dict[int, Chunk]]:
-        """Use PyMuPDF (fitz) to extract text from each page and chunk by blank lines."""
+    def extract_text_chunks(self, do_ocr: bool = False) -> tuple[list[Chunk], dict[int, Chunk]]:
+
+        def parse_paragraphs(raw_text: str) -> list[list[str]]:
+            """Split raw_text into paragraphs (list of lines) using blank lines as separators."""
+            paragraphs: list[list[str]] = []
+            current_para: list[str] = []
+            for line in raw_text.split("\n"):
+                if line.strip() == "":
+                    if current_para:
+                        paragraphs.append(current_para)
+                        current_para = []
+                else:
+                    current_para.append(line)
+            if current_para:
+                paragraphs.append(current_para)
+            return paragraphs
+
+        def chunk_paragraph(paragraph_lines: list[str], max_tokens: int = 200) -> list[list[str]]:
+            """
+            Split a paragraph (list of lines) into sub-chunks if token count exceeds max_tokens.
+            For simplicity, each sub-chunk is stored as a single line in a list.
+            """
+            joined_text = " ".join(paragraph_lines)
+            tokens = joined_text.split()
+            result: list[list[str]] = []
+
+            start_idx = 0
+            while start_idx < len(tokens):
+                sub_tokens = tokens[start_idx : start_idx + max_tokens]
+                start_idx += max_tokens
+                result.append([" ".join(sub_tokens)])
+            return result
+
+        # -------------------- Main Logic --------------------
         doc = fitz.open(self.file_path)
         chunks: list[Chunk] = []
         page_chunks: dict[int, Chunk] = {}
 
         for page_num in range(len(doc)):
             page = doc[page_num]
-            text = page.get_text("text")  # Using 'text' to preserve spacing
-
-            print(f"Processing page {page_num + 1}...")
-            print(f"	Text: {text[:200]}...")  # Print just a preview
+            raw_text = page.get_text("text")  # Using 'text' to preserve spacing
 
             # Create a parent chunk for this page
             page_chunk_id = generate_id()
-            page_chunk = Chunk(page_chunk_id, str(page_num), [], "", [])
+            page_chunk = Chunk(
+                id=page_chunk_id,
+                pageid=str(page_num),
+                blobs=[],
+                parentId="",
+                children=[]
+            )
             page_chunks[page_num] = page_chunk
             chunks.append(page_chunk)
 
-            # If there's text, split into paragraphs at blank lines
-            if text:
-                paragraphs: list[tuple[int, list[str]]] = []
-                current_para: list[str] = []
+            # 1) Save page as image
+            pix = page.get_pixmap()
+            page_image_path = os.path.join(self.output_dir, f"page_{page_num}.png")
+            pix.save(page_image_path)
+
+            # 2) Store page_image blob in the page chunk
+            page_image_blob = Blob(
+                blob_type="page_image",
+                content=None,         # No direct text
+                start=page_num,
+                bbox=None,
+                img_path=page_image_path
+            )
+            page_chunk.blobs.append(page_image_blob)
+
+            # 3) If do_ocr is True, run Tesseract on the page image
+            if do_ocr:
+                try:
+                    from PIL import Image
+                    import pytesseract
+                    ocr_text = pytesseract.image_to_string(Image.open(page_image_path))
+                    ocr_text = ocr_text.strip()
+
+                    if ocr_text:
+                        page_ocr_blob = Blob(
+                            blob_type="page_ocr",
+                            content=[ocr_text],
+                            start=page_num
+                        )
+                        page_chunk.blobs.append(page_ocr_blob)
+                except Exception as e:
+                    print(f"OCR failed on page {page_num}: {e}")
+
+            # 4) If there's text, parse paragraphs
+            if raw_text:
+                paragraphs = parse_paragraphs(raw_text)
+
                 para_id = 0
+                for paragraph_lines in paragraphs:
+                    # Optionally split large paragraphs
+                    splitted = chunk_paragraph(paragraph_lines, max_tokens=200)
 
-                # Split text by newline, detect blank lines for paragraph breaks
-                for line in text.split("\n"):
-                    if line.strip() == "":
-                        # Blank line -> finish current paragraph
-                        if current_para:
-                            paragraphs.append((para_id, current_para))
-                            para_id += 1
-                            current_para = []
-                    else:
-                        # Keep the line exactly as-is
-                        current_para.append(line)
+                    for sub_para in splitted:
+                        para_chunk_id = generate_id()
+                        para_blob = Blob(
+                            blob_type="text",
+                            content=sub_para,
+                            start=page_num,
+                            para_id=para_id
+                        )
+                        para_chunk = Chunk(
+                            id=para_chunk_id,
+                            pageid=str(page_num),
+                            blobs=[para_blob],
+                            parentId=page_chunk_id,
+                            children=[]
+                        )
+                        page_chunk.children.append(para_chunk_id)
+                        chunks.append(para_chunk)
 
-                # If any leftover lines, form a final paragraph
-                if current_para:
-                    paragraphs.append((para_id, current_para))
-
-                # Create child chunks for each paragraph
-                for pid, para_lines in paragraphs:
-                    para_chunk_id = generate_id()
-                    # Store the paragraph as a list of lines
-                    para_blob = Blob("text", para_lines, page_num, para_id=pid)
-                    para_chunk = Chunk(
-                        para_chunk_id,
-                        str(page_num),
-                        [para_blob],
-                        page_chunk_id,
-                        []
-                    )
-                    page_chunk.children.append(para_chunk_id)
-                    chunks.append(para_chunk)
-
+                        para_id += 1
         return chunks, page_chunks
-
 
     def extract_tables(self, pdf, page_chunks) -> List[Chunk]:
         chunks = []

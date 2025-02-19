@@ -5,7 +5,7 @@ import { openai, ChatModel, TextEmbeddingModel } from "aiclient";
 import * as knowLib from "knowledge-processor";
 import { createObjectFolder, loadSchema, ObjectFolder } from "typeagent";
 
-import { createFileDocumenter, FileDocumenter } from "./pdfFileDocumenter.js";
+import { createPdfDocumenter, PdfFileDocumenter } from "./pdfFileDocumenter.js";
 import { Chunk, ChunkId } from "./pdfChunker.js";
 import { QuerySpecs } from "./pdfDocQuerySchema.js";
 import { createJsonTranslator, TypeChatJsonTranslator } from "typechat";
@@ -27,7 +27,7 @@ export class ChunkyIndex {
     chatModel: ChatModel;
     miniModel: ChatModel; // E.g. gpt-3.5-turbo or gpt-4-mini or o1-mini.
     embeddingModel: TextEmbeddingModel;
-    fileDocumenter: FileDocumenter;
+    fileDocumenter: PdfFileDocumenter;
     queryMaker: TypeChatJsonTranslator<QuerySpecs>;
     answerMaker: TypeChatJsonTranslator<AnswerSpecs>;
 
@@ -49,7 +49,7 @@ export class ChunkyIndex {
             openai.createEmbeddingModel(),
             1000,
         );
-        this.fileDocumenter = createFileDocumenter(this.chatModel);
+        this.fileDocumenter = createPdfDocumenter(this.chatModel);
         this.queryMaker = createQueryMaker(this.chatModel);
         this.answerMaker = createAnswerMaker(this.chatModel);
     }

@@ -9,7 +9,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { promisify } from "util";
 
-import { PdfFileDocumentation } from "./pdfDocChunkSchema.js";
+import { PdfDocChunk } from "./pdfDocChunkSchema.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -19,20 +19,25 @@ const execPromise = promisify(exec);
 export type ChunkId = string;
 
 export interface Blob {
-    start: number; // int; 0-based!
-    lines: string[];
-    breadcrumb?: boolean;
+    /** Stores text, table, or image data plus metadata. */
+    blob_type: string;  // e.g. "text", "table", "image"
+    content: any;  // e.g. list of lines, or path to a CSV
+    start: number; // Page number (0-based)
+    bbox?: number[]; // Optional bounding box
+    img_path?: string; // Optional image path
+    para_id?: number; // Optional paragraph ID
 }
 
 export interface Chunk {
+    // A chunk at any level of nesting (e.g., a page, a paragraph, a table).
     // Names here must match names in pdfChunker.py.
-    id: ChunkId;
-    treeName: string;
+    id: string;
+    pageid: string;
     blobs: Blob[];
     parentId: ChunkId;
     children: ChunkId[];
     fileName: string; // Set upon receiving end from ChunkedFile.fileName.
-    docs?: PdfFileDocumentation; // Computed later by fileDocumenter.
+    docs?: PdfDocChunk; // Computed later by fileDocumenter.
 }
 
 export interface ChunkedFile {
@@ -87,13 +92,14 @@ export async function chunkifyPdfFiles(
             }
         }
     }
-    return splitLargeFiles(results);
+    return results;
+    //return splitLargeFiles(results);
 }
 
 const CHUNK_COUNT_LIMIT = 25; // How many chunks at most.
 const FILE_SIZE_LIMIT = 25000; // How many characters at most.
 
-function splitLargeFiles(
+export function splitLargeFiles(
     items: (ChunkedFile | ErrorItem)[],
 ): (ChunkedFile | ErrorItem)[] {
     const results: (ChunkedFile | ErrorItem)[] = [];
@@ -174,13 +180,19 @@ function fileSize(file: ChunkedFile): number {
 }
 
 function chunkSize(chunk: Chunk): number {
-    let totalCharacters = 0;
+    let totalChars = 0;
     for (const blob of chunk.blobs) {
-        if (!blob.breadcrumb) {
-            for (const line of blob.lines) {
-                totalCharacters += line.length;
+        if(blob.blob_type === "text") {
+            if (Array.isArray(blob.content)) {
+                // content is an array of strings
+                for (const line of blob.content) {
+                    totalChars += line.length;
+                }
+            } else {
+                // content is a single string
+                totalChars += blob.content.length;
             }
         }
     }
-    return totalCharacters;
+    return totalChars;
 }
