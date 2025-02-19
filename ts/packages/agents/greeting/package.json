@@ -25,10 +25,12 @@
   },
   "dependencies": {
     "@typeagent/agent-sdk": "workspace:*",
+    "agent-dispatcher": "workspace:*",
     "aiclient": "workspace:*",
     "chat-agent": "workspace:*",
     "common-utils": "workspace:*",
     "knowledge-processor": "workspace:*",
+    "telemetry": "workspace:*",
     "typeagent": "workspace:*",
     "typechat": "^0.1.1"
   },

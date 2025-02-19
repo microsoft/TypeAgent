@@ -7,7 +7,7 @@ import {
     ActionResult,
     ActionResultSuccess,
 } from "@typeagent/agent-sdk";
-import { createTypeChat, promptLib } from "typeagent";
+import { createTypeChat } from "typeagent";
 import { createActionResult } from "@typeagent/agent-sdk/helpers/action";
 import { randomInt } from "node:crypto";
 import {
@@ -16,7 +16,7 @@ import {
     getCommandInterface,
 } from "@typeagent/agent-sdk/helpers/command";
 import { ChatModelWithStreaming, CompletionSettings, openai } from "aiclient";
-import { PromptSection, Result, TypeChatJsonTranslator } from "typechat";
+import { PromptSection, Result } from "typechat";
 import {
     displayError,
     displayResult,
@@ -26,6 +26,9 @@ import {
     GreetingAction,
     PersonalizedGreetingAction,
 } from "./greetingActionSchema.js";
+//import { getLookupInstructions, getLookupSettings, LookupSettings } from "../../chat/dist/chatResponseHandler.js";
+//import { StopWatch } from "telemetry";
+import { conversation as Conversation } from "knowledge-processor";
 
 export function instantiate(): AppAgent {
     return {
@@ -34,14 +37,18 @@ export function instantiate(): AppAgent {
 }
 
 const personalizedGreetingSchema = `
+
+export type GreetingAction = PersonalizedGreetingAction;
+
 // Use this action greet the user.
-// Generate a five possible greetings and make sure they are varied in tone, length, cadence, delivery, and style.
+// Generate a three possible greetings and make sure they are varied in tone, length, cadence, delivery, and style.
 // Make sure they don't sound similar and are appropriate for the time and day (i.e. Happy Friday, good evening, etc.).
 // Some examples should borrow common greetings from languages other than English.
 // Come up with a spontaneous greeting that conveys one of the following moods: friendly, enthusiastic, excited, polite, cheerful, happy, positive, welcoming, affectionate, warm, jovial, lively, energetic, radiant, or breezy.
 // The goal is to create a warm and inviting atmosphere for the person you're greeting, so feel free to be creative and use your own style
+// If there is chat history incorporate it into the greeting with a possible continuation action.
 export interface PersonalizedGreetingAction {
-    actionName: "personalizedGreetingResponse";
+    actionName: "personalizedGreetingAction";
     parameters: {
         // the original request/greeting from the user
         originalRequest: string;
@@ -57,43 +64,51 @@ export interface GenericGreeting {
     // Be sure to make the greeting relevant to time of day (i.e. don't say good morning in the afternoon).
     // you can also use greetings such as Namaste/Shalom/Bonjour or similar.
     generatedGreeting: string;
-}`;
+}
 
+`;
+
+/**
+ * Implements the @greeting command.
+ */
 export class GreetingCommandHandler implements CommandHandlerNoParams {
     public readonly description =
         "Have the agent generate a personalized greeting.";
-    private instructions = `You are a breezy greeting generator. Greetings should NOT end with questions.`;
+    private instructions = `You are a breezy greeting generator.`;
+
+    /**
+     * Handle the @greeting command
+     *
+     * @param context The command context.
+     */
     public async run(context: ActionContext) {
+        // Initial output to let the user know the agent is thinking...
         displayStatus("...", context);
 
-        //
-        // Create Model
-        //
-        let chatModel = this.createModel(true);
-        //
-        // Create Chat History
-        //
-        let maxContextLength = 8196; // characters
-        let maxWindowLength = 30;
-        let chatHistory: PromptSection[] = [];
-
-        const chat = createTypeChat<GreetingAction>(
-            chatModel,
-            personalizedGreetingSchema,
-            "PersonalizedGreetingAction",
-            this.instructions,
-            chatHistory,
-            maxContextLength,
-            maxWindowLength,
-        );
-
-        const response = await this.getTypeChatResponse("Hi!", chat);
+        const response = await this.getTypeChatResponse(context);
 
         if (response.success) {
-            let result: ActionResultSuccess = handlePersonalizedGreetingAction(
-                response.data as PersonalizedGreetingAction,
-            ) as ActionResultSuccess;
-            displayResult(result.literalText!, context);
+            let action: GreetingAction = response.data as GreetingAction;
+            let result: ActionResultSuccess | undefined = undefined;
+            switch (action.actionName) {
+                case "personalizedGreetingAction":
+                    result = (await handlePersonalizedGreetingAction(
+                        action as PersonalizedGreetingAction,
+                        context,
+                    )) as ActionResultSuccess;
+
+                    displayResult(result.literalText!, context);
+                    break;
+
+                // case "contextualGreetingAction":
+
+                //     result = await handleContextualGreetingAction(
+                //         action as ContextualGreetingAction,
+                //     ) as ActionResultSuccess;
+
+                //     displayResult(result.literalText!, context);
+                //     break;
+            }
         } else {
             displayError("Unable to generate greeting.", context);
         }
@@ -116,8 +131,10 @@ export class GreetingCommandHandler implements CommandHandlerNoParams {
         }
         let completionSettings: CompletionSettings = {
             temperature: 1.0,
-            max_tokens: 1000, // Max response tokens
-            response_format: { type: "json_object" }, // createChatModel will remove it if the model doesn't support it
+            // Max response tokens
+            max_tokens: 1000,
+            // createChatModel will remove it if the model doesn't support it
+            response_format: { type: "json_object" },
         };
         const chatModel = openai.createChatModel(
             apiSettings,
@@ -130,34 +147,62 @@ export class GreetingCommandHandler implements CommandHandlerNoParams {
     }
 
     async getTypeChatResponse(
-        userInput: string,
-        chat: TypeChatJsonTranslator<GreetingAction>,
+        context: ActionContext,
     ): Promise<Result<GreetingAction>> {
-        const chatResponse = await chat.translate(
-            userInput,
-            promptLib.dateTimePrompt(), // Always include the current date and time. Makes the bot much smarter
+        // Create Model instance
+        let chatModel = this.createModel(true);
+
+        // Create Chat History
+        let maxContextLength = 8196;
+        let maxWindowLength = 30;
+        let chatHistory: PromptSection[] = [];
+
+        // create TypeChat object
+        const chat = createTypeChat<GreetingAction>(
+            chatModel,
+            personalizedGreetingSchema, //loadSchema(["greetingActionSchema.ts"]),
+            "GreetingAction",
+            this.instructions,
+            chatHistory,
+            maxContextLength,
+            maxWindowLength,
         );
+
+        // get chat history
+        const history = await getRecentChatHistory(context);
+        history.push("Hi!");
+        history.push("###");
+        history.push(
+            `Current Date is ${new Date().toLocaleDateString("en-US")}. The time is ${new Date().toLocaleTimeString()}.`,
+        );
+
+        // make the request
+        const chatResponse = await chat.translate(history.join("\n"));
 
         return chatResponse;
     }
 }
 
+/**
+ * The commands this agent supports
+ */
 const handlers: CommandHandlerTable = {
     description: "Generate agent greeting.",
     defaultSubCommand: new GreetingCommandHandler(),
     commands: {},
 };
 
-function handlePersonalizedGreetingAction(
+async function handlePersonalizedGreetingAction(
     greetingAction: PersonalizedGreetingAction,
-): ActionResult {
+    context: ActionContext,
+): Promise<ActionResult> {
     let result = createActionResult("Hi!");
     if (greetingAction.parameters !== undefined) {
         const count = greetingAction.parameters.possibleGreetings.length;
         console.log(`Received ${count} generated greetings`);
 
-        // randomly decide on a conversation starter (or not)
-        // TODO: personalize list based on user preferences
+        // //randomly decide on a conversation starter (or not)
+        // //TODO: personalize list based on user preferences
         // let intiatorTopic: string[] = [ "breaking news", "local headlines", "current local weather"];
         // let index: number = randomInt(intiatorTopic.length);
 
@@ -172,21 +217,29 @@ function handlePersonalizedGreetingAction(
         //     }
 
         // } else if (index == 0) {
-        //     // TODO: add chat history from conversation manager.  Waiting for time bounded API lookup.
-        //     result = createActionResult(
-        //         greetingAction.parameters.possibleGreetings[
-        //             randomInt(0, count)
-        //         ].generatedGreeting,
-        //     );
-        // } else {
         result = createActionResult(
             greetingAction.parameters.possibleGreetings[randomInt(0, count)]
                 .generatedGreeting,
         );
+        // } else {
+        //     result = createActionResult(
+        //         greetingAction.parameters.possibleGreetings[randomInt(0, count)]
+        //             .generatedGreeting,
+        //     );
         // }
     }
     return result;
 }
+
+// function handleContextualGreetingAction(
+//     greetingAction: ContextualGreetingAction,
+// ): ActionResult {
+//     let result = createActionResult("Hi!");
+//     if (greetingAction.parameters !== undefined) {
+//         result = createActionResult(greetingAction.parameters.greeting.generatedGreeting);
+//     }
+//     return result;
+// }
 
 // async function runLookup(
 //     lookup: string,
@@ -195,15 +248,18 @@ function handlePersonalizedGreetingAction(
 // ): Promise<string | undefined> {
 //     const stopWatch = new StopWatch();
 //     stopWatch.start("WEB SEARCH: " + lookup);
-//     const urls = await searchWeb(lookup, settings.maxSearchResults);
+//     const urls: bing.WebPage[] = await bing.searchWeb(lookup, settings.maxSearchResults);
 //     stopWatch.stop("WEB SEARCH: " + lookup);
 //     if (!urls) {
 //         return undefined;
 //     }
+//     const sUrls: string[] = [];
+//     urls.map((wp) => { sUrls.push(wp.url); });
+
 //     const answer = await generateAnswerFromWebPages(
 //         settings.fastMode ? "Speed" : "Quality",
 //         settings.answerGenModel,
-//         urls,
+//         sUrls,
 //         lookup,
 //         settings.lookupOptions,
 //         1,
@@ -212,3 +268,55 @@ function handlePersonalizedGreetingAction(
 
 //     return answer?.generatedText;
 // }
+
+async function getRecentChatHistory(context: ActionContext): Promise<string[]> {
+    const conversationManager: Conversation.ConversationManager = (
+        context.sessionContext as any
+    ).conversationManager;
+
+    const chatHistory: string[] = [];
+
+    if (conversationManager !== undefined) {
+        let searchResponse = await conversationManager.getSearchResponse(
+            "What were we talking about last?",
+            [{ terms: ["last conversation"] }],
+        );
+        if (searchResponse && searchResponse.response?.hasHits()) {
+            chatHistory.push(
+                "The following is a summary of the last conversation:",
+            );
+            chatHistory.push("###");
+            chatHistory.push(
+                "Recent entities found in chat history, in order, most recent first:",
+            );
+            searchResponse.response?.entities.map((ee) => {
+                ee.entities?.map((e) => {
+                    chatHistory.push(`${e.name} (${e.type})`);
+                });
+            });
+
+            // chatHistory.push("###");
+            // chatHistory.push("Information about the lastest assistant action.");
+            // searchResponse.response?.actions?.map((aa) => {
+            //     aa.actions?.map((a) => {
+            //         a.
+            //     });
+            // });
+
+            chatHistory.push("###");
+            chatHistory.push("Here are the last few user messages:");
+            searchResponse.response?.messages?.map((msg) => {
+                chatHistory.push(`- \"${msg.value.value}\"`);
+            });
+
+            const matches =
+                await conversationManager.generateAnswerForSearchResponse(
+                    "What were we talking about last?",
+                    searchResponse,
+                );
+            console.log(matches);
+        }
+    }
+
+    return chatHistory;
+}
