@@ -21,3 +21,5 @@ export type {
     TemplateData,
 } from "./translation/actionTemplate.js";
 export { getUserDataDir, getInstanceDir } from "./utils/userData.js";
+export { getChatHistoryContextPrompts, entityToText } from "./context/chatHistoryPrompt.js";
+export { getChatHistoryForTranslation } from "./translation/translateRequest.js";

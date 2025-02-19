@@ -5,7 +5,7 @@ import { HistoryContext, PromptEntity } from "agent-cache";
 import { CachedImageWithDetails } from "common-utils";
 import { PromptSection, TypeChatJsonTranslator } from "typechat";
 
-function entityToText(entity: PromptEntity) {
+export function entityToText(entity: PromptEntity) {
     return `${entity.name} (${entity.type})${entity.additionalEntityText ? `: ${entity.additionalEntityText}` : ""}`;
 }
 
@@ -38,45 +38,12 @@ export function createTypeAgentRequestPrompt(
     }
 
     if (context) {
-        if (history !== undefined) {
-            const promptSections: PromptSection[] = history.promptSections;
-            if (promptSections.length > 1) {
-                prompts.push("The following is a summary of the chat history:");
-
-                const promptEntities = history.entities;
-                if (promptEntities.length > 0) {
-                    prompts.push("###");
-                    prompts.push(
-                        "Recent entities found in chat history, in order, oldest first:",
-                    );
-                    prompts.push(...promptEntities.map(entityToText).reverse());
-                }
-
-                const additionalInstructions = history?.additionalInstructions;
-                if (
-                    additionalInstructions !== undefined &&
-                    additionalInstructions.length > 0
-                ) {
-                    prompts.push("###");
-                    prompts.push(
-                        "Information about the latest assistant action:",
-                    );
-                    prompts.push(...additionalInstructions);
-                }
-
-                prompts.push("###");
-                prompts.push("The latest assistant response:");
-                prompts.push(
-                    promptSections[promptSections.length - 1].content as string,
-                );
-            }
+        const context: string[] = getChatHistoryContextPrompts(history);
+        for(let i = 0; i < context.length; i++) {
+            prompts.push(context[i]);
         }
-
-        prompts.push("###");
-        prompts.push(
-            `Current Date is ${new Date().toLocaleDateString("en-US")}. The time is ${new Date().toLocaleTimeString()}.`,
-        );
     }
+
     prompts.push("###");
     prompts.push(`The following is the current user request:`);
     prompts.push(`"""\n${request}\n"""`);
@@ -93,5 +60,51 @@ export function createTypeAgentRequestPrompt(
     prompts.push(
         `Based primarily on the current user request with references and pronouns resolved with recent entities in the chat history, but considering the context of the whole chat history, the following is the current user request translated into a JSON object with 2 spaces of indentation and no properties with the value undefined:`,
     );
+    
     return prompts.join("\n");
+}
+
+export function getChatHistoryContextPrompts(history: HistoryContext | undefined): string[] {
+    const prompts: string[] = [];
+
+    if (history !== undefined) {
+        const promptSections: PromptSection[] = history.promptSections;
+        if (promptSections.length > 1) {
+            prompts.push("The following is a summary of the chat history:");
+
+            const promptEntities = history.entities;
+            if (promptEntities.length > 0) {
+                prompts.push("###");
+                prompts.push(
+                    "Recent entities found in chat history, in order, oldest first:",
+                );
+                prompts.push(...promptEntities.map(entityToText).reverse());
+            }
+
+            const additionalInstructions = history?.additionalInstructions;
+            if (
+                additionalInstructions !== undefined &&
+                additionalInstructions.length > 0
+            ) {
+                prompts.push("###");
+                prompts.push(
+                    "Information about the latest assistant action:",
+                );
+                prompts.push(...additionalInstructions);
+            }
+
+            prompts.push("###");
+            prompts.push("The latest assistant response:");
+            prompts.push(
+                promptSections[promptSections.length - 1].content as string,
+            );
+        }
+    }
+
+    prompts.push("###");
+    prompts.push(
+        `Current Date is ${new Date().toLocaleDateString("en-US")}. The time is ${new Date().toLocaleTimeString()}.`,
+    );
+
+    return prompts;
 }
