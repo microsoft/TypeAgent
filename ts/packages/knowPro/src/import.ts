@@ -323,6 +323,10 @@ export interface PodcastData extends IConversationData<PodcastMessage> {
     relatedTermsIndexData?: ITermsToRelatedTermsIndexData | undefined;
 }
 
+export interface ImageCollectionData extends IConversationData<Image> {
+    relatedTermsIndexData?: ITermsToRelatedTermsIndexData | undefined;
+}
+
 export async function importPodcast(
     transcriptFilePath: string,
     podcastName?: string,
@@ -597,7 +601,7 @@ export class ImageCollection implements IConversation<ImageMeta> {
         this.settings = createPodcastSettings();
     }
 
-    addMetadataToIndex() {
+    public addMetadataToIndex() {
         for (let i = 0; i < this.messages.length; i++) {
             const msg = this.messages[i];
             const knowlegeResponse = msg.metadata.getKnowledge();
@@ -638,20 +642,8 @@ export class ImageCollection implements IConversation<ImageMeta> {
     ): Promise<ConversationIndexingResult> {
         const result = await buildConversationIndex(this, progressCallback);
         this.addMetadataToIndex();
-        this.buildPropertyIndex();
-        this.buildTimestampIndex();
         return result;
-    }    
-
-    public buildPropertyIndex() {
-        if (this.semanticRefs && this.semanticRefs.length > 0) {
-            this.propertyToSemanticRefIndex = new PropertyIndex();
-            addPropertiesToIndex(
-                this.semanticRefs,
-                this.propertyToSemanticRefIndex,
-            );
-        }
-    }    
+    }        
 
     public async buildRelatedTermsIndex(
         batchSize: number = 8,
@@ -671,10 +663,6 @@ export class ImageCollection implements IConversation<ImageMeta> {
                 progressCallback,
             );
         }
-    }
-
-    public buildTimestampIndex(): void {
-        this.timestampIndex = new TimestampToTextRangeIndex(this.messages);
     }
        
     public serialize(): ImageCollectionData {
@@ -702,9 +690,71 @@ export class ImageCollection implements IConversation<ImageMeta> {
                 data.relatedTermsIndexData,
             );
         }
+        this.buildSecondaryIndexes();
+    }    
+
+    private buildSecondaryIndexes() {
+        //this.buildParticipantAliases();
         this.buildPropertyIndex();
         this.buildTimestampIndex();
-    }    
+    }
+
+    private buildPropertyIndex() {
+        if (this.semanticRefs && this.semanticRefs.length > 0) {
+            this.propertyToSemanticRefIndex = new PropertyIndex();
+            addPropertiesToIndex(
+                this.semanticRefs,
+                this.propertyToSemanticRefIndex,
+            );
+        }
+    }
+
+    private buildTimestampIndex(): void {
+        this.timestampIndex = new TimestampToTextRangeIndex(this.messages);
+    }
+
+    // private buildParticipantAliases(): void {
+    //     if (this.termToRelatedTermsIndex) {
+    //         const nameToAliasMap = this.collectParticipantAliases();
+    //         for (const name of nameToAliasMap.keys()) {
+    //             const relatedTerms: Term[] = nameToAliasMap
+    //                 .get(name)!
+    //                 .map((alias) => {
+    //                     return { text: alias };
+    //                 });
+    //             this.termToRelatedTermsIndex.aliases.addRelatedTerm(
+    //                 name,
+    //                 relatedTerms,
+    //             );
+    //         }
+    //     }
+    // }`
+
+    // private collectParticipantAliases() {
+    //     const aliases: collections.MultiMap<string, string> =
+    //         new collections.MultiMap();
+    //     for (const message of this.messages) {
+    //         const metadata = message.metadata;
+    //         collectName(metadata.speaker);
+    //         for (const listener of metadata.listeners) {
+    //             collectName(listener);
+    //         }
+    //     }
+
+    //     function collectName(participantName: string | undefined) {
+    //         if (participantName) {
+    //             participantName = participantName.toLowerCase();
+    //             const parsedName =
+    //                 conversation.splitParticipantName(participantName);
+    //             if (parsedName && parsedName.firstName && parsedName.lastName) {
+    //                 // If participantName is a full name, then associate firstName with the full name
+    //                 aliases.addUnique(parsedName.firstName, participantName);
+    //                 aliases.addUnique(participantName, parsedName.firstName);
+    //             }
+    //         }
+    //     }
+    //     return aliases;
+    // }    
 }
 
 /**
