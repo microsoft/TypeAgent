@@ -437,7 +437,9 @@ export class Image implements IMessage<ImageMeta> {
         public textChunks: string[],
         public metadata: ImageMeta,
         public tags: string[] = [],
-    ) {}
+    ) {
+        this.timestamp = metadata.img.dateTaken;
+    }
 }
 
 // metadata for images
