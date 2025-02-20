@@ -5,9 +5,11 @@ import {
     ScoredSemanticRef,
     SemanticRef,
     SemanticRefIndex,
+    Tag,
 } from "./dataFormat.js";
 import { conversation } from "knowledge-processor";
 import { IPropertyToSemanticRefIndex } from "./secondaryIndexes.js";
+import { TextRangesInScope } from "./collections.js";
 
 export enum PropertyNames {
     EntityName = "name",
@@ -18,6 +20,7 @@ export enum PropertyNames {
     Subject = "subject",
     Object = "object",
     IndirectObject = "indirectObject",
+    Tag = "tag",
 }
 
 function addFacet(
@@ -123,6 +126,14 @@ export function addPropertiesToIndex(
                     semanticRefIndex,
                 );
                 break;
+            case "tag":
+                const tag = semanticRef.knowledge as Tag;
+                propertyIndex.addProperty(
+                    PropertyNames.Tag,
+                    tag.text,
+                    semanticRefIndex,
+                );
+                break;
         }
     }
 }
@@ -188,6 +199,24 @@ export class PropertyIndex implements IPropertyToSemanticRefIndex {
     private termTextToNameValue(termText: string): [string, string] {
         return splitPropertyTermText(termText);
     }
+}
+
+export function lookupPropertyInPropertyIndex(
+    propertyIndex: IPropertyToSemanticRefIndex,
+    propertyName: string,
+    propertyValue: string,
+    semanticRefs: SemanticRef[],
+    rangesInScope?: TextRangesInScope,
+): ScoredSemanticRef[] | undefined {
+    let scoredRefs = propertyIndex.lookupProperty(propertyName, propertyValue);
+    if (scoredRefs && scoredRefs.length > 0 && rangesInScope) {
+        scoredRefs = scoredRefs.filter((sr) =>
+            rangesInScope.isRangeInScope(
+                semanticRefs[sr.semanticRefIndex].range,
+            ),
+        );
+    }
+    return scoredRefs;
 }
 
 const PropertyDelimiter = "@@";

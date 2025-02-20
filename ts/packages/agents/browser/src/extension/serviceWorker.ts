@@ -1536,6 +1536,99 @@ chrome.runtime.onMessage.addListener(
                     sendResponse({ schema: schemaResult });
                     break;
                 }
+                case "startRecording": {
+                    const targetTab = await getActiveTab();
+                    const response = await chrome.tabs.sendMessage(
+                        targetTab.id!,
+                        {
+                            type: "startRecording",
+                        },
+                        { frameId: 0 }, // Limit action recording to the top frame for now
+                    );
+                    sendResponse({});
+                    break;
+                }
+                case "stopRecording": {
+                    const targetTab = await getActiveTab();
+                    const response = await chrome.tabs.sendMessage(
+                        targetTab.id!,
+                        {
+                            type: "stopRecording",
+                        },
+                        { frameId: 0 },
+                    );
+
+                    sendResponse(response);
+                    break;
+                }
+                case "takeScreenshot": {
+                    const screenshotUrl = await chrome.tabs.captureVisibleTab({
+                        format: "png",
+                    });
+
+                    sendResponse(screenshotUrl);
+                    break;
+                }
+                case "saveAnnotatedScreenshot": {
+                    await chrome.storage.local.set({
+                        annotatedScreenshot: message.screenshot,
+                    });
+                    sendResponse({});
+                    break;
+                }
+                case "getAnnotatedScreenshot": {
+                    const data = await chrome.storage.local.get(
+                        "annotatedScreenshot",
+                    );
+                    sendResponse(data.annotatedScreenshot);
+                    break;
+                }
+                case "saveRecordedActionPageHTML": {
+                    await chrome.storage.local.set({
+                        recordedActionPageHTML: message.html,
+                    });
+                    sendResponse({});
+                    break;
+                }
+                case "getRecordedActionPageHTML": {
+                    const data = await chrome.storage.local.get(
+                        "recordedActionPageHTML",
+                    );
+                    sendResponse(data.recordedActionPageHTML);
+                    break;
+                }
+                case "saveRecordedActions": {
+                    await chrome.storage.local.set({
+                        recordedActions: message.recordedActions,
+                    });
+                    sendResponse({});
+                    break;
+                }
+                case "recordingStopped": {
+                    await chrome.storage.local.set({
+                        recordedActions: message.recordedActions,
+                        recordedActionPageHTML: message.recordedActionPageHTML,
+                        annotatedScreenshot: message.recordedActionScreenshot,
+                    });
+
+                    sendResponse({});
+                    break;
+                }
+                case "getRecordedActions": {
+                    const data =
+                        await chrome.storage.local.get("recordedActions");
+                    sendResponse(data.recordedActions);
+                    break;
+                }
+                case "clearRecordedActions": {
+                    const data =
+                        await chrome.storage.local.get("recordedActions");
+                    if (data) {
+                        chrome.storage.local.remove("recordedActions");
+                    }
+                    sendResponse({});
+                    break;
+                }
             }
         };
 
@@ -1558,6 +1651,7 @@ chrome.runtime.onInstalled.addListener(() => {
     // Add separator
     chrome.contextMenus.create({
         type: "separator",
+        id: "menuSeparator",
     });
 
     chrome.contextMenus.create({
@@ -1612,7 +1706,7 @@ chrome.contextMenus?.onClicked.addListener(
                 break;
             }
             case "discoverPageSchema": {
-                chrome.sidePanel.open({ tabId: tab.id! });
+                await chrome.sidePanel.open({ tabId: tab.id! });
                 break;
             }
         }

@@ -740,6 +740,9 @@ importers:
       aiclient:
         specifier: workspace:*
         version: link:../../aiclient
+      bootstrap:
+        specifier: ^5.3.3
+        version: 5.3.3(@popperjs/core@2.11.8)
       common-utils:
         specifier: workspace:*
         version: link:../../commonUtils
@@ -747,8 +750,8 @@ importers:
         specifier: ^4.4.0
         version: 4.4.0(supports-color@8.1.1)
       dompurify:
-        specifier: ^3.1.6
-        version: 3.1.6
+        specifier: ^3.2.4
+        version: 3.2.4
       html-to-text:
         specifier: ^9.0.5
         version: 9.0.5
@@ -1043,6 +1046,9 @@ importers:
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../../agentSdk
+      agent-dispatcher:
+        specifier: workspace:*
+        version: link:../../dispatcher
       aiclient:
         specifier: workspace:*
         version: link:../../aiclient
@@ -1055,6 +1061,9 @@ importers:
       knowledge-processor:
         specifier: workspace:*
         version: link:../../knowledgeProcessor
+      telemetry:
+        specifier: workspace:*
+        version: link:../../telemetry
       typeagent:
         specifier: workspace:*
         version: link:../../typeagent
@@ -2340,8 +2349,8 @@ importers:
         specifier: workspace:*
         version: link:../defaultAgentProvider
       dompurify:
-        specifier: ^3.1.6
-        version: 3.1.6
+        specifier: ^3.2.4
+        version: 3.2.4
       dotenv:
         specifier: ^16.3.1
         version: 16.3.1
@@ -3878,6 +3887,9 @@ packages:
     engines: {node: '>=18'}
     hasBin: true
 
+  '@popperjs/core@2.11.8':
+    resolution: {integrity: sha512-P1st0aksCrn9sGZhp8GMYwBnQsbvAWsZAX44oXNNvLHGqAOcoVxmjZiohstwQ7SqKnbR47akdNi+uleWD8+g6A==}
+
   '@puppeteer/browsers@2.4.1':
     resolution: {integrity: sha512-0kdAbmic3J09I6dT8e9vE2JOCSt13wHCW5x/ly8TSt2bDtuIWe2TgLZZDHdcziw9AVCzflMAXCrVyRIhIs44Ng==}
     engines: {node: '>=18'}
@@ -4977,6 +4989,11 @@ packages:
     resolution: {integrity: sha512-d0II/GO9uf9lfUHH2BQsjxzRJZBdsjgsBiW4BvhWk/3qoKwQFjIDVN19PfX8F2D/r9PCMTtLWjYVCFrpeYUzsw==}
     deprecated: Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.
 
+  bootstrap@5.3.3:
+    resolution: {integrity: sha512-8HLCdWgyoMguSO9o+aH+iuZ+aht+mzW0u3HIMzVu7Srrpv7EBBxTnrFlSCskwdY1+EOFQSm7uMJhNQHkdPcmjg==}
+    peerDependencies:
+      '@popperjs/core': ^2.11.8
+
   bowser@2.11.0:
     resolution: {integrity: sha512-AlcaJBi/pqqJBIQ8U9Mcpc9i8Aqxn88Skv5d+xBX006BY5u8N3mGLHa5Lgppa7L/HfwgwLgZ6NYs+Ag6uUmJRA==}
 
@@ -5820,8 +5837,8 @@ packages:
     resolution: {integrity: sha512-cgwlv/1iFQiFnU96XXgROh8xTeetsnJiDsTc7TYCLFd9+/WNkIqPTxiM/8pSd8VIrhXGTf1Ny1q1hquVqDJB5w==}
     engines: {node: '>= 4'}
 
-  dompurify@3.1.6:
-    resolution: {integrity: sha512-cTOAhc36AalkjtBpfG6O8JimdTMWNXjiePT2xQH/ppBGi/4uIpmj8eKyIkMJErXWARyINV/sB38yf8JCLF5pbQ==}
+  dompurify@3.2.4:
+    resolution: {integrity: sha512-ysFSFEDVduQpyhzAob/kkuJjf5zWkZD8/A9ywSp1byueyuCfHamrCBa14/Oc2iiB0e51B+NpxSl5gmzn+Ms/mg==}
 
   domutils@2.8.0:
     resolution: {integrity: sha512-w96Cjofp72M5IIhpjgobBimYEfoPjx1Vx0BSX9P30WBdZW2WIKU0T1Bd0kz2eNZ9ikjKgHbEyKx8BB6H1L3h3A==}
@@ -11477,6 +11494,8 @@ snapshots:
     dependencies:
       playwright: 1.50.0
 
+  '@popperjs/core@2.11.8': {}
+
   '@puppeteer/browsers@2.4.1':
     dependencies:
       debug: 4.4.0(supports-color@8.1.1)
@@ -12854,6 +12873,10 @@ snapshots:
   boolean@3.2.0:
     optional: true
 
+  bootstrap@5.3.3(@popperjs/core@2.11.8):
+    dependencies:
+      '@popperjs/core': 2.11.8
+
   bowser@2.11.0: {}
 
   brace-expansion@1.1.11:
@@ -13874,7 +13897,9 @@ snapshots:
     dependencies:
       domelementtype: 2.3.0
 
-  dompurify@3.1.6: {}
+  dompurify@3.2.4:
+    optionalDependencies:
+      '@types/trusted-types': 2.0.7
 
   domutils@2.8.0:
     dependencies:

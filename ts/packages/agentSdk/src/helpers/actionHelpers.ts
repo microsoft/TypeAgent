@@ -76,6 +76,19 @@ export function createActionResultFromHtmlDisplayWithScript(
     };
 }
 
+export function createActionResultFromMarkdownDisplay(
+    literalText: string,
+    entities: Entity[] = [],
+    resultEntity?: Entity,
+): ActionResultSuccess {
+    return {
+        literalText,
+        entities,
+        resultEntity,
+        displayContent: { type: "markdown", content: literalText },
+    };
+}
+
 export function createActionResultFromError(error: string): ActionResultError {
     return {
         error,

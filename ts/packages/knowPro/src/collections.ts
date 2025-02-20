@@ -118,13 +118,19 @@ export class MatchAccumulator<T = any> {
         }
     }
 
-    public addIntersect(other: MatchAccumulator) {
-        for (const otherMatch of other.getMatches()) {
-            const existingMatch = this.getMatch(otherMatch.value);
-            if (existingMatch) {
-                this.combineMatches(existingMatch, otherMatch);
+    public intersect(
+        other: MatchAccumulator,
+        intersection?: MatchAccumulator,
+    ): MatchAccumulator {
+        intersection ??= new MatchAccumulator();
+        for (const thisMatch of this.getMatches()) {
+            const otherMatch = other.getMatch(thisMatch.value);
+            if (otherMatch) {
+                this.combineMatches(thisMatch, otherMatch);
+                intersection.setMatch(thisMatch);
             }
         }
+        return intersection;
     }
 
     private combineMatches(match: Match, other: Match) {
@@ -311,20 +317,23 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
 
     public getMatchesInScope(
         semanticRefs: SemanticRef[],
-        textRangesInScope: TextRangeCollection[],
+        rangesInScope: TextRangesInScope,
     ) {
         const accumulator = new SemanticRefAccumulator(this.searchTermMatches);
         for (const match of this.getMatches()) {
-            if (
-                isInAllTextRanges(
-                    textRangesInScope,
-                    semanticRefs[match.value].range,
-                )
-            ) {
+            if (rangesInScope.isRangeInScope(semanticRefs[match.value].range)) {
                 accumulator.setMatch(match);
             }
         }
         return accumulator;
+    }
+
+    public override intersect(
+        other: SemanticRefAccumulator,
+    ): SemanticRefAccumulator {
+        const intersection = new SemanticRefAccumulator();
+        super.intersect(other, intersection);
+        return intersection;
     }
 
     public toScoredSemanticRefs(): ScoredSemanticRef[] {
@@ -346,9 +355,11 @@ export class MessageAccumulator extends MatchAccumulator<IMessage> {}
 
 export class TextRangeCollection {
     // Maintains ranges sorted by message index
-    private ranges: TextRange[] = [];
+    private ranges: TextRange[];
 
-    constructor() {}
+    constructor(ranges?: TextRange[] | undefined) {
+        this.ranges = ranges ?? [];
+    }
 
     public get size() {
         return this.ranges.length;
@@ -380,6 +391,9 @@ export class TextRangeCollection {
     }
 
     public isInRange(rangeToMatch: TextRange): boolean {
+        if (this.ranges.length === 0) {
+            return false;
+        }
         // Find the first text range with messageIndex == rangeToMatch.start.messageIndex
         let i = collections.binarySearchFirst(
             this.ranges,
@@ -389,10 +403,13 @@ export class TextRangeCollection {
         if (i < 0) {
             return false;
         }
+        if (i == this.ranges.length) {
+            i--;
+        }
         // Now loop over all text ranges that start at rangeToMatch.start.messageIndex
         for (; i < this.ranges.length; ++i) {
             const range = this.ranges[i];
-            if (range.start.messageIndex !== rangeToMatch.start.messageIndex) {
+            if (range.start.messageIndex > rangeToMatch.start.messageIndex) {
                 break;
             }
             if (isInTextRange(range, rangeToMatch)) {
@@ -403,19 +420,26 @@ export class TextRangeCollection {
     }
 }
 
-/**
- * Return false if inner range is not in ALL the given ranges
- */
-function isInAllTextRanges(
-    ranges: TextRangeCollection[],
-    innerRange: TextRange,
-): boolean {
-    for (const outerRange of ranges) {
-        if (!outerRange.isInRange(innerRange)) {
-            return false;
-        }
+export class TextRangesInScope {
+    constructor(
+        public textRanges: TextRangeCollection[] | undefined = undefined,
+    ) {}
+
+    public addTextRanges(ranges: TextRangeCollection): void {
+        this.textRanges ??= [];
+        this.textRanges.push(ranges);
     }
-    return true;
+
+    public isRangeInScope(range: TextRange): boolean {
+        if (this.textRanges !== undefined) {
+            for (const outerRange of this.textRanges) {
+                if (!outerRange.isInRange(range)) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
 }
 
 export class TermSet {

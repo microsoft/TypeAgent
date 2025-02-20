@@ -7,9 +7,11 @@ import {
     IMessage,
     ITermToSemanticRefIndex,
     KnowledgeType,
+    MessageIndex,
     ScoredSemanticRef,
     SemanticRef,
     SemanticRefIndex,
+    Tag,
     Term,
     TextLocation,
     TextRange,
@@ -23,13 +25,17 @@ import {
     SemanticRefAccumulator,
     TermSet,
     TextRangeCollection,
+    TextRangesInScope,
 } from "./collections.js";
-import { PropertyNames } from "./propertyIndex.js";
+import {
+    lookupPropertyInPropertyIndex,
+    PropertyNames,
+} from "./propertyIndex.js";
 import { IPropertyToSemanticRefIndex } from "./secondaryIndexes.js";
 import { conversation } from "knowledge-processor";
 import { collections } from "typeagent";
-import { textRangeFromLocation } from "./conversationIndex.js";
 import { ITimestampToTextRangeIndex } from "./secondaryIndexes.js";
+import { Thread } from "./conversationThread.js";
 
 export function isConversationSearchable(conversation: IConversation): boolean {
     return (
@@ -38,35 +44,10 @@ export function isConversationSearchable(conversation: IConversation): boolean {
     );
 }
 
-export function textRangeForConversation(
-    conversation: IConversation,
-): TextRange {
-    const messages = conversation.messages;
-    return {
-        start: { messageIndex: 0 },
-        end: { messageIndex: messages.length - 1 },
-    };
-}
-
 export type TimestampRange = {
     start: string;
     end?: string | undefined;
 };
-
-export function timestampRangeForConversation(
-    conversation: IConversation,
-): TimestampRange | undefined {
-    const messages = conversation.messages;
-    const start = messages[0].timestamp;
-    const end = messages[messages.length - 1].timestamp;
-    if (start !== undefined) {
-        return {
-            start,
-            end,
-        };
-    }
-    return undefined;
-}
 
 /**
  * Returns:
@@ -89,12 +70,6 @@ export function compareTextLocation(x: TextLocation, y: TextLocation): number {
     return (x.charIndex ?? 0) - (y.charIndex ?? 0);
 }
 
-export const MaxTextLocation: TextLocation = {
-    messageIndex: Number.MAX_SAFE_INTEGER,
-    chunkIndex: Number.MAX_SAFE_INTEGER,
-    charIndex: Number.MAX_SAFE_INTEGER,
-};
-
 export function compareTextRange(x: TextRange, y: TextRange) {
     let cmp = compareTextLocation(x.start, y.start);
     if (cmp !== 0) {
@@ -103,10 +78,7 @@ export function compareTextRange(x: TextRange, y: TextRange) {
     if (x.end === undefined && y.end === undefined) {
         return cmp;
     }
-    cmp = compareTextLocation(
-        x.end ?? MaxTextLocation,
-        y.end ?? MaxTextLocation,
-    );
+    cmp = compareTextLocation(x.end ?? x.start, y.end ?? y.start);
     return cmp;
 }
 
@@ -118,11 +90,14 @@ export function isInTextRange(
     // inner end must be < outerEnd (which is exclusive)
     let cmpStart = compareTextLocation(outerRange.start, innerRange.start);
     if (outerRange.end === undefined && innerRange.end === undefined) {
-        return cmpStart <= 0;
+        // Since both ends are undefined, we have an point location, not a range.
+        // Points must be equal
+        return cmpStart == 0;
     }
     let cmpEnd = compareTextLocation(
-        innerRange.end ?? MaxTextLocation,
-        outerRange.end ?? MaxTextLocation,
+        // innerRange.end must be < outerRange end
+        innerRange.end ?? innerRange.start,
+        outerRange.end ?? outerRange.start,
     );
     return cmpStart <= 0 && cmpEnd < 0;
 }
@@ -138,6 +113,37 @@ export function isInDateRange(outerRange: DateRange, date: Date): boolean {
     let cmpEnd =
         outerRange.end !== undefined ? compareDates(date, outerRange.end) : -1;
     return cmpStart <= 0 && cmpEnd <= 0;
+}
+
+export function getTextRangeForDateRange(
+    conversation: IConversation,
+    dateRange: DateRange,
+): TextRange | undefined {
+    const messages = conversation.messages;
+    let rangeStartIndex: MessageIndex = -1;
+    let rangeEndIndex = rangeStartIndex;
+    for (let messageIndex = 0; messageIndex < messages.length; ++messageIndex) {
+        const message = messages[messageIndex];
+        if (message.timestamp) {
+            if (isInDateRange(dateRange, new Date(message.timestamp))) {
+                if (rangeStartIndex < 0) {
+                    rangeStartIndex = messageIndex;
+                }
+                rangeEndIndex = messageIndex;
+            } else {
+                if (rangeStartIndex >= 0) {
+                    break;
+                }
+            }
+        }
+    }
+    if (rangeStartIndex >= 0) {
+        return {
+            start: { messageIndex: rangeStartIndex },
+            end: { messageIndex: rangeEndIndex + 1 },
+        };
+    }
+    return undefined;
 }
 
 export function messageLength(message: IMessage): number {
@@ -318,13 +324,30 @@ function matchPropertySearchTermToAction(
     }
 }
 
+function matchPropertySearchTermToTag(
+    searchTerm: PropertySearchTerm,
+    semanticRef: SemanticRef,
+) {
+    if (
+        semanticRef.knowledgeType !== "tag" ||
+        typeof searchTerm.propertyName !== "string"
+    ) {
+        return false;
+    }
+    return matchSearchTermToText(
+        searchTerm.propertyValue,
+        (semanticRef.knowledge as Tag).text,
+    );
+}
+
 export function matchPropertySearchTermToSemanticRef(
     searchTerm: PropertySearchTerm,
     semanticRef: SemanticRef,
 ): boolean {
     return (
         matchPropertySearchTermToEntity(searchTerm, semanticRef) ||
-        matchPropertySearchTermToAction(searchTerm, semanticRef)
+        matchPropertySearchTermToAction(searchTerm, semanticRef) ||
+        matchPropertySearchTermToTag(searchTerm, semanticRef)
     );
 }
 
@@ -336,21 +359,41 @@ export function lookupTermFiltered(
 ): ScoredSemanticRef[] | undefined {
     const scoredRefs = semanticRefIndex.lookupTerm(term.text);
     if (scoredRefs && scoredRefs.length > 0) {
-        return scoredRefs.filter((sr) =>
-            filter(semanticRefs[sr.semanticRefIndex], sr),
-        );
+        let filtered = scoredRefs.filter((sr) => {
+            const semanticRef = semanticRefs[sr.semanticRefIndex];
+            const result = filter(semanticRef, sr);
+            return result;
+        });
+        return filtered;
     }
     return undefined;
 }
 
-export function lookupPropertySearchTerm(
+export function lookupTerm(
+    semanticRefIndex: ITermToSemanticRefIndex,
+    term: Term,
+    semanticRefs: SemanticRef[],
+    rangesInScope?: TextRangesInScope,
+): ScoredSemanticRef[] | undefined {
+    if (rangesInScope) {
+        // If rangesInScope has no actual text ranges, then lookups can't possibly match
+        return lookupTermFiltered(semanticRefIndex, term, semanticRefs, (sr) =>
+            rangesInScope.isRangeInScope(sr.range),
+        );
+    }
+    return semanticRefIndex.lookupTerm(term.text);
+}
+
+export function lookupProperty(
     semanticRefIndex: ITermToSemanticRefIndex,
     propertySearchTerm: PropertySearchTerm,
     semanticRefs: SemanticRef[],
+    rangesInScope?: TextRangesInScope,
 ): ScoredSemanticRef[] | undefined {
     if (typeof propertySearchTerm.propertyName !== "string") {
         throw new Error("Not supported");
     }
+
     // Since we are only matching propertyValue.term
     const valueTerm = propertySearchTerm.propertyValue.term;
     propertySearchTerm = {
@@ -361,11 +404,18 @@ export function lookupPropertySearchTerm(
         semanticRefIndex,
         valueTerm,
         semanticRefs,
-        (semanticRef) =>
-            matchPropertySearchTermToSemanticRef(
-                propertySearchTerm,
-                semanticRef,
-            ),
+        (semanticRef) => {
+            const inScope = rangesInScope
+                ? rangesInScope.isRangeInScope(semanticRef.range)
+                : true;
+            return (
+                inScope &&
+                matchPropertySearchTermToSemanticRef(
+                    propertySearchTerm,
+                    semanticRef,
+                )
+            );
+        },
     );
 }
 
@@ -378,6 +428,7 @@ export interface IQueryOpExpr<T> {
 export class QueryEvalContext {
     public matchedTerms = new TermSet();
     public matchedPropertyTerms = new PropertyTermSet();
+    public textRangesInScope: TextRangesInScope | undefined;
 
     constructor(
         public conversation: IConversation,
@@ -399,6 +450,7 @@ export class QueryEvalContext {
                 `${conversation.nameTag} is not initialized and cannot be searched`,
             );
         }
+        this.textRangesInScope = new TextRangesInScope();
     }
 
     public get semanticRefIndex() {
@@ -446,19 +498,35 @@ export class SelectTopNExpr<T extends MatchAccumulator> extends QueryOpExpr<T> {
     }
 }
 
+export class MatchTermsBooleanExpr extends QueryOpExpr<SemanticRefAccumulator> {
+    constructor(public getScopeExpr?: GetScopeExpr | undefined) {
+        super();
+    }
+
+    protected beginMatch(context: QueryEvalContext) {
+        if (this.getScopeExpr) {
+            context.textRangesInScope = this.getScopeExpr.eval(context);
+        }
+        context.clearMatchedTerms();
+    }
+}
+
 /**
  * Evaluates all child search term expressions
  * Returns their accumulated scored matches
  */
-export class MatchTermsOrExpr extends QueryOpExpr<SemanticRefAccumulator> {
-    constructor(public searchTermExpressions: MatchTermExpr[]) {
-        super();
+export class MatchTermsOrExpr extends MatchTermsBooleanExpr {
+    constructor(
+        public termExpressions: MatchTermExpr[],
+        public getScopeExpr?: GetScopeExpr | undefined,
+    ) {
+        super(getScopeExpr);
     }
 
     public override eval(context: QueryEvalContext): SemanticRefAccumulator {
+        super.beginMatch(context);
         const allMatches = new SemanticRefAccumulator();
-        context.clearMatchedTerms();
-        for (const matchExpr of this.searchTermExpressions) {
+        for (const matchExpr of this.termExpressions) {
             matchExpr.accumulateMatches(context, allMatches);
         }
         allMatches.calculateTotalScore();
@@ -466,18 +534,22 @@ export class MatchTermsOrExpr extends QueryOpExpr<SemanticRefAccumulator> {
     }
 }
 
-export class MatchTermsAndExpr extends QueryOpExpr<SemanticRefAccumulator> {
-    constructor(public searchTermExpressions: MatchTermExpr[]) {
-        super();
+export class MatchTermsAndExpr extends MatchTermsBooleanExpr {
+    constructor(
+        public termExpressions: MatchTermExpr[],
+        public getScopeExpr?: GetScopeExpr | undefined,
+    ) {
+        super(getScopeExpr);
     }
 
     public override eval(context: QueryEvalContext): SemanticRefAccumulator {
+        super.beginMatch(context);
+
         let allMatches: SemanticRefAccumulator | undefined;
-        context.clearMatchedTerms();
         let iTerm = 0;
         // Loop over each search term, intersecting the returned results...
-        for (; iTerm < this.searchTermExpressions.length; ++iTerm) {
-            const termMatches = this.searchTermExpressions[iTerm].eval(context);
+        for (; iTerm < this.termExpressions.length; ++iTerm) {
+            const termMatches = this.termExpressions[iTerm].eval(context);
             if (termMatches === undefined || termMatches.size === 0) {
                 // We can't possibly have an 'and'
                 break;
@@ -485,15 +557,13 @@ export class MatchTermsAndExpr extends QueryOpExpr<SemanticRefAccumulator> {
             if (allMatches === undefined) {
                 allMatches = termMatches;
             } else {
-                allMatches.addIntersect(termMatches);
+                allMatches = allMatches.intersect(termMatches);
             }
         }
         if (allMatches) {
-            if (iTerm === this.searchTermExpressions.length) {
+            if (iTerm === this.termExpressions.length) {
                 allMatches.calculateTotalScore();
-                allMatches.selectWithHitCount(
-                    this.searchTermExpressions.length,
-                );
+                allMatches.selectWithHitCount(this.termExpressions.length);
             } else {
                 // And is not possible
                 allMatches.clearMatches();
@@ -560,7 +630,12 @@ export class MatchSearchTermExpr extends MatchTermExpr {
         context: QueryEvalContext,
         term: Term,
     ): ScoredSemanticRef[] | IterableIterator<ScoredSemanticRef> | undefined {
-        return context.semanticRefIndex.lookupTerm(term.text);
+        return lookupTerm(
+            context.semanticRefIndex,
+            term,
+            context.semanticRefs,
+            context.textRangesInScope,
+        );
     }
 
     private accumulateMatchesForTerm(
@@ -587,23 +662,6 @@ export class MatchSearchTermExpr extends MatchTermExpr {
                 context.matchedTerms.add(relatedTerm);
             }
         }
-    }
-}
-
-export class MatchTagExpr extends MatchSearchTermExpr {
-    constructor(public tagTerm: SearchTerm) {
-        super(tagTerm);
-    }
-    protected override lookupTerm(
-        context: QueryEvalContext,
-        term: Term,
-    ): ScoredSemanticRef[] | undefined {
-        return lookupTermFiltered(
-            context.semanticRefIndex,
-            term,
-            context.semanticRefs,
-            (semanticRef) => semanticRef.knowledgeType === "tag",
-        );
     }
 }
 
@@ -728,9 +786,12 @@ export class MatchPropertySearchTermExpr extends MatchTermExpr {
         propertyValue: string,
     ): ScoredSemanticRef[] | undefined {
         if (context.propertyIndex) {
-            return context.propertyIndex.lookupProperty(
+            return lookupPropertyInPropertyIndex(
+                context.propertyIndex,
                 propertyName,
                 propertyValue,
+                context.semanticRefs,
+                context.textRangesInScope,
             );
         }
         return this.lookupPropertyWithoutIndex(
@@ -745,13 +806,31 @@ export class MatchPropertySearchTermExpr extends MatchTermExpr {
         propertyName: string,
         propertyValue: string,
     ): ScoredSemanticRef[] | undefined {
-        return lookupPropertySearchTerm(
+        return lookupProperty(
             context.semanticRefIndex,
             {
                 propertyName: propertyName as KnowledgePropertyName,
                 propertyValue: { term: { text: propertyValue } },
             },
             context.semanticRefs,
+            context.textRangesInScope,
+        );
+    }
+}
+
+export class MatchTagExpr extends MatchSearchTermExpr {
+    constructor(public tagTerm: SearchTerm) {
+        super(tagTerm);
+    }
+    protected override lookupTerm(
+        context: QueryEvalContext,
+        term: Term,
+    ): ScoredSemanticRef[] | undefined {
+        return lookupTermFiltered(
+            context.semanticRefIndex,
+            term,
+            context.semanticRefs,
+            (semanticRef) => semanticRef.knowledgeType === "tag",
         );
     }
 }
@@ -867,6 +946,23 @@ export class PropertyMatchPredicate implements IQuerySemanticRefPredicate {
     }
 }
 
+export class GetScopeExpr extends QueryOpExpr<TextRangesInScope> {
+    constructor(public rangeSelectors: IQueryTextRangeSelector[]) {
+        super();
+    }
+
+    public eval(context: QueryEvalContext): TextRangesInScope {
+        let rangesInScope = new TextRangesInScope();
+        for (const selector of this.rangeSelectors) {
+            const range = selector.eval(context);
+            if (range) {
+                rangesInScope.addTextRanges(range);
+            }
+        }
+        return rangesInScope;
+    }
+}
+
 export class SelectInScopeExpr extends QueryOpExpr<SemanticRefAccumulator> {
     constructor(
         public sourceExpr: IQueryOpExpr<SemanticRefAccumulator>,
@@ -876,29 +972,29 @@ export class SelectInScopeExpr extends QueryOpExpr<SemanticRefAccumulator> {
     }
 
     public override eval(context: QueryEvalContext): SemanticRefAccumulator {
-        let accumulatedSemanticRefs = this.sourceExpr.eval(context);
+        let semanticRefs = this.sourceExpr.eval(context);
         // Scope => text ranges in scope
         // Collect all possible text rang. The ranges may overlap, may not agree.
         // What we want to ensure is that if any of the
-        const rangeCollection: TextRangeCollection[] = [];
+        const rangesInScope = new TextRangesInScope();
         for (const selector of this.rangeSelectors) {
-            const range = selector.eval(context, accumulatedSemanticRefs);
+            const range = selector.eval(context, semanticRefs);
             if (range) {
-                rangeCollection.push(range);
+                rangesInScope.addTextRanges(range);
             }
         }
-        accumulatedSemanticRefs = accumulatedSemanticRefs.getMatchesInScope(
+        semanticRefs = semanticRefs.getMatchesInScope(
             context.semanticRefs,
-            rangeCollection,
+            rangesInScope,
         );
-        return accumulatedSemanticRefs;
+        return semanticRefs;
     }
 }
 
 export interface IQueryTextRangeSelector {
     eval(
         context: QueryEvalContext,
-        semanticRefs: SemanticRefAccumulator,
+        semanticRefs?: SemanticRefAccumulator | undefined,
     ): TextRangeCollection | undefined;
 }
 
@@ -908,32 +1004,20 @@ export class TextRangesInDateRangeSelector implements IQueryTextRangeSelector {
     public eval(context: QueryEvalContext): TextRangeCollection | undefined {
         const textRangesInScope = new TextRangeCollection();
         if (context.timestampIndex) {
-            const timeRanges = context.timestampIndex.lookupRange(
+            const textRanges = context.timestampIndex.lookupRange(
                 this.dateRangeInScope,
             );
-            for (const timeRange of timeRanges) {
+            for (const timeRange of textRanges) {
                 textRangesInScope.addRange(timeRange.range);
             }
             return textRangesInScope;
         } else {
-            const messages = context.conversation.messages;
-            for (
-                let messageIndex = 0;
-                messageIndex < messages.length;
-                ++messageIndex
-            ) {
-                const message = messages[messageIndex];
-                if (
-                    message.timestamp &&
-                    isInDateRange(
-                        this.dateRangeInScope,
-                        new Date(message.timestamp),
-                    )
-                ) {
-                    textRangesInScope.addRange(
-                        textRangeFromLocation(messageIndex),
-                    );
-                }
+            const textRange = getTextRangeForDateRange(
+                context.conversation,
+                this.dateRangeInScope,
+            );
+            if (textRange !== undefined) {
+                textRangesInScope.addRange(textRange);
             }
         }
         return textRangesInScope;
@@ -945,11 +1029,14 @@ export class TextRangesPredicateSelector implements IQueryTextRangeSelector {
 
     public eval(
         context: QueryEvalContext,
-        accumulator: SemanticRefAccumulator,
+        semanticRefs?: SemanticRefAccumulator | undefined,
     ): TextRangeCollection | undefined {
+        if (!semanticRefs) {
+            return undefined;
+        }
         if (this.predicates && this.predicates.length > 0) {
             const textRangesInScope = new TextRangeCollection();
-            for (const inScopeRef of accumulator.getSemanticRefs(
+            for (const inScopeRef of semanticRefs.getSemanticRefs(
                 context.semanticRefs,
                 (sr) => matchPredicates(context, this.predicates, sr),
             )) {
@@ -966,10 +1053,10 @@ export class TextRangesWithTagSelector implements IQueryTextRangeSelector {
 
     public eval(
         context: QueryEvalContext,
-        accumulator: SemanticRefAccumulator,
+        semanticRefs: SemanticRefAccumulator,
     ): TextRangeCollection | undefined {
         let textRangesInScope: TextRangeCollection | undefined;
-        for (const inScopeRef of accumulator.getSemanticRefs(
+        for (const inScopeRef of semanticRefs.getSemanticRefs(
             context.semanticRefs,
             (sr) => sr.knowledgeType === "tag",
         )) {
@@ -977,5 +1064,31 @@ export class TextRangesWithTagSelector implements IQueryTextRangeSelector {
             textRangesInScope.addRange(inScopeRef.range);
         }
         return textRangesInScope;
+    }
+}
+
+export class TextRangesWithTermMatchesSelector
+    implements IQueryTextRangeSelector
+{
+    constructor(public sourceExpr: QueryOpExpr<SemanticRefAccumulator>) {}
+
+    public eval(context: QueryEvalContext): TextRangeCollection {
+        const matches = this.sourceExpr.eval(context);
+        const rangesInScope = new TextRangeCollection();
+        if (matches.size > 0) {
+            for (const match of matches.getMatches()) {
+                const semanticRef = context.getSemanticRef(match.value);
+                rangesInScope.addRange(semanticRef.range);
+            }
+        }
+        return rangesInScope;
+    }
+}
+
+export class ThreadSelector implements IQueryTextRangeSelector {
+    constructor(public thread: Thread) {}
+
+    public eval(context: QueryEvalContext): TextRangeCollection | undefined {
+        return new TextRangeCollection(this.thread.ranges);
     }
 }

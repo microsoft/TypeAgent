@@ -1,13 +1,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { HistoryContext, PromptEntity } from "agent-cache";
+import { HistoryContext } from "agent-cache";
 import { CachedImageWithDetails } from "common-utils";
 import { PromptSection, TypeChatJsonTranslator } from "typechat";
-
-function entityToText(entity: PromptEntity) {
-    return `${entity.name} (${entity.type})${entity.additionalEntityText ? `: ${entity.additionalEntityText}` : ""}`;
-}
 
 export function createTypeAgentRequestPrompt(
     translator: TypeChatJsonTranslator<object>,
@@ -49,7 +45,17 @@ export function createTypeAgentRequestPrompt(
                     prompts.push(
                         "Recent entities found in chat history, in order, oldest first:",
                     );
-                    prompts.push(...promptEntities.map(entityToText).reverse());
+                    prompts.push(
+                        JSON.stringify(
+                            promptEntities.map((entity, i) => ({
+                                id: `\${entity-${i}}`,
+                                name: entity.name,
+                                type: entity.type,
+                            })),
+                            undefined,
+                            2,
+                        ),
+                    );
                 }
 
                 const additionalInstructions = history?.additionalInstructions;
@@ -84,10 +90,9 @@ export function createTypeAgentRequestPrompt(
     prompts.push("###");
     if (context && history !== undefined) {
         prompts.push(
-            "Resolve all references and pronouns in the current user request with the recent entities in the chat history.  If there are multiple possible resolution, choose the most likely resolution based on conversation context, bias toward the newest.",
-        );
-        prompts.push(
-            "Avoid clarifying unless absolutely necessary. Infer the user's intent based on conversation context.",
+            "Resolve all explicit and pronouns in the current user request with the recent entities in the chat history. Determine the entities implicitly referred in the current user request based on the chat history.",
+            "MUST not use the entity's name as parameter values. Use entities' id as parameter values when referring to entities",
+            "If there are multiple possible resolution, choose the most likely resolution based on conversation context, bias toward the newest. Avoid clarifying unless absolutely necessary. Infer the user's intent based on conversation context.",
         );
     }
     prompts.push(

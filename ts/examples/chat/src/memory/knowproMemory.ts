@@ -193,6 +193,8 @@ export async function createKnowproCommands(
             return;
         }
 
+        const clock = new StopWatch();
+        clock.start();
         const data = await readJsonFile<kp.PodcastData>(podcastFilePath);
         if (!data) {
             context.printer.writeError("Could not load podcast data");
@@ -205,6 +207,8 @@ export async function createKnowproCommands(
             data.semanticRefs,
         );
         context.podcast.deserialize(data);
+        clock.stop();
+        context.printer.writeTiming(chalk.gray, clock);
         context.conversation = context.podcast;
         context.printer.conversation = context.conversation;
         context.printer.writePodcastInfo(context.podcast);
@@ -222,15 +226,17 @@ export async function createKnowproCommands(
                 displayAsc: argBool("Display results in ascending order", true),
                 startMinute: argNum("Starting at minute."),
                 endMinute: argNum("Ending minute."),
+                startDate: arg("Starting at this date"),
+                endDate: arg("Ending at this date"),
                 andTerms: argBool("'And' all terms. Default is 'or", false),
                 exact: argBool("Exact match only. No related terms", false),
                 usePropertyIndex: argBool(
                     "Use property index while searching",
-                    false,
+                    true,
                 ),
                 useTimestampIndex: argBool(
                     "Use timestamp index while searching",
-                    false,
+                    true,
                 ),
             },
         };
@@ -274,6 +280,7 @@ export async function createKnowproCommands(
                 {
                     exactMatch: namedArgs.exact,
                     usePropertyIndex: namedArgs.usePropertyIndex,
+                    useTimestampIndex: namedArgs.useTimestampIndex,
                 },
             );
             timer.stop();
@@ -307,36 +314,17 @@ export async function createKnowproCommands(
         };
     }
 
-    const scopePrefix = "%";
     function propertyTermsFromNamedArgs(
         namedArgs: NamedArgs,
         commandDef: CommandMetadata,
     ): kp.PropertySearchTerm[] {
-        return createPropertyTerms(namedArgs, commandDef, undefined, (name) => {
-            if (name.startsWith(scopePrefix)) {
-                return name.substring(1);
-            }
-            return name;
-        });
-    }
-
-    function scopingTermsFromNamedArgs(
-        namedArgs: NamedArgs,
-        commandDef: CommandMetadata,
-    ): kp.PropertySearchTerm[] {
-        return createPropertyTerms(
-            namedArgs,
-            commandDef,
-            (name) => name.startsWith(scopePrefix),
-            (name) => name.substring(1),
-        );
+        return createPropertyTerms(namedArgs, commandDef);
     }
 
     function createPropertyTerms(
         namedArgs: NamedArgs,
         commandDef: CommandMetadata,
         nameFilter?: (name: string) => boolean,
-        nameModifier?: (name: string) => string,
     ): kp.PropertySearchTerm[] {
         const keyValues = keyValuesFromNamedArgs(namedArgs, commandDef);
         const propertyNames = nameFilter
@@ -347,12 +335,7 @@ export async function createKnowproCommands(
             const allValues = splitTermValues(keyValues[propertyName]);
             for (const value of allValues) {
                 propertySearchTerms.push(
-                    kp.propertySearchTermFromKeyValue(
-                        nameModifier
-                            ? nameModifier(propertyName)
-                            : propertyName,
-                        value,
-                    ),
+                    kp.propertySearchTermFromKeyValue(propertyName, value),
                 );
             }
         }
@@ -367,23 +350,34 @@ export async function createKnowproCommands(
             knowledgeType: namedArgs.ktype,
         };
         const dateRange = kp.getTimeRangeForConversation(context.podcast!);
-        if (dateRange && namedArgs.startMinute >= 0) {
-            filter.inDateRange = {
-                start: dateTime.addMinutesToDate(
-                    dateRange.start,
-                    namedArgs.startMinute,
-                ),
-            };
-            if (namedArgs.endMinute) {
-                filter.inDateRange.end = dateTime.addMinutesToDate(
-                    dateRange.start,
-                    namedArgs.endMinute,
-                );
+        if (dateRange) {
+            let startDate: Date | undefined;
+            let endDate: Date | undefined;
+            // Did they provide an explicit date range?
+            if (namedArgs.startDate || namedArgs.endDate) {
+                startDate = argToDate(namedArgs.startDate) ?? dateRange.start;
+                endDate = argToDate(namedArgs.endDate) ?? dateRange.end;
+            } else {
+                // They may have provided a relative date range
+                if (namedArgs.startMinute >= 0) {
+                    startDate = dateTime.addMinutesToDate(
+                        dateRange.start,
+                        namedArgs.startMinute,
+                    );
+                }
+                if (namedArgs.endMinute > 0) {
+                    endDate = dateTime.addMinutesToDate(
+                        dateRange.start,
+                        namedArgs.endMinute,
+                    );
+                }
             }
-        }
-        const scopingTerms = scopingTermsFromNamedArgs(namedArgs, commandDef);
-        if (scopingTerms.length > 0) {
-            filter.scopingTerms = scopingTerms;
+            if (startDate) {
+                filter.inDateRange = {
+                    start: startDate,
+                    end: endDate,
+                };
+            }
         }
         return filter;
     }
@@ -418,7 +412,7 @@ export async function createKnowproCommands(
         return {
             description: "Build index",
             options: {
-                knowLedge: argBool("Index knowledge", false),
+                knowledge: argBool("Index knowledge", false),
                 related: argBool("Index related terms", false),
                 maxMessages: argNum("Maximum messages to index"),
             },
@@ -444,7 +438,9 @@ export async function createKnowproCommands(
         const namedArgs = parseNamedArguments(args, podcastBuildIndexDef());
         // Build index
         context.printer.writeLine();
-        context.printer.writeLine("Building index");
+        context.printer.writeLine(
+            `Build knowledge: ${namedArgs.knowledge}\nBuild related terms: ${namedArgs.related}\n`,
+        );
         if (namedArgs.knowledge) {
             context.printer.writeLine("Building knowledge index");
             const maxMessages = namedArgs.maxMessages ?? messageCount;
@@ -465,18 +461,18 @@ export async function createKnowproCommands(
             context.printer.writeIndexingResults(indexResult);
         }
         if (namedArgs.related) {
-            context.printer.writeLine("Building semantic index");
+            context.printer.writeLine("Building related terms index");
             const progress = new ProgressBar(
                 context.printer,
                 context.podcast.semanticRefIndex.size,
             );
-            await context.podcast.buildRelatedTermsIndex(16, (terms, batch) => {
-                progress.advance(batch.value.length);
+            await context.podcast.buildRelatedTermsIndex(16, (batch) => {
+                progress.advance(batch.length);
                 return true;
             });
             progress.complete();
             context.printer.writeLine(
-                `Semantic Indexed ${context.podcast.semanticRefIndex.size} terms`,
+                `Indexed ${context.podcast.semanticRefIndex.size} terms`,
             );
         }
     }

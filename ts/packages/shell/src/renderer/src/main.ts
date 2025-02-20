@@ -7,7 +7,8 @@ import {
     ClientAPI,
     NotifyCommands,
     SpeechToken,
-} from "../../preload/electronTypes";
+    ShellSettingsType,
+} from "../../preload/electronTypes.js";
 import { ChatView } from "./chatView";
 import { TabView } from "./tabView";
 import { recognizeOnce } from "./speech";
@@ -16,7 +17,6 @@ import { iconHelp, iconMetrics, iconSettings } from "./icon";
 import { SettingsView } from "./settingsView";
 import { HelpView } from "./helpView";
 import { MetricsView } from "./metricsView";
-import { ShellSettings } from "../../main/shellSettings";
 import { CameraView } from "./cameraView";
 import { createWebSocket, webapi, webdispatcher } from "./webSocketAPI";
 import * as jose from "jose";
@@ -256,7 +256,7 @@ function addEvents(
 
         tabsView.showTab(key);
     });
-    api.onSettingsChanged((_, value: ShellSettings) => {
+    api.onSettingsChanged((_, value: ShellSettingsType) => {
         let newTitle = document.title.substring(
             0,
             document.title.indexOf("Zoom: "),

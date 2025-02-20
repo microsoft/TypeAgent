@@ -7,14 +7,14 @@ import {
     defaultSettings,
     ShellSettingsType,
     TTSSettings,
-} from "./shellSettingsType.js";
+} from "../preload/shellSettingsType.js";
 import {
     ClientSettingsProvider,
-    DisplayType,
     EmptyFunction,
 } from "../preload/electronTypes.js";
 import { getInstanceDir } from "agent-dispatcher";
 import path from "path";
+import { DisplayType } from "@typeagent/agent-sdk";
 
 const debugShell = registerDebug("typeagent:shell");
 

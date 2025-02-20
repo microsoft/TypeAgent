@@ -90,7 +90,6 @@ export interface ITermsToRelatedTermsDataItem {
 }
 
 export interface ITextEmbeddingIndexData {
-    modelName?: string | undefined;
     embeddingData?: ITextEmbeddingDataItem[] | undefined;
 }
 
