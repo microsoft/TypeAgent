@@ -76,10 +76,12 @@ even when the sample codebase is re-chunked for some reason
 (which assigns new chunks everywhere).
 
 However, sometimes unrelated hashes have the same text, e.g.
+
 ```py
     def __len__(self):
         return len(self._data)
 ```
+
 occurring in multiple classes written using the same design pattern.
 
 How to disambiguate? I propose to include the names of the containing
@@ -87,6 +89,7 @@ chunk(s), up to the module root, and also the full filename of the
 file where the chunk occurs (in case there are very similar files).
 
 So, for example, the input to the hash function could be:
+
 ```
 # <filename>
 # <great-grandparent> <grandparent> <parent>
