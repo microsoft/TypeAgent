@@ -129,7 +129,8 @@ class SearchQueryBuilder {
     constructor(
         public conversation: IConversation,
         public secondaryIndexes?: IConversationSecondaryIndexes | undefined,
-        public defaultMatchWeight: number = 100,
+        public entityTermMatchWeight: number = 100,
+        public defaultTermMatchWeight: number = 10,
         public relatedIsExactThreshold: number = 0.95,
     ) {}
 
@@ -200,6 +201,10 @@ class SearchQueryBuilder {
                 termExpressions.push(new q.MatchPropertySearchTermExpr(term));
                 if (typeof term.propertyName !== "string") {
                     searchTermsUsed.push(term.propertyName);
+                }
+                if (isEntityPropertyTerm(term)) {
+                    term.propertyValue.term.weight ??=
+                        this.entityTermMatchWeight;
                 }
                 searchTermsUsed.push(term.propertyValue);
             } else {
@@ -304,7 +309,7 @@ class SearchQueryBuilder {
         if (!this.validateAndPrepareTerm(searchTerm.term)) {
             return false;
         }
-        searchTerm.term.weight ??= this.defaultMatchWeight;
+        searchTerm.term.weight ??= this.defaultTermMatchWeight;
         if (searchTerm.relatedTerms) {
             for (const relatedTerm of searchTerm.relatedTerms) {
                 if (!this.validateAndPrepareTerm(relatedTerm)) {
@@ -314,10 +319,9 @@ class SearchQueryBuilder {
                     relatedTerm.weight &&
                     relatedTerm.weight >= this.relatedIsExactThreshold
                 ) {
-                    relatedTerm.weight = this.defaultMatchWeight;
+                    relatedTerm.weight = this.defaultTermMatchWeight;
                 }
             }
-            searchTerm.relatedTerms.forEach((st) => {});
         }
         return true;
     }
@@ -381,6 +385,17 @@ function isPropertyTerm(
     term: SearchTerm | PropertySearchTerm,
 ): term is PropertySearchTerm {
     return term.hasOwnProperty("propertyName");
+}
+
+function isEntityPropertyTerm(term: PropertySearchTerm): boolean {
+    switch (term.propertyName) {
+        default:
+            break;
+        case "name":
+        case "type":
+            return true;
+    }
+    return false;
 }
 
 function isActionPropertyTerm(term: PropertySearchTerm): boolean {

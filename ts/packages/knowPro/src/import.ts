@@ -24,7 +24,12 @@ import {
     TermToRelatedTermsIndex,
     TermsToRelatedTermIndexSettings,
 } from "./relatedTermsIndex.js";
-import { createTextEmbeddingIndexSettings } from "./fuzzyIndex.js";
+import {
+    createTextEmbeddingIndexSettings,
+    deserializeEmbedding,
+    serializeEmbedding,
+    TextEmbeddingIndexSettings,
+} from "./fuzzyIndex.js";
 import { TimestampToTextRangeIndex } from "./timestampIndex.js";
 import {
     ITermsToRelatedTermsIndexData,
@@ -33,6 +38,13 @@ import {
 import { addPropertiesToIndex, PropertyIndex } from "./propertyIndex.js";
 import { IPropertyToSemanticRefIndex } from "./secondaryIndexes.js";
 import { IConversationSecondaryIndexes } from "./secondaryIndexes.js";
+import {
+    IConversationThreadData,
+    IConversationThreads,
+    IThreadDataItem,
+    Thread,
+    ThreadDescriptionIndex,
+} from "./conversationThread.js";
 
 // metadata for podcast messages
 export class PodcastMessageMeta implements IKnowledgeSource {
@@ -114,13 +126,16 @@ export class PodcastMessage implements IMessage<PodcastMessageMeta> {
 
 export type PodcastSettings = {
     relatedTermIndexSettings: TermsToRelatedTermIndexSettings;
+    threadSettings: TextEmbeddingIndexSettings;
 };
 
 export function createPodcastSettings(): PodcastSettings {
+    const embeddingIndexSettings = createTextEmbeddingIndexSettings();
     return {
         relatedTermIndexSettings: {
-            embeddingIndexSettings: createTextEmbeddingIndexSettings(),
+            embeddingIndexSettings,
         },
+        threadSettings: embeddingIndexSettings,
     };
 }
 
@@ -128,6 +143,8 @@ export class Podcast
     implements IConversation<PodcastMessageMeta>, IConversationSecondaryIndexes
 {
     public settings: PodcastSettings;
+    public threads: PodcastThreads;
+
     constructor(
         public nameTag: string,
         public messages: PodcastMessage[],
@@ -145,6 +162,7 @@ export class Podcast
             | undefined = undefined,
     ) {
         this.settings = createPodcastSettings();
+        this.threads = new PodcastThreads(this.settings.threadSettings);
     }
 
     public addMetadataToIndex() {
@@ -199,6 +217,7 @@ export class Podcast
         const result = await buildConversationIndex(this, progressCallback);
         this.addMetadataToIndex();
         this.buildSecondaryIndexes();
+        await this.threads.buildIndex();
         return result;
     }
 
@@ -227,6 +246,7 @@ export class Podcast
             semanticRefs: this.semanticRefs,
             semanticIndexData: this.semanticRefIndex?.serialize(),
             relatedTermsIndexData: this.termToRelatedTermsIndex?.serialize(),
+            threadData: this.threads.serialize(),
         };
     }
 
@@ -243,6 +263,10 @@ export class Podcast
             this.termToRelatedTermsIndex.deserialize(
                 data.relatedTermsIndexData,
             );
+        }
+        if (data.threadData) {
+            this.threads = new PodcastThreads(this.settings.threadSettings);
+            this.threads.deserialize(data.threadData);
         }
         this.buildSecondaryIndexes();
     }
@@ -313,6 +337,7 @@ export class Podcast
 
 export interface PodcastData extends IConversationData<PodcastMessage> {
     relatedTermsIndexData?: ITermsToRelatedTermsIndexData | undefined;
+    threadData?: IConversationThreadData;
 }
 
 export async function importPodcast(
@@ -417,4 +442,53 @@ function randomDate(startHour = 14) {
     date.setMonth(Math.floor(Math.random() * 12));
     date.setDate(Math.floor(Math.random() * 28));
     return date;
+}
+
+class PodcastThreads implements IConversationThreads {
+    public threads: Thread[];
+    public threadDescriptionIndex: ThreadDescriptionIndex;
+
+    constructor(settings: TextEmbeddingIndexSettings) {
+        this.threads = [];
+        this.threadDescriptionIndex = new ThreadDescriptionIndex(settings);
+    }
+
+    public async buildIndex(): Promise<void> {
+        for (let i = 0; i < this.threads.length; ++i) {
+            const thread = this.threads[i];
+            await this.threadDescriptionIndex.addDescription(
+                thread.description,
+                i,
+            );
+        }
+    }
+
+    public serialize(): IConversationThreadData {
+        const threadData: IThreadDataItem[] = [];
+        const embeddingIndex = this.threadDescriptionIndex.embeddingIndex;
+        for (let i = 0; i < this.threads.length; ++i) {
+            const thread = this.threads[i];
+            threadData.push({
+                thread,
+                embedding: serializeEmbedding(embeddingIndex.get(i)),
+            });
+        }
+        return {
+            threads: threadData,
+        };
+    }
+
+    public deserialize(data: IConversationThreadData): void {
+        if (data.threads) {
+            this.threads = [];
+            this.threadDescriptionIndex.clear();
+            for (let i = 0; i < data.threads.length; ++i) {
+                this.threads.push(data.threads[i].thread);
+                const embedding = deserializeEmbedding(
+                    data.threads[i].embedding,
+                );
+                this.threadDescriptionIndex.add(embedding, i);
+            }
+        }
+    }
 }

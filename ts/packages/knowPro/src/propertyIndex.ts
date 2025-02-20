@@ -5,6 +5,7 @@ import {
     ScoredSemanticRef,
     SemanticRef,
     SemanticRefIndex,
+    Tag,
 } from "./dataFormat.js";
 import { conversation } from "knowledge-processor";
 import { IPropertyToSemanticRefIndex } from "./secondaryIndexes.js";
@@ -19,6 +20,7 @@ export enum PropertyNames {
     Subject = "subject",
     Object = "object",
     IndirectObject = "indirectObject",
+    Tag = "tag",
 }
 
 function addFacet(
@@ -121,6 +123,14 @@ export function addPropertiesToIndex(
                 addEntityPropertiesToIndex(
                     semanticRef.knowledge as conversation.ConcreteEntity,
                     propertyIndex,
+                    semanticRefIndex,
+                );
+                break;
+            case "tag":
+                const tag = semanticRef.knowledge as Tag;
+                propertyIndex.addProperty(
+                    PropertyNames.Tag,
+                    tag.text,
                     semanticRefIndex,
                 );
                 break;

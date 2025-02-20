@@ -81,6 +81,10 @@ export class TextEmbeddingIndex {
         this.embeddings.splice(pos, 1);
     }
 
+    public clear(): void {
+        this.embeddings = [];
+    }
+
     private indexesOfNearestText(
         textEmbedding: NormalizedEmbedding,
         maxMatches?: number,
