@@ -286,9 +286,9 @@ class PDFChunker:
     def chunkify(self) -> ChunkedFile:
         with pdfplumber.open(self.file_path) as pdf:
             text_chunks, page_chunks = self.extract_text_chunks()
-            table_chunks = self.extract_tables(pdf, page_chunks=page_chunks)
+            #table_chunks = self.extract_tables(pdf, page_chunks=page_chunks)
             image_chunks = self.extract_images(page_chunks)
-        all_chunks = text_chunks + table_chunks + image_chunks
+        all_chunks = text_chunks + image_chunks
         return all_chunks
 
     def save_json(self, output_path: str) -> list[Chunk] | ErrorItem:
@@ -297,17 +297,45 @@ class PDFChunker:
             return all_chunks
         chunked_file = ChunkedFile(self.file_path, all_chunks)
         with open(output_path, "w") as f:
-            print(json.dumps(chunked_file, default=custom_json, indent=2))
+            json.dump(chunked_file, f, default=custom_json, indent=2)
         return all_chunks
+    
+def ensure_directory_exists(directory: str) -> str:
+    """Ensure the specified directory exists, creating it if necessary."""
+    if not os.path.exists(directory):
+        os.makedirs(directory)
+    return directory
+    
+def parse_args(args):
+    """Parse command-line arguments for -files and -outdir."""
+    input_files = []
+    output_folder = None
+
+    if "-files" in args:
+        files_index = args.index("-files") + 1
+        while files_index < len(args) and not args[files_index].startswith("-"):
+            input_files.append(os.path.abspath(args[files_index]))
+            files_index += 1
+
+    if "-outdir" in args:
+        outdir_index = args.index("-outdir") + 1
+        if outdir_index < len(args):
+            output_folder = ensure_directory_exists(os.path.abspath(args[outdir_index]))
+
+    return input_files, output_folder
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: python3 -X utf8 pdfChunker.py FILE [FILE] ...")
+        print("Usage: python3 -X utf8 pdfChunker.py -files FILE [FILE] ... -outdir OUTPUT_FOLDER")
         return 2
 
-    output_json = "pdf-chunked-output.json"
+    input_files, output_folder = parse_args(sys.argv[1:])
+    if not input_files or not output_folder:
+        print("Error: Missing input files or output folder.")
+        return 2
+
     items: list[ErrorItem | ChunkedFile] = []
-    for filename in sys.argv[1:]:
+    for filename in input_files:
         if not os.path.exists(filename):
             items.append(ErrorItem(f"File not found: {filename}", filename))
             continue
@@ -317,16 +345,25 @@ def main():
             if not filename.lower().endswith(".pdf"):
                 items.append(ErrorItem(f"Invalid file type: {filename}", filename))
                 continue
-            
-            chunker = PDFChunker(filename)
+
+            # Process PDF and save JSON output in output_folder
+            chunker = PDFChunker(filename, output_folder)
+            output_json = os.path.join(chunker.output_dir, os.path.basename(filename) + "-chunked.json")
             result = chunker.save_json(output_json)
+
             if isinstance(result, ErrorItem):
                 items.append(result)
             else:
                 chunks = [chunk for chunk in result if chunk.blobs]
                 items.append(ChunkedFile(filename, chunks))
+
         except IOError as err:
             items.append(ErrorItem(str(err), filename))
+
+    # Save a summary JSON file in the output folder
+    summary_json_path = os.path.join(output_folder, "summary.json")
+    with open(summary_json_path, "w", encoding="utf-8") as f:
+        json.dump(items, f, default=custom_json, indent=2)
 
     print(json.dumps(items, default=custom_json, indent=2))
     return 0

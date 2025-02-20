@@ -62,8 +62,9 @@ export async function chunkifyPdfFiles(
         const chunkerPath = path.join(__dirname, "pdfChunker.py");
         const absChunkerPath = resolve(chunkerPath);
         const absFilenames = filenames.map(f => `"${path.join(__dirname, f)}"`);
+        const outputDir = path.join(__dirname, "output");
         let { stdout, stderr } = await execPromise(
-            `python3 -X utf8 "${absChunkerPath}" ${absFilenames.join(" ")}`,
+            `python3 -X utf8 "${absChunkerPath}" -files ${absFilenames.join(" ")} -outdir ${outputDir}`,
             { maxBuffer: 64 * 1024 * 1024 }, // Super large buffer
         );
         output = stdout;
