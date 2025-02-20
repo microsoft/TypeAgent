@@ -879,6 +879,8 @@ function podcastMessageFromEmailText(text: string) {
     for (let line of lines) {
         if (line.startsWith("From: ")) {
             speaker = line.replace("From: ", "");
+        } else if (line.startsWith(`"From: `)) {
+            speaker = line.replace(`"From: `, "");
         } else if (!line.startsWith("To: ")) {
             messageText += line;
             messageText += "\n";
