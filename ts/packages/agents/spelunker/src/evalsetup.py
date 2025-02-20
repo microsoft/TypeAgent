@@ -140,11 +140,13 @@ def add_new_tables(dst_cur):
 def fill_in_hashes(dst_cur):
     count = 0
     # Fetch all chunks
-    selection = dst_cur.execute("SELECT chunkId, codeName, parentId, fileName FROM Chunks")
+    selection = dst_cur.execute(
+        "SELECT chunkId, codeName, parentId, fileName FROM Chunks"
+    )
     # Use fetchall() because we reuse the cursor below
     for chunkid, codename, parentid, filename in selection.fetchall():
         if filename.startswith(os.getenv("HOME") + os.sep):
-            filename = "~" + filename[len(os.getenv("HOME")) : ]
+            filename = "~" + filename[len(os.getenv("HOME")) :]
         input_lines = [filename]  # Start with the cleaned-up filename
 
         # Add the path from the root node
