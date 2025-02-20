@@ -193,6 +193,8 @@ export async function createKnowproCommands(
             return;
         }
 
+        const clock = new StopWatch();
+        clock.start();
         const data = await readJsonFile<kp.PodcastData>(podcastFilePath);
         if (!data) {
             context.printer.writeError("Could not load podcast data");
@@ -205,6 +207,8 @@ export async function createKnowproCommands(
             data.semanticRefs,
         );
         context.podcast.deserialize(data);
+        clock.stop();
+        context.printer.writeTiming(chalk.gray, clock);
         context.conversation = context.podcast;
         context.printer.conversation = context.conversation;
         context.printer.writePodcastInfo(context.podcast);
@@ -222,6 +226,8 @@ export async function createKnowproCommands(
                 displayAsc: argBool("Display results in ascending order", true),
                 startMinute: argNum("Starting at minute."),
                 endMinute: argNum("Ending minute."),
+                startDate: arg("Starting at this date"),
+                endDate: arg("Ending at this date"),
                 andTerms: argBool("'And' all terms. Default is 'or", false),
                 exact: argBool("Exact match only. No related terms", false),
                 usePropertyIndex: argBool(
@@ -344,18 +350,33 @@ export async function createKnowproCommands(
             knowledgeType: namedArgs.ktype,
         };
         const dateRange = kp.getTimeRangeForConversation(context.podcast!);
-        if (dateRange && namedArgs.startMinute >= 0) {
-            filter.inDateRange = {
-                start: dateTime.addMinutesToDate(
-                    dateRange.start,
-                    namedArgs.startMinute,
-                ),
-            };
-            if (namedArgs.endMinute) {
-                filter.inDateRange.end = dateTime.addMinutesToDate(
-                    dateRange.start,
-                    namedArgs.endMinute,
-                );
+        if (dateRange) {
+            let startDate: Date | undefined;
+            let endDate: Date | undefined;
+            // Did they provide an explicit date range?
+            if (namedArgs.startDate || namedArgs.endDate) {
+                startDate = argToDate(namedArgs.startDate) ?? dateRange.start;
+                endDate = argToDate(namedArgs.endDate) ?? dateRange.end;
+            } else {
+                // They may have provided a relative date range
+                if (namedArgs.startMinute >= 0) {
+                    startDate = dateTime.addMinutesToDate(
+                        dateRange.start,
+                        namedArgs.startMinute,
+                    );
+                }
+                if (namedArgs.endMinute > 0) {
+                    endDate = dateTime.addMinutesToDate(
+                        dateRange.start,
+                        namedArgs.endMinute,
+                    );
+                }
+            }
+            if (startDate) {
+                filter.inDateRange = {
+                    start: startDate,
+                    end: endDate,
+                };
             }
         }
         return filter;

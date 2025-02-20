@@ -38,9 +38,11 @@ import {
     isFilePath,
     NameValue,
     removeDir,
+    writeJsonFile,
 } from "typeagent";
 import { runImportQueue } from "./importer.js";
 import chalk from "chalk";
+import * as kp from "knowpro";
 
 export async function createPodcastMemory(
     models: Models,
@@ -106,6 +108,7 @@ export function createPodcastCommands(
     commands.podcastAlias = podcastAlias;
     commands.podcastEntities = podcastEntities;
     commands.podcastSearch = podcastSearch;
+    commands.podcastExport = podcastExport;
 
     //-----------
     // COMMANDS
@@ -141,6 +144,43 @@ export function createPodcastCommands(
         const turnsFilePath = getTurnsFolderPath(sourcePath);
         namedArgs.sourcePath = turnsFilePath;
         await podcastIndex(namedArgs);
+    }
+
+    function podcastExportDef(): CommandMetadata {
+        return {
+            description: "Export podcast to knowpro format",
+            args: {
+                filePath: arg("Output filePath"),
+            },
+        };
+    }
+    commands.podcastExport.metadata = podcastExportDef();
+    async function podcastExport(args: string[]) {
+        const namedArgs = parseNamedArguments(args, podcastExportDef());
+        const messageStore = context.podcastMemory.conversation.messages;
+        const knowledgeStore = context.podcastMemory.conversation.knowledge;
+        const kpMessages: kp.PodcastMessage[] = [];
+        const knowledgeResponses: conversation.KnowledgeResponse[] = [];
+        for await (const entry of messageStore.all()) {
+            const messageId = entry.name;
+            const message = entry.value;
+
+            const podcastMessage = podcastMessageFromEmailText(
+                message.value.value,
+            );
+            podcastMessage.addTimestamp(message.timestamp.toISOString());
+            kpMessages.push(podcastMessage);
+            knowledgeResponses.push(
+                extractedKnowledgeToResponse(
+                    await knowledgeStore.get(messageId),
+                ),
+            );
+        }
+        const kpPodcast = new kp.Podcast("AllEpisodes", []);
+        kp.addToConversationIndex(kpPodcast, kpMessages, knowledgeResponses);
+        const podcastData = kpPodcast.serialize();
+        await ensureDir(path.dirname(namedArgs.filePath));
+        await writeJsonFile(namedArgs.filePath, podcastData);
     }
 
     // Eventually we should unite these functions with their
@@ -647,76 +687,6 @@ export function createPodcastCommands(
             context.printer.writeLine("Thread not found");
         }
     }
-    /*
-    function podcastAddThreadTagsDef(): CommandMetadata {
-        return {
-            description: "Add tags for a sub-thread to the podcast index",
-            args: {
-                sourcePath: argSourceFileOrFolder(),
-                startAt: arg("Start date and time"),
-                length: argNum("Length of the podcast in minutes", 60),
-            },
-        };
-    }
-    commands.podcastAddThreadTags.metadata = podcastAddThreadTagsDef();
-    async function podcastAddThreadTags(args: string[]) {
-        const namedArgs = parseNamedArguments(args, podcastAddThreadTagsDef());
-        const timeRange = conversation.parseTranscriptDuration(
-            namedArgs.startAt,
-            namedArgs.length,
-        );
-        const threadTags = conversation.getTranscriptTags(
-            await conversation.loadTurnsFromTranscriptFile(
-                namedArgs.sourcePath,
-            ),
-        );
-        context.printer.writeTitle(`${threadTags.length} tags:`);
-        context.printer.writeList(threadTags);
-        context.printer.writeLine();
-        const entityIndex =
-            await context.podcastMemory.conversation.getEntityIndex();
-
-        const entityIds = await entityIndex.getEntityIdsInTimeRange(
-            conversation.toStartDate(timeRange.startDate),
-            conversation.toStopDate(timeRange.stopDate),
-        );
-        await writeEntities(entityIndex, entityIds);
-        if (entityIds && entityIds.length > 0) {
-            context.printer.writeLine(
-                `Adding tags to ${entityIds.length} entities`,
-            );
-            await asyncArray.forEachAsync(threadTags, 1, async (tag) => {
-                await entityIndex.addTag(tag, entityIds);
-            });
-        }
-    }
-
-    function podcastListThreadEntitiesDef() {
-        return {
-            description: "List tags for a sub-thread to the podcast index",
-            args: {
-                sourcePath: argSourceFileOrFolder(),
-            },
-        };
-    }
-    commands.podcastListThreadEntities.metadata =
-        podcastListThreadEntitiesDef();
-    async function podcastListThreadEntities(args: string[]) {
-        const namedArgs = parseNamedArguments(
-            args,
-            podcastListThreadEntitiesDef(),
-        );
-        const threadTags = conversation.getTranscriptTags(
-            await conversation.loadTurnsFromTranscriptFile(
-                namedArgs.sourcePath,
-            ),
-        );
-        const entityIndex =
-            await context.podcastMemory.conversation.getEntityIndex();
-        const entityIds = await entityIndex.getByTag(threadTags);
-        await writeEntities(entityIndex, entityIds);
-    }
-    */
 
     function podcastAliasDef(): CommandMetadata {
         return {
@@ -865,4 +835,47 @@ export function createPodcastCommands(
             context.printer.writeLine("No entities");
         }
     }*/
+}
+
+function podcastMessageFromEmailText(text: string) {
+    let messageText = "";
+    let speaker: string | undefined;
+    let lines = knowLib.splitIntoLines(text);
+    for (let line of lines) {
+        if (line.startsWith("From: ")) {
+            speaker = line.replace("From: ", "");
+        } else if (!line.startsWith("To: ")) {
+            messageText += line;
+            messageText += "\n";
+        }
+    }
+    return new kp.PodcastMessage(
+        [messageText],
+        new kp.PodcastMessageMeta(speaker),
+    );
+}
+
+function extractedKnowledgeToResponse(
+    extractedKnowledge: conversation.ExtractedKnowledge | undefined,
+): conversation.KnowledgeResponse {
+    if (extractedKnowledge) {
+        const entities: conversation.ConcreteEntity[] =
+            extractedKnowledge.entities?.map((e) => e.value) ?? [];
+        const actions: conversation.Action[] =
+            extractedKnowledge.actions?.map((a) => a.value) ?? [];
+        const topics: conversation.Topic[] =
+            extractedKnowledge.topics?.map((t) => t.value) ?? [];
+        return {
+            entities,
+            actions,
+            topics,
+            inverseActions: [],
+        };
+    }
+    return {
+        entities: [],
+        actions: [],
+        topics: [],
+        inverseActions: [],
+    };
 }
