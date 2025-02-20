@@ -322,7 +322,9 @@ def main():
                 items.append(result)
             else:
                 # Only keep non-empty chunks, and the root node (empty parentId).
-                chunks = [chunk for chunk in result if chunk.blobs or not chunk.parentId]
+                chunks = [
+                    chunk for chunk in result if chunk.blobs or not chunk.parentId
+                ]
                 items.append(ChunkedFile(filename, chunks))
 
     print(json.dumps(items, default=custom_json, indent=2))

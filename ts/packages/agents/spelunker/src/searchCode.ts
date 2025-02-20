@@ -15,7 +15,13 @@ import {
 } from "@typeagent/agent-sdk/helpers/action";
 
 import { keepBestChunks, makeBatches } from "./batching.js";
-import { Blob, Chunk, ChunkedFile, ChunkerErrorItem } from "./chunkSchema.js";
+import {
+    Blob,
+    Chunk,
+    ChunkId,
+    ChunkedFile,
+    ChunkerErrorItem,
+} from "./chunkSchema.js";
 import { createDatabase, purgeFile } from "./databaseUtils.js";
 import { loadEmbeddings, preSelectChunks } from "./embeddings.js";
 import { console_log, resetEpoch } from "./logging.js";
@@ -71,7 +77,8 @@ export async function searchCode(
 
     // 6. Extract answer from result.
     const result = wrappedResult.data;
-    const answer = result.answer;
+    const answer =
+        result.answer.trimEnd() + formatReferences(result.references);
 
     // 7. Produce entities and an action result from the result.
     const outputEntities = produceEntitiesFromResult(result, allChunks, db);
@@ -82,6 +89,17 @@ export async function searchCode(
         outputEntities,
         resultEntity,
     );
+}
+
+function formatReferences(references: ChunkId[]): string {
+    if (!references.length) return "";
+    const answer: string[] = ["\n\nReferences: "];
+    let prefix: string = " ";
+    for (const ref of references) {
+        answer.push(`${prefix}${ref}`);
+        prefix = ", ";
+    }
+    return answer.join("");
 }
 
 async function readAllChunksFromDatabase(
