@@ -9,6 +9,11 @@ import os
 import sqlite3
 
 
+EXT_TO_LANG = {
+    ".py": "python",
+    ".ts": "typescript",
+}
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -62,6 +67,7 @@ def main():
         if hash_row is None:
             print(f"Skipping chunk {chunk_id} ({code_name}) because it has no hash")
             continue
+
         chunk_hash = hash_row[0]
         score_row = cursor.execute(
             "SELECT score FROM ManualScores WHERE questionId = ? AND chunkHash = ?",
@@ -73,6 +79,13 @@ def main():
 
         if filename.startswith(os.getenv("HOME") + os.sep):
             filename = "~" + filename[len(os.getenv("HOME")) :]
+
+        language = EXT_TO_LANG.get(os.path.splitext(filename)[1])
+        if not language:
+            print(f"Skipping chunk {chunk_id} ({code_name} in {os.path.basename(filename)})" +
+                  "because it has no supported language")
+            continue
+
         path = [code_name]
         pid = parent_id
         while pid:
@@ -83,7 +96,7 @@ def main():
         path.reverse()  # E.g. "module class method"
         chunk_text = f"{filename}\n{' '.join(path)}\n"
         chunk_text += get_chunk_text(cursor, chunk_id)
-        score = score_chunk(args.question, chunk_text)
+        score = score_chunk(args.question, chunk_text, language)
 
         timestamp = datetime.datetime.now().isoformat()
         cursor.execute(
@@ -105,10 +118,13 @@ def get_chunk_text(cursor: sqlite3.Cursor, chunkid):
     return "\n".join(text_lines)
 
 
-def score_chunk(question, chunk_text):
-    print("\n" + "-"*50)
-    print(chunk_text)
-    print("\n" + "-"*50)
+def score_chunk(question, chunk_text, language):
+    separator = "-" * 50
+    print(separator)
+    pipe = os.popen(f"pygmentize -l {language}", "w")
+    pipe.write(chunk_text)
+    pipe.close()
+    print(separator)
     yes = no = False
     while not yes and not no:
         score = input("Score: ")
