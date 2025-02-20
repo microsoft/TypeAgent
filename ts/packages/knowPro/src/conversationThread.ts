@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { NormalizedEmbedding } from "typeagent";
 import { TextRange } from "./dataFormat.js";
 import {
     TextEmbeddingIndex,
@@ -22,8 +23,25 @@ export type ScoredThreadIndex = {
     score: number;
 };
 
-export interface IThreadDescriptionIndexFuzzy {
-    addThread(
+export interface IConversationThreads {
+    threads: Thread[];
+    threadDescriptionIndex: IThreadDescriptionIndex;
+
+    serialize(): IConversationThreadData;
+    deserialize(data: IConversationThreadData): void;
+}
+
+export interface IConversationThreadData {
+    threads?: IThreadDataItem[] | undefined;
+}
+
+export interface IThreadDataItem {
+    thread: Thread;
+    embedding: number[];
+}
+
+export interface IThreadDescriptionIndex {
+    addDescription(
         description: string,
         threadIndex: ThreadIndex | ScoredThreadIndex,
     ): Promise<void>;
@@ -34,18 +52,16 @@ export interface IThreadDescriptionIndexFuzzy {
     ): Promise<ScoredThreadIndex[] | undefined>;
 }
 
-export class ThreadDescriptionEmbeddingIndex
-    implements IThreadDescriptionIndexFuzzy
-{
-    private threads: ScoredThreadIndex[];
-    private embeddingIndex: TextEmbeddingIndex;
+export class ThreadDescriptionIndex implements IThreadDescriptionIndex {
+    public threads: ScoredThreadIndex[];
+    public embeddingIndex: TextEmbeddingIndex;
 
     constructor(public settings: TextEmbeddingIndexSettings) {
         this.threads = [];
         this.embeddingIndex = new TextEmbeddingIndex(settings);
     }
 
-    public async addThread(
+    public async addDescription(
         description: string,
         threadIndex: ThreadIndex | ScoredThreadIndex,
     ): Promise<void> {
@@ -57,6 +73,14 @@ export class ThreadDescriptionEmbeddingIndex
         }
         await this.embeddingIndex.addText(description);
         this.threads.push(threadIndex);
+    }
+
+    public add(embedding: NormalizedEmbedding, threadIndex: ThreadIndex): void {
+        this.embeddingIndex.add(embedding);
+        this.threads.push({
+            threadIndex: threadIndex,
+            score: 1,
+        });
     }
 
     public async lookupThread(
@@ -82,5 +106,10 @@ export class ThreadDescriptionEmbeddingIndex
             this.threads.splice(indexOf, 1);
             this.embeddingIndex.removeAt(indexOf);
         }
+    }
+
+    public clear(): void {
+        this.threads = [];
+        this.embeddingIndex.clear();
     }
 }

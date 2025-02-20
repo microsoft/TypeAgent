@@ -11,6 +11,7 @@ import {
     ScoredSemanticRef,
     SemanticRef,
     SemanticRefIndex,
+    Tag,
     Term,
     TextLocation,
     TextRange,
@@ -322,13 +323,30 @@ function matchPropertySearchTermToAction(
     }
 }
 
+function matchPropertySearchTermToTag(
+    searchTerm: PropertySearchTerm,
+    semanticRef: SemanticRef,
+) {
+    if (
+        semanticRef.knowledgeType !== "tag" ||
+        typeof searchTerm.propertyName !== "string"
+    ) {
+        return false;
+    }
+    return matchSearchTermToText(
+        searchTerm.propertyValue,
+        (semanticRef.knowledge as Tag).text,
+    );
+}
+
 export function matchPropertySearchTermToSemanticRef(
     searchTerm: PropertySearchTerm,
     semanticRef: SemanticRef,
 ): boolean {
     return (
         matchPropertySearchTermToEntity(searchTerm, semanticRef) ||
-        matchPropertySearchTermToAction(searchTerm, semanticRef)
+        matchPropertySearchTermToAction(searchTerm, semanticRef) ||
+        matchPropertySearchTermToTag(searchTerm, semanticRef)
     );
 }
 

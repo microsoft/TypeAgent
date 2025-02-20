@@ -94,7 +94,7 @@ export interface TextLocation {
 export interface TextRange {
     // the start of the range
     start: TextLocation;
-    // the end of the range (exclusive)
+    // the end of the range  (exclusive)
     end?: TextLocation | undefined;
 }
 

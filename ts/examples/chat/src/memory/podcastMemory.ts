@@ -152,32 +152,67 @@ export function createPodcastCommands(
             args: {
                 filePath: arg("Output filePath"),
             },
+            options: {
+                threads: argBool("Export threads", true),
+            },
         };
     }
     commands.podcastExport.metadata = podcastExportDef();
     async function podcastExport(args: string[]) {
         const namedArgs = parseNamedArguments(args, podcastExportDef());
         const messageStore = context.podcastMemory.conversation.messages;
+        const threads =
+            await context.podcastMemory.conversation.getThreadIndex();
         const knowledgeStore = context.podcastMemory.conversation.knowledge;
-        const kpMessages: kp.PodcastMessage[] = [];
         const knowledgeResponses: conversation.KnowledgeResponse[] = [];
-        for await (const entry of messageStore.all()) {
-            const messageId = entry.name;
-            const message = entry.value;
 
-            const podcastMessage = podcastMessageFromEmailText(
-                message.value.value,
+        const podcastMessages: kp.PodcastMessage[] = [];
+        const podcastThreads: kp.Thread[] = [];
+        for await (const threadEntry of threads.entries()) {
+            const thread = threadEntry.value;
+            const range = conversation.toDateRange(thread.timeRange);
+            const messageIds = await messageStore.getIdsInRange(
+                range.startDate,
+                range.stopDate,
             );
-            podcastMessage.addTimestamp(message.timestamp.toISOString());
-            kpMessages.push(podcastMessage);
-            knowledgeResponses.push(
-                extractedKnowledgeToResponse(
-                    await knowledgeStore.get(messageId),
-                ),
-            );
+            let threadRange: kp.TextRange = {
+                start: {
+                    messageIndex: podcastMessages.length,
+                },
+            };
+            const messages = await messageStore.getMultiple(messageIds);
+            for (let i = 0; i < messageIds.length; ++i) {
+                const messageId = messageIds[i];
+                const message = messages[i]!;
+                const podcastMessage = podcastMessageFromEmailText(
+                    message.value.value,
+                );
+                podcastMessage.addTimestamp(message.timestamp.toISOString());
+                threadRange.end = {
+                    messageIndex: podcastMessages.length,
+                };
+                podcastMessages.push(podcastMessage);
+                knowledgeResponses.push(
+                    extractedKnowledgeToResponse(
+                        await knowledgeStore.get(messageId),
+                    ),
+                );
+            }
+            podcastThreads.push({
+                description: thread.description,
+                ranges: [threadRange],
+            });
         }
+
         const kpPodcast = new kp.Podcast("AllEpisodes", []);
-        kp.addToConversationIndex(kpPodcast, kpMessages, knowledgeResponses);
+        kp.addToConversationIndex(
+            kpPodcast,
+            podcastMessages,
+            knowledgeResponses,
+        );
+        kpPodcast.threads.threads.push(...podcastThreads);
+        await kpPodcast.threads.buildIndex();
+
         const podcastData = kpPodcast.serialize();
         await ensureDir(path.dirname(namedArgs.filePath));
         await writeJsonFile(namedArgs.filePath, podcastData);
