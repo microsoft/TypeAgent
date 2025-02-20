@@ -193,6 +193,8 @@ export async function createKnowproCommands(
             return;
         }
 
+        const clock = new StopWatch();
+        clock.start();
         const data = await readJsonFile<kp.PodcastData>(podcastFilePath);
         if (!data) {
             context.printer.writeError("Could not load podcast data");
@@ -205,6 +207,8 @@ export async function createKnowproCommands(
             data.semanticRefs,
         );
         context.podcast.deserialize(data);
+        clock.stop();
+        context.printer.writeTiming(chalk.gray, clock);
         context.conversation = context.podcast;
         context.printer.conversation = context.conversation;
         context.printer.writePodcastInfo(context.podcast);
