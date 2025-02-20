@@ -124,3 +124,7 @@ we can move on to the next stage, running the evals:
 ## Automatic eval runs
 
 TBD
+
+# Random notes
+
+Scoring tool needs more UI. Maybe use colors? (Code colorization, even?)
