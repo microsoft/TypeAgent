@@ -35,6 +35,7 @@ import { IPropertyToSemanticRefIndex } from "./secondaryIndexes.js";
 import { conversation } from "knowledge-processor";
 import { collections } from "typeagent";
 import { ITimestampToTextRangeIndex } from "./secondaryIndexes.js";
+import { Thread } from "./conversationThread.js";
 
 export function isConversationSearchable(conversation: IConversation): boolean {
     return (
@@ -1081,5 +1082,13 @@ export class TextRangesWithTermMatchesSelector
             }
         }
         return rangesInScope;
+    }
+}
+
+export class ThreadSelector implements IQueryTextRangeSelector {
+    constructor(public thread: Thread) {}
+
+    public eval(context: QueryEvalContext): TextRangeCollection | undefined {
+        return new TextRangeCollection(this.thread.ranges);
     }
 }

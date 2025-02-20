@@ -355,9 +355,11 @@ export class MessageAccumulator extends MatchAccumulator<IMessage> {}
 
 export class TextRangeCollection {
     // Maintains ranges sorted by message index
-    private ranges: TextRange[] = [];
+    private ranges: TextRange[];
 
-    constructor() {}
+    constructor(ranges?: TextRange[] | undefined) {
+        this.ranges = ranges ?? [];
+    }
 
     public get size() {
         return this.ranges.length;
