@@ -7,11 +7,13 @@ import {
     IConversation,
     KnowledgeType,
     ScoredSemanticRef,
+    SemanticRef,
     Term,
 } from "./dataFormat.js";
 import * as q from "./query.js";
 import { resolveRelatedTerms } from "./relatedTermsIndex.js";
 import { IConversationSecondaryIndexes } from "./secondaryIndexes.js";
+import { conversation } from "knowledge-processor";
 
 export type SearchTerm = {
     /**
@@ -208,7 +210,11 @@ class SearchQueryBuilder {
                 }
                 searchTermsUsed.push(term.propertyValue);
             } else {
-                termExpressions.push(new q.MatchSearchTermExpr(term));
+                termExpressions.push(
+                    new q.MatchSearchTermExpr(term, (term, sr, scored) =>
+                        this.boostEntities(term, sr, scored, 10),
+                    ),
+                );
                 searchTermsUsed.push(term);
             }
         }
@@ -339,6 +345,27 @@ class SearchQueryBuilder {
             term.text = term.text.toLowerCase();
         }
         return true;
+    }
+
+    private boostEntities(
+        searchTerm: SearchTerm,
+        sr: SemanticRef,
+        scoredRef: ScoredSemanticRef,
+        boostWeight: number,
+    ): ScoredSemanticRef {
+        if (
+            sr.knowledgeType === "entity" &&
+            q.matchEntityNameOrType(
+                searchTerm,
+                sr.knowledge as conversation.ConcreteEntity,
+            )
+        ) {
+            scoredRef = {
+                semanticRefIndex: scoredRef.semanticRefIndex,
+                score: scoredRef.score * boostWeight,
+            };
+        }
+        return scoredRef;
     }
 }
 

@@ -213,7 +213,7 @@ function matchSearchTermToOneOfText(
     return false;
 }
 
-function matchPropertySearchTermToEntity(
+export function matchPropertySearchTermToEntity(
     searchTerm: PropertySearchTerm,
     semanticRef: SemanticRef,
 ): boolean {
@@ -248,6 +248,16 @@ function matchPropertySearchTermToEntity(
             );
     }
     return false;
+}
+
+export function matchEntityNameOrType(
+    propertyValue: SearchTerm,
+    entity: conversation.ConcreteEntity,
+): boolean {
+    return (
+        matchSearchTermToText(propertyValue, entity.name) ||
+        matchSearchTermToOneOfText(propertyValue, entity.type)
+    );
 }
 
 function matchPropertyNameToFacetName(
@@ -600,7 +610,14 @@ export class MatchTermExpr extends QueryOpExpr<
 }
 
 export class MatchSearchTermExpr extends MatchTermExpr {
-    constructor(public searchTerm: SearchTerm) {
+    constructor(
+        public searchTerm: SearchTerm,
+        public scoreBooster?: (
+            searchTerm: SearchTerm,
+            sr: SemanticRef,
+            scored: ScoredSemanticRef,
+        ) => ScoredSemanticRef,
+    ) {
         super();
     }
 
@@ -630,12 +647,22 @@ export class MatchSearchTermExpr extends MatchTermExpr {
         context: QueryEvalContext,
         term: Term,
     ): ScoredSemanticRef[] | IterableIterator<ScoredSemanticRef> | undefined {
-        return lookupTerm(
+        const matches = lookupTerm(
             context.semanticRefIndex,
             term,
             context.semanticRefs,
             context.textRangesInScope,
         );
+        if (matches && this.scoreBooster) {
+            for (let i = 0; i < matches.length; ++i) {
+                matches[i] = this.scoreBooster(
+                    this.searchTerm,
+                    context.getSemanticRef(matches[i].semanticRefIndex),
+                    matches[i],
+                );
+            }
+        }
+        return matches;
     }
 
     private accumulateMatchesForTerm(
