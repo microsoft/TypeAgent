@@ -21,8 +21,12 @@ $ mkdir evals/eval-1
 $ mkdir evals/eval-1/source
 $ cp -r ~/TypeAgent/ts/packages/dispatcher evals/eval-1/source/
 $ rm -rf evals/eval-1/source/dispatcher/{dist,node_modules}
+$ rm -rf evals/eval-1/source/dispatcher/package.json
 $
 ```
+
+We delete `dist` and `node_mpdules` to save space (Spelunker ignores them).
+We remove `package.json` since otherwise the Repo policy test fails.
 
 ## 2. Run Spelunker over the copied sources
 
