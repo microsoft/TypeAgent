@@ -123,11 +123,6 @@ def copy_table(src_cur, dst_cur, table_name):
 
 
 DBSCHEMA = """
-CREATE TABLE IF NOT EXISTS EvalInfo (  -- Only one row
-    startDate TEXT,
-    endDate TEXT,
-    notes TEXT
-);
 CREATE TABLE IF NOT EXISTS Hashes (
     chunkHash TEXT PRIMARY KEY,
     chunkId TEXT NOT NULL UNIQUE

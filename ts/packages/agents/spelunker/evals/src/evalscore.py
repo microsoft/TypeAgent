@@ -131,10 +131,9 @@ def get_chunk_text(cursor: sqlite3.Cursor, chunkid):
 def score_chunk(question, chunk_text, language):
     separator = "-" * 50
     print(separator)
-    pipe = os.popen(f"pygmentize -l {language} | less -RF", "w")
+    pipe = os.popen(f"pygmentize -l {language} | less -FRX", "w")
     pipe.write(chunk_text)
     pipe.close()
-    print(separator)
     yes = no = False
     while not yes and not no:
         score = input("Score: ")
