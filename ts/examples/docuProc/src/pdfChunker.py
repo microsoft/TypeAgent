@@ -170,7 +170,7 @@ class PDFChunker:
 
         return all_lines
 
-    def get_lines_from_dict(self, page: fitz.Page) -> list[str]:
+    def get_lines_from_dict_alt2(self, page: fitz.Page) -> list[str]:
         # How close in 'y' do lines need to be to unify? (tune this)
         Y_THRESHOLD = 2.0  # e.g., lines whose y-mid differs by less than ~2 points
         # How close in 'x'? If there's minimal gap between x1 of line A and x0 of line B,
@@ -260,6 +260,336 @@ class PDFChunker:
             merged_lines.append(current_text)
             i += 1
         return merged_lines
+    
+    def get_lines_from_dict(self, page: fitz.Page) -> list[str]:
+        # How close in 'y' do lines need to be to unify? (tune this)
+        Y_THRESHOLD = 2.0  # e.g., lines whose y-mid differs by less than ~2 points
+        # How close in 'x'? If there's minimal gap between x1 of line A and x0 of line B,
+        # we unify them. Some PDFs have bigger or smaller spacing, so tune as needed.
+        X_GAP_THRESHOLD = 15.0
+        # <-- NEW: Define a paragraph gap threshold.
+        PARA_GAP_THRESHOLD = 10.0  # Only insert a paragraph break if gap >= 10 points
+        # Marker to indicate a paragraph break in the final list
+        PARA_MARKER = "<PARA_BREAK>"
+
+        data = page.get_text("dict")  # <-- NEW: structured data
+        line_entries = []
+
+        for block in data["blocks"]:
+            if block["type"] == 0:  # text block
+                for ln in block["lines"]:
+                    # Combine all spans into one string
+                    line_text = "".join(span["text"] for span in ln["spans"]).strip()
+                    if not line_text:
+                        continue
+
+                    # Get the bounding box for the line: [x0, y0, x1, y1]
+                    x0, y0, x1, y1 = ln["bbox"]
+                    line_entries.append({
+                        "text": line_text,
+                        "x0": x0,
+                        "y0": y0,
+                        "x1": x1,
+                        "y1": y1,
+                    })
+
+        # Sort the line_entries top-to-bottom, then left-to-right.
+        line_entries.sort(key=lambda e: (e["y0"], e["x0"]))
+
+        merged_lines: list[str] = []
+        i = 0
+        while i < len(line_entries):
+            current = line_entries[i]
+            current_text = current["text"]
+            x0_c = current["x0"]
+            y0_c = current["y0"]
+            x1_c = current["x1"]
+            y1_c = current["y1"]
+
+            # Look ahead to see if the next line should be merged with the current one.
+            if i < len(line_entries) - 1:
+                next_line = line_entries[i + 1]
+                x0_n = next_line["x0"]
+                y0_n = next_line["y0"]
+                x1_n = next_line["x1"]
+                y1_n = next_line["y1"]
+                text_n = next_line["text"]
+
+                # Compute mid-Y for merging decision.
+                midY_c = (y0_c + y1_c) / 2.0
+                midY_n = (y0_n + y1_n) / 2.0
+                y_diff = abs(midY_c - midY_n)
+
+                if y_diff < Y_THRESHOLD:
+                    x_gap = x0_n - x1_c
+                    if 0 <= x_gap < X_GAP_THRESHOLD:
+                        # Merge these lines
+                        unified_text = current_text.rstrip() + " " + text_n.lstrip()
+                        new_entry = {
+                            "text": unified_text,
+                            "x0": x0_c,
+                            "y0": min(y0_c, y0_n),
+                            "x1": x1_n,
+                            "y1": max(y1_c, y1_n),
+                        }
+                        line_entries[i] = new_entry
+                        del line_entries[i + 1]
+                        continue  # check current index again in case further merging is needed
+
+            # Append the current line.
+            merged_lines.append(current_text)
+
+            # Instead of using mid-Y difference, compute the vertical gap
+            # between the bottom of the current line and the top of the next line.
+            if i < len(line_entries) - 1:
+                next_line = line_entries[i + 1]
+                gap = next_line["y0"] - current["y1"]
+                if gap >= PARA_GAP_THRESHOLD:
+                    merged_lines.append(PARA_MARKER)
+            i += 1
+
+        return merged_lines
+
+    def get_paragraphs_from_columns(self, page: fitz.Page) -> list[list[str]]:
+        """
+        Extract lines from a PDF page using bounding-box logic, detect multiple columns, 
+        then group lines in each column into paragraphs by vertical proximity.
+
+        Returns a list of paragraphs, where each paragraph is a list of lines (strings).
+        """
+
+        # Tuning constants:
+        Y_THRESHOLD = 2.0       # unify lines on the same row if their mid-Y is within ~2 points
+        X_GAP_THRESHOLD = 15.0  # unify horizontally if x-gap < 15
+        X_COL_THRESHOLD = 50.0  # lines whose x0 differ by < 50 points => same column
+        Y_PAR_THRESHOLD = 10.0  # if gap between lines is < 10 => same paragraph
+
+        data = page.get_text("dict")
+        line_entries = []
+
+        # Step A: gather raw lines
+        for block in data["blocks"]:
+            if block["type"] == 0:  # text block
+                for ln in block["lines"]:
+                    line_text = "".join(span["text"] for span in ln["spans"]).strip()
+                    if not line_text:
+                        continue
+                    x0, y0, x1, y1 = ln["bbox"]
+                    line_entries.append({
+                        "text": line_text,
+                        "x0": x0,
+                        "y0": y0,
+                        "x1": x1,
+                        "y1": y1,
+                    })
+
+        # Sort lines top-to-bottom, then left-to-right
+        line_entries.sort(key=lambda e: (e["y0"], e["x0"]))
+
+        # Step B: unify lines that appear on the same row
+        merged_lines: list[dict] = []
+        i = 0
+        while i < len(line_entries):
+            current = line_entries[i]
+            current_text = current["text"]
+            x0_c = current["x0"]
+            y0_c = current["y0"]
+            x1_c = current["x1"]
+            y1_c = current["y1"]
+
+            if i < len(line_entries) - 1:
+                next_line = line_entries[i + 1]
+                x0_n = next_line["x0"]
+                y0_n = next_line["y0"]
+                x1_n = next_line["x1"]
+                y1_n = next_line["y1"]
+                text_n = next_line["text"]
+
+                midY_c = (y0_c + y1_c) / 2.0
+                midY_n = (y0_n + y1_n) / 2.0
+                y_diff = abs(midY_c - midY_n)
+
+                if y_diff < Y_THRESHOLD:
+                    x_gap = x0_n - x1_c
+                    if 0 <= x_gap < X_GAP_THRESHOLD:
+                        # unify horizontally
+                        unified_text = current_text.rstrip() + " " + text_n.lstrip()
+                        new_entry = {
+                            "text": unified_text,
+                            "x0": x0_c,
+                            "y0": min(y0_c, y0_n),
+                            "x1": x1_n,
+                            "y1": max(y1_c, y1_n),
+                        }
+                        line_entries[i] = new_entry
+                        del line_entries[i + 1]
+                        continue
+            merged_lines.append(current)
+            i += 1
+
+        # Step C: cluster lines by column
+        columns: list[dict] = []  # each column = {"x_mean": float, "lines": [line_dicts]}
+
+        def find_column_for_line(x0_val: float) -> int:
+            """
+            Return index of column in 'columns' whose x_mean is within X_COL_THRESHOLD
+            of x0_val, or -1 if none.
+            """
+            for idx, col in enumerate(columns):
+                if abs(col["x_mean"] - x0_val) < X_COL_THRESHOLD:
+                    return idx
+            return -1
+
+        for line in merged_lines:
+            x0_val = line["x0"]
+            col_idx = find_column_for_line(x0_val)
+            if col_idx == -1:
+                # create new column
+                columns.append({
+                    "x_mean": x0_val,
+                    "lines": [line],
+                })
+            else:
+                # add to existing column
+                col = columns[col_idx]
+                col["lines"].append(line)
+                # update the column's x_mean
+                old_mean = col["x_mean"]
+                n_lines = len(col["lines"])
+                # simple incremental average
+                col["x_mean"] = ((old_mean * (n_lines - 1)) + x0_val) / n_lines
+
+        # Step D: sort columns by x_mean (left -> right)
+        columns.sort(key=lambda c: c["x_mean"])
+
+        # Step E: for each column, sort lines top-to-bottom and group them into paragraphs
+        final_paragraphs: list[list[str]] = []
+
+        for col in columns:
+            # sort lines in ascending y0
+            col["lines"].sort(key=lambda l: l["y0"])
+            # now group them into paragraphs by Y_PAR_THRESHOLD
+            para_lines: list[str] = []
+            prev_bottom = None
+
+            for ln in col["lines"]:
+                y_top = ln["y0"]
+                y_bot = ln["y1"]
+                text = ln["text"]
+                if prev_bottom is None:
+                    # start first paragraph
+                    para_lines = [text]
+                    prev_bottom = y_bot
+                else:
+                    gap = y_top - prev_bottom
+                    if gap < Y_PAR_THRESHOLD:
+                        # same paragraph
+                        para_lines.append(text)
+                        prev_bottom = y_bot
+                    else:
+                        # new paragraph
+                        final_paragraphs.append(para_lines)
+                        para_lines = [text]
+                        prev_bottom = y_bot
+
+            # leftover paragraph
+            if para_lines:
+                final_paragraphs.append(para_lines)
+
+        return final_paragraphs
+
+    def get_paragraphs_row_first(self, page: fitz.Page) -> list[list[str]]:
+        """
+        Row-first approach: we group lines by similar y-mid,
+        then read each row left to right, 
+        inserting a paragraph break if there's a big gap in y between rows.
+        """
+
+        Y_ROW_THRESHOLD = 3.0    # if mid-Y difference < 3 => same row
+        Y_PAR_THRESHOLD = 10.0   # if gap in y between row i and i+1 >= 10 => new paragraph
+
+        data = page.get_text("dict")
+        line_entries = []
+
+        # Step A: gather lines from each block
+        for block in data["blocks"]:
+            if block["type"] == 0:
+                for ln in block["lines"]:
+                    text = "".join(span["text"] for span in ln["spans"]).strip()
+                    if not text:
+                        continue
+                    x0, y0, x1, y1 = ln["bbox"]
+                    line_entries.append({
+                        "text": text,
+                        "x0": x0,
+                        "y0": y0,
+                        "x1": x1,
+                        "y1": y1,
+                    })
+
+        # Sort top-to-bottom
+        line_entries.sort(key=lambda e: (e["y0"], e["x0"]))
+
+        # Step B: group lines into "rows"
+        rows = []
+        current_row = []
+        last_midY = None
+
+        for line in line_entries:
+            midY = (line["y0"] + line["y1"]) / 2.0
+            if last_midY is None:
+                current_row = [line]
+                last_midY = midY
+            else:
+                if abs(midY - last_midY) < Y_ROW_THRESHOLD:
+                    # same row
+                    current_row.append(line)
+                else:
+                    # new row
+                    rows.append(current_row)
+                    current_row = [line]
+                last_midY = midY
+        if current_row:
+            rows.append(current_row)
+
+        # Step C: For each row, sort lines left->right
+        for row in rows:
+            row.sort(key=lambda r: r["x0"])
+
+        # Step D: Convert each row into text by merging lines left->right
+        # Then group rows into paragraphs if the gap is big
+        paragraphs: list[list[str]] = []
+        current_para: list[str] = []
+        prev_bottom = None
+
+        for row in rows:
+            # row is a list of line dicts that share a row
+            # unify them into one single line or keep them separate?
+            # Let's unify them with a space:
+            row_text = " ".join(r["text"] for r in row)
+            # check vertical gap from previous row
+            top_this_row = min(r["y0"] for r in row)
+            bot_this_row = max(r["y1"] for r in row)
+
+            if prev_bottom is None:
+                # first row => start paragraph
+                current_para = [row_text]
+            else:
+                gap = top_this_row - prev_bottom
+                if gap >= Y_PAR_THRESHOLD:
+                    # new paragraph
+                    paragraphs.append(current_para)
+                    current_para = [row_text]
+                else:
+                    # same paragraph
+                    current_para.append(row_text)
+
+            prev_bottom = bot_this_row
+
+        if current_para:
+            paragraphs.append(current_para)
+
+        return paragraphs
 
     def is_heading_line(line: str) -> bool:
         trimmed = line.strip()
@@ -362,7 +692,7 @@ class PDFChunker:
             chunks = self.merge_short_lines_with_colon(chunks)
         return chunks
 
-    def extract_text_chunks(self, do_ocr: bool = False) -> tuple[list[Chunk], dict[int, Chunk]]:
+    def extract_text_chunks_old(self, do_ocr: bool = False) -> tuple[list[Chunk], dict[int, Chunk]]:
 
         def parse_paragraphs(raw_text: str) -> list[list[str]]:
             """Split raw_text into paragraphs (list of lines) using blank lines as separators."""
@@ -478,17 +808,102 @@ class PDFChunker:
                         para_id += 1
         return chunks, page_chunks
 
+    def extract_text_chunksV1(self, do_ocr: bool = False) -> tuple[list[Chunk], dict[int, Chunk]]:
+        """
+        New method that uses a row-first approach to group lines into paragraphs.
+        It calls get_paragraphs_row_first (which uses bounding box info to group lines
+        in reading order) and then creates Chunk objects for each paragraph.
+        The final JSON structure is similar to extract_text_chunksV2.
+        """
+        # Open the PDF document
+        doc = fitz.open(self.file_path)
+        chunks: list[Chunk] = []
+        page_chunks: dict[int, Chunk] = {}
+
+        for page_num in range(len(doc)):
+            page = doc[page_num]
+            # <-- NEW: Get paragraphs using the row-first method
+            paragraphs = self.get_paragraphs_row_first(page)
+            
+            # Debug: print paragraphs for this page
+            print(f"\n--- DEBUG: Page {page_num} paragraphs (row-first) ---")
+            for idx, para in enumerate(paragraphs):
+                print(f"Paragraph {idx}: {para}")
+
+            # Create a parent chunk for the page
+            page_chunk_id = generate_id()
+            page_chunk = Chunk(
+                id=page_chunk_id,
+                pageid=str(page_num),
+                blobs=[],
+                parentId="",
+                children=[]
+            )
+            page_chunks[page_num] = page_chunk
+            chunks.append(page_chunk)
+
+            # Save page as image (same as before)
+            pix = page.get_pixmap()
+            page_image_path = os.path.join(self.output_dir, f"page_{page_num}.png")
+            pix.save(page_image_path)
+
+            # Store page image blob
+            page_image_blob = Blob(
+                blob_type="page_image",
+                start=page_num,
+                bbox=None,
+                img_path=page_image_path
+            )
+            page_chunk.blobs.append(page_image_blob)
+
+            # Run OCR if requested (same as before)
+            if do_ocr:
+                try:
+                    from PIL import Image
+                    import pytesseract
+                    ocr_text = pytesseract.image_to_string(Image.open(page_image_path)).strip()
+                    if ocr_text:
+                        page_ocr_blob = Blob(
+                            blob_type="page_ocr",
+                            content=[ocr_text],
+                            start=page_num
+                        )
+                        page_chunk.blobs.append(page_ocr_blob)
+                except Exception as e:
+                    print(f"OCR failed on page {page_num}: {e}")
+
+            # For each paragraph (a list of lines) from get_paragraphs_row_first,
+            # join the lines (with newline) and create a text Chunk.
+            para_id = 0
+            for para in paragraphs:
+                paragraph_text = "\n".join(para)  # <-- NEW: Join lines into a multi-line string
+                para_chunk_id = generate_id()
+                para_blob = Blob(
+                    blob_type="text",
+                    content=paragraph_text,
+                    start=page_num,
+                    para_id=para_id
+                )
+                para_chunk = Chunk(
+                    id=para_chunk_id,
+                    pageid=str(page_num),
+                    blobs=[para_blob],
+                    parentId=page_chunk_id,
+                    children=[]
+                )
+                page_chunk.children.append(para_chunk_id)
+                chunks.append(para_chunk)
+                para_id += 1
+
+        return chunks, page_chunks
+
     def extract_text_chunksV2(self, do_ocr: bool = False) -> tuple[list[Chunk], dict[int, Chunk]]:
-        """
-        A new method that uses page.get_text('dict') to reconstruct lines 
-        more accurately (including merges of spans so "1 Introduction" 
-        isn't split). Then proceeds with your normal paragraph 
-        and sentence-based chunking logic.
-        """
+        
         def merge_single_line_headings(paragraphs: list[list[str]]) -> list[list[str]]:
             """
-            Same logic as in V3 to merge single-line paragraphs 
-            that appear to be short headings.
+            Merge paragraphs that are short headers/titles with the following paragraph.
+            A header is defined as a single line with <=10 words and not ending in .?!.
+            The header is appended to the following paragraph with a colon.
             """
             merged_pars: list[list[str]] = []
             skip_next = False
@@ -499,25 +914,23 @@ class PDFChunker:
                     continue
 
                 current_par = paragraphs[i]
-                if i < len(paragraphs) - 1:
-                    next_par = paragraphs[i + 1]
-                    if len(current_par) == 1:
-                        line = current_par[0].strip()
-                        if line and (len(line.split()) <= 10) and (line[-1] not in ".?!"):
-                            # Merge with next paragraph
+                # Add check to ensure we have a valid header candidate.
+                if len(current_par) == 1:
+                    line = current_par[0].strip()
+                    # check that line is not empty and is short enough to be a header.
+                    if line and (len(line.split()) <= 10) and (line[-1] not in ".?!"):
+                        if i < len(paragraphs) - 1:
+                            next_par = paragraphs[i + 1]
                             if next_par:
+                                # Append a colon to the header and merge with the first line of the next paragraph.
                                 next_par[0] = line + ": " + next_par[0]
                             else:
-                                next_par.append(line)
+                                next_par.append(line + ":")  # Edge-case: empty next paragraph
                             merged_pars.append(next_par)
                             skip_next = True
-                        else:
-                            merged_pars.append(current_par)
-                    else:
-                        merged_pars.append(current_par)
-                else:
-                    merged_pars.append(current_par)
-
+                            continue  # Proceed to next iteration after merging
+                # Default: just add the current paragraph as is.
+                merged_pars.append(current_par)
             return merged_pars
         
         def print_lines(page_num: int, page_lines: list[str]) -> None:
@@ -647,6 +1060,186 @@ class PDFChunker:
 
         return chunks, page_chunks
 
+    def extract_text_chunksV3(self, do_ocr: bool = False) -> tuple[list[Chunk], dict[int, Chunk]]:
+        def split_paragraphs(lines: list[str]) -> list[list[str]]:
+            paragraphs = []
+            current_par = []
+            for line in lines:
+                if line.strip() == "<PARA_BREAK>":
+                    if current_par:
+                        paragraphs.append(current_par)
+                        current_par = []
+                    # You can optionally keep a marker here if needed (e.g., append an empty list) 
+                    # but here we simply use it to break paragraphs.
+                else:
+                    current_par.append(line)
+            if current_par:
+                paragraphs.append(current_par)
+            return paragraphs
+
+        # Updated merge function that checks if a candidate header is followed by a large paragraph chunk.
+        def merge_single_line_headings(paragraphs: list[list[str]]) -> list[list[str]]:
+            merged_pars: list[list[str]] = []
+            i = 0
+            while i < len(paragraphs):
+                current_par = paragraphs[i]
+                if len(current_par) == 1:
+                    line = current_par[0].strip()
+                    # Check if the line is a potential header candidate.
+                    if line and (len(line.split()) <= 10) and (line[-1] not in ".?!"):
+                        # Candidate header found.
+                        if i + 1 < len(paragraphs):
+                            next_par = paragraphs[i + 1]
+                            # Define "large" as either having multiple lines or a single line with >10 words.
+                            if (len(next_par) > 1) or (len(next_par) == 1 and len(next_par[0].split()) > 10):
+                                # Merge: Prepend header (wrapped in [ ]) with a colon to the next paragraph.
+                                next_par[0] = f"[{line}]: " + next_par[0]
+                                merged_pars.append(next_par)
+                                i += 2  # Skip the next paragraph since it has been merged.
+                                continue
+                            else:
+                                # Not large; keep header as its own paragraph (wrapped in [ ]).
+                                merged_pars.append([f"[{line}]"])
+                                i += 1
+                                continue
+                        else:
+                            # No following paragraph exists; keep header as its own.
+                            merged_pars.append([f"[{line}]"])
+                            i += 1
+                            continue
+                # Default: add the current paragraph unchanged.
+                merged_pars.append(current_par)
+                i += 1
+            return merged_pars
+
+        def print_lines(page_num: int, page_lines: list[str]) -> None:
+            print(f"\n--- DEBUG: Page {page_num} raw lines ---")
+            for idx, ln in enumerate(page_lines):
+                print(f"  Raw line {idx}: '{ln}'")
+
+        def chunk_paragraph_by_sentence(paragraph_lines: list[str], max_tokens: int = 200) -> list[str]:
+            """
+            A simplified approach:
+            1) Join lines into one string.
+            2) Regex split into sentences by punctuation + whitespace.
+            3) Accumulate sentences up to 'max_tokens'.
+            """
+            joined_text = " ".join(paragraph_lines).strip()
+            sentences = re.split(r'(?<=[.?!])\s+', joined_text)
+
+            chunks: list[str] = []
+            current_tokens: list[str] = []
+            token_count = 0
+
+            for sent in sentences:
+                tokens = sent.split()
+                if not tokens:
+                    continue
+
+                if token_count + len(tokens) > max_tokens:
+                    if current_tokens:
+                        chunks.append(" ".join(current_tokens))
+                    current_tokens = []
+                    token_count = 0
+
+                current_tokens.extend(tokens)
+                token_count += len(tokens)
+
+            if current_tokens:
+                chunks.append(" ".join(current_tokens))
+
+            return chunks
+
+        # ------------------- MAIN LOGIC --------------------
+        doc = fitz.open(self.file_path)
+        chunks: list[Chunk] = []
+        page_chunks: dict[int, Chunk] = {}
+
+        for page_num in range(len(doc)):
+            page = doc[page_num]
+            page_lines = self.get_lines_from_dict(page)
+
+            # remove a purely numeric last line (like "2"):
+            if page_lines and page_lines[-1].strip().isdigit():
+                page_lines.pop()
+
+            if self.debug:
+                print_lines(page_num, page_lines)
+
+            # Create a parent chunk for this page
+            page_chunk_id = generate_id()
+            page_chunk = Chunk(
+                id=page_chunk_id,
+                pageid=str(page_num),
+                blobs=[],
+                parentId="",
+                children=[]
+            )
+            page_chunks[page_num] = page_chunk
+            chunks.append(page_chunk)
+
+            # 1) Save page as image (as you do in your code)
+            pix = page.get_pixmap()
+            page_image_path = os.path.join(self.output_dir, f"page_{page_num}.png")
+            pix.save(page_image_path)
+
+            # 2) Store page_image blob
+            page_image_blob = Blob(
+                blob_type="page_image",
+                start=page_num,
+                bbox=None,
+                img_path=page_image_path
+            )
+            page_chunk.blobs.append(page_image_blob)
+
+            # 3) OCR if do_ocr, same as before
+            if do_ocr:
+                try:
+                    from PIL import Image
+                    import pytesseract
+                    ocr_text = pytesseract.image_to_string(Image.open(page_image_path)).strip()
+                    if ocr_text:
+                        page_ocr_blob = Blob(
+                            blob_type="page_ocr",
+                            content=[ocr_text],
+                            start=page_num
+                        )
+                        page_chunk.blobs.append(page_ocr_blob)
+                except Exception as e:
+                    print(f"OCR failed on page {page_num}: {e}")
+
+            # 4) Split paragraphs using the <PARA_BREAK> markers.
+            #    This removes the tokens from the actual content while preserving paragraph boundaries.
+            paragraphs = split_paragraphs(page_lines)
+
+            # 5) Possibly merge single-line headings with a following large paragraph.
+            paragraphs = merge_single_line_headings(paragraphs)
+
+            # 6) For each paragraph, chunk by sentences (or any logic you want)
+            para_id = 0
+            for paragraph_lines in paragraphs:
+                splitted_chunks = chunk_paragraph_by_sentence(paragraph_lines, max_tokens=200)
+                for chunk_text in splitted_chunks:
+                    para_chunk_id = generate_id()
+                    para_blob = Blob(
+                        blob_type="text",
+                        content=chunk_text,
+                        start=page_num,
+                        para_id=para_id
+                    )
+                    para_chunk = Chunk(
+                        id=para_chunk_id,
+                        pageid=str(page_num),
+                        blobs=[para_blob],
+                        parentId=page_chunk_id,
+                        children=[]
+                    )
+                    page_chunk.children.append(para_chunk_id)
+                    chunks.append(para_chunk)
+                    para_id += 1
+
+        return chunks, page_chunks
+
     def extract_tables(self, pdf, page_chunks) -> List[Chunk]:
         chunks = []
         for page_num, page in enumerate(pdf.pages):
@@ -700,21 +1293,12 @@ class PDFChunker:
 
     def chunkify(self) -> ChunkedFile:
         with pdfplumber.open(self.file_path) as pdf:
-            text_chunks, page_chunks = self.extract_text_chunksV2()
+            text_chunks, page_chunks = self.extract_text_chunksV3()
             if self.debug:
                 self.debug_print_lines(text_chunks)
             #table_chunks = self.extract_tables(pdf, page_chunks=page_chunks)
             image_chunks = self.extract_images(page_chunks)
         all_chunks = text_chunks + image_chunks
-        
-        # post process the chunks
-        '''
-        all_chunks = self.apply_pipeline(
-                                            chunks=all_chunks,
-                                            remove_blanks=True,
-                                            merge_shorts=True
-                                        )
-        '''
         return all_chunks
 
     def save_json(self, output_path: str) -> list[Chunk] | ErrorItem:
