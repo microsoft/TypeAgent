@@ -18,12 +18,15 @@ EXT_TO_LANG = {
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
+        "-f",
         "--folder",
         type=str,
-        required=True,
-        help="Path to the eval folder (e.g. 'evals/eval-1').",
+        required=False,
+        default="evals/eval-1",
+        help="Path to the eval folder (default 'evals/eval-1').",
     )
     parser.add_argument(
+        "-q",
         "--question",
         type=str,
         required=True,
@@ -34,8 +37,7 @@ def main():
     conn = sqlite3.connect(os.path.join(args.folder, "eval.db"))
     cursor = conn.cursor()
 
-    breakpoint()
-    filename_prefix = os.path.realpath(args.folder)
+    filename_prefix = os.path.join(os.path.realpath(args.folder), "source", "")
 
     question_row = cursor.execute(
         "SELECT questionId FROM questions WHERE question = ?",
@@ -74,7 +76,7 @@ def main():
 
         chunk_hash = hash_row[0]
         score_row = cursor.execute(
-            "SELECT score FROM ManualScores WHERE questionId = ? AND chunkHash = ?",
+            "SELECT score FROM Scores WHERE questionId = ? AND chunkHash = ?",
             (question_id, chunk_hash),
         ).fetchone()
         if score_row is not None and score_row[0] is not None:
@@ -83,7 +85,6 @@ def main():
             )
             continue
 
-        breakpoint()
         if filename_prefix and filename.startswith(filename_prefix):
             filename = filename[len(filename_prefix) :]
 
@@ -109,26 +110,12 @@ def main():
 
         timestamp = datetime.datetime.now().isoformat()
         cursor.execute(
-            "INSERT OR REPLACE INTO ManualScores (questionId, chunkHash, score, timestamp) VALUES (?, ?, ?, ?)",
+            "INSERT OR REPLACE INTO Scores (questionId, chunkHash, score, timestamp) VALUES (?, ?, ?, ?)",
             (question_id, chunk_hash, score, timestamp),
         )
         conn.commit()
 
     conn.close()
-
-
-def get_common_filename_prefix(cursor: sqlite3.Cursor):
-    prefix = ""
-    filename_rows = cursor.execute("SELECT fileName FROM Chunks").fetchall()
-    if not filename_rows:
-        return prefix
-    filenames = [filename for (filename,) in filename_rows]
-    if filenames:
-        prefix = os.path.commonprefix(filenames)
-        i = prefix.rfind(os.sep)
-        if i >= 0:
-            prefix = prefix[: i + len(os.sep)]
-    return prefix
 
 
 def get_chunk_text(cursor: sqlite3.Cursor, chunkid):
@@ -144,7 +131,7 @@ def get_chunk_text(cursor: sqlite3.Cursor, chunkid):
 def score_chunk(question, chunk_text, language):
     separator = "-" * 50
     print(separator)
-    pipe = os.popen(f"pygmentize -l {language}", "w")
+    pipe = os.popen(f"pygmentize -l {language} | less -RF", "w")
     pipe.write(chunk_text)
     pipe.close()
     print(separator)
