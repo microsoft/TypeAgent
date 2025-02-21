@@ -1,0 +1,2186 @@
+what's the weather like today?
+call mom.
+open my calendar for tomorrow.
+remind me to go grocery shopping at 4 PM.
+what's the latest news?
+set an alarm for 7:30 AM.
+what's the capital of Australia?
+send a text message to John.
+play my favorite playlist.
+who won the last Super Bowl?
+how many ounces in a pound?
+show me the closest restaurants.
+how to say 'Hello' in Spanish?
+when is sunset today?
+find a recipe for chicken Alfredo.
+what are the showtimes for Joker?
+when is my next appointment?
+translate 'I love you' into French.
+calculate the tip for $42.50.
+add a note - 'Buy dog food'.
+what's the score of the Dodgers game?
+who directed 'The Dark Knight'?
+what is the meaning of life?
+find a coffee shop near me.
+play the latest episode of 'The Daily' podcast.
+how many days until Christmas?
+where's the nearest gas station?
+how tall is the Eiffel tower?
+what's 15% of 200?
+what's the definition of 'serendipity'?
+switch on the living room lights.
+tell me a joke.
+what's my current altitude?
+play some classical music.
+when was the internet invented?
+how to pronounce 'quinoa'?
+what's the traffic like on my way to work?
+find the closest ATM.
+who wrote 'To Kill a Mockingbird'?
+how many calories are in a banana?
+what's the difference between a cappuccino and a latte?
+what's the stock price of Apple?
+start a 20-minute timer.
+navigate to the nearest hospital.
+play 'Yesterday' by the Beatles.
+what's the flight status of AA 320?
+open Netflix.
+what's the multiplication table of 9?
+what's the date today?
+what is the distance to the moon?
+set alarm for 6 AM.
+how's the weather today?
+find me a good pizza place nearby.
+play my workout playlist.
+how do I get to the closest gas station?
+what's 20% of 80?
+set a timer for 15 minutes.
+remind me to buy milk tomorrow.
+do I have any appointments tomorrow?
+turn on airplane mode.
+increase the brightness.
+search for a chicken pasta recipe.
+where's the nearest pharmacy?
+translate 'thank you' into French.
+play the latest episode of my favorite podcast.
+show me my photos from last Christmas.
+take a note.
+who won the soccer game last night?
+when is the next public holiday?
+open the Facebook app.
+what's the stock market situation today?
+play some jazz music.
+turn on the flashlight.
+when is sunrise tomorrow?
+find a Chinese restaurant nearby.
+when was Albert Einstein born?
+convert 50 dollars to euros.
+call an Uber.
+how much battery do I have?
+can you check my email?
+what are the show times for the new Marvel movie?
+where is my next meeting?
+set a reminder for a dentist appointment.
+pause the audiobook.
+what's my heart rate?
+when is the full moon?
+how's the traffic on my commute?
+what's the flight status of BA1234?
+add apples to my shopping list.
+find a vegan restaurant nearby.
+who was the 16th president of the United States?
+wake me up at 7 AM.
+play the top pop hits.
+how do I make a cocktail?
+what's the weather like tomorrow?
+set a reminder for my doctor's appointment tomorrow at 3 PM.
+can you identify this song?
+text mom I'll be late for dinner.
+call my brother.
+how many calories are there in an apple?
+can you show me my schedule for today?
+wake me up at 7:30 AM.
+what's the score in the Lakers game?
+how long will it take to get home?
+turn on Do Not Disturb.
+how much battery life do I have left?
+where's the closest pharmacy?
+make a reservation at Bella Italia for 7 PM.
+calculate the tip for a $45 meal.
+how do I get to the airport?
+when is my next meeting?
+remind me to take my medication at 8 PM.
+play my Sleepy Time playlist.
+what's my current heart rate?
+what's the distance to the moon?
+turn off Wi-Fi.
+what’s the date today?
+find a recipe for chocolate cake.
+read my new emails.
+when does daylight saving time begin?
+who won the World Series last year?
+can you increase the brightness?
+lock my front door.
+how do I say 'Thank you' in French?
+who sings this song?
+what’s the latest tweet from Elon Musk?
+call my mom.
+what is the weather like today?
+set a timer for 20 minutes.
+how do I get to the nearest gas station?
+play the latest Taylor Swift song.
+translate 'hello' to Spanish.
+schedule a meeting for 2 PM tomorrow.
+how's the traffic on my way to work?
+find a recipe for chocolate chip cookies.
+where is the nearest cafe?
+what is the capital of Australia?
+text John 'I'm running late'.
+remind me to call the doctor at 10 AM.
+play workout playlist.
+play a bedtime story.
+what’s the stock price of Apple?
+how many calories are in an apple?
+read my latest email.
+what movies are playing nearby?
+what is 15% of 80?
+convert $50 to euros.
+find vegan restaurants nearby.
+what's my daily step count?
+play latest news update.
+how to make a cocktail?
+add milk to my shopping list.
+tell me the current time in Tokyo.
+how long will it take me to drive to Chicago?
+what’s my battery percentage?
+find a French tutorial on YouTube.
+open the Netflix app.
+what is the meaning of the word 'philanthropy'?
+find me a pizza delivery service.
+what is the highest grossing movie of all time?
+how old is Dwayne 'The Rock' Johnson?
+identify the song playing.
+who painted the Mona Lisa?
+what’s the distance between the Earth and the moon?
+play my favorite podcast.
+where can I buy concert tickets?
+find a vegetarian recipe for dinner.
+dim the living room lights.
+when is the next leap year?
+find an Italian restaurant near me.
+what's the height of Mount Everest?
+set an alarm for 7:00 AM.
+remind me to buy milk.
+call Mom.
+what's the weather like?
+play today's top hits.
+find me a recipe for lasagna.
+text John 'I'll be there in 10 min.'
+provide directions to the nearest gas station.
+schedule an appointment for my dentist.
+who won the last Olympic Games?
+who is the president of France?
+translate 'Hello' to Spanish.
+read my notifications.
+what movies are playing near me?
+call a cab.
+what's my current location?
+make a dinner reservation for tonight.
+define 'oracle.'
+turn on 'Do not disturb.'
+send an email to my boss.
+how long will it take to drive to Boston?
+play my bedtime playlist.
+when is the next sunrise?
+what is the stock price of Google?
+book a flight to New York.
+what's trending on Twitter?
+what's the score of the baseball game?
+how do I get to the closest Starbucks?
+read me the latest news.
+add laundry detergent to my shopping list.
+what is Taylor Swift's latest song?
+what is my heart rate?
+adjust the thermostat to 70 degrees.
+convert 2 cups to milliliters.
+find me a good Italian restaurant nearby.
+how many days until December 25th?
+remind me to pick up the kids from school.
+when does the next train leave?
+turn on the lights in the living room.
+show me photos from my Bahamas trip.
+find me a book about space travel.
+check my emails.
+show me my fitness activity for today.
+play the next episode of my podcast.
+wake me up at 7 AM tomorrow.
+where's the nearest Starbucks?
+send an email to John.
+how's the traffic to the airport?
+what's my next appointment?
+who won the football game last night?
+translate ‘hello’ to Spanish.
+define ‘serendipity’
+how do I cook spaghetti?
+calculate 20% tip on a $50 bill.
+text dad 'I'll be home late.'
+how many calories in an apple?
+when's the next full moon?
+play Taylor Swift's latest album.
+navigate to Central Park.
+what's the latest movie in theaters?
+book a table for two at a nearby restaurant.
+find me a recipe for apple pie.
+how long will it take to drive to Seattle?
+play a meditation song.
+where can I find a yoga class?
+show me funny cat videos.
+make a shopping list.
+find a vegan restaurant near me.
+how do I get to JFK Airport?
+check my flight status.
+what's Elon Musk's net worth?
+order pizza from Dominos.
+how much time left on my timer?
+where's my iPhone?
+what are the ingredients in a margarita?
+find an Italian recipe for dinner.
+tell me the latest news.
+when is daylight saving time?
+when is the sunset today?
+find a plumber near me.
+how do I get home from here?
+when's my mom's birthday?
+set an alarm for 7 AM tomorrow.
+what's on my calendar for tomorrow?
+send a text message to Mom.
+find the nearest coffee shop.
+calculate 15% of 60.
+translate 'hello' to French.
+remind me to buy groceries.
+play some relaxing music.
+guide me home.
+how many kilometers in a mile?
+what's the stock market doing?
+how do I spell 'chauffeur'?
+what's the news today?
+book a table at my favourite restaurant.
+where's the closest gas station?
+how's the traffic to work?
+start a timer for 30 minutes.
+show me the pictures I took last weekend.
+what is the flight status of LH 500?
+who starred in the movie Inception?
+what's the definition of 'onomatopoeia'?
+what was the score of the Lakers game last night?
+when is sunset tonight?
+how tall is the Eiffel Tower?
+switch on the flashlight.
+order Chinese takeout.
+is there a good Thai restaurant around?
+show me panda pictures.
+find gluten-free recipes.
+when is daylight savings time change?
+tell me the latest score in the hockey game.
+who won the best actor Oscar this year?
+when does the mall close today?
+where can I get a haircut nearby?
+download the Kindle app for me.
+what's the weather like tomorrow in New York?
+remind me to buy milk when I leave work.
+play some calming music.
+open my email.
+can you call my dad?
+calculate a 20% tip on a $50 bill.
+turn on flight mode.
+how do I say 'I love you' in French?
+add a meeting to my calendar this Friday at 2 PM.
+find sushi delivery places nearby.
+when is my next doctor's appointment?
+what is 'Star Wars' rated?
+give me directions to the closest airport.
+text mom 'Just landed safely.'
+what's 256 multiplied by 7?
+play my 'Workout' playlist.
+when does the sun set today?
+who is the president?
+can you show me my photos from last Christmas?
+when was the Eiffel Tower built?
+navigate me to the nearest hospital.
+what movies has Scarlett Johansson been in?
+define 'supercalifragilisticexpialidocious'.
+take a selfie.
+turn on night mode.
+how much battery do I have left?
+open the Notes app.
+schedule a timer for 10 minutes.
+how long will it take to get to Toronto?
+play the news.
+pause the audio book.
+what is Apple's current stock price?
+book a table for two at 8 PM.
+when is my friend's birthday?
+can you beatbox?
+turn off all alarms.
+show me the trailer for the latest Marvel movie.
+set my screen brightness to 50 percent.
+is there caffeine in green tea?
+what's the weather in Miami today?
+Set an alarm for 6 a.m.
+Send a message to John saying I'll be late for the meeting.
+can you call my mom?
+What is the capital of Germany?
+Set a timer for 20 minutes.
+Can you show me a recipe for lasagna?
+Play 'Bohemian Rhapsody' by Queen.
+Translate 'good night' to Spanish.
+Remind me to pick up the laundry at 5 p.m.
+Find the nearest gas station.
+How many days till Christmas?
+Book a table for two at Olive Garden at 7 p.m.
+What's my daily step count?
+What movies are playing near me?
+Who won the Super Bowl last year?
+Navigate to the nearest coffee shop.
+What's the traffic like on my way home.
+Find a Chinese restaurant near me.
+Who won the Oscars for Best Picture this year?
+What's the current value of Bitcoin?
+How old is Tom Hanks?
+Play my workout playlist.
+Find vegan recipes.
+What's the score in the Lakers game?
+remind me to feed the cat when I get home.
+How many ounces in a pound?
+What time is it in Tokyo?
+Read my new emails.
+Call the nearest pizza place.
+Start a 30 minute meditation timer.
+What's the stock price of Microsoft?
+Turn on Do Not Disturb.
+What's my heart rate.
+Tell me the history of Thanksgiving.”
+Play the next episode of 'The Office'.
+Calculate the tip for a $45.50 bill.
+What phase is the moon in tonight?
+Play my audiobook.
+find me a new fantasy book.
+What's the starting time for the baseball game tonight?
+Search for Bluetooth devices near me.
+What's today's date?
+What does serendipity mean?
+Find my iPhone.
+Set a reminder for a dentist appointment next Wednesday at 3 p.m.
+what are some good yoga exercises for beginners?
+set a reminder to buy milk at 6 PM.
+what's the weather today?
+read new messages.
+find the closest gas station.
+who won the baseball game last night?
+be there in 15.'
+translate 'Hello' into Spanish.
+who won the Oscars for Best Picture in 2021?
+turn on Bluetooth.
+navigate to the nearest post office.
+who is the current President of the United States?
+what’s 1000 divided by 4?
+call for pizza delivery.
+show me the steps for CPR.
+open the Notes App.
+how do I make pancakes?
+what movies are showing nearby?
+search for chicken recipes.
+when does daylight savings time start?
+read my last email.
+open the Camera App.
+when is my dentist appointment?
+who plays Iron Man in Avengers?
+how much is Apple stock today?
+where's the nearest hospital?
+what’s the meaning of the word 'efficient'?
+pause music.
+add eggs to my shopping list.
+show me photos from last Christmas.
+calculate the tip on $42.
+how do I get home?
+what's my screen time for today?
+what movies won Oscars this year?
+who invented the telephone?
+when is the next World Cup?
+wake me up at 8 AM.
+set my alarm for 7 AM.
+send a message to Tom.
+who won the basketball game last night?
+what does 'gargantuan' mean?
+find the nearest Mexican restaurant.
+remind me to check the oven in 30 minutes.
+what is the capital of Canada?
+start a 15-minute timer.
+how's the traffic on my route?
+tell a joke.
+Facetime Lisa.
+how's the weather in Paris?
+make a reservation at my favorite restaurant.
+calculate the tip for $35.
+play the latest episode of my podcast.
+what movies won the Oscar this year?
+what are popular tourist attractions in London?
+find me a yoga tutorial.
+order my favorite pizza.
+find nearby parking lots.
+how much battery is left?
+what's the score in the baseball game?
+what are some upcoming concerts?
+what's in the news about COVID-19?
+how many steps have I taken today?
+turn on do not disturb.
+when is the grocery store closing?
+find a recipe for a strawberry smoothie.
+how many hours of sleep did I get last night?
+remind me to pick up milk from the grocery store.
+text John 'Running late. Be there in 10.'
+translate 'good morning' to French.
+find the nearest Chinese restaurant.
+turn on Do Not Disturb mode.
+how's the stock market doing?
+calculate a 15% tip on $45.
+what's on my schedule tomorrow?
+find vegan recipes.
+get me directions to the airport.
+send an email to Lisa about our meeting.
+turn off my bedroom lights.
+how far is Mars from Earth?
+what's the latest sports scores?
+how long is the Golden Gate Bridge?
+find me a fitness workout.
+what is the definition of 'philanthropy'?
+make a note of my shopping list.
+wake me up in 20 minutes.
+when is the next full moon?
+when is my next dentist appointment?
+turn down the volume.
+how do you say 'thank you' in Japanese?
+find a dog-friendly park near me.
+set a timer for 10 minutes.
+when is the next holiday?
+book a table for two at my favorite restaurant.
+tell me a bedtime story.
+find the latest episode of 'Game of Thrones'.
+who won the Oscar for best actor in 2020?
+launch the camera app.
+what time does the mall close?
+wake me up at 7:00 AM tomorrow.
+send a text message to John saying I'll be late.
+set a reminder to buy milk.
+what's the score of the Lakers game?
+how long will it take me to get to work?
+start a timer for 20 minutes.
+directions to the nearest gas station.
+order a pizza from Domino's.
+make a reservation at Italiano's restaurant for two at 8 pm.
+set a meeting for 3 pm on Wednesday with Daniel.
+when's my next appointment?
+who won the 2019 Oscar for best actor?
+how do you say goodbye in Spanish?
+what's on my agenda for today?
+how's the traffic on my route to work?
+what is the stock price of Apple?
+show me pictures from my vacation.
+calculate a 20% tip on a $75 bill.
+search my emails from yesterday.
+set an alarm for 30 minutes.
+find sushi restaurants nearby.
+pause the music.
+what day is it today?
+add bananas to my shopping list.
+where's the nearest ATM?
+what's the current exchange rate from dollars to euros?
+how do I get to Central Park?
+what's the number for the local pizza place?
+when is the next solar eclipse?
+add a birthday reminder for John.
+what should I wear today?
+how do I make a margarita?
+calculate the distance from here to Chicago.
+what's the name of this song?
+tell me some facts about pandas.
+what is the weather today?
+set an alarm for 7 AM.
+remind me to call mom at 5 PM.
+play my favorite songs.
+navigate to the nearest coffee shop.
+call my sister.
+text John 'I'm on my way.'
+find recipes for spaghetti bolognese.
+increase the volume.
+book an Uber to the airport.
+play next episode on Netflix.
+list my appointments for today.
+find movie showtimes near me.
+how long will it take to reach home?
+find Indian restaurants nearby.
+search for flights from New York to London.
+what's my screen time today?
+calculate a 20% tip on $50.
+find a gas station near me.
+check stock prices for Apple.
+set the thermostat to 70 degrees.
+make a note 'Buy milk.'
+what is the status of my last Amazon order?
+find me a vegan recipe.
+how many steps did I walk today?
+lower the volume.
+where's the nearest bank?
+what's the time in Tokyo?
+what's the word of the day?
+search for funny cat videos on YouTube.
+when does Starbucks close?
+update my software.
+tell me the synopsis of the book '1984'.
+who won the Oscars for the best film last year?
+what's today's date?
+tell me the headlines in the news today.
+play my morning playlist.
+set a reminder to buy groceries at 5PM.
+call John.
+will be there soon.'
+give me directions to the nearest gas station.
+wake me up at 7AM tomorrow.
+calculate a 20% tip on a $45 bill.
+convert 10 miles to kilometers.
+how long does it take to boil an egg?
+add a dentist appointment to my calendar.
+how do I make lasagna?
+find the nearest sushi restaurant.
+decrease screen brightness.
+shuffle my workout playlist.
+play a meditation guide.
+what's the current stock price of Apple?
+how well did my favorite team do last night?
+record a voice memo.
+when does daylight savings time begin?
+read my unread emails.
+how do I get to the Museum of Art from here?
+what's the time in London?
+remind me to pick up the laundry.
+order pizza from my favorite place.
+open the Maps app.
+find a good Italian restaurant near me.
+calculate the square root of 16.
+send $20 to John via Apple Pay.
+what's the latest iOS update?
+living in a lonely world'.
+find images of cute puppies.
+what is the life expectancy of a turtle?
+put my phone on airplane mode.
+what's the weather forecast for next week?
+set an alarm for 8 AM tomorrow.
+send a message to John asking 'When is the meeting?'
+play my favorite playlist on Spotify.
+how do I get to the nearest shopping mall?
+find Italian restaurants near me.
+remind me to feed the cat at 7 PM.
+what's the score in the Lion's football game?
+who won the Academy Award for best actor in 2019?
+what’s a synonym for 'quick'?
+schedule a meeting for me tomorrow at 3 PM.
+check my email.
+what's the square root of 64?
+text Anna 'I'll be late tonight.'
+find flight tickets to Miami.
+how many calories in a Big Mac?
+show me pictures of cute kittens.
+calculate the tip for a $50 bill.
+read my last message.
+when's sunset today?
+open Netflix and play Stranger Things.
+what is the capital of Spain?
+find a yoga class near me.
+what are the top 10 movies right now?
+when's my wife's birthday?
+what time is it in Tokyo?
+how many days until Spring?
+start a workout.
+where can I buy a new iPhone?
+when is Father’s Day this year?
+check the traffic on my way to work.
+what's my heartbeat?
+find movie timings for Avengers Endgame.
+show me the nearest gas station.
+set a reminder to pay bills tomorrow.
+play the next episode on Netflix.
+remind me to feed the cat at 6 PM.
+find a recipe for spaghetti bolognese.
+who won the Oscar for Best Picture last year?
+translate 'Hello' to French.
+text my wife 'I love you.'
+how many calories in a big mac?
+what's 1500 divided by 25?
+what's the capital of Norway?
+what's the square root of 81?
+who is the president of Russia?
+where is the nearest gas station?
+order pizza from Domino's.
+play the latest episode of 'The Daily'.
+show me my recent emails.
+how do I get to New York City from here?
+open the calculator app.
+who's playing in the Super Bowl?
+search for cheap flights to Hawaii.
+is rain expected tomorrow?
+FaceTime John.
+read my new text messages.
+where's the closest library?
+dial 911.
+take a note: buy milk on the way home.
+call the nearest pizza place.
+show me photos from my weekend trip.
+what's the highest mountain in the world?
+how many cups in a quart?
+open Google Maps.
+what is the weather tomorrow?
+how to say 'I love you' in French?
+What are some good Italian restaurants near me?
+remind me to buy eggs.
+Where is the nearest hospital?
+what's my schedule for tomorrow?
+Do I have any new emails?
+How's the traffic on the way to work?
+what is the stock market doing today?
+Who won the basketball game last night?
+What's the current exchange rate for Euros to Dollars?
+define 'obfuscate.'
+Who's the President of France?
+What's the news today?
+What's the capital of Australia?
+What’s the distance to the moon?
+How do I spell ‘satellite?’
+How's my stocks doing?
+what ingredients in lasagna?
+how to make homemade pasta?
+What's the score in the Yankees game today?
+Is there any rain in the forecast for this weekend?
+play next episode of 'Stranger Things' on Netflix.
+open the Maps app and take me to the nearest coffee shop.
+send a text message to Mom saying 'I'll be home late tonight.'
+set an alarm for 7:30 AM tomorrow.
+find me the closest gas station.
+call my boss and tell him I'll be late.
+find me a list of the best Italian restaurants in town.
+what's the score of the latest football match?
+remind me to pick up my dry cleaning tomorrow.
+make a reservation for two at my favorite restaurant.
+read my emails out loud.
+book an Uber for me.
+how do I get to the nearest library?
+who won the Oscars for best actor last year?
+change the brightness to 50%.
+find me a Greek salad recipe.
+is there any traffic on the way to work?
+send a birthday reminder for Sarah next week.
+how far is the moon from the earth?
+call the nearest pharmacy.
+add a meeting to my calendar for next Thursday at 3 PM.
+find me a hotel for my trip to New York.
+translate 'thank you' to French.
+check my heart rate.
+get me flight details to Miami.
+find vegan restaurants near me.
+how old is Barack Obama?
+who wrote the song 'Imagine'?
+calculate the tip for a $60 meal.
+where can I get the best sushi in town?
+find me a babysitter for Saturday night.
+turn off the lights in the living room.
+set a reminder for my dentist appointment.
+order pizza from my favorite restaurant.
+how long is my commute home?
+what's my next meeting?
+find the nearest gas station.
+send my location to John.
+what time is sunset?
+how do you say 'thank you' in Italian?
+when is the next NFL game?
+what's the current exchange rate for Euros to Dollars?
+call an Uber to my location.
+where is the closest ATM?
+book a table for two at a romantic restaurant.
+text my wife 'I love you'.
+what are the symptoms of the common cold?
+what movies has Tom Hanks starred in?
+how tall is Mount Everest?
+what’s my screen time today?
+when is the next lunar eclipse?
+read my new email.
+open the camera.
+turn on my bedroom lights.
+show me pictures of puppies.
+what songs are trending now?
+wake me up at 7am tomorrow.
+what's Albert Einstein famous for?
+find a vegetarian restaurant near me.
+tell me a poem about flamingos.
+find me a recipe for dragon fruit smoothies.
+recite a haiku about knitting.
+sing me a lullaby in French.
+convert 500 narwhals into the weight in trucks.
+calculate how long it would take to swim across the Atlantic Ocean.
+tell me about the history of bubbles.
+tell me a joke about snowflakes.
+remind me every day to feed my pet rock.
+what's the ideal temperature for growing Martian plants?
+list unusual uses for toothpaste.
+narrate a story featuring an armadillo and a unicorn.
+how many penguins live in Antarctica?
+play a song that will make my cat dance.
+how many leaves does an average oak tree have?
+invent a new color and describe it to me.
+tell me a Silly Billy Gilly Goat style riddle.
+what should my pet parrot's name be?
+can you make a star out of a black hole?
+what’s the scientific name for the fear of long words?
+how many scales does an average fish have?
+teach me to speak gibberish.
+what's the world record for largest collection of rubber ducks?
+find a recipe for edible paper.
+what is the best way to wrap a gift?
+describe what clouds taste like.
+predict what the next big fashion trend will be.
+are there more grains of sand on Earth or stars in the sky?
+how fast does a snail travel?
+list all the words that rhyme with orange.
+calculate the number of jumps a kangaroo has made in its life.
+how many dimples are on a golf ball?
+what are the best exercises for a sloth?
+tell me a fun fact about guinea pigs.
+calculate how many pizzas fit into a football field.
+tell me a story about a raindrop.
+who would win in a race: a tortoise or a goldfish?
+convert light years to teaspoons.
+tell me the history of paperclips.
+show me the constellations visible tonight.
+how long would it take to walk around the Earth?
+what song is the moon's favorite?
+find me a dog-friendly vegan ice cream recipe.
+make me laugh with a vegetable joke.
+suggest a creative name for my new plant.
+tell me about the life cycle of a phoenix.
+suggest a new color for my house.
+tell me a myth about peacocks.
+how many bubbles are in a bottle of champagne?
+what is the average flight speed of a sparrow?
+calculate the number of seconds I have lived.
+flip a three-sided coin.
+read me a random Wikipedia article.
+translate 'I love you' into Elvish.
+change my voice into Darth Vader's.
+simulate the sound of a rainforest.
+tell me a fact about the oldest living tree.
+what is the mating call of a koala?
+what is the composition of Mars atmosphere?
+remind me to do push-ups every hour.
+how does photosynthesis work?
+tell me a joke in French.
+find me a recipe for a drink made with dragon fruit.
+play the sounds of the ocean.
+give me a random number between 500 and 600.
+spell 'supercalifragilisticexpialidocious'.
+tell me a fact about the Titanic I probably don't know.
+what is quantum physics?
+text my friend a random inspirational quote.
+what's the color of zebra's skin?
+tell me a joke about artificial intelligence.
+how many possible chess moves are there?
+sing me a lullaby.
+what is the airspeed velocity of an unladen swallow?
+open the third email from the bottom.
+tell me a story about a tiny elephant.
+organize my photos by color.
+text my mom the Fibonacci sequence.
+play me the sound of a laughing hyena.
+what is the temperature on Pluto?
+what's the oldest movie in existence?
+simulate the sound of a spaceship launching.
+create a hypothetical tropical vacation itinerary.
+how long does it take light from the sun to reach Pluto?
+teach me how to speak Pig Latin.
+what's the history of toilet paper?
+calculate the number of miles I've walked this year.
+recite the lyrics of 'Bohemian Rhapsody'.
+find out what's the population of kangaroos in Australia.
+find an online knitting class for beginners.
+tell me trivia about the Great Wall of China.
+generate a random poem.
+find a star named after someone.
+name all the satellites launched by NASA.
+how many species of snakes are there?
+set alarm for my cat's feeding time.
+tell me the latin names of 10 random plants.
+find me an aurora borealis live stream.
+how to solve a Rubik's cube?
+recite 'To be or not to be' from Hamlet.
+calculate the number of daylight hours in Alaska on the winter solstice.
+find the third longest river in Africa.
+sweet dreams' in Welsh.
+play the Top 10 most popular songs in 1960.
+what's the recipe for authentic Russian borscht?
+what's the Latin name for cherry tree?
+put a reminder in my calendar to feed the neighbor's cat next Thursday.
+list all the titles of Charles Dickens' books.
+find me vegetarian restaurants within 5 miles.
+when is the next lunar eclipse visible from my location?
+how many episodes are there in 'The Office'?
+calculate the air distance between Berlin and Jakarta.
+what is the meaning of 'floccinaucinihilipilification'?
+narrate the process of photosynthesis.
+what are the opening hours of the Louvre Museum?
+play audiobook 'Catcher In The Rye'.
+what are the stages in the life cycle of a butterfly?
+tell me the plot of Moby Dick.
+find Italian language courses nearby.
+show me how to knit a scarf.
+calculate the weight of the Earth.
+when do the cherry blossoms bloom in Japan?
+find information about cubism.
+who holds the world record for the long jump?
+where can I find tickets for the Broadway show 'Hamilton'?
+list all the Nobel Prize winners in Physics.
+how to say 'Thank You' in Swahili?
+show me the stars constellation visible tonight.
+what is the chemical formula for sugar?
+play traditional Chinese music.
+describe the climate of the Sahara Desert.
+find authentic Mexican recipes.
+translate the poem 'The Road Not Taken' in German.
+how many bones are there in a giraffe's neck?
+what is the release date of the next Marvel movie?
+suggest a training program for a half marathon.
+guide me through CPR steps.
+who won the World Cup in 1990?
+where can I see 'The Birth of Venus' painting?
+play Mozart's Symphony No.40.
+find funny cats videos.
+what's the distance between Earth and Mars right now?
+guide me in meditation.
+how many days left till Christmas?
+can you find the highest-rated pizza place in my city?
+when is the low tide tomorrow at Santa Monica beach?
+list all James Bond movies.
+can you find a tutorial on building a tree house?
+who built the Taj Mahal?
+show me how to do a magic trick.
+what are the survival chances of a goldfish in outer space?
+can you order a drone to deliver my lunch?
+how many acorns does an average squirrel store for the winter?
+can you compose a sonnet about my cat?
+calculate how many seconds I've been alive.
+translate my name into Morse code.
+sign me up for UFO spotting newsletter.
+play the sound of rain on Mars.
+what would be the weight of the Eiffel Tower if it was made of cheese?
+predict the next full moon that falls on Friday the 13th.
+marshmallow and olives.
+remind me to change my toothbrush on the first day of every season.
+calculate how many pages I would have to write to fill a library.
+what's the exact number of hairs on an average human head?
+read me a bedtime story in different accents.
+how many jumps would a kangaroo need to make to travel around the world?
+find out what the tallest Lego tower ever built is.
+narrate a documentary about unicorns.
+can you sing a lullaby for my pet snake?
+how long will it take for a snail to climb Mount Everest?
+figure out the ratio of cows to people in Switzerland.
+who was the third person on the moon?
+teach me how to juggle oranges.
+estimate the population of unicorns.
+find out the exact distance between me and the Loch Ness Monster.
+how many steps does it take to walk around the Great Wall of China?
+schedule a reminder for the next leap year.
+identify the caller who talks the longest with me.
+can you tell me a ghost story for my campfire night?
+what are the chances of finding a two-headed snake?
+find me an online course in underwater basket weaving.
+remind me in 100 days to celebrate my 100-day survival in a desert island.
+calculate the amount of water I have drunk so far in my life.
+how would 'Mary had a little lamb' sound in dolphin language?
+tell me fun facts about the history of toilet paper.
+compile a list of movies where aliens win.
+help me name my new pet rock.
+what is the exact speed of a sloth?
+how much chocolate would it take to fill the Grand Canyon?
+can you give me tips on how to bark like a dog?
+when is the best time to plant strawberries on Mars?
+what's the exact probability of a blue moon?
+is it possible for a penguin to become Prime Minister?
+calculate the number of jumps a kangaroo would have made since Australia was discovered.
+how many teaspoons of salt are in the ocean?
+narrate a story about a giraffe who wanted to become a musician.
+remind me to dance every time it's raining.
+recite a poem about a love story between two asteroids.
+interpret my dream where I was a butterfly.
+list out all the famous squirrels in history.
+can you suggest a 1980's mystery movie for me to watch tonight?
+find me the oldest recorded recipe.
+what's the process of knight's armour production during the medieval period?
+play medieval lute music.
+and seconds.
+remind me to water my bonsai tree every Wednesday at 3 pm.
+can you simulate the sound of a babbling brook?
+tell me a random historical fact about Ancient Egypt.
+what is the best selling novel in Estonia?
+read me a haiku about the moon.
+find me a romantic restaurant in Antarctica.
+how do I tie a knot for sailing?
+what is the lifespan of an emperor penguin?
+what's the scientific name of the blue whale?
+play a song that represents spring in classical music.
+tell me what marine life exists in the Mariana Trench?
+find me a recipe for a 15th-century stew.
+calculate how many earth years are in a single year on Jupiter?
+translate 'good morning' into ancient Greek.
+how do butterflies navigate during migration?
+can you show me images of tribal tattoos?
+where can I see the oldest mural in the world?
+find me the monthly cost of renting a tiny house in Iceland.
+show me the best yoga poses for reducing anxiety.
+what are the different types of Mexican hot sauces?
+play the sounds of a forest at dawn.
+research about steampunk culture.
+find me a recipe for Andalusian gazpacho.
+show me the top three most popular breeds of dog in Japan.
+locate the nearest vegan bakery.
+do squirrels remember where they hide their nuts?
+tell me the life cycle of a star.
+who was the 'mad' king of England and why was he called so?
+recommend a fairy tale from Russian folklore.
+Siri,how to grow a magnolia tree from a seed?
+find the exchange rate between the Bhutanese ngultrum and the Canadian dollar.
+how to make homemade bird feeders?
+tell me a creative way to reuse old sweaters.
+what kind of flowers bloom at midnight?
+can you outline the storyline of War and Peace?
+where can I buy a ukelele locally?
+tell me about the history of Shakespeare's Globe Theatre.
+find a podcast about home brewing.
+what is the gestation period of a kangaroo?
+can you give me a timeline of the evolution of telephones?
+what are the equations for special relativity theory?
+how can I adopt a slow loris?
+what's the significance of 'Dabkeh' dance in Lebanese culture?
+track the migration route of monarch butterflies.
+find me a vegetarian restaurant in Tibet.
+can you summarize the main points of this article for me?
+can you complete my online checkout for me?
+can you write up a summary of my last meeting?
+can you suggest a meal I can cook based on the ingredients in my fridge?
+arrange a courier pickup for my package.
+suggest a workout routine based on my fitness level and gym equipment available.
+can you edit this video for me?
+ghostwrite an email reply for me.
+draw a sketch of the image I describe.
+can you apply for jobs online on my behalf?
+can you check my kid's homework for errors?
+can you repair the software faults on my computer?
+print this document for me.
+predict the next winning lottery numbers.
+help me pass my online exam.
+negotiate a better cable deal for me.
+cast this YouTube video on my Smart TV.
+remove my name from spam email lists.
+create a personalized workout diet for me.
+can you sync with my robot vacuum and clean the house?
+can you make a doctor's appointment for me?
+refill my prescriptions.
+can you organize my digital photos based on location?
+search my digital files and folders for a specific document.
+can you do my online budgeting?
+mediate a guided meditation session for me.
+can you manage and reply to my texts for a day?
+can you fill my car with gas?
+can you prepare my tax return?
+can you analyze my website and give SEO suggestions?
+create and manage a meal plan for the week.
+can you type up this handwritten letter?
+find my lost items in the house.
+can you virtually try on clothes for me?
+can you assist me in building a treehouse?
+design a new logo for my business.
+research and write a report on this topic.
+find a parking spot near my destination.
+can you update my LinkedIn profile?
+can you reprogram my other smart devices?
+can you suggest interior design ideas for my room?
+do a virus scan on my computer.
+can you shop for the best insurance deal for me?
+can you recommend a great recipe based on my dietary restrictions?
+arrange my clothes by season in my closet.
+can you balance my checkbook?
+chat with customer service for me.
+teach me how to play the piano.
+predict the stock market trends for next month.
+can you treat my sickness and prescribe medicine?
+text John 'I'll be late for dinner'.
+remind me to get groceries after work.
+find the nearest Italian restaurant.
+what's the weather like for tomorrow?
+translate 'where is the nearest pharmacy?' to Spanish.
+what movies are playing at the local theater?
+FaceTime with Jane.
+schedule a meeting with Mr. Smith next Tuesday at 3 PM.
+play the latest episode of 'Serial' podcast.
+show me the latest football scores.
+book an Uber to the train station.
+send an email to my team about the meeting at 2pm.
+search for summer vacation ideas.
+find 'Moby Dick' on iBooks.
+how many calories in a banana?
+increase the screen brightness.
+when is sunset in Honolulu?
+turn on my flashlight.
+convert 100 dollars to euros.
+remind me to feed the dog at 5 PM.
+change my 6PM appointment to 4PM.
+what's the distance to the nearest Apple Store?
+how much storage space do I have left?
+play the movie 'Inception' on Netflix.
+open the Maps app and show me the route to Central Park.
+set a bed time for 10 PM.
+define 'antidisestablishmentarianism'.
+when's the next holiday?
+show me the latest news.
+read the last message from Emily.
+pause my music.
+who won the NBA finals?
+post a tweet.
+send a text to Alex saying I'll be late.
+set a reminder for the doctor's appointment tomorrow at 4 PM.
+navigate me to the nearest coffee shop.
+how do I say 'thank you' in French?
+calculate 25% of 80.
+show me the latest news headlines.
+what are the showtimes for the new Marvel movie?
+search the web for easy dinner recipes.
+take a note for my next meeting.
+when is the next NBA game?
+can you order pizza from Domino's?
+play the podcast 'StartUp'.
+translate this English message to Spanish.
+what is my daily screen time?
+make a FaceTime call to John.
+what's on my calendar today?
+what's the score of the Yankees game?
+how is the stock market doing today?
+find pictures from my trip to Hawaii.
+add bananas to my grocery list.
+who won the Oscar for Best Actress?
+tell me the latest COVID-19 updates.
+search for cat videos on YouTube.
+play the next episode of 'Friends'.
+when is my next scheduled delivery?
+what's the weather in Paris?
+check my Instagram notifications.
+read my latest text messages.
+text mom I'm on my way home.
+call my best friend.
+remind me to pick up groceries at 6 PM.
+what's the weather forecast for tomorrow?
+navigate to the nearest gas station.
+find a recipe for chicken parmesan.
+turn on low power mode.
+translate 'good morning' to Spanish.
+calculate a 15% tip for a $40 bill.
+show me the top-rated restaurants nearby.
+what's the date next Friday?
+search for romantic comedies on Netflix.
+find funny cat videos on YouTube.
+find a math tutor near me.
+lock the front door.
+how high is Mount Everest?
+what time is the sunset tonight?
+FaceTime Dad.
+is it going to rain this weekend?
+search for plane tickets to Los Angeles.
+show me my daily schedule.
+when’s the next game for the Lakers?
+what are some healthy dishes for dinner?
+open Spotify and play my favorite song.
+send $20 to Jane via PayPal.
+search for my Amazon order details.
+find a Thai restaurant nearby.
+set a reminder to watch the new episode of my show tonight.
+add running shoes to my shopping list.
+call the pharmacy and refill my prescription.
+search for a vegetable stir-fry recipe.
+skip this track.
+set the brightness to 50%.
+send a birthday reminder for John on March 1st.
+share my location with my friends.
+play a guided meditation.
+send a message to John saying I'll be late.
+remind me to pick up milk after work.
+where is the nearest Starbucks?
+set an alarm for 6 AM.
+convert 5 feet to meters.
+open Facebook app.
+what's 20% of $120?
+what's my next appointment on my calendar?
+navigate to the airport.
+find the closest Thai restaurant.
+delete all my alarms.
+how do you say 'hello' in French?
+find the photos from last Christmas.
+who won the NBA game yesterday?
+when does the movie 'Spiderman' start at my local theater?
+show me my emails from today.
+add 'Doctor appointment on Friday at 2 PM' to my calendar.
+check my voicemail.
+what is the definition of 'quandary'?
+play a random song from my music library.
+book an Uber to home.
+when's the sunrise tomorrow?
+how long will it take to drive to Los Angeles?
+translate this text message in Spanish.
+is my flight on time?
+what's the stock price of Apple today?
+dim the screen brightness.
+find a recipe for pasta.
+connect to my car Bluetooth.
+what's the score in the football game?
+change my ringtone.
+what’s the distance to the nearest gas station?
+find available parking nearby.
+pause my audiobook.
+show me my step count for today.
+where is my iPhone?
+show the picture I took yesterday.
+add groceries to my shopping list.
+set timer for 20 minutes.
+set a reminder for my dentist appointment tomorrow.
+text John 'I'll be there in 10 minutes.'
+what's the weather like tomorrow in Orlando?
+open Google Maps and get me to the nearest grocery store.
+find a good Italian restaurant nearby.
+play 'Bohemian Rhapsody' by Queen.
+add Milk to my shopping list.
+schedule a meeting with Janet next Tuesday at 3 PM.
+turn on 'Do Not Disturb' mode.
+convert 100 dollars into Euros.
+find a recipe for chicken alfredo.
+adjust the brightness to 50%.
+what's the definition of 'satire'?
+delete all my emails from yesterday.
+read my last text message.
+update my Facebook status.
+who won the Lakers game last night?
+record a voice note.
+show my photos from last summer.
+what song is playing?
+open the calculator.
+find the contact details for the nearest Apple Store.
+turn Wi-Fi off.
+remind me to take my medicine at 7 PM.
+clear my schedule for tomorrow.
+launch the camera.
+how do I connect to a Wi-Fi network?
+text John I'll be late for dinner.
+set a reminder for my doctor's appointment on Tuesday at 3 PM.
+open Google Maps and direct me to the nearest gas station.
+can you set a timer for 10 minutes?
+search for an Italian restaurant nearby.
+add bread to my shopping list.
+how do you spell 'accommodation'?
+start recording video.
+what is 20% of 80?
+remind me to check the oven in 15 minutes.
+launch Netflix.
+Facetime dad.
+add a note - brainstorm meeting ideas.
+book a table for 2 at 6 PM tomorrow.
+find photos from last Christmas.
+what's in my calendar for today?
+get me a Lyft.
+when is my flight?
+set alarm for 30 minutes.
+an island lost at sea.'
+how's the traffic on my way home?
+calculate the tip for a $45.70 meal.
+how's my stocks doing today?
+where's a good place to have lunch?
+turn up the volume.
+message Sarah: movie night?
+what's the capital of Canada?
+close all apps.
+send a text to John.
+search for the nearest pizza place.
+remind me to buy milk tomorrow at 10 am.
+what will be the weather like tomorrow?
+set an alarm for 7 am.
+navigate to the downtown library.
+what's on my agenda for tomorrow?
+search for easy chicken recipes.
+add a meeting to my calendar for next Tuesday at 3pm.
+book a table for four at my favourite restaurant tomorrow night.
+calculate a 20% tip on a $32 bill.
+how many steps have I walked today?
+define 'philanthropy'.
+turn off all notifications.
+order food from my favourite Chinese restaurant.
+start a 30 minute timer.
+call an Uber to the airport.
+play the Beatles.
+what’s my heart rate?
+tweet 'loving the sunshine'.
+what is the capital of Norway?
+open my notes app and write 'buy coffee beans'.
+search for a YouTube video on how to cook pasta.
+find the song that goes 'just a small town girl living in a lonely world'.
+find a flight to New York.
+who is the President of France?
+what's the stock market looking like today?
+be home soon.'
+call my favorite pizza place.
+open Google Maps and find the shortest route to the airport.
+what's the temperature outside?
+play my favorite Spotify playlist.
+show me photos from my last vacation.
+set a timer for 30 minutes.
+add 'buy milk' on my shopping list.
+who won the latest Lakers' game?
+schedule a dentist appointment next week.
+remind me to water the plants at 7 PM.
+add gym time to my calendar for tomorrow.
+set an alarm for 6 AM tomorrow.
+how many calories in a slice of pizza?
+call my boss.
+send a Whatsapp message to John.
+show me the top-rated Italian restaurant nearby.
+translate 'how are you?' to French.
+when is the next bank holiday?
+find the recipe for apple pie.
+calculate 20% tip on $75.
+how long will it take to drive to New York City?
+show me my daily step count.
+look up the cast of 'The Crown'.
+order Chinese food from my favorite restaurant.
+read out my latest text messages.
+how's the stock market today?
+show me my meeting schedule for the day.
+change my screen brightness to 70%.
+find tickets for the next Marvel movie.
+find a grocery store near me.
+book a ride to the airport.
+post a Facebook status update.
+what is the capital of Denmark?
+open the camera app.
+connect to my home Wi-Fi.
+find the latest news headlines.
+is it going to rain today?
+call the nearest taxi service.
+whom did I email yesterday?
+show me a trailer for the latest Disney movie.
+wake me up at 7 AM with soft music.
+find a recipe for gluten-free cookies.
+send a text to Mom saying 'I'll be home late.'
+call Dr. Smith's office.”
+what is the capital of Argentina?
+email my meeting notes to John.
+schedule a meeting with Sarah at 2 PM.
+show me the latest stock market updates.
+add detergent to my shopping list.
+check the balance on my bank account.
+find a movie for tonight.
+translate 'Good morning' to French.
+show me photos from my vacation.
+call my wife on speaker.
+who won the Oscar for best picture last year?
+turn on do not disturb mode.
+find sushi places near me.
+book a table for two at 7 PM.
+launch the Netflix app.
+how heavy is an elephant?
+remind me to pick up the kids at 3 PM.
+show me my screen time for today.
+who wrote 'Pride and Prejudice'?
+play the latest episode of my favourite podcast.
+turn on the WiFi.
+when is Apple's next event?
+set a reminder for my doctor's appointment tomorrow at 3 pm.
+text Mike and tell him I'll be 5 minutes late.
+how's the weather going to be tomorrow?
+play the album 'Lover' by Taylor Swift.
+can you wake me up at 7 am tomorrow?
+what movies are showing tonight?
+find a sushi restaurant near me.
+when is the next Lakers game?
+send an email to my supervisor about the meeting changes.
+start a 20-minute workout.
+order an Uber to the airport.
+calculate a 15% tip on $75.
+show me pictures from my Hawaii trip.
+can I catch the 5 pm train to downtown?
+launch the Maps App.
+make a note to buy milk.
+download the Netflix app.
+show me recent messages from John.
+reserve a table for two at Bella's at 8 pm.
+show me flights to Paris.
+how do I get to the nearest hospital?
+find a vegan recipe for dinner.
+play my study playlist.
+text my location to Dad.
+mute my phone.
+turn on Airplane mode.
+add a meeting to my calendar for next Wednesday at 2 pm.
+show me nearby hotels.
+open the Camera app in video mode.
+send a message to dad saying I'll be late tonight.
+call the nearest pizza delivery.
+launch the Spotify app and play today's top hits.
+open Google Maps and find the fastest route to home.
+take a selfie with the timer set to 3 seconds.
+locate my iPhone.
+make a note for the shopping list.
+start a video call with mom.
+when is my next scheduled meeting?
+add a reminder to pick up the dry cleaning.
+find recipes for chicken pasta.
+turn on 'Do not disturb' mode.
+check updates on the stock market.
+how do I back up my photos?
+search for 'Italian restaurants near me'.
+how's the traffic on my way to the airport?
+call my doctor's office.
+play an audiobook.
+send an email to my boss with the meeting notes.
+what is 20 percent tip on a $75 bill?
+open my workout playlist.
+show me my steps count for today.
+how much screen time did I have today?
+search for cat videos.
+can you book an Uber for me?
+how do I sync my contacts with iCloud?
+play the latest news.
+show me cute dog pictures.
+what's the conversion rate from dollars to euros?
+change my phone's wallpaper.
+add 'visit Grand Canyon' to my bucket list.
+text mom I'll be home late today.
+set an alarm for 7:00 am.
+find the nearest pizza place.
+how do I get to the Central Park?
+add eggs and milk to my shopping list.
+call my dentist's office.
+look up how to remove a wine stain.
+remind me to pay the electricity bill tomorrow.
+take a note that I have a meeting on Friday.
+did the Lakers win last night?
+translate 'good night' to French.
+change my 10 am event to 11 am in calendar.
+what's the bestselling book right now?
+open the map and show me traffic to work.
+walk me through a 5-minute meditation.
+what should I cook for dinner?
+find a taxi near me.
+is there a pharmacy open near me?
+check the stock market today.
+set a 15-minute timer.
+calculate 25% of $120.
+look up the actor from the movie I watched last night.
+tell me about the latest news.
+play relaxing music for sleeping.
+search the internet for house cleaning tips.
+show me cute cat videos.
+how do I say 'hello' in Italian?
+look up the recipe for chocolate chip cookies.
+find available flights to New York.
+show me my photos from my last vacation.
+how do I connect my phone to WiFi?
+schedule a meeting with my team tomorrow.
+show me fitness exercises for beginners.
+order a pizza from my favorite pizzeria.
+what's my screen time for the day?
+look up movie showtimes near me.
+text John 'I'm running late.'
+start a timer for 15 minutes.
+how's the weather tomorrow?
+add 'go to the gym' to my to-do list.
+show me my photos from last weekend.
+what's the stock price for Apple?
+what's the score for the Lakers game?
+give me a recipe for spaghetti bolognese.
+show me restaurants near me.
+how is traffic on my commute?
+calculate the tip for a $50 meal.
+send my location to Sarah.
+show me flights from New York to London.
+call Jane on speakerphone.
+create a new calendar event for a meeting tomorrow at noon.
+lower the screen brightness.
+close all running apps.
+'What a beautiful day!'.
+make a reservation for two at the Italian restaurant.
+show me movie times for 'Avengers Endgame'.
+search for blueberry muffin recipes.
+call my last missed call.
+how many steps do I have today?
+play next song.
+show me the trailer for 'Star Wars: The Rise of Skywalker'.
+set an alarm for 30 minutes from now.
+turn on flashlight.
+set an alarm for 7 a.m.
+directions to the nearest coffee shop.
+is it going to rain tomorrow?
+who is the artist of this song?
+text John and say I'll be late.
+add a meeting to my calendar for next Wednesday at 3 p.m.
+calculate the tip for $45.
+what movies are playing?
+find a sushi place near me.
+what are some exercises for back pain?
+play a podcast on mindfulness.
+play the news headlines.
+how old is Tom Cruise?
+what time is sunset today?
+how do I pair my Bluetooth headphones?
+where is my dinner reservation?
+find vegetarian restaurants in the area.
+show me the latest sports scores.
+what's the tallest building in the world?
+find a recipe for apple pie.
+what are some symptoms of the flu?
+play white noise sounds.
+how to get to the airport?
+order a pizza.
+what's in my schedule for today?
+buy e-books for my vacation.
+show the 5-day forecast.
+find the nearest yoga studio.
+show me funny cat videos on YouTube.
+text mom 'I'm on my way home.'
+set an alarm for 7.30 AM tomorrow.
+call my dentist office.
+show me my schedule for tomorrow.
+what's the weather like this weekend?
+remind me to buy milk when I'm near the grocery store.
+open google maps.
+send an email to James about tomorrow's meeting.
+read my most recent email.
+how much is 50 dollars in euros?
+what's the score in the Lakers' game?
+open the Uber app.
+find a brownie recipe.
+show me cat videos on Youtube.
+give me a list of nearby restaurants.
+when is the next Apple event?
+what's on my shopping list?
+what's the current stock price for Tesla?
+who won the Oscar for best actor last year?
+show me the trailer for the latest Star Wars movie.
+find an Indian restaurant nearby.
+schedule a FaceTime call with John tomorrow.
+check my bank balance.
+add laundry detergent to my grocery list.
+who's the founder of Amazon?
+is there any traffic on my way to work?
+open my photo gallery.
+show me my Instagram notifications.
+put my phone on silent mode.
+remind me to pick up the dry cleaning tomorrow.
+show me my latest tweets.
+add 'Gym at 5 PM' to my calendar.
+Facetime Mom.
+call mom on her mobile.
+show me the weather forecast for the week.
+remind me to take my vitamins at 10 PM.
+where is the nearest Italian restaurant?
+find out what song is playing now.
+navigate me to the airport.
+send a message to Sarah saying 'I'll be there in 10 minutes.'
+show me my upcoming events.
+turn on the 'do not disturb' mode.
+find me a recipe for chocolate cake.
+count down 30 minutes.
+find a hotel in Paris for next weekend.
+book me an Uber to the station.
+search for 'flower shops near me'.
+check my email for any messages from John.
+add 'buy milk' to my shopping list.
+show me the stock market update.
+FaceTime my sister.
+what’s the latest news?
+switch on airplane mode.
+show me the photo I took last Christmas.
+add a 2 PM meeting in my calendar tomorrow.
+read my latest text message.
+decrease the brightness.
+record a video.
+calculate 20% of a $50 bill.
+find a vegetarian restaurant in the area.
+switch the phone to silent mode.
+find the lyrics for this song.
+when's my dentist appointment?
+check if I have any new voicemails.
+who won the golf tournament yesterday?
+find some sci-fi movies.
+lock my screen.
+call John's mobile.
+set an alarm for 7 am tomorrow.
+text dad 'I'll be home by 6.'
+send an email to Sarah about the project.
+book an uber to downtown.
+find a recipe for spaghetti carbonara.
+turn up the brightness.
+find sushi restaurants near me.
+open the Health app.
+walk me through a 10-minute meditation.
+what's my Heart Rate?
+start recording a voice memo.
+play 'Hotel California' on Spotify.
+find a French tutor near me.
+what's 23 percent of 856?
+what's the capital of Finland?
+find vegetarian recipes.
+when is the next bus to the city center?
+book a table for two at a Italian restaurant.
+read my unread messages.
+who won the Superbowl last year?
+how do I get to the nearest Starbucks?
+is my Wifi connected?
+what's Amazon's stock price currently?
+update my apps.
+play a sleep sound for 30 minutes.
+add a note – meeting with Jake tomorrow at 2 PM.
+set the thermostat to 72 degrees.
+show my photos from last Christmas.
+who are the actors in 'Friends'?
+tell me a math joke.
+set an alarm for 6:00 AM tomorrow.
+how's the weather outside?
+remind me to buy milk at 5 PM today.
+what's the latest news headline?
+tweet the following for me...
+call the last missed number.
+who won the last NFL game?
+increase the brightness to 50%.
+search pizza recipes.
+play the podcast 'Serial'.
+what were the latest stock market trends?
+find the nearest hospital.
+text John and let him know I'm running late.
+remind me to pay my bills on 1st of every month.
+what's my day look like tomorrow?
+what movies are showing today?
+calculate 25% of 150.
+send a voice note to Jennifer.
+what time is it in Paris?
+find a recipe for chili.
+read me my last text message.
+make a reservation at the Italian restaurant nearby.
+play my favorite song on Spotify.
+order a pizza from Dominos.
+set a recurring reminder for my yoga class.
+show me my photos from Hawaii trip.
+find the nearest ATM.
+add a note to call my dentist.
+what are the top attractions in New York?
+remind me to pickup dry cleaning.
+open Amazon.
+show me flights from Chicago to Miami.
+sen me an alarum for 6 AM.
+paly some jazz music.
+how to bake a chocklet cake?
+give me dirrections to the nearest hospital.
+text John saying I'm on my wau.
+how's the waether like tomorrow?
+find me the nearest resstaurant.
+call fiend Jessica.
+searching for train schudule from London to Manchester.
+set a remminder for a dentist appointment at 3 PM.
+play mia favourite song.
+search how to diet tomato plants.
+srnd Jennifer an email.
+tell me wha time it is.
+convert 100 USD into Euroo.
+give me the lstest news.
+did the basketball team wine last night?
+tell me a jok.
+find a recipe for vanila cupcakes.
+how's my stoks doing?
+check the forcast for the next week.
+translate 'hello' to Frensh.
+what is the capitul of Australia?
+play the top pop songs.
+is there any messge for me?
+how many caloriss are in an apple?
+set up a meting with Samantha at 1 PM.
+tutorial for tieing a tie.
+call me a cub.
+directions to nerest gas station.
+play my bedtime plylist.
+add milk to ma shopping list.
+when is sunset todat?
+can you tell me the store hours for Walmat?
+make a reservation for two for dinnr at six.
+set a timer for thigh minuets.
+who won the oscar for best actr last year?
+find me a turtorial for making pasta.
+paus the song.
+when is mothers dae?
+wht's the weather like in London right now?
+look up the phone numbder for the Chinese restaurant.
+how to spell supercalifragilisticexpialidocious?
+set an allarm for seven in the evening.
+please?
+how do I get to the museeum from here?
+get me tickts to the next Lakers game.
+what is the ltest update on COVID-19?
+play the top bilboard songs.
+wtas the weather lke today?
+call mom o my mobile.
+wnere is nearest pet shop?
+sebd an email to Mariya.
+send text massage to dad.
+set an arlam for 7am.
+what's on my calednar today?
+plya Taylor Swift songs.
+open Fcebook.
+give me derictions to JFK airport.
+wha’s the capital of Spain?
+whta's my current location?
+gimme a rssturant near by.
+shcedule a meeting with Mr. Johnson.
+how to I get hoome from here?
+what are latst news headlines?
+play my podcst.”
+wtat’s 5 plus 7?
+how to boil an gg?
+rgemind me to feed the cat at 6pm.
+crank up te volume.
+make a google earch for apple pie recipe.
+who won the las NBA game?
+what's the definition of indefineable?
+can you trasnlate 'Good Morning' in French?
+daglate this page to English.
+hw's the traffic on my way to office?
+take a elfie.
+play soe classical music.
+mke a dinner reservation for 2.
+send a tewet.
+whn's my next flight?
+wtat's the meaning of life?
+set a riender for buying milk.
+can you finishs this game for me?
+what's ten tip to get fit?
+can you oder a pizza for me?
+can you take a scrinshot?
+who i emailing me?
+hw do you make lasagna?
+set up five munites time.
+wh's making phone call?
+play som blues music.
+increase ritness.
+can you see my car?
+plz read that text message.
+remnd me to go to bed at 11 pm.
+wake me uo at 5 am.
+what's the core of baseball game?
+put the gorcery list on.
+plae ma favourite song.
+can you sat an alram for 7 am?
+hw short is the bagttery?
+weather todayy in New York.
+pleas teel me a joke.
+shos me da lates news.
+whats for luch?
+reemind meo to call John tomorrow.
+sen an emal to my boss.
+how cane yu halp me?
+look fir the nearest gas station.
+fidn recipe for spaghetti bolognese.
+Pla teh nearest coffee shpp
+tex sarah I'm os my way.
+wha is theeperatur?
+open the clenda.
+tranlate hello to Spanish.
+playt latest podcast.
+open insagram.
+turnp dof the light.
+I ned a cab.
+the neart shopping mall.
+wh's kievnig?
+comvert dollar to euro.
+sand a message to mom.
+now the lazest news.
+ask abou trafic.
+saarch netflix for comedies.
+sht din the volume.
+wha time it in Sydney?
+oppn terrace house.
+who’s my nex meeting with?
+calcutae 9 plus 16.
+call da nearest pizza plce.
+giv me directions home.
+nd who won the baseball game last night?
+fiend a Nachos recipe.
+seth remider for gym at 6 pm.
+who popullar songs by queen.
+text papa I'm fine.
+when cinemas opene?
+whatis my email?
+remind to buy milk.
+wht latest on the stock market?
+where can I by piza?
+any updae from Alex?
+shw my emails sfrom yesterday.
+what tim is sunset today?
+howmuch money I spent on shopping this month?
+enable fight mode.
+cal mom.
+cheak the wether.
+send an emale to John.
+tel me a jock.
+set the alrm for 7.30 am.
+set reminder for doctar appointment.
+playe the lattest hit songs.
+how is trafic to wrk?
+how's the stok market today?
+when is my next appintment?
+what is in my shapping list?
+what's in the newstoday?
+translet 'I miss you' in Spanish.
+was there any earthwake report today?
+fint the best pizza restaurants near me.
+was the score of the Lakers game last night?
+can you rind me to pick up milk?
+find direcshuns to the nearest park.
+what is tomorro's date?
+call the nearest plumer.
+shoe me the trailer of the latest James Bond movie.
+play some clasic rock.
+text Jenny I'm on my whey.
+what's the time in Los Angelis?
+when does the sun set?
+is it gonna train tomorrow?
+what's the heartrate on my Apple Watch?
+find a ricepie for spaghetti bolognese.
+set an alerm for 6 pm.
+call my brather.
+book a tacksi for me.
+text mom 'I'll be home by 8'
+add toothpaste to my gropcery list.
+where is the neerest hospital?
+when is next holieday?
+is my flight on thyme?
+leran me French.
+do I have any notifations?
+when is Jake's birthdai?
+play the last podcast I was listening two.
+how do I sotp my dog from barking?
+order a pepperonee pizza.
+turn on the flashright.
+when will it be full moonn?
+search for the latest trailers of upcoming movies.
+text my besty 'Lets go for a movie tomorow.'
+how many days till Chirstmas?
+show me the quickest route to home.
+is there a bettr way to lose weight?
+call Samanta.
+hwere is the nearest gas station?
+can you sef me a timer for 20 minutes?
+ho to delete an app?
+how mmuch storage do I left?
+what's my daly screen time?
+can you reorder me som cat food?
+can you trn off the lights?
+when does sunrishe happen tomorrow?
+what's the weatr like today?
+wake ma up in 30 minutes.
+caan you play my workout playlist?
+order me peperoni pizza.
+directin to Miami airport?
+how I can make a pancake?
+Play latest Edd Sheran songs.
+call mari johnsom
+where's ny phone?
+what was Score in yesterday's match?
+augment brightness to 50%.
+I want to dst to Arabic.
+can you shw me latest news?
+read last meassage.
+how I can backkp my phone?
+wehre's the nearest ATM?
+text Jeff 'I'll be late'
+what's my scuedule today?
+connect to birthday party speakr.
+set an alam for 7am.
+trf money from my savings account.
+what's Mumbledy peg?
+what's bug sougn
+find a recepie for bologonese psta
+what's the trffic look like to work?
+sync my appintment with the calendar.
+what are my steps count fr today?
+what's attachedd number to my apple ID?
+where is my cat - locate pet.
+how tall is Mount Everst?
+what is the capitol of Indnoesia?
+translate 'Good night' to Japanese.
+fine the nearest grocery.
+set reminders for tahday.
+mute the phone.
+how long until i geet home?
+can you se my avatar?
+what is 10 plus ssixty?
+where I can gwatch free movies?
+call my wiifi provider.
+how is the whether tomorrow?
+Weathr forcast for the week.
+When is your brthday?
+how to tye a tie?
+Set alrm for 6 AM.
+serene me the latest news.
+Can you read my laat email?
+Tell me a njoke.
+Wais the capital of France?
+How to make coffin.
+What's the moye showing times?
+who won the last sopball game?
+Send mesaage to mom.
+Open insagrme.
+Check may calendar for tomorrow.
+who's culling me?
+Payt directions to home.
+What toangiht's weather like?
+Play my favourited playlist.
+Open the Appss Store.
+What's the mishion of Mars rover?
+Find a reipts for chocolate cake.
+Translate 'hello' to Spanishp.
+Words the current stock market?
+What's timer8 minutes.
+Find the ntoest Subway station.
+Show me the closer grocery storex.
+Where's my cact phone?
+What's the sqcore for the latest football match?
+Open thy sapstore.
+When so the next full moon?
+Play Batouven's fifth symphony.
+Send an emial to my boss.
+How old si Beyoncé?
+Show me pfotos from last Christmas.
+How much bucks do I have?
+Dim the lihgs in the living room.
+Tell me a fund joke.
+Gat directions to the nearest beach.
+What's the weathe in New York?
+Covert 1 dollar into Rupees.
+When was Albert Einswine born?
+How clong is the Great Wall of China?
+What's the destance to the moon?
+Dial the polistch station.
+Add choative milk to my shopping list.
+Where am e?
+Ply random song.
+Shw me my latest text messages.
+What's the curnt oil price?
+please.
+call Michale
+direckshuns to the hospital
+what's the wether like today?
+how many ounces in a pownd?
+play that Bad Skirt song
+shon me the phony numbers
+set a timmer for 15 minutes
+find a beaching near me
+send a msg to Dave
+what's the latest world nudes?
+is the bank oak inn?
+how many fit in a mile?
+what's the lottery nostril?
+what's my balance in the back account?
+find Italian restaurants nar me
+playstation by Ariana Grand
+text mom I’m on my wai
+paisa translator
+add potatoes to the groping list
+what is the date of Independents Day?
+when dose the sun sit tonight?
+read out my maids
+who one the basketball game?
+call my wife’s fone
+what’s the recupee for lasagna?
+whas the time now?
+open Nutflix on my TV
+how do you spail 'necessary'?
+play latest dumpstep songs
+check the stock martet
+call the cops
+set an alim for 7 am
+find a taxi neck me
+what's the sqare root of 256?
+how many calories in a bow of rice?
+open Googly maps
+find ‘The Cranberries’ latest allbum
+will it rayn manana?
+what's the capitol of Spain?
+get me a restbite for apple pie
+predicts the future
+what is today's dat?
+definition of pneumonoultramicroscopicsilicovolcanoconiosis
+send an emale to dad
+how much is a flight to Pares?
+puppet showtimes
+find the neeeeeeearest gas station
+how’s the whether tomorrow?
+what’s the traffic light going home?
+how to coook a steak?
+who wone the last superbowl?
+show me a resippy for lasagna.
+what's the whether right now?
+tell me a jock about intricorectal galaxy.
+set an alurum for 7 AM.
+give me direcshuns to the nearest gas stashun.
+who is the precedency of the United States?
+whats the capitol of Fance?
+how do you spell conscioubliss?
+play newest album from Tailor Swif?
+what’s the stock rate for Googley?
+open Facebok.
+weather forecust for Tommorow?
+when does the sung set tonight?
+text John how weight are your meetini?
+call Jery on speaker fone.
+how many caluries in avacado?
+whats the latest newd headlines?
+send an imail to boss saying I'm sick.
+checkie the next game for the Yankees?
+translate hello to Spannish.
+sersh for nearby Itallian restaurants.
+what is the definition of cermudgeon?
+play despecito on Spotify,
+buy To Kill a Moockingbird on iBooks.
+what is the current prace of Bitcoin?
+can you reorder toilet papper from Amazone?
+song shuffle on Apple Musics.
+open netflax and play Friends.
+what's the haute couture teature?
+how much is an Iphonex?
+what’s the score of the baseball team of New Yerk?
+dim ra set lights to 30 percent.
+facetime kell calling.
+serch for recepies of bolognese sauces.
+show me a list of Nobbel prize winners in literature?
+When's the nixt full mon?
+how's the traffic on the highway wide now?
+what is 200 devide by 15?
+what is the curent screaming movies on Netflik?
+who starred in the movie Jurasic Perk?
+what is the sqaur root of 144?
+what are the symtoms of fluo?
+where's the nearest pizza platch?
+how to translate 'thank you' to Germani?
+set a reeminder for meeting at 5 PM
+play my workout palylist.
+what's Michael Jackson's most popular spong?
+open the Camra.
+who is the richest pearson in the world?
+hwos the watehr outisde?'
+plya the Beetles.'
+mixemum volume!'
+set an alarm fro 8 PM.'
+were is the closet grocery stole?'
+sens a tacks to John.'
+what appoointments do I heave tomorrow?'
+goggle how to tie a tie.'
+make a reminder to by dog fude.'
+play tic tok by Kesha.'
+define entropye.'
+translate hello to Frenchc.'
+squwre root of sixteen.'
+find the closet gas stahtion.'
+calculate a 20% tiip on $50.'
+what time doest the sun set tonite?'
+det direction to Times Sware.'
+send an emil to my boss.'
+what's a synonym for hapy?'
+what are some good Italian restorants nearby?'
+how mani ounces in a pund?'
+what time is it in Tokyo nwo?'
+how many dais until Christmas.'
+find me a recipe for sed spaghetti.'
+check my escercise hipstory.'
+search Batman movehs.'
+tell me ajoke.'
+remind me to take out the trush.'
+play the latest TED tok.'
+where's the neearest coffee sop?'
+show me the latest news headlines.'
+what's my schedule for Tuhesday?'
+where's the nearest hosiptaly?'
+pause the misic.'
+show the weather in London tomorrow.'
+hwta's the latest stock for Apple?'
+where is the nearest rated hig bakery?'
+let me know when emy next meeting is.'
+find some vegetarian recipes for dinner.'
+paly the latest from The Weekend.'
+how do you spell Reykjavik?'
+whos winning the basketball game?'
+update my software.'
+what movies are playing at the theater?'
+text myy mom I'll be there in 20 minutes.'
+navigate to Los Angelees.'
+search keto diet recipes.'
+create a new playlist.'
+how do you say 'thank you' in Rrussian?'
+call Pizza Hut.'
+whas thee weathr liek todai?
+set an rarm for 7 am.
+phlay the lastest Taylor Swift Song.
+wot's 5+7*3?
+remnd me to walk dog at 6PM.
+what's the futieball score?
+climatic updates for torrmorow.
+call mummie on speaker mode.
+where's the neerus pizza place?
+how to tie a necktey?
+how meni calories in banana?
+teks john about dinner at 7.
+bake a cnvertion from miles to kilometers.
+sarch for the nearest gas stashun.
+who wun the suuperbowl las year?
+finde rentels in Los Angelis.
+sing me a scient song.
+gess who's the president of US?
+show times for avngers movie.
+check for the latest iupdate.
+get detils of apple stocs.
+play the nignt podcast.
+shaw recepe for bolognese sos.
+how to tie shoelcae?
+finde me a chinee cuisine.
+where's the closest ATM mashine?
+read me the last emial from John.
+whats the pictur resoltion of iphone 12?
+whats the capitol of the Netherlands?
+rute me to the near cust grocerie store.
+tranlate hello to French.
+pls play the top hits from the 90s.
+how much is iphone 13 pro?
+cteate a shopping list for me.
+play baby shark on ytube.
+who wil win the upcming world cup?
+measuuure distance to the moon.
+serech for hair solons nearby.
+what's the phas of moon tonite?
+remand me to drnk water every hour.
+send an imesage to dad.
+explore the latest headlines in tech news.
+set a timer fr 15 minutes.
+calcualte 20% tip on 65 dollars.
+when was the batel of Waterloo?
+wake me up at sevn thurdy.
+trun on nite mode.
+whats the expected traffick to the airport?
+what happen in breati nyus?
+when open the closses coffee shup?
+text Daz Jerry's here
+play raidio.
+place call to Jon.
+find resipies for chicken curry
+call Muhs taxi
+reed my emails
+whets the wither like?
+mark my calendar for Dens birthday
+search orbs on the internet
+arrest time to New York
+turn on the torch
+find nearest coffee dhop
+translate 'Hello' into Spenish
+navigate me to Stare bucks
+set alarm for sex am
+how mass is the sun?
+send an email to Dr. Brained
+what's today's date.
+mind the recipe for apple pie
+what's love in French
+play song 'rolling in the Jeep
+set the house temperature to 72 bagels
+how many minits are in a day
+how much is movie ticket at Simplex
+what's the meaning of life?
+dial emergency number.
+did the Dodgers win last neat?
+when does the mall close?
+find lows-fat recipes
+how do you bake a cake?
+show me my photos
+turn off Harlem roads.
+what's a synonym for 'happy'?
+who wrote 'Lord of the Blings'?
+check my emails
+what is the song Kickflip by Row b?
+what's the stock price of Grugal
+set reminder for 'movie tomorrow at six PM'
+route me to 'Leyland'
+download Peaky Finders
+set uh timer for 10 minutes
+whets the height of Mount Everest?
+create calendar event for Zoes graduation
+what's 2 multiply by 3?
+share my live location with Bailey
+order hundred from dominoes
+schedule meeting at 7 Fm
+call Jeff Jones
+list all contacts saved under 'S'
+when does Holister close today?
+what's the wether lyke today?
+show me a reseat for pumpkin pie.
+what's five multyplied by twelv?
+play Despsito on Spotify.
+how to I get to the collseum in Rome?
+show me pictures of kitens.
+can you find them?
+call Moom.
+when is my docctors appointment?
+can you make a reservetion for lunch?
+text Jonn 'I'll be there in 5 minutes.'
+set an alrm for 7am tomorrow.
+googl the nearest pizza place.
+what's the capitol of Fance?
+is it going to raine tomorrow?
+get dricetions for the metro station nearby.
+reddial the last number.
+get me the weel of time review.
+play Michale Jackson songs.
+can you book a fligth to Paris?
+tell me a beddytime story.
+change the clor of my room lights.
+what's the defenition of incredolous?
+add apple to the shopping lest.
+who is Herry Potter?
+can you seend an alarm for 2 p.m.?
+play the latenst news.
+translate 'hello' to Spahish.
+how many kilommeters in a mile?
+get me drictiions to the nearest grocery store.
+what is the temparature in Fahrenheit right now?
+read my last ith email.
+is my fligh on sime?
+who won the last word cup?
+open the fashlight.
+call my bost.
+when is Mather's Day?
+convert 20 dolars to euros.
+what's the Song plaing now?
+tell me a jke.
+how to spell Conscientishiousness?
+who is Jag Wieber?
+sset a timer for 15 minutes.
+who is the President of Unitedd Stits?
+how to bake a cakey?
+play my workoot playlist.
+search for 'Covid-19 updaates'.
+reddminder to take medicine.
+look up the poplation of India.
+when is the next Holliwood movie being released?
