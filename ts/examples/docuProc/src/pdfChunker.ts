@@ -22,8 +22,8 @@ export type ChunkId = string;
 export interface Blob {
     /** Stores text, table, or image data plus metadata. */
     blob_type: string;  // e.g. "text", "table", "image"
-    content: any;  // e.g. list of lines, or path to a CSV
     start: number; // Page number (0-based)
+    content?: any;  // e.g. chunk of text
     bbox?: number[]; // Optional bounding box
     img_path?: string; // Optional image path
     para_id?: number; // Optional paragraph ID

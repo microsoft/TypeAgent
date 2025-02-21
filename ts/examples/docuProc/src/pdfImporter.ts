@@ -94,7 +94,9 @@ async function importPdfFiles(
             for (const chunk of chunkedFile.chunks) {
                 numBlobs += chunk.blobs.length;
                 for (const blob of chunk.blobs) {
-                    numLines += blob.content.split("\n").length;
+                    if(blob.content && blob.content !== "")
+                        //numLines += blob.content.split("\n").length;
+                        numLines += blob.content.split(/[\n.]+/).filter((line: any) => line.trim().length > 0).length;
                 }
             }
         }

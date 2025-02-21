@@ -64,11 +64,9 @@ export function createPdfDocumenter(model: ChatModel): PdfFileDocumenter {
             for (const block of blocks) {
                 const blockIdentifier = `Chunk Id: ${block.id}, Page: ${block.pageid}`;
                 for (const blob of block.blobs) {
-                    if (blob.blob_type === "text" && Array.isArray(blob.content)) {
+                    if (blob.blob_type === "text") {
                         text += `Text Content (${blockIdentifier}):\n`;
-                        for (let i = 0; i < blob.content.length; i++) {
-                            text += `[${blob.start + i + 1}]: ${blob.content[i]}\n`;
-                        }
+                        text += `[$Start:{blob.start+1}]: ${blob.content}\n`;
                     } else if (blob.blob_type === "table") {
                         text += `Table Data (${blockIdentifier}):\n`;
                         text += `CSV Path: ${blob.content}\n`;
@@ -83,8 +81,8 @@ export function createPdfDocumenter(model: ChatModel): PdfFileDocumenter {
                 "Summarize the given document sections based on the extracted content and page image.\n" +
                 "For text, provide a concise summary of the main points.\n" +
                 //"For tables, describe their contents and significance.\n" +
-                "For images, infer their purpose based on the context.\n" +
-                "Include a high-level summary of the entire page based on the extracted image and text.\n" +
+                "For images, infer their purpose based on the context. For page level image summarze for the entire page.\n" +
+                "Include a high-level summary of the entire page based on the extracted image and paragraph level text.\n" +
                 "Also fill in the lists of keywords, tags, synonyms, and dependencies.\n";
             
             const result = await pdfDocTranslator.translate(request, text);
