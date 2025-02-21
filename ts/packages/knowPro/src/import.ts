@@ -855,7 +855,7 @@ async function indexImage(fileName: string, chatModel: ChatModel): Promise<Image
         return;
     }
 
-    const img: image.Image | undefined = await image.loadImage(fileName, chatModel);
+    const img: image.Image | undefined = await image.loadImageWithKnowledge(fileName, chatModel);
 
     if (img !== undefined) {
         return new Image([img!.title, img!.caption], new ImageMeta(fileName, img!));

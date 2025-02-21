@@ -303,7 +303,8 @@ export function getKnowledgeForImage(
     return retVal;
 }
 
-const imageCaptionGeneratingSchema = `// An interface that describes an image in detail
+const imageCaptionGeneratingSchema = `
+// An interface that describes an image in detail
 export interface generateCaption {
     // A short, descriptive title for this image
     title: string;
@@ -319,11 +320,86 @@ export interface generateCaption {
     dateTaken: string
 }`;
 
+const imageDetailExtractionSchema = `
+export type Quantity = {
+    amount: number;
+    units: string;
+};
+
+export type Value = string | number | boolean | Quantity;
+
+export type Facet = {
+    name: string;
+    // Very concise values.
+    value: Value;
+};
+
+// Specific, tangible people, places, institutions or things only
+export type ConcreteEntity = {
+    // the name of the entity or thing such as "Bach", "Great Gatsby", "frog" or "piano"
+    name: string;
+    // the types of the entity such as "speaker", "person", "artist", "animal", "object", "instrument", "school", "room", "museum", "food" etc.
+    // An entity can have multiple types; entity types should be single words
+    type: string[];
+    // A specific, inherent, defining, or non-immediate facet of the entity such as "blue", "old", "famous", "sister", "aunt_of", "weight: 4 kg"
+    // trivial actions or state changes are not facets
+    // facets are concise "properties"
+    facets?: Facet[];
+};
+
+export type ActionParam = {
+    name: string;
+    value: Value;
+};
+
+export type VerbTense = "past" | "present" | "future";
+
+export type Action = {
+    // Each verb is typically a word
+    verbs: string[];
+    verbTense: VerbTense;
+    subjectEntityName: string | "none";
+    objectEntityName: string | "none";
+    indirectObjectEntityName: string | "none";
+    params?: (string | ActionParam)[];
+    // If the action implies this additional facet or property of the subjectEntity, such as hobbies, activities, interests, personality
+    subjectEntityFacet?: Facet | undefined;
+};
+
+// Detailed and comprehensive knowledge response
+export type KnowledgeResponse = {
+    entities: ConcreteEntity[];
+    // The 'subjectEntityName' and 'objectEntityName' must correspond to the 'name' of an entity listed in the 'entities' array.
+    actions: Action[];
+    // Some actions can ALSO be expressed in a reverse way... e.g. (A give to B) --> (B receive from A) and vice versa
+    // If so, also return the reverse form of the action, full filled out
+    inverseActions: Action[];
+    // Detailed, descriptive topics and keyword.
+    topics: string[];
+};
+
+// An interface that describes an image in detail
+export interface imageDetailExtractionSchema {
+    // A short, descriptive title for this image
+    title: string;
+    // Alternative text for this image
+    altText: string;
+    // A very detailed and factual image caption of no less than 200 words.  
+    // Ignore image orientation.
+    // Include descriptive adjectives like color, motion, etc.
+    caption: string;
+    // Knowledge extracted from the image including all visible (or implied) entities, actions, and topics
+    knowledge: KnowledgeResponse;
+};
+`;
+
 // An interface that describes an image in detail
 export interface generateCaption {
     // A short, descriptive title for this image
     title: string;
-    // A detailed image description
+    // Alternative text for this image
+    altText: string;
+    // A detailed image description of no less than 175 words.
     caption: string;
     // The image file name
     fileName: string;
@@ -334,6 +410,20 @@ export interface generateCaption {
     // The date the image was taken
     dateTaken: string;
 }
+
+// An interface that describes an image in detail
+export interface imageDetailExtractionSchema {
+    // A short, descriptive title for this image
+    title: string;
+    // Alternative text for this image
+    altText: string;
+    // A very detailed and factual image caption of no less than 200 words.  
+    // Ignore image orientation.
+    // Include descriptive adjectives like color, motion, etc.
+    caption: string;
+    // Knowledge extracted from the image including all visible (or implied) entities, actions, and topics
+    knowledge: KnowledgeResponse;
+};
 
 /**
  * 
@@ -403,6 +493,7 @@ export async function loadImage(
         if (chatResponse.success) {
             const retVal = {
                 title: chatResponse.data.title,
+                altText: chatResponse.data.altText,
                 caption: chatResponse.data.caption,
                 width: chatResponse.data.width,
                 height: chatResponse.data.height,
@@ -411,6 +502,126 @@ export async function loadImage(
                 exifData: properties,
                 nearbyPOI: content.nearbyPOI,
                 reverseGeocode: content.reverseGeocode
+            };
+
+            // cache this information for possible reuse later
+            fs.writeFileSync(cachedFileName, JSON.stringify(retVal));
+
+            // return the image description
+            return retVal;
+
+        } else {
+            const err = `Unable to load ${fileName}. '${chatResponse.message}'`;
+            console.error("\t" + err);
+            //throw new Error(err);
+            return undefined;
+        }
+    } catch {
+        return undefined;
+    }
+}
+
+/**
+ * Loads the image and then uses the LLM and other APIs to get POI, KnowledgeResponse, address, etc.
+ * 
+ * @param fileName The image file to load
+ * @param model The language model being used to describe the image.
+ * @param loadCachedDetails A flag indicating if cached image descriptions should be loaded if available.
+ * @returns The described image.
+ */
+export async function loadImageWithKnowledge(
+    fileName: string,
+    model: ChatModel,
+    loadCachedDetails: boolean = true
+): Promise<Image | undefined> {
+
+    const cachedFileName: string = fileName + ".kr.json";
+    if (loadCachedDetails && fs.existsSync(cachedFileName)) {
+        return JSON.parse(fs.readFileSync(cachedFileName, "utf8"));
+    }
+
+    const buffer: Buffer = fs.readFileSync(fileName);
+
+    // load EXIF properties
+    const tags: ExifReader.Tags = ExifReader.load(buffer);
+    const properties: string[][] = [];
+    for (const tag of Object.keys(tags)) {
+        if (tags[tag]) {
+            properties.push([tag, tags[tag].description]);
+        }
+    }
+    const mimeType = getMimeType(path.extname(fileName));
+    const loadedImage: CachedImageWithDetails = new CachedImageWithDetails(
+        tags,
+        fileName,
+        `data:image/${mimeType};base64,${buffer.toString("base64")}`,
+    );
+
+
+    // const typeName = "KnowledgeResponse";
+    // const validator = createTypeScriptJsonValidator<imageDetailExtractionSchema>(
+    //     imageDetailExtractionSchema,
+    //     typeName,
+    // );
+    // const translator = createJsonTranslator<imageDetailExtractionSchema>(
+    //     model,
+    //     validator,
+    // );
+    // translator.createRequestPrompt = createRequestPrompt;
+    function createRequestPrompt() {
+        return (
+            `You are a service that translates images into JSON objects of type "imageDetailExtractionSchema" according to the following TypeScript definitions:\n` +
+            `\`\`\`\n${imageDetailExtractionSchema}\`\`\`\n`// +
+            // `The following are messages in a conversation:\n` +
+            // `"""\n${request}\n"""\n` +
+            // `The following is the user request translated into a JSON object with 2 spaces of indentation and no properties with the value undefined:\n`
+        );
+    }
+
+
+    // create a caption for the image
+    const caption = createTypeChat<imageDetailExtractionSchema>(
+        model,
+        imageCaptionGeneratingSchema,
+        "imageDetailExtractionSchema",
+        createRequestPrompt(),//`You are photography expert.`,
+        [],
+        4096,
+        30,
+    );
+
+    try {
+        const prompt: PromptSection[] = [];
+        const content: ImagePromptDetails = await addImagePromptContent(
+            "user",
+            loadedImage,
+            true,
+            false,
+            false,
+            true,
+            true,
+        );
+        prompt.push(promptLib.dateTimePromptSection()); // Always include the current date and time. Makes the bot much smarter
+        prompt.push(content.promptSection!);
+
+        const chatResponse = await caption.translate(
+            "Caption supplied images in no less than 175 words without making any assumptions, remain factual.",
+            prompt,
+        );
+
+        if (chatResponse.success) {
+            const retVal = {
+                title: chatResponse.data.title,
+                altText: chatResponse.data.altText,
+                caption: chatResponse.data.caption,
+                exifData: properties,
+                nearbyPOI: content.nearbyPOI,
+                reverseGeocode: content.reverseGeocode,
+                knowledge: content.knowledge,
+                width: -1,
+                height: -1,
+                fileName: "",
+                dateTaken: ""
             };
 
             // cache this information for possible reuse later

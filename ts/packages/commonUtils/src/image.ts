@@ -32,7 +32,8 @@ export class CachedImageWithDetails {
 export type ImagePromptDetails = {
     promptSection?: PromptSection | undefined,
     nearbyPOI?: PointOfInterest[] | undefined,
-    reverseGeocode?: ReverseGeocodeAddressLookup[] | undefined
+    reverseGeocode?: ReverseGeocodeAddressLookup[] | undefined,
+    knowledge?: any | undefined
 }
 
 export function getImageElement(imgData: string): string {
