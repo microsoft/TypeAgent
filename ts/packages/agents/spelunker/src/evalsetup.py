@@ -6,7 +6,7 @@
 Usage: evalsetup.py SOURCE EVALDIR
 
 By default SOURCE is ~/.typeagent/agents/spelunker/codeSearchDatabase.db,
-and EVALDIR ./test-data/evals/eval-1.
+and EVALDIR evals/eval-1.
 
 EVALDIR is always a new directory; if the given directory already exists,
 we create a new directory name by adding -2, -3, etc.
@@ -51,7 +51,7 @@ def main():
         nargs="?",
         type=str,
         help="The evaluation directory.",
-        default="./test-data/evals/eval-1",
+        default="evals/eval-1",
     )
     args = parser.parse_args()
     source: str = os.path.expanduser(args.source)

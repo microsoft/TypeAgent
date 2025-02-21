@@ -14,24 +14,28 @@ EXT_TO_LANG = {
     ".ts": "typescript",
 }
 
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--db",
+        "--folder",
         type=str,
         required=True,
-        help="Path to the SQLite database file.",
+        help="Path to the eval folder (e.g. 'evals/eval-1').",
     )
     parser.add_argument(
         "--question",
         type=str,
         required=True,
-        help="The question to score chunks against.",
+        help="The question to score chunks against (e.g. 'Describe the toplevel classes and interfaces').",
     )
     args = parser.parse_args()
 
-    conn = sqlite3.connect(args.db)
+    conn = sqlite3.connect(os.path.join(args.folder, "eval.db"))
     cursor = conn.cursor()
+
+    breakpoint()
+    filename_prefix = os.path.realpath(args.folder)
 
     question_row = cursor.execute(
         "SELECT questionId FROM questions WHERE question = ?",
@@ -74,16 +78,21 @@ def main():
             (question_id, chunk_hash),
         ).fetchone()
         if score_row is not None and score_row[0] is not None:
-            print(f"Skipping chunk {chunk_id} ({code_name}) because it has already been scored")
+            print(
+                f"Skipping chunk {chunk_id} ({code_name}) because it has already been scored"
+            )
             continue
 
-        if filename.startswith(os.getenv("HOME") + os.sep):
-            filename = "~" + filename[len(os.getenv("HOME")) :]
+        breakpoint()
+        if filename_prefix and filename.startswith(filename_prefix):
+            filename = filename[len(filename_prefix) :]
 
         language = EXT_TO_LANG.get(os.path.splitext(filename)[1])
         if not language:
-            print(f"Skipping chunk {chunk_id} ({code_name} in {os.path.basename(filename)})" +
-                  "because it has no supported language")
+            print(
+                f"Skipping chunk {chunk_id} ({code_name} in {os.path.basename(filename)})"
+                + "because it has no supported language"
+            )
             continue
 
         path = [code_name]
@@ -106,6 +115,20 @@ def main():
         conn.commit()
 
     conn.close()
+
+
+def get_common_filename_prefix(cursor: sqlite3.Cursor):
+    prefix = ""
+    filename_rows = cursor.execute("SELECT fileName FROM Chunks").fetchall()
+    if not filename_rows:
+        return prefix
+    filenames = [filename for (filename,) in filename_rows]
+    if filenames:
+        prefix = os.path.commonprefix(filenames)
+        i = prefix.rfind(os.sep)
+        if i >= 0:
+            prefix = prefix[: i + len(os.sep)]
+    return prefix
 
 
 def get_chunk_text(cursor: sqlite3.Cursor, chunkid):
