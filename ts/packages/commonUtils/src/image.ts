@@ -150,16 +150,16 @@ export async function addImagePromptContent(
     }
 
     // include POI
+    retValue.nearbyPOI = await findNearbyPointsOfInterest(
+        exifGPSTagToLatLong(
+            image.exifTags.GPSLatitude,
+            image.exifTags.GPSLatitudeRef,
+            image.exifTags.GPSLongitude,
+            image.exifTags.GPSLongitudeRef,
+        ),
+        openai.apiSettingsFromEnv(),
+    )
     if (includePOI !== false) {
-        retValue.nearbyPOI = await findNearbyPointsOfInterest(
-            exifGPSTagToLatLong(
-                image.exifTags.GPSLatitude,
-                image.exifTags.GPSLatitudeRef,
-                image.exifTags.GPSLongitude,
-                image.exifTags.GPSLongitudeRef,
-            ),
-            openai.apiSettingsFromEnv(),
-        )
         content.push({
             type: "text",
             text: `Nearby Points of Interest: \n${JSON.stringify(retValue.nearbyPOI)}`,
@@ -167,17 +167,16 @@ export async function addImagePromptContent(
     }
 
     // include address
-    if (includeGeocodedAddress !== false) {
-        retValue.reverseGeocode = await reverseGeocode(
-            exifGPSTagToLatLong(
-                image.exifTags.GPSLatitude,
-                image.exifTags.GPSLatitudeRef,
-                image.exifTags.GPSLongitude,
-                image.exifTags.GPSLongitudeRef,
-            ),
-            openai.apiSettingsFromEnv(),
+    retValue.reverseGeocode = await reverseGeocode(
+        exifGPSTagToLatLong(
+            image.exifTags.GPSLatitude,
+            image.exifTags.GPSLatitudeRef,
+            image.exifTags.GPSLongitude,
+            image.exifTags.GPSLongitudeRef,
         ),
-
+        openai.apiSettingsFromEnv(),
+    );
+    if (includeGeocodedAddress !== false) {
         content.push({
             type: "text",
             text: `Reverse Geocode Results: \n${JSON.stringify(retValue.reverseGeocode)}`,

@@ -19,7 +19,7 @@ import { Image } from "./imageSchema.js";
 import { ConcreteEntity, KnowledgeResponse } from "../conversation/knowledgeSchema.js";
 import fs from "node:fs";
 import ExifReader from "exifreader";
-import { PromptSection } from "typechat";
+import { createJsonTranslator, PromptSection } from "typechat";
 import {
     addImagePromptContent,
     CachedImageWithDetails,
@@ -31,6 +31,7 @@ import {
 } from "common-utils";
 import { KnowledgeExtractor } from "../conversation/knowledge.js";
 import { AddressOutput } from "@azure-rest/maps-search";
+import { createTypeScriptJsonValidator } from "typechat/ts";
 
 /**
  * Creates an image memory
@@ -495,10 +496,10 @@ export async function loadImage(
                 title: chatResponse.data.title,
                 altText: chatResponse.data.altText,
                 caption: chatResponse.data.caption,
-                width: chatResponse.data.width,
-                height: chatResponse.data.height,
-                fileName: chatResponse.data.fileName,
-                dateTaken: chatResponse.data.dateTaken,
+                width: -1,
+                height: -1,
+                fileName: fileName,
+                dateTaken: "",
                 exifData: properties,
                 nearbyPOI: content.nearbyPOI,
                 reverseGeocode: content.reverseGeocode
@@ -558,56 +559,57 @@ export async function loadImageWithKnowledge(
     );
 
 
-    // const typeName = "KnowledgeResponse";
-    // const validator = createTypeScriptJsonValidator<imageDetailExtractionSchema>(
-    //     imageDetailExtractionSchema,
-    //     typeName,
-    // );
-    // const translator = createJsonTranslator<imageDetailExtractionSchema>(
-    //     model,
-    //     validator,
-    // );
-    // translator.createRequestPrompt = createRequestPrompt;
-    function createRequestPrompt() {
+    const validator = createTypeScriptJsonValidator<imageDetailExtractionSchema>(
+        imageDetailExtractionSchema,
+        "imageDetailExtractionSchema",
+    );
+    const translator = createJsonTranslator<imageDetailExtractionSchema>(
+        model,
+        validator,
+    );
+
+    translator.createRequestPrompt = createRequestPrompt;
+    function createRequestPrompt(request: string) {
         return (
-            `You are a service that translates images into JSON objects of type "imageDetailExtractionSchema" according to the following TypeScript definitions:\n` +
-            `\`\`\`\n${imageDetailExtractionSchema}\`\`\`\n`// +
-            // `The following are messages in a conversation:\n` +
-            // `"""\n${request}\n"""\n` +
-            // `The following is the user request translated into a JSON object with 2 spaces of indentation and no properties with the value undefined:\n`
+            `You are a service that translates images into JSON objects of type "imageDetailExtractionSchema" according to the following TypeScript definitions::\n` +
+            `\`\`\`\n${imageDetailExtractionSchema}\`\`\`\n`
+//            `The following are messages in a conversation:\n` +
+//            `"""\n${request}\n"""\n` +
+//            `The following is the user request translated into a JSON object with 2 spaces of indentation and no properties with the value undefined:\n`
         );
     }
 
 
     // create a caption for the image
-    const caption = createTypeChat<imageDetailExtractionSchema>(
-        model,
-        imageCaptionGeneratingSchema,
-        "imageDetailExtractionSchema",
-        createRequestPrompt(),//`You are photography expert.`,
-        [],
-        4096,
-        30,
-    );
+    // const caption = createTypeChat<imageDetailExtractionSchema>(
+    //     model,
+    //     imageCaptionGeneratingSchema,
+    //     "imageDetailExtractionSchema",
+    //     createRequestPrompt(),//`You are photography expert.`,
+    //     [],
+    //     4096,
+    //     30,
+    // );
 
     try {
-        const prompt: PromptSection[] = [];
         const content: ImagePromptDetails = await addImagePromptContent(
             "user",
             loadedImage,
-            true,
             false,
             false,
-            true,
-            true,
+            false,
+            false,
+            false,
         );
-        prompt.push(promptLib.dateTimePromptSection()); // Always include the current date and time. Makes the bot much smarter
-        prompt.push(content.promptSection!);
+        //prompt.push(promptLib.dateTimePromptSection()); // Always include the current date and time. Makes the bot much smarter
+        //prompt.push(content.promptSection!);
 
-        const chatResponse = await caption.translate(
-            "Caption supplied images in no less than 175 words without making any assumptions, remain factual.",
-            prompt,
-        );
+        // const chatResponse = await caption.translate(
+        //     "Caption supplied images in no less than 175 words without making any assumptions, remain factual.",
+        //     prompt,
+        // );
+
+        const chatResponse = await translator.translate("", [content.promptSection!]);
 
         if (chatResponse.success) {
             const retVal = {
@@ -620,7 +622,7 @@ export async function loadImageWithKnowledge(
                 knowledge: content.knowledge,
                 width: -1,
                 height: -1,
-                fileName: "",
+                fileName: fileName,
                 dateTaken: ""
             };
 
