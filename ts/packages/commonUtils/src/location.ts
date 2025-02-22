@@ -145,10 +145,10 @@ export async function findNearbyPointsOfInterest(
                         categories: result.poi?.categories,
                         freeFormAddress: result.address.freeformAddress,
                         position: {
-                            latitude: result.position[0],
-                            longitude: result.position[1],
+                            latitude: result.position.lat,
+                            longitude: result.position.lon,
                         },
-                        distance: result.poi?.dist,
+                        distance: result.dist,
                     });
                 } else {
                     // TODO: handle more result types

@@ -619,11 +619,11 @@ export async function loadImageWithKnowledge(
                 exifData: properties,
                 nearbyPOI: content.nearbyPOI,
                 reverseGeocode: content.reverseGeocode,
-                knowledge: content.knowledge,
+                knowledge: chatResponse.data.knowledge,
                 width: -1,
                 height: -1,
                 fileName: fileName,
-                dateTaken: ""
+                dateTaken: "",
             };
 
             // cache this information for possible reuse later

@@ -40,6 +40,7 @@ import { AddressOutput } from "@azure-rest/maps-search";
 import { ConcreteEntity } from "../../knowledgeProcessor/dist/conversation/knowledgeSchema.js";
 import { IPropertyToSemanticRefIndex } from "./secondaryIndexes.js";
 import { IConversationSecondaryIndexes } from "./secondaryIndexes.js";
+import { Topic } from "../../knowledgeProcessor/dist/conversation/topicSchema.js";
 
 // metadata for podcast messages
 export class PodcastMessageMeta implements IKnowledgeSource {
@@ -468,8 +469,15 @@ export class ImageMeta implements IKnowledgeSource {
         }
 
         // create the return values
-        const entities: conversation.ConcreteEntity[] = [];
-        const actions: conversation.Action[] = [];
+        let entities: conversation.ConcreteEntity[] = [];
+        let actions: conversation.Action[] = [];
+        let inverseActions: conversation.Action[] = [];
+        let topics: Topic[] = [];
+        const timestampParam = [];
+
+        if (this.img.dateTaken) {
+            timestampParam.push({ name: "Timestamp", value: this.img.dateTaken });
+        }
         
         // add the image entity
         entities.push(imageEntity);
@@ -491,6 +499,10 @@ export class ImageMeta implements IKnowledgeSource {
                     poiEntity.facets?.push({ name: "position", value: JSON.stringify(this.img.nearbyPOI[i].position)});
                     poiEntity.facets?.push({ name: "longitude", value: this.img.nearbyPOI[i].position!.longitude!.toString()});
                     poiEntity.facets?.push({ name: "latitude", value: this.img.nearbyPOI[i].position!.latitude!.toString()});
+                }
+
+                if (this.img.nearbyPOI[i].categories !== undefined && this.img.nearbyPOI[i].categories!.length > 0) {
+                    poiEntity.facets?.push({ name: "category", value: this.img.nearbyPOI[i].categories!.join(",")});                
                 }
 
                 entities.push(poiEntity);
@@ -516,6 +528,11 @@ export class ImageMeta implements IKnowledgeSource {
                         name: this.img.reverseGeocode[i].address!.formattedAddress ?? "",
                         type: [ "address" ],
                         facets: []
+                    }
+
+                    // Add the address of the image as a facet to it's entity
+                    if (i == 0 && addrOutput.formattedAddress) {
+                        imageEntity.facets?.push({ name: "address", value: addrOutput.formattedAddress });
                     }
 
                     // make the address an entity
@@ -568,16 +585,63 @@ export class ImageMeta implements IKnowledgeSource {
                     if (addrOutput.intersection) {
                         addrEntity.facets?.push({ name: "intersection", value: JSON.stringify(addrOutput.intersection)});
                         entities.push({ name: addrOutput.intersection.displayName ?? "", type: [ "intersection", "place" ] });
-                    }                                                                                
+                    }   
+                    
+                    actions.push({
+                        verbs: [ "captured at" ],
+                        verbTense: "present",
+                        subjectEntityName: imageEntity.name,
+                        objectEntityName: addrEntity.name,
+                        params: timestampParam,
+                        indirectObjectEntityName: "none"
+                    });                    
                 }
             }
-        }        
+        }  
+        
+        // add knowledge respone items from ImageMeta to knowledge
+        if (this.img.knowledge?.entities) {
+            entities = entities.concat(this.img.knowledge?.entities);
+
+            // each extracted entity "is in" the image
+            // and all such entities are "contained by" the image
+            for(let i = 0; i < this.img.knowledge?.entities.length; i++) {
+                actions.push({
+                    verbs: [ "within" ],
+                    verbTense: "present",
+                    subjectEntityName: this.img.knowledge?.entities[i].name,
+                    objectEntityName: imageEntity.name,
+                    indirectObjectEntityName: "none",
+                    params: timestampParam,
+                    subjectEntityFacet: undefined
+                }); 
+
+                actions.push({
+                    verbs: [ "contains" ],
+                    verbTense: "present",
+                    subjectEntityName: imageEntity.name,
+                    objectEntityName: this.img.knowledge.entities[i].name,
+                    indirectObjectEntityName: "none",
+                    params: timestampParam,
+                    subjectEntityFacet: undefined
+                });                 
+            }          
+        }
+        if (this.img.knowledge?.actions) {
+            actions = actions.concat(this.img.knowledge?.actions);
+        }
+        if (this.img.knowledge?.inverseActions) {
+            inverseActions = actions.concat(this.img.knowledge?.inverseActions);
+        }
+        if (this.img.knowledge?.topics) {
+            topics = topics.concat(this.img.knowledge.topics);
+        }
 
         return {
             entities,
             actions,
-            inverseActions: [],
-            topics: [],
+            inverseActions: inverseActions,
+            topics: topics,
         };
     }
 }
@@ -614,6 +678,8 @@ export class ImageCollection implements IConversation<ImageMeta> {
                         this.semanticRefs,
                         this.semanticRefIndex,
                         i,
+                        0,
+                        true
                     );
                 }
                 for (const action of knowlegeResponse.actions) {
@@ -626,7 +692,7 @@ export class ImageCollection implements IConversation<ImageMeta> {
                 }
                 for (const topic of knowlegeResponse.topics) {
                     addTopicToIndex(
-                        topic,
+                        { text: topic },
                         this.semanticRefs,
                         this.semanticRefIndex,
                         i,
@@ -642,9 +708,19 @@ export class ImageCollection implements IConversation<ImageMeta> {
             knowledgeResult: Result<conversation.KnowledgeResponse>,
         ) => boolean,
     ): Promise<ConversationIndexingResult> {
-        const result = await buildConversationIndex(this, progressCallback);
+        //const result = await buildConversationIndex(this, progressCallback);
+        this.semanticRefIndex = new ConversationIndex();
+        if (this.semanticRefs === undefined) {
+            this.semanticRefs = [];
+        }
+    
         this.addMetadataToIndex();
-        return result;
+
+        let indexingResult: ConversationIndexingResult = {
+            index: this.semanticRefIndex,
+            failedMessages: [],
+        };
+        return indexingResult;
     }        
 
     public async buildRelatedTermsIndex(
@@ -858,7 +934,7 @@ async function indexImage(fileName: string, chatModel: ChatModel): Promise<Image
     const img: image.Image | undefined = await image.loadImageWithKnowledge(fileName, chatModel);
 
     if (img !== undefined) {
-        return new Image([img!.title, img!.caption], new ImageMeta(fileName, img!));
+        return new Image([img.fileName], new ImageMeta(fileName, img!));
     }
 
     return undefined;
