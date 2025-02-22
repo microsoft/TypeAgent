@@ -8,7 +8,8 @@ Usage: evalsetup.py SOURCE EVALDIR
 By default SOURCE is ~/.typeagent/agents/spelunker/codeSearchDatabase.db,
 and EVALDIR evals/eval-1.
 
-EVALDIR is always a new directory; if the given directory already exists,
+EVALDIR is always a new directory, unless --overwrite is given.
+If the given directory already exists,
 we create a new directory name by adding -2, -3, etc.
 
 This script does the following:
@@ -82,11 +83,6 @@ def main():
     dbname = os.path.join(evaldir, "eval.db")
     print(f"Database: {dbname}")
 
-    if args.overwrite:
-        # TODO: Unsafe, but okay for now
-        assert "'" not in dbname, dbname  # TODO: Still not safe?
-        os.system(f"rm '{dbname}'*")
-
     src_conn = sqlite3.connect(f"file:{source}?mode=ro", uri=True)
     src_cur = src_conn.cursor()
     dst_conn = sqlite3.connect(dbname)
@@ -147,9 +143,11 @@ def add_new_tables(dst_cur):
         if not sql or sql.startswith("--"):
             continue
         table_name = sql.split()[5]
-        print(f"Creating table {table_name} and clearing it")
+        print(f"Creating table {table_name}")
         dst_cur.execute(sql)
-        dst_cur.execute(f"DELETE FROM {table_name}")
+        if table_name == "Hashes":
+            print(f"Clearing contents of table {table_name}")
+            dst_cur.execute(f"DELETE FROM {table_name}")
 
 
 def fill_in_hashes(dst_cur, prefix):
