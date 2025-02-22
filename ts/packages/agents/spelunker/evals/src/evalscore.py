@@ -7,6 +7,7 @@ import argparse
 import datetime
 import os
 import sqlite3
+import sys
 
 
 EXT_TO_LANG = {
@@ -30,7 +31,11 @@ def main():
         "--question",
         type=str,
         required=True,
-        help="The question to score chunks against (e.g. 'Describe the toplevel classes and interfaces').",
+        help=(
+            "The question to score chunks against\n"
+            + "(e.g. 'Describe the toplevel classes and interfaces').\n"
+            + "May also be an integer question ID."
+        ),
     )
     args = parser.parse_args()
 
@@ -39,26 +44,14 @@ def main():
 
     filename_prefix = os.path.join(os.path.realpath(args.folder), "source", "")
 
-    question_row = cursor.execute(
-        "SELECT questionId FROM questions WHERE question = ?",
-        [args.question],
-    ).fetchone()
-    if question_row:
-        question_id = question_row[0]
-        print(f"Existing question ID: {question_id}")
-    else:
-        # Write the question to the database (unique key auto-generated)
-        cursor.execute(
-            "INSERT INTO questions (question) VALUES (?)",
-            [args.question],
-        )
+    question = args.question
+    try:
+        question_id = int(question)
+    except ValueError:
+        question_id = get_question_id_by_text(cursor, question)
         conn.commit()
-        [question_id] = cursor.execute(
-            "SELECT questionId FROM questions WHERE question = ?",
-            [args.question],
-        ).fetchone()
-        assert question_id, question_id
-        print(f"New question ID: {question_id}")
+    else:
+        question = get_question_by_id(cursor, question_id)
 
     # Score each chunk
     selection = cursor.execute(
@@ -106,7 +99,7 @@ def main():
         path.reverse()  # E.g. "module class method"
         chunk_text = f"{filename}\n{' '.join(path)}\n"
         chunk_text += get_chunk_text(cursor, chunk_id)
-        score = score_chunk(args.question, chunk_text, language)
+        score = score_chunk(question, chunk_text, language)
 
         timestamp = datetime.datetime.now().isoformat()
         cursor.execute(
@@ -116,6 +109,50 @@ def main():
         conn.commit()
 
     conn.close()
+
+
+def get_question_by_id(cursor: sqlite3.Cursor, question_id):
+    row = cursor.execute(
+        "SELECT question FROM Questions WHERE questionId = ?",
+        [question_id],
+    ).fetchone()
+    if not row:
+        print(f"Question ID {question_id} not found")
+        return sys.exit(1)
+
+    question = row[0]
+    print(f"Existing question: {question}")
+    return question
+
+
+def get_question_id_by_text(cursor: sqlite3.Cursor, question):
+    row = cursor.execute(
+        "SELECT questionId FROM Questions WHERE question = ?",
+        [question],
+    ).fetchone()
+    if row:
+        question_id = row[0]
+        print(f"Existing question ID: {question_id}")
+        return question_id
+
+    # Write the question to the database (ID is auto-generated)
+    cursor.execute(
+        "INSERT INTO Questions (question) VALUES (?)",
+        [question],
+    )
+
+    # Retrieve the question ID from the newly inserted row
+    row = cursor.execute(
+        "SELECT questionId FROM Questions WHERE question = ?",
+        [question],
+    ).fetchone()
+    if not row:
+        print(f"Huh? Newly inserted question not found")
+        return sys.exit(1)
+
+    question_id = row[0]
+    print(f"New question ID: {question_id}")
+    return question_id
 
 
 def get_chunk_text(cursor: sqlite3.Cursor, chunkid):

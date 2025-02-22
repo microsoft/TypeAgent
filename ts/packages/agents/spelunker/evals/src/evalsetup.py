@@ -65,7 +65,7 @@ def main():
 
     if not os.path.exists(source):
         print(f"Source database {source} does not exist.", file=sys.stderr)
-        os._exit(2)
+        return sys.exit(2)
 
     if not args.overwrite:
         while os.path.exists(evaldir):
