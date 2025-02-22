@@ -163,7 +163,9 @@ def fill_in_hashes(dst_cur, prefix):
         if filename.startswith(prefix):
             filename = filename[len(prefix) :]  # E.g. 'dispatcher/src/index.ts'
         else:
-            print(f"Skipping chunk {chunkid} ({filename}) because it is not in {prefix}")
+            print(
+                f"Skipping chunk {chunkid} ({filename}) because it is not in {prefix}"
+            )
             continue
         input_lines = [filename]  # Start with the cleaned-up filename
 
