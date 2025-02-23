@@ -152,10 +152,12 @@ class InteractiveApp {
         this._settings = this.initSettings(settings);
 
         this.lineReader = this._stdio.readline;
-        this.lineReader.setPrompt(this._settings.prompt!);     
+        this.lineReader.setPrompt(this._settings.prompt!);
 
         if (fs.existsSync("command_history.json")) {
-            const history = JSON.parse(fs.readFileSync("command_history.json", {encoding: "utf-8"}));
+            const history = JSON.parse(
+                fs.readFileSync("command_history.json", { encoding: "utf-8" }),
+            );
             this.commandBackStack = history.commands;
 
             (this.lineReader as any).history = history.commands;
@@ -179,23 +181,21 @@ class InteractiveApp {
             await this.processInput(commandLine);
             exit();
         }
-        this.lineReader.prompt();   
+        this.lineReader.prompt();
 
         const lines: string[] = [];
 
         process.stdin.setRawMode(true);
         process.stdin.on("keypress", (_, key) => {
-
             if (key.name === "escape") {
                 // clear the input line
-                this.lineReader.write(null, { ctrl: true, name: 'u' })
+                this.lineReader.write(null, { ctrl: true, name: "u" });
             }
         });
         process.stdin.resume();
         readline.emitKeypressEvents(process.stdin);
 
-
-        this.lineReader 
+        this.lineReader
             .on("line", async (line) => {
                 if (this._settings.multiline) {
                     if (!this.isEOLMulti(line)) {
@@ -214,8 +214,11 @@ class InteractiveApp {
             })
             .on("close", () => {
                 this.lineReader.close();
-                fs.writeFileSync("command_history.json", JSON.stringify({ commands: this.commandBackStack }));
-            })
+                fs.writeFileSync(
+                    "command_history.json",
+                    JSON.stringify({ commands: this.commandBackStack }),
+                );
+            });
     }
 
     public async processInput(line: string): Promise<boolean> {
