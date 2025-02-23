@@ -143,10 +143,22 @@ export async function runConsole(
 class InteractiveApp {
     private _settings: InteractiveAppSettings;
     private _stdio: InteractiveIo;
+    private commandBackStack: string[] = [];
+    private lineReader;
 
     constructor(stdio: InteractiveIo, settings: InteractiveAppSettings) {
         this._stdio = stdio;
         this._settings = this.initSettings(settings);
+
+        this.lineReader = this._stdio.readline;
+        this.lineReader.setPrompt(this._settings.prompt!);     
+
+        if (fs.existsSync("command_history.json")) {
+            const history = JSON.parse(fs.readFileSync("command_history.json", {encoding: "utf-8"}));
+            this.commandBackStack = history.commands;
+
+            (this.lineReader as any).history = history.commands;
+        }
     }
 
     public get stdio(): InteractiveIo {
@@ -167,13 +179,65 @@ class InteractiveApp {
             exit();
             return;
         }
-
-        const lineReader = this._stdio.readline;
-        lineReader.setPrompt(this._settings.prompt!);
-        lineReader.prompt();
+        this.lineReader.prompt();   
 
         const lines: string[] = [];
-        lineReader
+
+        // process.stdin.setRawMode(true);
+        // process.stdin.on("keypress", (_, key) => {
+
+        //     // ignore key strokes while processing commands
+        //     if (this.processing) {
+        //         return;
+        //     }
+
+        //     if (key.name === "escape") {
+        //         // process.stdout.clearLine(0);
+        //         // process.stdout.moveCursor(-lineReader.getCursorPos().cols, 0);
+        //         // process.stdout.write(this._settings.prompt!);
+
+
+        //         // lineReader.prompt(false);
+
+        //         // readline.clearLine(process.stdout, 0);
+                              
+        //         // let position = lineReader.getCursorPos().cols;
+        //         // while (position-- > 0) {
+        //         //     process.stdout.write("\b ");
+        //         //     process.stdout.moveCursor(-1, 0);
+        //         // }
+
+        //         // readline.clearLine(process.stdin, 0);
+
+        //         // lineReader.prompt();
+
+        //     } else if (key.name === "up") {
+        //         if (this.commandBackStackIndex <= this.commandBackStack.length - 2) {
+        //             ++this.commandBackStackIndex;
+
+        //             process.stdout.clearLine(0);
+        //             lineReader.prompt();
+        //             process.stdout.write(this.commandBackStack[this.commandBackStackIndex]);
+        //         }
+        //     }  else if (key.name === "down") {
+        //         if (this.commandBackStackIndex >= 1) {
+        //             --this.commandBackStackIndex;
+
+        //             process.stdout.clearLine(0);
+        //             lineReader.prompt()
+        //             process.stdout.write(this.commandBackStack[this.commandBackStackIndex]);
+        //         }
+        //     } else if (key.name === "backspace" && this.commandBackStackIndex != -1) {
+        //         if (lineReader.getCursorPos().cols > this._settings.prompt!.length) {
+        //             process.stdout.write("\b ");
+        //             process.stdout.moveCursor(-1, 0);
+        //         }
+        //     }
+        // });
+        //process.stdin.resume();
+        //readline.emitKeypressEvents(process.stdin);
+
+        this.lineReader 
             .on("line", async (line) => {
                 if (this._settings.multiline) {
                     if (!this.isEOLMulti(line)) {
@@ -185,14 +249,15 @@ class InteractiveApp {
                     lines.splice(0);
                 }
                 if (await this.processInput(line)) {
-                    lineReader.prompt();
+                    this.lineReader.prompt();
                 } else {
-                    lineReader.close();
+                    this.lineReader.close();
                 }
             })
             .on("close", () => {
-                lineReader.close();
-            });
+                this.lineReader.close();
+                fs.writeFileSync("command_history.json", JSON.stringify({ commands: this.commandBackStack }));
+            })
     }
 
     public async processInput(line: string): Promise<boolean> {
@@ -200,6 +265,9 @@ class InteractiveApp {
         if (line.length == 0) {
             return true;
         }
+
+        // save this command on the back stack
+        this.commandBackStack.unshift(line);
 
         try {
             const cmdLine = this.getCommand(line);

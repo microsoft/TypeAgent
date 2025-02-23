@@ -9,3 +9,6 @@ coverage/
 /playwright-report/
 /blob-report/
 /playwright/.cache/
+
+#interactive apps
+command_history.json
