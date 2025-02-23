@@ -4,6 +4,7 @@
 import fs from "fs";
 import { InteractiveIo, getInteractiveIO } from "./InteractiveIo";
 import { exit } from "process";
+import readline from "readline";
 
 /**
  * Handler of command line inputs
@@ -144,7 +145,7 @@ class InteractiveApp {
     private _settings: InteractiveAppSettings;
     private _stdio: InteractiveIo;
     private commandBackStack: string[] = [];
-    private lineReader;
+    private lineReader: readline.promises.Interface;
 
     constructor(stdio: InteractiveIo, settings: InteractiveAppSettings) {
         this._stdio = stdio;
@@ -177,65 +178,22 @@ class InteractiveApp {
         if (hasCommandLine) {
             await this.processInput(commandLine);
             exit();
-            return;
         }
         this.lineReader.prompt();   
 
         const lines: string[] = [];
 
-        // process.stdin.setRawMode(true);
-        // process.stdin.on("keypress", (_, key) => {
+        process.stdin.setRawMode(true);
+        process.stdin.on("keypress", (_, key) => {
 
-        //     // ignore key strokes while processing commands
-        //     if (this.processing) {
-        //         return;
-        //     }
+            if (key.name === "escape") {
+                // clear the input line
+                this.lineReader.write(null, { ctrl: true, name: 'u' })
+            }
+        });
+        process.stdin.resume();
+        readline.emitKeypressEvents(process.stdin);
 
-        //     if (key.name === "escape") {
-        //         // process.stdout.clearLine(0);
-        //         // process.stdout.moveCursor(-lineReader.getCursorPos().cols, 0);
-        //         // process.stdout.write(this._settings.prompt!);
-
-
-        //         // lineReader.prompt(false);
-
-        //         // readline.clearLine(process.stdout, 0);
-                              
-        //         // let position = lineReader.getCursorPos().cols;
-        //         // while (position-- > 0) {
-        //         //     process.stdout.write("\b ");
-        //         //     process.stdout.moveCursor(-1, 0);
-        //         // }
-
-        //         // readline.clearLine(process.stdin, 0);
-
-        //         // lineReader.prompt();
-
-        //     } else if (key.name === "up") {
-        //         if (this.commandBackStackIndex <= this.commandBackStack.length - 2) {
-        //             ++this.commandBackStackIndex;
-
-        //             process.stdout.clearLine(0);
-        //             lineReader.prompt();
-        //             process.stdout.write(this.commandBackStack[this.commandBackStackIndex]);
-        //         }
-        //     }  else if (key.name === "down") {
-        //         if (this.commandBackStackIndex >= 1) {
-        //             --this.commandBackStackIndex;
-
-        //             process.stdout.clearLine(0);
-        //             lineReader.prompt()
-        //             process.stdout.write(this.commandBackStack[this.commandBackStackIndex]);
-        //         }
-        //     } else if (key.name === "backspace" && this.commandBackStackIndex != -1) {
-        //         if (lineReader.getCursorPos().cols > this._settings.prompt!.length) {
-        //             process.stdout.write("\b ");
-        //             process.stdout.moveCursor(-1, 0);
-        //         }
-        //     }
-        // });
-        //process.stdin.resume();
-        //readline.emitKeypressEvents(process.stdin);
 
         this.lineReader 
             .on("line", async (line) => {
