@@ -11,6 +11,7 @@ import {
     Term,
 } from "./dataFormat.js";
 import * as q from "./query.js";
+import { IQueryOpExpr } from "./query.js";
 import { resolveRelatedTerms } from "./relatedTermsIndex.js";
 import { IConversationSecondaryIndexes } from "./secondaryIndexes.js";
 import { conversation } from "knowledge-processor";
@@ -129,7 +130,7 @@ export async function searchConversation(
                 : undefined,
         ),
     );
-    return toGroupedSearchResults(queryResults);
+    return queryResults;
 }
 
 export function getDistinctEntityMatches(
@@ -160,7 +161,7 @@ class SearchQueryBuilder {
         filter?: WhenFilter,
         options?: SearchOptions,
     ) {
-        let query = this.compileQuery(terms, filter, options);
+        let query = await this.compileQuery(terms, filter, options);
 
         const exactMatch = options?.exactMatch ?? false;
         if (!exactMatch) {
@@ -170,14 +171,14 @@ class SearchQueryBuilder {
             await this.resolveRelatedTerms(this.allScopeSearchTerms, false);
         }
 
-        return query;
+        return new q.GroupSearchResultsExpr(query);
     }
 
     public async compileQuery(
         searchTermGroup: SearchTermGroup,
         filter?: WhenFilter,
         options?: SearchOptions,
-    ) {
+    ): Promise<IQueryOpExpr<Map<KnowledgeType, SemanticRefAccumulator>>> {
         let selectExpr = this.compileSelect(
             searchTermGroup,
             filter ? this.compileScope(searchTermGroup, filter) : undefined,
@@ -410,21 +411,6 @@ export function propertySearchTermFromKeyValue(
     }
     propertyValue = createSearchTerm(value);
     return { propertyName, propertyValue };
-}
-
-function toGroupedSearchResults(
-    evalResults: Map<KnowledgeType, SemanticRefAccumulator>,
-) {
-    const semanticRefMatches = new Map<KnowledgeType, SearchResult>();
-    for (const [type, accumulator] of evalResults) {
-        if (accumulator.size > 0) {
-            semanticRefMatches.set(type, {
-                termMatches: accumulator.searchTermMatches,
-                semanticRefMatches: accumulator.toScoredSemanticRefs(),
-            });
-        }
-    }
-    return semanticRefMatches;
 }
 
 function isPropertyTerm(

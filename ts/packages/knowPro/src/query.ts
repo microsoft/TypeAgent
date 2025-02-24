@@ -21,6 +21,7 @@ import {
     KnowledgePropertyName,
     PropertySearchTerm,
     Scored,
+    SearchResult,
 } from "./search.js";
 import { SearchTerm } from "./search.js";
 import {
@@ -907,6 +908,22 @@ export class SelectTopNKnowledgeGroupExpr extends QueryOpExpr<
     }
 }
 
+export class GroupSearchResultsExpr extends QueryOpExpr<
+    Map<KnowledgeType, SearchResult>
+> {
+    constructor(
+        public srcExpr: IQueryOpExpr<
+            Map<KnowledgeType, SemanticRefAccumulator>
+        >,
+    ) {
+        super();
+    }
+
+    public eval(context: QueryEvalContext): Map<KnowledgeType, SearchResult> {
+        return toGroupedSearchResults(this.srcExpr.eval(context));
+    }
+}
+
 export class WhereSemanticRefExpr extends QueryOpExpr<SemanticRefAccumulator> {
     constructor(
         public sourceExpr: IQueryOpExpr<SemanticRefAccumulator>,
@@ -1124,6 +1141,21 @@ export class ThreadSelector implements IQueryTextRangeSelector {
     public eval(context: QueryEvalContext): TextRangeCollection | undefined {
         return new TextRangeCollection(this.thread.ranges);
     }
+}
+
+export function toGroupedSearchResults(
+    evalResults: Map<KnowledgeType, SemanticRefAccumulator>,
+): Map<KnowledgeType, SearchResult> {
+    const semanticRefMatches = new Map<KnowledgeType, SearchResult>();
+    for (const [type, accumulator] of evalResults) {
+        if (accumulator.size > 0) {
+            semanticRefMatches.set(type, {
+                termMatches: accumulator.searchTermMatches,
+                semanticRefMatches: accumulator.toScoredSemanticRefs(),
+            });
+        }
+    }
+    return semanticRefMatches;
 }
 
 export function mergeEntityMatches(
