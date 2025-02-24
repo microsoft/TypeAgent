@@ -92,6 +92,17 @@ export type SearchResult = {
     semanticRefMatches: ScoredSemanticRef[];
 };
 
+export interface Scored<T = any> {
+    item: T;
+    score: number;
+}
+
+export type CompositeEntity = {
+    name: string;
+    type: string[];
+    facets?: string[] | undefined;
+};
+
 /**
  * Searches conversation for terms
  */
@@ -119,6 +130,14 @@ export async function searchConversation(
         ),
     );
     return toGroupedSearchResults(queryResults);
+}
+
+export function getDistinctEntityMatches(
+    semanticRefs: SemanticRef[],
+    searchResults: ScoredSemanticRef[],
+    topK?: number,
+) {
+    return q.mergeEntityMatches(semanticRefs, searchResults, topK);
 }
 
 class SearchQueryBuilder {

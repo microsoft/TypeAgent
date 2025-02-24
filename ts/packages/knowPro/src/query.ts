@@ -16,7 +16,12 @@ import {
     TextLocation,
     TextRange,
 } from "./dataFormat.js";
-import { KnowledgePropertyName, PropertySearchTerm } from "./search.js";
+import {
+    CompositeEntity,
+    KnowledgePropertyName,
+    PropertySearchTerm,
+    Scored,
+} from "./search.js";
 import { SearchTerm } from "./search.js";
 import {
     Match,
@@ -26,6 +31,7 @@ import {
     TermSet,
     TextRangeCollection,
     TextRangesInScope,
+    unionArrays,
 } from "./collections.js";
 import {
     lookupPropertyInPropertyIndex,
@@ -33,7 +39,7 @@ import {
 } from "./propertyIndex.js";
 import { IPropertyToSemanticRefIndex } from "./secondaryIndexes.js";
 import { conversation } from "knowledge-processor";
-import { collections } from "typeagent";
+import { collections, getTopK } from "typeagent";
 import { ITimestampToTextRangeIndex } from "./secondaryIndexes.js";
 import { Thread } from "./conversationThread.js";
 
@@ -1118,4 +1124,74 @@ export class ThreadSelector implements IQueryTextRangeSelector {
     public eval(context: QueryEvalContext): TextRangeCollection | undefined {
         return new TextRangeCollection(this.thread.ranges);
     }
+}
+
+export function mergeEntityMatches(
+    semanticRefs: SemanticRef[],
+    semanticRefMatches: ScoredSemanticRef[],
+    topK?: number,
+): Scored<CompositeEntity>[] {
+    let mergedEntities = new Map<string, Scored<CompositeEntity>>();
+    for (let semanticRefMatch of semanticRefMatches) {
+        const semanticRef = semanticRefs[semanticRefMatch.semanticRefIndex];
+        if (semanticRef.knowledgeType !== "entity") {
+            continue;
+        }
+        const compositeEntity = toCompositeEntity(
+            semanticRef.knowledge as conversation.ConcreteEntity,
+        );
+        const existing = mergedEntities.get(compositeEntity.name);
+        if (existing) {
+            if (combineCompositeEntities(existing.item, compositeEntity)) {
+                existing.score += semanticRefMatch.score;
+            }
+        } else {
+            mergedEntities.set(compositeEntity.name, {
+                item: compositeEntity,
+                score: semanticRefMatch.score,
+            });
+        }
+    }
+    if (topK !== undefined && topK > 0) {
+        return getTopK(mergedEntities.values(), topK);
+    }
+    return [...mergedEntities.values()];
+}
+
+function toCompositeEntity(
+    entity: conversation.ConcreteEntity,
+): CompositeEntity {
+    if (entity === undefined) {
+        return {
+            name: "undefined",
+            type: ["undefined"],
+        };
+    }
+    const composite: CompositeEntity = {
+        name: entity.name,
+        type: [...entity.type],
+    };
+    composite.name = composite.name.toLowerCase();
+    collections.lowerAndSort(composite.type);
+    if (entity.facets) {
+        composite.facets = entity.facets.map((f) => facetToString(f));
+        collections.lowerAndSort(composite.facets);
+    }
+    return composite;
+}
+
+function facetToString(facet: conversation.Facet): string {
+    return `${facet.name}="${conversation.knowledgeValueToString(facet.value)}"`;
+}
+
+function combineCompositeEntities(
+    x: CompositeEntity,
+    y: CompositeEntity,
+): boolean {
+    if (x.name !== y.name) {
+        return false;
+    }
+    x.type = unionArrays(x.type, y.type)!;
+    x.facets = unionArrays(x.facets, y.facets);
+    return true;
 }
