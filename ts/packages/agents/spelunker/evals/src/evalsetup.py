@@ -42,46 +42,47 @@ def main():
         description="Set up an evaluation database for spelunker."
     )
     parser.add_argument(
+        "-o",
         "--overwrite",
         action="store_true",
         help="Overwrite the database if it already exists.",
     )
     parser.add_argument(
-        "source",
-        nargs="?",
+        "-s",
+        "--source",
         type=str,
-        help="The source database file.",
+        help="The source database file; default ~/.typeagent/agents/spelunker/codeSearchDatabase.db.",
         default="~/.typeagent/agents/spelunker/codeSearchDatabase.db",
     )
     parser.add_argument(
-        "evaldir",
-        nargs="?",
+        "-f",
+        "--folder",
         type=str,
-        help="The evaluation directory.",
+        help="The evaluation directory; default evals/eval-1 (unless -o/--overwrite is given, if it exists, a new folder is created by adding -2, -3, etc.).",
         default="evals/eval-1",
     )
     args = parser.parse_args()
     source: str = os.path.expanduser(args.source)
-    evaldir: str = args.evaldir
+    folder: str = args.folder
 
     if not os.path.exists(source):
         print(f"Source database {source} does not exist.", file=sys.stderr)
         return sys.exit(2)
 
     if not args.overwrite:
-        while os.path.exists(evaldir):
-            m = re.match(r"(.*?)(\d+)$", evaldir)
+        while os.path.exists(folder):
+            m = re.match(r"(.*?)(\d+)$", folder)
             if m:
                 digits = m.group(2)
                 num = int(digits)
-                evaldir = m.group(1) + str(num + 1)
+                folder = m.group(1) + str(num + 1)
             else:
-                evaldir += "-1"
-    if not os.path.exists(evaldir):
-        os.makedirs(evaldir)
-    filename_prefix = os.path.join(os.path.realpath(evaldir), "source", "")
+                folder += "-1"
+    if not os.path.exists(folder):
+        os.makedirs(folder)
+    filename_prefix = os.path.join(os.path.realpath(folder), "source", "")
     print(f"Prefix: {filename_prefix}")
-    dbname = os.path.join(evaldir, "eval.db")
+    dbname = os.path.join(folder, "eval.db")
     print(f"Database: {dbname}")
 
     src_conn = sqlite3.connect(f"file:{source}?mode=ro", uri=True)
