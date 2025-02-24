@@ -122,7 +122,28 @@ we can move on to the next stage, running the evals:
 
 ## Automatic eval runs
 
-TBD
+An eval run needs to do the following:
+
+- Use the eval database as ground truth for files, chunks and blobs.
+- (Not sure yet what to do if the run needs e.g. summaries.)
+- For each question in the Questions table:
+  - Run the full chunk selection process using that question.
+  - This includes the part that keeps the top N selected chunks only.
+  - Compute the F1 score by comparing the precision and recall
+    based on the scores in the Scores table: `F1 = 2 * (p*r) / (p+r)`
+  - Print some JSON with the question, the F1 score, and the algorithm
+    (and perhaps a timestamp).
+
+## Tooling needed for automatic eval runs
+
+We need to write a new TypeScript program that reuses much of
+`searchCode.ts`, setting the database to the right file
+(given on the command line),
+and running variants of the selection algorithm
+(another command line flag).
+This should be straightforward.
+We may need small tweaks to the existing algorithms to make the right
+APIs available.
 
 # Random notes
 

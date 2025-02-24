@@ -90,7 +90,7 @@ def main():
     dst_conn = sqlite3.connect(dbname)
     dst_cur = dst_conn.cursor()
 
-    copy_table(src_cur, dst_cur, "Files")
+    copy_table(src_cur, dst_cur, "Files", filename_prefix)
     copy_table(src_cur, dst_cur, "Chunks")
     copy_table(src_cur, dst_cur, "Blobs")
     src_conn.close()
@@ -101,20 +101,28 @@ def main():
     dst_conn.close()
 
 
-def copy_table(src_cur, dst_cur, table_name):
-    # Get CREATE TABLE SQL from the source
+def copy_table(src_cur, dst_cur, table_name, prefix=None):
+    # Get CREATE TABLE SQL from the database'schema
     create_sql = src_cur.execute(
         f"SELECT sql FROM sqlite_master WHERE type='table' AND name='{table_name}'"
     ).fetchone()[0]
     if create_sql.startswith("CREATE TABLE"):
         create_sql = create_sql.replace("CREATE TABLE", "CREATE TABLE IF NOT EXISTS")
     # print(create_sql)
-    print("Creating and clearing table {table_name}")
+    print(f"Creating and clearing table {table_name}")
     dst_cur.execute(create_sql)
     dst_cur.execute(f"DELETE FROM {table_name}")
 
-    # Copy rows
+    # Read rows
     rows = src_cur.execute(f"SELECT * FROM {table_name}").fetchall()
+    if prefix and  table_name.lower() == "files":
+        # Check the filenames start with the prefix
+        for row in rows:
+            filename = row[0]
+            if not filename.startswith(prefix):
+                print(f"Aborting because {filename} does not start with {prefix}")
+                sys.exit(1)
+    # Copy rows
     print(f"Inserting {len(rows)} rows with {len(rows[0])} columns into {table_name}")
     placeholders = ",".join(["?"] * len(rows[0]))
     dst_cur.executemany(f"INSERT INTO {table_name} VALUES ({placeholders})", rows)
@@ -132,7 +140,7 @@ CREATE TABLE IF NOT EXISTS Questions (
 CREATE TABLE IF NOT EXISTS Scores (
     questionId INTEGER REFERENCES Questions(id),
     chunkHash TEXT REFERENCES Hashes(chunkHash),
-    score INTEGER,  -- 0 or 1,
+    score INTEGER,  -- 0 or 1
     timestamp TEXT
 );
 """
