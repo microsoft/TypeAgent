@@ -31,7 +31,7 @@ import sys
 from typing import Any, Iterator
 
 
-IdType = str
+ChunkId = str
 
 
 @dataclass
@@ -40,7 +40,7 @@ class Blob:
 
     start: int  # 0-based!
     lines: list[str]
-    breadcrumb: IdType | None = None  # Chunk id if breadcrumb
+    breadcrumb: ChunkId | None = None  # Chunk id if breadcrumb
 
     def to_dict(self) -> dict[str, object]:
         result: dict[str, Any] = {
@@ -56,16 +56,16 @@ class Blob:
 class Chunk:
     """A chunk at any level of nesting (root, inner, leaf)."""
 
-    chunkId: IdType
+    chunkId: ChunkId
     treeName: str  # AST node name
     codeName: str  # function/class/module name (TODO: dotted names)
     blobs: list[Blob]  # Blobs around the placeholders
 
     # For inner chunks:
-    parentId: IdType
+    parentId: ChunkId
 
     # For outer chunks:
-    children: list[IdType]  # len() is one less than len(blobs)
+    children: list[ChunkId]  # len() is one less than len(blobs)
 
     # Used by custom_json() below.
     def to_dict(self) -> dict[str, object]:
@@ -121,7 +121,7 @@ def custom_json(obj: object) -> dict[str, object]:
 last_ts: datetime.datetime = datetime.datetime.now()
 
 
-def generate_id() -> IdType:
+def generate_id() -> ChunkId:
     """Generate a new unique ID.
 
     IDs are really timestamps formatted as YYYY_MM_DD-HH_MM_SS.UUUUUU,
@@ -322,7 +322,9 @@ def main():
                 items.append(result)
             else:
                 # Only keep non-empty chunks, and the root node (empty parentId).
-                chunks = [chunk for chunk in result if chunk.blobs or not chunk.parentId]
+                chunks = [
+                    chunk for chunk in result if chunk.blobs or not chunk.parentId
+                ]
                 items.append(ChunkedFile(filename, chunks))
 
     print(json.dumps(items, default=custom_json, indent=2))
