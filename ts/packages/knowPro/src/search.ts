@@ -141,6 +141,14 @@ export function getDistinctEntityMatches(
     return q.mergeEntityMatches(semanticRefs, searchResults, topK);
 }
 
+export function getDistinctTopicMatches(
+    semanticRefs: SemanticRef[],
+    searchResults: ScoredSemanticRef[],
+    topK?: number,
+) {
+    return q.mergeTopics(semanticRefs, searchResults, topK);
+}
+
 class SearchQueryBuilder {
     // All SearchTerms used which compiling the 'select' portion of the query
     private allSearchTerms: SearchTerm[] = [];
