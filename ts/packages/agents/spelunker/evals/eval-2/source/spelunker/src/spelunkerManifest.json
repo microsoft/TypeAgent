@@ -1,0 +1,11 @@
+{
+  "emojiChar": "<>",
+  "description": "Code search/analysis tool",
+  "schemaDefaultEnabled": false,
+  "schema": {
+    "description": "Code search/analysys agents: get/set focus folder, search code in focus folder for answers",
+    "schemaFile": "./spelunkerSchema.ts",
+    "schemaType": "SpelunkerAction",
+    "cached": false
+  }
+}
