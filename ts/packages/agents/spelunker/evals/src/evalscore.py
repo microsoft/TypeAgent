@@ -98,7 +98,7 @@ def main():
             ).fetchone()
             path.append(cn)
         path.reverse()  # E.g. "module class method"
-        chunk_text = f"{filename}\n{' '.join(path)}\n"
+        chunk_text = f"{filename}\n{'.'.join(path)}\n"
         chunk_text += get_chunk_text(cursor, chunk_id)
         score = score_chunk(question, chunk_text, language)
 
@@ -172,9 +172,12 @@ def score_chunk(question, chunk_text, language):
     pipe = os.popen(f"pygmentize -l {language} | less -FRX", "w")
     pipe.write(chunk_text)
     pipe.close()
+    headlines = chunk_text.splitlines()[:2]
+    for line in headlines:
+        print(line)
     yes = no = False
     while not yes and not no:
-        score = input("Score: ")
+        score = input(question + "\nScore: ")
         yes = score.lower() in ("1", "y", "yes")
         no = score.lower() in ("0", "n", "no")
     assert yes != no
