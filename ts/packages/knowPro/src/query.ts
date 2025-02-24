@@ -15,6 +15,7 @@ import {
     Term,
     TextLocation,
     TextRange,
+    Topic,
 } from "./dataFormat.js";
 import {
     CompositeEntity,
@@ -1228,4 +1229,34 @@ function combineCompositeEntities(
     x.type = unionArrays(x.type, y.type)!;
     x.facets = unionArrays(x.facets, y.facets);
     return true;
+}
+
+export function mergeTopics(
+    semanticRefs: SemanticRef[],
+    semanticRefMatches: ScoredSemanticRef[],
+    topK?: number,
+): Scored<Topic>[] {
+    let mergedTopics = new Map<string, Scored<Topic>>();
+    for (let semanticRefMatch of semanticRefMatches) {
+        const semanticRef = semanticRefs[semanticRefMatch.semanticRefIndex];
+        if (semanticRef.knowledgeType !== "topic") {
+            continue;
+        }
+        const topic = semanticRef.knowledge as Topic;
+        const existing = mergedTopics.get(topic.text);
+        if (existing) {
+            if (existing.score < semanticRefMatch.score) {
+                existing.score = semanticRefMatch.score;
+            }
+        } else {
+            mergedTopics.set(topic.text, {
+                item: topic,
+                score: semanticRefMatch.score,
+            });
+        }
+    }
+    if (topK !== undefined && topK > 0) {
+        return getTopK(mergedTopics.values(), topK);
+    }
+    return [...mergedTopics.values()];
 }

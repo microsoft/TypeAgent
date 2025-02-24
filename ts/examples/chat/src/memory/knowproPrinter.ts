@@ -184,6 +184,12 @@ export class KnowProPrinter extends ChatPrinter {
                 results,
                 maxToDisplay,
             );
+            this.writeResultDistinct(
+                conversation,
+                "topic",
+                results,
+                maxToDisplay,
+            );
         } else {
             // Do entities before actions...
             this.writeResult(conversation, "entity", results, maxToDisplay);
@@ -214,30 +220,58 @@ export class KnowProPrinter extends ChatPrinter {
         results: Map<kp.KnowledgeType, kp.SearchResult>,
         maxToDisplay: number,
     ) {
-        if (type !== "entity") {
-            return;
+        if (this.sortAsc) {
+            this.writeLine(`Sorted in ascending order (lowest first)`);
         }
-        const entities = results.get("entity");
-        if (entities) {
-            let distinctEntities = kp.getDistinctEntityMatches(
-                conversation.semanticRefs!,
-                entities.semanticRefMatches,
-                maxToDisplay,
-            );
-            if (this.sortAsc) {
-                this.writeLine(`Sorted in ascending order (lowest first)`);
-            }
+        switch (type) {
+            default:
+                return;
 
-            for (let i = 0; i < distinctEntities.length; ++i) {
-                let pos = this.sortAsc ? distinctEntities.length - (i + 1) : i;
-                const entity = distinctEntities[pos];
-                this.writeInColor(
-                    chalk.green,
-                    `#${pos + 1} / ${distinctEntities.length}: [${entity.score}]`,
-                );
-                this.writeCompositeEntity(entity.item);
-                this.writeLine();
-            }
+            case "topic":
+                const topics = results.get("topic");
+                if (topics) {
+                    let distinctTopics = kp.getDistinctTopicMatches(
+                        conversation.semanticRefs!,
+                        topics.semanticRefMatches,
+                        maxToDisplay,
+                    );
+                    for (let i = 0; i < distinctTopics.length; ++i) {
+                        let pos = this.sortAsc
+                            ? distinctTopics.length - (i + 1)
+                            : i;
+                        const entity = distinctTopics[pos];
+                        this.writeInColor(
+                            chalk.green,
+                            `#${pos + 1} / ${distinctTopics.length}: [${entity.score}]`,
+                        );
+                        this.writeLine(entity.item.text);
+                        this.writeLine();
+                    }
+                }
+                break;
+
+            case "entity":
+                const entities = results.get("entity");
+                if (entities) {
+                    let distinctEntities = kp.getDistinctEntityMatches(
+                        conversation.semanticRefs!,
+                        entities.semanticRefMatches,
+                        maxToDisplay,
+                    );
+                    for (let i = 0; i < distinctEntities.length; ++i) {
+                        let pos = this.sortAsc
+                            ? distinctEntities.length - (i + 1)
+                            : i;
+                        const entity = distinctEntities[pos];
+                        this.writeInColor(
+                            chalk.green,
+                            `#${pos + 1} / ${distinctEntities.length}: [${entity.score}]`,
+                        );
+                        this.writeCompositeEntity(entity.item);
+                        this.writeLine();
+                    }
+                }
+                break;
         }
 
         return this;
