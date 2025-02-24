@@ -1175,7 +1175,9 @@ export function mergeEntityMatches(
         const existing = mergedEntities.get(compositeEntity.name);
         if (existing) {
             if (combineCompositeEntities(existing.item, compositeEntity)) {
-                existing.score += semanticRefMatch.score;
+                if (existing.score < semanticRefMatch.score) {
+                    existing.score = semanticRefMatch.score;
+                }
             }
         } else {
             mergedEntities.set(compositeEntity.name, {

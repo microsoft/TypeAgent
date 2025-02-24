@@ -175,12 +175,22 @@ export class KnowProPrinter extends ChatPrinter {
         conversation: kp.IConversation,
         results: Map<kp.KnowledgeType, kp.SearchResult>,
         maxToDisplay: number,
+        distinct: boolean = false,
     ) {
-        // Do entities before actions...
-        this.writeResult(conversation, "entity", results, maxToDisplay);
-        this.writeResult(conversation, "action", results, maxToDisplay);
-        this.writeResult(conversation, "topic", results, maxToDisplay);
-        this.writeResult(conversation, "tag", results, maxToDisplay);
+        if (distinct) {
+            this.writeResultDistinct(
+                conversation,
+                "entity",
+                results,
+                maxToDisplay,
+            );
+        } else {
+            // Do entities before actions...
+            this.writeResult(conversation, "entity", results, maxToDisplay);
+            this.writeResult(conversation, "action", results, maxToDisplay);
+            this.writeResult(conversation, "topic", results, maxToDisplay);
+            this.writeResult(conversation, "tag", results, maxToDisplay);
+        }
         return this;
     }
 
@@ -196,6 +206,51 @@ export class KnowProPrinter extends ChatPrinter {
             this.writeSearchResult(conversation, result, maxToDisplay);
         }
         return this;
+    }
+
+    private writeResultDistinct(
+        conversation: kp.IConversation,
+        type: kp.KnowledgeType,
+        results: Map<kp.KnowledgeType, kp.SearchResult>,
+        maxToDisplay: number,
+    ) {
+        if (type !== "entity") {
+            return;
+        }
+        const entities = results.get("entity");
+        if (entities) {
+            let distinctEntities = kp.getDistinctEntityMatches(
+                conversation.semanticRefs!,
+                entities.semanticRefMatches,
+                maxToDisplay,
+            );
+            if (this.sortAsc) {
+                this.writeLine(`Sorted in ascending order (lowest first)`);
+            }
+
+            for (let i = 0; i < distinctEntities.length; ++i) {
+                let pos = this.sortAsc ? distinctEntities.length - (i + 1) : i;
+                const entity = distinctEntities[pos];
+                this.writeInColor(
+                    chalk.green,
+                    `#${pos + 1} / ${distinctEntities.length}: [${entity.score}]`,
+                );
+                this.writeCompositeEntity(entity.item);
+                this.writeLine();
+            }
+        }
+
+        return this;
+    }
+
+    public writeCompositeEntity(
+        entity: knowLib.conversation.CompositeEntity | undefined,
+    ): void {
+        if (entity) {
+            this.writeLine(entity.name.toUpperCase());
+            this.writeList(entity.type, { type: "csv" });
+            this.writeList(entity.facets, { type: "ul" });
+        }
     }
 
     public writeConversationInfo(conversation: kp.IConversation) {
