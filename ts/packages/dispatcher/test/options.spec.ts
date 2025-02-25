@@ -47,6 +47,21 @@ describe("mergeConfig", () => {
                 "Invalid option 'a': type mismatch (expected: number, actual: object)",
             );
         });
+
+        it("should add flex key", () => {
+            const config = {};
+            const options = { a: { c: 1 } };
+            const changed = mergeConfig(config, options, ["a"]);
+            expect(config).toStrictEqual({ a: { c: 1 } });
+            expect(changed).toStrictEqual({ a: { c: 1 } });
+        });
+        it("should delete flex key", () => {
+            const config = { a: { c: 1 } };
+            const options = { a: null };
+            const changed = mergeConfig(config, options, ["a"]);
+            expect(config).toStrictEqual({});
+            expect(changed).toStrictEqual({ a: undefined });
+        });
         it("should add nested flex key", () => {
             const config = { a: { b: 0 } };
             const options = { a: { c: 1 } };
@@ -54,7 +69,6 @@ describe("mergeConfig", () => {
             expect(config).toStrictEqual({ a: { b: 0, c: 1 } });
             expect(changed).toStrictEqual({ a: { c: 1 } });
         });
-
         it("should delete nested flex key", () => {
             const config = { a: { b: 0, c: 1 } };
             const options = { a: { c: null } };
@@ -107,6 +121,13 @@ describe("mergeConfig", () => {
             expect(config).toStrictEqual({ a: 1, b: "str" });
             expect(changed).toStrictEqual({ b: "str" });
         });
+        it("should delete value", () => {
+            const config = { a: 1 };
+            const options = { a: null };
+            const changed = mergeConfig(config, options, true);
+            expect(config).toStrictEqual({});
+            expect(changed).toStrictEqual({ a: undefined });
+        });
         it("should overwrite mismatch value type", () => {
             const config = { a: 1 };
             const options = { a: "str" };
@@ -114,7 +135,7 @@ describe("mergeConfig", () => {
             expect(config).toStrictEqual({ a: "str" });
             expect(changed).toStrictEqual({ a: "str" });
         });
-        it("should overwrite with nested value", () => {
+        it("should overwrite mismatch value type with nested value", () => {
             const config = { a: 1 };
             const options = { a: { b: 1 } };
             const changed = mergeConfig(config, options, true);

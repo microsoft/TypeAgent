@@ -46,12 +46,14 @@ export function mergeConfig(
     // process option properties.
     const keys = Object.keys(options !== null ? options : config);
     for (const key of keys) {
-        if (overwrite !== true && !config.hasOwnProperty(key)) {
+        const overwriteKey = Array.isArray(overwrite)
+            ? overwrite.includes(key)
+            : overwrite;
+        if (!overwriteKey && !config.hasOwnProperty(key)) {
             continue;
         }
 
         const optionValue = options !== null ? options[key] : null;
-
         // undefined means no change
         if (optionValue === undefined) {
             continue;
@@ -63,9 +65,6 @@ export function mergeConfig(
             );
         }
 
-        const overwriteKey = Array.isArray(overwrite)
-            ? overwrite.includes(key)
-            : overwrite;
         // null means set it to default value (overwrite keys default value is always undefined)
         const defaultValue = defaultConfig?.[key];
         const value =
@@ -74,8 +73,8 @@ export function mergeConfig(
                     ? undefined
                     : defaultValue
                 : optionValue;
-        let existingValue = config[key];
 
+        let existingValue = config[key];
         if (!overwriteKey && typeof existingValue !== typeof value) {
             throw new Error(
                 `Invalid option '${prefix}${key}': type mismatch (expected: ${typeof existingValue}, actual: ${typeof value})`,

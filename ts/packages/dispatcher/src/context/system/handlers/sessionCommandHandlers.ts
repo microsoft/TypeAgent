@@ -28,6 +28,7 @@ import {
     displayWarn,
 } from "@typeagent/agent-sdk/helpers/display";
 import { askYesNoWithContext } from "../../interactiveIO.js";
+import { appAgentStateKeys } from "../../appAgentManager.js";
 
 class SessionNewCommandHandler implements CommandHandler {
     public readonly description = "Create a new empty session";
@@ -265,16 +266,24 @@ class SessionInfoCommandHandler implements CommandHandlerNoParams {
         );
 
         const table: string[][] = [["Name", "Value"]];
-        const addConfig = (options: any, settings: any, prefix: number = 0) => {
+        const addConfig = (
+            options: any,
+            settings: any,
+            override: readonly string[] | boolean = false,
+            prefix: number = 0,
+        ) => {
             for (const [key, value] of Object.entries(options)) {
                 const name = `${" ".repeat(prefix)}${key.padEnd(20 - prefix)}`;
                 const currentSetting = settings?.[key];
+                const overrideKey = Array.isArray(override)
+                    ? override.includes(key)
+                    : override;
                 if (typeof value === "object") {
                     table.push([chalk.bold(name), ""]);
-                    addConfig(value, currentSetting, prefix + 2);
+                    addConfig(value, currentSetting, overrideKey, prefix + 2);
                 } else {
                     const valueStr =
-                        currentSetting === undefined
+                        !overrideKey && currentSetting === undefined
                             ? chalk.grey(value)
                             : currentSetting !== value
                               ? chalk.yellow(value)
@@ -283,7 +292,11 @@ class SessionInfoCommandHandler implements CommandHandlerNoParams {
                 }
             }
         };
-        addConfig(session.getConfig(), session.getSettings());
+        addConfig(
+            session.getConfig(),
+            session.getSettings(),
+            appAgentStateKeys,
+        );
 
         displayResult(table, context);
 
