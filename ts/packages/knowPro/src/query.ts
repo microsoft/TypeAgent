@@ -1137,10 +1137,14 @@ export class TextRangesWithTermMatchesSelector
 }
 
 export class ThreadSelector implements IQueryTextRangeSelector {
-    constructor(public thread: Thread) {}
+    constructor(public threads: Thread[]) {}
 
     public eval(context: QueryEvalContext): TextRangeCollection | undefined {
-        return new TextRangeCollection(this.thread.ranges);
+        const textRanges = new TextRangeCollection();
+        for (const thread of this.threads) {
+            textRanges.addRanges(thread.ranges);
+        }
+        return textRanges;
     }
 }
 

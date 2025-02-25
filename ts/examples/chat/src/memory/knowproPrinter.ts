@@ -180,22 +180,21 @@ export class KnowProPrinter extends ChatPrinter {
         if (distinct) {
             this.writeResultDistinct(
                 conversation,
-                "entity",
+                "topic",
                 results,
                 maxToDisplay,
             );
             this.writeResultDistinct(
                 conversation,
-                "topic",
+                "entity",
                 results,
                 maxToDisplay,
             );
         } else {
-            // Do entities before actions...
-            this.writeResult(conversation, "entity", results, maxToDisplay);
-            this.writeResult(conversation, "action", results, maxToDisplay);
-            this.writeResult(conversation, "topic", results, maxToDisplay);
             this.writeResult(conversation, "tag", results, maxToDisplay);
+            this.writeResult(conversation, "topic", results, maxToDisplay);
+            this.writeResult(conversation, "action", results, maxToDisplay);
+            this.writeResult(conversation, "entity", results, maxToDisplay);
         }
         return this;
     }
@@ -220,9 +219,10 @@ export class KnowProPrinter extends ChatPrinter {
         results: Map<kp.KnowledgeType, kp.SearchResult>,
         maxToDisplay: number,
     ) {
-        if (this.sortAsc) {
-            this.writeLine(`Sorted in ascending order (lowest first)`);
+        if (type !== "topic" && type !== "entity") {
+            return;
         }
+
         switch (type) {
             default:
                 return;
@@ -230,6 +230,7 @@ export class KnowProPrinter extends ChatPrinter {
             case "topic":
                 const topics = results.get("topic");
                 if (topics) {
+                    this.writeTitle(type.toUpperCase());
                     let distinctTopics = kp.getDistinctTopicMatches(
                         conversation.semanticRefs!,
                         topics.semanticRefMatches,
@@ -239,12 +240,12 @@ export class KnowProPrinter extends ChatPrinter {
                         let pos = this.sortAsc
                             ? distinctTopics.length - (i + 1)
                             : i;
-                        const entity = distinctTopics[pos];
+                        const topic = distinctTopics[pos];
                         this.writeInColor(
                             chalk.green,
-                            `#${pos + 1} / ${distinctTopics.length}: [${entity.score}]`,
+                            `#${pos + 1} / ${distinctTopics.length}: [${topic.score}]`,
                         );
-                        this.writeLine(entity.item.text);
+                        this.writeLine(topic.item.text);
                         this.writeLine();
                     }
                 }
@@ -253,6 +254,7 @@ export class KnowProPrinter extends ChatPrinter {
             case "entity":
                 const entities = results.get("entity");
                 if (entities) {
+                    this.writeTitle(type.toUpperCase());
                     let distinctEntities = kp.getDistinctEntityMatches(
                         conversation.semanticRefs!,
                         entities.semanticRefMatches,

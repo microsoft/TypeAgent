@@ -530,7 +530,7 @@ export async function createKnowproCommands(
                 }
             }
             if (startDate) {
-                filter.inDateRange = {
+                filter.dateRange = {
                     start: startDate,
                     end: endDate,
                 };
