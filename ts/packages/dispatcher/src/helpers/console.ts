@@ -15,6 +15,9 @@ import {
 import { TemplateEditConfig } from "../translation/actionTemplate.js";
 import chalk from "chalk";
 import stringWidth from "string-width";
+import { createInterface } from "readline/promises";
+import fs from "fs";
+import readline from "readline";
 
 function displayPadEnd(content: string, length: number): string {
     // Account for full width characters
@@ -183,13 +186,17 @@ function createConsoleClientIO(): ClientIO {
     };
 }
 
-import readline from "readline";
-function initializeConsole() {
+function initializeConsole(rl?: readline.promises.Interface | undefined) {
+    
     // set the input back to raw mode and resume the input to drain key press during action and not echo them
     process.stdin.setRawMode(true);
     process.stdin.on("keypress", (_, key) => {
         if (key?.ctrl && key.name === "c") {
             process.emit("SIGINT");
+        } 
+        else if (key.name === "escape" && rl !== undefined) {         
+            // clear the input lien
+            rl.write(null, { ctrl: true, name: "u" });
         }
     });
     process.stdin.resume();
@@ -199,23 +206,23 @@ function initializeConsole() {
 let usingConsole = false;
 export async function withConsoleClientIO(
     callback: (clientIO: ClientIO) => Promise<void>,
+    rl?: readline.promises.Interface | undefined,
 ) {
     if (usingConsole) {
         throw new Error("Cannot have multiple console clients");
     }
     usingConsole = true;
     try {
-        initializeConsole();
+        initializeConsole(rl);
         await callback(createConsoleClientIO());
     } finally {
         process.stdin.pause();
-        usingConsole = false;
+        usingConsole = false;  
     }
 }
 
-import { createInterface } from "readline/promises";
 async function question(message: string, history?: string[]): Promise<string> {
-    const rl = createInterface({
+    const rl: readline.promises.Interface = createInterface({
         input: process.stdin,
         output: process.stdout,
         history,
@@ -285,7 +292,23 @@ export async function processCommands<T>(
     context: T,
     inputs?: string[],
 ) {
-    const history: string[] = [];
+    let history: string[] = [];
+    if (fs.existsSync("command_history.json")) {
+        const hh = JSON.parse(
+            fs.readFileSync("command_history.json", { encoding: "utf-8" }),
+        );
+        history = hh.commands;
+    }
+
+    const rl = createInterface({
+        input: process.stdin,
+        output: process.stdout,
+        history
+    });
+
+    process.stdin.setRawMode(true);
+    process.stdin.resume();
+    
     while (true) {
         const prompt =
             typeof interactivePrompt === "function"
@@ -311,5 +334,11 @@ export async function processCommands<T>(
             }
         }
         console.log("");
+
+        // save command history
+        fs.writeFileSync(
+            "command_history.json",
+            JSON.stringify({ commands: (rl as any).history }),
+        );  
     }
 }

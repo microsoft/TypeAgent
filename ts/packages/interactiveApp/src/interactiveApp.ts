@@ -144,7 +144,6 @@ export async function runConsole(
 class InteractiveApp {
     private _settings: InteractiveAppSettings;
     private _stdio: InteractiveIo;
-    private commandBackStack: string[] = [];
     private lineReader: readline.promises.Interface;
 
     constructor(stdio: InteractiveIo, settings: InteractiveAppSettings) {
@@ -158,7 +157,6 @@ class InteractiveApp {
             const history = JSON.parse(
                 fs.readFileSync("command_history.json", { encoding: "utf-8" }),
             );
-            this.commandBackStack = history.commands;
 
             (this.lineReader as any).history = history.commands;
         }
@@ -216,7 +214,7 @@ class InteractiveApp {
                 this.lineReader.close();
                 fs.writeFileSync(
                     "command_history.json",
-                    JSON.stringify({ commands: this.commandBackStack }),
+                    JSON.stringify({ commands: (this.lineReader as any).history }),
                 );
             });
     }
@@ -226,9 +224,6 @@ class InteractiveApp {
         if (line.length == 0) {
             return true;
         }
-
-        // save this command on the back stack
-        this.commandBackStack.unshift(line);
 
         try {
             const cmdLine = this.getCommand(line);
