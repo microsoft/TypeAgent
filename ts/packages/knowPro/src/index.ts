@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 export * from "./import.js";
+export * from "./importImages.js";
 export * from "./dataFormat.js";
 export * from "./conversation.js";
 export * from "./conversationIndex.js";
