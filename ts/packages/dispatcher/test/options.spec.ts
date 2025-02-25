@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { mergeConfig, sanitizeConfig } from "../src/context/options.js";
+import { mergeConfig } from "../src/context/options.js";
 
 describe("mergeConfig", () => {
     describe("strict", () => {
@@ -112,43 +112,5 @@ describe("mergeConfig", () => {
             expect(config).toEqual({ a: { b: 1 } });
             expect(changed).toEqual({ a: { b: 1 } });
         });
-    });
-});
-
-describe("sanitizeConfig", () => {
-    it("should error on null value", () => {
-        expect(() => {
-            sanitizeConfig({ a: 1 }, { a: null });
-        }).toThrow("Invalid option: 'a' cannot be null");
-    });
-    it("should ignore extraneous options", () => {
-        const options = { b: undefined, c: 3 };
-        const changed = sanitizeConfig({ a: 1 }, options);
-        expect(changed).toEqual(false);
-        expect(options).toEqual({ b: undefined, c: 3 });
-    });
-    it("should clear mismatch types", () => {
-        const options = { a: "str", b: 2 };
-        const changed = sanitizeConfig({ a: 1, b: 2 }, options);
-        expect(changed).toEqual(true);
-        expect(options).toEqual({ b: 2 });
-    });
-
-    it("should error on null value in nested objects", () => {
-        expect(() => {
-            sanitizeConfig({ d: { a: 1 } }, { d: { a: null } });
-        }).toThrow("Invalid option: 'd.a' cannot be null");
-    });
-    it("should ignore extraneous options in nested objects", () => {
-        const options = { d: { b: undefined, c: 3 } };
-        const changed = sanitizeConfig({ a: 1 }, options);
-        expect(changed).toEqual(false);
-        expect(options).toEqual({ d: { b: undefined, c: 3 } });
-    });
-    it("should clear mismatch types in nested objects", () => {
-        const options = { d: { a: "str", b: 2 } };
-        const changed = sanitizeConfig({ d: { a: 1, b: 2 } }, options);
-        expect(changed).toEqual(true);
-        expect(options).toEqual({ d: { b: 2 } });
     });
 });

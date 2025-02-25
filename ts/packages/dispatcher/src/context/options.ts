@@ -24,23 +24,6 @@ type ConfigChanged = DeepPartialUndefined<ConfigObject> | undefined;
 // Changes to be applied to the settings, with null values indicating removal and undefined indicating no change.
 type ConfigOptions = DeepPartialUndefinedAndNull<ConfigObject>;
 
-export function setConfigSettings(
-    config: ConfigSettings,
-    options: ConfigOptions,
-    overwrite: string[] | boolean = false,
-) {
-    return mergeConfig(config, options, overwrite);
-}
-
-export function setConfigObject(
-    config: ConfigObject,
-    options: ConfigOptions,
-    defaultConfig: ConfigObject,
-    overwrite: string[] | boolean = false,
-) {
-    return mergeConfig(config, options, overwrite, defaultConfig);
-}
-
 /**
  * Merge options into config.
  *
@@ -123,45 +106,3 @@ export function mergeConfig(
     return Object.keys(changed).length !== 0 ? changed : undefined;
 }
 
-export function sanitizeConfig(
-    config: ConfigSettings,
-    options: ConfigOptions,
-    strict: string[] | boolean = true,
-    prefix: string = "",
-) {
-    let changed = false;
-    for (const [key, value] of Object.entries(options)) {
-        if (value === null) {
-            // Serialized options can't have a null value.
-            throw new Error(`Invalid option: '${prefix}${key}' cannot be null`);
-        }
-        if (value === undefined || !config.hasOwnProperty(key)) {
-            // Ignore options with no effect and extraneous options.
-            continue;
-        }
-        const existingValue = config[key];
-        const strictKey = Array.isArray(strict)
-            ? !strict.includes(key)
-            : strict;
-        if (strictKey && typeof existingValue !== typeof value) {
-            // Clear value for mismatched types.
-            delete options[key];
-            changed = true;
-            continue;
-        }
-
-        if (typeof existingValue === "object" && typeof value === "object") {
-            if (
-                sanitizeConfig(
-                    existingValue,
-                    value,
-                    strictKey,
-                    `${prefix}${key}.`,
-                )
-            ) {
-                changed = true;
-            }
-        }
-    }
-    return changed;
-}
