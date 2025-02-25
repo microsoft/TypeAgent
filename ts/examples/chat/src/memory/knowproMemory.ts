@@ -688,7 +688,7 @@ export async function createKnowproCommands(
                 context.images?.semanticRefIndex!.size,
             );
             await context.images?.buildRelatedTermsIndex(16, (batch) => {
-                progress.advance(batch.values.length);
+                progress.advance(batch.length);
                 return true;
             });
             progress.complete();
