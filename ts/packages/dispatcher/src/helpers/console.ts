@@ -222,13 +222,6 @@ export async function withConsoleClientIO(
 }
 
 async function question(message: string, rl?: readline.promises.Interface, history?: string[]): Promise<string> {
-    // const rl: readline.promises.Interface = createInterface({
-    //     input: process.stdin,
-    //     output: process.stdout,
-    //     history,
-    //     terminal: true
-    // });
-
     // readline doesn't account for the right full width for some emojis.
     // Do manual adjustment.
     const adjust = (data: Buffer) => {
@@ -248,13 +241,6 @@ async function question(message: string, rl?: readline.promises.Interface, histo
         return await p;
     } finally {
         process.stdin.off("data", adjust);
-
-        // // Close the readline interface
-        // rl.close();
-
-        // // set the input back to raw mode and resume the input to drain key press during action and not echo them
-        // process.stdin.setRawMode(true);
-        // process.stdin.resume();
     }
 }
 
