@@ -755,8 +755,8 @@ export class ImageCollection implements IConversation<ImageMeta> {
     public async buildRelatedTermsIndex(
         batchSize: number = 8,
         progressCallback?: (
-            terms: string[],
-            batch: collections.Slice<string>,
+            batch: string[],
+            batchStartAt: number,
         ) => boolean,
     ): Promise<void> {
         if (this.semanticRefIndex) {

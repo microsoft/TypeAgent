@@ -640,6 +640,7 @@ export async function createKnowproCommands(
             },
         };
     }
+
     commands.kpImagesBuildIndex.metadata = imageCollectionBuildIndexDef();
     async function imagesBuildIndex(
         args: string[] | NamedArgs,
@@ -666,7 +667,7 @@ export async function createKnowproCommands(
             const maxMessages = namedArgs.maxMessages ?? messageCount;
             let progress = new ProgressBar(context.printer, maxMessages);
             const indexResult = await context.images?.buildIndex(
-                (text, result) => {
+                (text: any, result) => {
                     progress.advance();
                     if (!result.success) {
                         context.printer.writeError(
@@ -686,75 +687,8 @@ export async function createKnowproCommands(
                 context.printer,
                 context.images?.semanticRefIndex!.size,
             );
-            await context.images?.buildRelatedTermsIndex(16, (terms, batch) => {
-                progress.advance(batch.value.length);
-                return true;
-            });
-            progress.complete();
-            context.printer.writeLine(
-                `Semantic Indexed ${context.images?.semanticRefIndex!.size} terms`,
-            );
-        }
-    }
-
-    function imageCollectionBuildIndexDef(): CommandMetadata {
-        return {
-            description: "Build image collection index",
-            options: {
-                knowledge: argBool("Index knowledge", false),
-                related: argBool("Index related terms", false),
-                maxMessages: argNum("Maximum messages to index"),
-            },
-        };
-    }
-    commands.kpImagesBuildIndex.metadata = imageCollectionBuildIndexDef();
-    async function imagesBuildIndex(
-        args: string[] | NamedArgs,
-    ): Promise<void> {
-        if (!context.images) {
-            context.printer.writeError("No image collection loaded");
-            return;
-        }
-        // if (!context.images.semanticRefIndex) {
-        //     context.printer.writeError("Image collection is not indexed");
-        //     return;
-        // }
-        const messageCount = context.images.messages.length;
-        if (messageCount === 0) {
-            return;
-        }
-
-        const namedArgs = parseNamedArguments(args, imageCollectionBuildIndexDef());
-        // Build index
-        context.printer.writeLine();
-        context.printer.writeLine("Building index");
-        if (namedArgs.knowledge) {
-            context.printer.writeLine("Building knowledge index");
-            const maxMessages = namedArgs.maxMessages ?? messageCount;
-            let progress = new ProgressBar(context.printer, maxMessages);
-            const indexResult = await context.images?.buildIndex(
-                (text, result) => {
-                    progress.advance();
-                    if (!result.success) {
-                        context.printer.writeError(
-                            `${result.message}\n${text}`,
-                        );
-                    }
-                    return progress.count < maxMessages;
-                },
-            );
-            progress.complete();
-            context.printer.writeLine(`Indexed ${maxMessages} items`);
-            context.printer.writeIndexingResults(indexResult);
-        }
-        if (namedArgs.related) {
-            context.printer.writeLine("Building semantic index");
-            const progress = new ProgressBar(
-                context.printer,
-                context.images?.semanticRefIndex!.size,
-            );
-            await context.images?.buildRelatedTermsIndex(16, (terms, batch) => {
-                progress.advance(batch.value.length);
+            await context.images?.buildRelatedTermsIndex(16, (batch) => {
+                progress.advance(batch.values.length);
                 return true;
             });
             progress.complete();
