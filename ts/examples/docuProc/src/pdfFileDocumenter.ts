@@ -10,9 +10,6 @@ import { PdfFileDocumentation } from "./pdfDocChunkSchema.js";
 import { Chunk } from "./pdfChunker.js";
 import fs from "fs";
 
-
-// Document an entire file and assign comments to chunks.
-
 export interface PdfFileDocumenter {
     document(chunks: Chunk[]): Promise<PdfFileDocumentation>;
 }
