@@ -64,7 +64,7 @@ function messageContentToText(message: MessageContent): string {
     return displayRows.join("\n");
 }
 
-function createConsoleClientIO(): ClientIO {
+function createConsoleClientIO(rl?: readline.promises.Interface): ClientIO {
     let lastAppendMode: DisplayAppendMode | undefined;
     function displayContent(
         content: DisplayContent,
@@ -146,7 +146,7 @@ function createConsoleClientIO(): ClientIO {
             requestId: RequestId,
             defaultValue?: boolean,
         ): Promise<boolean> {
-            const input = await question(`${message} (y/n)`);
+            const input = await question(`${message} (y/n)`, rl);
             return input.toLowerCase() === "y";
         },
         async proposeAction(
@@ -186,7 +186,7 @@ function createConsoleClientIO(): ClientIO {
     };
 }
 
-function initializeConsole(rl?: readline.promises.Interface | undefined) {
+function initializeConsole(rl?: readline.promises.Interface) {
     
     // set the input back to raw mode and resume the input to drain key press during action and not echo them
     process.stdin.setRawMode(true);
@@ -196,7 +196,7 @@ function initializeConsole(rl?: readline.promises.Interface | undefined) {
         } 
         else if (key.name === "escape" && rl !== undefined) {         
             // clear the input lien
-            rl.write(null, { ctrl: true, name: "u" });
+            rl!.write(null, { ctrl: true, name: "u" });
         }
     });
     process.stdin.resume();
@@ -206,7 +206,7 @@ function initializeConsole(rl?: readline.promises.Interface | undefined) {
 let usingConsole = false;
 export async function withConsoleClientIO(
     callback: (clientIO: ClientIO) => Promise<void>,
-    rl?: readline.promises.Interface | undefined,
+    rl?: readline.promises.Interface,
 ) {
     if (usingConsole) {
         throw new Error("Cannot have multiple console clients");
@@ -214,19 +214,20 @@ export async function withConsoleClientIO(
     usingConsole = true;
     try {
         initializeConsole(rl);
-        await callback(createConsoleClientIO());
+        await callback(createConsoleClientIO(rl));
     } finally {
         process.stdin.pause();
         usingConsole = false;  
     }
 }
 
-async function question(message: string, history?: string[]): Promise<string> {
-    const rl: readline.promises.Interface = createInterface({
-        input: process.stdin,
-        output: process.stdout,
-        history,
-    });
+async function question(message: string, rl?: readline.promises.Interface, history?: string[]): Promise<string> {
+    // const rl: readline.promises.Interface = createInterface({
+    //     input: process.stdin,
+    //     output: process.stdout,
+    //     history,
+    //     terminal: true
+    // });
 
     // readline doesn't account for the right full width for some emojis.
     // Do manual adjustment.
@@ -236,24 +237,24 @@ async function question(message: string, history?: string[]): Promise<string> {
         }
 
         process.stdout.cursorTo(
-            stringWidth(message + rl.line.slice(0, rl.cursor)),
+            stringWidth(message + rl!.line.slice(0, rl!.cursor)),
         );
     };
     process.stdin.on("data", adjust);
 
     try {
-        const p = rl.question(message);
+        const p = rl!.question(message);
         process.stdout.cursorTo(stringWidth(message));
         return await p;
     } finally {
         process.stdin.off("data", adjust);
 
-        // Close the readline interface
-        rl.close();
+        // // Close the readline interface
+        // rl.close();
 
-        // set the input back to raw mode and resume the input to drain key press during action and not echo them
-        process.stdin.setRawMode(true);
-        process.stdin.resume();
+        // // set the input back to raw mode and resume the input to drain key press during action and not echo them
+        // process.stdin.setRawMode(true);
+        // process.stdin.resume();
     }
 }
 
@@ -303,7 +304,8 @@ export async function processCommands<T>(
     const rl = createInterface({
         input: process.stdin,
         output: process.stdout,
-        history
+        history,
+        terminal: true
     });
 
     process.stdin.setRawMode(true);
@@ -316,7 +318,7 @@ export async function processCommands<T>(
                 : interactivePrompt;
         const request = inputs
             ? getNextInput(prompt, inputs)
-            : await question(promptColor(prompt), history);
+            : await question(promptColor(prompt), rl, history);
         if (request.length) {
             if (
                 request.toLowerCase() === "quit" ||
