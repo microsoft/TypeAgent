@@ -219,10 +219,10 @@ export class KnowProPrinter extends ChatPrinter {
         results: Map<kp.KnowledgeType, kp.SearchResult>,
         maxToDisplay: number,
     ) {
-        this.writeTitle(type.toUpperCase());
-        if (this.sortAsc) {
-            this.writeLine(`Sorted in ascending order (lowest first)`);
+        if (type !== "topic" && type !== "entity") {
+            return;
         }
+
         switch (type) {
             default:
                 return;
@@ -230,6 +230,7 @@ export class KnowProPrinter extends ChatPrinter {
             case "topic":
                 const topics = results.get("topic");
                 if (topics) {
+                    this.writeTitle(type.toUpperCase());
                     let distinctTopics = kp.getDistinctTopicMatches(
                         conversation.semanticRefs!,
                         topics.semanticRefMatches,
@@ -253,6 +254,7 @@ export class KnowProPrinter extends ChatPrinter {
             case "entity":
                 const entities = results.get("entity");
                 if (entities) {
+                    this.writeTitle(type.toUpperCase());
                     let distinctEntities = kp.getDistinctEntityMatches(
                         conversation.semanticRefs!,
                         entities.semanticRefMatches,
