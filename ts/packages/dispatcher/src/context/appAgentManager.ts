@@ -16,7 +16,10 @@ import { getAppAgentName } from "../translation/agentTranslators.js";
 import { createSessionContext } from "../execute/actionHandlers.js";
 import { AppAgentProvider } from "../agentProvider/agentProvider.js";
 import registerDebug from "debug";
-import { DeepPartialUndefinedAndNull } from "common-utils";
+import {
+    DeepPartialUndefined,
+    DeepPartialUndefinedAndNull,
+} from "common-utils";
 import { DispatcherName } from "./dispatcher/dispatcherUtils.js";
 import {
     ActionSchemaSemanticMap,
@@ -43,21 +46,23 @@ type AppAgentRecord = {
     sessionContextP?: Promise<SessionContext> | undefined;
 };
 
-export type AppAgentState = {
-    schemas: Record<string, boolean> | undefined;
-    actions: Record<string, boolean> | undefined;
-    commands: Record<string, boolean> | undefined;
+export type AppAgentStateConfig = {
+    schemas: Record<string, boolean>;
+    actions: Record<string, boolean>;
+    commands: Record<string, boolean>;
 };
 
 export const appAgentStateKeys = ["schemas", "actions", "commands"] as const;
 
-export type AppAgentStateOptions = DeepPartialUndefinedAndNull<AppAgentState>;
+export type AppAgentStateSettings = DeepPartialUndefined<AppAgentStateConfig>;
+export type AppAgentStateOptions =
+    DeepPartialUndefinedAndNull<AppAgentStateConfig>;
 
 // For overrides, if the options kind or app agent value is null, use the agent default.
 // If it is missing, then either use the default value based on the 'useDefault' parameter, or the current value.
 function getEffectiveValue(
     overrides: AppAgentStateOptions | undefined,
-    kind: keyof AppAgentState,
+    kind: keyof AppAgentStateConfig,
     name: string,
     useDefault: boolean,
     defaultValue: boolean,
@@ -73,7 +78,7 @@ function getEffectiveValue(
 
 function computeStateChange(
     overrides: AppAgentStateOptions | undefined,
-    kind: keyof AppAgentState,
+    kind: keyof AppAgentStateConfig,
     name: string,
     useDefault: boolean,
     defaultEnabled: boolean,
@@ -728,14 +733,14 @@ export type AppAgentStateInitSettings =
           commands?: string[] | boolean | undefined;
       };
 
-export function getAppAgentStateOptions(
+export function getAppAgentStateSettings(
     settings: AppAgentStateInitSettings,
     agents: AppAgentManager,
-): AppAgentStateOptions | undefined {
+): AppAgentStateSettings | undefined {
     if (settings === undefined) {
         return undefined;
     }
-    const result: AppAgentStateOptions = {};
+    const result: AppAgentStateSettings = {};
     if (typeof settings === "boolean" || Array.isArray(settings)) {
         const entries = agents
             .getAppAgentNames()
@@ -767,9 +772,11 @@ export function getAppAgentStateOptions(
             .getAppAgentNames()
             .map((name) => [
                 name,
-                alwaysEnabled.includes(name) || typeof state === "boolean"
-                    ? state
-                    : state.includes(name),
+                alwaysEnabled.includes(name)
+                    ? true
+                    : typeof state === "boolean"
+                      ? state
+                      : state.includes(name),
             ]);
         result[key] = Object.fromEntries(entries);
     }

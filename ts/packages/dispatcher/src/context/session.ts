@@ -11,8 +11,13 @@ import fs from "node:fs";
 import path from "node:path";
 import { getUniqueFileName, getYMDPrefix } from "../utils/userData.js";
 import ExifReader from "exifreader";
-import { AppAgentState, appAgentStateKeys } from "./appAgentManager.js";
-import { cloneConfig, mergeConfig } from "./options.js";
+import { AppAgentStateConfig, appAgentStateKeys } from "./appAgentManager.js";
+import {
+    cloneConfig,
+    isEmptySettings,
+    mergeConfig,
+    sanitizeConfig,
+} from "./options.js";
 import { TokenCounter, TokenCounterData } from "aiclient";
 import { DispatcherName } from "./dispatcher/dispatcherUtils.js";
 import { ConstructionProvider } from "../agentProvider/agentProvider.js";
@@ -129,15 +134,15 @@ export type DispatcherConfig = {
     };
 };
 
-export type SessionConfig = AppAgentState & DispatcherConfig;
+export type SessionConfig = AppAgentStateConfig & DispatcherConfig;
 export type SessionSettings = DeepPartialUndefined<SessionConfig>;
-export type SessionOptions = DeepPartialUndefinedAndNull<SessionConfig>;
+export type SessionOptions = DeepPartialUndefinedAndNull<SessionConfig> | null;
 export type SessionChanged = DeepPartialUndefined<SessionConfig> | undefined;
 
 const defaultSessionConfig: SessionConfig = {
-    schemas: undefined,
-    actions: undefined,
-    commands: undefined,
+    schemas: {},
+    actions: {},
+    commands: {},
 
     // default to dispatcher
     request: DispatcherName,
@@ -212,24 +217,20 @@ type SessionCacheData = {
 };
 
 type SessionData = {
-    config: SessionConfig;
+    settings?: SessionSettings | undefined;
     cacheData: SessionCacheData;
     tokens?: TokenCounterData;
 };
 
 // Fill in missing fields when loading sessions from disk
 function ensureSessionData(data: any): SessionData {
-    if (data.config === undefined) {
-        data.config = {};
+    if (data.config !== undefined) {
+        data.settings = data.config;
     }
-    // Make sure the data we load from disk has all the fields,
-    // and set it to the default value if it is missing.
-    // Also clear extra flags.
 
-    const existingData = data.config;
-    data.config = cloneConfig(defaultSessionConfig);
-    mergeConfig(data.config, existingData, appAgentStateKeys);
-
+    if (data.settings !== undefined) {
+        data.settings = sanitizeConfig(defaultSessionConfig, data.settings);
+    }
     if (data.cacheData === undefined) {
         data.cacheData = {};
     }
@@ -258,15 +259,17 @@ async function readSessionData(dirPath: string) {
     return ensureSessionData(data);
 }
 export class Session {
+    private readonly defaultConfig = cloneConfig(defaultSessionConfig);
+    private readonly settings: SessionSettings;
     private config: SessionConfig;
     private cacheData: SessionCacheData;
 
     public static async create(
-        config: SessionConfig = defaultSessionConfig,
+        settings?: SessionSettings,
         instanceDir?: string,
     ) {
         const session = new Session(
-            { config: cloneConfig(config), cacheData: {} },
+            { settings, cacheData: {} },
             instanceDir ? await newSessionDir(instanceDir) : undefined,
         );
         await session.save();
@@ -278,7 +281,7 @@ export class Session {
         const sessionData = await readSessionData(dirPath);
         debugSession(`Loading session: ${dir}`);
         debugSession(
-            `Config: ${JSON.stringify(sessionData.config, undefined, 2)}`,
+            `Settings: ${JSON.stringify(sessionData.settings, undefined, 2)}`,
         );
 
         return new Session(sessionData, dirPath);
@@ -302,7 +305,9 @@ export class Session {
         sessionData: SessionData,
         public readonly sessionDirPath?: string,
     ) {
-        this.config = sessionData.config;
+        this.settings = sessionData.settings ?? {};
+        this.config = cloneConfig(defaultSessionConfig);
+        mergeConfig(this.config, this.settings, appAgentStateKeys);
         this.cacheData = sessionData.cacheData;
 
         // rehydrate token stats
@@ -326,16 +331,36 @@ export class Session {
         };
     }
 
+    public getSettings(): Readonly<SessionSettings> {
+        return this.settings;
+    }
+    public updateSettings(options: SessionOptions): SessionChanged {
+        const changed = mergeConfig(this.settings, options, true);
+        if (changed) {
+            this.save();
+        }
+        return mergeConfig(
+            this.config,
+            options,
+            appAgentStateKeys,
+            this.defaultConfig,
+        );
+    }
+
     public getConfig(): Readonly<SessionConfig> {
         return this.config;
     }
 
-    public setConfig(options: SessionOptions): SessionChanged {
-        const changed = mergeConfig(this.config, options, appAgentStateKeys);
-        if (changed) {
-            this.save();
-        }
-        return changed;
+    public updateConfig(settings: SessionSettings): SessionChanged {
+        return mergeConfig(this.config, settings, appAgentStateKeys);
+    }
+
+    public updateDefaultConfig(settings: SessionSettings): SessionChanged {
+        mergeConfig(this.defaultConfig, settings, appAgentStateKeys);
+        // Get the latest configuration
+        const newConfig = cloneConfig(this.defaultConfig);
+        mergeConfig(newConfig, this.settings, appAgentStateKeys);
+        return mergeConfig(this.config, newConfig, appAgentStateKeys);
     }
 
     public getSessionDirPath(): string | undefined {
@@ -416,7 +441,9 @@ export class Session {
             );
             const data = {
                 version: sessionVersion,
-                config: this.config,
+                settings: isEmptySettings(this.settings)
+                    ? undefined
+                    : this.settings,
                 cacheData: this.cacheData,
                 tokens: TokenCounter.getInstance(),
             };
@@ -424,7 +451,7 @@ export class Session {
                 `Saving session: ${getSessionName(this.sessionDirPath)}`,
             );
             debugSession(
-                `Config: ${JSON.stringify(data.config, undefined, 2)}`,
+                `Settings: ${JSON.stringify(data.settings, undefined, 2)}`,
             );
             fs.writeFileSync(
                 sessionDataFilePath,
@@ -498,7 +525,7 @@ export async function setupAgentCache(
             } else {
                 debugSession(`Cache file missing ${cacheData}`);
                 // Disable the cache if we can't load the file.
-                session.setConfig({ cache: { enabled: false } });
+                session.updateSettings({ cache: { enabled: false } });
                 throw new Error(
                     `Cache file ${cacheData} missing. Use '@const new' to create a new one'`,
                 );

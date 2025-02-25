@@ -112,3 +112,67 @@ export function mergeConfig(
 
     return Object.keys(changed).length !== 0 ? changed : undefined;
 }
+
+export function sanitizeConfig(
+    config: ConfigObject,
+    settings: unknown,
+    strict: string[] | boolean = true,
+    prefix: string = "",
+) {
+    if (typeof settings !== "object" || settings === null) {
+        return undefined;
+    }
+    let changed = false;
+    for (const [key, value] of Object.entries(settings)) {
+        if (value === null) {
+            // Serialized options can't have a null value.
+            throw new Error(`Invalid option: '${prefix}${key}' cannot be null`);
+        }
+        if (value === undefined || !config.hasOwnProperty(key)) {
+            // Ignore options with no effect and extraneous options.
+            continue;
+        }
+        const existingValue = config[key];
+        const strictKey = Array.isArray(strict)
+            ? !strict.includes(key)
+            : strict;
+        if (strictKey && typeof existingValue !== typeof value) {
+            // Clear value for mismatched types.
+            delete (settings as any)[key];
+            changed = true;
+            continue;
+        }
+
+        if (typeof existingValue === "object" && typeof value === "object") {
+            if (
+                sanitizeConfig(
+                    existingValue,
+                    value,
+                    strictKey,
+                    `${prefix}${key}.`,
+                )
+            ) {
+                changed = true;
+            }
+        }
+    }
+    return changed;
+}
+
+export function isEmptySettings(settings: ConfigSettings) {
+    const keys = Object.keys(settings);
+    if (keys.length === 0) {
+        return true;
+    }
+    for (const key of keys) {
+        const value = settings[key];
+        if (typeof value === "object") {
+            if (!isEmptySettings(value)) {
+                return false;
+            }
+        } else if (value !== undefined) {
+            return false;
+        }
+    }
+    return true;
+}

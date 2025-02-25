@@ -12,7 +12,6 @@ import {
     deleteAllSessions,
     deleteSession,
     getSessionNames,
-    getDefaultSessionConfig,
     getSessionConstructionDirPaths,
     getSessionName,
 } from "../../session.js";
@@ -109,15 +108,7 @@ class SessionOpenCommandHandler implements CommandHandler {
 class SessionResetCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Reset config on session and keep the data";
     public async run(context: ActionContext<CommandHandlerContext>) {
-        await changeContextConfig(getDefaultSessionConfig(), context);
-        await changeContextConfig(
-            {
-                schemas: null,
-                actions: null,
-                commands: null,
-            },
-            context,
-        );
+        await changeContextConfig(null, context);
         displaySuccess(`Session settings revert to default.`, context);
     }
 }
@@ -249,23 +240,6 @@ class SessionListCommandHandler implements CommandHandlerNoParams {
     }
 }
 
-function getConfigTable(config: any) {
-    const table: string[][] = [["Name", "Value"]];
-    const addConfig = (options: any, prefix: number = 2) => {
-        for (const [key, value] of Object.entries(options)) {
-            const name = `${" ".repeat(prefix)}${key.padEnd(20 - prefix)}`;
-            if (typeof value === "object") {
-                table.push([chalk.bold(name), ""]);
-                addConfig(value, prefix + 2);
-            } else {
-                table.push([name, String(value)]);
-            }
-        }
-    };
-    addConfig(config);
-    return table;
-}
-
 class SessionInfoCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Show info about the current session";
     public async run(context: ActionContext<CommandHandlerContext>) {
@@ -290,7 +264,28 @@ class SessionInfoCommandHandler implements CommandHandlerNoParams {
             context,
         );
 
-        displayResult(getConfigTable(session.getConfig()), context);
+        const table: string[][] = [["Name", "Value"]];
+        const addConfig = (options: any, settings: any, prefix: number = 2) => {
+            for (const [key, value] of Object.entries(options)) {
+                const name = `${" ".repeat(prefix)}${key.padEnd(20 - prefix)}`;
+                const currentSetting = settings?.[key];
+                if (typeof value === "object") {
+                    table.push([chalk.bold(name), ""]);
+                    addConfig(value, currentSetting, prefix + 2);
+                } else {
+                    const valueStr =
+                        currentSetting === undefined
+                            ? chalk.grey(value)
+                            : currentSetting !== value
+                              ? chalk.yellow(value)
+                              : String(value);
+                    table.push([name, valueStr]);
+                }
+            }
+        };
+        addConfig(session.getConfig(), session.getSettings());
+
+        displayResult(table, context);
 
         if (constructionFiles.length) {
             displayResult(`\n${chalk.bold("Construction Files:")}`, context);

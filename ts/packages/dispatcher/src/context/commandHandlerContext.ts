@@ -40,7 +40,8 @@ import {
     AppAgentManager,
     AppAgentStateInitSettings,
     AppAgentStateOptions,
-    getAppAgentStateOptions,
+    AppAgentStateSettings,
+    getAppAgentStateSettings,
     SetStateResult,
 } from "./appAgentManager.js";
 import {
@@ -312,8 +313,10 @@ export async function initializeCommandHandlerContext(
         const session = await getSession(
             persistSession ? instanceDir : undefined,
         );
+
+        // initialization options set the default, but persisted configuration will still overrides it.
         if (options) {
-            session.setConfig(options);
+            session.updateDefaultConfig(options);
         }
         const sessionDirPath = session.getSessionDirPath();
         debug(`Session directory: ${sessionDirPath}`);
@@ -384,12 +387,13 @@ export async function initializeCommandHandlerContext(
 
         await addAppAgentProviders(context, options?.appAgentProviders);
 
-        const appAgentStateOptions = getAppAgentStateOptions(
+        const appAgentStateOptions = getAppAgentStateSettings(
             options?.agents,
             agents,
         );
         if (appAgentStateOptions !== undefined) {
-            session.setConfig(appAgentStateOptions);
+            // initialization options set the default, but persisted configuration will still overrides it.
+            session.updateDefaultConfig(appAgentStateOptions);
         }
         await setAppAgentStates(context);
         debug("Context initialized");
@@ -411,7 +415,7 @@ async function setAppAgentStates(context: CommandHandlerContext) {
     // Only rollback if user explicitly change state.
     // Ignore the returned rollback state for initialization and keep the session setting as is.
 
-    processSetAppAgentStateResult(result, context, (message) =>
+    const rollback = processSetAppAgentStateResult(result, context, (message) =>
         context.clientIO.notify(
             AppAgentEvent.Error,
             undefined,
@@ -419,6 +423,10 @@ async function setAppAgentStates(context: CommandHandlerContext) {
             DispatcherName,
         ),
     );
+
+    if (rollback) {
+        context.session.updateConfig(rollback);
+    }
 }
 
 async function updateAppAgentStates(
@@ -439,7 +447,7 @@ async function updateAppAgentStates(
     );
 
     if (rollback) {
-        systemContext.session.setConfig(rollback);
+        systemContext.session.updateConfig(rollback);
     }
     const resultState: AppAgentStateOptions = {};
     for (const [stateName, changed] of Object.entries(result.changed)) {
@@ -455,7 +463,7 @@ function processSetAppAgentStateResult(
     result: SetStateResult,
     systemContext: CommandHandlerContext,
     cbError: (message: string) => void,
-): AppAgentStateOptions | undefined {
+): AppAgentStateSettings | undefined {
     let hasFailed = false;
     const rollback = { actions: {}, commands: {} };
     for (const [stateName, failed] of Object.entries(result.failed)) {
@@ -518,7 +526,7 @@ export async function changeContextConfig(
 ) {
     const systemContext = context.sessionContext.agentContext;
     const session = systemContext.session;
-    const changed = session.setConfig(options);
+    const changed = session.updateSettings(options);
     if (changed === undefined) {
         return undefined;
     }
@@ -555,7 +563,7 @@ export async function changeContextConfig(
             displayError(`Failed to change explainer: ${e.message}`, context);
             delete changed.explainer?.name;
             // Restore old explainer name
-            session.setConfig({
+            session.updateSettings({
                 explainer: {
                     name: systemContext.agentCache.explainerName,
                 },
