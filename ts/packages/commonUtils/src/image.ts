@@ -30,10 +30,10 @@ export class CachedImageWithDetails {
 }
 
 export type ImagePromptDetails = {
-    promptSection?: PromptSection | undefined,
-    nearbyPOI?: PointOfInterest[] | undefined,
-    reverseGeocode?: ReverseGeocodeAddressLookup[] | undefined,
-}
+    promptSection?: PromptSection | undefined;
+    nearbyPOI?: PointOfInterest[] | undefined;
+    reverseGeocode?: ReverseGeocodeAddressLookup[] | undefined;
+};
 
 export function getImageElement(imgData: string): string {
     return `<img class="chat-input-image" src="${imgData}" />`;
@@ -157,7 +157,7 @@ export async function addImagePromptContent(
             image.exifTags.GPSLongitudeRef,
         ),
         openai.apiSettingsFromEnv(),
-    )
+    );
     if (includePOI !== false) {
         content.push({
             type: "text",
@@ -183,7 +183,7 @@ export async function addImagePromptContent(
     }
 
     // set content
-    retValue.promptSection = { role: role, content: content};
+    retValue.promptSection = { role: role, content: content };
 
     return retValue;
 }

@@ -219,7 +219,9 @@ export class KnowProPrinter extends ChatPrinter {
     }
 
     public writeImageCollectionInfo(imageCollection: kp.ImageCollection) {
-        this.writeLine(`${imageCollection.nameTag}: ${imageCollection.messages.length} images.`);
+        this.writeLine(
+            `${imageCollection.nameTag}: ${imageCollection.messages.length} images.`,
+        );
         return this;
     }
 

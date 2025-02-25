@@ -18,9 +18,7 @@ import {
     createKnowledgeModel,
 } from "./conversationIndex.js";
 import { Result } from "typechat";
-import {
-    TermToRelatedTermsIndex,
-} from "./relatedTermsIndex.js";
+import { TermToRelatedTermsIndex } from "./relatedTermsIndex.js";
 import { TimestampToTextRangeIndex } from "./timestampIndex.js";
 import {
     ITermsToRelatedTermsIndexData,
@@ -61,25 +59,33 @@ export class Image implements IMessage<ImageMeta> {
 
 // metadata for images
 export class ImageMeta implements IKnowledgeSource {
-    constructor(public fileName: string, public img: image.Image) {}
+    constructor(
+        public fileName: string,
+        public img: image.Image,
+    ) {}
 
     getKnowledge() {
-        const imageEntity: conversation.ConcreteEntity = { 
-            name: `${path.basename(this.img.fileName)} - ${this.img.title}`, 
-            type: ["file", "image"], 
-            facets: [ 
+        const imageEntity: conversation.ConcreteEntity = {
+            name: `${path.basename(this.img.fileName)} - ${this.img.title}`,
+            type: ["file", "image"],
+            facets: [
                 { name: "File Name", value: this.img.fileName },
                 //{ name: "Title", value: this.image.title },
                 //{ name: "Caption", value: this.image.title },
-            ] 
+            ],
         };
-    
+
         // EXIF data are facets of this image
-        for(let i = 0; i < this.img?.exifData.length; i++) {
-            if (this.img?.exifData[i] !== undefined && this.img?.exifData[i][1] !== undefined && this.img?.exifData[i][1] !== null && this.img?.exifData[i][1].length > 0) {
+        for (let i = 0; i < this.img?.exifData.length; i++) {
+            if (
+                this.img?.exifData[i] !== undefined &&
+                this.img?.exifData[i][1] !== undefined &&
+                this.img?.exifData[i][1] !== null &&
+                this.img?.exifData[i][1].length > 0
+            ) {
                 imageEntity.facets!.push({
                     name: this.img?.exifData[i][0],
-                    value: this.img?.exifData[i][1]
+                    value: this.img?.exifData[i][1],
                 });
             }
         }
@@ -92,63 +98,104 @@ export class ImageMeta implements IKnowledgeSource {
         const timestampParam = [];
 
         if (this.img.dateTaken) {
-            timestampParam.push({ name: "Timestamp", value: this.img.dateTaken });
+            timestampParam.push({
+                name: "Timestamp",
+                value: this.img.dateTaken,
+            });
         }
-        
+
         // add the image entity
         entities.push(imageEntity);
 
         // if we have POI those are also entities
         if (this.img.nearbyPOI) {
-            for(let i = 0; i < this.img.nearbyPOI.length; i++) {
+            for (let i = 0; i < this.img.nearbyPOI.length; i++) {
                 const poiEntity: conversation.ConcreteEntity = {
                     name: this.img.nearbyPOI[i].name!,
-                    type: [...this.img.nearbyPOI[i].categories!, "PointOfInterest"],
-                    facets: []
-                }
+                    type: [
+                        ...this.img.nearbyPOI[i].categories!,
+                        "PointOfInterest",
+                    ],
+                    facets: [],
+                };
 
                 if (this.img.nearbyPOI[i].freeFormAddress) {
-                    poiEntity.facets?.push({ name: "address", value: this.img.nearbyPOI[i].freeFormAddress!});
+                    poiEntity.facets?.push({
+                        name: "address",
+                        value: this.img.nearbyPOI[i].freeFormAddress!,
+                    });
                 }
 
-                if (this.img.nearbyPOI[i].position != undefined && this.img.nearbyPOI[i].position?.latitude != undefined && this.img.nearbyPOI[i].position?.longitude != undefined) {
-                    poiEntity.facets?.push({ name: "position", value: JSON.stringify(this.img.nearbyPOI[i].position)});
-                    poiEntity.facets?.push({ name: "longitude", value: this.img.nearbyPOI[i].position!.longitude!.toString()});
-                    poiEntity.facets?.push({ name: "latitude", value: this.img.nearbyPOI[i].position!.latitude!.toString()});
+                if (
+                    this.img.nearbyPOI[i].position != undefined &&
+                    this.img.nearbyPOI[i].position?.latitude != undefined &&
+                    this.img.nearbyPOI[i].position?.longitude != undefined
+                ) {
+                    poiEntity.facets?.push({
+                        name: "position",
+                        value: JSON.stringify(this.img.nearbyPOI[i].position),
+                    });
+                    poiEntity.facets?.push({
+                        name: "longitude",
+                        value: this.img.nearbyPOI[
+                            i
+                        ].position!.longitude!.toString(),
+                    });
+                    poiEntity.facets?.push({
+                        name: "latitude",
+                        value: this.img.nearbyPOI[
+                            i
+                        ].position!.latitude!.toString(),
+                    });
                 }
 
-                if (this.img.nearbyPOI[i].categories !== undefined && this.img.nearbyPOI[i].categories!.length > 0) {
-                    poiEntity.facets?.push({ name: "category", value: this.img.nearbyPOI[i].categories!.join(",")});                
+                if (
+                    this.img.nearbyPOI[i].categories !== undefined &&
+                    this.img.nearbyPOI[i].categories!.length > 0
+                ) {
+                    poiEntity.facets?.push({
+                        name: "category",
+                        value: this.img.nearbyPOI[i].categories!.join(","),
+                    });
                 }
 
                 entities.push(poiEntity);
 
                 actions.push({
-                    verbs: [ "near" ],
+                    verbs: ["near"],
                     verbTense: "present",
                     subjectEntityName: this.img.fileName,
                     objectEntityName: this.img.nearbyPOI[i].name!,
-                    indirectObjectEntityName: "ME" // TODO: image taker name
+                    indirectObjectEntityName: "ME", // TODO: image taker name
                 });
             }
         }
-        
+
         // reverse lookup addresses are also entities
         if (this.img.reverseGeocode) {
-            for(let i = 0; i < this.img.reverseGeocode.length; i++) {
-
+            for (let i = 0; i < this.img.reverseGeocode.length; i++) {
                 // only put in high confidence items or the first one
-                if((i == 0 || this.img.reverseGeocode[i].confidence == "High") && this.img.reverseGeocode[i].address !== undefined) {
-                    const addrOutput: AddressOutput = this.img.reverseGeocode[i].address!;
+                if (
+                    (i == 0 ||
+                        this.img.reverseGeocode[i].confidence == "High") &&
+                    this.img.reverseGeocode[i].address !== undefined
+                ) {
+                    const addrOutput: AddressOutput =
+                        this.img.reverseGeocode[i].address!;
                     const addrEntity: conversation.ConcreteEntity = {
-                        name: this.img.reverseGeocode[i].address!.formattedAddress ?? "",
-                        type: [ "address" ],
-                        facets: []
-                    }
+                        name:
+                            this.img.reverseGeocode[i].address!
+                                .formattedAddress ?? "",
+                        type: ["address"],
+                        facets: [],
+                    };
 
                     // Add the address of the image as a facet to it's entity
                     if (i == 0 && addrOutput.formattedAddress) {
-                        imageEntity.facets?.push({ name: "address", value: addrOutput.formattedAddress });
+                        imageEntity.facets?.push({
+                            name: "address",
+                            value: addrOutput.formattedAddress,
+                        });
                     }
 
                     // make the address an entity
@@ -157,91 +204,143 @@ export class ImageMeta implements IKnowledgeSource {
                     // now make an entity for all of the different parts of the address
                     // and add them as facets to the address
                     if (addrOutput.addressLine) {
-                        addrEntity.facets?.push({ name: "addressLine", value: addrOutput.addressLine});
-                        entities.push({ name: addrOutput.locality ?? "", type: [ "locality", "place" ] });
+                        addrEntity.facets?.push({
+                            name: "addressLine",
+                            value: addrOutput.addressLine,
+                        });
+                        entities.push({
+                            name: addrOutput.locality ?? "",
+                            type: ["locality", "place"],
+                        });
                     }
                     if (addrOutput.locality) {
-                        addrEntity.facets?.push({ name: "locality", value: addrOutput.locality});
+                        addrEntity.facets?.push({
+                            name: "locality",
+                            value: addrOutput.locality,
+                        });
                     }
-                    if (addrOutput.neighborhood) {        
-                        addrEntity.facets?.push({ name: "neighborhood", value: addrOutput.neighborhood});
-                        entities.push({ name: addrOutput.neighborhood ?? "", type: [ "neighborhood", "place" ] });
+                    if (addrOutput.neighborhood) {
+                        addrEntity.facets?.push({
+                            name: "neighborhood",
+                            value: addrOutput.neighborhood,
+                        });
+                        entities.push({
+                            name: addrOutput.neighborhood ?? "",
+                            type: ["neighborhood", "place"],
+                        });
                     }
                     if (addrOutput.adminDistricts) {
-                        addrEntity.facets?.push({ name: "district", value: JSON.stringify(addrOutput.adminDistricts)});
-                        for(let i = 0; i < addrOutput.adminDistricts.length; i++) {                            
-                            const e: ConcreteEntity = { 
-                                name: addrOutput.adminDistricts[i].name ?? "", type: [ "district", "place" ], 
-                                facets: []
+                        addrEntity.facets?.push({
+                            name: "district",
+                            value: JSON.stringify(addrOutput.adminDistricts),
+                        });
+                        for (
+                            let i = 0;
+                            i < addrOutput.adminDistricts.length;
+                            i++
+                        ) {
+                            const e: ConcreteEntity = {
+                                name: addrOutput.adminDistricts[i].name ?? "",
+                                type: ["district", "place"],
+                                facets: [],
                             };
 
                             if (addrOutput.adminDistricts[i].shortName) {
-                                e.facets?.push({ name: "shortName", value: addrOutput.adminDistricts[i].shortName!})
+                                e.facets?.push({
+                                    name: "shortName",
+                                    value: addrOutput.adminDistricts[i]
+                                        .shortName!,
+                                });
                             }
 
                             entities.push(e);
                         }
                     }
                     if (addrOutput.postalCode) {
-                        addrEntity.facets?.push({ name: "postalCode", value: addrOutput.postalCode});
-                        entities.push({ name: addrOutput.postalCode ?? "", type: [ "postalCode", "place" ] });
+                        addrEntity.facets?.push({
+                            name: "postalCode",
+                            value: addrOutput.postalCode,
+                        });
+                        entities.push({
+                            name: addrOutput.postalCode ?? "",
+                            type: ["postalCode", "place"],
+                        });
                     }
                     if (addrOutput.countryRegion) {
-                        if (addrOutput.countryRegion.name !== undefined && addrOutput.countryRegion.name.length > 0) {
-                            addrEntity.facets?.push({ name: "countryName", value: addrOutput.countryRegion?.name!});
+                        if (
+                            addrOutput.countryRegion.name !== undefined &&
+                            addrOutput.countryRegion.name.length > 0
+                        ) {
+                            addrEntity.facets?.push({
+                                name: "countryName",
+                                value: addrOutput.countryRegion?.name!,
+                            });
                         }
-                        if (addrOutput.countryRegion.ISO !== undefined && addrOutput.countryRegion.ISO.length > 0) {
-                            addrEntity.facets?.push({ name: "countryISO", value: addrOutput.countryRegion?.ISO!});
+                        if (
+                            addrOutput.countryRegion.ISO !== undefined &&
+                            addrOutput.countryRegion.ISO.length > 0
+                        ) {
+                            addrEntity.facets?.push({
+                                name: "countryISO",
+                                value: addrOutput.countryRegion?.ISO!,
+                            });
                         }
-                        entities.push({ 
-                            name: addrOutput.countryRegion.name ?? "", type: [ "country", "place" ], 
+                        entities.push({
+                            name: addrOutput.countryRegion.name ?? "",
+                            type: ["country", "place"],
                             //facets: [ { name: "ISO", value: addrOutput.countryRegion.ISO ?? "" } ]
                         });
                     }
                     if (addrOutput.intersection) {
-                        addrEntity.facets?.push({ name: "intersection", value: JSON.stringify(addrOutput.intersection)});
-                        entities.push({ name: addrOutput.intersection.displayName ?? "", type: [ "intersection", "place" ] });
-                    }   
-                    
+                        addrEntity.facets?.push({
+                            name: "intersection",
+                            value: JSON.stringify(addrOutput.intersection),
+                        });
+                        entities.push({
+                            name: addrOutput.intersection.displayName ?? "",
+                            type: ["intersection", "place"],
+                        });
+                    }
+
                     actions.push({
-                        verbs: [ "captured at" ],
+                        verbs: ["captured at"],
                         verbTense: "present",
                         subjectEntityName: imageEntity.name,
                         objectEntityName: addrEntity.name,
                         params: timestampParam,
-                        indirectObjectEntityName: "none"
-                    });                    
+                        indirectObjectEntityName: "none",
+                    });
                 }
             }
-        }  
-        
+        }
+
         // add knowledge respone items from ImageMeta to knowledge
         if (this.img.knowledge?.entities) {
             entities = entities.concat(this.img.knowledge?.entities);
 
             // each extracted entity "is in" the image
             // and all such entities are "contained by" the image
-            for(let i = 0; i < this.img.knowledge?.entities.length; i++) {
+            for (let i = 0; i < this.img.knowledge?.entities.length; i++) {
                 actions.push({
-                    verbs: [ "within" ],
+                    verbs: ["within"],
                     verbTense: "present",
                     subjectEntityName: this.img.knowledge?.entities[i].name,
                     objectEntityName: imageEntity.name,
                     indirectObjectEntityName: "none",
                     params: timestampParam,
-                    subjectEntityFacet: undefined
-                }); 
+                    subjectEntityFacet: undefined,
+                });
 
                 actions.push({
-                    verbs: [ "contains" ],
+                    verbs: ["contains"],
                     verbTense: "present",
                     subjectEntityName: imageEntity.name,
                     objectEntityName: this.img.knowledge.entities[i].name,
                     indirectObjectEntityName: "none",
                     params: timestampParam,
-                    subjectEntityFacet: undefined
-                });                 
-            }          
+                    subjectEntityFacet: undefined,
+                });
+            }
         }
         if (this.img.knowledge?.actions) {
             actions = actions.concat(this.img.knowledge?.actions);
@@ -279,7 +378,7 @@ export class ImageCollection implements IConversation<ImageMeta> {
         public propertyToSemanticRefIndex:
             | IPropertyToSemanticRefIndex
             | undefined = undefined,
-    ) { 
+    ) {
         this.settings = createPodcastSettings();
     }
 
@@ -295,7 +394,7 @@ export class ImageCollection implements IConversation<ImageMeta> {
                         this.semanticRefIndex,
                         i,
                         0,
-                        true
+                        true,
                     );
                 }
                 for (const action of knowlegeResponse.actions) {
@@ -316,8 +415,8 @@ export class ImageCollection implements IConversation<ImageMeta> {
                 }
             }
         }
-    }    
-    
+    }
+
     public async buildIndex(
         progressCallback?: (
             text: string,
@@ -329,7 +428,7 @@ export class ImageCollection implements IConversation<ImageMeta> {
         if (this.semanticRefs === undefined) {
             this.semanticRefs = [];
         }
-    
+
         this.addMetadataToIndex();
 
         let indexingResult: ConversationIndexingResult = {
@@ -337,14 +436,11 @@ export class ImageCollection implements IConversation<ImageMeta> {
             failedMessages: [],
         };
         return indexingResult;
-    }        
+    }
 
     public async buildRelatedTermsIndex(
         batchSize: number = 8,
-        progressCallback?: (
-            batch: string[],
-            batchStartAt: number,
-        ) => boolean,
+        progressCallback?: (batch: string[], batchStartAt: number) => boolean,
     ): Promise<void> {
         if (this.semanticRefIndex) {
             this.termToRelatedTermsIndex = new TermToRelatedTermsIndex(
@@ -358,7 +454,7 @@ export class ImageCollection implements IConversation<ImageMeta> {
             );
         }
     }
-       
+
     public serialize(): ImageCollectionData {
         return {
             nameTag: this.nameTag,
@@ -385,7 +481,7 @@ export class ImageCollection implements IConversation<ImageMeta> {
             );
         }
         this.buildSecondaryIndexes();
-    }    
+    }
 
     private buildSecondaryIndexes() {
         //this.buildParticipantAliases();
@@ -418,13 +514,14 @@ export class ImageCollection implements IConversation<ImageMeta> {
 export async function importImages(
     imagePath: string,
     recursive: boolean = true,
-    callback?: (text: string, count: number, max: number) => void
+    callback?: (text: string, count: number, max: number) => void,
 ): Promise<ImageCollection> {
-
     let isDir = isDirectoryPath(imagePath);
 
     if (!fs.existsSync(imagePath)) {
-        throw Error(`The supplied file or folder '${imagePath}' does not exist.`);
+        throw Error(
+            `The supplied file or folder '${imagePath}' does not exist.`,
+        );
     }
 
     // create a model used to extract data from the images
@@ -440,15 +537,12 @@ export async function importImages(
         }
     }
 
-    return new ImageCollection(
-        path.dirname(imagePath),
-        images
-    );
+    return new ImageCollection(path.dirname(imagePath), images);
 }
 
 /**
  * Imports images from the supplied folder.
- * 
+ *
  * @param sourcePath - The folder to import.
  * @param recursive - A flag indicating whether or not subfolders are imported.
  * @param chatModel - The model used to extract data from the image.
@@ -458,7 +552,7 @@ async function indexImages(
     sourcePath: string,
     recursive: boolean,
     chatModel: ChatModel,
-    callback?: (text: string, count: number, max: number) => void
+    callback?: (text: string, count: number, max: number) => void,
 ): Promise<Image[]> {
     // load files from the supplied directory
     const fileNames = await fs.promises.readdir(sourcePath, {
@@ -466,7 +560,7 @@ async function indexImages(
     });
 
     // index each image
-    const retVal: Image[] = []    
+    const retVal: Image[] = [];
     for (let i = 0; i < fileNames.length; i++) {
         const fullFilePath: string = path.join(sourcePath, fileNames[i]);
         //console.log(`${fullFilePath} [${i+1} of ${fileNames.length}] (estimated time remaining: ${clock.elapsedSeconds / (i + 1) * (fileNames.length - i)})`);
@@ -486,12 +580,15 @@ async function indexImages(
 
 /**
  * Imports the supplied image file (if it's an image)
- * 
+ *
  * @param fileName - The file to import
  * @param chatModel - The model used to extract data from the image.
  * @returns - The imported image.
  */
-async function indexImage(fileName: string, chatModel: ChatModel): Promise<Image | undefined> {
+async function indexImage(
+    fileName: string,
+    chatModel: ChatModel,
+): Promise<Image | undefined> {
     if (!fs.existsSync(fileName)) {
         console.log(`Could not find part of the file path '${fileName}'`);
         return;
@@ -500,7 +597,10 @@ async function indexImage(fileName: string, chatModel: ChatModel): Promise<Image
         return;
     }
 
-    const img: image.Image | undefined = await image.loadImageWithKnowledge(fileName, chatModel);
+    const img: image.Image | undefined = await image.loadImageWithKnowledge(
+        fileName,
+        chatModel,
+    );
 
     if (img !== undefined) {
         return new Image([img.fileName], new ImageMeta(fileName, img!));

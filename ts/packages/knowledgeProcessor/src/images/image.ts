@@ -16,7 +16,10 @@ import path from "path";
 import { createTypeChat, isDirectoryPath, promptLib } from "typeagent";
 import { createEntitySearchOptions } from "../conversation/entities.js";
 import { Image } from "./imageSchema.js";
-import { ConcreteEntity, KnowledgeResponse } from "../conversation/knowledgeSchema.js";
+import {
+    ConcreteEntity,
+    KnowledgeResponse,
+} from "../conversation/knowledgeSchema.js";
 import fs from "node:fs";
 import ExifReader from "exifreader";
 import { createJsonTranslator, PromptSection } from "typechat";
@@ -139,29 +142,28 @@ export async function imageToMessage(
 
     // TODO: add actions for all extracted entities being photographed/contained by image
     if (kr?.entities) {
-        for(let i = 0; i < kr?.entities.length; i++) {
-            
+        for (let i = 0; i < kr?.entities.length; i++) {
             // each extracted entity "is in" the image
             // and all such entities are "contained by" the image
             kr.actions.push({
-                verbs: [ "is in" ],
+                verbs: ["is in"],
                 verbTense: "present",
                 subjectEntityName: "none",
                 objectEntityName: kr.entities[i].name,
                 indirectObjectEntityName: knowledge.entities[0].name, // the image name
                 params: [],
-                subjectEntityFacet: undefined
+                subjectEntityFacet: undefined,
             });
 
             kr.actions.push({
-                verbs: [ "contains" ],
+                verbs: ["contains"],
                 verbTense: "present",
                 subjectEntityName: "none",
                 objectEntityName: knowledge.entities[0].name,
                 indirectObjectEntityName: kr.entities[i].name, // the image name
                 params: [],
-                subjectEntityFacet: undefined
-            });            
+                subjectEntityFacet: undefined,
+            });
 
             // retVal.actions.push({
             //     verbs: [ "taken", "pictured", "photographed" ],
@@ -169,18 +171,17 @@ export async function imageToMessage(
             //     subjectEntityName: imageEntity.name,
             //     objectEntityName
             // })
-            // "actions": [  
-            //     {  
-            //         "verbs": ["hike"],  
-            //         "verbTense": "present",  
-            //         "subjectEntityName": "none",  
-            //         "objectEntityName": "hiking trail",  
-            //         "indirectObjectEntityName": "none"  
-            //     }  
-            // ],              
+            // "actions": [
+            //     {
+            //         "verbs": ["hike"],
+            //         "verbTense": "present",
+            //         "subjectEntityName": "none",
+            //         "objectEntityName": "hiking trail",
+            //         "indirectObjectEntityName": "none"
+            //     }
+            // ],
         }
     }
-
 
     return {
         header: `${image.fileName} - ${image.title}`,
@@ -195,43 +196,64 @@ export function getKnowledgeForImage(
     image: Image,
     extractor: KnowledgeExtractor,
 ): KnowledgeResponse {
-
-    const imageEntity: ConcreteEntity = { 
-        name: image.fileName, 
-        type: ["file", "image"], 
-        facets: [ { name: "File Name", value: image.fileName } ] };
+    const imageEntity: ConcreteEntity = {
+        name: image.fileName,
+        type: ["file", "image"],
+        facets: [{ name: "File Name", value: image.fileName }],
+    };
 
     // EXIF data are facets of this image
-    for(let i = 0; i < image?.exifData.length; i++) {
-        if (image?.exifData[i] !== undefined && image?.exifData[i][1] !== undefined) {
+    for (let i = 0; i < image?.exifData.length; i++) {
+        if (
+            image?.exifData[i] !== undefined &&
+            image?.exifData[i][1] !== undefined
+        ) {
             imageEntity.facets!.push({
                 name: image?.exifData[i][0],
-                value: image?.exifData[i][1]
+                value: image?.exifData[i][1],
             });
         }
     }
 
     // create the return value
     const retVal: KnowledgeResponse = {
-        entities: [ imageEntity ],
+        entities: [imageEntity],
         actions: [],
         inverseActions: [],
         topics: [],
-    };    
+    };
 
     // if we have POI those are also entities
     if (image.nearbyPOI) {
-        for(let i = 0; i < image.nearbyPOI.length; i++) {
+        for (let i = 0; i < image.nearbyPOI.length; i++) {
             const poiEntity: ConcreteEntity = {
                 name: image.nearbyPOI[i].name!,
                 type: [...image.nearbyPOI[i].categories!, "PointOfInterest"],
-                facets: [ 
-                    { name: "address", value: image.nearbyPOI[i].freeFormAddress ?? "" },
-                    { name: "position", value: JSON.stringify(image.nearbyPOI[i].position) ?? "" },
-                    { name: "longitude", value: image.nearbyPOI[i].position?.longitude?.toString() ?? "" },
-                    { name: "latitude", value: image.nearbyPOI[i].position?.latitude?.toString() ?? "" }
-                ]
-            }
+                facets: [
+                    {
+                        name: "address",
+                        value: image.nearbyPOI[i].freeFormAddress ?? "",
+                    },
+                    {
+                        name: "position",
+                        value:
+                            JSON.stringify(image.nearbyPOI[i].position) ?? "",
+                    },
+                    {
+                        name: "longitude",
+                        value:
+                            image.nearbyPOI[
+                                i
+                            ].position?.longitude?.toString() ?? "",
+                    },
+                    {
+                        name: "latitude",
+                        value:
+                            image.nearbyPOI[i].position?.latitude?.toString() ??
+                            "",
+                    },
+                ],
+            };
 
             retVal.entities.push(poiEntity);
         }
@@ -239,56 +261,109 @@ export function getKnowledgeForImage(
 
     // reverse lookup addresses are also entities
     if (image.reverseGeocode) {
-        for(let i = 0; i < image.reverseGeocode.length; i++) {
-
+        for (let i = 0; i < image.reverseGeocode.length; i++) {
             // only put in high confidence items or the first one
-            if((i == 0 || image.reverseGeocode[i].confidence == "High") && image.reverseGeocode[i].address !== undefined) {
-                const addrOutput: AddressOutput = image.reverseGeocode[i].address!;
+            if (
+                (i == 0 || image.reverseGeocode[i].confidence == "High") &&
+                image.reverseGeocode[i].address !== undefined
+            ) {
+                const addrOutput: AddressOutput =
+                    image.reverseGeocode[i].address!;
                 const addrEntity: ConcreteEntity = {
-                    name: image.reverseGeocode[i].address!.formattedAddress ?? "",
-                    type: [ "address" ],
+                    name:
+                        image.reverseGeocode[i].address!.formattedAddress ?? "",
+                    type: ["address"],
                     facets: [
-                        { name: "addressLine", value: addrOutput.addressLine ?? "" },
+                        {
+                            name: "addressLine",
+                            value: addrOutput.addressLine ?? "",
+                        },
                         { name: "locality", value: addrOutput.locality ?? "" },
-                        { name: "neighborhood", value: addrOutput.neighborhood ?? "" },
-                        { name: "adminDistricts", value: JSON.stringify(addrOutput.adminDistricts) ?? "" },
-                        { name: "postalCode", value: addrOutput.postalCode ?? "" },
-                        { name: "countryName", value: addrOutput.countryRegion?.name ?? "" },
-                        { name: "countryISO", value: addrOutput.countryRegion?.ISO ?? "" },
-                        { name: "intersection", value: JSON.stringify(addrOutput.intersection) ?? "" },
-                    ]
-                }
+                        {
+                            name: "neighborhood",
+                            value: addrOutput.neighborhood ?? "",
+                        },
+                        {
+                            name: "adminDistricts",
+                            value:
+                                JSON.stringify(addrOutput.adminDistricts) ?? "",
+                        },
+                        {
+                            name: "postalCode",
+                            value: addrOutput.postalCode ?? "",
+                        },
+                        {
+                            name: "countryName",
+                            value: addrOutput.countryRegion?.name ?? "",
+                        },
+                        {
+                            name: "countryISO",
+                            value: addrOutput.countryRegion?.ISO ?? "",
+                        },
+                        {
+                            name: "intersection",
+                            value:
+                                JSON.stringify(addrOutput.intersection) ?? "",
+                        },
+                    ],
+                };
 
                 // make the address an entity
                 retVal.entities.push(addrEntity);
 
                 // now make an entity for all of the different parts of teh address
                 if (addrOutput.addressLine) {
-                    retVal.entities.push({ name: addrOutput.locality ?? "", type: [ "locality", "place" ] });
+                    retVal.entities.push({
+                        name: addrOutput.locality ?? "",
+                        type: ["locality", "place"],
+                    });
                 }
                 if (addrOutput.neighborhood) {
-                    retVal.entities.push({ name: addrOutput.neighborhood ?? "", type: [ "neighborhood", "place" ] });
+                    retVal.entities.push({
+                        name: addrOutput.neighborhood ?? "",
+                        type: ["neighborhood", "place"],
+                    });
                 }
                 if (addrOutput.adminDistricts) {
-                    for(let i = 0; i < addrOutput.adminDistricts.length; i++) {
-                        retVal.entities.push({ 
-                            name: addrOutput.adminDistricts[i].name ?? "", type: [ "district", "place" ], 
-                            facets: [ { name: "shortName", value: addrOutput.adminDistricts[i].shortName ?? "" } ]
+                    for (let i = 0; i < addrOutput.adminDistricts.length; i++) {
+                        retVal.entities.push({
+                            name: addrOutput.adminDistricts[i].name ?? "",
+                            type: ["district", "place"],
+                            facets: [
+                                {
+                                    name: "shortName",
+                                    value:
+                                        addrOutput.adminDistricts[i]
+                                            .shortName ?? "",
+                                },
+                            ],
                         });
                     }
                 }
                 if (addrOutput.postalCode) {
-                    retVal.entities.push({ name: addrOutput.postalCode ?? "", type: [ "postalCode", "place" ] });
+                    retVal.entities.push({
+                        name: addrOutput.postalCode ?? "",
+                        type: ["postalCode", "place"],
+                    });
                 }
                 if (addrOutput.countryRegion) {
-                    retVal.entities.push({ 
-                        name: addrOutput.countryRegion.name ?? "", type: [ "country", "place" ], 
-                        facets: [ { name: "ISO", value: addrOutput.countryRegion.ISO ?? "" } ]
+                    retVal.entities.push({
+                        name: addrOutput.countryRegion.name ?? "",
+                        type: ["country", "place"],
+                        facets: [
+                            {
+                                name: "ISO",
+                                value: addrOutput.countryRegion.ISO ?? "",
+                            },
+                        ],
                     });
                 }
                 if (addrOutput.intersection) {
-                    retVal.entities.push({ name: addrOutput.intersection.displayName ?? "", type: [ "intersection", "place" ] });
-                }                                                                                
+                    retVal.entities.push({
+                        name: addrOutput.intersection.displayName ?? "",
+                        type: ["intersection", "place"],
+                    });
+                }
             }
         }
     }
@@ -299,7 +374,7 @@ export function getKnowledgeForImage(
     //     verbTense: "past",
     //     subjectEntityName: imageEntity.name,
     //     objectEntityName
-    // })    
+    // })
 
     return retVal;
 }
@@ -418,16 +493,16 @@ export interface imageDetailExtractionSchema {
     title: string;
     // Alternative text for this image
     altText: string;
-    // A very detailed and factual image caption of no less than 200 words.  
+    // A very detailed and factual image caption of no less than 200 words.
     // Ignore image orientation.
     // Include descriptive adjectives like color, motion, etc.
     caption: string;
     // Knowledge extracted from the image including all visible (or implied) entities, actions, and topics
     knowledge: KnowledgeResponse;
-};
+}
 
 /**
- * 
+ *
  * @param fileName The image file to load
  * @param model The language model being used to describe the image.
  * @param loadCachedDetails A flag indicating if cached image descriptions should be loaded if available.
@@ -436,9 +511,8 @@ export interface imageDetailExtractionSchema {
 export async function loadImage(
     fileName: string,
     model: ChatModel,
-    loadCachedDetails: boolean = true
+    loadCachedDetails: boolean = true,
 ): Promise<Image | undefined> {
-
     const cachedFileName: string = fileName + ".eat";
     if (loadCachedDetails && fs.existsSync(cachedFileName)) {
         return JSON.parse(fs.readFileSync(cachedFileName, "utf8"));
@@ -502,7 +576,7 @@ export async function loadImage(
                 dateTaken: "",
                 exifData: properties,
                 nearbyPOI: content.nearbyPOI,
-                reverseGeocode: content.reverseGeocode
+                reverseGeocode: content.reverseGeocode,
             };
 
             // cache this information for possible reuse later
@@ -510,7 +584,6 @@ export async function loadImage(
 
             // return the image description
             return retVal;
-
         } else {
             const err = `Unable to load ${fileName}. '${chatResponse.message}'`;
             console.error("\t" + err);
@@ -524,7 +597,7 @@ export async function loadImage(
 
 /**
  * Loads the image and then uses the LLM and other APIs to get POI, KnowledgeResponse, address, etc.
- * 
+ *
  * @param fileName The image file to load
  * @param model The language model being used to describe the image.
  * @param loadCachedDetails A flag indicating if cached image descriptions should be loaded if available.
@@ -533,9 +606,8 @@ export async function loadImage(
 export async function loadImageWithKnowledge(
     fileName: string,
     model: ChatModel,
-    loadCachedDetails: boolean = true
+    loadCachedDetails: boolean = true,
 ): Promise<Image | undefined> {
-
     const cachedFileName: string = fileName + ".kr.json";
     if (loadCachedDetails && fs.existsSync(cachedFileName)) {
         return JSON.parse(fs.readFileSync(cachedFileName, "utf8"));
@@ -558,11 +630,11 @@ export async function loadImageWithKnowledge(
         `data:image/${mimeType};base64,${buffer.toString("base64")}`,
     );
 
-
-    const validator = createTypeScriptJsonValidator<imageDetailExtractionSchema>(
-        imageDetailExtractionSchema,
-        "imageDetailExtractionSchema",
-    );
+    const validator =
+        createTypeScriptJsonValidator<imageDetailExtractionSchema>(
+            imageDetailExtractionSchema,
+            "imageDetailExtractionSchema",
+        );
     const translator = createJsonTranslator<imageDetailExtractionSchema>(
         model,
         validator,
@@ -573,12 +645,11 @@ export async function loadImageWithKnowledge(
         return (
             `You are a service that translates images into JSON objects of type "imageDetailExtractionSchema" according to the following TypeScript definitions::\n` +
             `\`\`\`\n${imageDetailExtractionSchema}\`\`\`\n`
-//            `The following are messages in a conversation:\n` +
-//            `"""\n${request}\n"""\n` +
-//            `The following is the user request translated into a JSON object with 2 spaces of indentation and no properties with the value undefined:\n`
+            //            `The following are messages in a conversation:\n` +
+            //            `"""\n${request}\n"""\n` +
+            //            `The following is the user request translated into a JSON object with 2 spaces of indentation and no properties with the value undefined:\n`
         );
     }
-
 
     // create a caption for the image
     // const caption = createTypeChat<imageDetailExtractionSchema>(
@@ -609,7 +680,9 @@ export async function loadImageWithKnowledge(
         //     prompt,
         // );
 
-        const chatResponse = await translator.translate("", [content.promptSection!]);
+        const chatResponse = await translator.translate("", [
+            content.promptSection!,
+        ]);
 
         if (chatResponse.success) {
             const retVal = {
@@ -631,7 +704,6 @@ export async function loadImageWithKnowledge(
 
             // return the image description
             return retVal;
-
         } else {
             const err = `Unable to load ${fileName}. '${chatResponse.message}'`;
             console.error("\t" + err);

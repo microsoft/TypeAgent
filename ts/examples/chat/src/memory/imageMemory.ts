@@ -163,17 +163,19 @@ export function createImageCommands(
         namesArgs: NamedArgs,
         sourcePath: string,
         context: ChatContext,
-        clock: StopWatch
+        clock: StopWatch,
     ) {
         // load files from directory
         const fileNames = await fs.promises.readdir(sourcePath, {
             recursive: true,
         });
 
-        // index each image        
+        // index each image
         for (let i = 0; i < fileNames.length; i++) {
             const fullFilePath: string = path.join(sourcePath, fileNames[i]);
-            console.log(`${fullFilePath} [${i+1} of ${fileNames.length}] (estimated time remaining: ${clock.elapsedSeconds / (i + 1) * (fileNames.length - i)})`);
+            console.log(
+                `${fullFilePath} [${i + 1} of ${fileNames.length}] (estimated time remaining: ${(clock.elapsedSeconds / (i + 1)) * (fileNames.length - i)})`,
+            );
             await indexImage(fullFilePath, context);
         }
     }

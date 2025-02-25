@@ -60,11 +60,10 @@ export async function createKnowproCommands(
     commands.kpPodcastBuildIndex = podcastBuildIndex;
 
     commands.kpImages = showImages;
-    commands.kpImagesImport = imagesImport;    
+    commands.kpImagesImport = imagesImport;
     commands.kpImagesSave = imagesSave;
     commands.kpImagesLoad = imagesLoad;
     commands.kpImagesBuildIndex = imagesBuildIndex;
-
 
     /*----------------
      * COMMANDS
@@ -269,14 +268,16 @@ export async function createKnowproCommands(
             context.printer.writeError(`${namedArgs.filePath} not found`);
             return;
         }
-        
+
         let progress = new ProgressBar(context.printer, 165);
-        context.images = await kp.importImages(namedArgs.filePath, true, 
+        context.images = await kp.importImages(
+            namedArgs.filePath,
+            true,
             (text, _index, max) => {
                 progress.total = max;
                 progress.advance();
                 return progress.count < max;
-            }            
+            },
         );
         context.conversation = context.images;
         progress.complete();
@@ -307,7 +308,7 @@ export async function createKnowproCommands(
             },
         };
     }
-    
+
     commands.kpImagesSave.metadata = imagesSaveDef();
     async function imagesSave(args: string[] | NamedArgs): Promise<void> {
         const namedArgs = parseNamedArguments(args, imagesSaveDef());
@@ -501,7 +502,8 @@ export async function createKnowproCommands(
         let filter: kp.WhenFilter = {
             knowledgeType: namedArgs.ktype,
         };
-        const conv: kp.IConversation | undefined = context.podcast ?? context.images;
+        const conv: kp.IConversation | undefined =
+            context.podcast ?? context.images;
         const dateRange = kp.getTimeRangeForConversation(conv!);
         if (dateRange) {
             let startDate: Date | undefined;
@@ -642,9 +644,7 @@ export async function createKnowproCommands(
     }
 
     commands.kpImagesBuildIndex.metadata = imageCollectionBuildIndexDef();
-    async function imagesBuildIndex(
-        args: string[] | NamedArgs,
-    ): Promise<void> {
+    async function imagesBuildIndex(args: string[] | NamedArgs): Promise<void> {
         if (!context.images) {
             context.printer.writeError("No image collection loaded");
             return;
@@ -658,7 +658,10 @@ export async function createKnowproCommands(
             return;
         }
 
-        const namedArgs = parseNamedArguments(args, imageCollectionBuildIndexDef());
+        const namedArgs = parseNamedArguments(
+            args,
+            imageCollectionBuildIndexDef(),
+        );
         // Build index
         context.printer.writeLine();
         context.printer.writeLine("Building index");
