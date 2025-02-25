@@ -1,17 +1,46 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { DeepPartialUndefinedAndNull } from "common-utils";
+import {
+    DeepPartialUndefined,
+    DeepPartialUndefinedAndNull,
+} from "common-utils";
 
 export function cloneConfig<T>(config: T): T {
     return structuredClone(config);
 }
 
+// Full config
 type ConfigObject = {
-    [key: string]: ConfigObject | string | number | boolean | undefined;
+    [key: string]: ConfigObject | string | number | boolean;
 };
 
+// Settings that can be serialized, with undefined values indicating default.
+type ConfigSettings = DeepPartialUndefined<ConfigObject>;
+
+// Config changed, with missing value indicating no change (and undefined values are changed);
+type ConfigChanged = DeepPartialUndefined<ConfigObject> | undefined;
+
+// Changes to be applied to the settings, with null values indicating removal and undefined indicating no change.
 type ConfigOptions = DeepPartialUndefinedAndNull<ConfigObject>;
+
+export function setConfigSettings(
+    config: ConfigSettings,
+    options: ConfigOptions,
+    overwrite: string[] | boolean = false,
+) {
+    return mergeConfig(config, options, overwrite);
+}
+
+export function setConfigObject(
+    config: ConfigObject,
+    options: ConfigOptions,
+    defaultConfig: ConfigObject,
+    overwrite: string[] | boolean = false,
+) {
+    return mergeConfig(config, options, overwrite, defaultConfig);
+}
+
 /**
  * Merge options into config.
  *
@@ -22,12 +51,13 @@ type ConfigOptions = DeepPartialUndefinedAndNull<ConfigObject>;
  * @returns
  */
 export function mergeConfig(
-    config: ConfigObject,
+    config: ConfigSettings,
     options: ConfigOptions,
     overwrite: string[] | boolean = false,
+    defaultConfig?: ConfigObject,
     prefix: string = "",
-) {
-    const changed: ConfigOptions = {};
+): ConfigChanged {
+    const changed: ConfigSettings = {};
 
     // Ignore extra properties when not overwrite by using the keys in config to
     // process option properties.
@@ -44,14 +74,15 @@ export function mergeConfig(
             continue;
         }
         // null means set it to undefined
-        const value = optionValue === null ? undefined : optionValue;
+        const defaultValue = defaultConfig?.[key];
+        const value = optionValue === null ? defaultValue : optionValue;
         let existingValue = config[key];
         const overwriteKey = Array.isArray(overwrite)
             ? overwrite.includes(key)
             : overwrite;
         if (!overwriteKey && typeof existingValue !== typeof value) {
             throw new Error(
-                `Invalid option '${key}': type mismatch (expected: ${typeof existingValue}, actual: ${typeof value})`,
+                `Invalid option '${prefix}${key}': type mismatch (expected: ${typeof existingValue}, actual: ${typeof value})`,
             );
         }
         if (typeof value === "object") {
@@ -61,13 +92,22 @@ export function mergeConfig(
                 config[key] = existingValue;
             }
 
+            if (
+                defaultValue !== undefined &&
+                typeof defaultValue !== "object"
+            ) {
+                throw new Error(
+                    `Invalid option '${prefix}${key}': default value is not an object`,
+                );
+            }
             const changedValue = mergeConfig(
                 existingValue,
                 value,
                 overwriteKey,
+                defaultValue,
                 `${prefix}${key}.`,
             );
-            if (Object.keys(changedValue).length !== 0) {
+            if (changedValue) {
                 changed[key] = changedValue;
             }
         } else if (existingValue !== value) {
@@ -76,14 +116,15 @@ export function mergeConfig(
             } else {
                 config[key] = value;
             }
-            changed[key] = optionValue;
+            changed[key] = value;
         }
     }
-    return changed;
+
+    return Object.keys(changed).length !== 0 ? changed : undefined;
 }
 
 export function sanitizeConfig(
-    config: ConfigObject,
+    config: ConfigSettings,
     options: ConfigOptions,
     strict: string[] | boolean = true,
     prefix: string = "",

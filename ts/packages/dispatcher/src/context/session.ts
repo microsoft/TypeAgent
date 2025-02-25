@@ -1,14 +1,17 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { DeepPartialUndefined } from "common-utils";
+import {
+    DeepPartialUndefined,
+    DeepPartialUndefinedAndNull,
+} from "common-utils";
 import { CacheConfig, AgentCache, getDefaultExplainerName } from "agent-cache";
 import registerDebug from "debug";
 import fs from "node:fs";
 import path from "node:path";
 import { getUniqueFileName, getYMDPrefix } from "../utils/userData.js";
 import ExifReader from "exifreader";
-import { AppAgentState, AppAgentStateOptions } from "./appAgentManager.js";
+import { AppAgentState } from "./appAgentManager.js";
 import { cloneConfig, mergeConfig } from "./options.js";
 import { TokenCounter, TokenCounterData } from "aiclient";
 import { DispatcherName } from "./dispatcher/dispatcherUtils.js";
@@ -127,9 +130,9 @@ type DispatcherConfig = {
 };
 
 export type SessionConfig = AppAgentState & DispatcherConfig;
-
-export type SessionOptions = AppAgentStateOptions &
-    DeepPartialUndefined<DispatcherConfig>;
+export type SessionSettings = DeepPartialUndefined<SessionConfig>;
+export type SessionOptions = DeepPartialUndefinedAndNull<SessionConfig>;
+export type SessionChanged = DeepPartialUndefined<SessionConfig> | undefined;
 
 const defaultSessionConfig: SessionConfig = {
     schemas: undefined,
@@ -329,9 +332,9 @@ export class Session {
         return this.config;
     }
 
-    public setConfig(options: SessionOptions): SessionOptions {
+    public setConfig(options: SessionOptions): SessionChanged {
         const changed = mergeConfig(this.config, options, flexKeys);
-        if (Object.keys(changed).length > 0) {
+        if (changed) {
             this.save();
         }
         return changed;

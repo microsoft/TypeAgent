@@ -24,14 +24,14 @@ describe("mergeConfig", () => {
             const options = { a: 1 };
             const changed = mergeConfig(config, options);
             expect(config).toEqual({ a: 1 });
-            expect(changed).toEqual({});
+            expect(changed).toBeUndefined();
         });
         it("should ignore extra value", () => {
             const config = { a: 1 };
             const options = { b: "str" };
             const changed = mergeConfig(config, options);
             expect(config).toEqual({ a: 1 });
-            expect(changed).toEqual({});
+            expect(changed).toBeUndefined();
         });
         it("should throw on mismatch value type", () => {
             expect(() => {
@@ -59,7 +59,7 @@ describe("mergeConfig", () => {
             const options = { a: { c: null } };
             const changed = mergeConfig(config, options, ["a"]);
             expect(config).toEqual({ a: { b: 0 } });
-            expect(changed).toEqual({ a: { c: null } });
+            expect(changed).toEqual({ a: { c: undefined } });
         });
         it("should overwrite flex key mismatched with nested value", () => {
             const config = { a: 1 };
@@ -89,7 +89,7 @@ describe("mergeConfig", () => {
             const options = { a: 1 };
             const changed = mergeConfig(config, options, true);
             expect(config).toEqual({ a: 1 });
-            expect(changed).toEqual({});
+            expect(changed).toBeUndefined();
         });
         it("should add extra value", () => {
             const config = { a: 1 };

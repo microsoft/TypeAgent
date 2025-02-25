@@ -513,6 +513,9 @@ export async function changeContextConfig(
     const systemContext = context.sessionContext.agentContext;
     const session = systemContext.session;
     const changed = session.setConfig(options);
+    if (changed === undefined) {
+        return undefined;
+    }
 
     const translatorChanged = changed.hasOwnProperty("schemas");
     const actionsChanged = changed.hasOwnProperty("actions");
