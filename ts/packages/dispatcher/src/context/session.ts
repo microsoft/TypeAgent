@@ -225,7 +225,7 @@ function ensureSessionData(data: any): SessionData {
 
     const existingData = data.config;
     data.config = cloneConfig(defaultSessionConfig);
-    mergeConfig(data.config, existingData, true, flexKeys);
+    mergeConfig(data.config, existingData, flexKeys);
 
     if (data.cacheData === undefined) {
         data.cacheData = {};
@@ -330,7 +330,7 @@ export class Session {
     }
 
     public setConfig(options: SessionOptions): SessionOptions {
-        const changed = mergeConfig(this.config, options, true, flexKeys);
+        const changed = mergeConfig(this.config, options, flexKeys);
         if (Object.keys(changed).length > 0) {
             this.save();
         }

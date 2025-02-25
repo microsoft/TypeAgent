@@ -249,6 +249,23 @@ class SessionListCommandHandler implements CommandHandlerNoParams {
     }
 }
 
+function getConfigTable(config: any) {
+    const table: string[][] = [["Name", "Value"]];
+    const addConfig = (options: any, prefix: number = 2) => {
+        for (const [key, value] of Object.entries(options)) {
+            const name = `${" ".repeat(prefix)}${key.padEnd(20 - prefix)}`;
+            if (typeof value === "object") {
+                table.push([chalk.bold(name), ""]);
+                addConfig(value, prefix + 2);
+            } else {
+                table.push([name, String(value)]);
+            }
+        }
+    };
+    addConfig(config);
+    return table;
+}
+
 class SessionInfoCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Show info about the current session";
     public async run(context: ActionContext<CommandHandlerContext>) {
@@ -258,45 +275,34 @@ class SessionInfoCommandHandler implements CommandHandlerNoParams {
                   systemContext.session.sessionDirPath,
               )
             : [];
-        displayResult((log: (message?: string) => void) => {
-            log(`${chalk.bold("Instance Dir:")} ${systemContext.instanceDir}`);
-            log(
-                `${chalk.bold("Session settings")} (${
-                    systemContext.session.sessionDirPath
-                        ? chalk.green(
-                              getSessionName(
-                                  systemContext.session.sessionDirPath,
-                              ),
-                          )
-                        : "in-memory"
-                }):`,
-            );
-            const printConfig = (options: any, prefix: number = 2) => {
-                for (const [key, value] of Object.entries(options)) {
-                    const name = `${" ".repeat(prefix)}${key.padEnd(
-                        20 - prefix,
-                    )}:`;
-                    if (typeof value === "object") {
-                        log(name);
-                        printConfig(value, prefix + 2);
-                    } else {
-                        log(`${name} ${value}`);
-                    }
-                }
-            };
-            printConfig(systemContext.session.getConfig());
 
-            if (constructionFiles.length) {
-                log(`\n${chalk.bold("Construction Files:")}`);
-                for (const file of constructionFiles) {
-                    log(
-                        `  ${
-                            file.current ? chalk.green(file.name) : file.name
-                        } (${file.explainer})`,
-                    );
-                }
+        displayResult(
+            `${chalk.bold("Instance Dir:")} ${systemContext.instanceDir}`,
+            context,
+        );
+        const session = systemContext.session;
+        displayResult(
+            `${chalk.bold("Session settings")} (${
+                session.sessionDirPath
+                    ? chalk.green(getSessionName(session.sessionDirPath))
+                    : "in-memory"
+            }):`,
+            context,
+        );
+
+        displayResult(getConfigTable(session.getConfig()), context);
+
+        if (constructionFiles.length) {
+            displayResult(`\n${chalk.bold("Construction Files:")}`, context);
+            for (const file of constructionFiles) {
+                displayResult(
+                    `  ${
+                        file.current ? chalk.green(file.name) : file.name
+                    } (${file.explainer})`,
+                    context,
+                );
             }
-        }, context);
+        }
     }
 }
 
