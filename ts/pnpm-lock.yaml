@@ -2079,9 +2079,15 @@ importers:
 
   packages/knowPro:
     dependencies:
+      '@azure-rest/maps-search':
+        specifier: ^2.0.0-beta.2
+        version: 2.0.0-beta.2
       aiclient:
         specifier: workspace:*
         version: link:../aiclient
+      common-utils:
+        specifier: workspace:*
+        version: link:../commonUtils
       debug:
         specifier: ^4.4.0
         version: 4.4.0(supports-color@8.1.1)
@@ -2131,6 +2137,9 @@ importers:
 
   packages/knowledgeProcessor:
     dependencies:
+      '@azure-rest/maps-search':
+        specifier: ^2.0.0-beta.2
+        version: 2.0.0-beta.2
       aiclient:
         specifier: workspace:*
         version: link:../aiclient
