@@ -414,7 +414,7 @@ export function createNamedArgs(): NamedArgs {
             let type = def.type ?? "string";
             let arg = value(key, type, required); // This will do type conversions
             if (arg === undefined) {
-                if (def.defaultValue) {
+                if (def.defaultValue !== undefined) {
                     arg = def.defaultValue;
                 } else if (required) {
                     throw Error(`${key} requires a ${type} value`);

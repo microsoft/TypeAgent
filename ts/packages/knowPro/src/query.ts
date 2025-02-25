@@ -11,6 +11,7 @@ import {
     ScoredSemanticRef,
     SemanticRef,
     SemanticRefIndex,
+    Tag,
     Term,
     TextLocation,
     TextRange,
@@ -34,6 +35,7 @@ import { IPropertyToSemanticRefIndex } from "./secondaryIndexes.js";
 import { conversation } from "knowledge-processor";
 import { collections } from "typeagent";
 import { ITimestampToTextRangeIndex } from "./secondaryIndexes.js";
+import { Thread } from "./conversationThread.js";
 
 export function isConversationSearchable(conversation: IConversation): boolean {
     return (
@@ -322,13 +324,30 @@ function matchPropertySearchTermToAction(
     }
 }
 
+function matchPropertySearchTermToTag(
+    searchTerm: PropertySearchTerm,
+    semanticRef: SemanticRef,
+) {
+    if (
+        semanticRef.knowledgeType !== "tag" ||
+        typeof searchTerm.propertyName !== "string"
+    ) {
+        return false;
+    }
+    return matchSearchTermToText(
+        searchTerm.propertyValue,
+        (semanticRef.knowledge as Tag).text,
+    );
+}
+
 export function matchPropertySearchTermToSemanticRef(
     searchTerm: PropertySearchTerm,
     semanticRef: SemanticRef,
 ): boolean {
     return (
         matchPropertySearchTermToEntity(searchTerm, semanticRef) ||
-        matchPropertySearchTermToAction(searchTerm, semanticRef)
+        matchPropertySearchTermToAction(searchTerm, semanticRef) ||
+        matchPropertySearchTermToTag(searchTerm, semanticRef)
     );
 }
 
@@ -1063,5 +1082,13 @@ export class TextRangesWithTermMatchesSelector
             }
         }
         return rangesInScope;
+    }
+}
+
+export class ThreadSelector implements IQueryTextRangeSelector {
+    constructor(public thread: Thread) {}
+
+    public eval(context: QueryEvalContext): TextRangeCollection | undefined {
+        return new TextRangeCollection(this.thread.ranges);
     }
 }

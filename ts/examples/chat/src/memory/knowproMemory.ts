@@ -204,6 +204,8 @@ export async function createKnowproCommands(
             return;
         }
 
+        const clock = new StopWatch();
+        clock.start();
         const data = await readJsonFile<kp.PodcastData>(podcastFilePath);
         if (!data) {
             context.printer.writeError("Could not load podcast data");
@@ -216,6 +218,8 @@ export async function createKnowproCommands(
             data.semanticRefs,
         );
         context.podcast.deserialize(data);
+        clock.stop();
+        context.printer.writeTiming(chalk.gray, clock);
         context.conversation = context.podcast;
         context.printer.conversation = context.conversation;
         context.printer.writePodcastInfo(context.podcast);
@@ -374,15 +378,17 @@ export async function createKnowproCommands(
                 displayAsc: argBool("Display results in ascending order", true),
                 startMinute: argNum("Starting at minute."),
                 endMinute: argNum("Ending minute."),
+                startDate: arg("Starting at this date"),
+                endDate: arg("Ending at this date"),
                 andTerms: argBool("'And' all terms. Default is 'or", false),
                 exact: argBool("Exact match only. No related terms", false),
                 usePropertyIndex: argBool(
                     "Use property index while searching",
-                    false,
+                    true,
                 ),
                 useTimestampIndex: argBool(
                     "Use timestamp index while searching",
-                    false,
+                    true,
                 ),
             },
         };
@@ -497,18 +503,33 @@ export async function createKnowproCommands(
         };
         const conv: kp.IConversation | undefined = context.podcast ?? context.images;
         const dateRange = kp.getTimeRangeForConversation(conv!);
-        if (dateRange && namedArgs.startMinute >= 0) {
-            filter.inDateRange = {
-                start: dateTime.addMinutesToDate(
-                    dateRange.start,
-                    namedArgs.startMinute,
-                ),
-            };
-            if (namedArgs.endMinute) {
-                filter.inDateRange.end = dateTime.addMinutesToDate(
-                    dateRange.start,
-                    namedArgs.endMinute,
-                );
+        if (dateRange) {
+            let startDate: Date | undefined;
+            let endDate: Date | undefined;
+            // Did they provide an explicit date range?
+            if (namedArgs.startDate || namedArgs.endDate) {
+                startDate = argToDate(namedArgs.startDate) ?? dateRange.start;
+                endDate = argToDate(namedArgs.endDate) ?? dateRange.end;
+            } else {
+                // They may have provided a relative date range
+                if (namedArgs.startMinute >= 0) {
+                    startDate = dateTime.addMinutesToDate(
+                        dateRange.start,
+                        namedArgs.startMinute,
+                    );
+                }
+                if (namedArgs.endMinute > 0) {
+                    endDate = dateTime.addMinutesToDate(
+                        dateRange.start,
+                        namedArgs.endMinute,
+                    );
+                }
+            }
+            if (startDate) {
+                filter.inDateRange = {
+                    start: startDate,
+                    end: endDate,
+                };
             }
         }
         return filter;
@@ -570,7 +591,9 @@ export async function createKnowproCommands(
         const namedArgs = parseNamedArguments(args, podcastBuildIndexDef());
         // Build index
         context.printer.writeLine();
-        context.printer.writeLine("Building index");
+        context.printer.writeLine(
+            `Build knowledge: ${namedArgs.knowledge}\nBuild related terms: ${namedArgs.related}\n`,
+        );
         if (namedArgs.knowledge) {
             context.printer.writeLine("Building knowledge index");
             const maxMessages = namedArgs.maxMessages ?? messageCount;
@@ -591,18 +614,85 @@ export async function createKnowproCommands(
             context.printer.writeIndexingResults(indexResult);
         }
         if (namedArgs.related) {
-            context.printer.writeLine("Building semantic index");
+            context.printer.writeLine("Building related terms index");
             const progress = new ProgressBar(
                 context.printer,
                 context.podcast.semanticRefIndex.size,
             );
-            await context.podcast.buildRelatedTermsIndex(16, (terms, batch) => {
+            await context.podcast.buildRelatedTermsIndex(16, (batch) => {
+                progress.advance(batch.length);
+                return true;
+            });
+            progress.complete();
+            context.printer.writeLine(
+                `Indexed ${context.podcast.semanticRefIndex.size} terms`,
+            );
+        }
+    }
+
+    function imageCollectionBuildIndexDef(): CommandMetadata {
+        return {
+            description: "Build image collection index",
+            options: {
+                knowledge: argBool("Index knowledge", false),
+                related: argBool("Index related terms", false),
+                maxMessages: argNum("Maximum messages to index"),
+            },
+        };
+    }
+    commands.kpImagesBuildIndex.metadata = imageCollectionBuildIndexDef();
+    async function imagesBuildIndex(
+        args: string[] | NamedArgs,
+    ): Promise<void> {
+        if (!context.images) {
+            context.printer.writeError("No image collection loaded");
+            return;
+        }
+        // if (!context.images.semanticRefIndex) {
+        //     context.printer.writeError("Image collection is not indexed");
+        //     return;
+        // }
+        const messageCount = context.images.messages.length;
+        if (messageCount === 0) {
+            return;
+        }
+
+        const namedArgs = parseNamedArguments(args, imageCollectionBuildIndexDef());
+        // Build index
+        context.printer.writeLine();
+        context.printer.writeLine("Building index");
+        if (namedArgs.knowledge) {
+            context.printer.writeLine("Building knowledge index");
+            const maxMessages = namedArgs.maxMessages ?? messageCount;
+            let progress = new ProgressBar(context.printer, maxMessages);
+            const indexResult = await context.images?.buildIndex(
+                (text, result) => {
+                    progress.advance();
+                    if (!result.success) {
+                        context.printer.writeError(
+                            `${result.message}\n${text}`,
+                        );
+                    }
+                    return progress.count < maxMessages;
+                },
+            );
+            progress.complete();
+            context.printer.writeLine(`Indexed ${maxMessages} items`);
+            context.printer.writeIndexingResults(indexResult);
+        }
+        if (namedArgs.related) {
+            context.printer.writeLine("Building semantic index");
+            const progress = new ProgressBar(
+                context.printer,
+                context.images?.semanticRefIndex!.size,
+            );
+            await context.images?.buildRelatedTermsIndex(16, (terms, batch) => {
                 progress.advance(batch.value.length);
                 return true;
             });
             progress.complete();
             context.printer.writeLine(
-                `Semantic Indexed ${context.podcast.semanticRefIndex.size} terms`,
+                `Semantic Indexed ${context.images?.semanticRefIndex!.size} terms`,
             );
         }
     }

@@ -62,14 +62,14 @@ export class KnowProPrinter extends ChatPrinter {
         return this;
     }
 
-    public writeTopic(topic: kp.ITopic | undefined) {
+    public writeTopic(topic: kp.Topic | undefined) {
         if (topic !== undefined) {
             this.writeLine(topic.text);
         }
         return this;
     }
 
-    public writeTag(tag: kp.ITag | undefined) {
+    public writeTag(tag: kp.Tag | undefined) {
         if (tag !== undefined) {
             this.writeLine(tag.text);
         }
@@ -92,7 +92,7 @@ export class KnowProPrinter extends ChatPrinter {
                 );
                 break;
             case "topic":
-                this.writeTopic(semanticRef.knowledge as kp.ITopic);
+                this.writeTopic(semanticRef.knowledge as kp.Topic);
                 break;
         }
         return this;

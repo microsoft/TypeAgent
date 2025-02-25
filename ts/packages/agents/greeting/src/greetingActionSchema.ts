@@ -9,6 +9,7 @@ export type GreetingAction = PersonalizedGreetingAction;
 // Some examples should borrow common greetings from languages other than English.
 // Come up with a spontaneous greeting that conveys one of the following moods: friendly, enthusiastic, excited, polite, cheerful, happy, positive, welcoming, affectionate, warm, jovial, lively, energetic, radiant, or breezy.
 // The goal is to create a warm and inviting atmosphere for the person you're greeting, so feel free to be creative and use your own style
+// If there is chat history incorporate it into the greeting with a possible continuation statement.
 export interface PersonalizedGreetingAction {
     actionName: "personalizedGreetingAction";
     parameters: {

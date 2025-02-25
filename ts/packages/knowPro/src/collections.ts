@@ -355,9 +355,11 @@ export class MessageAccumulator extends MatchAccumulator<IMessage> {}
 
 export class TextRangeCollection {
     // Maintains ranges sorted by message index
-    private ranges: TextRange[] = [];
+    private ranges: TextRange[];
 
-    constructor() {}
+    constructor(ranges?: TextRange[] | undefined) {
+        this.ranges = ranges ?? [];
+    }
 
     public get size() {
         return this.ranges.length;
@@ -422,25 +424,6 @@ export class TextRangesInScope {
     constructor(
         public textRanges: TextRangeCollection[] | undefined = undefined,
     ) {}
-
-    public size() {
-        if (this.textRanges) {
-            let totalSize = 0;
-            for (const ranges of this.textRanges) {
-                totalSize += ranges.size;
-            }
-            return totalSize;
-        }
-        return 0;
-    }
-
-    public allowsMatches(): boolean {
-        return (
-            this.textRanges === undefined ||
-            this.textRanges.length === 0 ||
-            this.size() > 0
-        );
-    }
 
     public addTextRanges(ranges: TextRangeCollection): void {
         this.textRanges ??= [];

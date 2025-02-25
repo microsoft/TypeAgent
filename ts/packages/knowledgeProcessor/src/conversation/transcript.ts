@@ -371,10 +371,10 @@ function getMessageText(t: TranscriptTurn, includeHeader: boolean) {
 function turnToHeaderString(turn: TranscriptTurn): string {
     let text = "";
     if (turn.speaker) {
-        text += `"From: ${turn.speaker}\n`;
+        text += `From: ${turn.speaker}\n`;
     }
     if (turn.listeners && turn.listeners.length > 0) {
-        text += `To: ${turn.listeners.join(", ")}\n"`;
+        text += `To: ${turn.listeners.join(", ")}\n`;
     }
     return text;
 }

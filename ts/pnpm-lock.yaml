@@ -994,6 +994,9 @@ importers:
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../../agentSdk
+      agent-dispatcher:
+        specifier: workspace:*
+        version: link:../../dispatcher
       aiclient:
         specifier: workspace:*
         version: link:../../aiclient
@@ -1006,6 +1009,9 @@ importers:
       knowledge-processor:
         specifier: workspace:*
         version: link:../../knowledgeProcessor
+      telemetry:
+        specifier: workspace:*
+        version: link:../../telemetry
       typeagent:
         specifier: workspace:*
         version: link:../../typeagent
