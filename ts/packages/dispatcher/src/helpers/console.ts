@@ -15,6 +15,9 @@ import {
 import { TemplateEditConfig } from "../translation/actionTemplate.js";
 import chalk from "chalk";
 import stringWidth from "string-width";
+import { createInterface } from "readline/promises";
+import fs from "fs";
+import readline from "readline";
 
 function displayPadEnd(content: string, length: number): string {
     // Account for full width characters
@@ -61,7 +64,7 @@ function messageContentToText(message: MessageContent): string {
     return displayRows.join("\n");
 }
 
-function createConsoleClientIO(): ClientIO {
+function createConsoleClientIO(rl?: readline.promises.Interface): ClientIO {
     let lastAppendMode: DisplayAppendMode | undefined;
     function displayContent(
         content: DisplayContent,
@@ -143,7 +146,7 @@ function createConsoleClientIO(): ClientIO {
             requestId: RequestId,
             defaultValue?: boolean,
         ): Promise<boolean> {
-            const input = await question(`${message} (y/n)`);
+            const input = await question(`${message} (y/n)`, rl);
             return input.toLowerCase() === "y";
         },
         async proposeAction(
@@ -183,13 +186,15 @@ function createConsoleClientIO(): ClientIO {
     };
 }
 
-import readline from "readline";
-function initializeConsole() {
+function initializeConsole(rl?: readline.promises.Interface) {
     // set the input back to raw mode and resume the input to drain key press during action and not echo them
     process.stdin.setRawMode(true);
     process.stdin.on("keypress", (_, key) => {
         if (key?.ctrl && key.name === "c") {
             process.emit("SIGINT");
+        } else if (key.name === "escape" && rl !== undefined) {
+            // clear the input lien
+            rl!.write(null, { ctrl: true, name: "u" });
         }
     });
     process.stdin.resume();
@@ -199,28 +204,26 @@ function initializeConsole() {
 let usingConsole = false;
 export async function withConsoleClientIO(
     callback: (clientIO: ClientIO) => Promise<void>,
+    rl?: readline.promises.Interface,
 ) {
     if (usingConsole) {
         throw new Error("Cannot have multiple console clients");
     }
     usingConsole = true;
     try {
-        initializeConsole();
-        await callback(createConsoleClientIO());
+        initializeConsole(rl);
+        await callback(createConsoleClientIO(rl));
     } finally {
         process.stdin.pause();
         usingConsole = false;
     }
 }
 
-import { createInterface } from "readline/promises";
-async function question(message: string, history?: string[]): Promise<string> {
-    const rl = createInterface({
-        input: process.stdin,
-        output: process.stdout,
-        history,
-    });
-
+async function question(
+    message: string,
+    rl?: readline.promises.Interface,
+    history?: string[],
+): Promise<string> {
     // readline doesn't account for the right full width for some emojis.
     // Do manual adjustment.
     const adjust = (data: Buffer) => {
@@ -229,24 +232,17 @@ async function question(message: string, history?: string[]): Promise<string> {
         }
 
         process.stdout.cursorTo(
-            stringWidth(message + rl.line.slice(0, rl.cursor)),
+            stringWidth(message + rl!.line.slice(0, rl!.cursor)),
         );
     };
     process.stdin.on("data", adjust);
 
     try {
-        const p = rl.question(message);
+        const p = rl!.question(message);
         process.stdout.cursorTo(stringWidth(message));
         return await p;
     } finally {
         process.stdin.off("data", adjust);
-
-        // Close the readline interface
-        rl.close();
-
-        // set the input back to raw mode and resume the input to drain key press during action and not echo them
-        process.stdin.setRawMode(true);
-        process.stdin.resume();
     }
 }
 
@@ -285,7 +281,24 @@ export async function processCommands<T>(
     context: T,
     inputs?: string[],
 ) {
-    const history: string[] = [];
+    let history: string[] = [];
+    if (fs.existsSync("command_history.json")) {
+        const hh = JSON.parse(
+            fs.readFileSync("command_history.json", { encoding: "utf-8" }),
+        );
+        history = hh.commands;
+    }
+
+    const rl = createInterface({
+        input: process.stdin,
+        output: process.stdout,
+        history,
+        terminal: true,
+    });
+
+    process.stdin.setRawMode(true);
+    process.stdin.resume();
+
     while (true) {
         const prompt =
             typeof interactivePrompt === "function"
@@ -293,7 +306,7 @@ export async function processCommands<T>(
                 : interactivePrompt;
         const request = inputs
             ? getNextInput(prompt, inputs)
-            : await question(promptColor(prompt), history);
+            : await question(promptColor(prompt), rl, history);
         if (request.length) {
             if (
                 request.toLowerCase() === "quit" ||
@@ -311,5 +324,11 @@ export async function processCommands<T>(
             }
         }
         console.log("");
+
+        // save command history
+        fs.writeFileSync(
+            "command_history.json",
+            JSON.stringify({ commands: (rl as any).history }),
+        );
     }
 }
