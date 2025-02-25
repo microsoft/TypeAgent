@@ -187,14 +187,12 @@ function createConsoleClientIO(rl?: readline.promises.Interface): ClientIO {
 }
 
 function initializeConsole(rl?: readline.promises.Interface) {
-    
     // set the input back to raw mode and resume the input to drain key press during action and not echo them
     process.stdin.setRawMode(true);
     process.stdin.on("keypress", (_, key) => {
         if (key?.ctrl && key.name === "c") {
             process.emit("SIGINT");
-        } 
-        else if (key.name === "escape" && rl !== undefined) {         
+        } else if (key.name === "escape" && rl !== undefined) {
             // clear the input lien
             rl!.write(null, { ctrl: true, name: "u" });
         }
@@ -217,11 +215,15 @@ export async function withConsoleClientIO(
         await callback(createConsoleClientIO(rl));
     } finally {
         process.stdin.pause();
-        usingConsole = false;  
+        usingConsole = false;
     }
 }
 
-async function question(message: string, rl?: readline.promises.Interface, history?: string[]): Promise<string> {
+async function question(
+    message: string,
+    rl?: readline.promises.Interface,
+    history?: string[],
+): Promise<string> {
     // readline doesn't account for the right full width for some emojis.
     // Do manual adjustment.
     const adjust = (data: Buffer) => {
@@ -291,12 +293,12 @@ export async function processCommands<T>(
         input: process.stdin,
         output: process.stdout,
         history,
-        terminal: true
+        terminal: true,
     });
 
     process.stdin.setRawMode(true);
     process.stdin.resume();
-    
+
     while (true) {
         const prompt =
             typeof interactivePrompt === "function"
@@ -327,6 +329,6 @@ export async function processCommands<T>(
         fs.writeFileSync(
             "command_history.json",
             JSON.stringify({ commands: (rl as any).history }),
-        );  
+        );
     }
 }

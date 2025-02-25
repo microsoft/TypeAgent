@@ -214,7 +214,9 @@ class InteractiveApp {
                 this.lineReader.close();
                 fs.writeFileSync(
                     "command_history.json",
-                    JSON.stringify({ commands: (this.lineReader as any).history }),
+                    JSON.stringify({
+                        commands: (this.lineReader as any).history,
+                    }),
                 );
             });
     }
