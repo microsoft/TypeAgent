@@ -172,7 +172,17 @@ async function stopRecording() {
             response.recordedActionHtml,
         );
 
+        const actionDescription = (
+            document.getElementById("actionDescription") as HTMLTextAreaElement
+        ).value.trim();
+
+        const actionName = (
+            document.getElementById("actionName") as HTMLInputElement
+        ).value.trim();
+
         renderTimelineSteps(
+            actionName,
+            actionDescription,
             response.recordedActions,
             stepsContainer,
             response.recordedActionScreenshot,
@@ -248,7 +258,7 @@ function renderTimeline(action: any, index: number) {
                         <div class="accordion-body">
                             <div class="row">
                                 <div class="col-md-12">
-                                    <p><i> Action description </i></h6>
+                                    <p><i> ${action.description} </i></h6>
                                     <h6 class="card-title">Steps</h6>
                                     <div id="Stepscontent">
                                     </div>
@@ -262,6 +272,8 @@ function renderTimeline(action: any, index: number) {
         "#Stepscontent",
     )! as HTMLElement;
     renderTimelineSteps(
+        action.name,
+        action.description,
         action.steps,
         stepsContainer,
         action.screenshot,
@@ -271,6 +283,8 @@ function renderTimeline(action: any, index: number) {
 }
 
 function renderTimelineSteps(
+    actionName: string,
+    actionDescription: string,
     steps: any[],
     userActionsListContainer: HTMLElement,
     screenshotData: string,
@@ -325,6 +339,10 @@ function renderTimelineSteps(
         "#downloadHtml",
     )! as HTMLElement;
 
+    const processActionButton = userActionsListContainer.querySelector(
+        "#processAction",
+    )! as HTMLElement;
+
     if (screenshotData) {
         const img = document.createElement("img");
         img.src = screenshotData;
@@ -349,6 +367,17 @@ function renderTimelineSteps(
         );
     }
 
+    processActionButton.style.display = "block";
+    processActionButton.addEventListener("click", () =>
+        getIntentFromRecording(
+            htmlData,
+            screenshotData,
+            actionName,
+            actionDescription,
+            steps,
+        ),
+    );
+
     // Function to download the screenshot
     function downloadScreenshot(dataUrl: string) {
         const link = document.createElement("a");
@@ -367,6 +396,28 @@ function renderTimelineSteps(
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
+    }
+
+    async function getIntentFromRecording(
+        html: string,
+        screenshot: string,
+        actionName: string,
+        description: string,
+        steps: any[],
+    ) {
+        const response = await chrome.runtime.sendMessage({
+            type: "getIntentFromRecording",
+            html: [{ content: html, frameId: 0 }],
+            screenshot,
+            actionName,
+            description,
+            steps: JSON.stringify(steps),
+        });
+        if (chrome.runtime.lastError) {
+            console.error("Error fetching schema:", chrome.runtime.lastError);
+            return;
+        }
+        console.log(response.data);
     }
 }
 

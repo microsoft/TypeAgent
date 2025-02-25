@@ -176,7 +176,8 @@ async function updateBrowserContext(
                             break;
                         }
 
-                        case "initializePageSchema": {
+                        case "initializePageSchema":
+                        case "getIntentFromRecording": {
                             const discoveryResult =
                                 await handleSchemaDiscoveryAction(
                                     {
