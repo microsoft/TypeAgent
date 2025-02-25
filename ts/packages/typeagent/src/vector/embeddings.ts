@@ -167,6 +167,17 @@ export function createTopNList<T>(maxMatches: number): TopNList<T> {
     };
 }
 
+export function getTopK<T>(
+    items: IterableIterator<ScoredItem<T>>,
+    topK: number,
+): ScoredItem<T>[] {
+    const topNList = new TopNCollection<T | undefined>(topK, undefined);
+    for (const scoredItem of items) {
+        topNList.push(scoredItem.item, scoredItem.score);
+    }
+    return <ScoredItem<T>[]>topNList.byRank();
+}
+
 /**
  * Uses a minHeap to maintain only the TopN matches - by rank - in memory at any time.
  * Automatically purges matches that no longer meet the bar

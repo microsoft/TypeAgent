@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
@@ -8,7 +9,8 @@ Usage: evalsetup.py SOURCE EVALDIR
 By default SOURCE is ~/.typeagent/agents/spelunker/codeSearchDatabase.db,
 and EVALDIR evals/eval-1.
 
-EVALDIR is always a new directory; if the given directory already exists,
+EVALDIR is always a new directory, unless --overwrite is given.
+If the given directory already exists,
 we create a new directory name by adding -2, -3, etc.
 
 This script does the following:
@@ -64,7 +66,7 @@ def main():
 
     if not os.path.exists(source):
         print(f"Source database {source} does not exist.", file=sys.stderr)
-        os._exit(2)
+        return sys.exit(2)
 
     if not args.overwrite:
         while os.path.exists(evaldir):
@@ -81,11 +83,6 @@ def main():
     print(f"Prefix: {filename_prefix}")
     dbname = os.path.join(evaldir, "eval.db")
     print(f"Database: {dbname}")
-
-    if args.overwrite:
-        # TODO: Unsafe, but okay for now
-        assert "'" not in dbname, dbname  # TODO: Still not safe?
-        os.system(f"rm '{dbname}'*")
 
     src_conn = sqlite3.connect(f"file:{source}?mode=ro", uri=True)
     src_cur = src_conn.cursor()
@@ -147,9 +144,11 @@ def add_new_tables(dst_cur):
         if not sql or sql.startswith("--"):
             continue
         table_name = sql.split()[5]
-        print(f"Creating table {table_name} and clearing it")
+        print(f"Creating table {table_name}")
         dst_cur.execute(sql)
-        dst_cur.execute(f"DELETE FROM {table_name}")
+        if table_name == "Hashes":
+            print(f"Clearing contents of table {table_name}")
+            dst_cur.execute(f"DELETE FROM {table_name}")
 
 
 def fill_in_hashes(dst_cur, prefix):
@@ -163,7 +162,9 @@ def fill_in_hashes(dst_cur, prefix):
         if filename.startswith(prefix):
             filename = filename[len(prefix) :]  # E.g. 'dispatcher/src/index.ts'
         else:
-            print(f"Skipping chunk {chunkid} ({filename}) because it is not in {prefix}")
+            print(
+                f"Skipping chunk {chunkid} ({filename}) because it is not in {prefix}"
+            )
             continue
         input_lines = [filename]  # Start with the cleaned-up filename
 

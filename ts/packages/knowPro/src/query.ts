@@ -15,8 +15,15 @@ import {
     Term,
     TextLocation,
     TextRange,
+    Topic,
 } from "./dataFormat.js";
-import { KnowledgePropertyName, PropertySearchTerm } from "./search.js";
+import {
+    CompositeEntity,
+    KnowledgePropertyName,
+    PropertySearchTerm,
+    Scored,
+    SearchResult,
+} from "./search.js";
 import { SearchTerm } from "./search.js";
 import {
     Match,
@@ -26,6 +33,7 @@ import {
     TermSet,
     TextRangeCollection,
     TextRangesInScope,
+    unionArrays,
 } from "./collections.js";
 import {
     lookupPropertyInPropertyIndex,
@@ -33,7 +41,7 @@ import {
 } from "./propertyIndex.js";
 import { IPropertyToSemanticRefIndex } from "./secondaryIndexes.js";
 import { conversation } from "knowledge-processor";
-import { collections } from "typeagent";
+import { collections, getTopK } from "typeagent";
 import { ITimestampToTextRangeIndex } from "./secondaryIndexes.js";
 import { Thread } from "./conversationThread.js";
 
@@ -213,7 +221,7 @@ function matchSearchTermToOneOfText(
     return false;
 }
 
-function matchPropertySearchTermToEntity(
+export function matchPropertySearchTermToEntity(
     searchTerm: PropertySearchTerm,
     semanticRef: SemanticRef,
 ): boolean {
@@ -248,6 +256,16 @@ function matchPropertySearchTermToEntity(
             );
     }
     return false;
+}
+
+export function matchEntityNameOrType(
+    propertyValue: SearchTerm,
+    entity: conversation.ConcreteEntity,
+): boolean {
+    return (
+        matchSearchTermToText(propertyValue, entity.name) ||
+        matchSearchTermToOneOfText(propertyValue, entity.type)
+    );
 }
 
 function matchPropertyNameToFacetName(
@@ -600,7 +618,14 @@ export class MatchTermExpr extends QueryOpExpr<
 }
 
 export class MatchSearchTermExpr extends MatchTermExpr {
-    constructor(public searchTerm: SearchTerm) {
+    constructor(
+        public searchTerm: SearchTerm,
+        public scoreBooster?: (
+            searchTerm: SearchTerm,
+            sr: SemanticRef,
+            scored: ScoredSemanticRef,
+        ) => ScoredSemanticRef,
+    ) {
         super();
     }
 
@@ -630,12 +655,22 @@ export class MatchSearchTermExpr extends MatchTermExpr {
         context: QueryEvalContext,
         term: Term,
     ): ScoredSemanticRef[] | IterableIterator<ScoredSemanticRef> | undefined {
-        return lookupTerm(
+        const matches = lookupTerm(
             context.semanticRefIndex,
             term,
             context.semanticRefs,
             context.textRangesInScope,
         );
+        if (matches && this.scoreBooster) {
+            for (let i = 0; i < matches.length; ++i) {
+                matches[i] = this.scoreBooster(
+                    this.searchTerm,
+                    context.getSemanticRef(matches[i].semanticRefIndex),
+                    matches[i],
+                );
+            }
+        }
+        return matches;
     }
 
     private accumulateMatchesForTerm(
@@ -874,6 +909,22 @@ export class SelectTopNKnowledgeGroupExpr extends QueryOpExpr<
     }
 }
 
+export class GroupSearchResultsExpr extends QueryOpExpr<
+    Map<KnowledgeType, SearchResult>
+> {
+    constructor(
+        public srcExpr: IQueryOpExpr<
+            Map<KnowledgeType, SemanticRefAccumulator>
+        >,
+    ) {
+        super();
+    }
+
+    public eval(context: QueryEvalContext): Map<KnowledgeType, SearchResult> {
+        return toGroupedSearchResults(this.srcExpr.eval(context));
+    }
+}
+
 export class WhereSemanticRefExpr extends QueryOpExpr<SemanticRefAccumulator> {
     constructor(
         public sourceExpr: IQueryOpExpr<SemanticRefAccumulator>,
@@ -1091,4 +1142,121 @@ export class ThreadSelector implements IQueryTextRangeSelector {
     public eval(context: QueryEvalContext): TextRangeCollection | undefined {
         return new TextRangeCollection(this.thread.ranges);
     }
+}
+
+export function toGroupedSearchResults(
+    evalResults: Map<KnowledgeType, SemanticRefAccumulator>,
+): Map<KnowledgeType, SearchResult> {
+    const semanticRefMatches = new Map<KnowledgeType, SearchResult>();
+    for (const [type, accumulator] of evalResults) {
+        if (accumulator.size > 0) {
+            semanticRefMatches.set(type, {
+                termMatches: accumulator.searchTermMatches,
+                semanticRefMatches: accumulator.toScoredSemanticRefs(),
+            });
+        }
+    }
+    return semanticRefMatches;
+}
+
+export function mergeEntityMatches(
+    semanticRefs: SemanticRef[],
+    semanticRefMatches: ScoredSemanticRef[],
+    topK?: number,
+): Scored<CompositeEntity>[] {
+    let mergedEntities = new Map<string, Scored<CompositeEntity>>();
+    for (let semanticRefMatch of semanticRefMatches) {
+        const semanticRef = semanticRefs[semanticRefMatch.semanticRefIndex];
+        if (semanticRef.knowledgeType !== "entity") {
+            continue;
+        }
+        const compositeEntity = toCompositeEntity(
+            semanticRef.knowledge as conversation.ConcreteEntity,
+        );
+        const existing = mergedEntities.get(compositeEntity.name);
+        if (existing) {
+            if (combineCompositeEntities(existing.item, compositeEntity)) {
+                if (existing.score < semanticRefMatch.score) {
+                    existing.score = semanticRefMatch.score;
+                }
+            }
+        } else {
+            mergedEntities.set(compositeEntity.name, {
+                item: compositeEntity,
+                score: semanticRefMatch.score,
+            });
+        }
+    }
+    if (topK !== undefined && topK > 0) {
+        return getTopK(mergedEntities.values(), topK);
+    }
+    return [...mergedEntities.values()];
+}
+
+function toCompositeEntity(
+    entity: conversation.ConcreteEntity,
+): CompositeEntity {
+    if (entity === undefined) {
+        return {
+            name: "undefined",
+            type: ["undefined"],
+        };
+    }
+    const composite: CompositeEntity = {
+        name: entity.name,
+        type: [...entity.type],
+    };
+    composite.name = composite.name.toLowerCase();
+    collections.lowerAndSort(composite.type);
+    if (entity.facets) {
+        composite.facets = entity.facets.map((f) => facetToString(f));
+        collections.lowerAndSort(composite.facets);
+    }
+    return composite;
+}
+
+function facetToString(facet: conversation.Facet): string {
+    return `${facet.name}="${conversation.knowledgeValueToString(facet.value)}"`;
+}
+
+function combineCompositeEntities(
+    x: CompositeEntity,
+    y: CompositeEntity,
+): boolean {
+    if (x.name !== y.name) {
+        return false;
+    }
+    x.type = unionArrays(x.type, y.type)!;
+    x.facets = unionArrays(x.facets, y.facets);
+    return true;
+}
+
+export function mergeTopics(
+    semanticRefs: SemanticRef[],
+    semanticRefMatches: ScoredSemanticRef[],
+    topK?: number,
+): Scored<Topic>[] {
+    let mergedTopics = new Map<string, Scored<Topic>>();
+    for (let semanticRefMatch of semanticRefMatches) {
+        const semanticRef = semanticRefs[semanticRefMatch.semanticRefIndex];
+        if (semanticRef.knowledgeType !== "topic") {
+            continue;
+        }
+        const topic = semanticRef.knowledge as Topic;
+        const existing = mergedTopics.get(topic.text);
+        if (existing) {
+            if (existing.score < semanticRefMatch.score) {
+                existing.score = semanticRefMatch.score;
+            }
+        } else {
+            mergedTopics.set(topic.text, {
+                item: topic,
+                score: semanticRefMatch.score,
+            });
+        }
+    }
+    if (topK !== undefined && topK > 0) {
+        return getTopK(mergedTopics.values(), topK);
+    }
+    return [...mergedTopics.values()];
 }

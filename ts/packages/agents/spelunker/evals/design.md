@@ -1,6 +1,4 @@
-# Spelunker design notes
-
-# Evaluation design
+# Spelunker evaluation design
 
 ## Purpose of the eval
 
@@ -111,7 +109,8 @@ Should be possible to remove certain entries to be redone.
 Basically in a loop:
 
 - If the chunk has already been scored for all questions, skip it.
-- Display the chunk (mostly from its blobs), probably using less
+- Display the chunk (mostly from its blobs).
+  - We use _Pygments_ to colorize and _less_ to page through the text.
 - For each question that hasn't been scored yet:
   - Ask for yes/no, corresponding to "should it be included in the
     oracle context"
@@ -127,4 +126,11 @@ TBD
 
 # Random notes
 
-Scoring tool needs more UI. Maybe use colors? (Code colorization, even?)
+Do we need more versatility in the scoring tool? E.g.
+
+- Pass the question _ID_ on the command line instead of the text.
+- A way to set a fixed score for all chunks in a given file
+  (or a file pattern).
+- A way to review scores (possibly by date range).
+- A way to set a fixed score for a list of chunk IDs
+  (e.g. the References section of an actual answer).

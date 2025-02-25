@@ -391,6 +391,7 @@ export async function createKnowproCommands(
                     "Use timestamp index while searching",
                     true,
                 ),
+                distinct: argBool("Show distinct results", false),
             },
         };
         if (kType === undefined) {
@@ -443,6 +444,7 @@ export async function createKnowproCommands(
                     conversation,
                     matches,
                     namedArgs.maxToDisplay,
+                    namedArgs.distinct,
                 );
             } else {
                 context.printer.writeLine("No matches");
