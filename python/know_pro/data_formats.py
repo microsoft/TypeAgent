@@ -2,11 +2,15 @@
 # Licensed under the MIT License.
 
 # TODO:
-# - Rename to something else once Steve reveals what.
+# - Rename this file to something else once Steve reveals what.
 # - See TODOs in knowledge_schema.py.
-# - Should we use ABC instead of Protocol for certain classes?
+#
+# NOTE:
+# - I took some liberty with index types and made them int.
+# - I rearranged the order in some cases to ensure def-before-ref.
 
 from typing import Any, Literal, Protocol, runtime_checkable
+from datetime import datetime as Date
 
 from .knowledge_schema import (
     KnowledgeResponse,
@@ -41,7 +45,7 @@ class IMessage[TMeta: IKnowledgeSource = Any](Protocol):
     deletion_info: DeletionInfo | None = None
 
 
-type SemanticRefIndex = float
+type SemanticRefIndex = int
 
 
 @runtime_checkable
@@ -80,3 +84,86 @@ class ITermToSemanticRefIndex(Protocol):
 
     def lookupTerm(self, term: str) -> list[ScoredSemanticRef] | None:
         raise NotImplementedError
+
+
+type KnowledgeType = Literal["entity", "action", "topic", "tag"]
+
+
+type MessageIndex = int
+
+
+@runtime_checkable
+class Topic(Protocol):
+    text: str
+
+
+@runtime_checkable
+class Tag(Protocol):
+    text: str
+
+
+type Knowledge = ConcreteEntity | Action | Topic | Tag
+
+
+@runtime_checkable
+class TextLocation(Protocol):
+    # The index of the message.
+    message_index: MessageIndex
+    # The index of the chunk.
+    chunkIndex: int | None
+    # The index of the character within the chunk.
+    charIndex: int | None
+
+
+@runtime_checkable
+class TextRange(Protocol):
+    # The start of the range.
+    start: TextLocation
+    # The end of the range (exclusive).
+    end: TextLocation | None
+
+
+@runtime_checkable
+class SemanticRef(Protocol):
+    semantic_ref_index: SemanticRefIndex
+    range: TextRange
+    knowledge_type: KnowledgeType
+    knowledge: Knowledge
+
+
+@runtime_checkable
+class IConversation[TMeta: IKnowledgeSource = Any](Protocol):
+    name_tag: str
+    tags: list[str]
+    messages: list[IMessage[TMeta]]
+    semantic_refs: list[SemanticRef] | None
+    semantic_ref_index: ITermToSemanticRefIndex | None
+
+
+@runtime_checkable
+class IConversationData[TMessage](Protocol):
+    name_tag: str
+    messages: list[TMessage]
+    tags: list[str]
+    semantic_refs: list[SemanticRef]
+    semantic_index_data: ITermToSemanticRefIndexData | None
+
+
+@runtime_checkable
+class DateRange(Protocol):
+    start: Date
+    # Inclusive.
+    end: Date | None
+
+
+@runtime_checkable
+class Term(Protocol):
+    text: str
+    # Optional weighting for these matches.
+    weight: float | None
+
+
+# Also see:
+# - secondaryIndex.ts for optional secondary interfaces.
+# - search.ts for search interfaces.
+# - thread.ts for early ideas on threads.

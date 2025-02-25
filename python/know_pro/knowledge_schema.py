@@ -7,7 +7,7 @@
 # - Should the field names be camelCase to match the JSON schema?
 # - For things of type float, should we add `| int` to emphasize that int is okay?
 # - How to allow totally missing attributes? (facets, params, subject_entity_facet)
-# - Should we use the `type` keyword or not? It's new in Python 3.12 IIRC.
+# - Should we use ABC instead of Protocol for certain classes?
 
 from typing import Literal, Protocol, runtime_checkable
 
