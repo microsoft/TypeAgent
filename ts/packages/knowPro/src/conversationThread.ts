@@ -1,9 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { NormalizedEmbedding } from "typeagent";
 import { TextRange } from "./dataFormat.js";
 import {
+    deserializeEmbedding,
+    serializeEmbedding,
     TextEmbeddingIndex,
     TextEmbeddingIndexSettings,
 } from "./fuzzyIndex.js";
@@ -24,8 +25,15 @@ export type ScoredThreadIndex = {
 };
 
 export interface IConversationThreads {
-    threads: Thread[];
-    threadDescriptionIndex: IThreadDescriptionIndex;
+    readonly threads: Thread[];
+
+    addThread(thread: Thread): Promise<void>;
+    lookupThread(
+        threadDescription: string,
+        maxMatches?: number,
+        thresholdScore?: number,
+    ): Promise<ScoredThreadIndex[] | undefined>;
+    removeThread(threadIndex: ThreadIndex): void;
 
     serialize(): IConversationThreadData;
     deserialize(data: IConversationThreadData): void;
@@ -40,20 +48,8 @@ export interface IThreadDataItem {
     embedding: number[];
 }
 
-export interface IThreadDescriptionIndex {
-    addDescription(
-        description: string,
-        threadIndex: ThreadIndex | ScoredThreadIndex,
-    ): Promise<void>;
-    lookupThread(
-        text: string,
-        maxMatches?: number,
-        thresholdScore?: number,
-    ): Promise<ScoredThreadIndex[] | undefined>;
-}
-
-export class ThreadDescriptionIndex implements IThreadDescriptionIndex {
-    public threads: ScoredThreadIndex[];
+export class ConversationThreads implements IConversationThreads {
+    public threads: Thread[];
     public embeddingIndex: TextEmbeddingIndex;
 
     constructor(public settings: TextEmbeddingIndexSettings) {
@@ -61,26 +57,9 @@ export class ThreadDescriptionIndex implements IThreadDescriptionIndex {
         this.embeddingIndex = new TextEmbeddingIndex(settings);
     }
 
-    public async addDescription(
-        description: string,
-        threadIndex: ThreadIndex | ScoredThreadIndex,
-    ): Promise<void> {
-        if (typeof threadIndex === "number") {
-            threadIndex = {
-                threadIndex: threadIndex,
-                score: 1,
-            };
-        }
-        await this.embeddingIndex.addText(description);
-        this.threads.push(threadIndex);
-    }
-
-    public add(embedding: NormalizedEmbedding, threadIndex: ThreadIndex): void {
-        this.embeddingIndex.add(embedding);
-        this.threads.push({
-            threadIndex: threadIndex,
-            score: 1,
-        });
+    public async addThread(thread: Thread): Promise<void> {
+        this.threads.push(thread);
+        await this.embeddingIndex.addText(thread.description);
     }
 
     public async lookupThread(
@@ -99,17 +78,51 @@ export class ThreadDescriptionIndex implements IThreadDescriptionIndex {
     }
 
     public removeThread(threadIndex: ThreadIndex) {
-        const indexOf = this.threads.findIndex(
-            (t) => t.threadIndex === threadIndex,
-        );
-        if (indexOf >= 0) {
-            this.threads.splice(indexOf, 1);
-            this.embeddingIndex.removeAt(indexOf);
+        if (threadIndex >= 0) {
+            this.threads.splice(threadIndex, 1);
+            this.embeddingIndex.removeAt(threadIndex);
         }
     }
 
     public clear(): void {
         this.threads = [];
         this.embeddingIndex.clear();
+    }
+
+    public async buildIndex(): Promise<void> {
+        this.embeddingIndex.clear();
+        for (let i = 0; i < this.threads.length; ++i) {
+            const thread = this.threads[i];
+            await this.embeddingIndex.addText(thread.description);
+        }
+    }
+
+    public serialize(): IConversationThreadData {
+        const threadData: IThreadDataItem[] = [];
+        const embeddingIndex = this.embeddingIndex;
+        for (let i = 0; i < this.threads.length; ++i) {
+            const thread = this.threads[i];
+            threadData.push({
+                thread,
+                embedding: serializeEmbedding(embeddingIndex.get(i)),
+            });
+        }
+        return {
+            threads: threadData,
+        };
+    }
+
+    public deserialize(data: IConversationThreadData): void {
+        if (data.threads) {
+            this.threads = [];
+            this.embeddingIndex.clear();
+            for (let i = 0; i < data.threads.length; ++i) {
+                this.threads.push(data.threads[i].thread);
+                const embedding = deserializeEmbedding(
+                    data.threads[i].embedding,
+                );
+                this.embeddingIndex.add(embedding);
+            }
+        }
     }
 }
