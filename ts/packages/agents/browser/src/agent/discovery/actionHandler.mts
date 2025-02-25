@@ -275,11 +275,12 @@ export async function handleSchemaDiscoveryAction(
         const timerName = `Getting intent schema`;
         console.time(timerName);
         const response = await agent.getIntentSchemaFromRecording(
-            action.recordedActionName,
-            action.recordedActionDescription,
-            action.recordedActionSteps,
-            action.htmlFragments,
-            action.screenshot,
+            action.parameters.recordedActionName,
+            action.parameters.recordedActionDescription,
+            action.parameters.recordedActionSteps,
+            action.parameters.htmlFragments,
+            // action.parameters.screenshot,
+            "",
         );
 
         if (!response.success) {
