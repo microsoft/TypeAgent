@@ -12,6 +12,10 @@ as sample code.
 We use `evals/eval-1` as the directory to hold all eval data.
 (This happens to be the default built into the scripts.)
 
+(Consider using a different directory -- we now have checked-in
+data for both `eval-1` (`dispatcher`) and `eval-2` (spelunker),
+so consider a higher number or a different prefix.
+
 ## 1. Copy source files to EVALDIR (`evals/eval-1`)
 
 Assume the TypeAgent root is `~/TypeAgent`. Adjust to taste.
@@ -27,6 +31,10 @@ $
 
 We delete `dist` and `node_mpdules` to save space (Spelunker ignores them).
 We remove `package.json` since otherwise the Repo policy test fails.
+
+Create `evals/eval-1/source/README.md` to explain the origin of the code
+(notably the git commit ID from which the code was copied, and the path
+of the code relative to TypeAgent).
 
 ## 2. Run Spelunker over the copied sources
 
@@ -57,8 +65,11 @@ This leaves the data in the database `~/.typeagent/agents/spelunker/codeSearchDa
 
 ## 3. Initialize the eval database
 
-You can do this multiple times, but once you've started scoring (#4 below),
-it will erase the scores you've already entered. (TODO: preserve scores.)
+You can do this multiple times, using `--overwrite`. (Without that flag,
+it will create a new eval directory `eval-N`.) `--overwrite` preserves
+the Questions and Scores tables, but recomputes the Hashes table, after
+recopying the Files, Chunks and Blobs tables.
+(It doesn't need the Embeddings and Summaries tables.)
 
 ```shell
 $ python3 ./evals/src/evalsetup.py --overwrite
