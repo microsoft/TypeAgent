@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { ChildProcess } from "child_process";
-import { Limiter, createLimiter } from "common-utils";
+import { DeepPartialUndefined, Limiter, createLimiter } from "common-utils";
 import {
     ChildLogger,
     Logger,
@@ -14,6 +14,7 @@ import {
 import { AgentCache } from "agent-cache";
 import { randomUUID } from "crypto";
 import {
+    DispatcherConfig,
     getSessionName,
     Session,
     SessionOptions,
@@ -37,7 +38,9 @@ import { Profiler } from "telemetry";
 import { conversation as Conversation } from "knowledge-processor";
 import {
     AppAgentManager,
+    AppAgentStateInitSettings,
     AppAgentStateOptions,
+    getAppAgentStateOptions,
     SetStateResult,
 } from "./appAgentManager.js";
 import {
@@ -157,7 +160,7 @@ async function getAgentCache(
     return agentCache;
 }
 
-export type DispatcherOptions = SessionOptions & {
+export type DispatcherOptions = DeepPartialUndefined<DispatcherConfig> & {
     appAgentProviders?: AppAgentProvider[];
     explanationAsynchronousMode?: boolean; // default to false
     persistSession?: boolean; // default to false,
@@ -169,6 +172,7 @@ export type DispatcherOptions = SessionOptions & {
     constructionProvider?: ConstructionProvider;
     agentInstaller?: AppAgentInstaller;
     collectCommandResult?: boolean; // default to false
+    agents?: AppAgentStateInitSettings;
 };
 
 async function getSession(instanceDir?: string) {
@@ -380,7 +384,14 @@ export async function initializeCommandHandlerContext(
 
         await addAppAgentProviders(context, options?.appAgentProviders);
 
-        await setAppAgentStates(context, options);
+        const appAgentStateOptions = getAppAgentStateOptions(
+            options?.agents,
+            agents,
+        );
+        if (appAgentStateOptions !== undefined) {
+            session.setConfig(appAgentStateOptions);
+        }
+        await setAppAgentStates(context);
         debug("Context initialized");
         return context;
     } catch (e) {
@@ -391,14 +402,10 @@ export async function initializeCommandHandlerContext(
     }
 }
 
-async function setAppAgentStates(
-    context: CommandHandlerContext,
-    options?: AppAgentStateOptions,
-) {
+async function setAppAgentStates(context: CommandHandlerContext) {
     const result = await context.agents.setState(
         context,
         context.session.getConfig(),
-        options,
     );
 
     // Only rollback if user explicitly change state.
@@ -422,7 +429,6 @@ async function updateAppAgentStates(
     const result = await systemContext.agents.setState(
         systemContext,
         changed,
-        undefined,
         false,
     );
 

@@ -72,9 +72,6 @@ export default class ExplainCommand extends Command {
 
     async run(): Promise<void> {
         const { args, flags } = await this.parse(ExplainCommand);
-        const schemas = flags.schema
-            ? Object.fromEntries(flags.schema.map((name) => [name, true]))
-            : undefined;
 
         const command = ["@dispatcher explain"];
         if (flags.filter?.includes("refValue")) {
@@ -98,9 +95,11 @@ export default class ExplainCommand extends Command {
         await withConsoleClientIO(async (clientIO: ClientIO) => {
             const dispatcher = await createDispatcher("cli run explain", {
                 appAgentProviders: defaultAgentProviders,
-                schemas,
-                actions: null, // We don't need any actions
-                commands: { dispatcher: true },
+                agents: {
+                    schemas: flags.schema,
+                    actions: false, // We don't need any actions
+                    commands: ["dispatcher"],
+                },
                 explainer: {
                     name: flags.explainer,
                 },

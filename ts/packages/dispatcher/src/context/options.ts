@@ -18,11 +18,11 @@ type ConfigObject = {
 // Settings that can be serialized, with undefined values indicating default.
 type ConfigSettings = DeepPartialUndefined<ConfigObject>;
 
-// Config changed, with missing value indicating no change (and undefined values are changed);
-type ConfigChanged = DeepPartialUndefined<ConfigObject> | undefined;
+// Changes to be applied to the settings, with null values indicating setting to default and undefined indicating no change.
+type ConfigOptions = DeepPartialUndefinedAndNull<ConfigObject> | null;
 
-// Changes to be applied to the settings, with null values indicating removal and undefined indicating no change.
-type ConfigOptions = DeepPartialUndefinedAndNull<ConfigObject>;
+// Config changed, with missing value indicating no change (and undefined values are changed)
+type ConfigChanged = ConfigSettings | undefined;
 
 /**
  * Merge options into config.
@@ -36,7 +36,7 @@ type ConfigOptions = DeepPartialUndefinedAndNull<ConfigObject>;
 export function mergeConfig(
     config: ConfigSettings,
     options: ConfigOptions,
-    overwrite: string[] | boolean = false,
+    overwrite: readonly string[] | boolean = false,
     defaultConfig?: ConfigObject,
     prefix: string = "",
 ): ConfigChanged {
@@ -44,19 +44,26 @@ export function mergeConfig(
 
     // Ignore extra properties when not overwrite by using the keys in config to
     // process option properties.
-    const keys = Object.keys(overwrite === true ? options : config);
+    const keys = Object.keys(options !== null ? options : config);
     for (const key of keys) {
-        if (overwrite !== true && !options.hasOwnProperty(key)) {
+        if (overwrite !== true && !config.hasOwnProperty(key)) {
             continue;
         }
 
-        const optionValue = options[key];
+        const optionValue = options !== null ? options[key] : null;
 
         // undefined means no change
         if (optionValue === undefined) {
             continue;
         }
-        // null means set it to undefined
+
+        if (Array.isArray(optionValue)) {
+            throw new Error(
+                `Invalid option '${prefix}${key}': array is not a valid value`,
+            );
+        }
+
+        // null means set it to default value
         const defaultValue = defaultConfig?.[key];
         const value = optionValue === null ? defaultValue : optionValue;
         let existingValue = config[key];
@@ -105,4 +112,3 @@ export function mergeConfig(
 
     return Object.keys(changed).length !== 0 ? changed : undefined;
 }
-

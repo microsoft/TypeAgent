@@ -54,6 +54,7 @@ describe("mergeConfig", () => {
             expect(config).toEqual({ a: { b: 0, c: 1 } });
             expect(changed).toEqual({ a: { c: 1 } });
         });
+
         it("should delete nested flex key", () => {
             const config = { a: { b: 0, c: 1 } };
             const options = { a: { c: null } };
@@ -67,6 +68,14 @@ describe("mergeConfig", () => {
             const changed = mergeConfig(config, options, ["a"]);
             expect(config).toEqual({ a: { b: 1 } });
             expect(changed).toEqual({ a: { b: 1 } });
+        });
+
+        it("should overwrite flex key mismatched with non-nested value", () => {
+            const config = { a: { b: 1 } };
+            const options = { a: 1 };
+            const changed = mergeConfig(config, options, ["a"]);
+            expect(config).toEqual({ a: 1 });
+            expect(changed).toEqual({ a: 1 });
         });
     });
     describe("non-strict", () => {

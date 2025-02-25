@@ -11,7 +11,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { getUniqueFileName, getYMDPrefix } from "../utils/userData.js";
 import ExifReader from "exifreader";
-import { AppAgentState } from "./appAgentManager.js";
+import { AppAgentState, appAgentStateKeys } from "./appAgentManager.js";
 import { cloneConfig, mergeConfig } from "./options.js";
 import { TokenCounter, TokenCounterData } from "aiclient";
 import { DispatcherName } from "./dispatcher/dispatcherUtils.js";
@@ -70,7 +70,7 @@ async function newSessionDir(instanceDir: string) {
     return fullDir;
 }
 
-type DispatcherConfig = {
+export type DispatcherConfig = {
     request: string;
     translation: {
         enabled: boolean;
@@ -228,7 +228,7 @@ function ensureSessionData(data: any): SessionData {
 
     const existingData = data.config;
     data.config = cloneConfig(defaultSessionConfig);
-    mergeConfig(data.config, existingData, flexKeys);
+    mergeConfig(data.config, existingData, appAgentStateKeys);
 
     if (data.cacheData === undefined) {
         data.cacheData = {};
@@ -257,8 +257,6 @@ async function readSessionData(dirPath: string) {
     }
     return ensureSessionData(data);
 }
-
-const flexKeys = ["schemas", "actions", "commands"];
 export class Session {
     private config: SessionConfig;
     private cacheData: SessionCacheData;
@@ -333,7 +331,7 @@ export class Session {
     }
 
     public setConfig(options: SessionOptions): SessionChanged {
-        const changed = mergeConfig(this.config, options, flexKeys);
+        const changed = mergeConfig(this.config, options, appAgentStateKeys);
         if (changed) {
             this.save();
         }
