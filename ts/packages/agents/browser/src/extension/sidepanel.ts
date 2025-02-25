@@ -172,11 +172,22 @@ async function stopRecording() {
             response.recordedActionHtml,
         );
 
+        const actionDescription = (
+            document.getElementById("actionDescription") as HTMLTextAreaElement
+        ).value.trim();
+
+        const actionName = (
+            document.getElementById("actionName") as HTMLInputElement
+        ).value.trim();
+
         renderTimelineSteps(
+            actionName,
+            actionDescription,
             response.recordedActions,
             stepsContainer,
             response.recordedActionScreenshot,
             response.recordedActionHtml,
+            true,
         );
     }
 
@@ -248,10 +259,42 @@ function renderTimeline(action: any, index: number) {
                         <div class="accordion-body">
                             <div class="row">
                                 <div class="col-md-12">
-                                    <p><i> Action description </i></h6>
-                                    <h6 class="card-title">Steps</h6>
-                                    <div id="Stepscontent">
+                                    <p><i> ${action.description} </i></h6>
+                                    
+                                    <div class="tab-container">
+                                        <ul class="nav nav-tabs" id="sidePanelTabs${index}">
+                                            <li class="nav-item">
+                                            <a class="nav-link active" data-bs-toggle="tab" href="#stepsTab${index}">Steps</a>
+                                            </li>
+                                            <li class="nav-item">
+                                            <a class="nav-link" data-bs-toggle="tab" href="#intentTab${index}">Intent</a>
+                                            </li>
+                                            <li class="nav-item">
+                                            <a class="nav-link" data-bs-toggle="tab" href="#planTab${index}">Plan</a>
+                                            </li>
+                                        </ul>
+                                    <button id="processAction" class="btn btn-sm btn-outline-primary" style="border:0px" title="Process Action">
+                                        <i class="bi bi-robot"></i>
+                                    </button>
                                     </div>
+
+                                    <!-- Tab Content -->
+                                        <div class="tab-content mt-3">
+                                            <!-- Steps Tab -->
+                                            <div class="tab-pane fade show active" id="stepsTab${index}">
+                                                <div id="Stepscontent"></div>
+                                            </div>
+
+                                            <!-- Intent Tab -->
+                                            <div class="tab-pane fade" id="intentTab${index}">
+                                                <div id="intentContent"></div>
+                                            </div>
+
+                                            <!-- Plan Tab -->
+                                            <div class="tab-pane fade" id="planTab${index}">
+                                                <div id="planContent"></div>
+                                            </div>
+                                        </div>
                                 </div>
                             </div>
                         </div>
@@ -262,19 +305,72 @@ function renderTimeline(action: any, index: number) {
         "#Stepscontent",
     )! as HTMLElement;
     renderTimelineSteps(
+        action.name,
+        action.description,
         action.steps,
         stepsContainer,
         action.screenshot,
         action.html,
     );
+
+    const processActionButton = timelineHeader.querySelector(
+        "#processAction",
+    )! as HTMLElement;
+
+    const intentViewContainer = timelineHeader.querySelector(
+        "#intentContent",
+    )! as HTMLElement;
+
+    processActionButton.style.display = "block";
+    processActionButton.addEventListener("click", () =>
+        getIntentFromRecording(
+            action.html,
+            action.screenshot,
+            action.name,
+            action.description,
+            action.steps,
+        ),
+    );
+
+    async function getIntentFromRecording(
+        html: string,
+        screenshot: string,
+        actionName: string,
+        description: string,
+        steps: any[],
+    ) {
+        const response = await chrome.runtime.sendMessage({
+            type: "getIntentFromRecording",
+            html: [{ content: html, frameId: 0 }],
+            screenshot,
+            actionName,
+            description,
+            steps: JSON.stringify(steps),
+        });
+        if (chrome.runtime.lastError) {
+            console.error("Error fetching schema:", chrome.runtime.lastError);
+            return;
+        }
+
+        const card = document.createElement("div");
+        card.innerHTML = `        
+            <pre class="card-text"><code class="language-json">${JSON.stringify(response.schema, null, 2)}</code></pre>
+        `;
+
+        intentViewContainer.appendChild(card);
+    }
+
     userActionsListContainer.appendChild(timelineHeader);
 }
 
 function renderTimelineSteps(
+    actionName: string,
+    actionDescription: string,
     steps: any[],
     userActionsListContainer: HTMLElement,
     screenshotData: string,
     htmlData: string,
+    isEditingMode?: boolean,
 ) {
     userActionsListContainer.innerHTML = `
                     <div id="content">
@@ -289,7 +385,7 @@ function renderTimelineSteps(
                         <button id="downloadHtml" class="btn btn-sm btn-outline-primary" title="Download HTML">
                             <i class="bi bi-filetype-html"></i>
                         </button>
-                        <button id="processAction" class="btn btn-sm btn-outline-primary" title="Process Action">
+                        <button id="processAction" class="btn btn-sm btn-outline-primary hidden" title="Process Action">
                             <i class="bi bi-robot"></i>
                         </button>
                     </div>
@@ -325,6 +421,10 @@ function renderTimelineSteps(
         "#downloadHtml",
     )! as HTMLElement;
 
+    const processActionButton = userActionsListContainer.querySelector(
+        "#processAction",
+    )! as HTMLElement;
+
     if (screenshotData) {
         const img = document.createElement("img");
         img.src = screenshotData;
@@ -349,6 +449,19 @@ function renderTimelineSteps(
         );
     }
 
+    if (isEditingMode) {
+        processActionButton.classList.remove("hidden");
+        processActionButton.addEventListener("click", () =>
+            getIntentFromRecording(
+                htmlData,
+                screenshotData,
+                actionName,
+                actionDescription,
+                steps,
+            ),
+        );
+    }
+
     // Function to download the screenshot
     function downloadScreenshot(dataUrl: string) {
         const link = document.createElement("a");
@@ -368,6 +481,28 @@ function renderTimelineSteps(
         link.click();
         document.body.removeChild(link);
     }
+
+    async function getIntentFromRecording(
+        html: string,
+        screenshot: string,
+        actionName: string,
+        description: string,
+        steps: any[],
+    ) {
+        const response = await chrome.runtime.sendMessage({
+            type: "getIntentFromRecording",
+            html: [{ content: html, frameId: 0 }],
+            screenshot,
+            actionName,
+            description,
+            steps: JSON.stringify(steps),
+        });
+        if (chrome.runtime.lastError) {
+            console.error("Error fetching schema:", chrome.runtime.lastError);
+            return;
+        }
+        console.log(response.data);
+    }
 }
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -379,7 +514,7 @@ document.addEventListener("DOMContentLoaded", () => {
         .addEventListener("click", saveUserAction);
 
     document
-        .getElementById("refreshSchema")!
+        .getElementById("refreshDetectedActions")!
         .addEventListener("click", requestSchemaUpdate);
 
     document

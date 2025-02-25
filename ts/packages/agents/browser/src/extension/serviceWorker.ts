@@ -1536,6 +1536,21 @@ chrome.runtime.onMessage.addListener(
                     sendResponse({ schema: schemaResult });
                     break;
                 }
+                case "getIntentFromRecording": {
+                    const schemaResult = await sendActionToAgent({
+                        actionName: "getIntentFromRecording",
+                        parameters: {
+                            recordedActionName: message.actionName,
+                            recordedActionDescription: message.description,
+                            recordedActionSteps: message.steps,
+                            fragments: message.html,
+                            screenshot: message.screenshot,
+                        },
+                    });
+
+                    sendResponse({ schema: schemaResult });
+                    break;
+                }
                 case "startRecording": {
                     const targetTab = await getActiveTab();
                     const response = await chrome.tabs.sendMessage(

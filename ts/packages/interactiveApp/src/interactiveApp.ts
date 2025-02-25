@@ -4,6 +4,7 @@
 import fs from "fs";
 import { InteractiveIo, getInteractiveIO } from "./InteractiveIo";
 import { exit } from "process";
+import readline from "readline";
 
 /**
  * Handler of command line inputs
@@ -143,10 +144,22 @@ export async function runConsole(
 class InteractiveApp {
     private _settings: InteractiveAppSettings;
     private _stdio: InteractiveIo;
+    private lineReader: readline.promises.Interface;
 
     constructor(stdio: InteractiveIo, settings: InteractiveAppSettings) {
         this._stdio = stdio;
         this._settings = this.initSettings(settings);
+
+        this.lineReader = this._stdio.readline;
+        this.lineReader.setPrompt(this._settings.prompt!);
+
+        if (fs.existsSync("command_history.json")) {
+            const history = JSON.parse(
+                fs.readFileSync("command_history.json", { encoding: "utf-8" }),
+            );
+
+            (this.lineReader as any).history = history.commands;
+        }
     }
 
     public get stdio(): InteractiveIo {
@@ -165,15 +178,22 @@ class InteractiveApp {
         if (hasCommandLine) {
             await this.processInput(commandLine);
             exit();
-            return;
         }
-
-        const lineReader = this._stdio.readline;
-        lineReader.setPrompt(this._settings.prompt!);
-        lineReader.prompt();
+        this.lineReader.prompt();
 
         const lines: string[] = [];
-        lineReader
+
+        process.stdin.setRawMode(true);
+        process.stdin.on("keypress", (_, key) => {
+            if (key.name === "escape") {
+                // clear the input line
+                this.lineReader.write(null, { ctrl: true, name: "u" });
+            }
+        });
+        process.stdin.resume();
+        readline.emitKeypressEvents(process.stdin);
+
+        this.lineReader
             .on("line", async (line) => {
                 if (this._settings.multiline) {
                     if (!this.isEOLMulti(line)) {
@@ -185,13 +205,19 @@ class InteractiveApp {
                     lines.splice(0);
                 }
                 if (await this.processInput(line)) {
-                    lineReader.prompt();
+                    this.lineReader.prompt();
                 } else {
-                    lineReader.close();
+                    this.lineReader.close();
                 }
             })
             .on("close", () => {
-                lineReader.close();
+                this.lineReader.close();
+                fs.writeFileSync(
+                    "command_history.json",
+                    JSON.stringify({
+                        commands: (this.lineReader as any).history,
+                    }),
+                );
             });
     }
 
