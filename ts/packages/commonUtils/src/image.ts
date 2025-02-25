@@ -12,7 +12,9 @@ import {
 import {
     exifGPSTagToLatLong,
     findNearbyPointsOfInterest,
+    PointOfInterest,
     reverseGeocode,
+    ReverseGeocodeAddressLookup,
 } from "./location.js";
 import { openai } from "aiclient";
 import fs from "node:fs";
@@ -26,6 +28,12 @@ export class CachedImageWithDetails {
         public image: string,
     ) {}
 }
+
+export type ImagePromptDetails = {
+    promptSection?: PromptSection | undefined;
+    nearbyPOI?: PointOfInterest[] | undefined;
+    reverseGeocode?: ReverseGeocodeAddressLookup[] | undefined;
+};
 
 export function getImageElement(imgData: string): string {
     return `<img class="chat-input-image" src="${imgData}" />`;
@@ -106,8 +114,9 @@ export async function addImagePromptContent(
     includeAllExifTags?: boolean,
     includePOI?: boolean,
     includeGeocodedAddress?: boolean,
-): Promise<PromptSection> {
+): Promise<ImagePromptDetails> {
     const content: MultimodalPromptContent[] = [];
+    const retValue: ImagePromptDetails = {};
 
     // add the image to the prompt
     content.push({
@@ -140,45 +149,43 @@ export async function addImagePromptContent(
     }
 
     // include POI
+    retValue.nearbyPOI = await findNearbyPointsOfInterest(
+        exifGPSTagToLatLong(
+            image.exifTags.GPSLatitude,
+            image.exifTags.GPSLatitudeRef,
+            image.exifTags.GPSLongitude,
+            image.exifTags.GPSLongitudeRef,
+        ),
+        openai.apiSettingsFromEnv(),
+    );
     if (includePOI !== false) {
         content.push({
             type: "text",
-            text: `Nearby Points of Interest: \n${JSON.stringify(
-                await findNearbyPointsOfInterest(
-                    exifGPSTagToLatLong(
-                        image.exifTags.GPSLatitude,
-                        image.exifTags.GPSLatitudeRef,
-                        image.exifTags.GPSLongitude,
-                        image.exifTags.GPSLongitudeRef,
-                    ),
-                    openai.apiSettingsFromEnv(),
-                ),
-            )}`,
+            text: `Nearby Points of Interest: \n${JSON.stringify(retValue.nearbyPOI)}`,
         });
     }
 
     // include address
+    retValue.reverseGeocode = await reverseGeocode(
+        exifGPSTagToLatLong(
+            image.exifTags.GPSLatitude,
+            image.exifTags.GPSLatitudeRef,
+            image.exifTags.GPSLongitude,
+            image.exifTags.GPSLongitudeRef,
+        ),
+        openai.apiSettingsFromEnv(),
+    );
     if (includeGeocodedAddress !== false) {
         content.push({
             type: "text",
-            text: `Reverse Geocode Results: \n${JSON.stringify(
-                await reverseGeocode(
-                    exifGPSTagToLatLong(
-                        image.exifTags.GPSLatitude,
-                        image.exifTags.GPSLatitudeRef,
-                        image.exifTags.GPSLongitude,
-                        image.exifTags.GPSLongitudeRef,
-                    ),
-                    openai.apiSettingsFromEnv(),
-                ),
-            )}`,
+            text: `Reverse Geocode Results: \n${JSON.stringify(retValue.reverseGeocode)}`,
         });
     }
 
-    return {
-        role: role,
-        content: content,
-    };
+    // set content
+    retValue.promptSection = { role: role, content: content };
+
+    return retValue;
 }
 
 /**

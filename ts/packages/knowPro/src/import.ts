@@ -32,11 +32,11 @@ import {
 } from "./fuzzyIndex.js";
 import { TimestampToTextRangeIndex } from "./timestampIndex.js";
 import {
+    IPropertyToSemanticRefIndex,
     ITermsToRelatedTermsIndexData,
     ITimestampToTextRangeIndex,
 } from "./secondaryIndexes.js";
 import { addPropertiesToIndex, PropertyIndex } from "./propertyIndex.js";
-import { IPropertyToSemanticRefIndex } from "./secondaryIndexes.js";
 import { IConversationSecondaryIndexes } from "./secondaryIndexes.js";
 import {
     IConversationThreadData,

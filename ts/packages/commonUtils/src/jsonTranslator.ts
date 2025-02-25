@@ -169,7 +169,10 @@ async function attachAttachments(
 
     if (attachments && attachments.length > 0 && pp) {
         for (let i = 0; i < attachments.length; i++) {
-            pp.unshift(await addImagePromptContent("user", attachments[i]));
+            pp.unshift(
+                (await addImagePromptContent("user", attachments[i]))
+                    .promptSection!,
+            );
         }
     }
 }
