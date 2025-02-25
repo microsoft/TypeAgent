@@ -63,13 +63,19 @@ export function mergeConfig(
             );
         }
 
-        // null means set it to default value
-        const defaultValue = defaultConfig?.[key];
-        const value = optionValue === null ? defaultValue : optionValue;
-        let existingValue = config[key];
         const overwriteKey = Array.isArray(overwrite)
             ? overwrite.includes(key)
             : overwrite;
+        // null means set it to default value (overwrite keys default value is always undefined)
+        const defaultValue = defaultConfig?.[key];
+        const value =
+            optionValue === null
+                ? overwriteKey
+                    ? undefined
+                    : defaultValue
+                : optionValue;
+        let existingValue = config[key];
+
         if (!overwriteKey && typeof existingValue !== typeof value) {
             throw new Error(
                 `Invalid option '${prefix}${key}': type mismatch (expected: ${typeof existingValue}, actual: ${typeof value})`,
@@ -101,7 +107,7 @@ export function mergeConfig(
                 changed[key] = changedValue;
             }
         } else if (existingValue !== value) {
-            if (!overwriteKey && value === undefined) {
+            if (overwriteKey && value === undefined) {
                 delete config[key];
             } else {
                 config[key] = value;
@@ -116,7 +122,7 @@ export function mergeConfig(
 export function sanitizeConfig(
     config: ConfigObject,
     settings: unknown,
-    strict: string[] | boolean = true,
+    override: readonly string[] | boolean = false,
     prefix: string = "",
 ) {
     if (typeof settings !== "object" || settings === null) {
@@ -133,10 +139,10 @@ export function sanitizeConfig(
             continue;
         }
         const existingValue = config[key];
-        const strictKey = Array.isArray(strict)
-            ? !strict.includes(key)
-            : strict;
-        if (strictKey && typeof existingValue !== typeof value) {
+        const overrideKey = Array.isArray(override)
+            ? override.includes(key)
+            : override;
+        if (!overrideKey && typeof existingValue !== typeof value) {
             // Clear value for mismatched types.
             delete (settings as any)[key];
             changed = true;
@@ -148,7 +154,7 @@ export function sanitizeConfig(
                 sanitizeConfig(
                     existingValue,
                     value,
-                    strictKey,
+                    overrideKey,
                     `${prefix}${key}.`,
                 )
             ) {

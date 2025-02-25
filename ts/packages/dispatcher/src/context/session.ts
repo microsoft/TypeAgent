@@ -229,7 +229,7 @@ function ensureSessionData(data: any): SessionData {
     }
 
     if (data.settings !== undefined) {
-        data.settings = sanitizeConfig(defaultSessionConfig, data.settings);
+        sanitizeConfig(defaultSessionConfig, data.settings, appAgentStateKeys);
     }
     if (data.cacheData === undefined) {
         data.cacheData = {};

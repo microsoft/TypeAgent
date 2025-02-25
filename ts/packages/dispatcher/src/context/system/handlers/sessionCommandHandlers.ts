@@ -265,7 +265,7 @@ class SessionInfoCommandHandler implements CommandHandlerNoParams {
         );
 
         const table: string[][] = [["Name", "Value"]];
-        const addConfig = (options: any, settings: any, prefix: number = 2) => {
+        const addConfig = (options: any, settings: any, prefix: number = 0) => {
             for (const [key, value] of Object.entries(options)) {
                 const name = `${" ".repeat(prefix)}${key.padEnd(20 - prefix)}`;
                 const currentSetting = settings?.[key];

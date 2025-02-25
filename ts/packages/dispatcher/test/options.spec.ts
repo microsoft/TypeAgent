@@ -9,28 +9,28 @@ describe("mergeConfig", () => {
             const config = { a: 1, b: 2 };
             const options = { a: 10 };
             const changed = mergeConfig(config, options);
-            expect(config).toEqual({ a: 10, b: 2 });
-            expect(changed).toEqual({ a: 10 });
+            expect(config).toStrictEqual({ a: 10, b: 2 });
+            expect(changed).toStrictEqual({ a: 10 });
         });
         it("should merge options into config nested", () => {
             const config = { a: { b: 1, c: 2 }, d: 3 };
             const options = { a: { b: 10 } };
             const changed = mergeConfig(config, options);
-            expect(config).toEqual({ a: { b: 10, c: 2 }, d: 3 });
-            expect(changed).toEqual({ a: { b: 10 } });
+            expect(config).toStrictEqual({ a: { b: 10, c: 2 }, d: 3 });
+            expect(changed).toStrictEqual({ a: { b: 10 } });
         });
         it("should skip same value in changed", () => {
             const config = { a: 1 };
             const options = { a: 1 };
             const changed = mergeConfig(config, options);
-            expect(config).toEqual({ a: 1 });
+            expect(config).toStrictEqual({ a: 1 });
             expect(changed).toBeUndefined();
         });
         it("should ignore extra value", () => {
             const config = { a: 1 };
             const options = { b: "str" };
             const changed = mergeConfig(config, options);
-            expect(config).toEqual({ a: 1 });
+            expect(config).toStrictEqual({ a: 1 });
             expect(changed).toBeUndefined();
         });
         it("should throw on mismatch value type", () => {
@@ -51,31 +51,31 @@ describe("mergeConfig", () => {
             const config = { a: { b: 0 } };
             const options = { a: { c: 1 } };
             const changed = mergeConfig(config, options, ["a"]);
-            expect(config).toEqual({ a: { b: 0, c: 1 } });
-            expect(changed).toEqual({ a: { c: 1 } });
+            expect(config).toStrictEqual({ a: { b: 0, c: 1 } });
+            expect(changed).toStrictEqual({ a: { c: 1 } });
         });
 
         it("should delete nested flex key", () => {
             const config = { a: { b: 0, c: 1 } };
             const options = { a: { c: null } };
             const changed = mergeConfig(config, options, ["a"]);
-            expect(config).toEqual({ a: { b: 0 } });
-            expect(changed).toEqual({ a: { c: undefined } });
+            expect(config).toStrictEqual({ a: { b: 0 } });
+            expect(changed).toStrictEqual({ a: { c: undefined } });
         });
         it("should overwrite flex key mismatched with nested value", () => {
             const config = { a: 1 };
             const options = { a: { b: 1 } };
             const changed = mergeConfig(config, options, ["a"]);
-            expect(config).toEqual({ a: { b: 1 } });
-            expect(changed).toEqual({ a: { b: 1 } });
+            expect(config).toStrictEqual({ a: { b: 1 } });
+            expect(changed).toStrictEqual({ a: { b: 1 } });
         });
 
         it("should overwrite flex key mismatched with non-nested value", () => {
             const config = { a: { b: 1 } };
             const options = { a: 1 };
             const changed = mergeConfig(config, options, ["a"]);
-            expect(config).toEqual({ a: 1 });
-            expect(changed).toEqual({ a: 1 });
+            expect(config).toStrictEqual({ a: 1 });
+            expect(changed).toStrictEqual({ a: 1 });
         });
     });
     describe("non-strict", () => {
@@ -83,43 +83,43 @@ describe("mergeConfig", () => {
             const config = { a: 1, b: 2 };
             const options = { a: 10 };
             const changed = mergeConfig(config, options, true);
-            expect(config).toEqual({ a: 10, b: 2 });
-            expect(changed).toEqual({ a: 10 });
+            expect(config).toStrictEqual({ a: 10, b: 2 });
+            expect(changed).toStrictEqual({ a: 10 });
         });
         it("should merge options into config nested", () => {
             const config = { a: { b: 1, c: 2 }, d: 3 };
             const options = { a: { b: 10 } };
             const changed = mergeConfig(config, options, true);
-            expect(config).toEqual({ a: { b: 10, c: 2 }, d: 3 });
-            expect(changed).toEqual({ a: { b: 10 } });
+            expect(config).toStrictEqual({ a: { b: 10, c: 2 }, d: 3 });
+            expect(changed).toStrictEqual({ a: { b: 10 } });
         });
         it("should skip same value in changed", () => {
             const config = { a: 1 };
             const options = { a: 1 };
             const changed = mergeConfig(config, options, true);
-            expect(config).toEqual({ a: 1 });
+            expect(config).toStrictEqual({ a: 1 });
             expect(changed).toBeUndefined();
         });
         it("should add extra value", () => {
             const config = { a: 1 };
             const options = { b: "str" };
             const changed = mergeConfig(config, options, true);
-            expect(config).toEqual({ a: 1, b: "str" });
-            expect(changed).toEqual({ b: "str" });
+            expect(config).toStrictEqual({ a: 1, b: "str" });
+            expect(changed).toStrictEqual({ b: "str" });
         });
         it("should overwrite mismatch value type", () => {
             const config = { a: 1 };
             const options = { a: "str" };
             const changed = mergeConfig(config, options, true);
-            expect(config).toEqual({ a: "str" });
-            expect(changed).toEqual({ a: "str" });
+            expect(config).toStrictEqual({ a: "str" });
+            expect(changed).toStrictEqual({ a: "str" });
         });
         it("should overwrite with nested value", () => {
             const config = { a: 1 };
             const options = { a: { b: 1 } };
             const changed = mergeConfig(config, options, true);
-            expect(config).toEqual({ a: { b: 1 } });
-            expect(changed).toEqual({ a: { b: 1 } });
+            expect(config).toStrictEqual({ a: { b: 1 } });
+            expect(changed).toStrictEqual({ a: { b: 1 } });
         });
     });
 });
@@ -133,14 +133,14 @@ describe("sanitizeConfig", () => {
     it("should ignore extraneous options", () => {
         const options = { b: undefined, c: 3 };
         const changed = sanitizeConfig({ a: 1 }, options);
-        expect(changed).toEqual(false);
-        expect(options).toEqual({ b: undefined, c: 3 });
+        expect(changed).toStrictEqual(false);
+        expect(options).toStrictEqual({ b: undefined, c: 3 });
     });
     it("should clear mismatch types", () => {
         const options = { a: "str", b: 2 };
         const changed = sanitizeConfig({ a: 1, b: 2 }, options);
-        expect(changed).toEqual(true);
-        expect(options).toEqual({ b: 2 });
+        expect(changed).toStrictEqual(true);
+        expect(options).toStrictEqual({ b: 2 });
     });
 
     it("should error on null value in nested objects", () => {
@@ -151,13 +151,13 @@ describe("sanitizeConfig", () => {
     it("should ignore extraneous options in nested objects", () => {
         const options = { d: { b: undefined, c: 3 } };
         const changed = sanitizeConfig({ a: 1 }, options);
-        expect(changed).toEqual(false);
-        expect(options).toEqual({ d: { b: undefined, c: 3 } });
+        expect(changed).toStrictEqual(false);
+        expect(options).toStrictEqual({ d: { b: undefined, c: 3 } });
     });
     it("should clear mismatch types in nested objects", () => {
         const options = { d: { a: "str", b: 2 } };
         const changed = sanitizeConfig({ d: { a: 1, b: 2 } }, options);
-        expect(changed).toEqual(true);
-        expect(options).toEqual({ d: { b: 2 } });
+        expect(changed).toStrictEqual(true);
+        expect(options).toStrictEqual({ d: { b: 2 } });
     });
 });
