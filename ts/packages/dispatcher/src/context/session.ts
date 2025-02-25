@@ -207,10 +207,6 @@ const defaultSessionConfig: SessionConfig = {
     },
 };
 
-export function getDefaultSessionConfig() {
-    return defaultSessionConfig;
-}
-
 // explainer name as key, cache file path as value
 type SessionCacheData = {
     [key: string]: string | undefined;
@@ -225,6 +221,7 @@ type SessionData = {
 // Fill in missing fields when loading sessions from disk
 function ensureSessionData(data: any): SessionData {
     if (data.config !== undefined) {
+        // back compat
         data.settings = data.config;
     }
 

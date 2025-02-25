@@ -528,12 +528,12 @@ export async function changeContextConfig(
         return undefined;
     }
 
-    const translatorChanged = changed.hasOwnProperty("schemas");
+    const schemasChanged = changed.hasOwnProperty("schemas");
     const actionsChanged = changed.hasOwnProperty("actions");
     const commandsChanged = changed.hasOwnProperty("commands");
 
     if (
-        translatorChanged ||
+        schemasChanged ||
         changed.translation?.model !== undefined ||
         changed.translation?.switch?.inline !== undefined ||
         changed.translation?.multiple !== undefined ||
@@ -544,7 +544,7 @@ export async function changeContextConfig(
         systemContext.translatorCache.clear();
     }
 
-    if (translatorChanged || actionsChanged || commandsChanged) {
+    if (schemasChanged || actionsChanged || commandsChanged) {
         Object.assign(changed, await updateAppAgentStates(context));
     }
 
