@@ -514,7 +514,7 @@ document.addEventListener("DOMContentLoaded", () => {
         .addEventListener("click", saveUserAction);
 
     document
-        .getElementById("refreshSchema")!
+        .getElementById("refreshDetectedActions")!
         .addEventListener("click", requestSchemaUpdate);
 
     document
