@@ -16,10 +16,6 @@ import { getAppAgentName } from "../translation/agentTranslators.js";
 import { createSessionContext } from "../execute/actionHandlers.js";
 import { AppAgentProvider } from "../agentProvider/agentProvider.js";
 import registerDebug from "debug";
-import {
-    DeepPartialUndefined,
-    DeepPartialUndefinedAndNull,
-} from "common-utils";
 import { DispatcherName } from "./dispatcher/dispatcherUtils.js";
 import {
     ActionSchemaSemanticMap,
@@ -54,9 +50,7 @@ export type AppAgentStateConfig = {
 
 export const appAgentStateKeys = ["schemas", "actions", "commands"] as const;
 
-export type AppAgentStateSettings = DeepPartialUndefined<AppAgentStateConfig>;
-export type AppAgentStateOptions =
-    DeepPartialUndefinedAndNull<AppAgentStateConfig>;
+export type AppAgentStateSettings = Partial<AppAgentStateConfig>;
 
 function computeStateChange(
     settings: AppAgentStateSettings | undefined,

@@ -39,7 +39,6 @@ import { conversation as Conversation } from "knowledge-processor";
 import {
     AppAgentManager,
     AppAgentStateInitSettings,
-    AppAgentStateOptions,
     AppAgentStateSettings,
     getAppAgentStateSettings,
     SetStateResult,
@@ -431,7 +430,7 @@ async function setAppAgentStates(context: CommandHandlerContext) {
 
 async function updateAppAgentStates(
     context: ActionContext<CommandHandlerContext>,
-): Promise<AppAgentStateOptions> {
+): Promise<AppAgentStateSettings> {
     const systemContext = context.sessionContext.agentContext;
     const result = await systemContext.agents.setState(
         systemContext,
@@ -447,10 +446,10 @@ async function updateAppAgentStates(
     if (rollback) {
         systemContext.session.updateConfig(rollback);
     }
-    const resultState: AppAgentStateOptions = {};
+    const resultState: AppAgentStateSettings = {};
     for (const [stateName, changed] of Object.entries(result.changed)) {
         if (changed.length !== 0) {
-            resultState[stateName as keyof AppAgentStateOptions] =
+            resultState[stateName as keyof AppAgentStateSettings] =
                 Object.fromEntries(changed);
         }
     }
