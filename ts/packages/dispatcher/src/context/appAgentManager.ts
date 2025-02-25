@@ -58,57 +58,23 @@ export type AppAgentStateSettings = DeepPartialUndefined<AppAgentStateConfig>;
 export type AppAgentStateOptions =
     DeepPartialUndefinedAndNull<AppAgentStateConfig>;
 
-// For overrides, if the options kind or app agent value is null, use the agent default.
-// If it is missing, then either use the default value based on the 'useDefault' parameter, or the current value.
-function getEffectiveValue(
-    overrides: AppAgentStateOptions | undefined,
-    kind: keyof AppAgentStateConfig,
-    name: string,
-    useDefault: boolean,
-    defaultValue: boolean,
-    currentValue: boolean,
-): boolean {
-    const enabled = overrides?.[kind]?.[name];
-    if (enabled === undefined) {
-        return useDefault ? defaultValue : currentValue;
-    }
-    // null means default value
-    return enabled ?? defaultValue;
-}
-
 function computeStateChange(
-    overrides: AppAgentStateOptions | undefined,
+    settings: AppAgentStateSettings | undefined,
     kind: keyof AppAgentStateConfig,
     name: string,
-    useDefault: boolean,
     defaultEnabled: boolean,
-    currentEnabled: boolean,
     failed: [string, boolean, Error][],
 ) {
     const alwaysEnabled = alwaysEnabledAgents[kind].includes(name);
-    const effectiveEnabled = getEffectiveValue(
-        overrides,
-        kind,
-        name,
-        useDefault,
-        defaultEnabled,
-        currentEnabled,
-    );
+    const effectiveEnabled = settings?.[kind]?.[name] ?? defaultEnabled;
     if (alwaysEnabled && !effectiveEnabled) {
-        // error message if user explicitly say false. (instead of using "null")
-        if (overrides?.[kind]?.[name] === false) {
-            failed.push([
-                name,
-                effectiveEnabled,
-                new Error(`Cannot disable ${kind} for '${name}'`),
-            ]);
-        }
+        failed.push([
+            name,
+            effectiveEnabled,
+            new Error(`Cannot disable ${kind} for '${name}'`),
+        ]);
     }
-    const enable = alwaysEnabled || effectiveEnabled;
-    if (enable !== currentEnabled) {
-        return enable;
-    }
-    return undefined;
+    return alwaysEnabled || effectiveEnabled;
 }
 
 export type SetStateResult = {
@@ -118,6 +84,7 @@ export type SetStateResult = {
         commands: [string, boolean][];
     };
     failed: {
+        schemas: [string, boolean, Error][];
         actions: [string, boolean, Error][];
         commands: [string, boolean, Error][];
     };
@@ -426,8 +393,7 @@ export class AppAgentManager implements ActionConfigProvider {
 
     public async setState(
         context: CommandHandlerContext,
-        overrides?: AppAgentStateOptions,
-        useDefault: boolean = true,
+        settings?: AppAgentStateSettings,
     ): Promise<SetStateResult> {
         const changedSchemas: [string, boolean][] = [];
         const failedSchemas: [string, boolean, Error][] = [];
@@ -441,15 +407,13 @@ export class AppAgentManager implements ActionConfigProvider {
             const record = this.getRecord(getAppAgentName(name));
 
             const enableSchema = computeStateChange(
-                overrides,
+                settings,
                 "schemas",
                 name,
-                useDefault,
                 config.schemaDefaultEnabled,
-                record.schemas.has(name),
                 failedSchemas,
             );
-            if (enableSchema !== undefined) {
+            if (enableSchema !== record.schemas.has(name)) {
                 if (enableSchema) {
                     record.schemas.add(name);
                     changedSchemas.push([name, enableSchema]);
@@ -462,15 +426,13 @@ export class AppAgentManager implements ActionConfigProvider {
             }
 
             const enableAction = computeStateChange(
-                overrides,
+                settings,
                 "actions",
                 name,
-                useDefault,
                 config.actionDefaultEnabled,
-                record.actions.has(name),
                 failedActions,
             );
-            if (enableAction !== undefined) {
+            if (enableAction !== record.actions.has(name)) {
                 p.push(
                     (async () => {
                         try {
@@ -491,18 +453,16 @@ export class AppAgentManager implements ActionConfigProvider {
 
         for (const record of this.agents.values()) {
             const enableCommands = computeStateChange(
-                overrides,
+                settings,
                 "commands",
                 record.name,
-                useDefault,
                 record.manifest.commandDefaultEnabled ??
                     record.manifest.defaultEnabled ??
                     true,
-                record.commands,
                 failedCommands,
             );
 
-            if (enableCommands !== undefined) {
+            if (enableCommands !== record.commands) {
                 if (enableCommands) {
                     p.push(
                         (async () => {
@@ -543,6 +503,7 @@ export class AppAgentManager implements ActionConfigProvider {
                 commands: changedCommands,
             },
             failed: {
+                schemas: failedSchemas,
                 actions: failedActions,
                 commands: failedCommands,
             },

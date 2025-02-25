@@ -387,13 +387,13 @@ export async function initializeCommandHandlerContext(
 
         await addAppAgentProviders(context, options?.appAgentProviders);
 
-        const appAgentStateOptions = getAppAgentStateSettings(
+        const appAgentStateSettings = getAppAgentStateSettings(
             options?.agents,
             agents,
         );
-        if (appAgentStateOptions !== undefined) {
+        if (appAgentStateSettings !== undefined) {
             // initialization options set the default, but persisted configuration will still overrides it.
-            session.updateDefaultConfig(appAgentStateOptions);
+            session.updateDefaultConfig(appAgentStateSettings);
         }
         await setAppAgentStates(context);
         debug("Context initialized");
@@ -431,13 +431,11 @@ async function setAppAgentStates(context: CommandHandlerContext) {
 
 async function updateAppAgentStates(
     context: ActionContext<CommandHandlerContext>,
-    changed: AppAgentStateOptions,
 ): Promise<AppAgentStateOptions> {
     const systemContext = context.sessionContext.agentContext;
     const result = await systemContext.agents.setState(
         systemContext,
-        changed,
-        false,
+        systemContext.session.getConfig(),
     );
 
     const rollback = processSetAppAgentStateResult(
@@ -465,7 +463,7 @@ function processSetAppAgentStateResult(
     cbError: (message: string) => void,
 ): AppAgentStateSettings | undefined {
     let hasFailed = false;
-    const rollback = { actions: {}, commands: {} };
+    const rollback = { schemas: {}, actions: {}, commands: {} };
     for (const [stateName, failed] of Object.entries(result.failed)) {
         for (const [translatorName, enable, e] of failed) {
             hasFailed = true;
@@ -548,7 +546,7 @@ export async function changeContextConfig(
     }
 
     if (translatorChanged || actionsChanged || commandsChanged) {
-        Object.assign(changed, await updateAppAgentStates(context, changed));
+        Object.assign(changed, await updateAppAgentStates(context));
     }
 
     if (changed.explainer?.name !== undefined) {
