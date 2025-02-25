@@ -78,7 +78,8 @@ function createSearchTerm(text: string, score?: number): SearchTerm {
 
 export type WhenFilter = {
     knowledgeType?: KnowledgeType | undefined;
-    inDateRange?: DateRange | undefined;
+    dateRange?: DateRange | undefined;
+    threadDescription?: string | undefined;
 };
 
 export type SearchOptions = {
@@ -189,7 +190,9 @@ class SearchQueryBuilder {
     ): Promise<IQueryOpExpr<Map<KnowledgeType, SemanticRefAccumulator>>> {
         let selectExpr = this.compileSelect(
             searchTermGroup,
-            filter ? this.compileScope(searchTermGroup, filter) : undefined,
+            filter
+                ? await this.compileScope(searchTermGroup, filter)
+                : undefined,
             options,
         );
         // Constrain the select with scopes and 'where'
@@ -254,13 +257,16 @@ class SearchQueryBuilder {
         ];
     }
 
-    private compileScope(searchGroup: SearchTermGroup, filter: WhenFilter) {
+    private async compileScope(
+        searchGroup: SearchTermGroup,
+        filter: WhenFilter,
+    ): Promise<q.GetScopeExpr | undefined> {
         let scopeSelectors: q.IQueryTextRangeSelector[] | undefined;
         // First, use any provided date ranges to select scope
-        if (filter.inDateRange) {
+        if (filter.dateRange) {
             scopeSelectors ??= [];
             scopeSelectors.push(
-                new q.TextRangesInDateRangeSelector(filter.inDateRange),
+                new q.TextRangesInDateRangeSelector(filter.dateRange),
             );
         }
         // Actions are inherently scope selecting. If any present in the query, use them
@@ -275,6 +281,24 @@ class SearchQueryBuilder {
                 new q.TextRangesWithTermMatchesSelector(selectExpr),
             );
             this.allScopeSearchTerms.push(...searchTermsUsed);
+        }
+        // If a thread index is available...
+        const threadIndex = this.secondaryIndexes?.threadIndex;
+        if (filter.threadDescription && threadIndex) {
+            const threadsInScope =
+                await threadIndex.threadDescriptionIndex.lookupThread(
+                    filter.threadDescription,
+                );
+            if (threadsInScope) {
+                scopeSelectors ??= [];
+                scopeSelectors.push(
+                    new q.ThreadSelector(
+                        threadsInScope.map(
+                            (t) => threadIndex.threads[t.threadIndex],
+                        ),
+                    ),
+                );
+            }
         }
         return scopeSelectors ? new q.GetScopeExpr(scopeSelectors) : undefined;
     }

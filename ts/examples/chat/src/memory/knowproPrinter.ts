@@ -180,22 +180,21 @@ export class KnowProPrinter extends ChatPrinter {
         if (distinct) {
             this.writeResultDistinct(
                 conversation,
-                "entity",
+                "topic",
                 results,
                 maxToDisplay,
             );
             this.writeResultDistinct(
                 conversation,
-                "topic",
+                "entity",
                 results,
                 maxToDisplay,
             );
         } else {
-            // Do entities before actions...
-            this.writeResult(conversation, "entity", results, maxToDisplay);
-            this.writeResult(conversation, "action", results, maxToDisplay);
-            this.writeResult(conversation, "topic", results, maxToDisplay);
             this.writeResult(conversation, "tag", results, maxToDisplay);
+            this.writeResult(conversation, "topic", results, maxToDisplay);
+            this.writeResult(conversation, "action", results, maxToDisplay);
+            this.writeResult(conversation, "entity", results, maxToDisplay);
         }
         return this;
     }
@@ -220,6 +219,7 @@ export class KnowProPrinter extends ChatPrinter {
         results: Map<kp.KnowledgeType, kp.SearchResult>,
         maxToDisplay: number,
     ) {
+        this.writeTitle(type.toUpperCase());
         if (this.sortAsc) {
             this.writeLine(`Sorted in ascending order (lowest first)`);
         }
@@ -239,12 +239,12 @@ export class KnowProPrinter extends ChatPrinter {
                         let pos = this.sortAsc
                             ? distinctTopics.length - (i + 1)
                             : i;
-                        const entity = distinctTopics[pos];
+                        const topic = distinctTopics[pos];
                         this.writeInColor(
                             chalk.green,
-                            `#${pos + 1} / ${distinctTopics.length}: [${entity.score}]`,
+                            `#${pos + 1} / ${distinctTopics.length}: [${topic.score}]`,
                         );
-                        this.writeLine(entity.item.text);
+                        this.writeLine(topic.item.text);
                         this.writeLine();
                     }
                 }

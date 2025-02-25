@@ -210,8 +210,8 @@ export function createPodcastCommands(
             podcastMessages,
             knowledgeResponses,
         );
-        kpPodcast.threads.threads.push(...podcastThreads);
-        await kpPodcast.threads.buildIndex();
+        kpPodcast.threadIndex.threads.push(...podcastThreads);
+        await kpPodcast.threadIndex.buildIndex();
 
         const podcastData = kpPodcast.serialize();
         await ensureDir(path.dirname(namedArgs.filePath));

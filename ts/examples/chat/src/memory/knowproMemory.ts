@@ -90,7 +90,7 @@ export async function createKnowproCommands(
                 filePath: arg("File path to transcript file"),
             },
             options: {
-                knowLedge: argBool("Index knowledge", true),
+                knowledge: argBool("Index knowledge", true),
                 related: argBool("Index related terms", true),
                 indexFilePath: arg("Output path for index file"),
                 maxMessages: argNum("Maximum messages to index"),
@@ -375,7 +375,7 @@ export async function createKnowproCommands(
                 }
             }
             if (startDate) {
-                filter.inDateRange = {
+                filter.dateRange = {
                     start: startDate,
                     end: endDate,
                 };
