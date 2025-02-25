@@ -21,7 +21,7 @@ import { openai } from "aiclient";
 import { Result } from "typechat";
 import { async } from "typeagent";
 
-function createKnowledgeModel() {
+export function createKnowledgeModel() {
     const chatModelSettings = openai.apiSettingsFromEnv(
         openai.ModelType.Chat,
         undefined,
@@ -73,7 +73,12 @@ export function addEntityToIndex(
     semanticRefIndex: ITermToSemanticRefIndex,
     messageIndex: number,
     chunkIndex = 0,
+    deDuplicate = false,
 ) {
+    if (deDuplicate && isDuplicateEntity(entity, semanticRefs)) {
+        return;
+    }
+
     const refIndex = semanticRefs.length;
     semanticRefs.push({
         semanticRefIndex: refIndex,
@@ -92,6 +97,34 @@ export function addEntityToIndex(
             addFacet(facet, refIndex, semanticRefIndex);
         }
     }
+}
+
+/**
+ *
+ * @param entity The entity to match
+ * @param semanticRefs The semantic references in the index
+ * @returns True if there's a duplicate, false otherwise
+ */
+function isDuplicateEntity(
+    entity: conversation.ConcreteEntity,
+    semanticRefs: SemanticRef[],
+) {
+    for (let i = 0; i < semanticRefs.length; i++) {
+        if (
+            semanticRefs[i].knowledgeType == "entity" &&
+            entity.name ==
+                (semanticRefs[i].knowledge as conversation.ConcreteEntity).name
+        ) {
+            if (
+                JSON.stringify(entity) ===
+                JSON.stringify(semanticRefs[i].knowledge)
+            ) {
+                return true;
+            }
+        }
+    }
+
+    return false;
 }
 
 export function addTopicToIndex(

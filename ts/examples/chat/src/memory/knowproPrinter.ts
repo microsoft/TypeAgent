@@ -175,12 +175,27 @@ export class KnowProPrinter extends ChatPrinter {
         conversation: kp.IConversation,
         results: Map<kp.KnowledgeType, kp.SearchResult>,
         maxToDisplay: number,
+        distinct: boolean = false,
     ) {
-        // Do entities before actions...
-        this.writeResult(conversation, "entity", results, maxToDisplay);
-        this.writeResult(conversation, "action", results, maxToDisplay);
-        this.writeResult(conversation, "topic", results, maxToDisplay);
-        this.writeResult(conversation, "tag", results, maxToDisplay);
+        if (distinct) {
+            this.writeResultDistinct(
+                conversation,
+                "topic",
+                results,
+                maxToDisplay,
+            );
+            this.writeResultDistinct(
+                conversation,
+                "entity",
+                results,
+                maxToDisplay,
+            );
+        } else {
+            this.writeResult(conversation, "tag", results, maxToDisplay);
+            this.writeResult(conversation, "topic", results, maxToDisplay);
+            this.writeResult(conversation, "action", results, maxToDisplay);
+            this.writeResult(conversation, "entity", results, maxToDisplay);
+        }
         return this;
     }
 
@@ -196,6 +211,82 @@ export class KnowProPrinter extends ChatPrinter {
             this.writeSearchResult(conversation, result, maxToDisplay);
         }
         return this;
+    }
+
+    private writeResultDistinct(
+        conversation: kp.IConversation,
+        type: kp.KnowledgeType,
+        results: Map<kp.KnowledgeType, kp.SearchResult>,
+        maxToDisplay: number,
+    ) {
+        if (type !== "topic" && type !== "entity") {
+            return;
+        }
+
+        switch (type) {
+            default:
+                return;
+
+            case "topic":
+                const topics = results.get("topic");
+                if (topics) {
+                    this.writeTitle(type.toUpperCase());
+                    let distinctTopics = kp.getDistinctTopicMatches(
+                        conversation.semanticRefs!,
+                        topics.semanticRefMatches,
+                        maxToDisplay,
+                    );
+                    for (let i = 0; i < distinctTopics.length; ++i) {
+                        let pos = this.sortAsc
+                            ? distinctTopics.length - (i + 1)
+                            : i;
+                        const topic = distinctTopics[pos];
+                        this.writeInColor(
+                            chalk.green,
+                            `#${pos + 1} / ${distinctTopics.length}: [${topic.score}]`,
+                        );
+                        this.writeLine(topic.item.text);
+                        this.writeLine();
+                    }
+                }
+                break;
+
+            case "entity":
+                const entities = results.get("entity");
+                if (entities) {
+                    this.writeTitle(type.toUpperCase());
+                    let distinctEntities = kp.getDistinctEntityMatches(
+                        conversation.semanticRefs!,
+                        entities.semanticRefMatches,
+                        maxToDisplay,
+                    );
+                    for (let i = 0; i < distinctEntities.length; ++i) {
+                        let pos = this.sortAsc
+                            ? distinctEntities.length - (i + 1)
+                            : i;
+                        const entity = distinctEntities[pos];
+                        this.writeInColor(
+                            chalk.green,
+                            `#${pos + 1} / ${distinctEntities.length}: [${entity.score}]`,
+                        );
+                        this.writeCompositeEntity(entity.item);
+                        this.writeLine();
+                    }
+                }
+                break;
+        }
+
+        return this;
+    }
+
+    public writeCompositeEntity(
+        entity: knowLib.conversation.CompositeEntity | undefined,
+    ): void {
+        if (entity) {
+            this.writeLine(entity.name.toUpperCase());
+            this.writeList(entity.type, { type: "csv" });
+            this.writeList(entity.facets, { type: "ul" });
+        }
     }
 
     public writeConversationInfo(conversation: kp.IConversation) {
@@ -215,6 +306,13 @@ export class KnowProPrinter extends ChatPrinter {
             type: "csv",
             title: "Participants",
         });
+        return this;
+    }
+
+    public writeImageCollectionInfo(imageCollection: kp.ImageCollection) {
+        this.writeLine(
+            `${imageCollection.nameTag}: ${imageCollection.messages.length} images.`,
+        );
         return this;
     }
 

@@ -131,7 +131,7 @@ export function createImageCommands(
             TokenCounter.getInstance().total;
 
         if (isDir) {
-            await indexImages(namedArgs, sourcePath, context);
+            await indexImages(namedArgs, sourcePath, context, clock);
         } else {
             await indexImage(sourcePath, context);
         }
@@ -163,6 +163,7 @@ export function createImageCommands(
         namesArgs: NamedArgs,
         sourcePath: string,
         context: ChatContext,
+        clock: StopWatch,
     ) {
         // load files from directory
         const fileNames = await fs.promises.readdir(sourcePath, {
@@ -172,7 +173,9 @@ export function createImageCommands(
         // index each image
         for (let i = 0; i < fileNames.length; i++) {
             const fullFilePath: string = path.join(sourcePath, fileNames[i]);
-            console.log(fullFilePath);
+            console.log(
+                `${fullFilePath} [${i + 1} of ${fileNames.length}] (estimated time remaining: ${(clock.elapsedSeconds / (i + 1)) * (fileNames.length - i)})`,
+            );
             await indexImage(fullFilePath, context);
         }
     }
@@ -191,7 +194,7 @@ export function createImageCommands(
             await knowLib.image.loadImage(fileName, context.models.chatModel);
 
         if (image) {
-            knowLib.image.addImageToConversation(
+            await knowLib.image.addImageToConversation(
                 context.imageMemory,
                 image,
                 context.maxCharsPerChunk,

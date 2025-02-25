@@ -32,11 +32,11 @@ import {
 } from "./fuzzyIndex.js";
 import { TimestampToTextRangeIndex } from "./timestampIndex.js";
 import {
+    IPropertyToSemanticRefIndex,
     ITermsToRelatedTermsIndexData,
     ITimestampToTextRangeIndex,
 } from "./secondaryIndexes.js";
 import { addPropertiesToIndex, PropertyIndex } from "./propertyIndex.js";
-import { IPropertyToSemanticRefIndex } from "./secondaryIndexes.js";
 import { IConversationSecondaryIndexes } from "./secondaryIndexes.js";
 import {
     IConversationThreadData,
@@ -143,7 +143,7 @@ export class Podcast
     implements IConversation<PodcastMessageMeta>, IConversationSecondaryIndexes
 {
     public settings: PodcastSettings;
-    public threads: PodcastThreads;
+    public threadIndex: PodcastThreads;
 
     constructor(
         public nameTag: string,
@@ -162,7 +162,7 @@ export class Podcast
             | undefined = undefined,
     ) {
         this.settings = createPodcastSettings();
-        this.threads = new PodcastThreads(this.settings.threadSettings);
+        this.threadIndex = new PodcastThreads(this.settings.threadSettings);
     }
 
     public addMetadataToIndex() {
@@ -217,7 +217,7 @@ export class Podcast
         const result = await buildConversationIndex(this, progressCallback);
         this.addMetadataToIndex();
         this.buildSecondaryIndexes();
-        await this.threads.buildIndex();
+        await this.threadIndex.buildIndex();
         return result;
     }
 
@@ -246,7 +246,7 @@ export class Podcast
             semanticRefs: this.semanticRefs,
             semanticIndexData: this.semanticRefIndex?.serialize(),
             relatedTermsIndexData: this.termToRelatedTermsIndex?.serialize(),
-            threadData: this.threads.serialize(),
+            threadData: this.threadIndex.serialize(),
         };
     }
 
@@ -265,8 +265,8 @@ export class Podcast
             );
         }
         if (data.threadData) {
-            this.threads = new PodcastThreads(this.settings.threadSettings);
-            this.threads.deserialize(data.threadData);
+            this.threadIndex = new PodcastThreads(this.settings.threadSettings);
+            this.threadIndex.deserialize(data.threadData);
         }
         this.buildSecondaryIndexes();
     }

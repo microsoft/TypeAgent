@@ -39,6 +39,16 @@
         color: #666;
       }
 
+      .tab-container {
+        position: relative;
+      }
+
+      #processAction {
+        position: absolute;
+        right: 0px;
+        top: 5px;
+      }
+
       /* Timeline styling*/
       .timeline {
         border-left: 3px solid #727cf5;
@@ -159,19 +169,11 @@
   <body class="container">
     <div class="d-flex gap-2">
       <button
-        id="refreshSchema"
-        class="btn btn-sm btn-outline-primary"
-        title="Refresh Schema"
-      >
-        <i class="bi bi-arrow-clockwise"></i> Refresh
-      </button>
-
-      <button
         id="trySchema"
         class="btn btn-sm btn-outline-primary"
         title="Try Schema"
       >
-        <i class="bi bi-play-circle"></i> Try it out
+        <i class="bi bi-play-circle"></i> Try Page Agent
       </button>
 
       <button
@@ -179,13 +181,20 @@
         class="btn btn-sm btn-outline-primary"
         title="Save Schema"
       >
-        <i class="bi bi-save"></i> Download
+        <i class="bi bi-floppy"></i> Save
       </button>
     </div>
 
     <div class="mt-4"></div>
-    <h3>Detected Actions</h3>
-
+    <div class="d-flex justify-content-between align-items-center mt-3">
+      <h3>Detected Actions</h3>
+      <button
+        id="refreshDetectedActions"
+        class="btn btn-outline-secondary btn-sm"
+      >
+        <i class="bi bi-arrow-clockwise"></i>
+      </button>
+    </div>
     <!-- Accordion for Schema -->
     <div class="accordion" id="schemaAccordion"></div>
 

@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { IConversationThreads } from "./conversationThread.js";
 import {
     SemanticRefIndex,
     ScoredSemanticRef,
@@ -17,6 +18,7 @@ export interface IConversationSecondaryIndexes {
     termToRelatedTermsIndex?: ITermToRelatedTermsIndex | undefined;
     propertyToSemanticRefIndex: IPropertyToSemanticRefIndex | undefined;
     timestampIndex?: ITimestampToTextRangeIndex | undefined;
+    threadIndex?: IConversationThreads | undefined;
 }
 
 /**

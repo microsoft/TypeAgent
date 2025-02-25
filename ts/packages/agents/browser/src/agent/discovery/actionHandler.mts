@@ -31,7 +31,8 @@ export async function handleSchemaDiscoveryAction(
 
     const browser: BrowserConnector = context.agentContext.browserConnector;
 
-    const agent = await createDiscoveryPageTranslator("GPT_4_O_MINI");
+    // const agent = await createDiscoveryPageTranslator("GPT_4_O_MINI");
+    const agent = await createDiscoveryPageTranslator("GPT_4_O");
 
     switch (action.actionName) {
         case "initializePageSchema":
@@ -49,6 +50,9 @@ export async function handleSchemaDiscoveryAction(
             break;
         case "getSiteType":
             actionData = await handleGetSiteType(action);
+            break;
+        case "getIntentFromRecording":
+            actionData = await handleGetIntentFromReccording(action);
             break;
     }
 
@@ -266,6 +270,33 @@ export async function handleSchemaDiscoveryAction(
 
         return response.data;
     }
+
+    async function handleGetIntentFromReccording(action: any) {
+        const timerName = `Getting intent schema`;
+        console.time(timerName);
+        const response = await agent.getIntentSchemaFromRecording(
+            action.parameters.recordedActionName,
+            action.parameters.recordedActionDescription,
+            action.parameters.recordedActionSteps,
+            action.parameters.htmlFragments,
+            // action.parameters.screenshot,
+            "",
+        );
+
+        if (!response.success) {
+            console.error("Attempt to process recorded action failed");
+            console.error(response.message);
+            message = "Action could not be completed";
+            return;
+        }
+
+        console.timeEnd(timerName);
+        message = "Intent schema: \n" + JSON.stringify(response.data, null, 2);
+
+        return response.data;
+    }
+
+    //
 
     return {
         displayText: message,

@@ -10,12 +10,6 @@ import {
 import { StringArrayTag, TypedTag, XmpTag } from "exifreader";
 import { openai } from "aiclient";
 import { env } from "process";
-// import {
-//     GeoJsonFeature,
-//     GeoJsonFeatureCollection,
-//     SearchAddressResult,
-//     SearchAddressResultItem,
-// } from "@azure/maps-search";
 import { AddressOutput } from "@azure-rest/maps-search";
 
 // Maps token provider
@@ -27,9 +21,9 @@ const tokenProvider: AuthTokenProvider = createAzureTokenProvider(
  * Point of interest
  */
 export type PointOfInterest = {
-    name?: String | undefined;
-    categories?: String[] | undefined;
-    freeFormAddress?: String | undefined;
+    name?: string | undefined;
+    categories?: string[] | undefined;
+    freeFormAddress?: string | undefined;
     position?: LatLong | undefined;
     distance?: number | undefined;
 };
@@ -47,8 +41,8 @@ export type ReverseGeocodeAddressLookup = {
  * Latitude, longitude coordinates
  */
 export type LatLong = {
-    latitude: Number | String | undefined;
-    longitude: Number | String | undefined;
+    latitude: Number | string | undefined;
+    longitude: Number | string | undefined;
 };
 
 /**
@@ -151,10 +145,10 @@ export async function findNearbyPointsOfInterest(
                         categories: result.poi?.categories,
                         freeFormAddress: result.address.freeformAddress,
                         position: {
-                            latitude: result.position[0],
-                            longitude: result.position[1],
+                            latitude: result.position.lat,
+                            longitude: result.position.lon,
                         },
-                        distance: result.poi?.dist,
+                        distance: result.dist,
                     });
                 } else {
                     // TODO: handle more result types
