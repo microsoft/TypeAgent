@@ -283,18 +283,17 @@ class SearchQueryBuilder {
             this.allScopeSearchTerms.push(...searchTermsUsed);
         }
         // If a thread index is available...
-        const threadIndex = this.secondaryIndexes?.threadIndex;
-        if (filter.threadDescription && threadIndex) {
-            const threadsInScope =
-                await threadIndex.threadDescriptionIndex.lookupThread(
-                    filter.threadDescription,
-                );
+        const threads = this.secondaryIndexes?.threads;
+        if (filter.threadDescription && threads) {
+            const threadsInScope = await threads.lookupThread(
+                filter.threadDescription,
+            );
             if (threadsInScope) {
                 scopeSelectors ??= [];
                 scopeSelectors.push(
                     new q.ThreadSelector(
                         threadsInScope.map(
-                            (t) => threadIndex.threads[t.threadIndex],
+                            (t) => threads.threads[t.threadIndex],
                         ),
                     ),
                 );

@@ -18,7 +18,7 @@ export interface IConversationSecondaryIndexes {
     termToRelatedTermsIndex?: ITermToRelatedTermsIndex | undefined;
     propertyToSemanticRefIndex: IPropertyToSemanticRefIndex | undefined;
     timestampIndex?: ITimestampToTextRangeIndex | undefined;
-    threadIndex?: IConversationThreads | undefined;
+    threads?: IConversationThreads | undefined;
 }
 
 /**
