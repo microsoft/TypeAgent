@@ -14,7 +14,7 @@ import * as q from "./query.js";
 import { IQueryOpExpr } from "./query.js";
 import { resolveRelatedTerms } from "./relatedTermsIndex.js";
 import { IConversationSecondaryIndexes } from "./secondaryIndexes.js";
-import { conversation } from "knowledge-processor";
+import { conversation as kpLib } from "knowledge-processor";
 
 export type SearchTerm = {
     /**
@@ -99,6 +99,10 @@ export interface Scored<T = any> {
     score: number;
 }
 
+/**
+ * Temporary placeholder; will be removed once "merge" of entities
+ * returns ConcreteEntities
+ */
 export type CompositeEntity = {
     name: string;
     type: string[];
@@ -408,7 +412,7 @@ class SearchQueryBuilder {
             sr.knowledgeType === "entity" &&
             q.matchEntityNameOrType(
                 searchTerm,
-                sr.knowledge as conversation.ConcreteEntity,
+                sr.knowledge as kpLib.ConcreteEntity,
             )
         ) {
             scoredRef = {

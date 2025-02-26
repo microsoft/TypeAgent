@@ -8,7 +8,7 @@ import {
     IMessage,
     SemanticRef,
 } from "./dataFormat.js";
-import { conversation, image } from "knowledge-processor";
+import { conversation as kpLib, image } from "knowledge-processor";
 import {
     ConversationIndex,
     addActionToIndex,
@@ -35,8 +35,8 @@ import { IConversationThreadData } from "./conversationThread.js";
 import { createPodcastSettings, PodcastSettings } from "./import.js";
 import { isDirectoryPath } from "typeagent";
 
-type ConcreteEntity = conversation.ConcreteEntity;
-type Topic = conversation.Topic;
+type ConcreteEntity = kpLib.ConcreteEntity;
+type Topic = kpLib.Topic;
 
 export interface ImageCollectionData extends IConversationData<Image> {
     relatedTermsIndexData?: ITermsToRelatedTermsIndexData | undefined;
@@ -66,7 +66,7 @@ export class ImageMeta implements IKnowledgeSource {
     ) {}
 
     getKnowledge() {
-        const imageEntity: conversation.ConcreteEntity = {
+        const imageEntity: kpLib.ConcreteEntity = {
             name: `${path.basename(this.img.fileName)} - ${this.img.title}`,
             type: ["file", "image"],
             facets: [
@@ -92,9 +92,9 @@ export class ImageMeta implements IKnowledgeSource {
         }
 
         // create the return values
-        let entities: conversation.ConcreteEntity[] = [];
-        let actions: conversation.Action[] = [];
-        let inverseActions: conversation.Action[] = [];
+        let entities: kpLib.ConcreteEntity[] = [];
+        let actions: kpLib.Action[] = [];
+        let inverseActions: kpLib.Action[] = [];
         let topics: Topic[] = [];
         const timestampParam = [];
 
@@ -111,7 +111,7 @@ export class ImageMeta implements IKnowledgeSource {
         // if we have POI those are also entities
         if (this.img.nearbyPOI) {
             for (let i = 0; i < this.img.nearbyPOI.length; i++) {
-                const poiEntity: conversation.ConcreteEntity = {
+                const poiEntity: kpLib.ConcreteEntity = {
                     name: this.img.nearbyPOI[i].name!,
                     type: [
                         ...this.img.nearbyPOI[i].categories!,
@@ -183,7 +183,7 @@ export class ImageMeta implements IKnowledgeSource {
                 ) {
                     const addrOutput: AddressOutput =
                         this.img.reverseGeocode[i].address!;
-                    const addrEntity: conversation.ConcreteEntity = {
+                    const addrEntity: kpLib.ConcreteEntity = {
                         name:
                             this.img.reverseGeocode[i].address!
                                 .formattedAddress ?? "",
@@ -421,7 +421,7 @@ export class ImageCollection implements IConversation<ImageMeta> {
     public async buildIndex(
         progressCallback?: (
             text: string,
-            knowledgeResult: Result<conversation.KnowledgeResponse>,
+            knowledgeResult: Result<kpLib.KnowledgeResponse>,
         ) => boolean,
     ): Promise<ConversationIndexingResult> {
         //const result = await buildConversationIndex(this, progressCallback);
