@@ -40,7 +40,7 @@ import {
     PropertyNames,
 } from "./propertyIndex.js";
 import { IPropertyToSemanticRefIndex } from "./secondaryIndexes.js";
-import { conversation } from "knowledge-processor";
+import { conversation as kpLib } from "knowledge-processor";
 import { collections, getTopK } from "typeagent";
 import { ITimestampToTextRangeIndex } from "./secondaryIndexes.js";
 import { Thread } from "./conversationThread.js";
@@ -231,7 +231,7 @@ export function matchPropertySearchTermToEntity(
     ) {
         return false;
     }
-    const entity = semanticRef.knowledge as conversation.ConcreteEntity;
+    const entity = semanticRef.knowledge as kpLib.ConcreteEntity;
     switch (<string>searchTerm.propertyName) {
         default:
             break;
@@ -260,7 +260,7 @@ export function matchPropertySearchTermToEntity(
 
 export function matchEntityNameOrType(
     propertyValue: SearchTerm,
-    entity: conversation.ConcreteEntity,
+    entity: kpLib.ConcreteEntity,
 ): boolean {
     return (
         matchSearchTermToText(propertyValue, entity.name) ||
@@ -270,7 +270,7 @@ export function matchEntityNameOrType(
 
 function matchPropertyNameToFacetName(
     propertyValue: SearchTerm,
-    entity: conversation.ConcreteEntity,
+    entity: kpLib.ConcreteEntity,
 ) {
     if (entity.facets && entity.facets.length > 0) {
         for (const facet of entity.facets) {
@@ -284,11 +284,11 @@ function matchPropertyNameToFacetName(
 
 function matchPropertyValueToFacetValue(
     propertyValue: SearchTerm,
-    entity: conversation.ConcreteEntity,
+    entity: kpLib.ConcreteEntity,
 ) {
     if (entity.facets && entity.facets.length > 0) {
         for (const facet of entity.facets) {
-            const facetValue = conversation.knowledgeValueToString(facet.value);
+            const facetValue = kpLib.knowledgeValueToString(facet.value);
             if (matchSearchTermToText(propertyValue, facetValue)) {
                 return true;
             }
@@ -307,7 +307,7 @@ function matchPropertySearchTermToAction(
     ) {
         return false;
     }
-    const action = semanticRef.knowledge as conversation.Action;
+    const action = semanticRef.knowledge as kpLib.Action;
     switch (searchTerm.propertyName) {
         default:
             break;
@@ -1176,7 +1176,7 @@ export function mergeEntityMatches(
             continue;
         }
         const compositeEntity = toCompositeEntity(
-            semanticRef.knowledge as conversation.ConcreteEntity,
+            semanticRef.knowledge as kpLib.ConcreteEntity,
         );
         const existing = mergedEntities.get(compositeEntity.name);
         if (existing) {
@@ -1198,9 +1198,7 @@ export function mergeEntityMatches(
     return [...mergedEntities.values()];
 }
 
-function toCompositeEntity(
-    entity: conversation.ConcreteEntity,
-): CompositeEntity {
+function toCompositeEntity(entity: kpLib.ConcreteEntity): CompositeEntity {
     if (entity === undefined) {
         return {
             name: "undefined",
@@ -1220,8 +1218,8 @@ function toCompositeEntity(
     return composite;
 }
 
-function facetToString(facet: conversation.Facet): string {
-    return `${facet.name}="${conversation.knowledgeValueToString(facet.value)}"`;
+function facetToString(facet: kpLib.Facet): string {
+    return `${facet.name}="${kpLib.knowledgeValueToString(facet.value)}"`;
 }
 
 function combineCompositeEntities(

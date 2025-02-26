@@ -9,7 +9,7 @@ import {
     IConversationData,
     Term,
 } from "./dataFormat.js";
-import { conversation, split } from "knowledge-processor";
+import { conversation as kpLib, split } from "knowledge-processor";
 import {
     collections,
     dateTime,
@@ -68,26 +68,26 @@ export class PodcastMessageMeta implements IKnowledgeSource {
                 topics: [],
             };
         } else {
-            const entities: conversation.ConcreteEntity[] = [];
+            const entities: kpLib.ConcreteEntity[] = [];
             entities.push({
                 name: this.speaker,
                 type: ["person"],
-            } as conversation.ConcreteEntity);
+            } as kpLib.ConcreteEntity);
             const listenerEntities = this.listeners.map((listener) => {
                 return {
                     name: listener,
                     type: ["person"],
-                } as conversation.ConcreteEntity;
+                } as kpLib.ConcreteEntity;
             });
             entities.push(...listenerEntities);
-            const actions: conversation.Action[] = [];
+            const actions: kpLib.Action[] = [];
             for (const listener of this.listeners) {
                 actions.push({
                     verbs: ["say"],
                     verbTense: "past",
                     subjectEntityName: this.speaker,
                     objectEntityName: listener,
-                } as conversation.Action);
+                } as kpLib.Action);
             }
             return {
                 entities,
@@ -212,7 +212,7 @@ export class Podcast
     public async buildIndex(
         progressCallback?: (
             text: string,
-            knowledgeResult: Result<conversation.KnowledgeResponse>,
+            knowledgeResult: Result<kpLib.KnowledgeResponse>,
         ) => boolean,
     ): Promise<ConversationIndexingResult> {
         const result = await buildConversationIndex(this, progressCallback);
@@ -377,8 +377,7 @@ export class Podcast
         function collectName(participantName: string | undefined) {
             if (participantName) {
                 participantName = participantName.toLowerCase();
-                const parsedName =
-                    conversation.splitParticipantName(participantName);
+                const parsedName = kpLib.splitParticipantName(participantName);
                 if (parsedName && parsedName.firstName && parsedName.lastName) {
                     // If participantName is a full name, then associate firstName with the full name
                     aliases.addUnique(parsedName.firstName, participantName);
