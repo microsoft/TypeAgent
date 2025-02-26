@@ -24,7 +24,8 @@ jobs:
     steps:
       - name: Install Prereqs
         run: |
-          sudo apt install libsecret-1-0
+          sudo apt-get update
+          sudo apt install -y gnome-keyring
 
       - name: Setup Git LF
         run: |
