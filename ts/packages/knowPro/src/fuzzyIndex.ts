@@ -23,6 +23,10 @@ export class TextEmbeddingIndex {
         this.embeddings = [];
     }
 
+    public get size(): number {
+        return this.embeddings.length;
+    }
+
     public async addText(texts: string | string[]): Promise<void> {
         if (Array.isArray(texts)) {
             const embeddings = await generateTextEmbeddingsWithRetry(
@@ -85,6 +89,14 @@ export class TextEmbeddingIndex {
         this.embeddings = [];
     }
 
+    public serialize(): Float32Array[] {
+        return this.embeddings;
+    }
+
+    public deserialize(embeddings: Float32Array[]): void {
+        this.embeddings = embeddings;
+    }
+
     private indexesOfNearestText(
         textEmbedding: NormalizedEmbedding,
         maxMatches?: number,
@@ -140,6 +152,7 @@ export async function addTextToEmbeddingIndex(
 
 export type TextEmbeddingIndexSettings = {
     embeddingModel: TextEmbeddingModel;
+    embeddingSize: number;
     minScore: number;
     maxMatches?: number | undefined;
     retryMaxAttempts?: number;
@@ -147,11 +160,11 @@ export type TextEmbeddingIndexSettings = {
 };
 
 export function createTextEmbeddingIndexSettings(
-    maxMatches = 100,
     minScore = 0.85,
 ): TextEmbeddingIndexSettings {
     return {
         embeddingModel: createEmbeddingCache(openai.createEmbeddingModel(), 64),
+        embeddingSize: 1536,
         minScore,
         retryMaxAttempts: 2,
         retryPauseMs: 2000,
@@ -238,4 +251,29 @@ function* getIndexingBatches(
         }
         yield { startAt: i, values: batch };
     }
+}
+
+export function serializeEmbeddings(embeddings: NormalizedEmbedding[]): Buffer {
+    return Buffer.concat(embeddings.map((e) => Buffer.from(e.buffer)));
+}
+
+export function deserializeEmbeddings(
+    buffer: Buffer,
+    embeddingSize: number,
+): NormalizedEmbedding[] {
+    const embeddings: NormalizedEmbedding[] = [];
+    const embeddingByteCount = Float32Array.BYTES_PER_ELEMENT * embeddingSize;
+    for (
+        let startAt = 0;
+        startAt < buffer.length;
+        startAt += embeddingByteCount
+    ) {
+        const embedding = new Float32Array(
+            buffer.buffer,
+            buffer.byteOffset + startAt,
+            embeddingSize,
+        );
+        embeddings.push(embedding);
+    }
+    return embeddings;
 }

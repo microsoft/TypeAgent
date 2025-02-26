@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import dotenv from "dotenv";
-import { getUserDataDir } from "agent-dispatcher";
+import { getUserDataDir } from "agent-dispatcher/helpers/data";
 import { readFileSync } from "node:fs";
 import {
     TypeAgentAPIServerConfig,

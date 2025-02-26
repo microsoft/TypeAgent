@@ -8,8 +8,8 @@ import {
     convertTestDataToExplanationData,
     createActionConfigProvider,
     createSchemaInfoProvider,
-    getInstanceDir,
 } from "agent-dispatcher/internal";
+import { getInstanceDir } from "agent-dispatcher/helpers/data";
 import { printImportConstructionResult } from "agent-cache";
 import fs from "node:fs";
 import chalk from "chalk";

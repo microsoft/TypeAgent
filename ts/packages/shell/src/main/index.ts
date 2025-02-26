@@ -40,7 +40,7 @@ import { createDispatcherRpcServer } from "agent-dispatcher/rpc/dispatcher/serve
 import { createGenericChannel } from "agent-rpc/channel";
 import net from "node:net";
 import { createClientIORpcClient } from "agent-dispatcher/rpc/clientio/client";
-import { getInstanceDir } from "agent-dispatcher/internal";
+import { getClientId, getInstanceDir } from "agent-dispatcher/helpers/data";
 
 console.log(auth.AzureTokenScopes.CogServices);
 
@@ -540,9 +540,11 @@ async function initializeDispatcher(
         agentInstaller: getDefaultAppAgentInstaller(instanceDir),
         explanationAsynchronousMode: true,
         persistSession: true,
+        persistDir: instanceDir,
         enableServiceHost: true,
         metrics: true,
         dblogging: true,
+        clientId: getClientId(),
         clientIO,
         constructionProvider: getDefaultConstructionProvider(),
     });

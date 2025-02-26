@@ -1,11 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { conversation } from "knowledge-processor";
+import { conversation as kpLib } from "knowledge-processor";
 
 // an object that can provide a KnowledgeResponse structure
 export interface IKnowledgeSource {
-    getKnowledge: () => conversation.KnowledgeResponse;
+    getKnowledge: () => kpLib.KnowledgeResponse;
 }
 
 export interface DeletionInfo {
@@ -50,11 +50,7 @@ export interface ITermToSemanticRefIndex {
 }
 
 export type KnowledgeType = "entity" | "action" | "topic" | "tag";
-export type Knowledge =
-    | conversation.ConcreteEntity
-    | conversation.Action
-    | Topic
-    | Tag;
+export type Knowledge = kpLib.ConcreteEntity | kpLib.Action | Topic | Tag;
 
 export interface SemanticRef {
     semanticRefIndex: SemanticRefIndex;
@@ -77,6 +73,8 @@ export interface IConversation<TMeta extends IKnowledgeSource = any> {
     messages: IMessage<TMeta>[];
     semanticRefs: SemanticRef[] | undefined;
     semanticRefIndex?: ITermToSemanticRefIndex | undefined;
+
+    serialize(): IConversationData<IMessage<TMeta>>;
 }
 
 export type MessageIndex = number;
@@ -98,7 +96,7 @@ export interface TextRange {
     end?: TextLocation | undefined;
 }
 
-export interface IConversationData<TMessage> {
+export interface IConversationData<TMessage = any> {
     nameTag: string;
     messages: TMessage[];
     tags: string[];
@@ -119,6 +117,11 @@ export type Term = {
      */
     weight?: number | undefined;
 };
+
+export interface Scored<T = any> {
+    item: T;
+    score: number;
+}
 
 // Also see:
 // - secondaryIndex.ts for optional secondary interfaces

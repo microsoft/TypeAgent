@@ -6,7 +6,7 @@ import {
     getSessionDirPath,
     getSessionsDirPath,
 } from "./context/session.js";
-import { getInstanceDir } from "./utils/userData.js";
+import { getInstanceDir } from "./helpers/userData.js";
 
 export function getInstanceSessionNames() {
     return getSessionNames(getInstanceDir());

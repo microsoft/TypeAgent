@@ -430,10 +430,16 @@ export class TextRangesInScope {
         this.textRanges.push(ranges);
     }
 
-    public isRangeInScope(range: TextRange): boolean {
+    public isRangeInScope(innerRange: TextRange): boolean {
         if (this.textRanges !== undefined) {
-            for (const outerRange of this.textRanges) {
-                if (!outerRange.isInRange(range)) {
+            /**
+                Since outerRanges come from a set of range selectors, they may overlap, or may not agree.
+                Outer ranges allowed by say a date range selector... may not be allowed by a tag selector.
+                We have a very simple impl: we don't intersect/union ranges yet.
+                Instead, we ensure that the innerRange is not rejected by any outerRanges
+             */
+            for (const outerRanges of this.textRanges) {
+                if (!outerRanges.isInRange(innerRange)) {
                     return false;
                 }
             }
