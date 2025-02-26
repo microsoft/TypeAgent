@@ -14,10 +14,11 @@ import {
     //generateMonotonicName,
 } from "typeagent";
 import { intersectMultiple, setFrom } from "./setOperations.js";
-import { DateRange } from "../../typeagent/dist/dateTime.js";
 import { pathToFileURL } from "url";
 import path from "path";
 import { valueToString } from "./text.js";
+
+type DateRange = dateTime.DateRange;
 
 export type TemporalLogSettings = {
     concurrency: number;
