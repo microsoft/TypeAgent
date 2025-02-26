@@ -12,6 +12,8 @@ import {
     ITermToRelatedTermsFuzzy,
     ITermToRelatedTerms,
     ITextEmbeddingDataItem,
+    ITextEmbeddingIndexData2,
+    ITermsToRelatedTermsIndexData2,
 } from "./secondaryIndexes.js";
 import { SearchTerm } from "./search.js";
 import { isSearchTermWildcard } from "./query.js";
@@ -107,6 +109,13 @@ export class TermToRelatedTermsIndex implements ITermToRelatedTermsIndex {
         };
     }
 
+    public serialize2(): ITermsToRelatedTermsIndexData2 {
+        return {
+            aliasData: this.aliasMap.serialize(),
+            textEmbeddingData: this.embeddingIndex?.serialize2(),
+        };
+    }
+
     public deserialize(data?: ITermsToRelatedTermsIndexData): void {
         if (data) {
             if (data.aliasData) {
@@ -118,6 +127,21 @@ export class TermToRelatedTermsIndex implements ITermToRelatedTermsIndex {
                     this.settings.embeddingIndexSettings,
                 );
                 this.embeddingIndex.deserialize(data.textEmbeddingData);
+            }
+        }
+    }
+
+    public deserialize2(data?: ITermsToRelatedTermsIndexData2): void {
+        if (data) {
+            if (data.aliasData) {
+                this.aliasMap = new TermToRelatedTermsMap();
+                this.aliasMap.deserialize(data.aliasData);
+            }
+            if (data.textEmbeddingData) {
+                this.embeddingIndex = new TermEmbeddingIndex(
+                    this.settings.embeddingIndexSettings,
+                );
+                this.embeddingIndex.deserialize2(data.textEmbeddingData);
             }
         }
     }
@@ -245,6 +269,9 @@ function dedupeRelatedTerms(
 export interface ITermEmbeddingIndex extends ITermToRelatedTermsFuzzy {
     serialize(): ITextEmbeddingIndexData;
     deserialize(data: ITextEmbeddingIndexData): void;
+
+    serialize2(): ITextEmbeddingIndexData2;
+    deserialize2(data: ITextEmbeddingIndexData2): void;
 }
 
 export class TermEmbeddingIndex implements ITermEmbeddingIndex {
@@ -344,6 +371,27 @@ export class TermEmbeddingIndex implements ITermEmbeddingIndex {
         return {
             embeddingData,
         };
+    }
+
+    public serialize2(): ITextEmbeddingIndexData2 {
+        return {
+            textItems: this.textArray,
+            embeddings: this.embeddingIndex.serialize(),
+        };
+    }
+
+    public deserialize2(data: ITextEmbeddingIndexData2): void {
+        this.textArray = data.textItems;
+        if (data.embeddings) {
+            this.embeddingIndex.deserialize(data.embeddings);
+            if (this.textArray.length !== this.embeddingIndex.size) {
+                throw new Error(
+                    `TextEmbeddingIndexData corrupt. textItems.length ${data.textItems.length} != ${this.embeddingIndex.size}`,
+                );
+            }
+        } else {
+            this.embeddingIndex.clear();
+        }
     }
 
     private matchesToTerms(matches: ScoredItem[]): Term[] {

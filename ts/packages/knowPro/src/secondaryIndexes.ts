@@ -99,3 +99,13 @@ export interface ITextEmbeddingDataItem {
     text: string;
     embedding: number[];
 }
+
+export interface ITermsToRelatedTermsIndexData2 {
+    aliasData?: ITermToRelatedTermsData | undefined;
+    textEmbeddingData?: ITextEmbeddingIndexData2 | undefined;
+}
+
+export interface ITextEmbeddingIndexData2 {
+    textItems: string[];
+    embeddings?: Buffer | undefined;
+}

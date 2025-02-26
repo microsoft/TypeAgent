@@ -23,6 +23,10 @@ export class TextEmbeddingIndex {
         this.embeddings = [];
     }
 
+    public get size(): number {
+        return this.embeddings.length;
+    }
+
     public async addText(texts: string | string[]): Promise<void> {
         if (Array.isArray(texts)) {
             const embeddings = await generateTextEmbeddingsWithRetry(
@@ -89,7 +93,8 @@ export class TextEmbeddingIndex {
         return serializeEmbeddingsToBuffer(this.embeddings);
     }
 
-    public deserialize(buffer: Buffer, embeddingSize: number = 1536): void {
+    public deserialize(buffer: Buffer, embeddingSize?: number): void {
+        embeddingSize ??= this.settings.embeddingSize;
         this.embeddings = deserializeEmbeddingsFromBuffer(
             buffer,
             embeddingSize,
@@ -151,6 +156,7 @@ export async function addTextToEmbeddingIndex(
 
 export type TextEmbeddingIndexSettings = {
     embeddingModel: TextEmbeddingModel;
+    embeddingSize: number;
     minScore: number;
     maxMatches?: number | undefined;
     retryMaxAttempts?: number;
@@ -158,11 +164,11 @@ export type TextEmbeddingIndexSettings = {
 };
 
 export function createTextEmbeddingIndexSettings(
-    maxMatches = 100,
     minScore = 0.85,
 ): TextEmbeddingIndexSettings {
     return {
         embeddingModel: createEmbeddingCache(openai.createEmbeddingModel(), 64),
+        embeddingSize: 1536,
         minScore,
         retryMaxAttempts: 2,
         retryPauseMs: 2000,
@@ -253,9 +259,8 @@ function* getIndexingBatches(
 
 export function serializeEmbeddingsToBuffer(
     embeddings: NormalizedEmbedding[],
-    embeddingSize?: number,
 ): Buffer {
-    return Buffer.concat(embeddings.map((e) => Buffer.from(e)));
+    return Buffer.concat(embeddings.map((e) => Buffer.from(e.buffer)));
 }
 
 export function deserializeEmbeddingsFromBuffer(

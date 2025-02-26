@@ -33,6 +33,7 @@ import { TimestampToTextRangeIndex } from "./timestampIndex.js";
 import {
     IPropertyToSemanticRefIndex,
     ITermsToRelatedTermsIndexData,
+    ITermsToRelatedTermsIndexData2,
     ITimestampToTextRangeIndex,
 } from "./secondaryIndexes.js";
 import { addPropertiesToIndex, PropertyIndex } from "./propertyIndex.js";
@@ -41,6 +42,7 @@ import {
     IConversationThreadData,
     ConversationThreads,
 } from "./conversationThread.js";
+import path from "path";
 
 // metadata for podcast messages
 export class PodcastMessageMeta implements IKnowledgeSource {
@@ -139,23 +141,17 @@ export class Podcast
     implements IConversation<PodcastMessageMeta>, IConversationSecondaryIndexes
 {
     public settings: PodcastSettings;
+    public semanticRefIndex: ConversationIndex | undefined;
+    public termToRelatedTermsIndex: TermToRelatedTermsIndex | undefined;
+    public timestampIndex: ITimestampToTextRangeIndex | undefined;
+    public propertyToSemanticRefIndex: IPropertyToSemanticRefIndex | undefined;
     public threads: ConversationThreads;
 
     constructor(
-        public nameTag: string,
-        public messages: PodcastMessage[],
+        public nameTag: string = "",
+        public messages: PodcastMessage[] = [],
         public tags: string[] = [],
         public semanticRefs: SemanticRef[] = [],
-        public semanticRefIndex: ConversationIndex | undefined = undefined,
-        public termToRelatedTermsIndex:
-            | TermToRelatedTermsIndex
-            | undefined = undefined,
-        public timestampIndex:
-            | ITimestampToTextRangeIndex
-            | undefined = undefined,
-        public propertyToSemanticRefIndex:
-            | IPropertyToSemanticRefIndex
-            | undefined = undefined,
     ) {
         this.settings = createPodcastSettings();
         this.threads = new ConversationThreads(this.settings.threadSettings);
@@ -246,7 +242,23 @@ export class Podcast
         };
     }
 
+    public serialize2(): PodcastData2 {
+        return {
+            nameTag: this.nameTag,
+            messages: this.messages,
+            tags: this.tags,
+            semanticRefs: this.semanticRefs,
+            semanticIndexData: this.semanticRefIndex?.serialize(),
+            relatedTermsIndexData: this.termToRelatedTermsIndex?.serialize2(),
+            threadData: this.threads.serialize(),
+        };
+    }
+
     public deserialize(data: PodcastData): void {
+        this.nameTag = data.nameTag;
+        this.messages = data.messages;
+        this.semanticRefs = data.semanticRefs;
+        this.tags = data.tags;
         if (data.semanticIndexData) {
             this.semanticRefIndex = new ConversationIndex(
                 data.semanticIndexData,
@@ -257,6 +269,33 @@ export class Podcast
                 this.settings.relatedTermIndexSettings,
             );
             this.termToRelatedTermsIndex.deserialize(
+                data.relatedTermsIndexData,
+            );
+        }
+        if (data.threadData) {
+            this.threads = new ConversationThreads(
+                this.settings.threadSettings,
+            );
+            this.threads.deserialize(data.threadData);
+        }
+        this.buildSecondaryIndexes();
+    }
+
+    public deserialize2(data: PodcastData2): void {
+        this.nameTag = data.nameTag;
+        this.messages = data.messages;
+        this.semanticRefs = data.semanticRefs;
+        this.tags = data.tags;
+        if (data.semanticIndexData) {
+            this.semanticRefIndex = new ConversationIndex(
+                data.semanticIndexData,
+            );
+        }
+        if (data.relatedTermsIndexData) {
+            this.termToRelatedTermsIndex = new TermToRelatedTermsIndex(
+                this.settings.relatedTermIndexSettings,
+            );
+            this.termToRelatedTermsIndex.deserialize2(
                 data.relatedTermsIndexData,
             );
         }
@@ -338,6 +377,11 @@ export interface PodcastData extends IConversationData<PodcastMessage> {
     threadData?: IConversationThreadData;
 }
 
+export interface PodcastData2 extends IConversationData<PodcastMessage> {
+    relatedTermsIndexData?: ITermsToRelatedTermsIndexData2 | undefined;
+    threadData?: IConversationThreadData;
+}
+
 export async function importPodcast(
     transcriptFilePath: string,
     podcastName?: string,
@@ -394,6 +438,56 @@ export async function importPodcast(
     pod.generateTimestamps(startDate, lengthMinutes);
     // TODO: add more tags
     return pod;
+}
+
+export async function savePodcast(
+    podcast: Podcast,
+    dirPath: string,
+    baseFileName: string,
+): Promise<void> {
+    const podcastData = podcast.serialize2();
+    const embeddingData = podcastData.relatedTermsIndexData?.textEmbeddingData;
+    if (embeddingData?.embeddings) {
+        const embeddingFilePath = path.join(
+            dirPath,
+            baseFileName + "_embeddings.json",
+        );
+        await fs.promises.writeFile(
+            embeddingFilePath,
+            embeddingData.embeddings,
+        );
+        embeddingData.embeddings = undefined;
+    }
+    const dataFilePath = path.join(dirPath, baseFileName + "_data.json");
+    await fs.promises.writeFile(dataFilePath, JSON.stringify(podcastData));
+}
+
+export async function loadPodcast(
+    dirPath: string,
+    baseFileName: string,
+): Promise<Podcast | undefined> {
+    const dataFilePath = path.join(dirPath, baseFileName + "_data.json");
+    if (fs.existsSync(dataFilePath)) {
+        const data: PodcastData2 = JSON.parse(
+            await fs.promises.readFile(dataFilePath, "utf-8"),
+        );
+        const embeddingData = data.relatedTermsIndexData?.textEmbeddingData;
+        if (embeddingData) {
+            const embeddingFilePath = path.join(
+                dirPath,
+                baseFileName + "_embeddings.json",
+            );
+            if (fs.existsSync(embeddingFilePath)) {
+                const embeddings =
+                    await fs.promises.readFile(embeddingFilePath);
+                embeddingData.embeddings = embeddings;
+            }
+        }
+        const podcast = new Podcast();
+        podcast.deserialize2(data);
+        return podcast;
+    }
+    return undefined;
 }
 
 /**

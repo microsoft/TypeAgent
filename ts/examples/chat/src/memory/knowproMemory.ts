@@ -25,7 +25,13 @@ import {
     parseFreeAndNamedArguments,
     keyValuesFromNamedArgs,
 } from "./common.js";
-import { dateTime, ensureDir, readJsonFile, writeJsonFile } from "typeagent";
+import {
+    dateTime,
+    ensureDir,
+    getFileName,
+    readJsonFile,
+    writeJsonFile,
+} from "typeagent";
 import path from "path";
 import chalk from "chalk";
 import { KnowProPrinter } from "./knowproPrinter.js";
@@ -174,8 +180,16 @@ export async function createKnowproCommands(
         context.printer.writeLine("Saving index");
         context.printer.writeLine(namedArgs.filePath);
         const podcastData: kp.PodcastData = context.podcast.serialize();
-        await ensureDir(path.dirname(namedArgs.filePath));
+
+        const dirName = path.dirname(namedArgs.filePath);
+        await ensureDir(dirName);
         await writeJsonFile(namedArgs.filePath, podcastData);
+
+        await kp.savePodcast(
+            context.podcast,
+            dirName,
+            getFileName(namedArgs.filePath),
+        );
     }
 
     function podcastLoadDef(): CommandMetadata {
@@ -210,15 +224,26 @@ export async function createKnowproCommands(
             context.printer.writeError("Could not load podcast data");
             return;
         }
+        clock.stop();
+        context.printer.writeTiming(chalk.gray, clock, "Read file");
+
         context.podcast = new kp.Podcast(
             data.nameTag,
             data.messages,
             data.tags,
-            data.semanticRefs,
         );
+        clock.start();
         context.podcast.deserialize(data);
         clock.stop();
-        context.printer.writeTiming(chalk.gray, clock);
+        context.printer.writeTiming(chalk.gray, clock, "Deserialize");
+
+        const podcast2 = await kp.loadPodcast(
+            path.dirname(podcastFilePath),
+            getFileName(podcastFilePath),
+        );
+        if (podcast2) {
+            context.podcast = podcast2;
+        }
         context.conversation = context.podcast;
         context.printer.conversation = context.conversation;
         context.printer.writePodcastInfo(context.podcast);
