@@ -11,15 +11,12 @@ import {
     ITermsToRelatedTermsIndexData,
     ITermToRelatedTermsFuzzy,
     ITermToRelatedTerms,
-    ITextEmbeddingDataItem,
 } from "./secondaryIndexes.js";
 import { SearchTerm } from "./search.js";
 import { isSearchTermWildcard } from "./query.js";
 import { TermSet } from "./collections.js";
 import {
     addTextToEmbeddingIndex,
-    deserializeEmbedding,
-    serializeEmbedding,
     TextEditDistanceIndex,
     TextEmbeddingIndex,
     TextEmbeddingIndexSettings,
@@ -248,8 +245,8 @@ export interface ITermEmbeddingIndex extends ITermToRelatedTermsFuzzy {
 }
 
 export class TermEmbeddingIndex implements ITermEmbeddingIndex {
-    private textArray: string[];
-    private embeddingIndex: TextEmbeddingIndex;
+    public textArray: string[];
+    public embeddingIndex: TextEmbeddingIndex;
 
     constructor(
         public settings: TextEmbeddingIndexSettings,
@@ -324,26 +321,21 @@ export class TermEmbeddingIndex implements ITermEmbeddingIndex {
         }
     }
 
-    public deserialize(data: ITextEmbeddingIndexData): void {
-        if (data.embeddingData !== undefined) {
-            for (const item of data.embeddingData) {
-                this.textArray.push(item.text);
-                this.embeddingIndex.add(deserializeEmbedding(item.embedding));
-            }
-        }
+    public serialize(): ITextEmbeddingIndexData {
+        return {
+            textItems: this.textArray,
+            embeddings: this.embeddingIndex.serialize(),
+        };
     }
 
-    public serialize(): ITextEmbeddingIndexData {
-        const embeddingData: ITextEmbeddingDataItem[] = [];
-        for (let i = 0; i < this.textArray.length; ++i) {
-            embeddingData.push({
-                text: this.textArray[i],
-                embedding: serializeEmbedding(this.embeddingIndex.get(i)),
-            });
+    public deserialize(data: ITextEmbeddingIndexData): void {
+        if (data.textItems.length !== data.embeddings.length) {
+            throw new Error(
+                `TextEmbeddingIndexData corrupt. textItems.length ${data.textItems.length} != ${data.embeddings.length}`,
+            );
         }
-        return {
-            embeddingData,
-        };
+        this.textArray = data.textItems;
+        this.embeddingIndex.deserialize(data.embeddings);
     }
 
     private matchesToTerms(matches: ScoredItem[]): Term[] {

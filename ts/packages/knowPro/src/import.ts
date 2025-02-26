@@ -10,7 +10,16 @@ import {
     Term,
 } from "./dataFormat.js";
 import { conversation, split } from "knowledge-processor";
-import { collections, dateTime, getFileName, readAllText } from "typeagent";
+import {
+    collections,
+    dateTime,
+    getFileName,
+    readAllText,
+    readFile,
+    readJsonFile,
+    writeFile,
+    writeJsonFile,
+} from "typeagent";
 import {
     ConversationIndex,
     addActionToIndex,
@@ -26,6 +35,8 @@ import {
 } from "./relatedTermsIndex.js";
 import {
     createTextEmbeddingIndexSettings,
+    deserializeEmbeddings,
+    serializeEmbeddings,
     TextEmbeddingIndexSettings,
 } from "./fuzzyIndex.js";
 import { TimestampToTextRangeIndex } from "./timestampIndex.js";
@@ -40,6 +51,7 @@ import {
     IConversationThreadData,
     ConversationThreads,
 } from "./conversationThread.js";
+import path from "path";
 
 // metadata for podcast messages
 export class PodcastMessageMeta implements IKnowledgeSource {
@@ -138,23 +150,17 @@ export class Podcast
     implements IConversation<PodcastMessageMeta>, IConversationSecondaryIndexes
 {
     public settings: PodcastSettings;
+    public semanticRefIndex: ConversationIndex | undefined;
+    public termToRelatedTermsIndex: TermToRelatedTermsIndex | undefined;
+    public timestampIndex: ITimestampToTextRangeIndex | undefined;
+    public propertyToSemanticRefIndex: IPropertyToSemanticRefIndex | undefined;
     public threads: ConversationThreads;
 
     constructor(
-        public nameTag: string,
-        public messages: PodcastMessage[],
+        public nameTag: string = "",
+        public messages: PodcastMessage[] = [],
         public tags: string[] = [],
         public semanticRefs: SemanticRef[] = [],
-        public semanticRefIndex: ConversationIndex | undefined = undefined,
-        public termToRelatedTermsIndex:
-            | TermToRelatedTermsIndex
-            | undefined = undefined,
-        public timestampIndex:
-            | ITimestampToTextRangeIndex
-            | undefined = undefined,
-        public propertyToSemanticRefIndex:
-            | IPropertyToSemanticRefIndex
-            | undefined = undefined,
     ) {
         this.settings = createPodcastSettings();
         this.threads = new ConversationThreads(this.settings.threadSettings);
@@ -246,6 +252,10 @@ export class Podcast
     }
 
     public deserialize(data: PodcastData): void {
+        this.nameTag = data.nameTag;
+        this.messages = data.messages;
+        this.semanticRefs = data.semanticRefs;
+        this.tags = data.tags;
         if (data.semanticIndexData) {
             this.semanticRefIndex = new ConversationIndex(
                 data.semanticIndexData,
@@ -266,6 +276,54 @@ export class Podcast
             this.threads.deserialize(data.threadData);
         }
         this.buildSecondaryIndexes();
+    }
+
+    public async writeToFile(
+        dirPath: string,
+        baseFileName: string,
+    ): Promise<void> {
+        const podcastData = this.serialize();
+        const embeddingData =
+            podcastData.relatedTermsIndexData?.textEmbeddingData;
+        if (embeddingData?.embeddings) {
+            await writeFile(
+                path.join(dirPath, baseFileName + EmbeddingFileSuffix),
+                serializeEmbeddings(embeddingData.embeddings),
+            );
+            embeddingData.embeddings = [];
+        }
+        await writeJsonFile(
+            path.join(dirPath, baseFileName + DataFileSuffix),
+            podcastData,
+        );
+    }
+
+    public static async readFromFile(
+        dirPath: string,
+        baseFileName: string,
+    ): Promise<Podcast | undefined> {
+        const data = await readJsonFile<PodcastData>(
+            path.join(dirPath, baseFileName + DataFileSuffix),
+        );
+        if (!data) {
+            return undefined;
+        }
+        const podcast = new Podcast();
+        const embeddingData = data.relatedTermsIndexData?.textEmbeddingData;
+        if (embeddingData) {
+            const embeddings = await readFile(
+                path.join(dirPath, baseFileName + EmbeddingFileSuffix),
+            );
+            if (embeddings) {
+                embeddingData.embeddings = deserializeEmbeddings(
+                    embeddings,
+                    podcast.settings.relatedTermIndexSettings
+                        .embeddingIndexSettings.embeddingSize,
+                );
+            }
+        }
+        podcast.deserialize(data);
+        return podcast;
     }
 
     private buildSecondaryIndexes() {
@@ -332,6 +390,9 @@ export class Podcast
     }
 }
 
+const DataFileSuffix = "_data.json";
+const EmbeddingFileSuffix = "_embeddings.bin";
+
 export interface PodcastData extends IConversationData<PodcastMessage> {
     relatedTermsIndexData?: ITermsToRelatedTermsIndexData | undefined;
     threadData?: IConversationThreadData;
@@ -389,8 +450,6 @@ export async function importPodcast(
     const pod = new Podcast(podcastName, msgs, [podcastName]);
     pod.generateTimestamps(startDate, lengthMinutes);
     // TODO: add more tags
-    // list all the books
-    // what did K say about Children of Time?
     return pod;
 }
 

@@ -77,6 +77,8 @@ export interface IConversation<TMeta extends IKnowledgeSource = any> {
     messages: IMessage<TMeta>[];
     semanticRefs: SemanticRef[] | undefined;
     semanticRefIndex?: ITermToSemanticRefIndex | undefined;
+
+    serialize(): IConversationData<IMessage<TMeta>>;
 }
 
 export type MessageIndex = number;
@@ -98,7 +100,7 @@ export interface TextRange {
     end?: TextLocation | undefined;
 }
 
-export interface IConversationData<TMessage> {
+export interface IConversationData<TMessage = any> {
     nameTag: string;
     messages: TMessage[];
     tags: string[];

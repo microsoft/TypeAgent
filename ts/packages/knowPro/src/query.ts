@@ -1024,9 +1024,10 @@ export class SelectInScopeExpr extends QueryOpExpr<SemanticRefAccumulator> {
 
     public override eval(context: QueryEvalContext): SemanticRefAccumulator {
         let semanticRefs = this.sourceExpr.eval(context);
-        // Scope => text ranges in scope
-        // Collect all possible text rang. The ranges may overlap, may not agree.
-        // What we want to ensure is that if any of the
+        // Scope => collect the set of text ranges that are in scope for this query
+        // - Collect all possible text ranges that may be in scope.
+        // - Since ranges come from a set of range selectors, the collected ranges may overlap, or may not agree.
+        //  We don't intersect/union ranges yet... future optimization
         const rangesInScope = new TextRangesInScope();
         for (const selector of this.rangeSelectors) {
             const range = selector.eval(context, semanticRefs);

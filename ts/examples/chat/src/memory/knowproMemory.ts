@@ -25,7 +25,13 @@ import {
     parseFreeAndNamedArguments,
     keyValuesFromNamedArgs,
 } from "./common.js";
-import { dateTime, ensureDir, readJsonFile, writeJsonFile } from "typeagent";
+import {
+    dateTime,
+    ensureDir,
+    getFileName,
+    readJsonFile,
+    writeJsonFile,
+} from "typeagent";
 import path from "path";
 import chalk from "chalk";
 import { KnowProPrinter } from "./knowproPrinter.js";
@@ -173,9 +179,17 @@ export async function createKnowproCommands(
         }
         context.printer.writeLine("Saving index");
         context.printer.writeLine(namedArgs.filePath);
-        const cData = context.podcast.serialize();
-        await ensureDir(path.dirname(namedArgs.filePath));
-        await writeJsonFile(namedArgs.filePath, cData);
+        const dirName = path.dirname(namedArgs.filePath);
+        await ensureDir(dirName);
+
+        const clock = new StopWatch();
+        clock.start();
+        await context.podcast.writeToFile(
+            dirName,
+            getFileName(namedArgs.filePath),
+        );
+        clock.stop();
+        context.printer.writeTiming(chalk.gray, clock, "Write to file");
     }
 
     function podcastLoadDef(): CommandMetadata {
@@ -198,27 +212,19 @@ export async function createKnowproCommands(
             context.printer.writeError("No filepath or name provided");
             return;
         }
-        if (!fs.existsSync(podcastFilePath)) {
-            context.printer.writeError(`${podcastFilePath} not found`);
-            return;
-        }
-
         const clock = new StopWatch();
         clock.start();
-        const data = await readJsonFile<kp.PodcastData>(podcastFilePath);
-        if (!data) {
-            context.printer.writeError("Could not load podcast data");
+        const podcast = await kp.Podcast.readFromFile(
+            path.dirname(podcastFilePath),
+            getFileName(podcastFilePath),
+        );
+        clock.stop();
+        context.printer.writeTiming(chalk.gray, clock, "Read file");
+        if (!podcast) {
+            context.printer.writeLine("Podcast file not found");
             return;
         }
-        context.podcast = new kp.Podcast(
-            data.nameTag,
-            data.messages,
-            data.tags,
-            data.semanticRefs,
-        );
-        context.podcast.deserialize(data);
-        clock.stop();
-        context.printer.writeTiming(chalk.gray, clock);
+        context.podcast = podcast;
         context.conversation = context.podcast;
         context.printer.conversation = context.conversation;
         context.printer.writePodcastInfo(context.podcast);
