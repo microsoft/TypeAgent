@@ -18,6 +18,7 @@ permissions:
 
 jobs:
   deploy:
+    environment: development-fork # required for federated credentials
     runs-on: ubuntu-latest # pnpm deploy does not work currently on Windows. Fails with EPERM.
     
     steps:
