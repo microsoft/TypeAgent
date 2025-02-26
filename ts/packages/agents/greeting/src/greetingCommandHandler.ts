@@ -26,8 +26,6 @@ import {
     GreetingAction,
     PersonalizedGreetingAction,
 } from "./greetingActionSchema.js";
-//import { getLookupInstructions, getLookupSettings, LookupSettings } from "../../chat/dist/chatResponseHandler.js";
-//import { StopWatch } from "telemetry";
 import { conversation as Conversation } from "knowledge-processor";
 
 export function instantiate(): AppAgent {

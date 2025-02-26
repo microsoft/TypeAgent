@@ -30,12 +30,13 @@ import path from "node:path";
 import { isImageFileType } from "common-utils";
 import { ChatModel } from "aiclient";
 import { AddressOutput } from "@azure-rest/maps-search";
-import { ConcreteEntity } from "../../knowledgeProcessor/dist/conversation/knowledgeSchema.js";
 import { IPropertyToSemanticRefIndex } from "./secondaryIndexes.js";
-import { Topic } from "../../knowledgeProcessor/dist/conversation/topicSchema.js";
 import { IConversationThreadData } from "./conversationThread.js";
 import { createPodcastSettings, PodcastSettings } from "./import.js";
 import { isDirectoryPath } from "typeagent";
+
+type ConcreteEntity = conversation.ConcreteEntity;
+type Topic = conversation.Topic;
 
 export interface ImageCollectionData extends IConversationData<Image> {
     relatedTermsIndexData?: ITermsToRelatedTermsIndexData | undefined;
