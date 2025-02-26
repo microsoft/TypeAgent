@@ -113,8 +113,8 @@ function unionEntities(to: MergedEntity, other: MergedEntity): boolean {
 
 function concreteToMergedEntity(entity: kpLib.ConcreteEntity): MergedEntity {
     return {
-        name: entity.name,
-        type: entity.type,
+        name: entity.name.toLowerCase(),
+        type: collections.lowerAndSort(entity.type)!,
         facets: entity.facets ? facetsToMergedFacets(entity.facets) : undefined,
     };
 }
@@ -139,7 +139,7 @@ function facetsToMergedFacets(facets: kpLib.Facet[]): MergedFacets {
     >();
     for (const facet of facets) {
         const name = facet.name.toLowerCase();
-        const value = kpLib.knowledgeValueToString(facet.value).toLowerCase();
+        const value = facetValueToString(facet).toLowerCase();
         mergedFacets.addUnique(name, value);
     }
     return mergedFacets;
