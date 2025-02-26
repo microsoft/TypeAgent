@@ -15,13 +15,10 @@ import {
     Term,
     TextLocation,
     TextRange,
-    Topic,
 } from "./dataFormat.js";
 import {
-    CompositeEntity,
     KnowledgePropertyName,
     PropertySearchTerm,
-    Scored,
     SearchResult,
 } from "./search.js";
 import { SearchTerm } from "./search.js";
@@ -33,17 +30,17 @@ import {
     TermSet,
     TextRangeCollection,
     TextRangesInScope,
-    unionArrays,
 } from "./collections.js";
 import {
     lookupPropertyInPropertyIndex,
     PropertyNames,
 } from "./propertyIndex.js";
 import { IPropertyToSemanticRefIndex } from "./secondaryIndexes.js";
-import { conversation } from "knowledge-processor";
-import { collections, getTopK } from "typeagent";
+import { conversation as kpLib } from "knowledge-processor";
+import { collections } from "typeagent";
 import { ITimestampToTextRangeIndex } from "./secondaryIndexes.js";
 import { Thread } from "./conversationThread.js";
+import { facetValueToString } from "./knowledge.js";
 
 export function isConversationSearchable(conversation: IConversation): boolean {
     return (
@@ -231,7 +228,7 @@ export function matchPropertySearchTermToEntity(
     ) {
         return false;
     }
-    const entity = semanticRef.knowledge as conversation.ConcreteEntity;
+    const entity = semanticRef.knowledge as kpLib.ConcreteEntity;
     switch (<string>searchTerm.propertyName) {
         default:
             break;
@@ -260,7 +257,7 @@ export function matchPropertySearchTermToEntity(
 
 export function matchEntityNameOrType(
     propertyValue: SearchTerm,
-    entity: conversation.ConcreteEntity,
+    entity: kpLib.ConcreteEntity,
 ): boolean {
     return (
         matchSearchTermToText(propertyValue, entity.name) ||
@@ -270,7 +267,7 @@ export function matchEntityNameOrType(
 
 function matchPropertyNameToFacetName(
     propertyValue: SearchTerm,
-    entity: conversation.ConcreteEntity,
+    entity: kpLib.ConcreteEntity,
 ) {
     if (entity.facets && entity.facets.length > 0) {
         for (const facet of entity.facets) {
@@ -284,11 +281,11 @@ function matchPropertyNameToFacetName(
 
 function matchPropertyValueToFacetValue(
     propertyValue: SearchTerm,
-    entity: conversation.ConcreteEntity,
+    entity: kpLib.ConcreteEntity,
 ) {
     if (entity.facets && entity.facets.length > 0) {
         for (const facet of entity.facets) {
-            const facetValue = conversation.knowledgeValueToString(facet.value);
+            const facetValue = facetValueToString(facet);
             if (matchSearchTermToText(propertyValue, facetValue)) {
                 return true;
             }
@@ -307,7 +304,7 @@ function matchPropertySearchTermToAction(
     ) {
         return false;
     }
-    const action = semanticRef.knowledge as conversation.Action;
+    const action = semanticRef.knowledge as kpLib.Action;
     switch (searchTerm.propertyName) {
         default:
             break;
@@ -1024,9 +1021,10 @@ export class SelectInScopeExpr extends QueryOpExpr<SemanticRefAccumulator> {
 
     public override eval(context: QueryEvalContext): SemanticRefAccumulator {
         let semanticRefs = this.sourceExpr.eval(context);
-        // Scope => text ranges in scope
-        // Collect all possible text rang. The ranges may overlap, may not agree.
-        // What we want to ensure is that if any of the
+        // Scope => collect the set of text ranges that are in scope for this query
+        // - Collect all possible text ranges that may be in scope.
+        // - Since ranges come from a set of range selectors, the collected ranges may overlap, or may not agree.
+        //  We don't intersect/union ranges yet... future optimization
         const rangesInScope = new TextRangesInScope();
         for (const selector of this.rangeSelectors) {
             const range = selector.eval(context, semanticRefs);
@@ -1161,106 +1159,4 @@ export function toGroupedSearchResults(
         }
     }
     return semanticRefMatches;
-}
-
-export function mergeEntityMatches(
-    semanticRefs: SemanticRef[],
-    semanticRefMatches: ScoredSemanticRef[],
-    topK?: number,
-): Scored<CompositeEntity>[] {
-    let mergedEntities = new Map<string, Scored<CompositeEntity>>();
-    for (let semanticRefMatch of semanticRefMatches) {
-        const semanticRef = semanticRefs[semanticRefMatch.semanticRefIndex];
-        if (semanticRef.knowledgeType !== "entity") {
-            continue;
-        }
-        const compositeEntity = toCompositeEntity(
-            semanticRef.knowledge as conversation.ConcreteEntity,
-        );
-        const existing = mergedEntities.get(compositeEntity.name);
-        if (existing) {
-            if (combineCompositeEntities(existing.item, compositeEntity)) {
-                if (existing.score < semanticRefMatch.score) {
-                    existing.score = semanticRefMatch.score;
-                }
-            }
-        } else {
-            mergedEntities.set(compositeEntity.name, {
-                item: compositeEntity,
-                score: semanticRefMatch.score,
-            });
-        }
-    }
-    if (topK !== undefined && topK > 0) {
-        return getTopK(mergedEntities.values(), topK);
-    }
-    return [...mergedEntities.values()];
-}
-
-function toCompositeEntity(
-    entity: conversation.ConcreteEntity,
-): CompositeEntity {
-    if (entity === undefined) {
-        return {
-            name: "undefined",
-            type: ["undefined"],
-        };
-    }
-    const composite: CompositeEntity = {
-        name: entity.name,
-        type: [...entity.type],
-    };
-    composite.name = composite.name.toLowerCase();
-    collections.lowerAndSort(composite.type);
-    if (entity.facets) {
-        composite.facets = entity.facets.map((f) => facetToString(f));
-        collections.lowerAndSort(composite.facets);
-    }
-    return composite;
-}
-
-function facetToString(facet: conversation.Facet): string {
-    return `${facet.name}="${conversation.knowledgeValueToString(facet.value)}"`;
-}
-
-function combineCompositeEntities(
-    x: CompositeEntity,
-    y: CompositeEntity,
-): boolean {
-    if (x.name !== y.name) {
-        return false;
-    }
-    x.type = unionArrays(x.type, y.type)!;
-    x.facets = unionArrays(x.facets, y.facets);
-    return true;
-}
-
-export function mergeTopics(
-    semanticRefs: SemanticRef[],
-    semanticRefMatches: ScoredSemanticRef[],
-    topK?: number,
-): Scored<Topic>[] {
-    let mergedTopics = new Map<string, Scored<Topic>>();
-    for (let semanticRefMatch of semanticRefMatches) {
-        const semanticRef = semanticRefs[semanticRefMatch.semanticRefIndex];
-        if (semanticRef.knowledgeType !== "topic") {
-            continue;
-        }
-        const topic = semanticRef.knowledge as Topic;
-        const existing = mergedTopics.get(topic.text);
-        if (existing) {
-            if (existing.score < semanticRefMatch.score) {
-                existing.score = semanticRefMatch.score;
-            }
-        } else {
-            mergedTopics.set(topic.text, {
-                item: topic,
-                score: semanticRefMatch.score,
-            });
-        }
-    }
-    if (topK !== undefined && topK > 0) {
-        return getTopK(mergedTopics.values(), topK);
-    }
-    return [...mergedTopics.values()];
 }

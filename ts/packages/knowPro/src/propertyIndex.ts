@@ -7,9 +7,10 @@ import {
     SemanticRefIndex,
     Tag,
 } from "./dataFormat.js";
-import { conversation } from "knowledge-processor";
+import { conversation as kpLib } from "knowledge-processor";
 import { IPropertyToSemanticRefIndex } from "./secondaryIndexes.js";
 import { TextRangesInScope } from "./collections.js";
+import { facetValueToString } from "./knowledge.js";
 
 export enum PropertyNames {
     EntityName = "name",
@@ -24,7 +25,7 @@ export enum PropertyNames {
 }
 
 function addFacet(
-    facet: conversation.Facet | undefined,
+    facet: kpLib.Facet | undefined,
     propertyIndex: IPropertyToSemanticRefIndex,
     semanticRefIndex: SemanticRefIndex,
 ) {
@@ -37,7 +38,7 @@ function addFacet(
         if (facet.value !== undefined) {
             propertyIndex.addProperty(
                 PropertyNames.FacetValue,
-                conversation.knowledgeValueToString(facet.value),
+                facetValueToString(facet),
                 semanticRefIndex,
             );
         }
@@ -45,7 +46,7 @@ function addFacet(
 }
 
 export function addEntityPropertiesToIndex(
-    entity: conversation.ConcreteEntity,
+    entity: kpLib.ConcreteEntity,
     propertyIndex: IPropertyToSemanticRefIndex,
     semanticRefIndex: SemanticRefIndex,
 ) {
@@ -70,7 +71,7 @@ export function addEntityPropertiesToIndex(
 }
 
 export function addActionPropertiesToIndex(
-    action: conversation.Action,
+    action: kpLib.Action,
     propertyIndex: IPropertyToSemanticRefIndex,
     semanticRefIndex: SemanticRefIndex,
 ) {
@@ -114,14 +115,14 @@ export function addPropertiesToIndex(
                 break;
             case "action":
                 addActionPropertiesToIndex(
-                    semanticRef.knowledge as conversation.Action,
+                    semanticRef.knowledge as kpLib.Action,
                     propertyIndex,
                     semanticRefIndex,
                 );
                 break;
             case "entity":
                 addEntityPropertiesToIndex(
-                    semanticRef.knowledge as conversation.ConcreteEntity,
+                    semanticRef.knowledge as kpLib.ConcreteEntity,
                     propertyIndex,
                     semanticRefIndex,
                 );

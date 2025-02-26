@@ -12,7 +12,7 @@ import {
     ClientSettingsProvider,
     EmptyFunction,
 } from "../preload/electronTypes.js";
-import { getInstanceDir } from "agent-dispatcher";
+import { getInstanceDir } from "agent-dispatcher/helpers/data";
 import path from "path";
 import { DisplayType } from "@typeagent/agent-sdk";
 

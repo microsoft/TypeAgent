@@ -16,10 +16,11 @@ import {
     SemanticRefIndex,
     MessageIndex,
 } from "./dataFormat.js";
-import { conversation } from "knowledge-processor";
+import { conversation as kpLib } from "knowledge-processor";
 import { openai } from "aiclient";
 import { Result } from "typechat";
 import { async } from "typeagent";
+import { facetValueToString } from "./knowledge.js";
 
 export function createKnowledgeModel() {
     const chatModelSettings = openai.apiSettingsFromEnv(
@@ -52,23 +53,20 @@ export function textRangeFromLocation(
 }
 
 function addFacet(
-    facet: conversation.Facet | undefined,
+    facet: kpLib.Facet | undefined,
     refIndex: number,
     semanticRefIndex: ITermToSemanticRefIndex,
 ) {
     if (facet !== undefined) {
         semanticRefIndex.addTerm(facet.name, refIndex);
         if (facet.value !== undefined) {
-            semanticRefIndex.addTerm(
-                conversation.knowledgeValueToString(facet.value),
-                refIndex,
-            );
+            semanticRefIndex.addTerm(facetValueToString(facet), refIndex);
         }
     }
 }
 
 export function addEntityToIndex(
-    entity: conversation.ConcreteEntity,
+    entity: kpLib.ConcreteEntity,
     semanticRefs: SemanticRef[],
     semanticRefIndex: ITermToSemanticRefIndex,
     messageIndex: number,
@@ -106,14 +104,14 @@ export function addEntityToIndex(
  * @returns True if there's a duplicate, false otherwise
  */
 function isDuplicateEntity(
-    entity: conversation.ConcreteEntity,
+    entity: kpLib.ConcreteEntity,
     semanticRefs: SemanticRef[],
 ) {
     for (let i = 0; i < semanticRefs.length; i++) {
         if (
             semanticRefs[i].knowledgeType == "entity" &&
             entity.name ==
-                (semanticRefs[i].knowledge as conversation.ConcreteEntity).name
+                (semanticRefs[i].knowledge as kpLib.ConcreteEntity).name
         ) {
             if (
                 JSON.stringify(entity) ===
@@ -145,7 +143,7 @@ export function addTopicToIndex(
 }
 
 export function addActionToIndex(
-    action: conversation.Action,
+    action: kpLib.Action,
     semanticRefs: SemanticRef[],
     semanticRefIndex: ITermToSemanticRefIndex,
     messageIndex: number,
@@ -187,7 +185,7 @@ export function addKnowledgeToIndex(
     semanticRefs: SemanticRef[],
     semanticRefIndex: ITermToSemanticRefIndex,
     messageIndex: MessageIndex,
-    knowledge: conversation.KnowledgeResponse,
+    knowledge: kpLib.KnowledgeResponse,
 ) {
     for (const entity of knowledge.entities) {
         addEntityToIndex(entity, semanticRefs, semanticRefIndex, messageIndex);
@@ -218,7 +216,7 @@ export async function buildConversationIndex<TMeta extends IKnowledgeSource>(
     convo: IConversation<TMeta>,
     progressCallback?: (
         text: string,
-        knowledgeResult: Result<conversation.KnowledgeResponse>,
+        knowledgeResult: Result<kpLib.KnowledgeResponse>,
     ) => boolean,
 ): Promise<ConversationIndexingResult> {
     const semanticRefIndex = new ConversationIndex();
@@ -228,7 +226,7 @@ export async function buildConversationIndex<TMeta extends IKnowledgeSource>(
     }
     const semanticRefs = convo.semanticRefs;
     const chatModel = createKnowledgeModel();
-    const extractor = conversation.createKnowledgeExtractor(chatModel, {
+    const extractor = kpLib.createKnowledgeExtractor(chatModel, {
         maxContextLength: 4096,
         mergeActionKnowledge: false,
     });
@@ -277,7 +275,7 @@ export async function buildConversationIndex<TMeta extends IKnowledgeSource>(
 export function addToConversationIndex<TMeta extends IKnowledgeSource>(
     convo: IConversation<TMeta>,
     messages: IMessage<TMeta>[],
-    knowledgeResponses: conversation.KnowledgeResponse[],
+    knowledgeResponses: kpLib.KnowledgeResponse[],
 ): void {
     if (convo.semanticRefIndex === undefined) {
         convo.semanticRefIndex = new ConversationIndex();

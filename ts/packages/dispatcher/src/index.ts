@@ -20,5 +20,3 @@ export type {
     TemplateEditConfig,
     TemplateData,
 } from "./translation/actionTemplate.js";
-export { getUserDataDir, getInstanceDir } from "./utils/userData.js";
-export { getChatHistoryForTranslation } from "./translation/translateRequest.js";
