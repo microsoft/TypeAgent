@@ -43,7 +43,6 @@ import { TimestampToTextRangeIndex } from "./timestampIndex.js";
 import {
     IPropertyToSemanticRefIndex,
     ITermsToRelatedTermsIndexData,
-    ITermsToRelatedTermsIndexData2,
     ITimestampToTextRangeIndex,
 } from "./secondaryIndexes.js";
 import { addPropertiesToIndex, PropertyIndex } from "./propertyIndex.js";
@@ -252,18 +251,6 @@ export class Podcast
         };
     }
 
-    public serialize2(): PodcastData2 {
-        return {
-            nameTag: this.nameTag,
-            messages: this.messages,
-            tags: this.tags,
-            semanticRefs: this.semanticRefs,
-            semanticIndexData: this.semanticRefIndex?.serialize(),
-            relatedTermsIndexData: this.termToRelatedTermsIndex?.serialize2(),
-            threadData: this.threads.serialize(),
-        };
-    }
-
     public deserialize(data: PodcastData): void {
         this.nameTag = data.nameTag;
         this.messages = data.messages;
@@ -291,38 +278,11 @@ export class Podcast
         this.buildSecondaryIndexes();
     }
 
-    public deserialize2(data: PodcastData2): void {
-        this.nameTag = data.nameTag;
-        this.messages = data.messages;
-        this.semanticRefs = data.semanticRefs;
-        this.tags = data.tags;
-        if (data.semanticIndexData) {
-            this.semanticRefIndex = new ConversationIndex(
-                data.semanticIndexData,
-            );
-        }
-        if (data.relatedTermsIndexData) {
-            this.termToRelatedTermsIndex = new TermToRelatedTermsIndex(
-                this.settings.relatedTermIndexSettings,
-            );
-            this.termToRelatedTermsIndex.deserialize2(
-                data.relatedTermsIndexData,
-            );
-        }
-        if (data.threadData) {
-            this.threads = new ConversationThreads(
-                this.settings.threadSettings,
-            );
-            this.threads.deserialize(data.threadData);
-        }
-        this.buildSecondaryIndexes();
-    }
-
     public async writeToFile(
         dirPath: string,
         baseFileName: string,
     ): Promise<void> {
-        const podcastData = this.serialize2();
+        const podcastData = this.serialize();
         const embeddingData =
             podcastData.relatedTermsIndexData?.textEmbeddingData;
         if (embeddingData?.embeddings) {
@@ -342,7 +302,7 @@ export class Podcast
         dirPath: string,
         baseFileName: string,
     ): Promise<Podcast | undefined> {
-        const data = await readJsonFile<PodcastData2>(
+        const data = await readJsonFile<PodcastData>(
             Podcast.makeDataFilePath(dirPath, baseFileName),
         );
         if (!data) {
@@ -362,7 +322,7 @@ export class Podcast
                 );
             }
         }
-        podcast.deserialize2(data);
+        podcast.deserialize(data);
         return podcast;
     }
 
@@ -446,11 +406,6 @@ export class Podcast
 
 export interface PodcastData extends IConversationData<PodcastMessage> {
     relatedTermsIndexData?: ITermsToRelatedTermsIndexData | undefined;
-    threadData?: IConversationThreadData;
-}
-
-export interface PodcastData2 extends IConversationData<PodcastMessage> {
-    relatedTermsIndexData?: ITermsToRelatedTermsIndexData2 | undefined;
     threadData?: IConversationThreadData;
 }
 

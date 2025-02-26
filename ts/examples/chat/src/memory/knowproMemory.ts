@@ -212,11 +212,6 @@ export async function createKnowproCommands(
             context.printer.writeError("No filepath or name provided");
             return;
         }
-        if (!fs.existsSync(podcastFilePath)) {
-            context.printer.writeError(`${podcastFilePath} not found`);
-            return;
-        }
-
         const clock = new StopWatch();
         clock.start();
         const podcast = await kp.Podcast.readFromFile(
@@ -226,7 +221,7 @@ export async function createKnowproCommands(
         clock.stop();
         context.printer.writeTiming(chalk.gray, clock, "Read file");
         if (!podcast) {
-            context.printer.writeLine("Could not load podcast");
+            context.printer.writeLine("Podcast file not found");
             return;
         }
         context.podcast = podcast;

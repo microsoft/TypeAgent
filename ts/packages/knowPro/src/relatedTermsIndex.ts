@@ -11,17 +11,12 @@ import {
     ITermsToRelatedTermsIndexData,
     ITermToRelatedTermsFuzzy,
     ITermToRelatedTerms,
-    ITextEmbeddingDataItem,
-    ITextEmbeddingIndexData2,
-    ITermsToRelatedTermsIndexData2,
 } from "./secondaryIndexes.js";
 import { SearchTerm } from "./search.js";
 import { isSearchTermWildcard } from "./query.js";
 import { TermSet } from "./collections.js";
 import {
     addTextToEmbeddingIndex,
-    deserializeEmbedding,
-    serializeEmbedding,
     TextEditDistanceIndex,
     TextEmbeddingIndex,
     TextEmbeddingIndexSettings,
@@ -109,13 +104,6 @@ export class TermToRelatedTermsIndex implements ITermToRelatedTermsIndex {
         };
     }
 
-    public serialize2(): ITermsToRelatedTermsIndexData2 {
-        return {
-            aliasData: this.aliasMap.serialize(),
-            textEmbeddingData: this.embeddingIndex?.serialize2(),
-        };
-    }
-
     public deserialize(data?: ITermsToRelatedTermsIndexData): void {
         if (data) {
             if (data.aliasData) {
@@ -127,21 +115,6 @@ export class TermToRelatedTermsIndex implements ITermToRelatedTermsIndex {
                     this.settings.embeddingIndexSettings,
                 );
                 this.embeddingIndex.deserialize(data.textEmbeddingData);
-            }
-        }
-    }
-
-    public deserialize2(data?: ITermsToRelatedTermsIndexData2): void {
-        if (data) {
-            if (data.aliasData) {
-                this.aliasMap = new TermToRelatedTermsMap();
-                this.aliasMap.deserialize(data.aliasData);
-            }
-            if (data.textEmbeddingData) {
-                this.embeddingIndex = new TermEmbeddingIndex(
-                    this.settings.embeddingIndexSettings,
-                );
-                this.embeddingIndex.deserialize2(data.textEmbeddingData);
             }
         }
     }
@@ -269,9 +242,6 @@ function dedupeRelatedTerms(
 export interface ITermEmbeddingIndex extends ITermToRelatedTermsFuzzy {
     serialize(): ITextEmbeddingIndexData;
     deserialize(data: ITextEmbeddingIndexData): void;
-
-    serialize2(): ITextEmbeddingIndexData2;
-    deserialize2(data: ITextEmbeddingIndexData2): void;
 }
 
 export class TermEmbeddingIndex implements ITermEmbeddingIndex {
@@ -351,36 +321,14 @@ export class TermEmbeddingIndex implements ITermEmbeddingIndex {
         }
     }
 
-    public deserialize(data: ITextEmbeddingIndexData): void {
-        if (data.embeddingData !== undefined) {
-            for (const item of data.embeddingData) {
-                this.textArray.push(item.text);
-                this.embeddingIndex.add(deserializeEmbedding(item.embedding));
-            }
-        }
-    }
-
     public serialize(): ITextEmbeddingIndexData {
-        const embeddingData: ITextEmbeddingDataItem[] = [];
-        for (let i = 0; i < this.textArray.length; ++i) {
-            embeddingData.push({
-                text: this.textArray[i],
-                embedding: serializeEmbedding(this.embeddingIndex.get(i)),
-            });
-        }
-        return {
-            embeddingData,
-        };
-    }
-
-    public serialize2(): ITextEmbeddingIndexData2 {
         return {
             textItems: this.textArray,
             embeddings: this.embeddingIndex.serialize(),
         };
     }
 
-    public deserialize2(data: ITextEmbeddingIndexData2): void {
+    public deserialize(data: ITextEmbeddingIndexData): void {
         if (data.textItems.length !== data.embeddings.length) {
             throw new Error(
                 `TextEmbeddingIndexData corrupt. textItems.length ${data.textItems.length} != ${data.embeddings.length}`,
