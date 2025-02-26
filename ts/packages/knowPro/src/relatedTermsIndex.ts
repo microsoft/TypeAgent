@@ -1,8 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { collections, ScoredItem } from "typeagent";
-import { Term } from "./dataFormat.js";
+import { collections } from "typeagent";
+import { Scored, Term } from "./dataFormat.js";
 import {
     ITextEmbeddingIndexData,
     ITermsToRelatedTermsDataItem,
@@ -338,7 +338,7 @@ export class TermEmbeddingIndex implements ITermEmbeddingIndex {
         this.embeddingIndex.deserialize(data.embeddings);
     }
 
-    private matchesToTerms(matches: ScoredItem[]): Term[] {
+    private matchesToTerms(matches: Scored[]): Term[] {
         return matches.map((m) => {
             return { text: this.textArray[m.item], weight: m.score };
         });
@@ -379,7 +379,7 @@ export class TermEditDistanceIndex
         return matches.map((m) => this.matchesToTerms(m));
     }
 
-    private matchesToTerms(matches: ScoredItem<string>[]): Term[] {
+    private matchesToTerms(matches: Scored<string>[]): Term[] {
         return matches.map((m) => {
             return { text: m.item, weight: m.score };
         });
