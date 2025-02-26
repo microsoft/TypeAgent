@@ -91,11 +91,6 @@ export interface ITermsToRelatedTermsDataItem {
     relatedTerms: Term[];
 }
 
-export interface ITermsToRelatedTermsIndexData2 {
-    aliasData?: ITermToRelatedTermsData | undefined;
-    textEmbeddingData?: ITextEmbeddingIndexData | undefined;
-}
-
 export interface ITextEmbeddingIndexData {
     textItems: string[];
     embeddings: Float32Array[];

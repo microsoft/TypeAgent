@@ -4,7 +4,13 @@
 import { conversation as kpLib } from "knowledge-processor";
 import { collections, getTopK } from "typeagent";
 import { unionArrays } from "./collections.js";
-import { Scored, ScoredSemanticRef, SemanticRef, Topic } from "./dataFormat.js";
+import {
+    ScoredKnowledge,
+    ScoredSemanticRef,
+    SemanticRef,
+    Topic,
+} from "./dataFormat.js";
+import { Scored } from "./common.js";
 
 export function facetValueToString(facet: kpLib.Facet): string {
     const value = facet.value;
@@ -18,7 +24,7 @@ export function mergeTopics(
     semanticRefs: SemanticRef[],
     semanticRefMatches: ScoredSemanticRef[],
     topK?: number,
-): Scored<Topic>[] {
+): ScoredKnowledge[] {
     let mergedTopics = new Map<string, Scored<Topic>>();
     for (let semanticRefMatch of semanticRefMatches) {
         const semanticRef = semanticRefs[semanticRefMatch.semanticRefIndex];
@@ -38,17 +44,27 @@ export function mergeTopics(
             });
         }
     }
-    if (topK !== undefined && topK > 0) {
-        return getTopK(mergedTopics.values(), topK);
+    let topKTopics =
+        topK !== undefined && topK > 0
+            ? getTopK(mergedTopics.values(), topK)
+            : mergedTopics.values();
+
+    const mergedKnowledge: ScoredKnowledge[] = [];
+    for (const scoredTopic of topKTopics) {
+        mergedKnowledge.push({
+            knowledgeType: "topic",
+            knowledge: scoredTopic.item,
+            score: scoredTopic.score,
+        });
     }
-    return [...mergedTopics.values()];
+    return mergedKnowledge;
 }
 
 export function mergedEntities(
     semanticRefs: SemanticRef[],
     semanticRefMatches: ScoredSemanticRef[],
     topK?: number,
-): Scored<kpLib.ConcreteEntity>[] {
+): ScoredKnowledge[] {
     return mergeScoredEntities(
         getScoredEntities(semanticRefs, semanticRefMatches),
         topK,
@@ -66,7 +82,7 @@ type MergedFacets = collections.MultiMap<string, string>;
 function mergeScoredEntities(
     scoredEntities: IterableIterator<Scored<kpLib.ConcreteEntity>>,
     topK?: number,
-): Scored<kpLib.ConcreteEntity>[] {
+): ScoredKnowledge[] {
     let mergedEntities = new Map<string, Scored<MergedEntity>>();
     for (let scoredEntity of scoredEntities) {
         const mergedEntity = concreteToMergedEntity(scoredEntity.item);
@@ -84,19 +100,21 @@ function mergeScoredEntities(
             });
         }
     }
+
     let topKEntities =
         topK !== undefined && topK > 0
             ? getTopK(mergedEntities.values(), topK)
             : mergedEntities.values();
 
-    const mergedConcrete: Scored<kpLib.ConcreteEntity>[] = [];
+    const mergedKnowledge: ScoredKnowledge[] = [];
     for (const scoredEntity of topKEntities) {
-        mergedConcrete.push({
-            item: mergedToConcreteEntity(scoredEntity.item),
+        mergedKnowledge.push({
+            knowledgeType: "entity",
+            knowledge: mergedToConcreteEntity(scoredEntity.item),
             score: scoredEntity.score,
         });
     }
-    return mergedConcrete;
+    return mergedKnowledge;
 }
 
 /**

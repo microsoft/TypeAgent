@@ -2,7 +2,8 @@
 // Licensed under the MIT License.
 
 import { collections } from "typeagent";
-import { Scored, Term } from "./dataFormat.js";
+import { Term } from "./dataFormat.js";
+import { Scored } from "./common.js";
 import {
     ITextEmbeddingIndexData,
     ITermsToRelatedTermsDataItem,
@@ -245,8 +246,8 @@ export interface ITermEmbeddingIndex extends ITermToRelatedTermsFuzzy {
 }
 
 export class TermEmbeddingIndex implements ITermEmbeddingIndex {
-    public textArray: string[];
-    public embeddingIndex: TextEmbeddingIndex;
+    private textArray: string[];
+    private embeddingIndex: TextEmbeddingIndex;
 
     constructor(
         public settings: TextEmbeddingIndexSettings,
