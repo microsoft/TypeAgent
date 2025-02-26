@@ -96,7 +96,7 @@ export type SpelunkerContext = {
     queryContext: QueryContext | undefined;
 };
 
-async function initializeSpelunkerContext(): Promise<SpelunkerContext> {
+export async function initializeSpelunkerContext(): Promise<SpelunkerContext> {
     return {
         focusFolders: [],
         queryContext: undefined,
