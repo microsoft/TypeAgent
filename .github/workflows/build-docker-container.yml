@@ -18,7 +18,12 @@ permissions:
 jobs:
   deploy:
     runs-on: ubuntu-latest # pnpm deploy does not work currently on Windows. Fails with EPERM.
+    
     steps:
+      - name: Install Prereqs
+        run: |
+          sudo apt install libsecret-1-0
+
       - name: Setup Git LF
         run: |
           git config --global core.autocrlf false
