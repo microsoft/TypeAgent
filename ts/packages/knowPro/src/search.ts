@@ -6,10 +6,12 @@ import {
     DateRange,
     IConversation,
     KnowledgeType,
+    Scored,
     ScoredSemanticRef,
     SemanticRef,
     Term,
 } from "./dataFormat.js";
+import { mergedEntities, mergeTopics } from "./knowledge.js";
 import * as q from "./query.js";
 import { IQueryOpExpr } from "./query.js";
 import { resolveRelatedTerms } from "./relatedTermsIndex.js";
@@ -94,21 +96,6 @@ export type SearchResult = {
     semanticRefMatches: ScoredSemanticRef[];
 };
 
-export interface Scored<T = any> {
-    item: T;
-    score: number;
-}
-
-/**
- * Temporary placeholder; will be removed once "merge" of entities
- * returns ConcreteEntities
- */
-export type CompositeEntity = {
-    name: string;
-    type: string[];
-    facets?: string[] | undefined;
-};
-
 /**
  * Searches conversation for terms
  */
@@ -142,8 +129,8 @@ export function getDistinctEntityMatches(
     semanticRefs: SemanticRef[],
     searchResults: ScoredSemanticRef[],
     topK?: number,
-) {
-    return q.mergeEntityMatches(semanticRefs, searchResults, topK);
+): Scored<kpLib.ConcreteEntity>[] {
+    return mergedEntities(semanticRefs, searchResults, topK);
 }
 
 export function getDistinctTopicMatches(
@@ -151,7 +138,7 @@ export function getDistinctTopicMatches(
     searchResults: ScoredSemanticRef[],
     topK?: number,
 ) {
-    return q.mergeTopics(semanticRefs, searchResults, topK);
+    return mergeTopics(semanticRefs, searchResults, topK);
 }
 
 class SearchQueryBuilder {

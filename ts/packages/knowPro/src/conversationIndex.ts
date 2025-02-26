@@ -20,6 +20,7 @@ import { conversation as kpLib } from "knowledge-processor";
 import { openai } from "aiclient";
 import { Result } from "typechat";
 import { async } from "typeagent";
+import { facetValueToString } from "./knowledge.js";
 
 export function createKnowledgeModel() {
     const chatModelSettings = openai.apiSettingsFromEnv(
@@ -59,10 +60,7 @@ function addFacet(
     if (facet !== undefined) {
         semanticRefIndex.addTerm(facet.name, refIndex);
         if (facet.value !== undefined) {
-            semanticRefIndex.addTerm(
-                kpLib.knowledgeValueToString(facet.value),
-                refIndex,
-            );
+            semanticRefIndex.addTerm(facetValueToString(facet), refIndex);
         }
     }
 }

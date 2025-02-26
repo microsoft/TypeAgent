@@ -15,13 +15,10 @@ import {
     Term,
     TextLocation,
     TextRange,
-    Topic,
 } from "./dataFormat.js";
 import {
-    CompositeEntity,
     KnowledgePropertyName,
     PropertySearchTerm,
-    Scored,
     SearchResult,
 } from "./search.js";
 import { SearchTerm } from "./search.js";
@@ -33,7 +30,6 @@ import {
     TermSet,
     TextRangeCollection,
     TextRangesInScope,
-    unionArrays,
 } from "./collections.js";
 import {
     lookupPropertyInPropertyIndex,
@@ -41,9 +37,10 @@ import {
 } from "./propertyIndex.js";
 import { IPropertyToSemanticRefIndex } from "./secondaryIndexes.js";
 import { conversation as kpLib } from "knowledge-processor";
-import { collections, getTopK } from "typeagent";
+import { collections } from "typeagent";
 import { ITimestampToTextRangeIndex } from "./secondaryIndexes.js";
 import { Thread } from "./conversationThread.js";
+import { facetValueToString } from "./knowledge.js";
 
 export function isConversationSearchable(conversation: IConversation): boolean {
     return (
@@ -288,7 +285,7 @@ function matchPropertyValueToFacetValue(
 ) {
     if (entity.facets && entity.facets.length > 0) {
         for (const facet of entity.facets) {
-            const facetValue = kpLib.knowledgeValueToString(facet.value);
+            const facetValue = facetValueToString(facet);
             if (matchSearchTermToText(propertyValue, facetValue)) {
                 return true;
             }
@@ -1162,104 +1159,4 @@ export function toGroupedSearchResults(
         }
     }
     return semanticRefMatches;
-}
-
-export function mergeEntityMatches(
-    semanticRefs: SemanticRef[],
-    semanticRefMatches: ScoredSemanticRef[],
-    topK?: number,
-): Scored<CompositeEntity>[] {
-    let mergedEntities = new Map<string, Scored<CompositeEntity>>();
-    for (let semanticRefMatch of semanticRefMatches) {
-        const semanticRef = semanticRefs[semanticRefMatch.semanticRefIndex];
-        if (semanticRef.knowledgeType !== "entity") {
-            continue;
-        }
-        const compositeEntity = toCompositeEntity(
-            semanticRef.knowledge as kpLib.ConcreteEntity,
-        );
-        const existing = mergedEntities.get(compositeEntity.name);
-        if (existing) {
-            if (combineCompositeEntities(existing.item, compositeEntity)) {
-                if (existing.score < semanticRefMatch.score) {
-                    existing.score = semanticRefMatch.score;
-                }
-            }
-        } else {
-            mergedEntities.set(compositeEntity.name, {
-                item: compositeEntity,
-                score: semanticRefMatch.score,
-            });
-        }
-    }
-    if (topK !== undefined && topK > 0) {
-        return getTopK(mergedEntities.values(), topK);
-    }
-    return [...mergedEntities.values()];
-}
-
-function toCompositeEntity(entity: kpLib.ConcreteEntity): CompositeEntity {
-    if (entity === undefined) {
-        return {
-            name: "undefined",
-            type: ["undefined"],
-        };
-    }
-    const composite: CompositeEntity = {
-        name: entity.name,
-        type: [...entity.type],
-    };
-    composite.name = composite.name.toLowerCase();
-    collections.lowerAndSort(composite.type);
-    if (entity.facets) {
-        composite.facets = entity.facets.map((f) => facetToString(f));
-        collections.lowerAndSort(composite.facets);
-    }
-    return composite;
-}
-
-function facetToString(facet: kpLib.Facet): string {
-    return `${facet.name}="${kpLib.knowledgeValueToString(facet.value)}"`;
-}
-
-function combineCompositeEntities(
-    x: CompositeEntity,
-    y: CompositeEntity,
-): boolean {
-    if (x.name !== y.name) {
-        return false;
-    }
-    x.type = unionArrays(x.type, y.type)!;
-    x.facets = unionArrays(x.facets, y.facets);
-    return true;
-}
-
-export function mergeTopics(
-    semanticRefs: SemanticRef[],
-    semanticRefMatches: ScoredSemanticRef[],
-    topK?: number,
-): Scored<Topic>[] {
-    let mergedTopics = new Map<string, Scored<Topic>>();
-    for (let semanticRefMatch of semanticRefMatches) {
-        const semanticRef = semanticRefs[semanticRefMatch.semanticRefIndex];
-        if (semanticRef.knowledgeType !== "topic") {
-            continue;
-        }
-        const topic = semanticRef.knowledge as Topic;
-        const existing = mergedTopics.get(topic.text);
-        if (existing) {
-            if (existing.score < semanticRefMatch.score) {
-                existing.score = semanticRefMatch.score;
-            }
-        } else {
-            mergedTopics.set(topic.text, {
-                item: topic,
-                score: semanticRefMatch.score,
-            });
-        }
-    }
-    if (topK !== undefined && topK > 0) {
-        return getTopK(mergedTopics.values(), topK);
-    }
-    return [...mergedTopics.values()];
 }

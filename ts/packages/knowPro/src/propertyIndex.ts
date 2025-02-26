@@ -10,6 +10,7 @@ import {
 import { conversation as kpLib } from "knowledge-processor";
 import { IPropertyToSemanticRefIndex } from "./secondaryIndexes.js";
 import { TextRangesInScope } from "./collections.js";
+import { facetValueToString } from "./knowledge.js";
 
 export enum PropertyNames {
     EntityName = "name",
@@ -37,7 +38,7 @@ function addFacet(
         if (facet.value !== undefined) {
             propertyIndex.addProperty(
                 PropertyNames.FacetValue,
-                kpLib.knowledgeValueToString(facet.value),
+                facetValueToString(facet),
                 semanticRefIndex,
             );
         }
