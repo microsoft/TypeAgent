@@ -9,6 +9,7 @@ RUN corepack install -g pnpm@latest
 # dependencies
 RUN apt-get update
 RUN apt-get install -y libsecret-1-0
+RUN apt-get install -y libsecret-1-dev
 RUN apt install -y gnome-keyring
 RUN curl -sL https://aka.ms/InstallAzureCLIDeb | bash
 
