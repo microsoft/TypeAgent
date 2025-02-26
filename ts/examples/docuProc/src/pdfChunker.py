@@ -151,19 +151,19 @@ class PDFChunker:
         return chunks
     
     def get_lines_from_dict(self, page: fitz.Page) -> list[str]:
-        # How close in 'y' do lines need to be to unify? (tune this)
+        # Thresholds for merging lines
         Y_THRESHOLD = 2.0  # e.g., lines whose y-mid differs by less than ~2 points
-        # How close in 'x'? If there's minimal gap between x1 of line A and x0 of line B,
-        # we unify them. Some PDFs have bigger or smaller spacing, so tune as needed.
         X_GAP_THRESHOLD = 15.0
-        # <-- NEW: Define a paragraph gap threshold.
         PARA_GAP_THRESHOLD = 10.0  # Only insert a paragraph break if gap >= 10 points
-        # Marker to indicate a paragraph break in the final list
         PARA_MARKER = "<PARA_BREAK>"
 
         data = page.get_text("dict")  # <-- NEW: structured data
         line_entries = []
 
+        # Extract image and table bounding boxes on the page
+        image_bboxes = [img["bbox"] for img in data.get("images", [])]
+        table_bboxes = [tbl["bbox"] for tbl in data.get("tables", [])] if "tables" in data else []
+        
         for block in data["blocks"]:
             if block["type"] == 0:  # text block
                 for ln in block["lines"]:
@@ -174,12 +174,34 @@ class PDFChunker:
 
                     # Get the bounding box for the line: [x0, y0, x1, y1]
                     x0, y0, x1, y1 = ln["bbox"]
+                    is_image_label = any(
+                    (y0 >= img_y0 - 10 and y1 <= img_y1 + 10) and  
+                    (x0 >= img_x0 and x1 <= img_x1)  
+                    for img_x0, img_y0, img_x1, img_y1 in image_bboxes
+                    )
+
+                    # Check if text is near a table
+                    is_table_label = any(
+                        (y0 >= tbl_y0 - 10 and y1 <= tbl_y1 + 10) and  
+                        (x0 >= tbl_x0 and x1 <= tbl_x1)  
+                        for tbl_x0, tbl_y0, tbl_x1, tbl_y1 in table_bboxes
+                    )
+
+                    # Assign label based on detected type
+                    if is_image_label:
+                        label = "image"
+                    elif is_table_label:
+                        label = "table"
+                    else:
+                        label = "text"
+
                     line_entries.append({
                         "text": line_text,
                         "x0": x0,
                         "y0": y0,
                         "x1": x1,
                         "y1": y1,
+                        "label": label
                     })
 
         # Sort the line_entries top-to-bottom, then left-to-right.
@@ -190,19 +212,13 @@ class PDFChunker:
         while i < len(line_entries):
             current = line_entries[i]
             current_text = current["text"]
-            x0_c = current["x0"]
-            y0_c = current["y0"]
-            x1_c = current["x1"]
-            y1_c = current["y1"]
+            current_label = current["label"]
+            x0_c, y0_c, x1_c, y1_c = current["x0"], current["y0"], current["x1"], current["y1"]
 
             # Look ahead to see if the next line should be merged with the current one.
             if i < len(line_entries) - 1:
                 next_line = line_entries[i + 1]
-                x0_n = next_line["x0"]
-                y0_n = next_line["y0"]
-                x1_n = next_line["x1"]
-                y1_n = next_line["y1"]
-                text_n = next_line["text"]
+                x0_n, y0_n, x1_n, y1_n, text_n, label_n = next_line["x0"], next_line["y0"], next_line["x1"], next_line["y1"], next_line["text"], next_line["label"]
 
                 # Compute mid-Y for merging decision.
                 midY_c = (y0_c + y1_c) / 2.0
@@ -220,6 +236,7 @@ class PDFChunker:
                             "y0": min(y0_c, y0_n),
                             "x1": x1_n,
                             "y1": max(y1_c, y1_n),
+                            "label": current_label if current_label != "text" else label_n
                         }
                         line_entries[i] = new_entry
                         del line_entries[i + 1]
@@ -296,7 +313,7 @@ class PDFChunker:
             for idx, ln in enumerate(page_lines):
                 print(f"  Raw line {idx}: '{ln}'")
 
-        def chunk_paragraph_by_sentence(paragraph_lines: list[str], max_tokens: int = 200) -> list[str]:
+        def chunk_paragraph_by_sentence(paragraph_lines: list[str], max_tokens: int = 100) -> list[str]:
             """
             A simplified approach:
             1) Join lines into one string.
