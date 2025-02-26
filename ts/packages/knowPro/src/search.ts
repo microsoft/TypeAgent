@@ -6,7 +6,7 @@ import {
     DateRange,
     IConversation,
     KnowledgeType,
-    Scored,
+    ScoredKnowledge,
     ScoredSemanticRef,
     SemanticRef,
     Term,
@@ -129,7 +129,7 @@ export function getDistinctEntityMatches(
     semanticRefs: SemanticRef[],
     searchResults: ScoredSemanticRef[],
     topK?: number,
-): Scored<kpLib.ConcreteEntity>[] {
+): ScoredKnowledge[] {
     return mergedEntities(semanticRefs, searchResults, topK);
 }
 
@@ -137,7 +137,7 @@ export function getDistinctTopicMatches(
     semanticRefs: SemanticRef[],
     searchResults: ScoredSemanticRef[],
     topK?: number,
-) {
+): ScoredKnowledge[] {
     return mergeTopics(semanticRefs, searchResults, topK);
 }
 
