@@ -289,9 +289,6 @@ export default class TestTranslateCommand extends Command {
             countStr = `${requests.length}/${countStr}`;
         }
 
-        const schemas = flags.schema
-            ? Object.fromEntries(flags.schema.map((name) => [name, true]))
-            : undefined;
         let failedTotal = 0;
         let noActions = 0;
         let processed = 0;
@@ -314,9 +311,11 @@ export default class TestTranslateCommand extends Command {
         async function worker() {
             const dispatcher = await createDispatcher("cli test translate", {
                 appAgentProviders: defaultAppAgentProviders,
-                schemas,
-                actions: null,
-                commands: { dispatcher: true },
+                agents: {
+                    schemas: flags.schema,
+                    actions: false,
+                    commands: ["dispatcher"],
+                },
                 translation: {
                     stream: flags.stream,
                     history: { enabled: false },

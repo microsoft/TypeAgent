@@ -65,16 +65,14 @@ export default class TranslateCommand extends Command {
 
     async run(): Promise<void> {
         const { args, flags } = await this.parse(TranslateCommand);
-        const schemas = flags.schema
-            ? Object.fromEntries(flags.schema.map((name) => [name, true]))
-            : undefined;
-
         await withConsoleClientIO(async (clientIO: ClientIO) => {
             const dispatcher = await createDispatcher("cli run translate", {
                 appAgentProviders: defaultAppAgentProviders,
-                schemas,
-                actions: null,
-                commands: { dispatcher: true },
+                agents: {
+                    schemas: flags.schema,
+                    actions: false,
+                    commands: ["dispatcher"],
+                },
                 translation: {
                     model: flags.model,
                     multiple: { enabled: flags.multiple },

@@ -12,7 +12,6 @@ import {
     deleteAllSessions,
     deleteSession,
     getSessionNames,
-    getDefaultSessionConfig,
     getSessionConstructionDirPaths,
     getSessionName,
 } from "../../session.js";
@@ -29,6 +28,7 @@ import {
     displayWarn,
 } from "@typeagent/agent-sdk/helpers/display";
 import { askYesNoWithContext } from "../../interactiveIO.js";
+import { appAgentStateKeys } from "../../appAgentManager.js";
 
 class SessionNewCommandHandler implements CommandHandler {
     public readonly description = "Create a new empty session";
@@ -109,15 +109,7 @@ class SessionOpenCommandHandler implements CommandHandler {
 class SessionResetCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Reset config on session and keep the data";
     public async run(context: ActionContext<CommandHandlerContext>) {
-        await changeContextConfig(getDefaultSessionConfig(), context);
-        await changeContextConfig(
-            {
-                schemas: null,
-                actions: null,
-                commands: null,
-            },
-            context,
-        );
+        await changeContextConfig(null, context);
         displaySuccess(`Session settings revert to default.`, context);
     }
 }
@@ -258,45 +250,67 @@ class SessionInfoCommandHandler implements CommandHandlerNoParams {
                   systemContext.session.sessionDirPath,
               )
             : [];
-        displayResult((log: (message?: string) => void) => {
-            log(`${chalk.bold("Instance Dir:")} ${systemContext.instanceDir}`);
-            log(
-                `${chalk.bold("Session settings")} (${
-                    systemContext.session.sessionDirPath
-                        ? chalk.green(
-                              getSessionName(
-                                  systemContext.session.sessionDirPath,
-                              ),
-                          )
-                        : "in-memory"
-                }):`,
-            );
-            const printConfig = (options: any, prefix: number = 2) => {
-                for (const [key, value] of Object.entries(options)) {
-                    const name = `${" ".repeat(prefix)}${key.padEnd(
-                        20 - prefix,
-                    )}:`;
-                    if (typeof value === "object") {
-                        log(name);
-                        printConfig(value, prefix + 2);
-                    } else {
-                        log(`${name} ${value}`);
-                    }
-                }
-            };
-            printConfig(systemContext.session.getConfig());
 
-            if (constructionFiles.length) {
-                log(`\n${chalk.bold("Construction Files:")}`);
-                for (const file of constructionFiles) {
-                    log(
-                        `  ${
-                            file.current ? chalk.green(file.name) : file.name
-                        } (${file.explainer})`,
-                    );
+        displayResult(
+            `${chalk.bold("Instance Dir:")} ${systemContext.instanceDir}`,
+            context,
+        );
+        const session = systemContext.session;
+        displayResult(
+            `${chalk.bold("Session settings")} (${
+                session.sessionDirPath
+                    ? chalk.green(getSessionName(session.sessionDirPath))
+                    : "in-memory"
+            }):`,
+            context,
+        );
+
+        const table: string[][] = [["Name", "Value"]];
+        const addConfig = (
+            options: any,
+            settings: any,
+            override: readonly string[] | boolean = false,
+            prefix: number = 0,
+        ) => {
+            for (const [key, value] of Object.entries(options)) {
+                const name = `${" ".repeat(prefix)}${key.padEnd(20 - prefix)}`;
+                const currentSetting = settings?.[key];
+                const overrideKey = Array.isArray(override)
+                    ? override.includes(key)
+                    : override;
+                if (typeof value === "object") {
+                    table.push([chalk.bold(name), ""]);
+                    addConfig(value, currentSetting, overrideKey, prefix + 2);
+                } else {
+                    const valueStr =
+                        !overrideKey && currentSetting === undefined
+                            ? chalk.grey(value)
+                            : currentSetting !== value
+                              ? chalk.yellow(value)
+                              : String(value);
+                    table.push([name, valueStr]);
                 }
             }
-        }, context);
+        };
+        addConfig(
+            session.getConfig(),
+            session.getSettings(),
+            appAgentStateKeys,
+        );
+
+        displayResult(table, context);
+
+        if (constructionFiles.length) {
+            displayResult(`\n${chalk.bold("Construction Files:")}`, context);
+            for (const file of constructionFiles) {
+                displayResult(
+                    `  ${
+                        file.current ? chalk.green(file.name) : file.name
+                    } (${file.explainer})`,
+                    context,
+                );
+            }
+        }
     }
 }
 
