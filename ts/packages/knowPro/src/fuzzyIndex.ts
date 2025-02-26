@@ -85,6 +85,17 @@ export class TextEmbeddingIndex {
         this.embeddings = [];
     }
 
+    public serialize(): Buffer {
+        return serializeEmbeddingsToBuffer(this.embeddings);
+    }
+
+    public deserialize(buffer: Buffer, embeddingSize: number = 1536): void {
+        this.embeddings = deserializeEmbeddingsFromBuffer(
+            buffer,
+            embeddingSize,
+        );
+    }
+
     private indexesOfNearestText(
         textEmbedding: NormalizedEmbedding,
         maxMatches?: number,
@@ -238,4 +249,32 @@ function* getIndexingBatches(
         }
         yield { startAt: i, values: batch };
     }
+}
+
+export function serializeEmbeddingsToBuffer(
+    embeddings: NormalizedEmbedding[],
+    embeddingSize?: number,
+): Buffer {
+    return Buffer.concat(embeddings.map((e) => Buffer.from(e)));
+}
+
+export function deserializeEmbeddingsFromBuffer(
+    buffer: Buffer,
+    embeddingSize: number,
+): NormalizedEmbedding[] {
+    const embeddings: NormalizedEmbedding[] = [];
+    const embeddingByteCount = Float32Array.BYTES_PER_ELEMENT * embeddingSize;
+    for (
+        let startAt = 0;
+        startAt < buffer.length;
+        startAt += embeddingByteCount
+    ) {
+        const embedding = new Float32Array(
+            buffer.buffer,
+            buffer.byteOffset + startAt,
+            embeddingSize,
+        );
+        embeddings.push(embedding);
+    }
+    return embeddings;
 }

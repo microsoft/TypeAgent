@@ -248,8 +248,8 @@ export interface ITermEmbeddingIndex extends ITermToRelatedTermsFuzzy {
 }
 
 export class TermEmbeddingIndex implements ITermEmbeddingIndex {
-    private textArray: string[];
-    private embeddingIndex: TextEmbeddingIndex;
+    public textArray: string[];
+    public embeddingIndex: TextEmbeddingIndex;
 
     constructor(
         public settings: TextEmbeddingIndexSettings,
