@@ -52,8 +52,10 @@ export async function defineTranslateTest(name: string, dataFiles: string[]) {
                 dispatcherP.push(
                     createDispatcher("cli test translate", {
                         appAgentProviders: defaultAppAgentProviders,
-                        actions: null,
-                        commands: { dispatcher: true },
+                        agents: {
+                            actions: false,
+                            commands: ["dispatcher"],
+                        },
                         execution: { history: false }, // don't generate chat history, the test manually imports them
                         explainer: { enabled: false },
                         cache: { enabled: false },

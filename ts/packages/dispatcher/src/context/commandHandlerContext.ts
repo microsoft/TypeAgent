@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { ChildProcess } from "child_process";
-import { Limiter, createLimiter } from "common-utils";
+import { DeepPartialUndefined, Limiter, createLimiter } from "common-utils";
 import {
     ChildLogger,
     Logger,
@@ -14,6 +14,7 @@ import {
 import { AgentCache } from "agent-cache";
 import { randomUUID } from "crypto";
 import {
+    DispatcherConfig,
     getSessionName,
     Session,
     SessionOptions,
@@ -37,7 +38,9 @@ import { Profiler } from "telemetry";
 import { conversation as Conversation } from "knowledge-processor";
 import {
     AppAgentManager,
-    AppAgentStateOptions,
+    AppAgentStateInitSettings,
+    AppAgentStateSettings,
+    getAppAgentStateSettings,
     SetStateResult,
 } from "./appAgentManager.js";
 import {
@@ -157,7 +160,7 @@ async function getAgentCache(
     return agentCache;
 }
 
-export type DispatcherOptions = SessionOptions & {
+export type DispatcherOptions = DeepPartialUndefined<DispatcherConfig> & {
     appAgentProviders?: AppAgentProvider[];
     explanationAsynchronousMode?: boolean; // default to false
     persistSession?: boolean; // default to false,
@@ -169,6 +172,7 @@ export type DispatcherOptions = SessionOptions & {
     constructionProvider?: ConstructionProvider;
     agentInstaller?: AppAgentInstaller;
     collectCommandResult?: boolean; // default to false
+    agents?: AppAgentStateInitSettings;
 };
 
 async function getSession(instanceDir?: string) {
@@ -308,8 +312,10 @@ export async function initializeCommandHandlerContext(
         const session = await getSession(
             persistSession ? instanceDir : undefined,
         );
+
+        // initialization options set the default, but persisted configuration will still overrides it.
         if (options) {
-            session.setConfig(options);
+            session.updateDefaultConfig(options);
         }
         const sessionDirPath = session.getSessionDirPath();
         debug(`Session directory: ${sessionDirPath}`);
@@ -380,7 +386,15 @@ export async function initializeCommandHandlerContext(
 
         await addAppAgentProviders(context, options?.appAgentProviders);
 
-        await setAppAgentStates(context, options);
+        const appAgentStateSettings = getAppAgentStateSettings(
+            options?.agents,
+            agents,
+        );
+        if (appAgentStateSettings !== undefined) {
+            // initialization options set the default, but persisted configuration will still overrides it.
+            session.updateDefaultConfig(appAgentStateSettings);
+        }
+        await setAppAgentStates(context);
         debug("Context initialized");
         return context;
     } catch (e) {
@@ -391,20 +405,16 @@ export async function initializeCommandHandlerContext(
     }
 }
 
-async function setAppAgentStates(
-    context: CommandHandlerContext,
-    options?: AppAgentStateOptions,
-) {
+async function setAppAgentStates(context: CommandHandlerContext) {
     const result = await context.agents.setState(
         context,
         context.session.getConfig(),
-        options,
     );
 
     // Only rollback if user explicitly change state.
     // Ignore the returned rollback state for initialization and keep the session setting as is.
 
-    processSetAppAgentStateResult(result, context, (message) =>
+    const rollback = processSetAppAgentStateResult(result, context, (message) =>
         context.clientIO.notify(
             AppAgentEvent.Error,
             undefined,
@@ -412,18 +422,19 @@ async function setAppAgentStates(
             DispatcherName,
         ),
     );
+
+    if (rollback) {
+        context.session.updateConfig(rollback);
+    }
 }
 
 async function updateAppAgentStates(
     context: ActionContext<CommandHandlerContext>,
-    changed: AppAgentStateOptions,
-): Promise<AppAgentStateOptions> {
+): Promise<AppAgentStateSettings> {
     const systemContext = context.sessionContext.agentContext;
     const result = await systemContext.agents.setState(
         systemContext,
-        changed,
-        undefined,
-        false,
+        systemContext.session.getConfig(),
     );
 
     const rollback = processSetAppAgentStateResult(
@@ -433,12 +444,12 @@ async function updateAppAgentStates(
     );
 
     if (rollback) {
-        systemContext.session.setConfig(rollback);
+        systemContext.session.updateConfig(rollback);
     }
-    const resultState: AppAgentStateOptions = {};
+    const resultState: AppAgentStateSettings = {};
     for (const [stateName, changed] of Object.entries(result.changed)) {
         if (changed.length !== 0) {
-            resultState[stateName as keyof AppAgentStateOptions] =
+            resultState[stateName as keyof AppAgentStateSettings] =
                 Object.fromEntries(changed);
         }
     }
@@ -449,9 +460,9 @@ function processSetAppAgentStateResult(
     result: SetStateResult,
     systemContext: CommandHandlerContext,
     cbError: (message: string) => void,
-): AppAgentStateOptions | undefined {
+): AppAgentStateSettings | undefined {
     let hasFailed = false;
-    const rollback = { actions: {}, commands: {} };
+    const rollback = { schemas: {}, actions: {}, commands: {} };
     for (const [stateName, failed] of Object.entries(result.failed)) {
         for (const [translatorName, enable, e] of failed) {
             hasFailed = true;
@@ -512,14 +523,17 @@ export async function changeContextConfig(
 ) {
     const systemContext = context.sessionContext.agentContext;
     const session = systemContext.session;
-    const changed = session.setConfig(options);
+    const changed = session.updateSettings(options);
+    if (changed === undefined) {
+        return undefined;
+    }
 
-    const translatorChanged = changed.hasOwnProperty("schemas");
+    const schemasChanged = changed.hasOwnProperty("schemas");
     const actionsChanged = changed.hasOwnProperty("actions");
     const commandsChanged = changed.hasOwnProperty("commands");
 
     if (
-        translatorChanged ||
+        schemasChanged ||
         changed.translation?.model !== undefined ||
         changed.translation?.switch?.inline !== undefined ||
         changed.translation?.multiple !== undefined ||
@@ -530,8 +544,8 @@ export async function changeContextConfig(
         systemContext.translatorCache.clear();
     }
 
-    if (translatorChanged || actionsChanged || commandsChanged) {
-        Object.assign(changed, await updateAppAgentStates(context, changed));
+    if (schemasChanged || actionsChanged || commandsChanged) {
+        Object.assign(changed, await updateAppAgentStates(context));
     }
 
     if (changed.explainer?.name !== undefined) {
@@ -546,7 +560,7 @@ export async function changeContextConfig(
             displayError(`Failed to change explainer: ${e.message}`, context);
             delete changed.explainer?.name;
             // Restore old explainer name
-            session.setConfig({
+            session.updateSettings({
                 explainer: {
                     name: systemContext.agentCache.explainerName,
                 },

@@ -57,14 +57,13 @@ export default class RequestCommand extends Command {
 
     async run(): Promise<void> {
         const { args, flags } = await this.parse(RequestCommand);
-        const schemas = flags.schema
-            ? Object.fromEntries(flags.schema.map((name) => [name, true]))
-            : undefined;
         const dispatcher = await createDispatcher("cli run request", {
             appAgentProviders: defaultAppAgentProviders,
-            schemas,
-            actions: schemas,
-            commands: { dispatcher: true },
+            agents: {
+                schemas: flags.schema,
+                actions: flags.schema,
+                commands: ["dispatcher"],
+            },
             translation: { model: flags.model },
             explainer: flags.explainer
                 ? { enabled: true, name: flags.explainer }

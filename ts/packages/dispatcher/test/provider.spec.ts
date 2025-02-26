@@ -39,7 +39,9 @@ describe("dispatcher", () => {
             beforeAll(async () => {
                 dispatcher = await createDispatcher("test", {
                     appAgentProviders: [testAppAgentProvider],
-                    commands: { test: true },
+                    agents: {
+                        commands: ["test"],
+                    },
                     clientIO: createTestClientIO(output),
                 });
             });
