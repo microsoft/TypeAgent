@@ -134,6 +134,37 @@ An eval run needs to do the following:
   - Print some JSON with the question, the F1 score, and the algorithm
     (and perhaps a timestamp).
 
+### Schema for evaluation scoring
+
+The database needs to store for each run, for each question,
+for each chunk, whether it was selected or not. Runs identify
+the algorithm and its variations. Run names must be unique.
+Since most algorithms have it available, we also store the score.
+
+```sql
+CREATE TABLE IF NOT EXISTS Runs (
+  runId TEXT PRIMARY KEY,
+  runName TEXT UNIQUE,
+  comments TEXT,
+  startTimestamp TEXT,
+  endTimestamp TEXT
+);
+CREATE TABLE IF NOT EXISTS RunScores (
+  runId TEXT REFERENCES Runs(runId),
+  questionId TEXT REFERENCES Questions(questionId),
+  chunkHash TEXT REFERENCES Hashes(chunkHash),
+  score INTEGER,  -- 0 or 1
+  relevance FLOAT,  -- Range [0.0 ... 1.0]
+  CONSTRAINT triple UNIQUE (runId, questionId, chunkHash)
+);
+```
+
+To compute precision and recall (all numbers in range [0.0 ... 1.0])
+
+- p(recision) = fraction of selected chunks that have score==1 in Scores
+- r(ecall) = fraction of chunks with score==1 in Scores that were selected
+- `f1 = 2 * (p * r) / (p + r)`
+
 ## Tooling needed for automatic eval runs
 
 We need to write a new TypeScript program that reuses much of
