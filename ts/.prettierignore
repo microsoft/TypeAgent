@@ -21,3 +21,6 @@ packages/defaultAgentProvider/data/**/*.json
 # Test result
 packages/shell/test-results/*
 packages/shell/playwright-report/*
+
+# Eval sources
+packages/agents/spelunker/evals/eval-*/source
