@@ -9,7 +9,6 @@ on:
   push:
     branches:
       - dev/robgruen/acr_push_fix
-  workflow_dispatch:
 
 permissions:
   id-token: write
