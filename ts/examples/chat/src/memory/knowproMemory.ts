@@ -179,16 +179,17 @@ export async function createKnowproCommands(
         }
         context.printer.writeLine("Saving index");
         context.printer.writeLine(namedArgs.filePath);
-        const podcastData: kp.PodcastData = context.podcast.serialize();
-
         const dirName = path.dirname(namedArgs.filePath);
         await ensureDir(dirName);
-        await writeJsonFile(namedArgs.filePath, podcastData);
 
+        const clock = new StopWatch();
+        clock.start();
         await context.podcast.writeToFile(
             dirName,
             getFileName(namedArgs.filePath),
         );
+        clock.stop();
+        context.printer.writeTiming(chalk.gray, clock, "Write to file");
     }
 
     function podcastLoadDef(): CommandMetadata {
@@ -218,31 +219,17 @@ export async function createKnowproCommands(
 
         const clock = new StopWatch();
         clock.start();
-        const data = await readJsonFile<kp.PodcastData>(podcastFilePath);
-        if (!data) {
-            context.printer.writeError("Could not load podcast data");
-            return;
-        }
-        clock.stop();
-        context.printer.writeTiming(chalk.gray, clock, "Read file");
-
-        context.podcast = new kp.Podcast(
-            data.nameTag,
-            data.messages,
-            data.tags,
-        );
-        clock.start();
-        context.podcast.deserialize(data);
-        clock.stop();
-        context.printer.writeTiming(chalk.gray, clock, "Deserialize");
-
-        const podcast2 = await kp.Podcast.readFromFile(
+        const podcast = await kp.Podcast.readFromFile(
             path.dirname(podcastFilePath),
             getFileName(podcastFilePath),
         );
-        if (podcast2) {
-            context.podcast = podcast2;
+        clock.stop();
+        context.printer.writeTiming(chalk.gray, clock, "Read file");
+        if (!podcast) {
+            context.printer.writeLine("Could not load podcast");
+            return;
         }
+        context.podcast = podcast;
         context.conversation = context.podcast;
         context.printer.conversation = context.conversation;
         context.printer.writePodcastInfo(context.podcast);
