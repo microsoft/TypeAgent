@@ -5,6 +5,7 @@ import * as kp from "knowpro";
 import * as knowLib from "knowledge-processor";
 import { ChatPrinter } from "../chatPrinter.js";
 import chalk from "chalk";
+import { getTimeRangeForConversation } from "./knowproCommon.js";
 
 export class KnowProPrinter extends ChatPrinter {
     public sortAsc: boolean = true;
@@ -291,7 +292,7 @@ export class KnowProPrinter extends ChatPrinter {
 
     public writeConversationInfo(conversation: kp.IConversation) {
         this.writeTitle(conversation.nameTag);
-        const timeRange = kp.getTimeRangeForConversation(conversation);
+        const timeRange = getTimeRangeForConversation(conversation);
         if (timeRange) {
             this.write("Time range: ");
             this.writeDateRange(timeRange);

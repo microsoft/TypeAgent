@@ -35,6 +35,7 @@ import {
 import path from "path";
 import chalk from "chalk";
 import { KnowProPrinter } from "./knowproPrinter.js";
+import { getTimeRangeForConversation } from "./knowproCommon.js";
 
 type KnowProContext = {
     knowledgeModel: ChatModel;
@@ -512,7 +513,7 @@ export async function createKnowproCommands(
         };
         const conv: kp.IConversation | undefined =
             context.podcast ?? context.images;
-        const dateRange = kp.getTimeRangeForConversation(conv!);
+        const dateRange = getTimeRangeForConversation(conv!);
         if (dateRange) {
             let startDate: Date | undefined;
             let endDate: Date | undefined;

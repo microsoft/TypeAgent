@@ -1,11 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { DateRange, IConversation } from "./dataFormat.js";
+import * as kp from "knowpro";
 
 export function getTimeRangeForConversation(
-    conversation: IConversation,
-): DateRange | undefined {
+    conversation: kp.IConversation,
+): kp.DateRange | undefined {
     const messages = conversation.messages;
     const start = messages[0].timestamp;
     const end = messages[messages.length - 1].timestamp;
