@@ -25,8 +25,6 @@ RUN apt-get update && apt-get install -y \
     libasound2 \
     libdbus-1-3 \
     libnspr4 \
-    libsecret-1-0 \
-    libsecret-1-dev \
     libxcomposite1 \
     libxdamage1 \
     libxrandr2 \
@@ -57,6 +55,7 @@ WORKDIR /prod/api
 
 # dependencies
 RUN apt-get update
+RUN apt install libsecret-1-0
 RUN apt install -y gnome-keyring
 RUN curl -sL https://aka.ms/InstallAzureCLIDeb | bash
 
