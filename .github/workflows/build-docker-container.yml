@@ -9,6 +9,7 @@ on:
   push:
     branches:
       - main
+      - dev/robgruen/acr_push_fix
   workflow_dispatch:
 
 permissions:
