@@ -5,7 +5,6 @@ import {
     NormalizedEmbedding,
     generateTextEmbeddingsWithRetry,
     generateEmbedding,
-    ScoredItem,
     generateTextEmbeddings,
     indexesOfNearest,
     SimilarityType,
@@ -15,6 +14,7 @@ import {
 import { openai, TextEmbeddingModel } from "aiclient";
 import * as levenshtein from "fast-levenshtein";
 import { createEmbeddingCache } from "knowledge-processor";
+import { Scored } from "./common.js";
 
 export class TextEmbeddingIndex {
     private embeddings: NormalizedEmbedding[];
@@ -55,7 +55,7 @@ export class TextEmbeddingIndex {
         text: string | NormalizedEmbedding,
         maxMatches?: number,
         minScore?: number,
-    ): Promise<ScoredItem[]> {
+    ): Promise<Scored[]> {
         const textEmbedding = await generateEmbedding(
             this.settings.embeddingModel,
             text,
@@ -67,7 +67,7 @@ export class TextEmbeddingIndex {
         textArray: string[],
         maxMatches?: number,
         minScore?: number,
-    ): Promise<ScoredItem[][]> {
+    ): Promise<Scored[][]> {
         const textEmbeddings = await generateTextEmbeddings(
             this.settings.embeddingModel,
             textArray,
@@ -101,10 +101,10 @@ export class TextEmbeddingIndex {
         textEmbedding: NormalizedEmbedding,
         maxMatches?: number,
         minScore?: number,
-    ): ScoredItem[] {
+    ): Scored[] {
         maxMatches ??= this.settings.maxMatches;
         minScore ??= this.settings.minScore;
-        let matches: ScoredItem[];
+        let matches: Scored[];
         if (maxMatches && maxMatches > 0) {
             matches = indexesOfNearest(
                 this.embeddings,
@@ -178,7 +178,7 @@ export class TextEditDistanceIndex {
         text: string,
         maxMatches?: number,
         maxEditDistance?: number,
-    ): Promise<ScoredItem<string>[]> {
+    ): Promise<Scored<string>[]> {
         const matches = nearestNeighborEditDistance(
             this.textArray,
             text,
@@ -192,7 +192,7 @@ export class TextEditDistanceIndex {
         textArray: string[],
         maxMatches?: number,
         maxEditDistance?: number,
-    ): Promise<ScoredItem<string>[][]> {
+    ): Promise<Scored<string>[][]> {
         const matches = textArray.map((text) =>
             nearestNeighborEditDistance(
                 this.textArray,
@@ -210,7 +210,7 @@ export function nearestNeighborEditDistance(
     other: string,
     maxMatches?: number,
     maxEditDistance?: number,
-): ScoredItem<string>[] {
+): Scored<string>[] {
     maxEditDistance ??= 0;
     if (maxMatches !== undefined && maxMatches > 0) {
         const matches = createTopNList<string>(maxMatches);
@@ -223,7 +223,7 @@ export function nearestNeighborEditDistance(
         }
         return matches.byRank();
     } else {
-        const matches: ScoredItem<string>[] = [];
+        const matches: Scored<string>[] = [];
         for (const text of textList) {
             const distance: number = levenshtein.get(text, other);
             if (distance <= maxEditDistance) {
