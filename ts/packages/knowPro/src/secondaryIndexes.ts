@@ -107,5 +107,5 @@ export interface ITermsToRelatedTermsIndexData2 {
 
 export interface ITextEmbeddingIndexData2 {
     textItems: string[];
-    embeddings?: Buffer | undefined;
+    embeddings: Float32Array[];
 }

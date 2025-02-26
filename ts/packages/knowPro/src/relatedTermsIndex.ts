@@ -381,17 +381,13 @@ export class TermEmbeddingIndex implements ITermEmbeddingIndex {
     }
 
     public deserialize2(data: ITextEmbeddingIndexData2): void {
-        this.textArray = data.textItems;
-        if (data.embeddings) {
-            this.embeddingIndex.deserialize(data.embeddings);
-            if (this.textArray.length !== this.embeddingIndex.size) {
-                throw new Error(
-                    `TextEmbeddingIndexData corrupt. textItems.length ${data.textItems.length} != ${this.embeddingIndex.size}`,
-                );
-            }
-        } else {
-            this.embeddingIndex.clear();
+        if (data.textItems.length !== data.embeddings.length) {
+            throw new Error(
+                `TextEmbeddingIndexData corrupt. textItems.length ${data.textItems.length} != ${data.embeddings.length}`,
+            );
         }
+        this.textArray = data.textItems;
+        this.embeddingIndex.deserialize(data.embeddings);
     }
 
     private matchesToTerms(matches: ScoredItem[]): Term[] {

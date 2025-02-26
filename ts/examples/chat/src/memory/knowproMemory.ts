@@ -185,8 +185,7 @@ export async function createKnowproCommands(
         await ensureDir(dirName);
         await writeJsonFile(namedArgs.filePath, podcastData);
 
-        await kp.savePodcast(
-            context.podcast,
+        await context.podcast.writeToFile(
             dirName,
             getFileName(namedArgs.filePath),
         );
@@ -237,7 +236,7 @@ export async function createKnowproCommands(
         clock.stop();
         context.printer.writeTiming(chalk.gray, clock, "Deserialize");
 
-        const podcast2 = await kp.loadPodcast(
+        const podcast2 = await kp.Podcast.readFromFile(
             path.dirname(podcastFilePath),
             getFileName(podcastFilePath),
         );

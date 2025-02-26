@@ -10,8 +10,16 @@ import {
     Term,
 } from "./dataFormat.js";
 import { conversation, split } from "knowledge-processor";
-import { collections, dateTime, getFileName } from "typeagent";
-import fs from "fs";
+import {
+    collections,
+    dateTime,
+    getFileName,
+    readAllText,
+    readFile,
+    readJsonFile,
+    writeFile,
+    writeJsonFile,
+} from "typeagent";
 import {
     ConversationIndex,
     addActionToIndex,
@@ -27,6 +35,8 @@ import {
 } from "./relatedTermsIndex.js";
 import {
     createTextEmbeddingIndexSettings,
+    deserializeEmbeddings,
+    serializeEmbeddings,
     TextEmbeddingIndexSettings,
 } from "./fuzzyIndex.js";
 import { TimestampToTextRangeIndex } from "./timestampIndex.js";
@@ -308,6 +318,68 @@ export class Podcast
         this.buildSecondaryIndexes();
     }
 
+    public async writeToFile(
+        dirPath: string,
+        baseFileName: string,
+    ): Promise<void> {
+        const podcastData = this.serialize2();
+        const embeddingData =
+            podcastData.relatedTermsIndexData?.textEmbeddingData;
+        if (embeddingData?.embeddings) {
+            await writeFile(
+                Podcast.makeEmbeddingsFilePath(dirPath, baseFileName),
+                serializeEmbeddings(embeddingData.embeddings),
+            );
+            embeddingData.embeddings = [];
+        }
+        await writeJsonFile(
+            Podcast.makeDataFilePath(dirPath, baseFileName),
+            podcastData,
+        );
+    }
+
+    public static async readFromFile(
+        dirPath: string,
+        baseFileName: string,
+    ): Promise<Podcast | undefined> {
+        const data = await readJsonFile<PodcastData2>(
+            Podcast.makeDataFilePath(dirPath, baseFileName),
+        );
+        if (!data) {
+            return undefined;
+        }
+        const podcast = new Podcast();
+        const embeddingData = data.relatedTermsIndexData?.textEmbeddingData;
+        if (embeddingData) {
+            const embeddings = await readFile(
+                Podcast.makeEmbeddingsFilePath(dirPath, baseFileName),
+            );
+            if (embeddings) {
+                embeddingData.embeddings = deserializeEmbeddings(
+                    embeddings,
+                    podcast.settings.relatedTermIndexSettings
+                        .embeddingIndexSettings.embeddingSize,
+                );
+            }
+        }
+        podcast.deserialize2(data);
+        return podcast;
+    }
+
+    private static makeDataFilePath(
+        dirPath: string,
+        baseFileName: string,
+    ): string {
+        return path.join(dirPath, baseFileName + "_data.json");
+    }
+
+    private static makeEmbeddingsFilePath(
+        dirPath: string,
+        baseFileName: string,
+    ): string {
+        return path.join(dirPath, baseFileName + "_embeddings.bin");
+    }
+
     private buildSecondaryIndexes() {
         this.buildParticipantAliases();
         this.buildPropertyIndex();
@@ -388,10 +460,7 @@ export async function importPodcast(
     startDate?: Date,
     lengthMinutes: number = 60,
 ): Promise<Podcast> {
-    const transcriptText = await fs.promises.readFile(
-        transcriptFilePath,
-        "utf-8",
-    );
+    const transcriptText = await readAllText(transcriptFilePath);
     podcastName ??= getFileName(transcriptFilePath);
     const transcriptLines = split(transcriptText, /\r?\n/, {
         removeEmpty: true,
@@ -438,56 +507,6 @@ export async function importPodcast(
     pod.generateTimestamps(startDate, lengthMinutes);
     // TODO: add more tags
     return pod;
-}
-
-export async function savePodcast(
-    podcast: Podcast,
-    dirPath: string,
-    baseFileName: string,
-): Promise<void> {
-    const podcastData = podcast.serialize2();
-    const embeddingData = podcastData.relatedTermsIndexData?.textEmbeddingData;
-    if (embeddingData?.embeddings) {
-        const embeddingFilePath = path.join(
-            dirPath,
-            baseFileName + "_embeddings.json",
-        );
-        await fs.promises.writeFile(
-            embeddingFilePath,
-            embeddingData.embeddings,
-        );
-        embeddingData.embeddings = undefined;
-    }
-    const dataFilePath = path.join(dirPath, baseFileName + "_data.json");
-    await fs.promises.writeFile(dataFilePath, JSON.stringify(podcastData));
-}
-
-export async function loadPodcast(
-    dirPath: string,
-    baseFileName: string,
-): Promise<Podcast | undefined> {
-    const dataFilePath = path.join(dirPath, baseFileName + "_data.json");
-    if (fs.existsSync(dataFilePath)) {
-        const data: PodcastData2 = JSON.parse(
-            await fs.promises.readFile(dataFilePath, "utf-8"),
-        );
-        const embeddingData = data.relatedTermsIndexData?.textEmbeddingData;
-        if (embeddingData) {
-            const embeddingFilePath = path.join(
-                dirPath,
-                baseFileName + "_embeddings.json",
-            );
-            if (fs.existsSync(embeddingFilePath)) {
-                const embeddings =
-                    await fs.promises.readFile(embeddingFilePath);
-                embeddingData.embeddings = embeddings;
-            }
-        }
-        const podcast = new Podcast();
-        podcast.deserialize2(data);
-        return podcast;
-    }
-    return undefined;
 }
 
 /**

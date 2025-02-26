@@ -360,6 +360,36 @@ export async function writeJsonFiles(
     }
 }
 
+export async function readFile(
+    filePath: string,
+    fSys?: FileSystem,
+): Promise<Buffer | undefined> {
+    try {
+        let buffer: Buffer;
+        if (fSys) {
+            buffer = await fSys.readBuffer(filePath);
+        } else {
+            buffer = await fs.promises.readFile(filePath);
+        }
+        return buffer.length > 0 ? buffer : undefined;
+    } catch (err: any) {
+        if (err.code !== "ENOENT") {
+            throw err;
+        }
+    }
+    return undefined;
+}
+
+export function writeFile(
+    filePath: string,
+    buffer: Buffer,
+    fSys?: FileSystem,
+): Promise<void> {
+    return fSys
+        ? fSys.write(filePath, buffer)
+        : fs.promises.writeFile(filePath, buffer);
+}
+
 export async function readMapFile<K, V>(
     filePath: string,
     fSys?: FileSystem,

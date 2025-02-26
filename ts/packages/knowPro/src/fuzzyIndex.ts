@@ -89,16 +89,12 @@ export class TextEmbeddingIndex {
         this.embeddings = [];
     }
 
-    public serialize(): Buffer {
-        return serializeEmbeddingsToBuffer(this.embeddings);
+    public serialize(): Float32Array[] {
+        return this.embeddings;
     }
 
-    public deserialize(buffer: Buffer, embeddingSize?: number): void {
-        embeddingSize ??= this.settings.embeddingSize;
-        this.embeddings = deserializeEmbeddingsFromBuffer(
-            buffer,
-            embeddingSize,
-        );
+    public deserialize(embeddings: Float32Array[]): void {
+        this.embeddings = embeddings;
     }
 
     private indexesOfNearestText(
@@ -257,13 +253,11 @@ function* getIndexingBatches(
     }
 }
 
-export function serializeEmbeddingsToBuffer(
-    embeddings: NormalizedEmbedding[],
-): Buffer {
+export function serializeEmbeddings(embeddings: NormalizedEmbedding[]): Buffer {
     return Buffer.concat(embeddings.map((e) => Buffer.from(e.buffer)));
 }
 
-export function deserializeEmbeddingsFromBuffer(
+export function deserializeEmbeddings(
     buffer: Buffer,
     embeddingSize: number,
 ): NormalizedEmbedding[] {
