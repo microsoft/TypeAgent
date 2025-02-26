@@ -2281,6 +2281,9 @@ importers:
       '@electron-toolkit/utils':
         specifier: ^2.0.0
         version: 2.0.1(electron@30.0.1)
+      '@fontsource/lato':
+        specifier: ^5.1.1
+        version: 5.1.1
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../agentSdk
@@ -3459,6 +3462,9 @@ packages:
     resolution: {integrity: sha512-A/Ze8bfmvzqgZsh2ZmfVqYeRnl3Eo3EeQnJI7tG2cTnXBvjNA/GobuoM9tZtFyD/vsuy1xp7vz7aYh4gANJz/w==}
     engines: {node: '>=18.17.1'}
     hasBin: true
+
+  '@fontsource/lato@5.1.1':
+    resolution: {integrity: sha512-sHnUKhfLcCxa2DTfXlpFntXJAFJ/s4kmmRFRf29Dp7dBcdFdlvWjCbXPZf1rhkzdE1vqTwBVlOGSX/kFgIOkhg==}
 
   '@inquirer/checkbox@4.1.2':
     resolution: {integrity: sha512-PL9ixC5YsPXzXhAZFUPmkXGxfgjkdfZdPEPPmt4kFwQ4LBMDG9n/nHXYRGGZSKZJs+d1sGKWgS2GiPzVRKUdtQ==}
@@ -10542,6 +10548,8 @@ snapshots:
       - react-devtools-core
       - supports-color
       - utf-8-validate
+
+  '@fontsource/lato@5.1.1': {}
 
   '@inquirer/checkbox@4.1.2(@types/node@20.8.9)':
     dependencies:
