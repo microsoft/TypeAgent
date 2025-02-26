@@ -35,8 +35,8 @@ import { IConversationThreadData } from "./conversationThread.js";
 import { createPodcastSettings, PodcastSettings } from "./import.js";
 import { isDirectoryPath } from "typeagent";
 
-type ConcreteEntity = conversation.ConcreteEntity;
-type Topic = conversation.Topic;
+type ConcreteEntity = kpLib.ConcreteEntity;
+type Topic = kpLib.Topic;
 
 export interface ImageCollectionData extends IConversationData<Image> {
     relatedTermsIndexData?: ITermsToRelatedTermsIndexData | undefined;
