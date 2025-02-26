@@ -8,14 +8,14 @@ name: Build and deploy Node.js app to Azure Web App - typeagent
 on:
   push:
     branches:
-      - dev/robgruen/acr_push_fix
+      - main
 
 permissions:
   id-token: write
   contents: read
 
 env:
-  export LD_DEBUG: libs
+  #export LD_DEBUG: libs -- for debug logging
 
 jobs:
   deploy:
@@ -30,7 +30,7 @@ jobs:
 
       - uses: actions/checkout@v4
         with:
-          ref: dev/robgruen/acr_push_fix
+          ref: main
 
       - uses: dorny/paths-filter@v3
         id: filter
