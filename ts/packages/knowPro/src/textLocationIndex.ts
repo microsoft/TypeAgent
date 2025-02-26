@@ -19,6 +19,14 @@ export interface ITextToTextLocationIndexFuzzy {
         maxMatches?: number,
         thresholdScore?: number,
     ): Promise<ScoredTextLocation[]>;
+
+    serialize(): ITextToTextLocationIndexData;
+    deserialize(data: ITextToTextLocationIndexData): void;
+}
+
+export interface ITextToTextLocationIndexData {
+    textLocations: TextLocation[];
+    embeddings: Float32Array[];
 }
 
 export class TextToTextLocationIndexFuzzy
@@ -70,5 +78,22 @@ export class TextToTextLocationIndexFuzzy
                 score: m.score,
             };
         });
+    }
+
+    public serialize(): ITextToTextLocationIndexData {
+        return {
+            textLocations: this.textLocations,
+            embeddings: this.embeddingIndex.serialize(),
+        };
+    }
+
+    public deserialize(data: ITextToTextLocationIndexData): void {
+        if (data.textLocations.length !== data.embeddings.length) {
+            throw new Error(
+                `TextToTextLocationIndexData corrupt. textLocation.length ${data.textLocations.length} != ${data.embeddings.length}`,
+            );
+        }
+        this.textLocations = data.textLocations;
+        this.embeddingIndex.deserialize(data.embeddings);
     }
 }
