@@ -9,8 +9,8 @@ import {
     readExplanationTestData,
     getSchemaNamesForActionConfigProvider,
     createActionConfigProvider,
-    getInstanceDir,
 } from "agent-dispatcher/internal";
+import { getInstanceDir } from "agent-dispatcher/helpers/data";
 import path from "node:path";
 import {
     getDefaultAppAgentProviders,

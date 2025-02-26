@@ -16,9 +16,9 @@ import {
     convertTestDataToExplanationData,
     createActionConfigProvider,
     createSchemaInfoProvider,
-    getInstanceDir,
     getAppAgentName,
 } from "agent-dispatcher/internal";
+import { getInstanceDir } from "agent-dispatcher/helpers/data";
 import {
     ExecutableAction,
     fromJsonActions,

@@ -18,6 +18,7 @@
     "./rpc/dispatcher/client": "./dist/rpc/dispatcherClient.js",
     "./rpc/dispatcher/server": "./dist/rpc/dispatcherServer.js",
     "./helpers/console": "./dist/helpers/console.js",
+    "./helpers/data": "./dist/helpers/userData.js",
     "./helpers/npmAgentProvider": "./dist/npmAgentProvider.js",
     "./internal": "./dist/internal.js",
     "./explorer": "./dist/explorer.js"

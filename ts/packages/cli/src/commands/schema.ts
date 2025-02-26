@@ -9,8 +9,8 @@ import {
     getActionSchema,
     createActionConfigProvider,
     getSchemaNamesForActionConfigProvider,
-    getInstanceDir,
 } from "agent-dispatcher/internal";
+import { getInstanceDir } from "agent-dispatcher/helpers/data";
 import { generateSchemaTypeDefinition } from "action-schema";
 import { getDefaultAppAgentProviders } from "default-agent-provider";
 

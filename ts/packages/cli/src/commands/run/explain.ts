@@ -7,9 +7,9 @@ import { RequestAction, fromJsonActions } from "agent-cache";
 import {
     createActionConfigProvider,
     getCacheFactory,
-    getInstanceDir,
     getSchemaNamesForActionConfigProvider,
 } from "agent-dispatcher/internal";
+import { getClientId, getInstanceDir } from "agent-dispatcher/helpers/data";
 import { getDefaultAppAgentProviders } from "default-agent-provider";
 import { withConsoleClientIO } from "agent-dispatcher/helpers/console";
 import { ClientIO, createDispatcher } from "agent-dispatcher";
@@ -26,7 +26,8 @@ const testRequest = new RequestAction(
     }),
 );
 
-const defaultAgentProviders = getDefaultAppAgentProviders(getInstanceDir());
+const instanceDir = getInstanceDir();
+const defaultAgentProviders = getDefaultAppAgentProviders(instanceDir);
 const schemaNames = getSchemaNamesForActionConfigProvider(
     await createActionConfigProvider(defaultAgentProviders),
 );
@@ -105,8 +106,9 @@ export default class ExplainCommand extends Command {
                 },
                 cache: { enabled: false },
                 clientIO,
-                persist: true,
+                persistDir: instanceDir,
                 dblogging: true,
+                clientId: getClientId(),
             });
             try {
                 await dispatcher.processCommand(command.join(" "));

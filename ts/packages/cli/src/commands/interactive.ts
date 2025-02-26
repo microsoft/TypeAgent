@@ -6,9 +6,9 @@ import { createDispatcher, Dispatcher } from "agent-dispatcher";
 import {
     createActionConfigProvider,
     getCacheFactory,
-    getInstanceDir,
     getSchemaNamesForActionConfigProvider,
 } from "agent-dispatcher/internal";
+import { getClientId, getInstanceDir } from "agent-dispatcher/helpers/data";
 import {
     getDefaultAppAgentProviders,
     getDefaultConstructionProvider,
@@ -80,9 +80,11 @@ export default class Interactive extends Command {
                 translation: { model: flags.model },
                 explainer: { name: flags.explainer },
                 persistSession: !flags.memory,
+                persistDir: !flags.memory ? getInstanceDir() : undefined,
                 enableServiceHost: true,
                 clientIO,
                 dblogging: true,
+                clientId: getClientId(),
                 constructionProvider: getDefaultConstructionProvider(),
             });
             try {

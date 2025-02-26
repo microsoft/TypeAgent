@@ -27,12 +27,8 @@ import { getCacheFactory } from "../utils/cacheFactory.js";
 import { createServiceHost } from "./system/handlers/serviceHost/serviceHostCommandHandler.js";
 import { ClientIO, RequestId, nullClientIO } from "./interactiveIO.js";
 import { ChatHistory, createChatHistory } from "./chatHistory.js";
-import {
-    ensureCacheDir,
-    getInstanceDir,
-    getUserId,
-    lockInstanceDir,
-} from "../utils/userData.js";
+
+import { ensureCacheDir, lockInstanceDir } from "../utils/fsUtils.js";
 import { ActionContext, AppAgentEvent } from "@typeagent/agent-sdk";
 import { Profiler } from "telemetry";
 import { conversation as Conversation } from "knowledge-processor";
@@ -164,7 +160,8 @@ export type DispatcherOptions = DeepPartialUndefined<DispatcherConfig> & {
     appAgentProviders?: AppAgentProvider[];
     explanationAsynchronousMode?: boolean; // default to false
     persistSession?: boolean; // default to false,
-    persist?: boolean; // default to false,
+    persistDir?: string | undefined;
+    clientId?: string;
     clientIO?: ClientIO | undefined; // undefined to disable any IO.
     enableServiceHost?: boolean; // default to false,
     metrics?: boolean; // default to false
@@ -302,8 +299,13 @@ export async function initializeCommandHandlerContext(
         options?.explanationAsynchronousMode ?? false;
 
     const persistSession = options?.persistSession ?? false;
-    const persist = options?.persist ?? persistSession;
-    const instanceDir = persist ? getInstanceDir() : undefined;
+    const instanceDir = options?.persistDir;
+
+    if (instanceDir === undefined && persistSession) {
+        throw new Error(
+            "Persist session requires persistDir to be set in options.",
+        );
+    }
     const instanceDirLock = instanceDir
         ? await lockInstanceDir(instanceDir)
         : undefined;
@@ -332,7 +334,7 @@ export async function initializeCommandHandlerContext(
         const loggerSink = getLoggerSink(() => context.dblogging, clientIO);
         const logger = new ChildLogger(loggerSink, DispatcherName, {
             hostName,
-            userId: getUserId(),
+            clientId: options?.clientId,
             sessionId: () =>
                 context.session.sessionDirPath
                     ? getSessionName(context.session.sessionDirPath)
