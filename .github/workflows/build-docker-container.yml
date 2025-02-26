@@ -14,9 +14,6 @@ permissions:
   id-token: write
   contents: read
 
-env:
-  #export LD_DEBUG: libs -- for debug logging
-
 jobs:
   deploy:
     environment: development-fork 
