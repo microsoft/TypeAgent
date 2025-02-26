@@ -2,8 +2,9 @@ FROM node:20 AS base
 
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
-RUN npm install -g corepack@0.31.0
-RUN corepack enable
+RUN npm install -g corepack@latest
+RUN corepack enable pnpm
+RUN corepack use pnpm@latest-10
 
 # dependencies
 RUN apt-get update
