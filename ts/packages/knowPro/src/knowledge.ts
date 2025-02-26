@@ -130,9 +130,11 @@ function unionEntities(to: MergedEntity, other: MergedEntity): boolean {
 }
 
 function concreteToMergedEntity(entity: kpLib.ConcreteEntity): MergedEntity {
+    let type = [...entity.type];
+    collections.lowerAndSort(type);
     return {
         name: entity.name.toLowerCase(),
-        type: collections.lowerAndSort(entity.type)!,
+        type: type,
         facets: entity.facets ? facetsToMergedFacets(entity.facets) : undefined,
     };
 }

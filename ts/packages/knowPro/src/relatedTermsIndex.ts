@@ -14,7 +14,7 @@ import {
     ITermToRelatedTerms,
 } from "./secondaryIndexes.js";
 import { SearchTerm } from "./search.js";
-import { isSearchTermWildcard } from "./query.js";
+import { isSearchTermWildcard } from "./common.js";
 import { TermSet } from "./collections.js";
 import {
     addTextToEmbeddingIndex,
