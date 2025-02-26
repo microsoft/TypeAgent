@@ -9,7 +9,7 @@ case $1 in
         ;;
 esac
 
-TABLES="Questions Hashes Scores"
+TABLES="Questions Scores"
 
 sqlite3 $1/eval.db ".dump $TABLES" >$1/dbdump.sql  || exit 1
 echo "Dumped $TABLES $1/eval.db to $1/dbdump.sql"
