@@ -5,12 +5,12 @@ ENV PATH="$PNPM_HOME:$PATH"
 RUN npm install -g npm@latest
 RUN npm install -g corepack@latest
 RUN corepack enable pnpm
-RUN corepack use pnpm@latest-10
+RUN corepack install -g pnpm@latest
 
 # dependencies
 RUN apt-get update
-RUN apt-get install libsecret-1-0
-RUN apt-get install libsecret-1-dev
+RUN apt-get install -y libsecret-1-0
+RUN apt-get install -y libsecret-1-dev
 RUN apt install -y gnome-keyring
 RUN curl -sL https://aka.ms/InstallAzureCLIDeb | bash
 
