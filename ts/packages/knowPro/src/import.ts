@@ -10,7 +10,8 @@ import {
     Term,
 } from "./dataFormat.js";
 import { conversation, split } from "knowledge-processor";
-import { collections, dateTime, getFileName, readAllText } from "typeagent";
+import { collections, dateTime, getFileName } from "typeagent";
+import fs from "fs";
 import {
     ConversationIndex,
     addActionToIndex,
@@ -343,7 +344,10 @@ export async function importPodcast(
     startDate?: Date,
     lengthMinutes: number = 60,
 ): Promise<Podcast> {
-    const transcriptText = await readAllText(transcriptFilePath);
+    const transcriptText = await fs.promises.readFile(
+        transcriptFilePath,
+        "utf-8",
+    );
     podcastName ??= getFileName(transcriptFilePath);
     const transcriptLines = split(transcriptText, /\r?\n/, {
         removeEmpty: true,
@@ -389,8 +393,6 @@ export async function importPodcast(
     const pod = new Podcast(podcastName, msgs, [podcastName]);
     pod.generateTimestamps(startDate, lengthMinutes);
     // TODO: add more tags
-    // list all the books
-    // what did K say about Children of Time?
     return pod;
 }
 

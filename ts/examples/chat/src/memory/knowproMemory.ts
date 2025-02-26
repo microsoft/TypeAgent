@@ -173,9 +173,9 @@ export async function createKnowproCommands(
         }
         context.printer.writeLine("Saving index");
         context.printer.writeLine(namedArgs.filePath);
-        const cData = context.podcast.serialize();
+        const podcastData: kp.PodcastData = context.podcast.serialize();
         await ensureDir(path.dirname(namedArgs.filePath));
-        await writeJsonFile(namedArgs.filePath, cData);
+        await writeJsonFile(namedArgs.filePath, podcastData);
     }
 
     function podcastLoadDef(): CommandMetadata {
