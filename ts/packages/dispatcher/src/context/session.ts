@@ -9,7 +9,7 @@ import { CacheConfig, AgentCache, getDefaultExplainerName } from "agent-cache";
 import registerDebug from "debug";
 import fs from "node:fs";
 import path from "node:path";
-import { getUniqueFileName, getYMDPrefix } from "../utils/userData.js";
+import { getUniqueFileName, getYMDPrefix } from "../utils/fsUtils.js";
 import ExifReader from "exifreader";
 import { AppAgentStateConfig, appAgentStateKeys } from "./appAgentManager.js";
 import {

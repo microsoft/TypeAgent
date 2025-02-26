@@ -13,7 +13,7 @@ import {
 } from "@azure/storage-blob";
 import path from "node:path";
 import fs from "node:fs";
-import { getUserDataDir } from "agent-dispatcher";
+import { getUserDataDir } from "agent-dispatcher/helpers/data";
 
 export class AzureStorageProvider implements TypeAgentStorageProvider {
     private containerName: string | undefined;

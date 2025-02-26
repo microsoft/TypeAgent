@@ -8,8 +8,8 @@ import {
     readExplanationTestData,
     getSchemaNamesForActionConfigProvider,
     createActionConfigProvider,
-    getInstanceDir,
 } from "agent-dispatcher/internal";
+import { getInstanceDir } from "agent-dispatcher/helpers/data";
 import {
     getDefaultAppAgentProviders,
     getDefaultConstructionProvider,

@@ -31,6 +31,5 @@ export {
     createActionConfigProvider,
     getSchemaNamesForActionConfigProvider,
 } from "./agentProvider/agentProviderUtils.js";
-export { getInstanceDir } from "./utils/userData.js";
 
 export type { ChatHistoryInput } from "./context/system/handlers/historyCommandHandler.js";

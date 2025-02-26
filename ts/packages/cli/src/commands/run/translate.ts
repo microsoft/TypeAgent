@@ -7,13 +7,14 @@ import { getDefaultAppAgentProviders } from "default-agent-provider";
 import { getChatModelNames } from "aiclient";
 import {
     createActionConfigProvider,
-    getInstanceDir,
     getSchemaNamesForActionConfigProvider,
 } from "agent-dispatcher/internal";
 import { withConsoleClientIO } from "agent-dispatcher/helpers/console";
+import { getClientId, getInstanceDir } from "agent-dispatcher/helpers/data";
 
 const modelNames = await getChatModelNames();
-const defaultAppAgentProviders = getDefaultAppAgentProviders(getInstanceDir());
+const instanceDir = getInstanceDir();
+const defaultAppAgentProviders = getDefaultAppAgentProviders(instanceDir);
 const schemaNames = getSchemaNamesForActionConfigProvider(
     await createActionConfigProvider(defaultAppAgentProviders),
 );
@@ -86,8 +87,9 @@ export default class TranslateCommand extends Command {
                 },
                 cache: { enabled: false },
                 clientIO,
-                persist: true,
+                persistDir: instanceDir,
                 dblogging: true,
+                clientId: getClientId(),
             });
             try {
                 await dispatcher.processCommand(
