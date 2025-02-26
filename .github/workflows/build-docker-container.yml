@@ -18,15 +18,15 @@ permissions:
 
 jobs:
   deploy:
-    environment: development-fork # required for federated credentials
+    environment: development-fork 
     runs-on: ubuntu-latest # pnpm deploy does not work currently on Windows. Fails with EPERM.
     
     steps:
       - name: Install Prereqs
         run: |
-          sudo apt-get update
-          sudo apt install -y gnome-keyring
-
+          sudo apt install libsecret-1-0
+          sudo apt install libsecret-1-dev
+          
       - name: Setup Git LF
         run: |
           git config --global core.autocrlf false
