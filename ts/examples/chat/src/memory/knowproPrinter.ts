@@ -269,7 +269,7 @@ export class KnowProPrinter extends ChatPrinter {
                             chalk.green,
                             `#${pos + 1} / ${distinctEntities.length}: [${entity.score}]`,
                         );
-                        this.writeCompositeEntity(entity.item);
+                        this.writeEntity(entity.item);
                         this.writeLine();
                     }
                 }

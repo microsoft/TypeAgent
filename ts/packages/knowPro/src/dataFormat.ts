@@ -118,6 +118,11 @@ export type Term = {
     weight?: number | undefined;
 };
 
+export interface Scored<T = any> {
+    item: T;
+    score: number;
+}
+
 // Also see:
 // - secondaryIndex.ts for optional secondary interfaces
 // - search.ts for search interfaces.
