@@ -10,7 +10,6 @@ import { createRpc } from "agent-rpc/rpc";
 import { createAgentRpcServer } from "agent-rpc/server";
 import { isWebAgentMessageFromDispatcher } from "../../dist/common/webAgentMessageTypes.mjs";
 import {
-    WebAgentDisconnectMessageFromDispatcher,
     WebAgentRegisterMessage,
     WebAgentRpcMessage,
 } from "../common/webAgentMessageTypes.mjs";

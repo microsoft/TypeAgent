@@ -25,11 +25,13 @@ import {
 } from "./testCore.js";
 import * as knowLib from "knowledge-processor";
 import { asyncArray, ScoredItem } from "typeagent";
-import { HitTable } from "../../../packages/knowledgeProcessor/dist/setOperations.js";
+
 import {
     createTemporalLogTable,
     TemporalTable,
 } from "../src/sqlite/temporalTable.js";
+
+type HitTable<T = any> = knowLib.sets.HitTable<T>;
 
 describe("sqlite.textTable", () => {
     const testTimeout = 1000 * 60 * 5;

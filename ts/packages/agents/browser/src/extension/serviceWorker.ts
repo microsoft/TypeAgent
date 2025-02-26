@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { AppAction } from "@typeagent/agent-sdk";
-import { WebSocketMessageV2 } from "../../../../commonUtils/dist/indexBrowser";
+import { WebSocketMessageV2 } from "common-utils";
 import {
     isWebAgentMessage,
     isWebAgentMessageFromDispatcher,

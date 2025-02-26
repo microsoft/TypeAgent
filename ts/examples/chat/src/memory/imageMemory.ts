@@ -26,8 +26,9 @@ import * as knowLib from "knowledge-processor";
 import path from "node:path";
 import { sqlite } from "memory-providers";
 import { isImageFileType } from "common-utils";
-import { TokenCounter } from "aiclient";
-import { CompletionUsageStats } from "../../../../packages/aiclient/dist/openai.js";
+import { TokenCounter, openai } from "aiclient";
+
+type CompletionUsageStats = openai.CompletionUsageStats;
 
 export async function createImageMemory(
     models: Models,
