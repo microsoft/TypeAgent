@@ -287,13 +287,13 @@ export class Podcast
             podcastData.relatedTermsIndexData?.textEmbeddingData;
         if (embeddingData?.embeddings) {
             await writeFile(
-                Podcast.makeEmbeddingsFilePath(dirPath, baseFileName),
+                path.join(dirPath, baseFileName + EmbeddingFileSuffix),
                 serializeEmbeddings(embeddingData.embeddings),
             );
             embeddingData.embeddings = [];
         }
         await writeJsonFile(
-            Podcast.makeDataFilePath(dirPath, baseFileName),
+            path.join(dirPath, baseFileName + DataFileSuffix),
             podcastData,
         );
     }
@@ -303,7 +303,7 @@ export class Podcast
         baseFileName: string,
     ): Promise<Podcast | undefined> {
         const data = await readJsonFile<PodcastData>(
-            Podcast.makeDataFilePath(dirPath, baseFileName),
+            path.join(dirPath, baseFileName + DataFileSuffix),
         );
         if (!data) {
             return undefined;
@@ -312,7 +312,7 @@ export class Podcast
         const embeddingData = data.relatedTermsIndexData?.textEmbeddingData;
         if (embeddingData) {
             const embeddings = await readFile(
-                Podcast.makeEmbeddingsFilePath(dirPath, baseFileName),
+                path.join(dirPath, baseFileName + EmbeddingFileSuffix),
             );
             if (embeddings) {
                 embeddingData.embeddings = deserializeEmbeddings(
@@ -324,20 +324,6 @@ export class Podcast
         }
         podcast.deserialize(data);
         return podcast;
-    }
-
-    private static makeDataFilePath(
-        dirPath: string,
-        baseFileName: string,
-    ): string {
-        return path.join(dirPath, baseFileName + "_data.json");
-    }
-
-    private static makeEmbeddingsFilePath(
-        dirPath: string,
-        baseFileName: string,
-    ): string {
-        return path.join(dirPath, baseFileName + "_embeddings.bin");
     }
 
     private buildSecondaryIndexes() {
@@ -403,6 +389,9 @@ export class Podcast
         return aliases;
     }
 }
+
+const DataFileSuffix = "_data.json";
+const EmbeddingFileSuffix = "_embeddings.bin";
 
 export interface PodcastData extends IConversationData<PodcastMessage> {
     relatedTermsIndexData?: ITermsToRelatedTermsIndexData | undefined;
