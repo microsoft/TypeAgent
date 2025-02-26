@@ -25,6 +25,7 @@ RUN apt-get update && apt-get install -y \
     libasound2 \
     libdbus-1-3 \
     libnspr4 \
+    libsecret-1-0 \
     libxcomposite1 \
     libxdamage1 \
     libxrandr2 \
