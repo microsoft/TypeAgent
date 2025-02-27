@@ -29,6 +29,7 @@
     "chalk": "^5.3.0",
     "code-processor": "workspace:*",
     "common-utils": "workspace:*",
+    "conversation-memory": "workspace:*",
     "dotenv": "^16.3.1",
     "exifreader": "4.23.5",
     "interactive-app": "workspace:*",

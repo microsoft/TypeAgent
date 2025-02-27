@@ -6,6 +6,7 @@ import * as knowLib from "knowledge-processor";
 import { ChatPrinter } from "../chatPrinter.js";
 import chalk from "chalk";
 import { getTimeRangeForConversation } from "./knowproCommon.js";
+import * as cm from "conversation-memory";
 
 export class KnowProPrinter extends ChatPrinter {
     public sortAsc: boolean = true;
@@ -302,7 +303,7 @@ export class KnowProPrinter extends ChatPrinter {
         return this;
     }
 
-    public writePodcastInfo(podcast: kp.Podcast) {
+    public writePodcastInfo(podcast: cm.Podcast) {
         this.writeConversationInfo(podcast);
         this.writeList(getPodcastParticipants(podcast), {
             type: "csv",
@@ -340,7 +341,7 @@ export class KnowProPrinter extends ChatPrinter {
     }
 }
 
-function getPodcastParticipants(podcast: kp.Podcast) {
+function getPodcastParticipants(podcast: cm.Podcast) {
     const participants = new Set<string>();
     for (let message of podcast.messages) {
         const meta = message.metadata;

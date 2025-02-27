@@ -9,3 +9,6 @@ export * from "./secondaryIndexes.js";
 export * from "./relatedTermsIndex.js";
 export * from "./search.js";
 export * from "./conversationThread.js";
+export * from "./fuzzyIndex.js";
+export * from "./propertyIndex.js";
+export * from "./timestampIndex.js";
