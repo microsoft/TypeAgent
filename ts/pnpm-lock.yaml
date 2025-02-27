@@ -1259,6 +1259,9 @@ importers:
       common-utils:
         specifier: workspace:*
         version: link:../../commonUtils
+      dotenv:
+        specifier: ^16.3.1
+        version: 16.3.1
       typeagent:
         specifier: workspace:*
         version: link:../../typeagent

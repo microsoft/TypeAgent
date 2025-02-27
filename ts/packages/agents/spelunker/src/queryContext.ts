@@ -40,7 +40,7 @@ function captureTokenStats(req: any, response: any): void {
     );
 }
 
-export function createQueryContext(dbFolder?: string): QueryContext {
+export function createQueryContext(dbFile?: string): QueryContext {
     const chatModel = openai.createChatModelDefault("spelunkerChat");
     chatModel.completionCallback = captureTokenStats;
     chatModel.retryMaxAttempts = 0;
@@ -85,7 +85,7 @@ export function createQueryContext(dbFolder?: string): QueryContext {
     fs.mkdirSync(databaseFolder, mkdirOptions);
 
     const databaseLocation =
-        dbFolder || path.join(makeDatabaseFolder(), "codeSearchDatabase.db");
+        dbFile || path.join(makeDatabaseFolder(), "codeSearchDatabase.db");
     const database = undefined;
     return {
         chatModel,

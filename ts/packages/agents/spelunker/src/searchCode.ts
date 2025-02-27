@@ -52,7 +52,7 @@ export async function searchCode(
     if (!context.queryContext) {
         context.queryContext = createQueryContext();
     }
-    await createDatabase(context);
+    createDatabase(context);
     await loadDatabase(context);
     const db = context.queryContext!.database!;
 
@@ -111,7 +111,7 @@ function formatReferences(references: ChunkId[]): string {
     return answer.join("");
 }
 
-async function readAllChunksFromDatabase(
+export async function readAllChunksFromDatabase(
     db: sqlite.Database,
 ): Promise<Chunk[]> {
     console_log(`[Step 2: Load chunks from database]`);
@@ -351,7 +351,7 @@ function getAllSourceFiles(dir: string): FileMtimeSize[] {
 
 // TODO: Break into multiple functions.
 // Notably the part that compares files in the database and files on disk.
-async function loadDatabase(context: SpelunkerContext): Promise<void> {
+export async function loadDatabase(context: SpelunkerContext): Promise<void> {
     console_log(`[Step 1: Load database]`);
     if (!context.queryContext) {
         context.queryContext = createQueryContext();
