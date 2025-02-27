@@ -32,8 +32,8 @@ import { ChatModel } from "aiclient";
 import { AddressOutput } from "@azure-rest/maps-search";
 import { IPropertyToSemanticRefIndex } from "./secondaryIndexes.js";
 import { IConversationThreadData } from "./conversationThread.js";
-import { createPodcastSettings, PodcastSettings } from "./import.js";
 import { isDirectoryPath } from "typeagent";
+import { ConversationSettings, createConversationSettings } from "./import.js";
 
 type ConcreteEntity = kpLib.ConcreteEntity;
 type Topic = kpLib.Topic;
@@ -363,7 +363,7 @@ export class ImageMeta implements IKnowledgeSource {
 }
 
 export class ImageCollection implements IConversation<ImageMeta> {
-    public settings: PodcastSettings;
+    public settings: ConversationSettings;
     constructor(
         public nameTag: string,
         public messages: Image[],
@@ -380,7 +380,7 @@ export class ImageCollection implements IConversation<ImageMeta> {
             | IPropertyToSemanticRefIndex
             | undefined = undefined,
     ) {
-        this.settings = createPodcastSettings();
+        this.settings = createConversationSettings();
     }
 
     public addMetadataToIndex() {

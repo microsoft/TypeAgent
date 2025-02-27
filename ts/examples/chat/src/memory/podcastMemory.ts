@@ -43,6 +43,7 @@ import {
 import { runImportQueue } from "./importer.js";
 import chalk from "chalk";
 import * as kp from "knowpro";
+import * as cm from "conversation-memory";
 
 export async function createPodcastMemory(
     models: Models,
@@ -166,7 +167,7 @@ export function createPodcastCommands(
         const knowledgeStore = context.podcastMemory.conversation.knowledge;
         const knowledgeResponses: conversation.KnowledgeResponse[] = [];
 
-        const podcastMessages: kp.PodcastMessage[] = [];
+        const podcastMessages: cm.PodcastMessage[] = [];
         const podcastThreads: kp.Thread[] = [];
         for await (const threadEntry of threads.entries()) {
             const thread = threadEntry.value;
@@ -204,7 +205,7 @@ export function createPodcastCommands(
             });
         }
 
-        const kpPodcast = new kp.Podcast("AllEpisodes", []);
+        const kpPodcast = new cm.Podcast("AllEpisodes", []);
         kp.addToConversationIndex(
             kpPodcast,
             podcastMessages,
@@ -886,9 +887,9 @@ function podcastMessageFromEmailText(text: string) {
             messageText += "\n";
         }
     }
-    return new kp.PodcastMessage(
+    return new cm.PodcastMessage(
         [messageText],
-        new kp.PodcastMessageMeta(speaker),
+        new cm.PodcastMessageMeta(speaker),
     );
 }
 

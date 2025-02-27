@@ -12,7 +12,7 @@ import {
     Term,
     TextRange,
 } from "./dataFormat.js";
-import { compareTextRange, isInTextRange } from "./query.js";
+import { compareTextRange, isInTextRange } from "./common.js";
 
 export interface Match<T = any> {
     value: T;

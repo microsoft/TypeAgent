@@ -36,12 +36,13 @@ import path from "path";
 import chalk from "chalk";
 import { KnowProPrinter } from "./knowproPrinter.js";
 import { getTimeRangeForConversation } from "./knowproCommon.js";
+import * as cm from "conversation-memory";
 
 type KnowProContext = {
     knowledgeModel: ChatModel;
     basePath: string;
     printer: KnowProPrinter;
-    podcast?: kp.Podcast | undefined;
+    podcast?: cm.Podcast | undefined;
     images?: kp.ImageCollection | undefined;
     conversation?: kp.IConversation | undefined;
 };
@@ -120,7 +121,7 @@ export async function createKnowproCommands(
             context.printer.writeError(`${namedArgs.filePath} not found`);
             return;
         }
-        context.podcast = await kp.importPodcast(namedArgs.filePath);
+        context.podcast = await cm.importPodcast(namedArgs.filePath);
         context.conversation = context.podcast;
         context.printer.writeLine("Imported podcast:");
         context.printer.writePodcastInfo(context.podcast);
@@ -160,7 +161,7 @@ export async function createKnowproCommands(
         const namedArgs = parseNamedArguments(args, podcastTimestampDef());
         const startAt = argToDate(namedArgs.startAt)!;
         const endAt = dateTime.addMinutesToDate(startAt, namedArgs.length);
-        kp.timestampMessages(conversation.messages, startAt, endAt);
+        cm.timestampMessages(conversation.messages, startAt, endAt);
     }
 
     function podcastSaveDef(): CommandMetadata {
@@ -215,7 +216,7 @@ export async function createKnowproCommands(
         }
         const clock = new StopWatch();
         clock.start();
-        const podcast = await kp.Podcast.readFromFile(
+        const podcast = await cm.Podcast.readFromFile(
             path.dirname(podcastFilePath),
             getFileName(podcastFilePath),
         );
