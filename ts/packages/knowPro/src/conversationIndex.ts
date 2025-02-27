@@ -21,6 +21,9 @@ import { openai } from "aiclient";
 import { Result } from "typechat";
 import { async } from "typeagent";
 import { facetValueToString } from "./knowledge.js";
+import { IConversationSecondaryIndexes } from "./secondaryIndexes.js";
+import { addPropertiesToIndex, PropertyIndex } from "./propertyIndex.js";
+import { TimestampToTextRangeIndex } from "./timestampIndex.js";
 
 export function createKnowledgeModel() {
     const chatModelSettings = openai.apiSettingsFromEnv(
@@ -93,12 +96,7 @@ export function addEntityToIndex(
     semanticRefIndex: ITermToSemanticRefIndex,
     messageIndex: number,
     chunkIndex = 0,
-    deDuplicate = false,
 ) {
-    if (deDuplicate && isDuplicateEntity(entity, semanticRefs)) {
-        return;
-    }
-
     const refIndex = semanticRefs.length;
     semanticRefs.push({
         semanticRefIndex: refIndex,
@@ -117,34 +115,6 @@ export function addEntityToIndex(
             addFacet(facet, refIndex, semanticRefIndex);
         }
     }
-}
-
-/**
- *
- * @param entity The entity to match
- * @param semanticRefs The semantic references in the index
- * @returns True if there's a duplicate, false otherwise
- */
-function isDuplicateEntity(
-    entity: kpLib.ConcreteEntity,
-    semanticRefs: SemanticRef[],
-) {
-    for (let i = 0; i < semanticRefs.length; i++) {
-        if (
-            semanticRefs[i].knowledgeType == "entity" &&
-            entity.name ==
-                (semanticRefs[i].knowledge as kpLib.ConcreteEntity).name
-        ) {
-            if (
-                JSON.stringify(entity) ===
-                JSON.stringify(semanticRefs[i].knowledge)
-            ) {
-                return true;
-            }
-        }
-    }
-
-    return false;
 }
 
 export function addTopicToIndex(
@@ -400,4 +370,28 @@ export class ConversationIndex implements ITermToSemanticRefIndex {
     private prepareTerm(term: string): string {
         return term.toLowerCase();
     }
+}
+
+export async function buildSecondaryIndexes(
+    conversation: IConversation,
+    secondaryIndexes?: IConversationSecondaryIndexes,
+): Promise<IConversationSecondaryIndexes> {
+    secondaryIndexes ??= {};
+    const semanticRefs = conversation.semanticRefs;
+    if (
+        semanticRefs &&
+        secondaryIndexes.propertyToSemanticRefIndex === undefined
+    ) {
+        secondaryIndexes.propertyToSemanticRefIndex = new PropertyIndex();
+        addPropertiesToIndex(
+            semanticRefs,
+            secondaryIndexes.propertyToSemanticRefIndex,
+        );
+    }
+    if (secondaryIndexes.timestampIndex === undefined) {
+        secondaryIndexes.timestampIndex = new TimestampToTextRangeIndex(
+            conversation.messages,
+        );
+    }
+    return secondaryIndexes;
 }

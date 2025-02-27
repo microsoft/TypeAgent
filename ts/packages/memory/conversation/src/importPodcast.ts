@@ -20,12 +20,10 @@ import {
     IConversationSecondaryIndexes,
     deserializeEmbeddings,
     serializeEmbeddings,
-    TimestampToTextRangeIndex,
-    addPropertiesToIndex,
-    PropertyIndex,
     ConversationSettings,
     createConversationSettings,
     addMetadataToIndex,
+    buildSecondaryIndexes,
 } from "knowpro";
 import { conversation as kpLib, split } from "knowledge-processor";
 import {
@@ -165,7 +163,7 @@ export class Podcast
     ): Promise<ConversationIndexingResult> {
         const result = await buildConversationIndex(this, progressCallback);
         this.addMetadataToIndex();
-        this.buildSecondaryIndexes();
+        await this.buildSecondaryIndexes();
         await this.threads.buildIndex();
         return result;
     }
@@ -274,24 +272,9 @@ export class Podcast
         return podcast;
     }
 
-    private buildSecondaryIndexes() {
+    private async buildSecondaryIndexes() {
         this.buildParticipantAliases();
-        this.buildPropertyIndex();
-        this.buildTimestampIndex();
-    }
-
-    private buildPropertyIndex() {
-        if (this.semanticRefs && this.semanticRefs.length > 0) {
-            this.propertyToSemanticRefIndex = new PropertyIndex();
-            addPropertiesToIndex(
-                this.semanticRefs,
-                this.propertyToSemanticRefIndex,
-            );
-        }
-    }
-
-    private buildTimestampIndex(): void {
-        this.timestampIndex = new TimestampToTextRangeIndex(this.messages);
+        await buildSecondaryIndexes(this, this);
     }
 
     private buildParticipantAliases(): void {

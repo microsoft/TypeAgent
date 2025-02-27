@@ -1,15 +1,8 @@
-# knowpro
+# conversation-memory
 
-**Experimental prototype**: Working toward a shared understanding of the MVP for structured RAG.
+**Experimental prototype**: Working toward a shared understanding of implementing conversation-memory using structured RAG and the [knowpro](../../knowPro/) experimental library.
 
-**Sample code** and early ideas that explore how to:
-
-- Use TypeChat to extract **_structured knowledge_** from conversations, transcripts and documents.
-- Implement a **Structured RAG**. The exploration includes ideas on how to:
-  - Index the extracted knowledge and source text for retrieval.
-  - Use TypeChat to generate **structured queries** for structured knowledge.\*\*
-  - Use structured objects to **_answer_** questions.
-  - Use structured indices to improve precision.
+This is **sample code** only.
 
 ## Trademarks
 
