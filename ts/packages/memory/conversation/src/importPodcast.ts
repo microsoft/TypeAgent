@@ -15,20 +15,19 @@ import {
     addTopicToIndex,
     ConversationIndexingResult,
     TermToRelatedTermsIndex,
-    TermsToRelatedTermIndexSettings,
     IPropertyToSemanticRefIndex,
     ITermsToRelatedTermsIndexData,
     ITimestampToTextRangeIndex,
     IConversationThreadData,
     ConversationThreads,
     IConversationSecondaryIndexes,
-    createTextEmbeddingIndexSettings,
     deserializeEmbeddings,
     serializeEmbeddings,
-    TextEmbeddingIndexSettings,
     TimestampToTextRangeIndex,
     addPropertiesToIndex,
     PropertyIndex,
+    ConversationSettings,
+    createConversationSettings,
 } from "knowpro";
 import { conversation as kpLib, split } from "knowledge-processor";
 import {
@@ -122,25 +121,10 @@ export class PodcastMessage implements IMessage<PodcastMessageMeta> {
     }
 }
 
-export type PodcastSettings = {
-    relatedTermIndexSettings: TermsToRelatedTermIndexSettings;
-    threadSettings: TextEmbeddingIndexSettings;
-};
-
-export function createPodcastSettings(): PodcastSettings {
-    const embeddingIndexSettings = createTextEmbeddingIndexSettings();
-    return {
-        relatedTermIndexSettings: {
-            embeddingIndexSettings,
-        },
-        threadSettings: embeddingIndexSettings,
-    };
-}
-
 export class Podcast
     implements IConversation<PodcastMessageMeta>, IConversationSecondaryIndexes
 {
-    public settings: PodcastSettings;
+    public settings: ConversationSettings;
     public semanticRefIndex: ConversationIndex | undefined;
     public termToRelatedTermsIndex: TermToRelatedTermsIndex | undefined;
     public timestampIndex: ITimestampToTextRangeIndex | undefined;
@@ -153,7 +137,7 @@ export class Podcast
         public tags: string[] = [],
         public semanticRefs: SemanticRef[] = [],
     ) {
-        this.settings = createPodcastSettings();
+        this.settings = createConversationSettings();
         this.threads = new ConversationThreads(this.settings.threadSettings);
     }
 
