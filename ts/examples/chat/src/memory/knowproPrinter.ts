@@ -6,6 +6,8 @@ import * as knowLib from "knowledge-processor";
 import { ChatPrinter } from "../chatPrinter.js";
 import chalk from "chalk";
 import { getTimeRangeForConversation } from "./knowproCommon.js";
+import * as cm from "conversation-memory";
+import * as im from "image-memory";
 
 export class KnowProPrinter extends ChatPrinter {
     public sortAsc: boolean = true;
@@ -134,6 +136,28 @@ export class KnowProPrinter extends ChatPrinter {
         return this;
     }
 
+    public writeScoredKnowledge(scoredKnowledge: kp.ScoredKnowledge) {
+        switch (scoredKnowledge.knowledgeType) {
+            default:
+                this.writeLine(scoredKnowledge.knowledgeType);
+                break;
+            case "entity":
+                this.writeEntity(
+                    scoredKnowledge.knowledge as knowLib.conversation.ConcreteEntity,
+                );
+                break;
+            case "action":
+                this.writeAction(
+                    scoredKnowledge.knowledge as knowLib.conversation.Action,
+                );
+                break;
+            case "topic":
+                this.writeTopic(scoredKnowledge.knowledge as kp.Topic);
+                break;
+        }
+        return this;
+    }
+
     private writeScoredRef(
         matchNumber: number,
         totalMatches: number,
@@ -224,6 +248,7 @@ export class KnowProPrinter extends ChatPrinter {
             return;
         }
 
+        let distinctKnowledge: kp.ScoredKnowledge[] | undefined;
         switch (type) {
             default:
                 return;
@@ -232,23 +257,11 @@ export class KnowProPrinter extends ChatPrinter {
                 const topics = results.get("topic");
                 if (topics) {
                     this.writeTitle(type.toUpperCase());
-                    let distinctTopics = kp.getDistinctTopicMatches(
+                    distinctKnowledge = kp.getDistinctTopicMatches(
                         conversation.semanticRefs!,
                         topics.semanticRefMatches,
                         maxToDisplay,
                     );
-                    for (let i = 0; i < distinctTopics.length; ++i) {
-                        let pos = this.sortAsc
-                            ? distinctTopics.length - (i + 1)
-                            : i;
-                        const topic = distinctTopics[pos];
-                        this.writeInColor(
-                            chalk.green,
-                            `#${pos + 1} / ${distinctTopics.length}: [${topic.score}]`,
-                        );
-                        this.writeLine(topic.item.text);
-                        this.writeLine();
-                    }
                 }
                 break;
 
@@ -256,38 +269,28 @@ export class KnowProPrinter extends ChatPrinter {
                 const entities = results.get("entity");
                 if (entities) {
                     this.writeTitle(type.toUpperCase());
-                    let distinctEntities = kp.getDistinctEntityMatches(
+                    distinctKnowledge = kp.getDistinctEntityMatches(
                         conversation.semanticRefs!,
                         entities.semanticRefMatches,
                         maxToDisplay,
                     );
-                    for (let i = 0; i < distinctEntities.length; ++i) {
-                        let pos = this.sortAsc
-                            ? distinctEntities.length - (i + 1)
-                            : i;
-                        const entity = distinctEntities[pos];
-                        this.writeInColor(
-                            chalk.green,
-                            `#${pos + 1} / ${distinctEntities.length}: [${entity.score}]`,
-                        );
-                        this.writeEntity(entity.item);
-                        this.writeLine();
-                    }
                 }
                 break;
         }
+        if (distinctKnowledge) {
+            for (let i = 0; i < distinctKnowledge.length; ++i) {
+                let pos = this.sortAsc ? distinctKnowledge.length - (i + 1) : i;
+                const knowledge = distinctKnowledge[pos];
+                this.writeInColor(
+                    chalk.green,
+                    `#${pos + 1} / ${distinctKnowledge.length}: [${knowledge.score}]`,
+                );
+                this.writeScoredKnowledge(knowledge);
+                this.writeLine();
+            }
+        }
 
         return this;
-    }
-
-    public writeCompositeEntity(
-        entity: knowLib.conversation.CompositeEntity | undefined,
-    ): void {
-        if (entity) {
-            this.writeLine(entity.name.toUpperCase());
-            this.writeList(entity.type, { type: "csv" });
-            this.writeList(entity.facets, { type: "ul" });
-        }
     }
 
     public writeConversationInfo(conversation: kp.IConversation) {
@@ -301,7 +304,7 @@ export class KnowProPrinter extends ChatPrinter {
         return this;
     }
 
-    public writePodcastInfo(podcast: kp.Podcast) {
+    public writePodcastInfo(podcast: cm.Podcast) {
         this.writeConversationInfo(podcast);
         this.writeList(getPodcastParticipants(podcast), {
             type: "csv",
@@ -310,7 +313,7 @@ export class KnowProPrinter extends ChatPrinter {
         return this;
     }
 
-    public writeImageCollectionInfo(imageCollection: kp.ImageCollection) {
+    public writeImageCollectionInfo(imageCollection: im.ImageCollection) {
         this.writeLine(
             `${imageCollection.nameTag}: ${imageCollection.messages.length} images.`,
         );
@@ -339,7 +342,7 @@ export class KnowProPrinter extends ChatPrinter {
     }
 }
 
-function getPodcastParticipants(podcast: kp.Podcast) {
+function getPodcastParticipants(podcast: cm.Podcast) {
     const participants = new Set<string>();
     for (let message of podcast.messages) {
         const meta = message.metadata;

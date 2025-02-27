@@ -2,8 +2,16 @@ FROM node:20 AS base
 
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
-RUN npm install -g corepack@0.31.0
-RUN corepack enable
+RUN npm install -g corepack@latest
+RUN corepack enable pnpm
+RUN corepack install -g pnpm@latest
+
+# dependencies
+RUN apt-get update
+RUN apt-get install -y libsecret-1-0
+RUN apt-get install -y libsecret-1-dev
+RUN apt install -y gnome-keyring
+RUN curl -sL https://aka.ms/InstallAzureCLIDeb | bash
 
 # Install dependencies required for Chrome/Puppeteer
 RUN apt-get update && apt-get install -y \
@@ -53,11 +61,6 @@ COPY --from=build /prod/tools/ /prod/tools/
 COPY --from=build /usr/src/app/packages/shell/out/ /prod/shell/out/
 WORKDIR /prod/api
 
-# dependencies
-RUN apt-get update
-RUN apt install -y gnome-keyring
-RUN curl -sL https://aka.ms/InstallAzureCLIDeb | bash
-
 ######################################### BLOB STORAGE MOUNT ######################################### 
 ## blobfuse - https://github.com/Azure/azure-storage-fuse/tree/main
 ## Uncomment the section below to use blobfuse to mount blob storage
@@ -87,4 +90,4 @@ RUN echo node ../tools/scripts/getKeys.mjs >> start.sh
 RUN echo pnpm start >> start.sh
 
 # run start script
-CMD bash start.sh
+CMD ["bash", "start.sh"]

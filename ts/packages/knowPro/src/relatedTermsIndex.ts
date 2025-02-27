@@ -1,8 +1,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { collections, ScoredItem } from "typeagent";
+import { collections } from "typeagent";
 import { Term } from "./dataFormat.js";
+import { Scored } from "./common.js";
 import {
     ITextEmbeddingIndexData,
     ITermsToRelatedTermsDataItem,
@@ -13,7 +14,7 @@ import {
     ITermToRelatedTerms,
 } from "./secondaryIndexes.js";
 import { SearchTerm } from "./search.js";
-import { isSearchTermWildcard } from "./query.js";
+import { isSearchTermWildcard } from "./common.js";
 import { TermSet } from "./collections.js";
 import {
     addTextToEmbeddingIndex,
@@ -245,8 +246,8 @@ export interface ITermEmbeddingIndex extends ITermToRelatedTermsFuzzy {
 }
 
 export class TermEmbeddingIndex implements ITermEmbeddingIndex {
-    public textArray: string[];
-    public embeddingIndex: TextEmbeddingIndex;
+    private textArray: string[];
+    private embeddingIndex: TextEmbeddingIndex;
 
     constructor(
         public settings: TextEmbeddingIndexSettings,
@@ -338,7 +339,7 @@ export class TermEmbeddingIndex implements ITermEmbeddingIndex {
         this.embeddingIndex.deserialize(data.embeddings);
     }
 
-    private matchesToTerms(matches: ScoredItem[]): Term[] {
+    private matchesToTerms(matches: Scored[]): Term[] {
         return matches.map((m) => {
             return { text: this.textArray[m.item], weight: m.score };
         });
@@ -379,7 +380,7 @@ export class TermEditDistanceIndex
         return matches.map((m) => this.matchesToTerms(m));
     }
 
-    private matchesToTerms(matches: ScoredItem<string>[]): Term[] {
+    private matchesToTerms(matches: Scored<string>[]): Term[] {
         return matches.map((m) => {
             return { text: m.item, weight: m.score };
         });

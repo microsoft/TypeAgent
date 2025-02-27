@@ -118,12 +118,8 @@ export type Term = {
     weight?: number | undefined;
 };
 
-export interface Scored<T = any> {
-    item: T;
+export type ScoredKnowledge = {
+    knowledgeType: KnowledgeType;
+    knowledge: Knowledge;
     score: number;
-}
-
-// Also see:
-// - secondaryIndex.ts for optional secondary interfaces
-// - search.ts for search interfaces.
-// - thread.ts for early ideas on threads
+};
