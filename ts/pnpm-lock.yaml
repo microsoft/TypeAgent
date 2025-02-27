@@ -99,7 +99,7 @@ importers:
         version: 4.23.5
       image-memory:
         specifier: workspace:*
-        version: link:../../packages/memory/images
+        version: link:../../packages/memory/image
       interactive-app:
         specifier: workspace:*
         version: link:../../packages/interactiveApp
@@ -2279,7 +2279,7 @@ importers:
         specifier: ^5.4.2
         version: 5.4.5
 
-  packages/memory/images:
+  packages/memory/image:
     dependencies:
       '@azure-rest/maps-search':
         specifier: ^2.0.0-beta.2
