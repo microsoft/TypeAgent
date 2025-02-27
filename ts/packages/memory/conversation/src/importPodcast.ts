@@ -9,10 +9,7 @@ import {
     IConversationData,
     Term,
     ConversationIndex,
-    addActionToIndex,
-    addEntityToIndex,
     buildConversationIndex,
-    addTopicToIndex,
     ConversationIndexingResult,
     TermToRelatedTermsIndex,
     IPropertyToSemanticRefIndex,
@@ -28,6 +25,7 @@ import {
     PropertyIndex,
     ConversationSettings,
     createConversationSettings,
+    addMetadataToIndex,
 } from "knowpro";
 import { conversation as kpLib, split } from "knowledge-processor";
 import {
@@ -142,41 +140,16 @@ export class Podcast
     }
 
     public addMetadataToIndex() {
-        for (let i = 0; i < this.messages.length; i++) {
-            const msg = this.messages[i];
-            const knowledgeResponse = msg.metadata.getKnowledge();
-            if (this.semanticRefIndex !== undefined) {
-                for (const entity of knowledgeResponse.entities) {
-                    addEntityToIndex(
-                        entity,
-                        this.semanticRefs,
-                        this.semanticRefIndex,
-                        i,
-                    );
-                }
-                for (const action of knowledgeResponse.actions) {
-                    addActionToIndex(
-                        action,
-                        this.semanticRefs,
-                        this.semanticRefIndex,
-                        i,
-                    );
-                }
-                for (const topic of knowledgeResponse.topics) {
-                    addTopicToIndex(
-                        topic,
-                        this.semanticRefs,
-                        this.semanticRefIndex,
-                        i,
-                    );
-                }
-            }
+        if (this.semanticRefIndex) {
+            addMetadataToIndex(
+                this.messages,
+                this.semanticRefs,
+                this.semanticRefIndex,
+            );
         }
     }
 
-    public generateTimestamps(startDate?: Date, lengthMinutes: number = 60) {
-        // generate a random date within the last 10 years
-        startDate ??= randomDate();
+    public generateTimestamps(startDate: Date, lengthMinutes: number = 60) {
         timestampMessages(
             this.messages,
             startDate,
@@ -422,7 +395,9 @@ export async function importPodcast(
     }
     assignMessageListeners(msgs, participants);
     const pod = new Podcast(podcastName, msgs, [podcastName]);
-    pod.generateTimestamps(startDate, lengthMinutes);
+    if (startDate) {
+        pod.generateTimestamps(startDate, lengthMinutes);
+    }
     // TODO: add more tags
     return pod;
 }
@@ -464,12 +439,4 @@ export function timestampMessages(
             0,
         );
     }
-}
-
-function randomDate(startHour = 14) {
-    const date = new Date();
-    date.setFullYear(date.getFullYear() - Math.floor(Math.random() * 10));
-    date.setMonth(Math.floor(Math.random() * 12));
-    date.setDate(Math.floor(Math.random() * 28));
-    return date;
 }

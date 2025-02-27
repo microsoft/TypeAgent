@@ -65,6 +65,28 @@ function addFacet(
     }
 }
 
+export function addMetadataToIndex(
+    messages: IMessage[],
+    semanticRefs: SemanticRef[],
+    semanticRefIndex: ITermToSemanticRefIndex,
+) {
+    for (let i = 0; i < messages.length; i++) {
+        const msg = messages[i];
+        const knowledgeResponse = msg.metadata.getKnowledge();
+        if (semanticRefIndex !== undefined) {
+            for (const entity of knowledgeResponse.entities) {
+                addEntityToIndex(entity, semanticRefs, semanticRefIndex, i);
+            }
+            for (const action of knowledgeResponse.actions) {
+                addActionToIndex(action, semanticRefs, semanticRefIndex, i);
+            }
+            for (const topic of knowledgeResponse.topics) {
+                addTopicToIndex(topic, semanticRefs, semanticRefIndex, i);
+            }
+        }
+    }
+}
+
 export function addEntityToIndex(
     entity: kpLib.ConcreteEntity,
     semanticRefs: SemanticRef[],
