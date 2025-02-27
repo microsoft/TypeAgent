@@ -161,8 +161,8 @@ export class Podcast
             knowledgeResult: Result<kpLib.KnowledgeResponse>,
         ) => boolean,
     ): Promise<ConversationIndexingResult> {
-        const result = await buildConversationIndex(this, progressCallback);
         this.addMetadataToIndex();
+        const result = await buildConversationIndex(this, progressCallback);
         await this.buildSecondaryIndexes();
         await this.threads.buildIndex();
         return result;
@@ -307,7 +307,7 @@ export class Podcast
 
         function collectName(participantName: string | undefined) {
             if (participantName) {
-                participantName = participantName.toLowerCase();
+                participantName = participantName.toLocaleLowerCase();
                 const parsedName = kpLib.splitParticipantName(participantName);
                 if (parsedName && parsedName.firstName && parsedName.lastName) {
                     // If participantName is a full name, then associate firstName with the full name

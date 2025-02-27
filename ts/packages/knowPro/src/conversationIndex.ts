@@ -315,6 +315,9 @@ export class ConversationIndex implements ITermToSemanticRefIndex {
         term: string,
         semanticRefIndex: SemanticRefIndex | ScoredSemanticRef,
     ): void {
+        if (!term) {
+            return;
+        }
         if (typeof semanticRefIndex === "number") {
             semanticRefIndex = {
                 semanticRefIndex: semanticRefIndex,
@@ -322,8 +325,9 @@ export class ConversationIndex implements ITermToSemanticRefIndex {
             };
         }
         term = this.prepareTerm(term);
-        if (this.map.has(term)) {
-            this.map.get(term)?.push(semanticRefIndex);
+        const existing = this.map.get(term);
+        if (existing != undefined) {
+            existing.push(semanticRefIndex);
         } else {
             this.map.set(term, [semanticRefIndex]);
         }
