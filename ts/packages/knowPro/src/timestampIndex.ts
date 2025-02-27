@@ -7,7 +7,7 @@ import { textRangeFromLocation } from "./conversationIndex.js";
 import {
     ITimestampToTextRangeIndex,
     TimestampedTextRange,
-} from "./secondaryIndexes.js";
+} from "./dataFormat.js";
 
 /**
  * An index of timestamp => TextRanges.

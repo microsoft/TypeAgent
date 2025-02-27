@@ -432,7 +432,7 @@ export class ImageCollection implements IConversation<ImageMeta> {
         }
     }
 
-    public serialize(): ImageCollectionData {
+    public async serialize(): Promise<ImageCollectionData> {
         return {
             nameTag: this.nameTag,
             messages: this.messages,

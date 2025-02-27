@@ -34,10 +34,8 @@ import {
     lookupPropertyInPropertyIndex,
     PropertyNames,
 } from "./propertyIndex.js";
-import {
-    IPropertyToSemanticRefIndex,
-    ITimestampToTextRangeIndex,
-} from "./secondaryIndexes.js";
+import { ITimestampToTextRangeIndex } from "./dataFormat.js";
+import { IPropertyToSemanticRefIndex } from "./dataFormat.js";
 import { conversation as kpLib } from "knowledge-processor";
 import { collections } from "typeagent";
 import { Thread } from "./conversationThread.js";

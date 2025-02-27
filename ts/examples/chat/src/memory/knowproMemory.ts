@@ -310,9 +310,11 @@ export async function createKnowproCommands(
         }
         context.printer.writeLine("Saving index");
         context.printer.writeLine(namedArgs.filePath);
-        const cData = context.images?.serialize();
-        await ensureDir(path.dirname(namedArgs.filePath));
-        await writeJsonFile(namedArgs.filePath, cData);
+        if (context.images) {
+            const cData = await context.images.serialize();
+            await ensureDir(path.dirname(namedArgs.filePath));
+            await writeJsonFile(namedArgs.filePath, cData);
+        }
     }
 
     function imagesLoadDef(): CommandMetadata {

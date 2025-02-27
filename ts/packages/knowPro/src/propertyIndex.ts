@@ -8,7 +8,7 @@ import {
     Tag,
 } from "./dataFormat.js";
 import { conversation as kpLib } from "knowledge-processor";
-import { IPropertyToSemanticRefIndex } from "./secondaryIndexes.js";
+import { IPropertyToSemanticRefIndex } from "./dataFormat.js";
 import { TextRangesInScope } from "./collections.js";
 import { facetValueToString } from "./knowledge.js";
 

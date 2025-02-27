@@ -74,7 +74,8 @@ export interface IConversation<TMeta extends IKnowledgeSource = any> {
     semanticRefs: SemanticRef[] | undefined;
     semanticRefIndex?: ITermToSemanticRefIndex | undefined;
 
-    serialize(): IConversationData<IMessage<TMeta>>;
+    serialize(): Promise<IConversationData<IMessage<TMeta>>>;
+    deserialize(data: IConversationData<IMessage<TMeta>>): Promise<void>;
 }
 
 export type MessageIndex = number;
@@ -123,3 +124,38 @@ export type ScoredKnowledge = {
     knowledge: Knowledge;
     score: number;
 };
+
+export interface IConversationIndexes {
+    semanticRefIndex?: ITermToSemanticRefIndex | undefined;
+    propertyToSemanticRefIndex?: IPropertyToSemanticRefIndex | undefined;
+    timestampIndex?: ITimestampToTextRangeIndex | undefined;
+}
+
+/**
+ * Allows for faster retrieval of name, value properties
+ */
+export interface IPropertyToSemanticRefIndex {
+    getValues(): string[];
+    addProperty(
+        propertyName: string,
+        value: string,
+        semanticRefIndex: SemanticRefIndex | ScoredSemanticRef,
+    ): void;
+    lookupProperty(
+        propertyName: string,
+        value: string,
+    ): ScoredSemanticRef[] | undefined;
+}
+
+export type TimestampedTextRange = {
+    timestamp: string;
+    range: TextRange;
+};
+
+/**
+ * Return text ranges in the given date range
+ */
+export interface ITimestampToTextRangeIndex {
+    addTimestamp(messageIndex: MessageIndex, timestamp: string): boolean;
+    lookupRange(dateRange: DateRange): TimestampedTextRange[];
+}

@@ -3,12 +3,9 @@
 
 import { IConversationThreads } from "./conversationThread.js";
 import {
-    SemanticRefIndex,
-    ScoredSemanticRef,
-    DateRange,
-    TextRange,
+    IPropertyToSemanticRefIndex,
+    ITimestampToTextRangeIndex,
     Term,
-    MessageIndex,
 } from "./dataFormat.js";
 
 /**
@@ -19,35 +16,6 @@ export interface IConversationSecondaryIndexes {
     propertyToSemanticRefIndex?: IPropertyToSemanticRefIndex | undefined;
     timestampIndex?: ITimestampToTextRangeIndex | undefined;
     threads?: IConversationThreads | undefined;
-}
-
-/**
- * Allows for faster retrieval of name, value properties
- */
-export interface IPropertyToSemanticRefIndex {
-    getValues(): string[];
-    addProperty(
-        propertyName: string,
-        value: string,
-        semanticRefIndex: SemanticRefIndex | ScoredSemanticRef,
-    ): void;
-    lookupProperty(
-        propertyName: string,
-        value: string,
-    ): ScoredSemanticRef[] | undefined;
-}
-
-export type TimestampedTextRange = {
-    timestamp: string;
-    range: TextRange;
-};
-
-/**
- * Return text ranges in the given date range
- */
-export interface ITimestampToTextRangeIndex {
-    addTimestamp(messageIndex: MessageIndex, timestamp: string): boolean;
-    lookupRange(dateRange: DateRange): TimestampedTextRange[];
 }
 
 /**

@@ -185,7 +185,7 @@ export class Podcast
         }
     }
 
-    public serialize(): PodcastData {
+    public async serialize(): Promise<PodcastData> {
         return {
             nameTag: this.nameTag,
             messages: this.messages,
@@ -228,7 +228,7 @@ export class Podcast
         dirPath: string,
         baseFileName: string,
     ): Promise<void> {
-        const podcastData = this.serialize();
+        const podcastData = await this.serialize();
         const embeddingData =
             podcastData.relatedTermsIndexData?.textEmbeddingData;
         if (embeddingData?.embeddings) {
