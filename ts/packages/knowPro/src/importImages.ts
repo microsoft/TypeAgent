@@ -389,14 +389,14 @@ export class ImageCollection implements IConversation<ImageMeta> {
             const knowlegeResponse = msg.metadata.getKnowledge();
             if (this.semanticRefIndex !== undefined) {
                 for (const entity of knowlegeResponse.entities) {
-                    addEntityToIndex(
-                        entity,
-                        this.semanticRefs,
-                        this.semanticRefIndex,
-                        i,
-                        0,
-                        true,
-                    );
+                    if (!isDuplicateEntity(entity, this.semanticRefs))
+                        addEntityToIndex(
+                            entity,
+                            this.semanticRefs,
+                            this.semanticRefIndex,
+                            i,
+                            0,
+                        );
                 }
                 for (const action of knowlegeResponse.actions) {
                     addActionToIndex(
@@ -608,4 +608,32 @@ async function indexImage(
     }
 
     return undefined;
+}
+
+/**
+ *
+ * @param entity The entity to match
+ * @param semanticRefs The semantic references in the index
+ * @returns True if there's a duplicate, false otherwise
+ */
+function isDuplicateEntity(
+    entity: kpLib.ConcreteEntity,
+    semanticRefs: SemanticRef[],
+) {
+    for (let i = 0; i < semanticRefs.length; i++) {
+        if (
+            semanticRefs[i].knowledgeType == "entity" &&
+            entity.name ==
+                (semanticRefs[i].knowledge as kpLib.ConcreteEntity).name
+        ) {
+            if (
+                JSON.stringify(entity) ===
+                JSON.stringify(semanticRefs[i].knowledge)
+            ) {
+                return true;
+            }
+        }
+    }
+
+    return false;
 }

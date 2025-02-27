@@ -60,7 +60,6 @@ export async function createKnowproCommands(
 
     commands.kpPodcastMessages = showMessages;
     commands.kpPodcastImport = podcastImport;
-    commands.kpPodcastTimestamp = podcastTimestamp;
     commands.kpPodcastSave = podcastSave;
     commands.kpPodcastLoad = podcastLoad;
     commands.kpSearchTerms = searchTerms;
@@ -105,12 +104,14 @@ export async function createKnowproCommands(
             description: "Create knowPro index",
             args: {
                 filePath: arg("File path to transcript file"),
+                startAt: arg("Start date and time"),
             },
             options: {
                 knowledge: argBool("Index knowledge", true),
                 related: argBool("Index related terms", true),
                 indexFilePath: arg("Output path for index file"),
                 maxMessages: argNum("Maximum messages to index"),
+                length: argNum("Length of the podcast in minutes", 60),
             },
         };
     }
@@ -121,12 +122,17 @@ export async function createKnowproCommands(
             context.printer.writeError(`${namedArgs.filePath} not found`);
             return;
         }
+        const startAt = argToDate(namedArgs.startAt)!;
+        const endAt = dateTime.addMinutesToDate(startAt, namedArgs.length);
+
         context.podcast = await cm.importPodcast(namedArgs.filePath);
+        cm.timestampMessages(context.podcast.messages, startAt, endAt);
+
         context.conversation = context.podcast;
         context.printer.writeLine("Imported podcast:");
         context.printer.writePodcastInfo(context.podcast);
 
-        if (!namedArgs.index) {
+        if (!(namedArgs.knowledge && namedArgs.related)) {
             return;
         }
 
@@ -139,29 +145,6 @@ export async function createKnowproCommands(
             namedArgs.indexFilePath,
         );
         await podcastSave(namedArgs);
-    }
-
-    function podcastTimestampDef(): CommandMetadata {
-        return {
-            description: "Set timestamps",
-            args: {
-                startAt: arg("Start date and time"),
-            },
-            options: {
-                length: argNum("Length of the podcast in minutes", 60),
-            },
-        };
-    }
-    commands.kpPodcastTimestamp.metadata = podcastTimestampDef();
-    async function podcastTimestamp(args: string[]) {
-        const conversation = ensureConversationLoaded();
-        if (!conversation) {
-            return;
-        }
-        const namedArgs = parseNamedArguments(args, podcastTimestampDef());
-        const startAt = argToDate(namedArgs.startAt)!;
-        const endAt = dateTime.addMinutesToDate(startAt, namedArgs.length);
-        cm.timestampMessages(conversation.messages, startAt, endAt);
     }
 
     function podcastSaveDef(): CommandMetadata {
@@ -591,10 +574,6 @@ export async function createKnowproCommands(
             context.printer.writeError("No podcast loaded");
             return;
         }
-        if (!context.podcast.semanticRefIndex) {
-            context.printer.writeError("Podcast not indexed");
-            return;
-        }
         const messageCount = context.podcast.messages.length;
         if (messageCount === 0) {
             return;
@@ -626,6 +605,11 @@ export async function createKnowproCommands(
             context.printer.writeIndexingResults(indexResult);
         }
         if (namedArgs.related) {
+            if (!context.podcast.semanticRefIndex) {
+                context.printer.writeError("Podcast not indexed");
+                return;
+            }
+
             context.printer.writeLine("Building related terms index");
             const progress = new ProgressBar(
                 context.printer,
