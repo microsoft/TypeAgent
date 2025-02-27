@@ -38,7 +38,7 @@ import { ITimestampToTextRangeIndex } from "./dataFormat.js";
 import { IPropertyToSemanticRefIndex } from "./dataFormat.js";
 import { conversation as kpLib } from "knowledge-processor";
 import { collections } from "typeagent";
-import { Thread } from "./conversationThread.js";
+import { Thread } from "./dataFormat.js";
 import { facetValueToString } from "./knowledge.js";
 import { isInDateRange, isSearchTermWildcard } from "./common.js";
 

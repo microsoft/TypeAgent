@@ -1,22 +1,54 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { IConversationThreads } from "./conversationThread.js";
 import {
-    IPropertyToSemanticRefIndex,
-    ITermToRelatedTermsIndex,
-    ITimestampToTextRangeIndex,
+    IConversation,
+    IConversationSecondaryIndexes,
     Term,
 } from "./dataFormat.js";
+import { PropertyIndex, addToPropertyIndex } from "./propertyIndex.js";
+import {
+    TermsToRelatedTermIndexSettings,
+    TermToRelatedTermsIndex,
+} from "./relatedTermsIndex.js";
+import {
+    addToTimestampIndex,
+    TimestampToTextRangeIndex,
+} from "./timestampIndex.js";
 
-/**
- * Optional secondary indexes that can help the query processor produce better results, but are not required
- */
-export interface IConversationSecondaryIndexes {
-    termToRelatedTermsIndex?: ITermToRelatedTermsIndex | undefined;
-    propertyToSemanticRefIndex?: IPropertyToSemanticRefIndex | undefined;
-    timestampIndex?: ITimestampToTextRangeIndex | undefined;
-    threads?: IConversationThreads | undefined;
+export async function buildSecondaryIndexes(
+    conversation: IConversation,
+): Promise<IConversationSecondaryIndexes> {
+    conversation.secondaryIndexes ??= new ConversationSecondaryIndexes();
+    const secondaryIndexes = conversation.secondaryIndexes;
+    const semanticRefs = conversation.semanticRefs;
+    if (semanticRefs && secondaryIndexes.propertyToSemanticRefIndex) {
+        addToPropertyIndex(
+            semanticRefs,
+            secondaryIndexes.propertyToSemanticRefIndex,
+        );
+    }
+    if (secondaryIndexes.timestampIndex) {
+        addToTimestampIndex(
+            secondaryIndexes.timestampIndex,
+            conversation.messages,
+        );
+    }
+    return secondaryIndexes;
+}
+
+export class ConversationSecondaryIndexes
+    implements IConversationSecondaryIndexes
+{
+    public propertyToSemanticRefIndex: PropertyIndex;
+    public timestampIndex: TimestampToTextRangeIndex;
+    public termToRelatedTermsIndex: TermToRelatedTermsIndex;
+
+    constructor(settings: TermsToRelatedTermIndexSettings = {}) {
+        this.propertyToSemanticRefIndex = new PropertyIndex();
+        this.timestampIndex = new TimestampToTextRangeIndex();
+        this.termToRelatedTermsIndex = new TermToRelatedTermsIndex(settings);
+    }
 }
 
 export interface ITermsToRelatedTermsIndexData {

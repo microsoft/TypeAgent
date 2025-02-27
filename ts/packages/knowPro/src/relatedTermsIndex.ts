@@ -76,7 +76,7 @@ export class TermToRelatedTermsMap implements ITermToRelatedTerms {
 }
 
 export type TermsToRelatedTermIndexSettings = {
-    embeddingIndexSettings: TextEmbeddingIndexSettings;
+    embeddingIndexSettings?: TextEmbeddingIndexSettings | undefined;
 };
 
 export class TermToRelatedTermsIndex implements ITermToRelatedTermsIndex {
@@ -113,7 +113,10 @@ export class TermToRelatedTermsIndex implements ITermToRelatedTermsIndex {
                 this.aliasMap = new TermToRelatedTermsMap();
                 this.aliasMap.deserialize(data.aliasData);
             }
-            if (data.textEmbeddingData) {
+            if (
+                data.textEmbeddingData &&
+                this.settings.embeddingIndexSettings
+            ) {
                 this.embeddingIndex = new TermEmbeddingIndex(
                     this.settings.embeddingIndexSettings,
                 );
@@ -122,23 +125,21 @@ export class TermToRelatedTermsIndex implements ITermToRelatedTermsIndex {
         }
     }
 
-    public buildEditDistanceIndex(terms: string[]): void {
-        this.editDistanceIndex = new TermEditDistanceIndex(terms);
-    }
-
     public async buildEmbeddingsIndex(
         terms: string[],
         batchSize: number = 8,
         progressCallback?: (batch: string[], batchStartAt: number) => boolean,
     ): Promise<void> {
-        this.embeddingIndex = new TermEmbeddingIndex(
-            this.settings.embeddingIndexSettings,
-        );
-        await this.embeddingIndex.addTermsBatched(
-            terms,
-            batchSize,
-            progressCallback,
-        );
+        if (this.settings.embeddingIndexSettings) {
+            this.embeddingIndex = new TermEmbeddingIndex(
+                this.settings.embeddingIndexSettings,
+            );
+            await this.embeddingIndex.addTermsBatched(
+                terms,
+                batchSize,
+                progressCallback,
+            );
+        }
     }
 }
 
@@ -352,7 +353,7 @@ export class TermEditDistanceIndex
     extends TextEditDistanceIndex
     implements ITermToRelatedTermsFuzzy
 {
-    constructor(textArray: string[]) {
+    constructor(textArray: string[] = []) {
         super(textArray);
     }
 

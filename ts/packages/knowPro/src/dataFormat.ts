@@ -5,7 +5,7 @@ import { conversation as kpLib } from "knowledge-processor";
 
 // an object that can provide a KnowledgeResponse structure
 export interface IKnowledgeSource {
-    getKnowledge: () => kpLib.KnowledgeResponse;
+    getKnowledge(): kpLib.KnowledgeResponse;
 }
 
 export interface DeletionInfo {
@@ -27,6 +27,7 @@ export interface ITermToSemanticRefIndexItem {
     term: string;
     semanticRefIndices: ScoredSemanticRef[];
 }
+
 // persistent form of a term index
 export interface ITermToSemanticRefIndexData {
     items: ITermToSemanticRefIndexItem[];
@@ -73,9 +74,7 @@ export interface IConversation<TMeta extends IKnowledgeSource = any> {
     messages: IMessage<TMeta>[];
     semanticRefs: SemanticRef[] | undefined;
     semanticRefIndex?: ITermToSemanticRefIndex | undefined;
-
-    serialize(): Promise<IConversationData<IMessage<TMeta>>>;
-    deserialize(data: IConversationData<IMessage<TMeta>>): Promise<void>;
+    secondaryIndexes?: IConversationSecondaryIndexes | undefined;
 }
 
 export type MessageIndex = number;
@@ -125,10 +124,11 @@ export type ScoredKnowledge = {
     score: number;
 };
 
-export interface IConversationIndexes {
-    semanticRefIndex?: ITermToSemanticRefIndex | undefined;
+export interface IConversationSecondaryIndexes {
     propertyToSemanticRefIndex?: IPropertyToSemanticRefIndex | undefined;
     timestampIndex?: ITimestampToTextRangeIndex | undefined;
+    termToRelatedTermsIndex?: ITermToRelatedTermsIndex | undefined;
+    threads?: IConversationThreads | undefined;
 }
 
 /**
@@ -157,6 +157,7 @@ export type TimestampedTextRange = {
  */
 export interface ITimestampToTextRangeIndex {
     addTimestamp(messageIndex: MessageIndex, timestamp: string): boolean;
+    addTimestamps(messageTimestamps: [MessageIndex, string][]): void;
     lookupRange(dateRange: DateRange): TimestampedTextRange[];
 }
 
@@ -180,4 +181,31 @@ export interface ITermToRelatedTermsFuzzy {
 export interface ITermToRelatedTermsIndex {
     get aliases(): ITermToRelatedTerms | undefined;
     get fuzzyIndex(): ITermToRelatedTermsFuzzy | undefined;
+}
+
+/**
+ * A Thread is a set of text ranges in a conversation
+ */
+export type Thread = {
+    description: string;
+    ranges: TextRange[];
+};
+
+export type ThreadIndex = number;
+
+export type ScoredThreadIndex = {
+    threadIndex: ThreadIndex;
+    score: number;
+};
+
+export interface IConversationThreads {
+    readonly threads: Thread[];
+
+    addThread(thread: Thread): Promise<void>;
+    lookupThread(
+        threadDescription: string,
+        maxMatches?: number,
+        thresholdScore?: number,
+    ): Promise<ScoredThreadIndex[] | undefined>;
+    removeThread(threadIndex: ThreadIndex): void;
 }

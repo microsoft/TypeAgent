@@ -1,43 +1,18 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { TextRange } from "./dataFormat.js";
+import {
+    IConversationThreads,
+    ScoredThreadIndex,
+    Thread,
+    ThreadIndex,
+} from "./dataFormat.js";
 import {
     deserializeEmbedding,
     serializeEmbedding,
     TextEmbeddingIndex,
     TextEmbeddingIndexSettings,
 } from "./fuzzyIndex.js";
-
-/**
- * A Thread is a set of text ranges in a conversation
- */
-export type Thread = {
-    description: string;
-    ranges: TextRange[];
-};
-
-export type ThreadIndex = number;
-
-export type ScoredThreadIndex = {
-    threadIndex: ThreadIndex;
-    score: number;
-};
-
-export interface IConversationThreads {
-    readonly threads: Thread[];
-
-    addThread(thread: Thread): Promise<void>;
-    lookupThread(
-        threadDescription: string,
-        maxMatches?: number,
-        thresholdScore?: number,
-    ): Promise<ScoredThreadIndex[] | undefined>;
-    removeThread(threadIndex: ThreadIndex): void;
-
-    serialize(): IConversationThreadData;
-    deserialize(data: IConversationThreadData): void;
-}
 
 export interface IConversationThreadData {
     threads?: IThreadDataItem[] | undefined;

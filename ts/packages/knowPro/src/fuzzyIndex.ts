@@ -172,7 +172,7 @@ export function createTextEmbeddingIndexSettings(
 }
 
 export class TextEditDistanceIndex {
-    constructor(public textArray: string[]) {}
+    constructor(public textArray: string[] = []) {}
 
     public getNearest(
         text: string,

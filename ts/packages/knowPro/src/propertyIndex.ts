@@ -103,13 +103,14 @@ export function addActionPropertiesToIndex(
     }
 }
 
-export function addPropertiesToIndex(
+export function addToPropertyIndex(
     semanticRefs: SemanticRef[],
     propertyIndex: IPropertyToSemanticRefIndex,
+    baseSemanticRefIndex: SemanticRefIndex = 0,
 ) {
     for (let i = 0; i < semanticRefs.length; ++i) {
         const semanticRef = semanticRefs[i];
-        const semanticRefIndex: SemanticRefIndex = i;
+        const semanticRefIndex: SemanticRefIndex = i + baseSemanticRefIndex;
         switch (semanticRef.knowledgeType) {
             default:
                 break;

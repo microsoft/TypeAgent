@@ -16,15 +16,9 @@ import {
  */
 export class TimestampToTextRangeIndex implements ITimestampToTextRangeIndex {
     // Maintains ranges sorted by timestamp
-    private ranges: TimestampedTextRange[];
+    private ranges: TimestampedTextRange[] = [];
 
-    constructor(messages: IMessage[]) {
-        this.ranges = [];
-        for (let i = 0; i < messages.length; ++i) {
-            this.insertTimestamp(i, messages[i].timestamp, false);
-        }
-        this.ranges.sort(this.compareTimestampedRange);
-    }
+    constructor() {}
 
     /**
      * Looks up text ranges in given date range.
@@ -51,6 +45,14 @@ export class TimestampToTextRangeIndex implements ITimestampToTextRangeIndex {
         timestamp: string,
     ): boolean {
         return this.insertTimestamp(messageIndex, timestamp, true);
+    }
+
+    public addTimestamps(messageTimestamps: [MessageIndex, string][]) {
+        for (let i = 0; i < messageTimestamps.length; ++i) {
+            const [messageIndex, timestamp] = messageTimestamps[i];
+            this.insertTimestamp(messageIndex, timestamp, false);
+        }
+        this.ranges.sort(this.compareTimestampedRange);
     }
 
     private insertTimestamp(
@@ -89,4 +91,19 @@ export class TimestampToTextRangeIndex implements ITimestampToTextRangeIndex {
     private dateToTimestamp(date: Date) {
         return dateTime.timestampString(date, false);
     }
+}
+
+export function addToTimestampIndex(
+    timestampIndex: ITimestampToTextRangeIndex,
+    messages: IMessage[],
+    baseMessageIndex: MessageIndex = 0,
+) {
+    const messageTimestamps: [MessageIndex, string][] = [];
+    for (let i = 0; i < messages.length; ++i) {
+        const timestamp = messages[i].timestamp;
+        if (timestamp) {
+            messageTimestamps.push([i + baseMessageIndex, timestamp]);
+        }
+    }
+    timestampIndex.addTimestamps(messageTimestamps);
 }

@@ -12,13 +12,12 @@ import {
     createKnowledgeModel,
     TermToRelatedTermsIndex,
     ITermsToRelatedTermsIndexData,
-    ITimestampToTextRangeIndex,
-    IPropertyToSemanticRefIndex,
     IConversationThreadData,
     ConversationSettings,
     createConversationSettings,
     addMetadataToIndex,
     buildSecondaryIndexes,
+    ConversationSecondaryIndexes,
 } from "knowpro";
 import { conversation as kpLib, image } from "knowledge-processor";
 import { Result } from "typechat";
@@ -306,7 +305,7 @@ export class ImageMeta implements IKnowledgeSource {
             }
         }
 
-        // add knowledge respone items from ImageMeta to knowledge
+        // add knowledge response items from ImageMeta to knowledge
         if (this.img.knowledge?.entities) {
             entities = entities.concat(this.img.knowledge?.entities);
 
@@ -355,23 +354,18 @@ export class ImageMeta implements IKnowledgeSource {
 
 export class ImageCollection implements IConversation<ImageMeta> {
     public settings: ConversationSettings;
+    public semanticRefIndex: ConversationIndex | undefined;
+    public secondaryIndexes: ConversationSecondaryIndexes;
     constructor(
         public nameTag: string,
         public messages: Image[],
         public tags: string[] = [],
         public semanticRefs: SemanticRef[] = [],
-        public semanticRefIndex: ConversationIndex | undefined = undefined,
-        public termToRelatedTermsIndex:
-            | TermToRelatedTermsIndex
-            | undefined = undefined,
-        public timestampIndex:
-            | ITimestampToTextRangeIndex
-            | undefined = undefined,
-        public propertyToSemanticRefIndex:
-            | IPropertyToSemanticRefIndex
-            | undefined = undefined,
     ) {
         this.settings = createConversationSettings();
+        this.secondaryIndexes = new ConversationSecondaryIndexes(
+            this.settings.relatedTermIndexSettings,
+        );
     }
 
     public addMetadataToIndex() {
@@ -409,7 +403,6 @@ export class ImageCollection implements IConversation<ImageMeta> {
         await this.buildSecondaryIndexes();
 
         let indexingResult: ConversationIndexingResult = {
-            index: this.semanticRefIndex,
             failedMessages: [],
         };
         return indexingResult;
@@ -420,11 +413,12 @@ export class ImageCollection implements IConversation<ImageMeta> {
         progressCallback?: (batch: string[], batchStartAt: number) => boolean,
     ): Promise<void> {
         if (this.semanticRefIndex) {
-            this.termToRelatedTermsIndex = new TermToRelatedTermsIndex(
-                this.settings.relatedTermIndexSettings,
-            );
+            this.secondaryIndexes.termToRelatedTermsIndex =
+                new TermToRelatedTermsIndex(
+                    this.settings.relatedTermIndexSettings,
+                );
             const allTerms = this.semanticRefIndex?.getTerms();
-            await this.termToRelatedTermsIndex.buildEmbeddingsIndex(
+            await this.secondaryIndexes.termToRelatedTermsIndex.buildEmbeddingsIndex(
                 allTerms,
                 batchSize,
                 progressCallback,
@@ -439,7 +433,8 @@ export class ImageCollection implements IConversation<ImageMeta> {
             tags: this.tags,
             semanticRefs: this.semanticRefs,
             semanticIndexData: this.semanticRefIndex?.serialize(),
-            relatedTermsIndexData: this.termToRelatedTermsIndex?.serialize(),
+            relatedTermsIndexData:
+                this.secondaryIndexes.termToRelatedTermsIndex.serialize(),
         };
     }
 
@@ -450,10 +445,7 @@ export class ImageCollection implements IConversation<ImageMeta> {
             );
         }
         if (data.relatedTermsIndexData) {
-            this.termToRelatedTermsIndex = new TermToRelatedTermsIndex(
-                this.settings.relatedTermIndexSettings,
-            );
-            this.termToRelatedTermsIndex.deserialize(
+            this.secondaryIndexes.termToRelatedTermsIndex.deserialize(
                 data.relatedTermsIndexData,
             );
         }
@@ -461,7 +453,7 @@ export class ImageCollection implements IConversation<ImageMeta> {
     }
 
     private async buildSecondaryIndexes() {
-        await buildSecondaryIndexes(this, this);
+        await buildSecondaryIndexes(this);
     }
 }
 

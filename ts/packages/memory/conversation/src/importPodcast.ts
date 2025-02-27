@@ -4,26 +4,23 @@
 import {
     IConversation,
     IMessage,
-    IKnowledgeSource,
     SemanticRef,
     IConversationData,
     Term,
     ConversationIndex,
     buildConversationIndex,
     ConversationIndexingResult,
-    TermToRelatedTermsIndex,
-    IPropertyToSemanticRefIndex,
     ITermsToRelatedTermsIndexData,
-    ITimestampToTextRangeIndex,
     IConversationThreadData,
-    ConversationThreads,
-    IConversationSecondaryIndexes,
     deserializeEmbeddings,
     serializeEmbeddings,
     ConversationSettings,
     createConversationSettings,
     addMetadataToIndex,
     buildSecondaryIndexes,
+    IKnowledgeSource,
+    ConversationSecondaryIndexes,
+    ConversationThreads,
 } from "knowpro";
 import { conversation as kpLib, split } from "knowledge-processor";
 import {
@@ -117,15 +114,10 @@ export class PodcastMessage implements IMessage<PodcastMessageMeta> {
     }
 }
 
-export class Podcast
-    implements IConversation<PodcastMessageMeta>, IConversationSecondaryIndexes
-{
+export class Podcast implements IConversation<PodcastMessageMeta> {
     public settings: ConversationSettings;
-    public semanticRefIndex: ConversationIndex | undefined;
-    public termToRelatedTermsIndex: TermToRelatedTermsIndex | undefined;
-    public timestampIndex: ITimestampToTextRangeIndex | undefined;
-    public propertyToSemanticRefIndex: IPropertyToSemanticRefIndex | undefined;
-    public threads: ConversationThreads;
+    public semanticRefIndex: ConversationIndex;
+    public secondaryIndexes: PodcastSecondaryIndexes;
 
     constructor(
         public nameTag: string = "",
@@ -134,7 +126,8 @@ export class Podcast
         public semanticRefs: SemanticRef[] = [],
     ) {
         this.settings = createConversationSettings();
-        this.threads = new ConversationThreads(this.settings.threadSettings);
+        this.semanticRefIndex = new ConversationIndex();
+        this.secondaryIndexes = new PodcastSecondaryIndexes(this.settings);
     }
 
     public addMetadataToIndex() {
@@ -164,7 +157,7 @@ export class Podcast
         this.addMetadataToIndex();
         const result = await buildConversationIndex(this, progressCallback);
         await this.buildSecondaryIndexes();
-        await this.threads.buildIndex();
+        await this.secondaryIndexes.threads.buildIndex();
         return result;
     }
 
@@ -172,17 +165,12 @@ export class Podcast
         batchSize: number = 8,
         progressCallback?: (batch: string[], batchStartAt: number) => boolean,
     ): Promise<void> {
-        if (this.semanticRefIndex) {
-            this.termToRelatedTermsIndex = new TermToRelatedTermsIndex(
-                this.settings.relatedTermIndexSettings,
-            );
-            const allTerms = this.semanticRefIndex?.getTerms();
-            await this.termToRelatedTermsIndex.buildEmbeddingsIndex(
-                allTerms,
-                batchSize,
-                progressCallback,
-            );
-        }
+        const allTerms = this.semanticRefIndex.getTerms();
+        await this.secondaryIndexes.termToRelatedTermsIndex.buildEmbeddingsIndex(
+            allTerms,
+            batchSize,
+            progressCallback,
+        );
     }
 
     public async serialize(): Promise<PodcastData> {
@@ -192,8 +180,9 @@ export class Podcast
             tags: this.tags,
             semanticRefs: this.semanticRefs,
             semanticIndexData: this.semanticRefIndex?.serialize(),
-            relatedTermsIndexData: this.termToRelatedTermsIndex?.serialize(),
-            threadData: this.threads.serialize(),
+            relatedTermsIndexData:
+                this.secondaryIndexes.termToRelatedTermsIndex.serialize(),
+            threadData: this.secondaryIndexes.threads.serialize(),
         };
     }
 
@@ -208,18 +197,15 @@ export class Podcast
             );
         }
         if (data.relatedTermsIndexData) {
-            this.termToRelatedTermsIndex = new TermToRelatedTermsIndex(
-                this.settings.relatedTermIndexSettings,
-            );
-            this.termToRelatedTermsIndex.deserialize(
+            this.secondaryIndexes.termToRelatedTermsIndex.deserialize(
                 data.relatedTermsIndexData,
             );
         }
         if (data.threadData) {
-            this.threads = new ConversationThreads(
+            this.secondaryIndexes.threads = new ConversationThreads(
                 this.settings.threadSettings,
             );
-            this.threads.deserialize(data.threadData);
+            this.secondaryIndexes.threads.deserialize(data.threadData);
         }
         await this.buildSecondaryIndexes();
     }
@@ -260,11 +246,13 @@ export class Podcast
             const embeddings = await readFile(
                 path.join(dirPath, baseFileName + EmbeddingFileSuffix),
             );
-            if (embeddings) {
+            const embeddingSettings =
+                podcast.settings.relatedTermIndexSettings
+                    .embeddingIndexSettings;
+            if (embeddings && embeddingSettings) {
                 embeddingData.embeddings = deserializeEmbeddings(
                     embeddings,
-                    podcast.settings.relatedTermIndexSettings
-                        .embeddingIndexSettings.embeddingSize,
+                    embeddingSettings.embeddingSize,
                 );
             }
         }
@@ -274,23 +262,19 @@ export class Podcast
 
     private async buildSecondaryIndexes() {
         this.buildParticipantAliases();
-        await buildSecondaryIndexes(this, this);
+        await buildSecondaryIndexes(this);
     }
 
     private buildParticipantAliases(): void {
-        if (this.termToRelatedTermsIndex) {
-            const nameToAliasMap = this.collectParticipantAliases();
-            for (const name of nameToAliasMap.keys()) {
-                const relatedTerms: Term[] = nameToAliasMap
-                    .get(name)!
-                    .map((alias) => {
-                        return { text: alias };
-                    });
-                this.termToRelatedTermsIndex.aliases.addRelatedTerm(
-                    name,
-                    relatedTerms,
-                );
-            }
+        const aliases = this.secondaryIndexes.termToRelatedTermsIndex.aliases;
+        const nameToAliasMap = this.collectParticipantAliases();
+        for (const name of nameToAliasMap.keys()) {
+            const relatedTerms: Term[] = nameToAliasMap
+                .get(name)!
+                .map((alias) => {
+                    return { text: alias };
+                });
+            aliases.addRelatedTerm(name, relatedTerms);
         }
     }
 
@@ -317,6 +301,15 @@ export class Podcast
             }
         }
         return aliases;
+    }
+}
+
+export class PodcastSecondaryIndexes extends ConversationSecondaryIndexes {
+    public threads: ConversationThreads;
+
+    constructor(settings: ConversationSettings) {
+        super(settings.relatedTermIndexSettings);
+        this.threads = new ConversationThreads(settings.threadSettings);
     }
 }
 
