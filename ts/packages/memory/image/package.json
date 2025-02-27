@@ -1,12 +1,12 @@
 {
-  "name": "conversation-memory",
+  "name": "image-memory",
   "version": "0.0.1",
-  "description": "Using structured RAG to implement conversation memory",
+  "description": "Using structured RAG to implement image memory",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {
     "type": "git",
     "url": "https://github.com/microsoft/TypeAgent.git",
-    "directory": "ts/packages/memory/conversation"
+    "directory": "ts/packages/memory/image"
   },
   "license": "MIT",
   "author": "Microsoft",
@@ -24,6 +24,9 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
+    "@azure-rest/maps-search": "^2.0.0-beta.2",
+    "aiclient": "workspace:*",
+    "common-utils": "workspace:*",
     "debug": "^4.4.0",
     "knowledge-processor": "workspace:*",
     "knowpro": "workspace:*",

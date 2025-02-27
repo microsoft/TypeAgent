@@ -197,7 +197,7 @@ export class Podcast
         };
     }
 
-    public deserialize(data: PodcastData): void {
+    public async deserialize(data: PodcastData): Promise<void> {
         this.nameTag = data.nameTag;
         this.messages = data.messages;
         this.semanticRefs = data.semanticRefs;
@@ -221,7 +221,7 @@ export class Podcast
             );
             this.threads.deserialize(data.threadData);
         }
-        this.buildSecondaryIndexes();
+        await this.buildSecondaryIndexes();
     }
 
     public async writeToFile(
@@ -268,7 +268,7 @@ export class Podcast
                 );
             }
         }
-        podcast.deserialize(data);
+        await podcast.deserialize(data);
         return podcast;
     }
 

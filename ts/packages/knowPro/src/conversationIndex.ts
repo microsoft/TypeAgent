@@ -15,6 +15,8 @@ import {
     IMessage,
     SemanticRefIndex,
     MessageIndex,
+    Knowledge,
+    KnowledgeType,
 } from "./dataFormat.js";
 import { conversation as kpLib } from "knowledge-processor";
 import { openai } from "aiclient";
@@ -24,6 +26,11 @@ import { facetValueToString } from "./knowledge.js";
 import { IConversationSecondaryIndexes } from "./secondaryIndexes.js";
 import { addPropertiesToIndex, PropertyIndex } from "./propertyIndex.js";
 import { TimestampToTextRangeIndex } from "./timestampIndex.js";
+
+export interface IConversationIndexes {
+    semanticRefIndex?: ITermToSemanticRefIndex | undefined;
+    secondaryIndexes?: IConversationSecondaryIndexes | undefined;
+}
 
 export function createKnowledgeModel() {
     const chatModelSettings = openai.apiSettingsFromEnv(
@@ -55,39 +62,46 @@ export function textRangeFromLocation(
     };
 }
 
-function addFacet(
-    facet: kpLib.Facet | undefined,
-    refIndex: number,
-    semanticRefIndex: ITermToSemanticRefIndex,
-) {
-    if (facet !== undefined) {
-        semanticRefIndex.addTerm(facet.name, refIndex);
-        if (facet.value !== undefined) {
-            semanticRefIndex.addTerm(facetValueToString(facet), refIndex);
-        }
-    }
-}
+export type KnowledgeValidator = (
+    knowledgeType: KnowledgeType,
+    knowledge: Knowledge,
+) => boolean;
 
 export function addMetadataToIndex(
     messages: IMessage[],
     semanticRefs: SemanticRef[],
     semanticRefIndex: ITermToSemanticRefIndex,
+    knowledgeValidator?: KnowledgeValidator,
 ) {
+    knowledgeValidator ??= defaultKnowledgeValidator;
     for (let i = 0; i < messages.length; i++) {
         const msg = messages[i];
         const knowledgeResponse = msg.metadata.getKnowledge();
         if (semanticRefIndex !== undefined) {
             for (const entity of knowledgeResponse.entities) {
-                addEntityToIndex(entity, semanticRefs, semanticRefIndex, i);
+                if (knowledgeValidator("entity", entity)) {
+                    addEntityToIndex(entity, semanticRefs, semanticRefIndex, i);
+                }
             }
             for (const action of knowledgeResponse.actions) {
-                addActionToIndex(action, semanticRefs, semanticRefIndex, i);
+                if (knowledgeValidator("action", action)) {
+                    addActionToIndex(action, semanticRefs, semanticRefIndex, i);
+                }
             }
             for (const topic of knowledgeResponse.topics) {
-                addTopicToIndex(topic, semanticRefs, semanticRefIndex, i);
+                if (knowledgeValidator("topic", topic)) {
+                    addTopicToIndex(topic, semanticRefs, semanticRefIndex, i);
+                }
             }
         }
     }
+}
+
+function defaultKnowledgeValidator(
+    knowledgeType: KnowledgeType,
+    knowledge: Knowledge,
+) {
+    return true;
 }
 
 export function addEntityToIndex(
@@ -113,6 +127,19 @@ export function addEntityToIndex(
     if (entity.facets) {
         for (const facet of entity.facets) {
             addFacet(facet, refIndex, semanticRefIndex);
+        }
+    }
+}
+
+function addFacet(
+    facet: kpLib.Facet | undefined,
+    refIndex: number,
+    semanticRefIndex: ITermToSemanticRefIndex,
+) {
+    if (facet !== undefined) {
+        semanticRefIndex.addTerm(facet.name, refIndex);
+        if (facet.value !== undefined) {
+            semanticRefIndex.addTerm(facetValueToString(facet), refIndex);
         }
     }
 }

@@ -97,6 +97,9 @@ importers:
       exifreader:
         specifier: 4.23.5
         version: 4.23.5
+      image-memory:
+        specifier: workspace:*
+        version: link:../../packages/memory/image
       interactive-app:
         specifier: workspace:*
         version: link:../../packages/interactiveApp
@@ -2082,15 +2085,9 @@ importers:
 
   packages/knowPro:
     dependencies:
-      '@azure-rest/maps-search':
-        specifier: ^2.0.0-beta.2
-        version: 2.0.0-beta.2
       aiclient:
         specifier: workspace:*
         version: link:../aiclient
-      common-utils:
-        specifier: workspace:*
-        version: link:../commonUtils
       debug:
         specifier: ^4.4.0
         version: 4.4.0(supports-color@8.1.1)
@@ -2247,9 +2244,52 @@ importers:
 
   packages/memory/conversation:
     dependencies:
+      debug:
+        specifier: ^4.4.0
+        version: 4.4.0(supports-color@8.1.1)
+      knowledge-processor:
+        specifier: workspace:*
+        version: link:../../knowledgeProcessor
+      knowpro:
+        specifier: workspace:*
+        version: link:../../knowPro
+      typeagent:
+        specifier: workspace:*
+        version: link:../../typeagent
+      typechat:
+        specifier: ^0.1.1
+        version: 0.1.1(typescript@5.4.5)(zod@3.23.8)
+    devDependencies:
+      '@types/debug':
+        specifier: ^4.1.12
+        version: 4.1.12
+      '@types/node':
+        specifier: ^18.18.7
+        version: 18.18.7
+      copyfiles:
+        specifier: ^2.4.1
+        version: 2.4.1
+      dotenv:
+        specifier: ^16.3.1
+        version: 16.3.1
+      prettier:
+        specifier: ^3.2.5
+        version: 3.2.5
+      typescript:
+        specifier: ^5.4.2
+        version: 5.4.5
+
+  packages/memory/image:
+    dependencies:
       '@azure-rest/maps-search':
         specifier: ^2.0.0-beta.2
         version: 2.0.0-beta.2
+      aiclient:
+        specifier: workspace:*
+        version: link:../../aiclient
+      common-utils:
+        specifier: workspace:*
+        version: link:../../commonUtils
       debug:
         specifier: ^4.4.0
         version: 4.4.0(supports-color@8.1.1)

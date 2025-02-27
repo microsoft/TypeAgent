@@ -37,13 +37,14 @@ import chalk from "chalk";
 import { KnowProPrinter } from "./knowproPrinter.js";
 import { getTimeRangeForConversation } from "./knowproCommon.js";
 import * as cm from "conversation-memory";
+import * as im from "image-memory";
 
 type KnowProContext = {
     knowledgeModel: ChatModel;
     basePath: string;
     printer: KnowProPrinter;
     podcast?: cm.Podcast | undefined;
-    images?: kp.ImageCollection | undefined;
+    images?: im.ImageCollection | undefined;
     conversation?: kp.IConversation | undefined;
 };
 
@@ -261,7 +262,7 @@ export async function createKnowproCommands(
         }
 
         let progress = new ProgressBar(context.printer, 165);
-        context.images = await kp.importImages(
+        context.images = await im.importImages(
             namedArgs.filePath,
             true,
             (text, _index, max) => {
@@ -340,18 +341,18 @@ export async function createKnowproCommands(
             return;
         }
 
-        const data = await readJsonFile<kp.ImageCollectionData>(imagesFilePath);
+        const data = await readJsonFile<im.ImageCollectionData>(imagesFilePath);
         if (!data) {
             context.printer.writeError("Could not load image collection data");
             return;
         }
-        context.images = new kp.ImageCollection(
+        context.images = new im.ImageCollection(
             data.nameTag,
             data.messages,
             data.tags,
             data.semanticRefs,
         );
-        context.images.deserialize(data);
+        await context.images.deserialize(data);
         context.conversation = context.podcast;
         context.printer.conversation = context.conversation;
         context.printer.writeImageCollectionInfo(context.images);

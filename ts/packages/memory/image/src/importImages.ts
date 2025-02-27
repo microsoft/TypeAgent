@@ -7,36 +7,27 @@ import {
     IKnowledgeSource,
     IMessage,
     SemanticRef,
-} from "./dataFormat.js";
-import { conversation as kpLib, image } from "knowledge-processor";
-import {
     ConversationIndex,
-    addActionToIndex,
-    addEntityToIndex,
-    addTopicToIndex,
     ConversationIndexingResult,
     createKnowledgeModel,
-} from "./conversationIndex.js";
-import { Result } from "typechat";
-import { TermToRelatedTermsIndex } from "./relatedTermsIndex.js";
-import { TimestampToTextRangeIndex } from "./timestampIndex.js";
-import {
+    TermToRelatedTermsIndex,
     ITermsToRelatedTermsIndexData,
     ITimestampToTextRangeIndex,
-} from "./secondaryIndexes.js";
-import { addPropertiesToIndex, PropertyIndex } from "./propertyIndex.js";
+    IPropertyToSemanticRefIndex,
+    IConversationThreadData,
+    ConversationSettings,
+    createConversationSettings,
+    addMetadataToIndex,
+    buildSecondaryIndexes,
+} from "knowpro";
+import { conversation as kpLib, image } from "knowledge-processor";
+import { Result } from "typechat";
 import fs from "node:fs";
 import path from "node:path";
 import { isImageFileType } from "common-utils";
 import { ChatModel } from "aiclient";
 import { AddressOutput } from "@azure-rest/maps-search";
-import { IPropertyToSemanticRefIndex } from "./secondaryIndexes.js";
-import { IConversationThreadData } from "./conversationThread.js";
 import { isDirectoryPath } from "typeagent";
-import { ConversationSettings, createConversationSettings } from "./import.js";
-
-type ConcreteEntity = kpLib.ConcreteEntity;
-type Topic = kpLib.Topic;
 
 export interface ImageCollectionData extends IConversationData<Image> {
     relatedTermsIndexData?: ITermsToRelatedTermsIndexData | undefined;
@@ -95,7 +86,7 @@ export class ImageMeta implements IKnowledgeSource {
         let entities: kpLib.ConcreteEntity[] = [];
         let actions: kpLib.Action[] = [];
         let inverseActions: kpLib.Action[] = [];
-        let topics: Topic[] = [];
+        let topics: kpLib.Topic[] = [];
         const timestampParam = [];
 
         if (this.img.dateTaken) {
@@ -240,7 +231,7 @@ export class ImageMeta implements IKnowledgeSource {
                             i < addrOutput.adminDistricts.length;
                             i++
                         ) {
-                            const e: ConcreteEntity = {
+                            const e: kpLib.ConcreteEntity = {
                                 name: addrOutput.adminDistricts[i].name ?? "",
                                 type: ["district", "place"],
                                 facets: [],
@@ -384,37 +375,21 @@ export class ImageCollection implements IConversation<ImageMeta> {
     }
 
     public addMetadataToIndex() {
-        for (let i = 0; i < this.messages.length; i++) {
-            const msg = this.messages[i];
-            const knowlegeResponse = msg.metadata.getKnowledge();
-            if (this.semanticRefIndex !== undefined) {
-                for (const entity of knowlegeResponse.entities) {
-                    if (!isDuplicateEntity(entity, this.semanticRefs))
-                        addEntityToIndex(
-                            entity,
+        if (this.semanticRefIndex) {
+            addMetadataToIndex(
+                this.messages,
+                this.semanticRefs,
+                this.semanticRefIndex,
+                (type, knowledge) => {
+                    if (type === "entity") {
+                        return isDuplicateEntity(
+                            knowledge as kpLib.ConcreteEntity,
                             this.semanticRefs,
-                            this.semanticRefIndex,
-                            i,
-                            0,
                         );
-                }
-                for (const action of knowlegeResponse.actions) {
-                    addActionToIndex(
-                        action,
-                        this.semanticRefs,
-                        this.semanticRefIndex,
-                        i,
-                    );
-                }
-                for (const topic of knowlegeResponse.topics) {
-                    addTopicToIndex(
-                        { text: topic },
-                        this.semanticRefs,
-                        this.semanticRefIndex,
-                        i,
-                    );
-                }
-            }
+                    }
+                    return true;
+                },
+            );
         }
     }
 
@@ -431,6 +406,7 @@ export class ImageCollection implements IConversation<ImageMeta> {
         }
 
         this.addMetadataToIndex();
+        await this.buildSecondaryIndexes();
 
         let indexingResult: ConversationIndexingResult = {
             index: this.semanticRefIndex,
@@ -467,7 +443,7 @@ export class ImageCollection implements IConversation<ImageMeta> {
         };
     }
 
-    public deserialize(data: ImageCollectionData): void {
+    public async deserialize(data: ImageCollectionData): Promise<void> {
         if (data.semanticIndexData) {
             this.semanticRefIndex = new ConversationIndex(
                 data.semanticIndexData,
@@ -481,27 +457,11 @@ export class ImageCollection implements IConversation<ImageMeta> {
                 data.relatedTermsIndexData,
             );
         }
-        this.buildSecondaryIndexes();
+        await this.buildSecondaryIndexes();
     }
 
-    private buildSecondaryIndexes() {
-        //this.buildParticipantAliases();
-        this.buildPropertyIndex();
-        this.buildTimestampIndex();
-    }
-
-    private buildPropertyIndex() {
-        if (this.semanticRefs && this.semanticRefs.length > 0) {
-            this.propertyToSemanticRefIndex = new PropertyIndex();
-            addPropertiesToIndex(
-                this.semanticRefs,
-                this.propertyToSemanticRefIndex,
-            );
-        }
-    }
-
-    private buildTimestampIndex(): void {
-        this.timestampIndex = new TimestampToTextRangeIndex(this.messages);
+    private async buildSecondaryIndexes() {
+        await buildSecondaryIndexes(this, this);
     }
 }
 
