@@ -352,7 +352,7 @@ export async function createKnowproCommands(
             data.tags,
             data.semanticRefs,
         );
-        context.images.deserialize(data);
+        await context.images.deserialize(data);
         context.conversation = context.podcast;
         context.printer.conversation = context.conversation;
         context.printer.writeImageCollectionInfo(context.images);
