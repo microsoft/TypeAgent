@@ -25,6 +25,11 @@ import { IConversationSecondaryIndexes } from "./secondaryIndexes.js";
 import { addPropertiesToIndex, PropertyIndex } from "./propertyIndex.js";
 import { TimestampToTextRangeIndex } from "./timestampIndex.js";
 
+export interface IConversationIndexes {
+    semanticRefIndex?: ITermToSemanticRefIndex | undefined;
+    secondaryIndexes?: IConversationSecondaryIndexes | undefined;
+}
+
 export function createKnowledgeModel() {
     const chatModelSettings = openai.apiSettingsFromEnv(
         openai.ModelType.Chat,

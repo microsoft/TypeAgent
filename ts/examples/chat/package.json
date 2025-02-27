@@ -32,6 +32,7 @@
     "conversation-memory": "workspace:*",
     "dotenv": "^16.3.1",
     "exifreader": "4.23.5",
+    "image-memory": "workspace:*",
     "interactive-app": "workspace:*",
     "knowledge-processor": "workspace:*",
     "knowpro": "workspace:*",

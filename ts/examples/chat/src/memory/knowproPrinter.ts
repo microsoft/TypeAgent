@@ -7,6 +7,7 @@ import { ChatPrinter } from "../chatPrinter.js";
 import chalk from "chalk";
 import { getTimeRangeForConversation } from "./knowproCommon.js";
 import * as cm from "conversation-memory";
+import * as im from "image-memory";
 
 export class KnowProPrinter extends ChatPrinter {
     public sortAsc: boolean = true;
@@ -312,7 +313,7 @@ export class KnowProPrinter extends ChatPrinter {
         return this;
     }
 
-    public writeImageCollectionInfo(imageCollection: kp.ImageCollection) {
+    public writeImageCollectionInfo(imageCollection: im.ImageCollection) {
         this.writeLine(
             `${imageCollection.nameTag}: ${imageCollection.messages.length} images.`,
         );

@@ -7,33 +7,31 @@ import {
     IKnowledgeSource,
     IMessage,
     SemanticRef,
-} from "./dataFormat.js";
-import { conversation as kpLib, image } from "knowledge-processor";
-import {
     ConversationIndex,
     addActionToIndex,
     addEntityToIndex,
     addTopicToIndex,
     ConversationIndexingResult,
     createKnowledgeModel,
-} from "./conversationIndex.js";
-import { Result } from "typechat";
-import { TermToRelatedTermsIndex } from "./relatedTermsIndex.js";
-import { TimestampToTextRangeIndex } from "./timestampIndex.js";
-import {
+    TermToRelatedTermsIndex,
+    TimestampToTextRangeIndex,
     ITermsToRelatedTermsIndexData,
     ITimestampToTextRangeIndex,
-} from "./secondaryIndexes.js";
-import { addPropertiesToIndex, PropertyIndex } from "./propertyIndex.js";
+    addPropertiesToIndex,
+    PropertyIndex,
+    IPropertyToSemanticRefIndex,
+    IConversationThreadData,
+    ConversationSettings,
+    createConversationSettings,
+} from "knowpro";
+import { conversation as kpLib, image } from "knowledge-processor";
+import { Result } from "typechat";
 import fs from "node:fs";
 import path from "node:path";
 import { isImageFileType } from "common-utils";
 import { ChatModel } from "aiclient";
 import { AddressOutput } from "@azure-rest/maps-search";
-import { IPropertyToSemanticRefIndex } from "./secondaryIndexes.js";
-import { IConversationThreadData } from "./conversationThread.js";
 import { isDirectoryPath } from "typeagent";
-import { ConversationSettings, createConversationSettings } from "./import.js";
 
 type ConcreteEntity = kpLib.ConcreteEntity;
 type Topic = kpLib.Topic;
