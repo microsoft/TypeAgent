@@ -8,11 +8,13 @@ import {
     ITextEmbeddingIndexData,
     ITermsToRelatedTermsDataItem,
     ITermToRelatedTermsData,
-    ITermToRelatedTermsIndex,
     ITermsToRelatedTermsIndexData,
+} from "./secondaryIndexes.js";
+import {
+    ITermToRelatedTermsIndex,
     ITermToRelatedTermsFuzzy,
     ITermToRelatedTerms,
-} from "./secondaryIndexes.js";
+} from "./dataFormat.js";
 import { SearchTerm } from "./search.js";
 import { isSearchTermWildcard } from "./common.js";
 import { TermSet } from "./collections.js";

@@ -159,3 +159,25 @@ export interface ITimestampToTextRangeIndex {
     addTimestamp(messageIndex: MessageIndex, timestamp: string): boolean;
     lookupRange(dateRange: DateRange): TimestampedTextRange[];
 }
+
+export interface ITermToRelatedTerms {
+    lookupTerm(text: string): Term[] | undefined;
+}
+
+export interface ITermToRelatedTermsFuzzy {
+    lookupTerm(
+        text: string,
+        maxMatches?: number,
+        thresholdScore?: number,
+    ): Promise<Term[]>;
+    lookupTerms(
+        textArray: string[],
+        maxMatches?: number,
+        thresholdScore?: number,
+    ): Promise<Term[][]>;
+}
+
+export interface ITermToRelatedTermsIndex {
+    get aliases(): ITermToRelatedTerms | undefined;
+    get fuzzyIndex(): ITermToRelatedTermsFuzzy | undefined;
+}

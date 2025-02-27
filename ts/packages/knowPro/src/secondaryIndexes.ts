@@ -4,6 +4,7 @@
 import { IConversationThreads } from "./conversationThread.js";
 import {
     IPropertyToSemanticRefIndex,
+    ITermToRelatedTermsIndex,
     ITimestampToTextRangeIndex,
     Term,
 } from "./dataFormat.js";
@@ -16,33 +17,6 @@ export interface IConversationSecondaryIndexes {
     propertyToSemanticRefIndex?: IPropertyToSemanticRefIndex | undefined;
     timestampIndex?: ITimestampToTextRangeIndex | undefined;
     threads?: IConversationThreads | undefined;
-}
-
-/**
- * Work in progress.
- */
-export interface ITermToRelatedTermsIndex {
-    get aliases(): ITermToRelatedTerms | undefined;
-    get fuzzyIndex(): ITermToRelatedTermsFuzzy | undefined;
-    serialize(): ITermsToRelatedTermsIndexData;
-    deserialize(data?: ITermsToRelatedTermsIndexData): void;
-}
-
-export interface ITermToRelatedTerms {
-    lookupTerm(text: string): Term[] | undefined;
-}
-
-export interface ITermToRelatedTermsFuzzy {
-    lookupTerm(
-        text: string,
-        maxMatches?: number,
-        thresholdScore?: number,
-    ): Promise<Term[]>;
-    lookupTerms(
-        textArray: string[],
-        maxMatches?: number,
-        thresholdScore?: number,
-    ): Promise<Term[][]>;
 }
 
 export interface ITermsToRelatedTermsIndexData {
