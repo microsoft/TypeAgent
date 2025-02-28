@@ -8,7 +8,7 @@ import {
     IConversationData,
     Term,
     ConversationIndex,
-    ConversationIndexingResult,
+    IndexingResults,
     ITermsToRelatedTermsIndexData,
     IConversationThreadData,
     deserializeEmbeddings,
@@ -150,7 +150,7 @@ export class Podcast implements IConversation<PodcastMessageMeta> {
 
     public async buildIndex(
         eventHandler?: IndexingEventHandlers,
-    ): Promise<ConversationIndexingResult> {
+    ): Promise<IndexingResults> {
         this.addMetadataToIndex();
         const result = await buildConversationIndex(this, eventHandler);
         if (!result.error) {

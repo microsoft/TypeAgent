@@ -564,6 +564,7 @@ export async function createKnowproCommands(
             description: "Build index",
             options: {
                 maxMessages: argNum("Maximum messages to index"),
+                related: argBool("Build only related index", false),
             },
         };
     }
@@ -586,11 +587,19 @@ export async function createKnowproCommands(
         const maxMessages = namedArgs.maxMessages ?? messageCount;
         context.printer.writeLine("Building index");
         let progress = new ProgressBar(context.printer, maxMessages);
-        const indexResult = await context.podcast.buildIndex(
-            createIndexingEventHandler(context, progress, maxMessages),
+        const eventHandler = createIndexingEventHandler(
+            context,
+            progress,
+            maxMessages,
         );
-        progress.complete();
-        context.printer.writeIndexingResults(indexResult);
+        if (namedArgs.related) {
+            await kp.buildRelatedTermsIndex(context.podcast, eventHandler);
+            progress.complete();
+        } else {
+            const indexResult = await context.podcast.buildIndex(eventHandler);
+            progress.complete();
+            context.printer.writeIndexingResults(indexResult);
+        }
     }
 
     function imageCollectionBuildIndexDef(): CommandMetadata {

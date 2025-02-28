@@ -323,7 +323,7 @@ export class KnowProPrinter extends ChatPrinter {
         return this;
     }
 
-    public writeIndexingResults(results: kp.ConversationIndexingResult) {
+    public writeIndexingResults(results: kp.IndexingResults) {
         if (results.chunksIndexedUpto) {
             this.writeLine(
                 `Indexed upto: ${textLocationToString(results.chunksIndexedUpto)}`,

@@ -2,21 +2,21 @@
 // Licensed under the MIT License.
 
 import {
+    IConversation,
+    IKnowledgeSource,
+    IMessage,
+    IndexingResults,
     ITermToSemanticRefIndex,
     ITermToSemanticRefIndexData,
     ITermToSemanticRefIndexItem,
-    ScoredSemanticRef,
-    IConversation,
-    IKnowledgeSource,
-    SemanticRef,
-    Topic,
-    TextRange,
-    IMessage,
-    SemanticRefIndex,
-    MessageIndex,
     Knowledge,
     KnowledgeType,
-    TextLocation,
+    MessageIndex,
+    ScoredSemanticRef,
+    SemanticRef,
+    SemanticRefIndex,
+    TextRange,
+    Topic,
 } from "./dataFormat.js";
 import { IndexingEventHandlers } from "./dataFormat.js";
 import { conversation as kpLib } from "knowledge-processor";
@@ -199,15 +199,10 @@ export function addKnowledgeToIndex(
     }
 }
 
-export type ConversationIndexingResult = {
-    chunksIndexedUpto?: TextLocation | undefined;
-    error?: string | undefined;
-};
-
 export async function buildSemanticRefIndex<TMeta extends IKnowledgeSource>(
     conversation: IConversation<TMeta>,
     eventHandler?: IndexingEventHandlers,
-): Promise<ConversationIndexingResult> {
+): Promise<IndexingResults> {
     conversation.semanticRefIndex ??= new ConversationIndex();
     const semanticRefIndex = conversation.semanticRefIndex;
     conversation.semanticRefIndex = semanticRefIndex;
@@ -221,7 +216,7 @@ export async function buildSemanticRefIndex<TMeta extends IKnowledgeSource>(
         mergeActionKnowledge: false,
     });
     const maxRetries = 4;
-    let indexingResult: ConversationIndexingResult = {};
+    let indexingResult: IndexingResults = {};
     for (let i = 0; i < conversation.messages.length; i++) {
         let messageIndex: MessageIndex = i;
         const chunkIndex = 0;
@@ -384,7 +379,7 @@ export function createKnowledgeModel() {
 export async function buildConversationIndex(
     conversation: IConversation,
     eventHandler?: IndexingEventHandlers,
-): Promise<ConversationIndexingResult> {
+): Promise<IndexingResults> {
     const result = await buildSemanticRefIndex(conversation, eventHandler);
     if (!result.error && conversation.semanticRefIndex) {
         await buildSecondaryIndexes(conversation, true, eventHandler);

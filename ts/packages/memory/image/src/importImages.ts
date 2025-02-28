@@ -8,7 +8,7 @@ import {
     IMessage,
     SemanticRef,
     ConversationIndex,
-    ConversationIndexingResult,
+    IndexingResults,
     createKnowledgeModel,
     ITermsToRelatedTermsIndexData,
     IConversationThreadData,
@@ -389,7 +389,7 @@ export class ImageCollection implements IConversation<ImageMeta> {
 
     public async buildIndex(
         eventHandler?: IndexingEventHandlers,
-    ): Promise<ConversationIndexingResult> {
+    ): Promise<IndexingResults> {
         //const result = await buildConversationIndex(this, eventHandler);
         this.semanticRefIndex = new ConversationIndex();
         if (this.semanticRefs === undefined) {
@@ -399,7 +399,7 @@ export class ImageCollection implements IConversation<ImageMeta> {
         this.addMetadataToIndex();
         await buildSecondaryIndexes(this, true);
 
-        let indexingResult: ConversationIndexingResult = {
+        let indexingResult: IndexingResults = {
             chunksIndexedUpto: { messageIndex: this.messages.length - 1 },
         };
         return indexingResult;
