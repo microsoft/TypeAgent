@@ -400,9 +400,7 @@ export class ImageCollection implements IConversation<ImageMeta> {
         await this.buildSecondaryIndexes();
 
         let indexingResult: ConversationIndexingResult = {
-            completedChunks: this.messages.map((m, i) => {
-                return { messageIndex: i };
-            }),
+            chunksIndexedUpto: { messageIndex: this.messages.length - 1 },
         };
         return indexingResult;
     }

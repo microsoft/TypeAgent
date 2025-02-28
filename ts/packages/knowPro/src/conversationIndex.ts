@@ -24,19 +24,12 @@ import { openai } from "aiclient";
 import { async } from "typeagent";
 import { facetValueToString } from "./knowledge.js";
 
-function textLocationFromLocation(
-    messageIndex: MessageIndex,
-    chunkIndex = 0,
-): TextLocation {
-    return { messageIndex, chunkIndex };
-}
-
 export function textRangeFromLocation(
     messageIndex: MessageIndex,
     chunkIndex = 0,
 ): TextRange {
     return {
-        start: textLocationFromLocation(messageIndex, chunkIndex),
+        start: { messageIndex, chunkIndex },
         end: undefined,
     };
 }
@@ -206,7 +199,7 @@ export function addKnowledgeToIndex(
 }
 
 export type ConversationIndexingResult = {
-    completedChunks: TextLocation[];
+    chunksIndexedUpto?: TextLocation | undefined;
     error?: string | undefined;
 };
 
@@ -227,9 +220,7 @@ export async function buildConversationIndex<TMeta extends IKnowledgeSource>(
         mergeActionKnowledge: false,
     });
     const maxRetries = 4;
-    let indexingResult: ConversationIndexingResult = {
-        completedChunks: [],
-    };
+    let indexingResult: ConversationIndexingResult = {};
     for (let i = 0; i < conversation.messages.length; i++) {
         let messageIndex: MessageIndex = i;
         const chunkIndex = 0;
@@ -252,11 +243,8 @@ export async function buildConversationIndex<TMeta extends IKnowledgeSource>(
                 knowledge,
             );
         }
-        const completedChunk = textLocationFromLocation(
-            messageIndex,
-            chunkIndex,
-        );
-        indexingResult.completedChunks.push(completedChunk);
+        const completedChunk = { messageIndex, chunkIndex };
+        indexingResult.chunksIndexedUpto = completedChunk;
         if (
             eventHandler?.onKnowledgeExtracted &&
             !eventHandler.onKnowledgeExtracted(completedChunk, knowledge)
