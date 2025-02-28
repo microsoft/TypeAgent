@@ -108,11 +108,10 @@ export async function createKnowproCommands(
                 startAt: arg("Start date and time"),
             },
             options: {
-                knowledge: argBool("Index knowledge", true),
-                related: argBool("Index related terms", true),
                 indexFilePath: arg("Output path for index file"),
                 maxMessages: argNum("Maximum messages to index"),
                 length: argNum("Length of the podcast in minutes", 60),
+                buildIndex: argBool("Index the imported podcast", true),
             },
         };
     }
@@ -132,11 +131,9 @@ export async function createKnowproCommands(
         context.conversation = context.podcast;
         context.printer.writeLine("Imported podcast:");
         context.printer.writePodcastInfo(context.podcast);
-
-        if (!(namedArgs.knowledge && namedArgs.related)) {
+        if (!namedArgs.buildIndex) {
             return;
         }
-
         // Build index
         await podcastBuildIndex(namedArgs);
 
@@ -310,9 +307,11 @@ export async function createKnowproCommands(
         }
         context.printer.writeLine("Saving index");
         context.printer.writeLine(namedArgs.filePath);
-        const cData = context.images?.serialize();
-        await ensureDir(path.dirname(namedArgs.filePath));
-        await writeJsonFile(namedArgs.filePath, cData);
+        if (context.images) {
+            const cData = await context.images.serialize();
+            await ensureDir(path.dirname(namedArgs.filePath));
+            await writeJsonFile(namedArgs.filePath, cData);
+        }
     }
 
     function imagesLoadDef(): CommandMetadata {
@@ -561,9 +560,8 @@ export async function createKnowproCommands(
         return {
             description: "Build index",
             options: {
-                knowledge: argBool("Index knowledge", false),
-                related: argBool("Index related terms", false),
                 maxMessages: argNum("Maximum messages to index"),
+                relatedOnly: argBool("Index related terms only", false),
             },
         };
     }
@@ -583,48 +581,25 @@ export async function createKnowproCommands(
         const namedArgs = parseNamedArguments(args, podcastBuildIndexDef());
         // Build index
         context.printer.writeLine();
-        context.printer.writeLine(
-            `Build knowledge: ${namedArgs.knowledge}\nBuild related terms: ${namedArgs.related}\n`,
+        const maxMessages = namedArgs.maxMessages ?? messageCount;
+        context.printer.writeLine(`Building Index`);
+        let progress = new ProgressBar(context.printer, maxMessages);
+        const eventHandler = createIndexingEventHandler(
+            context,
+            progress,
+            maxMessages,
         );
-        if (namedArgs.knowledge) {
-            context.printer.writeLine("Building knowledge index");
-            const maxMessages = namedArgs.maxMessages ?? messageCount;
-            let progress = new ProgressBar(context.printer, maxMessages);
-            const indexResult = await context.podcast.buildIndex(
-                (text, result) => {
-                    progress.advance();
-                    if (!result.success) {
-                        context.printer.writeError(
-                            `${result.message}\n${text}`,
-                        );
-                    }
-                    return progress.count < maxMessages;
-                },
-            );
+        // Build full index?
+        if (!namedArgs.relatedOnly) {
+            const indexResult = await context.podcast.buildIndex(eventHandler);
             progress.complete();
-            context.printer.writeLine(`Indexed ${maxMessages} items`);
             context.printer.writeIndexingResults(indexResult);
+            return;
         }
-        if (namedArgs.related) {
-            if (!context.podcast.semanticRefIndex) {
-                context.printer.writeError("Podcast not indexed");
-                return;
-            }
-
-            context.printer.writeLine("Building related terms index");
-            const progress = new ProgressBar(
-                context.printer,
-                context.podcast.semanticRefIndex.size,
-            );
-            await context.podcast.buildRelatedTermsIndex(16, (batch) => {
-                progress.advance(batch.length);
-                return true;
-            });
-            progress.complete();
-            context.printer.writeLine(
-                `Indexed ${context.podcast.semanticRefIndex.size} terms`,
-            );
-        }
+        // Build partial index
+        context.podcast.secondaryIndexes.termToRelatedTermsIndex.fuzzyIndex?.clear();
+        await kp.buildRelatedTermsIndex(context.podcast, eventHandler);
+        progress.complete();
     }
 
     function imageCollectionBuildIndexDef(): CommandMetadata {
@@ -644,10 +619,6 @@ export async function createKnowproCommands(
             context.printer.writeError("No image collection loaded");
             return;
         }
-        // if (!context.images.semanticRefIndex) {
-        //     context.printer.writeError("Image collection is not indexed");
-        //     return;
-        // }
         const messageCount = context.images.messages.length;
         if (messageCount === 0) {
             return;
@@ -660,40 +631,13 @@ export async function createKnowproCommands(
         // Build index
         context.printer.writeLine();
         context.printer.writeLine("Building index");
-        if (namedArgs.knowledge) {
-            context.printer.writeLine("Building knowledge index");
-            const maxMessages = namedArgs.maxMessages ?? messageCount;
-            let progress = new ProgressBar(context.printer, maxMessages);
-            const indexResult = await context.images?.buildIndex(
-                (text: any, result) => {
-                    progress.advance();
-                    if (!result.success) {
-                        context.printer.writeError(
-                            `${result.message}\n${text}`,
-                        );
-                    }
-                    return progress.count < maxMessages;
-                },
-            );
-            progress.complete();
-            context.printer.writeLine(`Indexed ${maxMessages} items`);
-            context.printer.writeIndexingResults(indexResult);
-        }
-        if (namedArgs.related) {
-            context.printer.writeLine("Building semantic index");
-            const progress = new ProgressBar(
-                context.printer,
-                context.images?.semanticRefIndex!.size,
-            );
-            await context.images?.buildRelatedTermsIndex(16, (batch) => {
-                progress.advance(batch.length);
-                return true;
-            });
-            progress.complete();
-            context.printer.writeLine(
-                `Semantic Indexed ${context.images?.semanticRefIndex!.size} terms`,
-            );
-        }
+        const maxMessages = namedArgs.maxMessages ?? messageCount;
+        let progress = new ProgressBar(context.printer, maxMessages);
+        const indexResult = await context.images?.buildIndex(
+            createIndexingEventHandler(context, progress, maxMessages),
+        );
+        progress.complete();
+        context.printer.writeIndexingResults(indexResult);
     }
 
     /*---------- 
@@ -751,4 +695,35 @@ function splitTermValues(term: string): string[] {
         removeEmpty: true,
     });
     return allTermStrings;
+}
+
+function createIndexingEventHandler(
+    context: KnowProContext,
+    progress: ProgressBar,
+    maxMessages: number,
+): kp.IndexingEventHandlers {
+    let startedKnowledge = false;
+    let startedRelated = false;
+
+    return {
+        onKnowledgeExtracted() {
+            if (!startedKnowledge) {
+                context.printer.writeLine("Indexing knowledge");
+                startedKnowledge = true;
+            }
+            progress.advance();
+            return progress.count < maxMessages;
+        },
+        onEmbeddingsCreated(sourceTexts, batch, batchStartAt) {
+            if (!startedRelated) {
+                progress.reset(sourceTexts.length);
+                context.printer.writeLine(
+                    `Indexing ${sourceTexts.length} related terms`,
+                );
+                startedRelated = true;
+            }
+            progress.advance(batch.length);
+            return true;
+        },
+    };
 }

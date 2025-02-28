@@ -10,12 +10,12 @@ import {
     ScoredSemanticRef,
     SemanticRef,
     Term,
-} from "./dataFormat.js";
+    IConversationSecondaryIndexes,
+} from "./interfaces.js";
 import { mergedEntities, mergeTopics } from "./knowledge.js";
 import * as q from "./query.js";
 import { IQueryOpExpr } from "./query.js";
 import { resolveRelatedTerms } from "./relatedTermsIndex.js";
-import { IConversationSecondaryIndexes } from "./secondaryIndexes.js";
 import { conversation as kpLib } from "knowledge-processor";
 
 export type SearchTerm = {
@@ -108,7 +108,8 @@ export async function searchConversation(
     if (!q.isConversationSearchable(conversation)) {
         return undefined;
     }
-    const secondaryIndexes: IConversationSecondaryIndexes = conversation as any;
+    const secondaryIndexes: IConversationSecondaryIndexes =
+        conversation.secondaryIndexes ?? {};
     const queryBuilder = new SearchQueryBuilder(conversation, secondaryIndexes);
     const query = await queryBuilder.compile(searchTermGroup, filter, options);
     const queryResults = query.eval(

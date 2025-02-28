@@ -2,12 +2,17 @@
 // Licensed under the MIT License.
 
 import { collections, dateTime } from "typeagent";
-import { DateRange, IMessage, MessageIndex } from "./dataFormat.js";
+import {
+    DateRange,
+    IConversation,
+    IMessage,
+    MessageIndex,
+} from "./interfaces.js";
 import { textRangeFromLocation } from "./conversationIndex.js";
 import {
     ITimestampToTextRangeIndex,
     TimestampedTextRange,
-} from "./secondaryIndexes.js";
+} from "./interfaces.js";
 
 /**
  * An index of timestamp => TextRanges.
@@ -16,15 +21,9 @@ import {
  */
 export class TimestampToTextRangeIndex implements ITimestampToTextRangeIndex {
     // Maintains ranges sorted by timestamp
-    private ranges: TimestampedTextRange[];
+    private ranges: TimestampedTextRange[] = [];
 
-    constructor(messages: IMessage[]) {
-        this.ranges = [];
-        for (let i = 0; i < messages.length; ++i) {
-            this.insertTimestamp(i, messages[i].timestamp, false);
-        }
-        this.ranges.sort(this.compareTimestampedRange);
-    }
+    constructor() {}
 
     /**
      * Looks up text ranges in given date range.
@@ -53,6 +52,14 @@ export class TimestampToTextRangeIndex implements ITimestampToTextRangeIndex {
         return this.insertTimestamp(messageIndex, timestamp, true);
     }
 
+    public addTimestamps(messageTimestamps: [MessageIndex, string][]) {
+        for (let i = 0; i < messageTimestamps.length; ++i) {
+            const [messageIndex, timestamp] = messageTimestamps[i];
+            this.insertTimestamp(messageIndex, timestamp, false);
+        }
+        this.ranges.sort(this.compareTimestampedRange);
+    }
+
     private insertTimestamp(
         messageIndex: MessageIndex,
         timestamp: string | undefined,
@@ -79,6 +86,10 @@ export class TimestampToTextRangeIndex implements ITimestampToTextRangeIndex {
         return true;
     }
 
+    public clear(): void {
+        this.ranges = [];
+    }
+
     private compareTimestampedRange(
         x: TimestampedTextRange,
         y: TimestampedTextRange,
@@ -89,4 +100,31 @@ export class TimestampToTextRangeIndex implements ITimestampToTextRangeIndex {
     private dateToTimestamp(date: Date) {
         return dateTime.timestampString(date, false);
     }
+}
+
+export function buildTimestampIndex(conversation: IConversation): void {
+    if (conversation.messages && conversation.secondaryIndexes) {
+        conversation.secondaryIndexes.timestampIndex ??=
+            new TimestampToTextRangeIndex();
+        addToTimestampIndex(
+            conversation.secondaryIndexes.timestampIndex,
+            conversation.messages,
+            0,
+        );
+    }
+}
+
+export function addToTimestampIndex(
+    timestampIndex: ITimestampToTextRangeIndex,
+    messages: IMessage[],
+    baseMessageIndex: MessageIndex,
+) {
+    const messageTimestamps: [MessageIndex, string][] = [];
+    for (let i = 0; i < messages.length; ++i) {
+        const timestamp = messages[i].timestamp;
+        if (timestamp) {
+            messageTimestamps.push([i + baseMessageIndex, timestamp]);
+        }
+    }
+    timestampIndex.addTimestamps(messageTimestamps);
 }

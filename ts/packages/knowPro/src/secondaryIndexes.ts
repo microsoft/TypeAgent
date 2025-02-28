@@ -1,80 +1,48 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { IConversationThreads } from "./conversationThread.js";
 import {
-    SemanticRefIndex,
-    ScoredSemanticRef,
-    DateRange,
-    TextRange,
+    IConversation,
+    IConversationSecondaryIndexes,
+    IndexingEventHandlers,
     Term,
-    MessageIndex,
-} from "./dataFormat.js";
+} from "./interfaces.js";
+import { PropertyIndex, buildPropertyIndex } from "./propertyIndex.js";
+import {
+    buildRelatedTermsIndex,
+    RelatedTermIndexSettings,
+    RelatedTermsIndex,
+} from "./relatedTermsIndex.js";
+import {
+    buildTimestampIndex,
+    TimestampToTextRangeIndex,
+} from "./timestampIndex.js";
 
-/**
- * Optional secondary indexes that can help the query processor produce better results, but are not required
- */
-export interface IConversationSecondaryIndexes {
-    termToRelatedTermsIndex?: ITermToRelatedTermsIndex | undefined;
-    propertyToSemanticRefIndex?: IPropertyToSemanticRefIndex | undefined;
-    timestampIndex?: ITimestampToTextRangeIndex | undefined;
-    threads?: IConversationThreads | undefined;
+export async function buildSecondaryIndexes(
+    conversation: IConversation,
+    buildRelated: boolean,
+    eventHandler?: IndexingEventHandlers,
+): Promise<void> {
+    conversation.secondaryIndexes ??= new ConversationSecondaryIndexes();
+    buildPropertyIndex(conversation);
+    buildTimestampIndex(conversation);
+    if (buildRelated) {
+        await buildRelatedTermsIndex(conversation, eventHandler);
+    }
 }
 
-/**
- * Allows for faster retrieval of name, value properties
- */
-export interface IPropertyToSemanticRefIndex {
-    getValues(): string[];
-    addProperty(
-        propertyName: string,
-        value: string,
-        semanticRefIndex: SemanticRefIndex | ScoredSemanticRef,
-    ): void;
-    lookupProperty(
-        propertyName: string,
-        value: string,
-    ): ScoredSemanticRef[] | undefined;
-}
+export class ConversationSecondaryIndexes
+    implements IConversationSecondaryIndexes
+{
+    public propertyToSemanticRefIndex: PropertyIndex;
+    public timestampIndex: TimestampToTextRangeIndex;
+    public termToRelatedTermsIndex: RelatedTermsIndex;
 
-export type TimestampedTextRange = {
-    timestamp: string;
-    range: TextRange;
-};
-
-/**
- * Return text ranges in the given date range
- */
-export interface ITimestampToTextRangeIndex {
-    addTimestamp(messageIndex: MessageIndex, timestamp: string): boolean;
-    lookupRange(dateRange: DateRange): TimestampedTextRange[];
-}
-
-/**
- * Work in progress.
- */
-export interface ITermToRelatedTermsIndex {
-    get aliases(): ITermToRelatedTerms | undefined;
-    get fuzzyIndex(): ITermToRelatedTermsFuzzy | undefined;
-    serialize(): ITermsToRelatedTermsIndexData;
-    deserialize(data?: ITermsToRelatedTermsIndexData): void;
-}
-
-export interface ITermToRelatedTerms {
-    lookupTerm(text: string): Term[] | undefined;
-}
-
-export interface ITermToRelatedTermsFuzzy {
-    lookupTerm(
-        text: string,
-        maxMatches?: number,
-        thresholdScore?: number,
-    ): Promise<Term[]>;
-    lookupTerms(
-        textArray: string[],
-        maxMatches?: number,
-        thresholdScore?: number,
-    ): Promise<Term[][]>;
+    constructor(settings: RelatedTermIndexSettings = {}) {
+        this.propertyToSemanticRefIndex = new PropertyIndex();
+        this.timestampIndex = new TimestampToTextRangeIndex();
+        this.termToRelatedTermsIndex = new RelatedTermsIndex(settings);
+    }
 }
 
 export interface ITermsToRelatedTermsIndexData {

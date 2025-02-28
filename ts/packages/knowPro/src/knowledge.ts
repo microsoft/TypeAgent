@@ -9,7 +9,7 @@ import {
     ScoredSemanticRef,
     SemanticRef,
     Topic,
-} from "./dataFormat.js";
+} from "./interfaces.js";
 import { Scored } from "./common.js";
 
 export function facetValueToString(facet: kpLib.Facet): string {
