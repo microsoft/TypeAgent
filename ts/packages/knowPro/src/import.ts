@@ -1,8 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { conversation as kpLib } from "knowledge-processor";
-import { IMessage, TextLocation } from "./dataFormat.js";
+import { IMessage } from "./dataFormat.js";
 import {
     createTextEmbeddingIndexSettings,
     TextEmbeddingIndexSettings,
@@ -22,18 +21,6 @@ export function createConversationSettings(): ConversationSettings {
         },
         threadSettings: embeddingIndexSettings,
     };
-}
-
-export interface IndexingEventHandlers {
-    onKnowledgeExtracted?: (
-        chunk: TextLocation,
-        knowledgeResult: kpLib.KnowledgeResponse,
-    ) => boolean;
-    onEmbeddingsCreated?: (
-        sourceTexts: string[],
-        batch: string[],
-        batchStartAt: number,
-    ) => boolean;
 }
 
 /**

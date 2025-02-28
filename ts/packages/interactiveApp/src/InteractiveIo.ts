@@ -248,4 +248,12 @@ export class ProgressBar {
             this._lastText = "";
         }
     }
+
+    public reset(total?: number) {
+        this.complete();
+        this.count = 0;
+        if (total) {
+            this.total = total;
+        }
+    }
 }

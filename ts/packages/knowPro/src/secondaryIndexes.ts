@@ -4,10 +4,12 @@
 import {
     IConversation,
     IConversationSecondaryIndexes,
+    IndexingEventHandlers,
     Term,
 } from "./dataFormat.js";
 import { PropertyIndex, buildPropertyIndex } from "./propertyIndex.js";
 import {
+    buildRelatedTermsIndex,
     RelatedTermIndexSettings,
     RelatedTermsIndex,
 } from "./relatedTermsIndex.js";
@@ -18,10 +20,15 @@ import {
 
 export async function buildSecondaryIndexes(
     conversation: IConversation,
+    buildRelated: boolean,
+    eventHandler?: IndexingEventHandlers,
 ): Promise<void> {
     conversation.secondaryIndexes ??= new ConversationSecondaryIndexes();
     buildPropertyIndex(conversation);
     buildTimestampIndex(conversation);
+    if (buildRelated) {
+        await buildRelatedTermsIndex(conversation, eventHandler);
+    }
 }
 
 export class ConversationSecondaryIndexes

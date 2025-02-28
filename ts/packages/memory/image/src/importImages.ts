@@ -397,26 +397,12 @@ export class ImageCollection implements IConversation<ImageMeta> {
         }
 
         this.addMetadataToIndex();
-        await this.buildSecondaryIndexes();
+        await buildSecondaryIndexes(this, true);
 
         let indexingResult: ConversationIndexingResult = {
             chunksIndexedUpto: { messageIndex: this.messages.length - 1 },
         };
         return indexingResult;
-    }
-
-    public async buildRelatedTermsIndex(
-        batchSize: number = 8,
-        eventHandler?: IndexingEventHandlers,
-    ): Promise<void> {
-        const allTerms = this.semanticRefIndex.getTerms();
-        if (allTerms?.length > 0) {
-            await this.secondaryIndexes.termToRelatedTermsIndex.buildEmbeddingsIndex(
-                allTerms,
-                batchSize,
-                eventHandler,
-            );
-        }
     }
 
     public async serialize(): Promise<ImageCollectionData> {
@@ -442,11 +428,7 @@ export class ImageCollection implements IConversation<ImageMeta> {
                 data.relatedTermsIndexData,
             );
         }
-        await this.buildSecondaryIndexes();
-    }
-
-    private async buildSecondaryIndexes() {
-        await buildSecondaryIndexes(this);
+        await buildSecondaryIndexes(this, false);
     }
 }
 

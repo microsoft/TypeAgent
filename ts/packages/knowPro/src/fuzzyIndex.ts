@@ -15,7 +15,7 @@ import { openai, TextEmbeddingModel } from "aiclient";
 import * as levenshtein from "fast-levenshtein";
 import { createEmbeddingCache } from "knowledge-processor";
 import { Scored } from "./common.js";
-import { IndexingEventHandlers } from "./import.js";
+import { IndexingEventHandlers } from "./dataFormat.js";
 
 export class TextEmbeddingIndex {
     private embeddings: NormalizedEmbedding[];
@@ -41,6 +41,28 @@ export class TextEmbeddingIndex {
                 texts,
             );
             this.embeddings.push(embedding);
+        }
+    }
+
+    public async addTextBatch(
+        textToIndex: string[],
+        eventHandler?: IndexingEventHandlers,
+    ): Promise<void> {
+        for (const batch of getIndexingBatches(
+            textToIndex,
+            this.settings.batchSize,
+        )) {
+            if (
+                eventHandler?.onEmbeddingsCreated &&
+                !eventHandler.onEmbeddingsCreated(
+                    textToIndex,
+                    batch.values,
+                    batch.startAt,
+                )
+            ) {
+                break;
+            }
+            await this.addText(batch.values);
         }
     }
 
@@ -134,27 +156,6 @@ export function deserializeEmbedding(array: number[]): NormalizedEmbedding {
     return new Float32Array(array);
 }
 
-export async function addTextToEmbeddingIndex(
-    index: TextEmbeddingIndex,
-    textToIndex: string[],
-    batchSize: number,
-    eventHandler?: IndexingEventHandlers,
-): Promise<void> {
-    for (const batch of getIndexingBatches(textToIndex, batchSize)) {
-        if (
-            eventHandler?.onEmbeddingsCreated &&
-            !eventHandler.onEmbeddingsCreated(
-                textToIndex,
-                batch.values,
-                batch.startAt,
-            )
-        ) {
-            break;
-        }
-        await index.addText(batch.values);
-    }
-}
-
 export type TextEmbeddingIndexSettings = {
     embeddingModel: TextEmbeddingModel;
     embeddingSize: number;
@@ -162,6 +163,7 @@ export type TextEmbeddingIndexSettings = {
     maxMatches?: number | undefined;
     retryMaxAttempts?: number;
     retryPauseMs?: number;
+    batchSize: number;
 };
 
 export function createTextEmbeddingIndexSettings(
@@ -173,6 +175,7 @@ export function createTextEmbeddingIndexSettings(
         minScore,
         retryMaxAttempts: 2,
         retryPauseMs: 2000,
+        batchSize: 8,
     };
 }
 

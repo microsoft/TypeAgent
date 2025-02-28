@@ -8,7 +8,6 @@ import {
     IConversationData,
     Term,
     ConversationIndex,
-    buildConversationIndex,
     ConversationIndexingResult,
     ITermsToRelatedTermsIndexData,
     IConversationThreadData,
@@ -22,6 +21,7 @@ import {
     ConversationSecondaryIndexes,
     ConversationThreads,
     IndexingEventHandlers,
+    buildConversationIndex,
 } from "knowpro";
 import { conversation as kpLib, split } from "knowledge-processor";
 import {
@@ -154,24 +154,9 @@ export class Podcast implements IConversation<PodcastMessageMeta> {
         this.addMetadataToIndex();
         const result = await buildConversationIndex(this, eventHandler);
         if (!result.error) {
-            await this.buildSecondaryIndexes();
             await this.secondaryIndexes.threads.buildIndex();
         }
         return result;
-    }
-
-    public async buildRelatedTermsIndex(
-        batchSize: number = 8,
-        eventHandler?: IndexingEventHandlers,
-    ): Promise<void> {
-        const allTerms = this.semanticRefIndex.getTerms();
-        if (allTerms.length > 0) {
-            await this.secondaryIndexes.termToRelatedTermsIndex.buildEmbeddingsIndex(
-                allTerms,
-                batchSize,
-                eventHandler,
-            );
-        }
     }
 
     public async serialize(): Promise<PodcastData> {
@@ -263,7 +248,7 @@ export class Podcast implements IConversation<PodcastMessageMeta> {
 
     private async buildSecondaryIndexes() {
         this.buildParticipantAliases();
-        await buildSecondaryIndexes(this);
+        await buildSecondaryIndexes(this, false);
     }
 
     private buildParticipantAliases(): void {

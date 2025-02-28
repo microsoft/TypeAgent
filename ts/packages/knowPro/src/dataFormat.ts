@@ -166,6 +166,10 @@ export interface ITermToRelatedTerms {
 }
 
 export interface ITermToRelatedTermsFuzzy {
+    addTerms(
+        terms: string[],
+        eventHandler?: IndexingEventHandlers,
+    ): Promise<void>;
     lookupTerm(
         text: string,
         maxMatches?: number,
@@ -208,4 +212,16 @@ export interface IConversationThreads {
         thresholdScore?: number,
     ): Promise<ScoredThreadIndex[] | undefined>;
     removeThread(threadIndex: ThreadIndex): void;
+}
+
+export interface IndexingEventHandlers {
+    onKnowledgeExtracted?: (
+        chunk: TextLocation,
+        knowledgeResult: kpLib.KnowledgeResponse,
+    ) => boolean;
+    onEmbeddingsCreated?: (
+        sourceTexts: string[],
+        batch: string[],
+        batchStartAt: number,
+    ) => boolean;
 }

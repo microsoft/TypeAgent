@@ -11,18 +11,19 @@ import {
     SemanticRef,
     Topic,
     TextRange,
-    TextLocation,
     IMessage,
     SemanticRefIndex,
     MessageIndex,
     Knowledge,
     KnowledgeType,
+    TextLocation,
 } from "./dataFormat.js";
-import { IndexingEventHandlers } from "./import.js";
+import { IndexingEventHandlers } from "./dataFormat.js";
 import { conversation as kpLib } from "knowledge-processor";
 import { openai } from "aiclient";
 import { async } from "typeagent";
 import { facetValueToString } from "./knowledge.js";
+import { buildSecondaryIndexes } from "./secondaryIndexes.js";
 
 export function textRangeFromLocation(
     messageIndex: MessageIndex,
@@ -177,7 +178,7 @@ export function addKnowledgeToIndex(
     semanticRefIndex: ITermToSemanticRefIndex,
     messageIndex: MessageIndex,
     knowledge: kpLib.KnowledgeResponse,
-) {
+): void {
     for (const entity of knowledge.entities) {
         addEntityToIndex(entity, semanticRefs, semanticRefIndex, messageIndex);
     }
@@ -203,7 +204,7 @@ export type ConversationIndexingResult = {
     error?: string | undefined;
 };
 
-export async function buildConversationIndex<TMeta extends IKnowledgeSource>(
+export async function buildSemanticRefIndex<TMeta extends IKnowledgeSource>(
     conversation: IConversation<TMeta>,
     eventHandler?: IndexingEventHandlers,
 ): Promise<ConversationIndexingResult> {
@@ -378,4 +379,15 @@ export function createKnowledgeModel() {
         "chatExtractor",
     ]);
     return chatModel;
+}
+
+export async function buildConversationIndex(
+    conversation: IConversation,
+    eventHandler?: IndexingEventHandlers,
+): Promise<ConversationIndexingResult> {
+    const result = await buildSemanticRefIndex(conversation, eventHandler);
+    if (!result.error && conversation.semanticRefIndex) {
+        await buildSecondaryIndexes(conversation, true, eventHandler);
+    }
+    return result;
 }

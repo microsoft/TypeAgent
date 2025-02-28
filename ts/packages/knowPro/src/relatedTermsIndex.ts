@@ -2,8 +2,8 @@
 // Licensed under the MIT License.
 
 import { collections } from "typeagent";
-import { Term } from "./dataFormat.js";
-import { IndexingEventHandlers } from "./import.js";
+import { IConversation, Term } from "./dataFormat.js";
+import { IndexingEventHandlers } from "./dataFormat.js";
 import { Scored } from "./common.js";
 import {
     ITextEmbeddingIndexData,
@@ -20,7 +20,6 @@ import { SearchTerm } from "./search.js";
 import { isSearchTermWildcard } from "./common.js";
 import { TermSet } from "./collections.js";
 import {
-    addTextToEmbeddingIndex,
     TextEditDistanceIndex,
     TextEmbeddingIndex,
     TextEmbeddingIndexSettings,
@@ -87,6 +86,11 @@ export class RelatedTermsIndex implements ITermToRelatedTermsIndex {
 
     constructor(public settings: RelatedTermIndexSettings) {
         this.aliasMap = new TermToRelatedTermsMap();
+        if (settings.embeddingIndexSettings) {
+            this.embeddingIndex = new TermEmbeddingIndex(
+                settings.embeddingIndexSettings,
+            );
+        }
     }
 
     public get aliases() {
@@ -125,21 +129,18 @@ export class RelatedTermsIndex implements ITermToRelatedTermsIndex {
             }
         }
     }
+}
 
-    public async buildEmbeddingsIndex(
-        terms: string[],
-        batchSize: number = 8,
-        eventHandler?: IndexingEventHandlers,
-    ): Promise<void> {
-        if (this.settings.embeddingIndexSettings) {
-            this.embeddingIndex = new TermEmbeddingIndex(
-                this.settings.embeddingIndexSettings,
-            );
-            await this.embeddingIndex.addTermsBatched(
-                terms,
-                batchSize,
-                eventHandler,
-            );
+export async function buildRelatedTermsIndex(
+    conversation: IConversation,
+    eventHandler?: IndexingEventHandlers,
+) {
+    const fuzzyIndex =
+        conversation.secondaryIndexes?.termToRelatedTermsIndex?.fuzzyIndex;
+    if (conversation.semanticRefIndex && fuzzyIndex) {
+        const allTerms = conversation.semanticRefIndex.getTerms();
+        if (allTerms.length > 0) {
+            await fuzzyIndex.addTerms(allTerms, eventHandler);
         }
     }
 }
@@ -264,26 +265,11 @@ export class TermEmbeddingIndex implements ITermEmbeddingIndex {
         }
     }
 
-    public async addTerms(terms: string | string[]): Promise<void> {
-        await this.embeddingIndex.addText(terms);
-        if (Array.isArray(terms)) {
-            this.textArray.push(...terms);
-        } else {
-            this.textArray.push(terms);
-        }
-    }
-
-    public async addTermsBatched(
+    public async addTerms(
         terms: string[],
-        batchSize: number,
         eventHandler?: IndexingEventHandlers,
     ): Promise<void> {
-        await addTextToEmbeddingIndex(
-            this.embeddingIndex,
-            terms,
-            batchSize,
-            eventHandler,
-        );
+        await this.embeddingIndex.addTextBatch(terms, eventHandler);
         this.textArray.push(...terms);
     }
 
@@ -356,6 +342,10 @@ export class TermEditDistanceIndex
 {
     constructor(textArray: string[] = []) {
         super(textArray);
+    }
+
+    public async addTerms(terms: string[]): Promise<void> {
+        this.textArray.push(...terms);
     }
 
     public async lookupTerm(
