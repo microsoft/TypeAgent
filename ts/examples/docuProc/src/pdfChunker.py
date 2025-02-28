@@ -8,7 +8,6 @@ import json
 
 import pdfplumber # type: ignore
 import fitz # type: ignore
-import pytesseract # type: ignore
 from PIL import Image # type: ignore
 
 import datetime
@@ -20,31 +19,33 @@ import re
 
 IdType = str
 
+from dataclasses import dataclass
+from typing import Optional, List, Union, Dict, Any
+
 @dataclass
 class Blob:
     """Stores text, table, or image data plus metadata."""
-    blob_type: str  # e.g. "text", "table", "image"
-    start: int  # Page number (0-based)
-    content: Optional[str] = None  # e.g. list of lines, or path to a CSV
-    bbox: Optional[List[float]] = None
-    img_path: Optional[str] = None
-    para_id: Optional[int] = None
+    blob_type: str                                 # e.g. "text", "table", "image"
+    start: int                                     # Page number (0-based)
+    content: Optional[Union[str, List[str]]] = None
+    img_path: Optional[str] = None                 # Path to the saved image file, if this is an image blob
+    para_id: Optional[int] = None                  # Paragraph ID if needed
+    image_chunk_ref: Optional[str] = None          # Pointer to the chunk that has the associated image (if this is a caption)
 
     def to_dict(self) -> Dict[str, Any]:
         result = {
             "blob_type": self.blob_type,
-            "start": self.start
+            "start": self.start,
         }
         if self.content is not None:
             result["content"] = self.content
-        if self.bbox:
-            result["bbox"] = self.bbox
         if self.img_path:
             result["img_path"] = self.img_path
         if self.para_id is not None:
             result["para_id"] = self.para_id
+        if self.image_chunk_ref is not None:
+            result["image_chunk_ref"] = self.image_chunk_ref
         return result
-
 
 @dataclass
 class Chunk:
@@ -124,6 +125,8 @@ class PDFChunker:
         self.pdf_name = get_FNameWithoutExtension(file_path)
         self.output_dir = Path(output_dir) / self.pdf_name
         self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.doc_table_data = {}
+        self.doc_image_chunksmap = {}
 
     def debug_print_lines(self, chunks: List[Chunk]) -> None:
         """
@@ -150,7 +153,7 @@ class PDFChunker:
                     blob.content = "\n".join(lines)
         return chunks
     
-    def get_lines_from_dict(self, page: fitz.Page) -> list[str]:
+    def get_lines_from_dict_orig(self, page: fitz.Page) -> list[str]:
         # Thresholds for merging lines
         Y_THRESHOLD = 2.0  # e.g., lines whose y-mid differs by less than ~2 points
         X_GAP_THRESHOLD = 15.0
@@ -256,6 +259,272 @@ class PDFChunker:
 
         return merged_lines
   
+    def extract_tables_from_page(self, page: fitz.Page) -> list[tuple[list[float], list[list[str]]]]:
+        """
+        Extracts detected tables from a PDF page.
+        - Uses column alignment and row spacing to find tables.
+        - Returns a list of tuples where:
+        - The first element is the bounding box of the table [x0, y0, x1, y1].
+        - The second element is a list of lists, where each inner list represents a row in the table.
+        """
+        detected_tables = []
+        blocks = page.get_text("blocks")
+
+        for block in blocks:
+            x0, y0, x1, y1, text, block_type = block[:6]
+            words = text.split()
+
+            # Skip empty or too short blocks
+            if len(words) < 3:
+                continue
+
+            # **Exclude long text paragraphs**
+            if len(text) > 200:  # Paragraphs tend to have long continuous text
+                continue
+
+            # Get individual lines in the block
+            lines = text.split("\n")
+            line_y_positions = [y0]  # Store Y-coordinates of each line
+
+            # Track previous line's Y-position for spacing check
+            prev_y = y0
+            structured_data = []  # Store table content
+
+            for line in lines:
+                if not line.strip():
+                    continue
+                prev_y += 12  # Approximate line height spacing
+                line_y_positions.append(prev_y)
+                structured_data.append(line.split())  # Store words as table row
+
+            # **Check for uniform row spacing**
+            row_spacings = [line_y_positions[i] - line_y_positions[i - 1] for i in range(1, len(line_y_positions))]
+            avg_spacing = sum(row_spacings) / len(row_spacings) if row_spacings else 0
+            spacing_variation = max(row_spacings) - min(row_spacings) if row_spacings else 0
+
+            # If row spacing is consistent, it's likely a table
+            is_table_like = avg_spacing > 5 and spacing_variation < 4
+
+            # **Check for column alignment (multiple words with same X)**
+            word_positions = [word.split() for word in lines]
+            column_counts = [len(set(pos)) for pos in word_positions if len(pos) > 1]
+
+            has_columns = max(column_counts, default=0) > 1  # More than 1 distinct column
+
+            if is_table_like and has_columns:
+                detected_tables.append(([x0, y0, x1, y1], structured_data))  # Store bbox and table content
+
+        return detected_tables
+    
+    def print_tables(self, tables: list[tuple[list[float], list[list[str]]]]) -> None:
+        # Debug: Print detected tables with bounding boxes and content
+        print(f"\n--- DEBUG: Found {len(tables)} tables on the page ---")
+        for idx, (bbox, table_data) in enumerate(tables):
+            x0, y0, x1, y1 = bbox
+            print(f"  🟦 Table {idx}: BBox ({x0}, {y0}, {x1}, {y1})")
+            
+            # Print table content
+            print("  Table Content:")
+            for row in table_data:
+                print(f"    {' | '.join(row)}")  # Format table rows nicely
+
+
+    def _find_nearest_image_bbox(self, line_bbox: List[float], image_bboxes: List[List[float]]) -> Optional[List[float]]:
+        """
+        Return the bounding box of the closest image to the given line_bbox,
+        or None if none are close.
+        """
+        x0_line, y0_line, x1_line, y1_line = line_bbox
+        min_dist = float("inf")
+        best_bbox: Optional[List[float]] = None
+
+        for (x0_img, y0_img, x1_img, y1_img) in image_bboxes:
+            # We'll measure vertical distance if the line is below or above the image
+            if y1_line < y0_img:
+                dist = abs(y0_img - y1_line)
+            elif y0_line > y1_img:
+                dist = abs(y0_line - y1_img)
+            else:
+                dist = 0
+
+            if dist < min_dist:
+                min_dist = dist
+                best_bbox = [x0_img, y0_img, x1_img, y1_img]
+
+        if min_dist > 150:
+            return None
+
+        return best_bbox
+
+    def get_lines_from_dict(self, page: fitz.Page) -> list[tuple[str, str]]:
+        # Thresholds for merging lines
+        Y_THRESHOLD = 2.0  
+        X_GAP_THRESHOLD = 15.0
+        PARA_GAP_THRESHOLD = 10.0  
+        PARA_MARKER = "<PARA_BREAK>"
+        IMAGE_LABEL_BUFFER = 50  # Extended buffer below images
+        IMAGE_TITLE_BUFFER = 30  # Allow small margin above image for titles
+
+        data = page.get_text("dict")  
+        line_entries = []
+
+        # Extract image bounding boxes using fitz (PyMuPDF)
+        image_bboxes = []
+        for img in page.get_images(full=True):
+            xref = img[0]
+            img_rects = page.get_image_rects(xref)
+            if img_rects:
+                image_bboxes.append(list(img_rects[0]))  # Store first rectangle found
+
+        # Extract table bounding boxes heuristically
+        table_bboxes = self.extract_tables_from_page(page)
+        # for block in page.get_text("blocks"):
+        #     x0, y0, x1, y1, text, block_type = block[:6]
+        #     # Heuristic: If the block is wide and contains structured content, assume table
+        #     if (x1 - x0) > 200 and len(text.split()) > 5:
+        #         table_bboxes.append([x0, y0, x1, y1])
+       
+        # Debug: Print image bounding boxes
+        print(f"\n--- DEBUG: Found {len(image_bboxes)} images on the page ---")
+        for idx, (x0, y0, x1, y1) in enumerate(image_bboxes):
+            print(f"  Image {idx}: BBox ({x0}, {y0}, {x1}, {y1})")
+
+        # Debug: Print image bounding boxes
+        #self.print_tables(table_bboxes)
+
+        for block in data["blocks"]:
+            if block["type"] == 0:  # Text block
+                for ln in block["lines"]:
+                    line_text = "".join(span["text"] for span in ln["spans"]).strip()
+                    if not line_text:
+                        continue
+
+                    x0, y0, x1, y1 = ln["bbox"]
+                    # Debug: Print line bounding boxes
+                    print(f"\n--- DEBUG: Checking line '{line_text}' ---")
+                    print(f"  Line BBox: ({x0}, {y0}, {x1}, {y1})")
+                    
+                    is_image_title = any(
+                        (y0 >= img_y0 - IMAGE_TITLE_BUFFER and y1 <= img_y1) and  # Slightly above or inside
+                        (x0 >= img_x0 - 30 and x1 <= img_x1 + 30)  # Extend x-range tolerance
+                        for img_x0, img_y0, img_x1, img_y1 in image_bboxes
+                    )
+
+                    is_image_caption = any(
+                        (y0 >= img_y1 and y1 <= img_y1 + IMAGE_LABEL_BUFFER) and  # Below image
+                        (x0 >= img_x0 - 30 and x1 <= img_x1 + 30)  # Extend x-range tolerance
+                        for img_x0, img_y0, img_x1, img_y1 in image_bboxes
+                    )
+
+                    is_image_label = is_image_title or is_image_caption
+                    if is_image_label:
+                        print(f"  ✅ Marked as IMAGE label")
+
+                    # Check if text is near a table
+                    # is_table_label = not is_image_label and any(
+                    #     (y0 >= tbl_y0 - 10 and y1 <= tbl_y1 + IMAGE_LABEL_BUFFER) and  
+                    #     (x0 >= tbl_x0 and x1 <= tbl_x1)  
+                    #     for tbl_x0, tbl_y0, tbl_x1, tbl_y1 in table_bboxes
+                    # )
+                    # if is_table_label:
+                    #     print(f"  🟦 Marked as TABLE label")
+
+                    is_table_label = not is_image_label and any(
+                        (y0 >= tbl_bbox[0][1] - 10 and y1 <= tbl_bbox[0][3] + IMAGE_LABEL_BUFFER) and  # Check Y-bounds
+                        (x0 >= tbl_bbox[0][0] and x1 <= tbl_bbox[0][2])  # Check X-bounds
+                        for tbl_bbox in table_bboxes  # Unpack (bbox, table_data)                        
+                    )
+                    # if is_table_label:
+                    #     print(f"  🟦 Marked as TABLE label")
+                    
+                    # debug setting this to false
+                    is_table_label = False
+
+                    # Assign label based on detected type
+                    if is_image_label:
+                        label = "image"
+                    elif is_table_label:
+                        label = "table"
+                    else:
+                        label = "text"
+
+                    line_entries.append({
+                        "text": line_text,
+                        "x0": x0,
+                        "y0": y0,
+                        "x1": x1,
+                        "y1": y1,
+                        "label": label  # Store the type of content
+                    })
+
+        # Sort the line_entries top-to-bottom, then left-to-right.
+        line_entries.sort(key=lambda e: (e["y0"], e["x0"]))
+
+        merged_lines: list[tuple[str, str]] = []
+        i = 0
+        while i < len(line_entries):
+            current = line_entries[i]
+            current_text = current["text"]
+            current_label = current["label"]
+            x0_c, y0_c, x1_c, y1_c = current["x0"], current["y0"], current["x1"], current["y1"]
+
+            if current_label in ["image", "table"]:
+                j = i + 1
+                while j < len(line_entries):
+                    next_line = line_entries[j]
+                    next_y0, next_y1 = next_line["y0"], next_line["y1"]
+                    if next_y0 - y1_c < PARA_GAP_THRESHOLD:  # Close enough to be part of the caption
+                        next_line["label"] = current_label  # Inherit label
+                        j += 1
+                    else:
+                        break
+
+            if i < len(line_entries) - 1:
+                next_line = line_entries[i + 1]
+                x0_n, y0_n, x1_n, y1_n, text_n, label_n = next_line["x0"], next_line["y0"], next_line["x1"], next_line["y1"], next_line["text"], next_line["label"]
+
+                midY_c = (y0_c + y1_c) / 2.0
+                midY_n = (y0_n + y1_n) / 2.0
+                y_diff = abs(midY_c - midY_n)
+
+                if y_diff < Y_THRESHOLD:
+                    x_gap = x0_n - x1_c
+                    if 0 <= x_gap < X_GAP_THRESHOLD:
+                        unified_text = current_text.rstrip() + " " + text_n.lstrip()
+
+                        # Keep the highest-priority label (prefer "image" or "table" over "text")
+                        if current_label == "image" or label_n == "image":
+                            final_label = "image"
+                        elif current_label == "table" or label_n == "table":
+                            final_label = "table"
+                        else:
+                            final_label = "text"
+
+                        new_entry = {
+                            "text": unified_text,
+                            "x0": x0_c,
+                            "y0": min(y0_c, y0_n),
+                            "x1": x1_n,
+                            "y1": max(y1_c, y1_n),
+                            "label": final_label  # Preserve the merged label
+                        }
+                        line_entries[i] = new_entry
+                        del line_entries[i + 1]
+                        continue  
+
+            # Append the current line as a tuple (text, label)
+            merged_lines.append((current_text, current_label))
+
+            # Handle paragraph breaks
+            if i < len(line_entries) - 1:
+                next_line = line_entries[i + 1]
+                gap = next_line["y0"] - current["y1"]
+                if gap >= PARA_GAP_THRESHOLD:
+                    merged_lines.append((PARA_MARKER, "text"))
+            i += 1
+
+        return merged_lines
+
     def extract_text_chunks(self, do_ocr: bool = False) -> tuple[list[Chunk], dict[int, Chunk]]:
         def split_paragraphs(lines: list[str]) -> list[list[str]]:
             paragraphs = []
@@ -313,6 +582,11 @@ class PDFChunker:
             for idx, ln in enumerate(page_lines):
                 print(f"  Raw line {idx}: '{ln}'")
 
+        def print_lines_with_label(page_num: int, page_lines: list[tuple[str, str]]) -> None:
+            print(f"\n--- DEBUG: Page {page_num} raw lines ---")
+            for idx, (text, label) in enumerate(page_lines):
+                print(f"  Raw line {idx}: '{text}' (Label: {label})")
+
         def chunk_paragraph_by_sentence(paragraph_lines: list[str], max_tokens: int = 100) -> list[str]:
             """
             A simplified approach:
@@ -353,14 +627,16 @@ class PDFChunker:
 
         for page_num in range(len(doc)):
             page = doc[page_num]
-            page_lines = self.get_lines_from_dict(page)
+            print(f"\n--- DEBUG: Page {page_num} ---")
+            page_lines_with_labels = self.get_lines_from_dict(page)
+            if page_lines_with_labels and page_lines_with_labels[-1][0].strip().isdigit():
+                page_lines_with_labels.pop()
 
-            # remove a purely numeric last line (like "2"):
-            if page_lines and page_lines[-1].strip().isdigit():
-                page_lines.pop()
+            # Extract only text after filtering
+            page_lines = [text for text, _ in page_lines_with_labels]
 
             if self.debug:
-                print_lines(page_num, page_lines)
+                print_lines_with_label(page_num, page_lines_with_labels)
 
             # Create a parent chunk for this page
             page_chunk_id = generate_id()
@@ -383,28 +659,11 @@ class PDFChunker:
             page_image_blob = Blob(
                 blob_type="page_image",
                 start=page_num,
-                bbox=None,
                 img_path=page_image_path
             )
             page_chunk.blobs.append(page_image_blob)
 
-            # 3) OCR if do_ocr, same as before
-            if do_ocr:
-                try:
-                    from PIL import Image
-                    import pytesseract
-                    ocr_text = pytesseract.image_to_string(Image.open(page_image_path)).strip()
-                    if ocr_text:
-                        page_ocr_blob = Blob(
-                            blob_type="page_ocr",
-                            content=[ocr_text],
-                            start=page_num
-                        )
-                        page_chunk.blobs.append(page_ocr_blob)
-                except Exception as e:
-                    print(f"OCR failed on page {page_num}: {e}")
-
-            # 4) Split paragraphs using the <PARA_BREAK> markers.
+            # 3) Split paragraphs using the <PARA_BREAK> markers.
             #    This removes the tokens from the actual content while preserving paragraph boundaries.
             paragraphs = split_paragraphs(page_lines)
 
@@ -435,6 +694,60 @@ class PDFChunker:
                     para_id += 1
 
         return chunks, page_chunks
+    
+    def extract_tables_from_page_plumber(self, pdf_path: str, page_num: int) -> list[tuple[list[float], list[list[str]]]]:
+        """
+        Extracts tables from a PDF page using pdfplumber.
+        - Returns a list of tuples where:
+        - The first element is the bounding box [x0, y0, x1, y1].
+        - The second element is the table content as a list of lists (rows).
+        """
+        detected_tables = []
+        
+        with pdfplumber.open(pdf_path) as pdf:
+            if page_num >= len(pdf.pages):
+                return detected_tables  # Return empty if page doesn't exist
+            
+            page = pdf.pages[page_num]
+            tables = page.extract_tables()  # Extract tables
+            
+            for table in tables:
+                # Get the bounding box from table metadata
+                bbox = page.bbox  # Entire page's bbox
+                structured_data = [row for row in table if any(row)]  # Remove empty rows
+                
+                if structured_data:
+                    detected_tables.append((bbox, structured_data))  # Store bbox and table content
+
+        return detected_tables
+    
+    def extract_tables_from_pdf(self, pdf_path: str) -> dict[int, list[tuple[list[float], list[list[str]]]]]:
+        """
+        Extracts tables from all pages of a PDF using pdfplumber.
+        - Returns a dictionary where:
+        - Key: Page index (int)
+        - Value: List of tuples, each containing:
+            - Bounding box [x0, y0, x1, y1]
+            - Table content as a list of lists (rows)
+        """
+        tables_per_page = {}
+
+        with pdfplumber.open(pdf_path) as pdf:
+            for page_num, page in enumerate(pdf.pages):
+                tables = page.extract_tables()  # Extract tables
+                
+                page_tables = []
+                for table in tables:
+                    bbox = page.bbox  # Get page bounding box
+                    structured_data = [row for row in table if any(row)]  # Remove empty rows
+                    
+                    if structured_data:
+                        page_tables.append((bbox, structured_data))  # Store bbox and table content
+
+                if page_tables:
+                    tables_per_page[page_num] = page_tables  # Store tables for this page
+
+        return tables_per_page
 
     def extract_tables(self, pdf, page_chunks) -> List[Chunk]:
         chunks = []
@@ -453,6 +766,57 @@ class PDFChunker:
                 chunks.append(table_chunk)
         return chunks
 
+    def get_imagechunks_for_doc(self) -> dict[int, dict[str, Chunk]]:
+        doc = fitz.open(self.file_path)
+        doc_image_map: dict[int, dict[str, Chunk]] = {}  # NEW: page-index-based dictionary
+
+        for page_num in range(len(doc)):
+            img_chunks = self.extract_imageblobs_from_page(page_num)
+
+            # Initialize the nested dict for this page
+            page_dict: dict[str, Chunk] = {}
+
+            for img_index, chunk in enumerate(img_chunks):
+                # Build a unique key for the image
+                unique_name = f"image_{page_num}_{img_index}"
+                blob = chunk.blobs[0]
+
+                # Optionally store this unique name in the blob (if you want to reference it later)
+                if blob.other_labels is None:
+                    blob.other_labels = []
+                blob.other_labels.append(unique_name)
+
+                page_dict[unique_name] = chunk
+
+            doc_image_map[page_num] = page_dict
+
+        self.doc_image_chunksmap = doc_image_map  # Store in the class attribute
+        return self.doc_image_chunksmap
+
+    def extract_imageblobs_from_page(self, page_num: int) -> list[Chunk]:
+        chunks = []
+        doc = fitz.open(self.file_path)
+        page = doc[page_num]
+        for img_index, img in enumerate(page.get_images(full=True)):
+            xref = img[0]
+            img_rect = doc[page_num].get_image_rects(xref)
+            bbox = list(img_rect[0]) if img_rect else None
+            img_path = os.path.join(self.output_dir, f"image_{page_num}_{img_index}.png")
+            fitz.Pixmap(doc, xref).save(img_path)
+            
+            image_chunk_id = generate_id()
+            image_blob = Blob(
+                blob_type="image",
+                start=page_num,
+                content=json.dumps(bbox),
+                img_path=img_path
+            )
+
+            # chunk id will assigned later
+            image_chunk = Chunk(image_chunk_id, str(page_num), [image_blob], "", [])
+            chunks.append(image_chunk)
+        return chunks
+    
     def extract_images(self, page_chunks) -> List[Chunk]:
         chunks = []
         doc = fitz.open(self.file_path)
@@ -467,18 +831,11 @@ class PDFChunker:
                 img_path = os.path.join(self.output_dir, f"image_{page_num}_{img_index}.png")
                 fitz.Pixmap(doc, xref).save(img_path)
                 
-                # Perform OCR to extract text label
-                try:
-                    label = pytesseract.image_to_string(Image.open(img_path)).strip()
-                except Exception as e:
-                    label = ""
-                
                 image_chunk_id = generate_id()
                 image_blob = Blob(
                     blob_type="image",
                     start=page_num,
-                    content=label,
-                    bbox=bbox,
+                    content="",
                     img_path=img_path
                 )
 
