@@ -304,7 +304,7 @@ export class RequestCommandHandler implements CommandHandler {
 
             // store attachments for later reuse
             const cachedAttachments: CachedImageWithDetails[] = [];
-            if (attachments) {
+            if (attachments && systemContext.session.sessionDirPath !== undefined) {
                 for (let i = 0; i < attachments?.length; i++) {
                     const [attachmentName, tags]: [string, ExifReader.Tags] =
                         await systemContext.session.storeUserSuppliedFile(
