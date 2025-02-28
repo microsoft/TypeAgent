@@ -3,6 +3,7 @@
 
 import { collections } from "typeagent";
 import { Term } from "./dataFormat.js";
+import { IndexingEventHandlers } from "./import.js";
 import { Scored } from "./common.js";
 import {
     ITextEmbeddingIndexData,
@@ -75,16 +76,16 @@ export class TermToRelatedTermsMap implements ITermToRelatedTerms {
     }
 }
 
-export type TermsToRelatedTermIndexSettings = {
+export type RelatedTermIndexSettings = {
     embeddingIndexSettings?: TextEmbeddingIndexSettings | undefined;
 };
 
-export class TermToRelatedTermsIndex implements ITermToRelatedTermsIndex {
+export class RelatedTermsIndex implements ITermToRelatedTermsIndex {
     private aliasMap: TermToRelatedTermsMap;
     private editDistanceIndex: TermEditDistanceIndex | undefined;
     private embeddingIndex: TermEmbeddingIndex | undefined;
 
-    constructor(public settings: TermsToRelatedTermIndexSettings) {
+    constructor(public settings: RelatedTermIndexSettings) {
         this.aliasMap = new TermToRelatedTermsMap();
     }
 
@@ -128,7 +129,7 @@ export class TermToRelatedTermsIndex implements ITermToRelatedTermsIndex {
     public async buildEmbeddingsIndex(
         terms: string[],
         batchSize: number = 8,
-        progressCallback?: (batch: string[], batchStartAt: number) => boolean,
+        eventHandler?: IndexingEventHandlers,
     ): Promise<void> {
         if (this.settings.embeddingIndexSettings) {
             this.embeddingIndex = new TermEmbeddingIndex(
@@ -137,7 +138,7 @@ export class TermToRelatedTermsIndex implements ITermToRelatedTermsIndex {
             await this.embeddingIndex.addTermsBatched(
                 terms,
                 batchSize,
-                progressCallback,
+                eventHandler,
             );
         }
     }
@@ -275,13 +276,13 @@ export class TermEmbeddingIndex implements ITermEmbeddingIndex {
     public async addTermsBatched(
         terms: string[],
         batchSize: number,
-        progressCallback?: (batch: string[], batchStartAt: number) => boolean,
+        eventHandler?: IndexingEventHandlers,
     ): Promise<void> {
         await addTextToEmbeddingIndex(
             this.embeddingIndex,
             terms,
             batchSize,
-            progressCallback,
+            eventHandler,
         );
         this.textArray.push(...terms);
     }

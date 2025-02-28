@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { TextLocation } from "./dataFormat.js";
+import { IndexingEventHandlers } from "./import.js";
 import {
     addTextToEmbeddingIndex,
     TextEmbeddingIndex,
@@ -51,13 +52,13 @@ export class TextToTextLocationIndexFuzzy
     public async addTextLocationsBatched(
         textAndLocations: [string, TextLocation][],
         batchSize: number,
-        progressCallback?: (batch: string[], batchStartAt: number) => boolean,
+        eventHandler?: IndexingEventHandlers,
     ): Promise<void> {
         await addTextToEmbeddingIndex(
             this.embeddingIndex,
             textAndLocations.map((tl) => tl[0]),
             batchSize,
-            progressCallback,
+            eventHandler,
         );
         this.textLocations.push(...textAndLocations.map((tl) => tl[1]));
     }

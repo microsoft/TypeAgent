@@ -320,23 +320,12 @@ export class KnowProPrinter extends ChatPrinter {
         return this;
     }
 
-    public writeIndexingResults(
-        results: kp.ConversationIndexingResult,
-        verbose = false,
-    ) {
-        if (results.failedMessages.length > 0) {
-            this.writeError(
-                `Errors for ${results.failedMessages.length} messages`,
-            );
-            if (verbose) {
-                for (const failedMessage of results.failedMessages) {
-                    this.writeInColor(
-                        chalk.cyan,
-                        failedMessage.message.textChunks[0],
-                    );
-                    this.writeError(failedMessage.error);
-                }
-            }
+    public writeIndexingResults(results: kp.ConversationIndexingResult) {
+        if (results.completedChunks.length > 0) {
+            this.writeLine(`Indexed ${results.completedChunks.length} chunks`);
+        }
+        if (results.error) {
+            this.writeError(results.error);
         }
         return this;
     }

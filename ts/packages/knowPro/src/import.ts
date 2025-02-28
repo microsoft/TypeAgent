@@ -1,15 +1,16 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { IMessage } from "./dataFormat.js";
+import { conversation as kpLib } from "knowledge-processor";
+import { IMessage, TextLocation } from "./dataFormat.js";
 import {
     createTextEmbeddingIndexSettings,
     TextEmbeddingIndexSettings,
 } from "./fuzzyIndex.js";
-import { TermsToRelatedTermIndexSettings } from "./relatedTermsIndex.js";
+import { RelatedTermIndexSettings } from "./relatedTermsIndex.js";
 
 export type ConversationSettings = {
-    relatedTermIndexSettings: TermsToRelatedTermIndexSettings;
+    relatedTermIndexSettings: RelatedTermIndexSettings;
     threadSettings: TextEmbeddingIndexSettings;
 };
 
@@ -21,6 +22,18 @@ export function createConversationSettings(): ConversationSettings {
         },
         threadSettings: embeddingIndexSettings,
     };
+}
+
+export interface IndexingEventHandlers {
+    onKnowledgeExtracted?: (
+        chunk: TextLocation,
+        knowledgeResult: kpLib.KnowledgeResponse,
+    ) => boolean;
+    onEmbeddingsCreated?: (
+        sourceTexts: string[],
+        batch: string[],
+        batchStartAt: number,
+    ) => boolean;
 }
 
 /**

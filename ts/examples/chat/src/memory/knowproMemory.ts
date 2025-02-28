@@ -592,19 +592,13 @@ export async function createKnowproCommands(
             context.printer.writeLine("Building knowledge index");
             const maxMessages = namedArgs.maxMessages ?? messageCount;
             let progress = new ProgressBar(context.printer, maxMessages);
-            const indexResult = await context.podcast.buildIndex(
-                (text, result) => {
+            const indexResult = await context.podcast.buildIndex({
+                onKnowledgeExtracted() {
                     progress.advance();
-                    if (!result.success) {
-                        context.printer.writeError(
-                            `${result.message}\n${text}`,
-                        );
-                    }
                     return progress.count < maxMessages;
                 },
-            );
+            });
             progress.complete();
-            context.printer.writeLine(`Indexed ${maxMessages} items`);
             context.printer.writeIndexingResults(indexResult);
         }
         if (namedArgs.related) {
@@ -618,9 +612,11 @@ export async function createKnowproCommands(
                 context.printer,
                 context.podcast.semanticRefIndex.size,
             );
-            await context.podcast.buildRelatedTermsIndex(16, (batch) => {
-                progress.advance(batch.length);
-                return true;
+            await context.podcast.buildRelatedTermsIndex(16, {
+                onEmbeddingsCreated(sourceTexts, batch, batchStartAt) {
+                    progress.advance(batch.length);
+                    return true;
+                },
             });
             progress.complete();
             context.printer.writeLine(
@@ -666,19 +662,13 @@ export async function createKnowproCommands(
             context.printer.writeLine("Building knowledge index");
             const maxMessages = namedArgs.maxMessages ?? messageCount;
             let progress = new ProgressBar(context.printer, maxMessages);
-            const indexResult = await context.images?.buildIndex(
-                (text: any, result) => {
+            const indexResult = await context.images?.buildIndex({
+                onKnowledgeExtracted() {
                     progress.advance();
-                    if (!result.success) {
-                        context.printer.writeError(
-                            `${result.message}\n${text}`,
-                        );
-                    }
                     return progress.count < maxMessages;
                 },
-            );
+            });
             progress.complete();
-            context.printer.writeLine(`Indexed ${maxMessages} items`);
             context.printer.writeIndexingResults(indexResult);
         }
         if (namedArgs.related) {
@@ -687,9 +677,11 @@ export async function createKnowproCommands(
                 context.printer,
                 context.images?.semanticRefIndex!.size,
             );
-            await context.images?.buildRelatedTermsIndex(16, (batch) => {
-                progress.advance(batch.length);
-                return true;
+            await context.images?.buildRelatedTermsIndex(16, {
+                onEmbeddingsCreated(sourceTexts, batch, batchStartAt) {
+                    progress.advance(batch.length);
+                    return true;
+                },
             });
             progress.complete();
             context.printer.writeLine(

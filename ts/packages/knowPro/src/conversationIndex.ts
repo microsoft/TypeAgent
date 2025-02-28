@@ -18,9 +18,9 @@ import {
     Knowledge,
     KnowledgeType,
 } from "./dataFormat.js";
+import { IndexingEventHandlers } from "./import.js";
 import { conversation as kpLib } from "knowledge-processor";
 import { openai } from "aiclient";
-import { Result } from "typechat";
 import { async } from "typeagent";
 import { facetValueToString } from "./knowledge.js";
 
@@ -206,15 +206,13 @@ export function addKnowledgeToIndex(
 }
 
 export type ConversationIndexingResult = {
-    failedMessages: { message: IMessage; error: string }[];
+    completedChunks: TextLocation[];
+    error?: string | undefined;
 };
 
 export async function buildConversationIndex<TMeta extends IKnowledgeSource>(
     conversation: IConversation<TMeta>,
-    progressCallback?: (
-        text: string,
-        knowledgeResult: Result<kpLib.KnowledgeResponse>,
-    ) => boolean,
+    eventHandler?: IndexingEventHandlers,
 ): Promise<ConversationIndexingResult> {
     conversation.semanticRefIndex ??= new ConversationIndex();
     const semanticRefIndex = conversation.semanticRefIndex;
@@ -230,40 +228,40 @@ export async function buildConversationIndex<TMeta extends IKnowledgeSource>(
     });
     const maxRetries = 4;
     let indexingResult: ConversationIndexingResult = {
-        failedMessages: [],
+        completedChunks: [],
     };
     for (let i = 0; i < conversation.messages.length; i++) {
-        const msg = conversation.messages[i];
+        let messageIndex: MessageIndex = i;
+        const chunkIndex = 0;
+        const msg = conversation.messages[messageIndex];
         // only one chunk per message for now
-        const text = msg.textChunks[0];
-        try {
-            const knowledgeResult = await async.callWithRetry(() =>
-                extractor.extractWithRetry(text, maxRetries),
+        const text = msg.textChunks[chunkIndex];
+        const knowledgeResult = await async.callWithRetry(() =>
+            extractor.extractWithRetry(text, maxRetries),
+        );
+        if (!knowledgeResult.success) {
+            indexingResult.error = knowledgeResult.message;
+            break;
+        }
+        const knowledge = knowledgeResult.data;
+        if (knowledge) {
+            addKnowledgeToIndex(
+                semanticRefs,
+                semanticRefIndex,
+                messageIndex,
+                knowledge,
             );
-            if (progressCallback && !progressCallback(text, knowledgeResult)) {
-                break;
-            }
-            if (knowledgeResult.success) {
-                const knowledge = knowledgeResult.data;
-                if (knowledge) {
-                    addKnowledgeToIndex(
-                        semanticRefs,
-                        semanticRefIndex,
-                        i,
-                        knowledge,
-                    );
-                }
-            } else {
-                indexingResult.failedMessages.push({
-                    message: msg,
-                    error: knowledgeResult.message,
-                });
-            }
-        } catch (ex) {
-            indexingResult.failedMessages.push({
-                message: msg,
-                error: `${ex}`,
-            });
+        }
+        const completedChunk = textLocationFromLocation(
+            messageIndex,
+            chunkIndex,
+        );
+        indexingResult.completedChunks.push(completedChunk);
+        if (
+            eventHandler?.onKnowledgeExtracted &&
+            !eventHandler.onKnowledgeExtracted(completedChunk, knowledge)
+        ) {
+            break;
         }
     }
     return indexingResult;

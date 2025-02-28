@@ -6,35 +6,22 @@ import {
     IConversationSecondaryIndexes,
     Term,
 } from "./dataFormat.js";
-import { PropertyIndex, addToPropertyIndex } from "./propertyIndex.js";
+import { PropertyIndex, buildPropertyIndex } from "./propertyIndex.js";
 import {
-    TermsToRelatedTermIndexSettings,
-    TermToRelatedTermsIndex,
+    RelatedTermIndexSettings,
+    RelatedTermsIndex,
 } from "./relatedTermsIndex.js";
 import {
-    addToTimestampIndex,
+    buildTimestampIndex,
     TimestampToTextRangeIndex,
 } from "./timestampIndex.js";
 
 export async function buildSecondaryIndexes(
     conversation: IConversation,
-): Promise<IConversationSecondaryIndexes> {
+): Promise<void> {
     conversation.secondaryIndexes ??= new ConversationSecondaryIndexes();
-    const secondaryIndexes = conversation.secondaryIndexes;
-    const semanticRefs = conversation.semanticRefs;
-    if (semanticRefs && secondaryIndexes.propertyToSemanticRefIndex) {
-        addToPropertyIndex(
-            semanticRefs,
-            secondaryIndexes.propertyToSemanticRefIndex,
-        );
-    }
-    if (secondaryIndexes.timestampIndex) {
-        addToTimestampIndex(
-            secondaryIndexes.timestampIndex,
-            conversation.messages,
-        );
-    }
-    return secondaryIndexes;
+    buildPropertyIndex(conversation);
+    buildTimestampIndex(conversation);
 }
 
 export class ConversationSecondaryIndexes
@@ -42,12 +29,12 @@ export class ConversationSecondaryIndexes
 {
     public propertyToSemanticRefIndex: PropertyIndex;
     public timestampIndex: TimestampToTextRangeIndex;
-    public termToRelatedTermsIndex: TermToRelatedTermsIndex;
+    public termToRelatedTermsIndex: RelatedTermsIndex;
 
-    constructor(settings: TermsToRelatedTermIndexSettings = {}) {
+    constructor(settings: RelatedTermIndexSettings = {}) {
         this.propertyToSemanticRefIndex = new PropertyIndex();
         this.timestampIndex = new TimestampToTextRangeIndex();
-        this.termToRelatedTermsIndex = new TermToRelatedTermsIndex(settings);
+        this.termToRelatedTermsIndex = new RelatedTermsIndex(settings);
     }
 }
 

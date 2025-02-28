@@ -21,6 +21,7 @@ import {
     IKnowledgeSource,
     ConversationSecondaryIndexes,
     ConversationThreads,
+    IndexingEventHandlers,
 } from "knowpro";
 import { conversation as kpLib, split } from "knowledge-processor";
 import {
@@ -33,7 +34,6 @@ import {
     writeFile,
     writeJsonFile,
 } from "typeagent";
-import { Result } from "typechat";
 import path from "path";
 
 // metadata for podcast messages
@@ -149,28 +149,29 @@ export class Podcast implements IConversation<PodcastMessageMeta> {
     }
 
     public async buildIndex(
-        progressCallback?: (
-            text: string,
-            knowledgeResult: Result<kpLib.KnowledgeResponse>,
-        ) => boolean,
+        eventHandler?: IndexingEventHandlers,
     ): Promise<ConversationIndexingResult> {
         this.addMetadataToIndex();
-        const result = await buildConversationIndex(this, progressCallback);
-        await this.buildSecondaryIndexes();
-        await this.secondaryIndexes.threads.buildIndex();
+        const result = await buildConversationIndex(this, eventHandler);
+        if (!result.error) {
+            await this.buildSecondaryIndexes();
+            await this.secondaryIndexes.threads.buildIndex();
+        }
         return result;
     }
 
     public async buildRelatedTermsIndex(
         batchSize: number = 8,
-        progressCallback?: (batch: string[], batchStartAt: number) => boolean,
+        eventHandler?: IndexingEventHandlers,
     ): Promise<void> {
         const allTerms = this.semanticRefIndex.getTerms();
-        await this.secondaryIndexes.termToRelatedTermsIndex.buildEmbeddingsIndex(
-            allTerms,
-            batchSize,
-            progressCallback,
-        );
+        if (allTerms.length > 0) {
+            await this.secondaryIndexes.termToRelatedTermsIndex.buildEmbeddingsIndex(
+                allTerms,
+                batchSize,
+                eventHandler,
+            );
+        }
     }
 
     public async serialize(): Promise<PodcastData> {

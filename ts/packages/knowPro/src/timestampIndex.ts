@@ -2,7 +2,12 @@
 // Licensed under the MIT License.
 
 import { collections, dateTime } from "typeagent";
-import { DateRange, IMessage, MessageIndex } from "./dataFormat.js";
+import {
+    DateRange,
+    IConversation,
+    IMessage,
+    MessageIndex,
+} from "./dataFormat.js";
 import { textRangeFromLocation } from "./conversationIndex.js";
 import {
     ITimestampToTextRangeIndex,
@@ -93,10 +98,22 @@ export class TimestampToTextRangeIndex implements ITimestampToTextRangeIndex {
     }
 }
 
+export function buildTimestampIndex(conversation: IConversation): void {
+    if (conversation.messages && conversation.secondaryIndexes) {
+        conversation.secondaryIndexes.timestampIndex ??=
+            new TimestampToTextRangeIndex();
+        addToTimestampIndex(
+            conversation.secondaryIndexes.timestampIndex,
+            conversation.messages,
+            0,
+        );
+    }
+}
+
 export function addToTimestampIndex(
     timestampIndex: ITimestampToTextRangeIndex,
     messages: IMessage[],
-    baseMessageIndex: MessageIndex = 0,
+    baseMessageIndex: MessageIndex,
 ) {
     const messageTimestamps: [MessageIndex, string][] = [];
     for (let i = 0; i < messages.length; ++i) {

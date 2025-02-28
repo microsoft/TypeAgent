@@ -15,6 +15,7 @@ import { openai, TextEmbeddingModel } from "aiclient";
 import * as levenshtein from "fast-levenshtein";
 import { createEmbeddingCache } from "knowledge-processor";
 import { Scored } from "./common.js";
+import { IndexingEventHandlers } from "./import.js";
 
 export class TextEmbeddingIndex {
     private embeddings: NormalizedEmbedding[];
@@ -137,12 +138,16 @@ export async function addTextToEmbeddingIndex(
     index: TextEmbeddingIndex,
     textToIndex: string[],
     batchSize: number,
-    progressCallback?: (batch: string[], batchStartAt: number) => boolean,
+    eventHandler?: IndexingEventHandlers,
 ): Promise<void> {
     for (const batch of getIndexingBatches(textToIndex, batchSize)) {
         if (
-            progressCallback &&
-            !progressCallback(batch.values, batch.startAt)
+            eventHandler?.onEmbeddingsCreated &&
+            !eventHandler.onEmbeddingsCreated(
+                textToIndex,
+                batch.values,
+                batch.startAt,
+            )
         ) {
             break;
         }

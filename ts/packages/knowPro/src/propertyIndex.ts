@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import {
+    IConversation,
     ScoredSemanticRef,
     SemanticRef,
     SemanticRefIndex,
@@ -103,10 +104,22 @@ export function addActionPropertiesToIndex(
     }
 }
 
+export function buildPropertyIndex(conversation: IConversation) {
+    if (conversation.secondaryIndexes && conversation.semanticRefs) {
+        conversation.secondaryIndexes.propertyToSemanticRefIndex ??=
+            new PropertyIndex();
+        addToPropertyIndex(
+            conversation.secondaryIndexes.propertyToSemanticRefIndex,
+            conversation.semanticRefs,
+            0,
+        );
+    }
+}
+
 export function addToPropertyIndex(
-    semanticRefs: SemanticRef[],
     propertyIndex: IPropertyToSemanticRefIndex,
-    baseSemanticRefIndex: SemanticRefIndex = 0,
+    semanticRefs: SemanticRef[],
+    baseSemanticRefIndex: SemanticRefIndex,
 ) {
     for (let i = 0; i < semanticRefs.length; ++i) {
         const semanticRef = semanticRefs[i];
