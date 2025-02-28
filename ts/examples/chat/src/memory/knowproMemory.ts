@@ -564,7 +564,8 @@ export async function createKnowproCommands(
             description: "Build index",
             options: {
                 maxMessages: argNum("Maximum messages to index"),
-                related: argBool("Build only related index", false),
+                knowledge: argBool("Index knowledge", false),
+                related: argBool("Index related terms", false),
             },
         };
     }
@@ -585,18 +586,31 @@ export async function createKnowproCommands(
         // Build index
         context.printer.writeLine();
         const maxMessages = namedArgs.maxMessages ?? messageCount;
-        context.printer.writeLine("Building index");
+        context.printer.writeLine(
+            `Building Index:: knowledge: ${namedArgs.knowledge}, related: ${namedArgs.related}`,
+        );
         let progress = new ProgressBar(context.printer, maxMessages);
         const eventHandler = createIndexingEventHandler(
             context,
             progress,
             maxMessages,
         );
+        // Build full index?
+        if (namedArgs.knowledge && namedArgs.related) {
+            const indexResult = await context.podcast.buildIndex(eventHandler);
+            progress.complete();
+            context.printer.writeIndexingResults(indexResult);
+            return;
+        }
+        // Build partial index
         if (namedArgs.related) {
             await kp.buildRelatedTermsIndex(context.podcast, eventHandler);
             progress.complete();
-        } else {
-            const indexResult = await context.podcast.buildIndex(eventHandler);
+        } else if (namedArgs.knowledge) {
+            const indexResult = await kp.buildSemanticRefIndex(
+                context.podcast,
+                eventHandler,
+            );
             progress.complete();
             context.printer.writeIndexingResults(indexResult);
         }
