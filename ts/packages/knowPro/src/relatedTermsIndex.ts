@@ -56,6 +56,10 @@ export class TermToRelatedTermsMap implements ITermToRelatedTerms {
         this.map.delete(term);
     }
 
+    public clear(): void {
+        this.map.clear();
+    }
+
     public serialize(): ITermToRelatedTermsData {
         const relatedTerms: ITermsToRelatedTermsDataItem[] = [];
         for (const [key, value] of this.map) {
@@ -310,6 +314,11 @@ export class TermEmbeddingIndex implements ITermEmbeddingIndex {
             this.textArray.splice(indexOf, 1);
             this.embeddingIndex.removeAt(indexOf);
         }
+    }
+
+    public clear(): void {
+        this.textArray = [];
+        this.embeddingIndex.clear();
     }
 
     public serialize(): ITextEmbeddingIndexData {

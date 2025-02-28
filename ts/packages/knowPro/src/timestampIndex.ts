@@ -86,6 +86,10 @@ export class TimestampToTextRangeIndex implements ITimestampToTextRangeIndex {
         return true;
     }
 
+    public clear(): void {
+        this.ranges = [];
+    }
+
     private compareTimestampedRange(
         x: TimestampedTextRange,
         y: TimestampedTextRange,

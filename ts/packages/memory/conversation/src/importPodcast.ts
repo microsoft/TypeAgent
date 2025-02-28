@@ -154,6 +154,8 @@ export class Podcast implements IConversation<PodcastMessageMeta> {
         this.addMetadataToIndex();
         const result = await buildConversationIndex(this, eventHandler);
         if (!result.error) {
+            // buildConversationIndex already built all aliases
+            await this.buildSecondaryIndexes(false);
             await this.secondaryIndexes.threads.buildIndex();
         }
         return result;
@@ -193,7 +195,7 @@ export class Podcast implements IConversation<PodcastMessageMeta> {
             );
             this.secondaryIndexes.threads.deserialize(data.threadData);
         }
-        await this.buildSecondaryIndexes();
+        await this.buildSecondaryIndexes(true);
     }
 
     public async writeToFile(
@@ -246,13 +248,16 @@ export class Podcast implements IConversation<PodcastMessageMeta> {
         return podcast;
     }
 
-    private async buildSecondaryIndexes() {
+    private async buildSecondaryIndexes(all: boolean) {
+        if (all) {
+            await buildSecondaryIndexes(this, false);
+        }
         this.buildParticipantAliases();
-        await buildSecondaryIndexes(this, false);
     }
 
     private buildParticipantAliases(): void {
         const aliases = this.secondaryIndexes.termToRelatedTermsIndex.aliases;
+        aliases.clear();
         const nameToAliasMap = this.collectParticipantAliases();
         for (const name of nameToAliasMap.keys()) {
             const relatedTerms: Term[] = nameToAliasMap

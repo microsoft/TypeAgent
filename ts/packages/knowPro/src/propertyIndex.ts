@@ -191,6 +191,10 @@ export class PropertyIndex implements IPropertyToSemanticRefIndex {
         }
     }
 
+    public clear(): void {
+        this.map.clear();
+    }
+
     lookupProperty(
         propertyName: string,
         value: string,

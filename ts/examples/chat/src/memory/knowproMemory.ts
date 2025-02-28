@@ -108,11 +108,10 @@ export async function createKnowproCommands(
                 startAt: arg("Start date and time"),
             },
             options: {
-                knowledge: argBool("Index knowledge", true),
-                related: argBool("Index related terms", true),
                 indexFilePath: arg("Output path for index file"),
                 maxMessages: argNum("Maximum messages to index"),
                 length: argNum("Length of the podcast in minutes", 60),
+                buildIndex: argBool("Index the imported podcast", true),
             },
         };
     }
@@ -132,11 +131,9 @@ export async function createKnowproCommands(
         context.conversation = context.podcast;
         context.printer.writeLine("Imported podcast:");
         context.printer.writePodcastInfo(context.podcast);
-
-        if (!(namedArgs.knowledge && namedArgs.related)) {
+        if (!namedArgs.buildIndex) {
             return;
         }
-
         // Build index
         await podcastBuildIndex(namedArgs);
 
@@ -564,8 +561,7 @@ export async function createKnowproCommands(
             description: "Build index",
             options: {
                 maxMessages: argNum("Maximum messages to index"),
-                knowledge: argBool("Index knowledge", false),
-                related: argBool("Index related terms", false),
+                relatedOnly: argBool("Index related terms only", false),
             },
         };
     }
@@ -586,9 +582,7 @@ export async function createKnowproCommands(
         // Build index
         context.printer.writeLine();
         const maxMessages = namedArgs.maxMessages ?? messageCount;
-        context.printer.writeLine(
-            `Building Index:: knowledge: ${namedArgs.knowledge}, related: ${namedArgs.related}`,
-        );
+        context.printer.writeLine(`Building Index`);
         let progress = new ProgressBar(context.printer, maxMessages);
         const eventHandler = createIndexingEventHandler(
             context,
@@ -596,24 +590,16 @@ export async function createKnowproCommands(
             maxMessages,
         );
         // Build full index?
-        if (namedArgs.knowledge && namedArgs.related) {
+        if (!namedArgs.relatedOnly) {
             const indexResult = await context.podcast.buildIndex(eventHandler);
             progress.complete();
             context.printer.writeIndexingResults(indexResult);
             return;
         }
         // Build partial index
-        if (namedArgs.related) {
-            await kp.buildRelatedTermsIndex(context.podcast, eventHandler);
-            progress.complete();
-        } else if (namedArgs.knowledge) {
-            const indexResult = await kp.buildSemanticRefIndex(
-                context.podcast,
-                eventHandler,
-            );
-            progress.complete();
-            context.printer.writeIndexingResults(indexResult);
-        }
+        context.podcast.secondaryIndexes.termToRelatedTermsIndex.fuzzyIndex?.clear();
+        await kp.buildRelatedTermsIndex(context.podcast, eventHandler);
+        progress.complete();
     }
 
     function imageCollectionBuildIndexDef(): CommandMetadata {
