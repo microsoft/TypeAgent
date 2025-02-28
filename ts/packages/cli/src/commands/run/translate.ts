@@ -57,6 +57,25 @@ export default class TranslateCommand extends Command {
             default: true, // follow DispatcherOptions default
             allowNo: true,
         }),
+        schemaOptimization: Flags.boolean({
+            description: "Enable schema optimization",
+        }),
+        switchEmbedding: Flags.boolean({
+            description: "Use embedding to determine the first schema to use",
+            default: true, // follow DispatcherOptions default
+            allowNo: true,
+        }),
+        switchInline: Flags.boolean({
+            description: "Use inline switch schema to select schema group",
+            default: true, // follow DispatcherOptions default
+            allowNo: true,
+        }),
+        switchSearch: Flags.boolean({
+            description:
+                "Enable second chance full switch schema to find schema group",
+            default: true, // follow DispatcherOptions default
+            allowNo: true,
+        }),
     };
 
     static description = "Translate a request into action";
@@ -83,6 +102,14 @@ export default class TranslateCommand extends Command {
                             jsonSchemaFunction: flags.jsonSchemaFunction,
                             jsonSchemaValidate: flags.jsonSchemaValidate,
                         },
+                        optimize: {
+                            enabled: flags.schemaOptimization,
+                        },
+                    },
+                    switch: {
+                        embedding: flags.switchEmbedding,
+                        inline: flags.switchInline,
+                        search: flags.switchSearch,
                     },
                 },
                 cache: { enabled: false },
