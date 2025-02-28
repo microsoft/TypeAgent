@@ -1,8 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { TextLocation } from "./dataFormat.js";
-import { IndexingEventHandlers } from "./dataFormat.js";
+import { TextLocation } from "./interfaces.js";
+import { IndexingEventHandlers } from "./interfaces.js";
 import {
     TextEmbeddingIndex,
     TextEmbeddingIndexSettings,

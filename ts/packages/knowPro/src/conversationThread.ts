@@ -6,7 +6,7 @@ import {
     ScoredThreadIndex,
     Thread,
     ThreadIndex,
-} from "./dataFormat.js";
+} from "./interfaces.js";
 import {
     deserializeEmbedding,
     serializeEmbedding,

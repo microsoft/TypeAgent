@@ -15,7 +15,7 @@ import { openai, TextEmbeddingModel } from "aiclient";
 import * as levenshtein from "fast-levenshtein";
 import { createEmbeddingCache } from "knowledge-processor";
 import { Scored } from "./common.js";
-import { IndexingEventHandlers } from "./dataFormat.js";
+import { IndexingEventHandlers } from "./interfaces.js";
 
 export class TextEmbeddingIndex {
     private embeddings: NormalizedEmbedding[];

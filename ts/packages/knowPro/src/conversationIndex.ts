@@ -17,8 +17,8 @@ import {
     SemanticRefIndex,
     TextRange,
     Topic,
-} from "./dataFormat.js";
-import { IndexingEventHandlers } from "./dataFormat.js";
+} from "./interfaces.js";
+import { IndexingEventHandlers } from "./interfaces.js";
 import { conversation as kpLib } from "knowledge-processor";
 import { openai } from "aiclient";
 import { async } from "typeagent";

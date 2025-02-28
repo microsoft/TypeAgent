@@ -6,7 +6,7 @@ import {
     IConversationSecondaryIndexes,
     IndexingEventHandlers,
     Term,
-} from "./dataFormat.js";
+} from "./interfaces.js";
 import { PropertyIndex, buildPropertyIndex } from "./propertyIndex.js";
 import {
     buildRelatedTermsIndex,

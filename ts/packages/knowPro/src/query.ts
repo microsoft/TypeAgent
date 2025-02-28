@@ -14,7 +14,7 @@ import {
     Tag,
     Term,
     TextRange,
-} from "./dataFormat.js";
+} from "./interfaces.js";
 import {
     KnowledgePropertyName,
     PropertySearchTerm,
@@ -34,11 +34,11 @@ import {
     lookupPropertyInPropertyIndex,
     PropertyNames,
 } from "./propertyIndex.js";
-import { ITimestampToTextRangeIndex } from "./dataFormat.js";
-import { IPropertyToSemanticRefIndex } from "./dataFormat.js";
+import { ITimestampToTextRangeIndex } from "./interfaces.js";
+import { IPropertyToSemanticRefIndex } from "./interfaces.js";
 import { conversation as kpLib } from "knowledge-processor";
 import { collections } from "typeagent";
-import { Thread } from "./dataFormat.js";
+import { Thread } from "./interfaces.js";
 import { facetValueToString } from "./knowledge.js";
 import { isInDateRange, isSearchTermWildcard } from "./common.js";
 

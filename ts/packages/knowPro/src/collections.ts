@@ -11,7 +11,7 @@ import {
     SemanticRefIndex,
     Term,
     TextRange,
-} from "./dataFormat.js";
+} from "./interfaces.js";
 import { compareTextRange, isInTextRange } from "./common.js";
 
 export interface Match<T = any> {

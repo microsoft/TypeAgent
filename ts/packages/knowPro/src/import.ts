@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { IMessage } from "./dataFormat.js";
+import { IMessage } from "./interfaces.js";
 import {
     createTextEmbeddingIndexSettings,
     TextEmbeddingIndexSettings,

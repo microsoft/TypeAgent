@@ -11,7 +11,7 @@ import {
     SemanticRef,
     Term,
     IConversationSecondaryIndexes,
-} from "./dataFormat.js";
+} from "./interfaces.js";
 import { mergedEntities, mergeTopics } from "./knowledge.js";
 import * as q from "./query.js";
 import { IQueryOpExpr } from "./query.js";

@@ -2,8 +2,8 @@
 // Licensed under the MIT License.
 
 import { collections } from "typeagent";
-import { IConversation, Term } from "./dataFormat.js";
-import { IndexingEventHandlers } from "./dataFormat.js";
+import { IConversation, Term } from "./interfaces.js";
+import { IndexingEventHandlers } from "./interfaces.js";
 import { Scored } from "./common.js";
 import {
     ITextEmbeddingIndexData,
@@ -15,7 +15,7 @@ import {
     ITermToRelatedTermsIndex,
     ITermToRelatedTermsFuzzy,
     ITermToRelatedTerms,
-} from "./dataFormat.js";
+} from "./interfaces.js";
 import { SearchTerm } from "./search.js";
 import { isSearchTermWildcard } from "./common.js";
 import { TermSet } from "./collections.js";

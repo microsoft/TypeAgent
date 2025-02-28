@@ -7,12 +7,12 @@ import {
     IConversation,
     IMessage,
     MessageIndex,
-} from "./dataFormat.js";
+} from "./interfaces.js";
 import { textRangeFromLocation } from "./conversationIndex.js";
 import {
     ITimestampToTextRangeIndex,
     TimestampedTextRange,
-} from "./dataFormat.js";
+} from "./interfaces.js";
 
 /**
  * An index of timestamp => TextRanges.

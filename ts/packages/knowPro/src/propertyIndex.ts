@@ -7,9 +7,9 @@ import {
     SemanticRef,
     SemanticRefIndex,
     Tag,
-} from "./dataFormat.js";
+} from "./interfaces.js";
 import { conversation as kpLib } from "knowledge-processor";
-import { IPropertyToSemanticRefIndex } from "./dataFormat.js";
+import { IPropertyToSemanticRefIndex } from "./interfaces.js";
 import { TextRangesInScope } from "./collections.js";
 import { facetValueToString } from "./knowledge.js";
 
