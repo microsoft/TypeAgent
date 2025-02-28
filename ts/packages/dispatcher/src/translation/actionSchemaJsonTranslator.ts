@@ -23,7 +23,6 @@ import {
     TypeAgentJsonValidator,
 } from "common-utils";
 import {
-    getInjectedActionConfigs,
     createChangeAssistantActionSchema,
     TranslatedAction,
 } from "./agentTranslators.js";
@@ -204,31 +203,26 @@ class ActionSchemaBuilder {
 }
 
 export function composeActionSchema(
-    schemaName: string,
+    actionConfigs: ActionConfig[],
+    switchActionConfigs: ActionConfig[],
     provider: ActionConfigProvider,
-    activeSchemas: { [key: string]: boolean },
-    changeAgentAction: boolean,
     multipleActionOptions: MultipleActionOptions,
 ) {
     const builder = new ActionSchemaBuilder(provider);
-    builder.addActionConfig(provider.getActionConfig(schemaName));
+    builder.addActionConfig(...actionConfigs);
     return finalizeActionSchemaBuilder(
         builder,
-        schemaName,
-        provider,
-        activeSchemas,
-        changeAgentAction,
+        switchActionConfigs,
         multipleActionOptions,
-        false,
     );
 }
 
 export function composeSelectedActionSchema(
     definitions: ActionSchemaTypeDefinition[],
+    actionConfigs: ActionConfig[],
+    switchActionConfigs: ActionConfig[],
     schemaName: string,
     provider: ActionConfigProvider,
-    activeSchemas: { [key: string]: boolean },
-    changeAgentAction: boolean,
     multipleActionOptions: MultipleActionOptions,
 ) {
     const builder = new ActionSchemaBuilder(provider);
@@ -239,41 +233,23 @@ export function composeSelectedActionSchema(
 
     const entry = sc.type(typeName, union, comments);
     builder.addTypeDefinition(entry);
-
+    builder.addActionConfig(...actionConfigs);
     return finalizeActionSchemaBuilder(
         builder,
-        schemaName,
-        provider,
-        activeSchemas,
-        changeAgentAction,
+        switchActionConfigs,
         multipleActionOptions,
-        true,
     );
 }
 
 function finalizeActionSchemaBuilder(
     builder: ActionSchemaBuilder,
-    schemaName: string,
-    provider: ActionConfigProvider,
-    activeSchemas: { [key: string]: boolean },
-    changeAgentAction: boolean,
+    switchActionConfigs: ActionConfig[],
     multipleActionOptions: MultipleActionOptions,
-    partial: boolean,
 ) {
-    builder.addActionConfig(
-        ...getInjectedActionConfigs(schemaName, provider, activeSchemas),
-    );
-
-    if (changeAgentAction) {
-        const changeAssistantActionSchema = createChangeAssistantActionSchema(
-            provider,
-            schemaName,
-            activeSchemas,
-            partial,
+    if (switchActionConfigs.length > 0) {
+        builder.addTypeDefinition(
+            createChangeAssistantActionSchema(switchActionConfigs),
         );
-        if (changeAssistantActionSchema) {
-            builder.addTypeDefinition(changeAssistantActionSchema);
-        }
     }
 
     if (

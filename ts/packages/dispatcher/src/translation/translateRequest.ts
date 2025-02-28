@@ -47,29 +47,68 @@ import {
 import { unicodeChar } from "../command/command.js";
 import registerDebug from "debug";
 import { confirmTranslation } from "./confirmTranslation.js";
+import { ActionConfig } from "./actionConfig.js";
+import { AppAgentManager } from "../context/appAgentManager.js";
+
 const debugTranslate = registerDebug("typeagent:translate");
 const debugSemanticSearch = registerDebug("typeagent:translate:semantic");
 
-function getActiveTranslators(context: CommandHandlerContext) {
-    return Object.fromEntries(
-        context.agents.getActiveSchemas().map((name) => [name, true]),
-    );
+/**
+ * Gather active action configs for injection and switch.
+ * If firstSchemaName is specified, it will be included for injection first regardless of whether config or it is active or not.
+ *
+ * @param agents the app agent manager
+ * @param changeAgentAction whether to generate the switch actions.
+ * @param firstSchemaName the first schema name to include for injection
+ * @returns
+ */
+
+function getTranslationActionConfigs(
+    agents: AppAgentManager,
+    changeAgentAction: boolean,
+    firstSchemaName?: string,
+) {
+    const actionConfigs: ActionConfig[] = [];
+    const switchActionConfigs: ActionConfig[] = [];
+    if (firstSchemaName) {
+        actionConfigs.push(agents.getActionConfig(firstSchemaName));
+    }
+    for (const actionConfig of agents.getActionConfigs()) {
+        const name = actionConfig.schemaName;
+        if (firstSchemaName === name || !agents.isSchemaActive(name)) {
+            continue;
+        }
+        if (actionConfig.injected) {
+            actionConfigs.push(actionConfig);
+        } else if (changeAgentAction) {
+            switchActionConfigs.push(actionConfig);
+        }
+    }
+    return {
+        actionConfigs,
+        switchActionConfigs,
+    };
 }
 
 export function getTranslatorForSchema(
     context: CommandHandlerContext,
-    translatorName: string,
+    schemaName: string,
 ) {
-    const translator = context.translatorCache.get(translatorName);
+    const translator = context.translatorCache.get(schemaName);
     if (translator !== undefined) {
         return translator;
     }
     const config = context.session.getConfig().translation;
-    const newTranslator = loadAgentJsonTranslator(
-        translatorName,
+    const { actionConfigs, switchActionConfigs } = getTranslationActionConfigs(
         context.agents,
-        getActiveTranslators(context),
         config.switch.inline,
+        schemaName,
+    );
+
+    const newTranslator = loadAgentJsonTranslator(
+        actionConfigs,
+        switchActionConfigs,
+        context.agents,
         config.multiple,
         config.schema.generation.enabled,
         config.model,
@@ -81,7 +120,7 @@ export function getTranslatorForSchema(
             jsonSchemaValidate: config.schema.generation.jsonSchemaValidate,
         },
     );
-    context.translatorCache.set(translatorName, newTranslator);
+    context.translatorCache.set(schemaName, newTranslator);
     return newTranslator;
 }
 
@@ -108,12 +147,17 @@ async function getTranslatorForSelectedActions(
         return undefined;
     }
     const config = context.session.getConfig().translation;
+
+    const { actionConfigs, switchActionConfigs } = getTranslationActionConfigs(
+        context.agents,
+        config.switch.inline,
+    );
     return createTypeAgentTranslatorForSelectedActions(
         nearestNeighbors.map((e) => e.item.definition),
+        actionConfigs,
+        switchActionConfigs,
         schemaName,
         context.agents,
-        getActiveTranslators(context),
-        config.switch.inline,
         config.multiple,
         config.model,
     );

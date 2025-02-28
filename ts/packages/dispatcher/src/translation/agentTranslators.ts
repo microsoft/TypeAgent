@@ -64,31 +64,21 @@ const additionalActionLookupTypeComments = [
     " The schema group will be chosen based on the schemaName parameter",
 ];
 export function createChangeAssistantActionSchema(
-    provider: ActionConfigProvider,
-    currentSchemaName: string, // schema name to not include
-    activeSchemas: { [key: string]: boolean },
-    partial: boolean = false,
-): ActionSchemaTypeDefinition | undefined {
-    // Default to no switching if active translator isn't passed in.
-    const translators = provider.getActionConfigs().filter(
-        ([name, actionConfigs]) =>
-            (partial && name === currentSchemaName) || // include itself if partial
-            (name !== currentSchemaName && // don't include itself
-                !actionConfigs.injected && // don't include injected translators
-                (activeSchemas[name] ?? false)),
-    );
-    if (translators.length === 0) {
-        return undefined;
-    }
-
-    const schemaNameParameterComments = translators.map(
-        ([name, translator]) => ` ${name} - ${translator.description}`,
+    actionConfigs: ActionConfig[],
+): ActionSchemaTypeDefinition {
+    const schemaNameParameterComments = actionConfigs.map(
+        (actionConfig) =>
+            ` ${actionConfig.schemaName} - ${actionConfig.description}`,
     );
     const obj: ActionSchemaObject = sc.obj({
         actionName: sc.string(additionalActionLookup),
         parameters: sc.obj({
             schemaName: sc.field(
-                sc.string(translators.map(([name]) => name)),
+                sc.string(
+                    actionConfigs.map(
+                        (actionConfig) => actionConfig.schemaName,
+                    ),
+                ),
                 schemaNameParameterComments,
             ),
             request: sc.string(),
@@ -103,15 +93,12 @@ export function createChangeAssistantActionSchema(
 }
 
 function getChangeAssistantSchemaDef(
-    currentSchemaName: string,
-    provider: ActionConfigProvider,
-    activeSchemas: { [key: string]: boolean },
+    switchActionConfigs: ActionConfig[],
 ): TranslatorSchemaDef | undefined {
-    const definition = createChangeAssistantActionSchema(
-        provider,
-        currentSchemaName,
-        activeSchemas,
-    );
+    if (switchActionConfigs.length === 0) {
+        return undefined;
+    }
+    const definition = createChangeAssistantActionSchema(switchActionConfigs);
     if (definition === undefined) {
         return undefined;
     }
@@ -146,54 +133,22 @@ function getTranslatorSchemaDef(
     );
 }
 
-export function getInjectedActionConfigs(
-    currentSchemaName: string,
-    provider: ActionConfigProvider,
-    activeSchemas: { [key: string]: boolean },
-) {
-    return provider
-        .getActionConfigs()
-        .filter(
-            ([name, config]) =>
-                config.injected &&
-                name !== currentSchemaName && // don't include itself
-                (activeSchemas[name] ?? false),
-        )
-        .map(([_, config]) => config);
-}
-
-function getInjectedSchemaDefs(
-    type: string,
-    currentSchemaName: string,
-    provider: ActionConfigProvider,
-    activeSchemas: { [key: string]: boolean },
-    changeAgentAction: boolean,
+function getTranslatorSchemaDefs(
+    actionConfigs: ActionConfig[],
+    switchActionConfigs: ActionConfig[],
     multipleActionOptions: MultipleActionOptions,
 ): TranslatorSchemaDef[] {
-    // Add all injected schemas
-    const injectedActionConfigs = getInjectedActionConfigs(
-        currentSchemaName,
-        provider,
-        activeSchemas,
-    );
-    const injectedSchemaDefs = injectedActionConfigs.map(
-        getTranslatorSchemaDef,
-    );
+    const translationSchemaDefs = actionConfigs.map(getTranslatorSchemaDef);
 
     // subAction for multiple action
-    const subActionType = [type, ...injectedSchemaDefs.map((s) => s.typeName)];
+    const subActionType = actionConfigs.map((s) => s.schemaType);
 
     // Add change assistant schema if needed
-    const changeAssistantSchemaDef = changeAgentAction
-        ? getChangeAssistantSchemaDef(
-              currentSchemaName,
-              provider,
-              activeSchemas,
-          )
-        : undefined;
+    const changeAssistantSchemaDef =
+        getChangeAssistantSchemaDef(switchActionConfigs);
 
     if (changeAssistantSchemaDef) {
-        injectedSchemaDefs.push(changeAssistantSchemaDef);
+        translationSchemaDefs.push(changeAssistantSchemaDef);
         subActionType.push(changeAssistantSchemaDef.typeName);
     }
 
@@ -203,31 +158,10 @@ function getInjectedSchemaDefs(
         : undefined;
 
     if (multipleActionSchemaDef) {
-        injectedSchemaDefs.push(multipleActionSchemaDef);
+        translationSchemaDefs.push(multipleActionSchemaDef);
     }
 
-    return injectedSchemaDefs;
-}
-
-function getTranslatorSchemaDefs(
-    schemaName: string,
-    provider: ActionConfigProvider,
-    activeSchemas: { [key: string]: boolean },
-    changeAgentAction: boolean,
-    multipleActionOptions: MultipleActionOptions,
-): TranslatorSchemaDef[] {
-    const actionConfig = provider.getActionConfig(schemaName);
-    return [
-        getTranslatorSchemaDef(actionConfig),
-        ...getInjectedSchemaDefs(
-            actionConfig.schemaType,
-            schemaName,
-            provider,
-            activeSchemas,
-            changeAgentAction,
-            multipleActionOptions,
-        ),
-    ];
+    return translationSchemaDefs;
 }
 
 export type TypeAgentTranslator<T = object> = {
@@ -256,10 +190,9 @@ export interface TranslatedAction {
 export function loadAgentJsonTranslator<
     T extends TranslatedAction = TranslatedAction,
 >(
-    schemaName: string,
+    actionConfigs: ActionConfig[],
+    switchActionConfigs: ActionConfig[],
     provider: ActionConfigProvider,
-    activeSchemas: { [key: string]: boolean } = {},
-    changeAgentAction: boolean = false,
     multipleActionOptions: MultipleActionOptions,
     generated: boolean = true,
     model?: string,
@@ -270,10 +203,9 @@ export function loadAgentJsonTranslator<
         ? createJsonTranslatorFromActionSchema<T>(
               "AllActions",
               composeActionSchema(
-                  schemaName,
+                  actionConfigs,
+                  switchActionConfigs,
                   provider,
-                  activeSchemas,
-                  changeAgentAction,
                   multipleActionOptions,
               ),
               options,
@@ -282,10 +214,8 @@ export function loadAgentJsonTranslator<
         : createJsonTranslatorFromSchemaDef<T>(
               "AllActions",
               getTranslatorSchemaDefs(
-                  schemaName,
-                  provider,
-                  activeSchemas,
-                  changeAgentAction,
+                  actionConfigs,
+                  switchActionConfigs,
                   multipleActionOptions,
               ),
               options,
@@ -360,10 +290,10 @@ export function createTypeAgentTranslatorForSelectedActions<
     T extends TranslatedAction = TranslatedAction,
 >(
     definitions: ActionSchemaTypeDefinition[],
+    actionConfigs: ActionConfig[],
+    switchActionConfigs: ActionConfig[],
     schemaName: string,
     provider: ActionConfigProvider,
-    activeSchemas: { [key: string]: boolean },
-    changeAgentAction: boolean,
     multipleActionOptions: MultipleActionOptions,
     model?: string,
 ) {
@@ -372,10 +302,10 @@ export function createTypeAgentTranslatorForSelectedActions<
         "AllActions",
         composeSelectedActionSchema(
             definitions,
+            actionConfigs,
+            switchActionConfigs,
             schemaName,
             provider,
-            activeSchemas,
-            changeAgentAction,
             multipleActionOptions,
         ),
         options,
@@ -385,34 +315,46 @@ export function createTypeAgentTranslatorForSelectedActions<
 
 // For CLI, replicate the behavior of loadAgentJsonTranslator to get the schema
 export function getFullSchemaText(
-    translatorName: string,
+    schemaName: string,
     provider: ActionConfigProvider,
     activeSchemas: string[] = [],
     changeAgentAction: boolean,
     multipleActionOptions: MultipleActionOptions,
     generated: boolean,
 ): string {
-    const active = Object.fromEntries(
-        activeSchemas.map((name) => [name, true]),
-    );
+    const actionConfigs: ActionConfig[] = [
+        provider.getActionConfig(schemaName),
+    ];
+    const switchActionConfigs: ActionConfig[] = [];
+
+    for (const actionConfig of provider.getActionConfigs()) {
+        if (
+            schemaName === actionConfig.schemaName ||
+            !activeSchemas.includes(actionConfig.schemaName)
+        ) {
+            continue;
+        }
+        if (actionConfig.injected) {
+            actionConfigs.push(actionConfig);
+        } else if (changeAgentAction) {
+            switchActionConfigs.push(actionConfig);
+        }
+    }
 
     if (generated) {
         return generateActionSchema(
             composeActionSchema(
-                translatorName,
+                actionConfigs,
+                switchActionConfigs,
                 provider,
-                active,
-                changeAgentAction,
                 multipleActionOptions,
             ),
             { exact: true },
         );
     }
     const schemaDefs = getTranslatorSchemaDefs(
-        translatorName,
-        provider,
-        active,
-        changeAgentAction,
+        actionConfigs,
+        switchActionConfigs,
         multipleActionOptions,
     );
     return composeTranslatorSchemas("AllActions", schemaDefs);
