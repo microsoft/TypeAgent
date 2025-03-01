@@ -418,7 +418,7 @@ class PDFChunker:
 
                     is_image_label = is_image_title or is_image_caption
                     if is_image_label:
-                        print(f"  ✅ Marked as IMAGE label")
+                        print(f" 🖼️ Marked as IMAGE label")
 
                     # Check if text is near a table
                     # is_table_label = not is_image_label and any(
@@ -578,12 +578,12 @@ class PDFChunker:
             return merged_pars
 
         def print_lines(page_num: int, page_lines: list[str]) -> None:
-            print(f"\n--- DEBUG: Page {page_num} raw lines ---")
+            print(f"\n--- 🚀 DEBUG: Page {page_num} raw lines ---")
             for idx, ln in enumerate(page_lines):
                 print(f"  Raw line {idx}: '{ln}'")
 
         def print_lines_with_label(page_num: int, page_lines: list[tuple[str, str]]) -> None:
-            print(f"\n--- DEBUG: Page {page_num} raw lines ---")
+            print(f"\n--- 🚀 DEBUG: Page {page_num} raw lines ---")
             for idx, (text, label) in enumerate(page_lines):
                 print(f"  Raw line {idx}: '{text}' (Label: {label})")
 
@@ -627,7 +627,7 @@ class PDFChunker:
 
         for page_num in range(len(doc)):
             page = doc[page_num]
-            print(f"\n--- DEBUG: Page {page_num} ---")
+            print(f"\n--- 🚀 DEBUG: Page {page_num} ---")
             page_lines_with_labels = self.get_lines_from_dict(page)
             if page_lines_with_labels and page_lines_with_labels[-1][0].strip().isdigit():
                 page_lines_with_labels.pop()
@@ -817,7 +817,7 @@ class PDFChunker:
             chunks.append(image_chunk)
         return chunks
     
-    def extract_images(self, page_chunks) -> List[Chunk]:
+    def extract_image_chunks(self, page_chunks) -> List[Chunk]:
         chunks = []
         doc = fitz.open(self.file_path)
         for page_num in range(len(doc)):
@@ -850,7 +850,7 @@ class PDFChunker:
             if self.debug:
                 self.debug_print_lines(text_chunks)
             #table_chunks = self.extract_tables(pdf, page_chunks=page_chunks)
-            image_chunks = self.extract_images(page_chunks)
+            image_chunks = self.extract_image_chunks(page_chunks)
         all_chunks = text_chunks + image_chunks
         return all_chunks
 
