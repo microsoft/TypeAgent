@@ -11,27 +11,21 @@ export async function executeSessionAction(
     context: ActionContext<CommandHandlerContext>,
 ) {
     switch (action.actionName) {
-        case "new":
+        case "newSession":
             await processCommandNoLock(
                 `@session new ${action.parameters.name ?? ""}`,
                 context.sessionContext.agentContext,
             );
             break;
-        case "list":
+        case "listSession":
             await processCommandNoLock(
                 "@session list",
                 context.sessionContext.agentContext,
             );
             break;
-        case "showInfo":
+        case "showSessionInfo":
             await processCommandNoLock(
                 "@session info",
-                context.sessionContext.agentContext,
-            );
-            break;
-        case "toggleHistory":
-            await processCommandNoLock(
-                `@session history ${action.parameters.enable ? "on" : "off"}`,
                 context.sessionContext.agentContext,
             );
             break;

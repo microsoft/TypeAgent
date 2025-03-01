@@ -28,6 +28,7 @@ import {
     isMultipleAction,
     isPendingRequest,
 } from "../../translation/multipleActionSchema.js";
+import { DispatcherName } from "../../context/dispatcher/dispatcherUtils.js";
 
 const testDataJSONVersion = 2;
 export type ExplanationTestDataEntry<T extends object = object> =
@@ -280,12 +281,14 @@ function getSafeTranslateFn(
     model?: string,
 ) {
     const translator = loadAgentJsonTranslator<TranslatedAction>(
-        schemaName,
+        [
+            provider.getActionConfig(schemaName),
+            provider.getActionConfig(DispatcherName), // make sure we have "unknown" action
+        ],
+        [],
         provider,
-        {},
-        false,
-        false,
-        true,
+        false, // multiple
+        true, // generated
         model,
     );
     return async (request: string): Promise<Result<TranslatedAction>> => {

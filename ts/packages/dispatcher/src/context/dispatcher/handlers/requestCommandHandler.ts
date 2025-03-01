@@ -42,7 +42,7 @@ const debugExplain = registerDebug("typeagent:explain");
 
 async function canTranslateWithoutContext(
     requestAction: RequestAction,
-    usedTranslators: Map<string, TypeAgentTranslator<object>>,
+    usedTranslators: Map<string, TypeAgentTranslator>,
     logger?: Logger,
 ) {
     if (requestAction.history === undefined) {
@@ -60,7 +60,7 @@ async function canTranslateWithoutContext(
             if (!result.success) {
                 throw new Error("Failed to translate without history context");
             }
-            const newActions = result.data as TranslatedAction;
+            const newActions = result.data;
             const count = isMultipleAction(newActions)
                 ? newActions.parameters.requests.length
                 : 1;
@@ -68,7 +68,7 @@ async function canTranslateWithoutContext(
             if (count !== oldActions.length) {
                 throw new Error("Action count mismatch without context");
             }
-            translations.set(translatorName, result.data as TranslatedAction);
+            translations.set(translatorName, result.data);
         }
 
         let index = 0;
@@ -85,8 +85,17 @@ async function canTranslateWithoutContext(
             } else {
                 newAction = newTranslatedActions;
             }
+            const schemaName = usedTranslators
+                .get(translatorName)!
+                .getSchemaName(newAction.actionName);
+            if (schemaName === undefined) {
+                // Should not happen
+                throw new Error(
+                    `Internal Error: Unable to match schema name for action '${newAction.actionName}'`,
+                );
+            }
             newActions.push({
-                translatorName,
+                translatorName: schemaName,
                 ...newAction,
             });
         }
@@ -156,7 +165,7 @@ function getExplainerOptions(
     }
 
     if (hasAdditionalInstructions(requestAction.history)) {
-        // Translation with additional instructions are not cachable.
+        // Translation with additional instructions are not cacheable.
         return undefined;
     }
 
@@ -168,7 +177,7 @@ function getExplainerOptions(
         return undefined;
     }
 
-    const usedTranslators = new Map<string, TypeAgentTranslator<object>>();
+    const usedTranslators = new Map<string, TypeAgentTranslator>();
     const actions = requestAction.actions;
     for (const { action } of actions) {
         if (isUnknownAction(action)) {
