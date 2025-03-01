@@ -47,7 +47,7 @@ function convertJsonSchemaOutput(
     return (jsonObject as any).response;
 }
 
-function createActionSchemaJsonValidator<T extends TranslatedAction>(
+export function createActionSchemaJsonValidator<T extends TranslatedAction>(
     actionSchemaGroup: ActionSchemaGroup,
     generateOptions?: GenerateSchemaOptions,
 ): TypeAgentJsonValidator<T> {
@@ -219,21 +219,20 @@ export function composeActionSchema(
 
 export function composeSelectedActionSchema(
     definitions: ActionSchemaTypeDefinition[],
-    actionConfigs: ActionConfig[],
+    actionConfig: ActionConfig,
+    additionalActionConfigs: ActionConfig[],
     switchActionConfigs: ActionConfig[],
-    schemaName: string,
     provider: ActionConfigProvider,
     multipleActionOptions: MultipleActionOptions,
 ) {
     const builder = new ActionSchemaBuilder(provider);
     const union = sc.union(definitions.map((definition) => sc.ref(definition)));
-    const config = provider.getActionConfig(schemaName);
-    const typeName = `Partial${config.schemaType}`;
-    const comments = `${typeName} is a partial list of actions available in schema group '${schemaName}'.`;
+    const typeName = `Partial${actionConfig.schemaType}`;
+    const comments = `${typeName} is a partial list of actions available in schema group '${actionConfig.schemaName}'.`;
 
     const entry = sc.type(typeName, union, comments);
     builder.addTypeDefinition(entry);
-    builder.addActionConfig(...actionConfigs);
+    builder.addActionConfig(...additionalActionConfigs);
     return finalizeActionSchemaBuilder(
         builder,
         switchActionConfigs,

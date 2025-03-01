@@ -15,20 +15,20 @@ export async function executeNotificationAction(
 ) {
     const notificationAction = action as NotificationAction;
     switch (notificationAction.actionName) {
-        case "show":
+        case "showNotifications":
             const showAction = notificationAction as ShowNotificationsAction;
             await processCommandNoLock(
                 `@notify show ${showAction.parameters.filter}`,
                 context.sessionContext.agentContext,
             );
             break;
-        case "summary":
+        case "showNotificationSummary":
             await processCommandNoLock(
                 `@notify info`,
                 context.sessionContext.agentContext,
             );
             break;
-        case "clear":
+        case "clearNotifications":
             await processCommandNoLock(
                 `@notify clear`,
                 context.sessionContext.agentContext,

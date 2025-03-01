@@ -212,8 +212,8 @@ export function createJsonTranslatorFromSchemaDef<T extends object>(
 
 export interface TypeAgentJsonValidator<T extends object>
     extends TypeChatJsonValidator<T> {
-    getSchemaText: () => string;
-    getTypeName: () => string;
+    getSchemaText(): string;
+    getTypeName(): string;
     validate(jsonObject: object): Result<T>;
     getJsonSchema?: () => CompletionJsonSchema | undefined;
 }

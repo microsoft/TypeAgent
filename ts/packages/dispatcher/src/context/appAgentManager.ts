@@ -363,10 +363,6 @@ export class AppAgentManager implements ActionConfigProvider {
         return Array.from(this.actionConfigs.values());
     }
 
-    public getInjectedSchemaForActionName(actionName: string) {
-        return this.injectedSchemaForActionName.get(actionName);
-    }
-
     public getAppAgent(appAgentName: string): AppAgent {
         const record = this.getRecord(appAgentName);
         if (record.appAgent === undefined) {

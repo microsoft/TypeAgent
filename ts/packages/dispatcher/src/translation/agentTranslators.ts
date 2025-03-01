@@ -3,13 +3,13 @@
 
 import {
     CachedImageWithDetails,
-    createJsonTranslatorFromSchemaDef,
     createJsonTranslatorWithValidator,
     enableJsonTranslatorStreaming,
     JsonTranslatorOptions,
+    TypeAgentJsonValidator,
 } from "common-utils";
 import { AppAction } from "@typeagent/agent-sdk";
-import { Result, TypeChatJsonTranslator } from "typechat";
+import { Result } from "typechat";
 import { getPackageFilePath } from "../utils/getPackageFilePath.js";
 import {
     getMultipleActionSchemaDef,
@@ -26,7 +26,7 @@ import { createTypeAgentRequestPrompt } from "../context/chatHistoryPrompt.js";
 import {
     composeActionSchema,
     composeSelectedActionSchema,
-    createJsonTranslatorFromActionSchema,
+    createActionSchemaJsonValidator,
 } from "./actionSchemaJsonTranslator.js";
 import {
     ActionSchemaTypeDefinition,
@@ -38,6 +38,7 @@ import {
 } from "action-schema";
 import { ActionConfig } from "./actionConfig.js";
 import { ActionConfigProvider } from "./actionConfigProvider.js";
+import { createTypeScriptJsonValidator } from "typechat/ts";
 
 export function getAppAgentName(schemaName: string) {
     return schemaName.split(".")[0];
@@ -164,20 +165,87 @@ function getTranslatorSchemaDefs(
     return translationSchemaDefs;
 }
 
-export type TypeAgentTranslator<T = object> = {
-    translate: (
+export type TypeAgentTranslator<T = TranslatedAction> = {
+    translate(
         request: string,
         history?: HistoryContext,
         attachments?: CachedImageWithDetails[],
         cb?: IncrementalJsonValueCallBack,
-    ) => Promise<Result<T>>;
-    checkTranslate: (request: string) => Promise<Result<T>>;
+    ): Promise<Result<T>>;
+    checkTranslate(request: string): Promise<Result<T>>;
+    getSchemaName(actionName: string): string | undefined;
 };
 
 // TranslatedAction are actions returned from the LLM without the translator name
 export interface TranslatedAction {
     actionName: string;
     parameters?: ParamObjectType;
+}
+
+function createTypeAgentValidator<T extends TranslatedAction>(
+    actionConfigs: ActionConfig[],
+    switchActionConfigs: ActionConfig[],
+    provider: ActionConfigProvider,
+    multipleActionOptions: MultipleActionOptions,
+    generated: boolean = true,
+    generateOptions?: GenerateSchemaOptions,
+) {
+    return generated
+        ? createActionSchemaJsonValidator<T>(
+              composeActionSchema(
+                  actionConfigs,
+                  switchActionConfigs,
+                  provider,
+                  multipleActionOptions,
+              ),
+              generateOptions,
+          )
+        : createTypeScriptJsonValidator<T>(
+              composeTranslatorSchemas(
+                  "AllActions",
+                  getTranslatorSchemaDefs(
+                      actionConfigs,
+                      switchActionConfigs,
+                      multipleActionOptions,
+                  ),
+              ),
+              "AllActions",
+          );
+}
+
+function collectSchemaName(
+    actionConfigs: ActionConfig[],
+    provider: ActionConfigProvider,
+    definitions?: ActionSchemaTypeDefinition[],
+    actionConfig?: ActionConfig,
+) {
+    const schemaNameMap = new Map<string, string>();
+    for (const actionConfig of actionConfigs) {
+        const schemaFile = provider.getActionSchemaFileForConfig(actionConfig);
+        for (const actionName of schemaFile.actionSchemas.keys()) {
+            const existing = schemaNameMap.get(actionName);
+            if (existing) {
+                throw new Error(
+                    `Conflicting action name '${actionName}' from schema '${schemaFile.schemaName}' and '${existing}'`,
+                );
+            }
+            schemaNameMap.set(actionName, actionConfig.schemaName);
+        }
+    }
+    if (definitions !== undefined && actionConfig !== undefined) {
+        for (const definition of definitions) {
+            const actionName =
+                definition.type.fields.actionName.type.typeEnum[0];
+            const existing = schemaNameMap.get(actionName);
+            if (existing) {
+                throw new Error(
+                    `Conflicting action name '${actionName}' from schema '${actionConfig.schemaName}' and '${existing}'`,
+                );
+            }
+            schemaNameMap.set(actionName, actionConfig.schemaName);
+        }
+    }
+    return schemaNameMap;
 }
 
 /**
@@ -198,38 +266,31 @@ export function loadAgentJsonTranslator<
     model?: string,
     generateOptions?: GenerateSchemaOptions,
 ): TypeAgentTranslator<T> {
-    const options = { model };
-    const translator = generated
-        ? createJsonTranslatorFromActionSchema<T>(
-              "AllActions",
-              composeActionSchema(
-                  actionConfigs,
-                  switchActionConfigs,
-                  provider,
-                  multipleActionOptions,
-              ),
-              options,
-              generateOptions,
-          )
-        : createJsonTranslatorFromSchemaDef<T>(
-              "AllActions",
-              getTranslatorSchemaDefs(
-                  actionConfigs,
-                  switchActionConfigs,
-                  multipleActionOptions,
-              ),
-              options,
-          );
-
-    return createTypeAgentTranslator(translator, options);
+    const validator = createTypeAgentValidator<T>(
+        actionConfigs,
+        switchActionConfigs,
+        provider,
+        multipleActionOptions,
+        generated,
+        generateOptions,
+    );
+    // Collect schema name mapping.
+    const schemaNameMap = collectSchemaName(actionConfigs, provider);
+    return createTypeAgentTranslator<T>(validator, schemaNameMap, { model });
 }
 
 function createTypeAgentTranslator<
     T extends TranslatedAction = TranslatedAction,
 >(
-    translator: TypeChatJsonTranslator<T>,
+    validator: TypeAgentJsonValidator<T>,
+    schemaNameMap: Map<string, string>,
     options: JsonTranslatorOptions<T>,
 ): TypeAgentTranslator<T> {
+    const translator = createJsonTranslatorWithValidator<T>(
+        validator.getTypeName().toLowerCase(),
+        validator,
+        options,
+    );
     const streamingTranslator = enableJsonTranslatorStreaming(translator);
 
     // the request prompt is already expanded by the override replacement below
@@ -281,6 +342,9 @@ function createTypeAgentTranslator<
             );
             return altTranslator.translate(requestPrompt);
         },
+        getSchemaName(actionName: string) {
+            return schemaNameMap.get(actionName);
+        },
     };
 
     return typeAgentTranslator;
@@ -290,27 +354,30 @@ export function createTypeAgentTranslatorForSelectedActions<
     T extends TranslatedAction = TranslatedAction,
 >(
     definitions: ActionSchemaTypeDefinition[],
-    actionConfigs: ActionConfig[],
+    actionConfig: ActionConfig,
+    additionalActionConfigs: ActionConfig[],
     switchActionConfigs: ActionConfig[],
-    schemaName: string,
     provider: ActionConfigProvider,
     multipleActionOptions: MultipleActionOptions,
     model?: string,
 ) {
-    const options = { model };
-    const translator = createJsonTranslatorFromActionSchema<T>(
-        "AllActions",
+    const validator = createActionSchemaJsonValidator<T>(
         composeSelectedActionSchema(
             definitions,
-            actionConfigs,
+            actionConfig,
+            additionalActionConfigs,
             switchActionConfigs,
-            schemaName,
             provider,
             multipleActionOptions,
         ),
-        options,
     );
-    return createTypeAgentTranslator<T>(translator, options);
+    const schemaNameMap = collectSchemaName(
+        additionalActionConfigs,
+        provider,
+        definitions,
+        actionConfig,
+    );
+    return createTypeAgentTranslator<T>(validator, schemaNameMap, { model });
 }
 
 // For CLI, replicate the behavior of loadAgentJsonTranslator to get the schema

@@ -730,7 +730,7 @@ const configTranslationCommandHandlers: CommandHandlerTable = {
                     },
                 ),
                 search: getToggleHandlerTable(
-                    "inject inline switch",
+                    "search switch",
                     async (context, enable: boolean) => {
                         await changeContextConfig(
                             {
