@@ -556,8 +556,9 @@ async function finalizeAction(
     );
 
     if (currentActionSchemaName === undefined) {
+        // Should not happen
         throw new Error(
-            `Unable to match schema name for action ${currentAction.actionName}`,
+            `Internal Error: Unable to match schema name for action ${currentAction.actionName}`,
         );
     }
 

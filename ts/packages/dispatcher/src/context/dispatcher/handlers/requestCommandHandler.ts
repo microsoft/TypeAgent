@@ -89,8 +89,9 @@ async function canTranslateWithoutContext(
                 .get(translatorName)!
                 .getSchemaName(newAction.actionName);
             if (schemaName === undefined) {
+                // Should not happen
                 throw new Error(
-                    `Unable to match schema name for action '${newAction.actionName}'`,
+                    `Internal Error: Unable to match schema name for action '${newAction.actionName}'`,
                 );
             }
             newActions.push({
