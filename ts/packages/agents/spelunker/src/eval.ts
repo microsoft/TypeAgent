@@ -24,14 +24,11 @@ dotenv.config({ path: path.join(__dirname, "../../../../.env") }); // .../ts/.en
 
 type ConfigRecord = Record<string, any>;
 
-// TODO: Read this from a file that can be edited before each run
+// TODO: Read this from a file that can be edited before each run,
+// or alternatively, read from command line args.
 const CONFIG: ConfigRecord = {
     evalFolder: "evals/eval-2",
-    runName: "trialRun-1",
-    // TODO: also all tuning parameters, maybe even prompt version
-    algorithm: "summaries=0,embeddings=1,selection=1",
-    questionId: 1,
-    comments: "This is just a test",
+    questionId: 2,
 };
 
 async function main() {
@@ -63,7 +60,7 @@ function readQuestion(context: SpelunkerContext, config: ConfigRecord): string {
     const row = db
         .prepare<
             [number],
-            {question: string}
+            { question: string }
         >("SELECT question FROM Questions WHERE questionId = ?")
         .get(CONFIG.questionId);
     if (!row) {

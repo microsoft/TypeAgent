@@ -180,9 +180,32 @@ APIs available.
 
 Do we need more versatility in the scoring tool? E.g.
 
-- Pass the question _ID_ on the command line instead of the text.
 - A way to set a fixed score for all chunks in a given file
   (or a file pattern).
 - A way to review scores (possibly by date range).
 - A way to set a fixed score for a list of chunk IDs
   (e.g. the References section of an actual answer).
+
+# Refactoring the selector
+
+Currently we have these steps:
+
+1. Using embeddings for fuzzy matching, select N nearest neighbors
+2. For those N chunks, ask an AI for a relevance score
+3. Pick the highest-scoring K chunks
+
+We can envision other steps:
+
+a. Ask an AI to construct a set of words or phrases to select nearest
+neighbors
+b. Ask an AI to select which files to pay attention to (bool or score?)
+
+In a sense we are collecting multiple types of scores, and we should
+combine them using
+[RRF ranking](https://learn.microsoft.com/en-us/azure/search/hybrid-search-ranking#how-rrf-ranking-works).
+
+For this to work, everything that returns a list of chunks/chunk IDs,
+should return a list of _scored_ chunk/chunk IDs. In practice, this
+just means that we have to change (1) (embeddings) to return the score.
+Or perhaps we just sort the results from highest to lowest score,
+since the RRF algorithm just takes the rank order for each score type.

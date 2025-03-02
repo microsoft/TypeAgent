@@ -62,7 +62,9 @@ export async function searchCode(
     // 3. Ask a fast LLM for the most relevant chunk Ids, rank them, and keep the best ones.
     const chunks = await selectChunks(context, allChunks, input);
     if (!chunks.length) {
-        throw new Error("No chunks selected");
+        return createActionResultFromError(
+            "No chunks selected (server access problem?)",
+        );
     }
 
     // 4. Construct a prompt from those chunks.
@@ -220,6 +222,11 @@ export async function selectChunks(
     );
     console_log(`[Step 3a: Pre-select with fuzzy matching]`);
     const nearestChunkIds = await preSelectChunks(context, input, 500);
+    if (!nearestChunkIds.length) {
+        // Fail fast if preselection failed.
+        console_log(`  [Preselection failed -- server access problem?]`);
+        return [];
+    }
     allChunks = allChunks.filter((c) => nearestChunkIds.includes(c.chunkId));
     console_log(`  [Pre-selected ${allChunks.length} chunks]`);
 
