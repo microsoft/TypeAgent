@@ -24,6 +24,7 @@
         {"name": "cache", "rootPath": "packages/cache"},
         {"name": "commonUtils", "rootPath": "packages/commonUtils"},
         {"name": "dispatcher", "rootPath": "packages/dispatcher"},
+        {"name": "defaultAgentProvider", "rootPath": "packages/defaultAgentProvider"},
         {"name": "knowledgeProcessor", "rootPath": "packages/knowledgeProcessor"},
         {"name": "memoryProviders", "rootPath": "examples/memoryProviders"},
         {"name": "typeagent", "rootPath": "packages/typeagent"}
