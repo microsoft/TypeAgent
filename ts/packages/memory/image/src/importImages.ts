@@ -397,7 +397,7 @@ export class ImageCollection implements IConversation<ImageMeta> {
         }
 
         this.addMetadataToIndex();
-        await buildSecondaryIndexes(this, true);
+        await buildSecondaryIndexes(this, true, eventHandler);
 
         let indexingResult: IndexingResults = {
             chunksIndexedUpto: { messageIndex: this.messages.length - 1 },
@@ -521,7 +521,7 @@ async function indexImage(
         console.log(`Could not find part of the file path '${fileName}'`);
         return;
     } else if (!isImageFileType(path.extname(fileName))) {
-        console.log(`Skipping '${fileName}', not a known image file.`);
+        //console.log(`Skipping '${fileName}', not a known image file.`);
         return;
     }
 
