@@ -111,17 +111,18 @@ async function handleChatResponse(
                         "...",
                 );
 
-                const needDisplay = context.streamingContext !== generatedText ;//|| generateResponseAction.parameters.showImageToUser;
+                const needDisplay = context.streamingContext !== generatedText; //|| generateResponseAction.parameters.showImageToUser;
                 let result;
                 if (needDisplay) {
-                      result = createActionResult(generatedText, true);  
+                    result = createActionResult(generatedText, true);
                 } else {
                     result = createActionResultNoDisplay(generatedText);
                 }
 
                 let entities = parameters.generatedTextEntities || [];
                 if (parameters.userRequestEntities !== undefined) {
-                    result.entities = parameters.userRequestEntities.concat(entities);
+                    result.entities =
+                        parameters.userRequestEntities.concat(entities);
                 }
 
                 if (
@@ -227,10 +228,8 @@ async function handleChatResponse(
                     console.log("Conversation manager is undefined!");
                 }
             } else if (
-                lookupAction.parameters
-                    .retrieveRelatedFilesFromStorage &&
-                lookupAction.parameters.relatedFiles !==
-                    undefined
+                lookupAction.parameters.retrieveRelatedFilesFromStorage &&
+                lookupAction.parameters.relatedFiles !== undefined
             ) {
                 return createActionResultFromHtmlDisplay(
                     `<div>${await rehydrateImages(context, lookupAction.parameters.relatedFiles)}</div>`,

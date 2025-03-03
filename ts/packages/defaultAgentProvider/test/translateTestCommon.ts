@@ -80,9 +80,14 @@ export async function defineTranslateTest(name: string, dataFiles: string[]) {
             await Promise.all(
                 dispatchers.map(async (dispatcher) => {
                     for (const step of steps) {
-                        const { request, action, match, history, attachments } = step;
+                        const { request, action, match, history, attachments } =
+                            step;
 
-                        const result = await dispatcher.processCommand(request, undefined, attachments);
+                        const result = await dispatcher.processCommand(
+                            request,
+                            undefined,
+                            attachments,
+                        );
                         expect(result?.hasError).toBeFalsy();
 
                         const actions = result?.actions;
