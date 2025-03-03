@@ -36,13 +36,15 @@ import path from "path";
 import chalk from "chalk";
 import { KnowProPrinter } from "./knowproPrinter.js";
 import { getTimeRangeForConversation } from "./knowproCommon.js";
+import * as cm from "conversation-memory";
+import * as im from "image-memory";
 
 type KnowProContext = {
     knowledgeModel: ChatModel;
     basePath: string;
     printer: KnowProPrinter;
-    podcast?: kp.Podcast | undefined;
-    images?: kp.ImageCollection | undefined;
+    podcast?: cm.Podcast | undefined;
+    images?: im.ImageCollection | undefined;
     conversation?: kp.IConversation | undefined;
 };
 
@@ -59,7 +61,6 @@ export async function createKnowproCommands(
 
     commands.kpPodcastMessages = showMessages;
     commands.kpPodcastImport = podcastImport;
-    commands.kpPodcastTimestamp = podcastTimestamp;
     commands.kpPodcastSave = podcastSave;
     commands.kpPodcastLoad = podcastLoad;
     commands.kpSearchTerms = searchTerms;
@@ -104,12 +105,14 @@ export async function createKnowproCommands(
             description: "Create knowPro index",
             args: {
                 filePath: arg("File path to transcript file"),
+                startAt: arg("Start date and time"),
             },
             options: {
                 knowledge: argBool("Index knowledge", true),
                 related: argBool("Index related terms", true),
                 indexFilePath: arg("Output path for index file"),
                 maxMessages: argNum("Maximum messages to index"),
+                length: argNum("Length of the podcast in minutes", 60),
             },
         };
     }
@@ -120,12 +123,17 @@ export async function createKnowproCommands(
             context.printer.writeError(`${namedArgs.filePath} not found`);
             return;
         }
-        context.podcast = await kp.importPodcast(namedArgs.filePath);
+        const startAt = argToDate(namedArgs.startAt)!;
+        const endAt = dateTime.addMinutesToDate(startAt, namedArgs.length);
+
+        context.podcast = await cm.importPodcast(namedArgs.filePath);
+        cm.timestampMessages(context.podcast.messages, startAt, endAt);
+
         context.conversation = context.podcast;
         context.printer.writeLine("Imported podcast:");
         context.printer.writePodcastInfo(context.podcast);
 
-        if (!namedArgs.index) {
+        if (!(namedArgs.knowledge && namedArgs.related)) {
             return;
         }
 
@@ -138,29 +146,6 @@ export async function createKnowproCommands(
             namedArgs.indexFilePath,
         );
         await podcastSave(namedArgs);
-    }
-
-    function podcastTimestampDef(): CommandMetadata {
-        return {
-            description: "Set timestamps",
-            args: {
-                startAt: arg("Start date and time"),
-            },
-            options: {
-                length: argNum("Length of the podcast in minutes", 60),
-            },
-        };
-    }
-    commands.kpPodcastTimestamp.metadata = podcastTimestampDef();
-    async function podcastTimestamp(args: string[]) {
-        const conversation = ensureConversationLoaded();
-        if (!conversation) {
-            return;
-        }
-        const namedArgs = parseNamedArguments(args, podcastTimestampDef());
-        const startAt = argToDate(namedArgs.startAt)!;
-        const endAt = dateTime.addMinutesToDate(startAt, namedArgs.length);
-        kp.timestampMessages(conversation.messages, startAt, endAt);
     }
 
     function podcastSaveDef(): CommandMetadata {
@@ -215,7 +200,7 @@ export async function createKnowproCommands(
         }
         const clock = new StopWatch();
         clock.start();
-        const podcast = await kp.Podcast.readFromFile(
+        const podcast = await cm.Podcast.readFromFile(
             path.dirname(podcastFilePath),
             getFileName(podcastFilePath),
         );
@@ -277,7 +262,7 @@ export async function createKnowproCommands(
         }
 
         let progress = new ProgressBar(context.printer, 165);
-        context.images = await kp.importImages(
+        context.images = await im.importImages(
             namedArgs.filePath,
             true,
             (text, _index, max) => {
@@ -356,18 +341,18 @@ export async function createKnowproCommands(
             return;
         }
 
-        const data = await readJsonFile<kp.ImageCollectionData>(imagesFilePath);
+        const data = await readJsonFile<im.ImageCollectionData>(imagesFilePath);
         if (!data) {
             context.printer.writeError("Could not load image collection data");
             return;
         }
-        context.images = new kp.ImageCollection(
+        context.images = new im.ImageCollection(
             data.nameTag,
             data.messages,
             data.tags,
             data.semanticRefs,
         );
-        context.images.deserialize(data);
+        await context.images.deserialize(data);
         context.conversation = context.podcast;
         context.printer.conversation = context.conversation;
         context.printer.writeImageCollectionInfo(context.images);
@@ -590,10 +575,6 @@ export async function createKnowproCommands(
             context.printer.writeError("No podcast loaded");
             return;
         }
-        if (!context.podcast.semanticRefIndex) {
-            context.printer.writeError("Podcast not indexed");
-            return;
-        }
         const messageCount = context.podcast.messages.length;
         if (messageCount === 0) {
             return;
@@ -625,6 +606,11 @@ export async function createKnowproCommands(
             context.printer.writeIndexingResults(indexResult);
         }
         if (namedArgs.related) {
+            if (!context.podcast.semanticRefIndex) {
+                context.printer.writeError("Podcast not indexed");
+                return;
+            }
+
             context.printer.writeLine("Building related terms index");
             const progress = new ProgressBar(
                 context.printer,

@@ -9,7 +9,6 @@ on:
   push:
     branches:
       - main
-  workflow_dispatch:
 
 permissions:
   id-token: write
@@ -17,8 +16,11 @@ permissions:
 
 jobs:
   deploy:
+    environment: development-fork 
     runs-on: ubuntu-latest # pnpm deploy does not work currently on Windows. Fails with EPERM.
+    
     steps:
+          
       - name: Setup Git LF
         run: |
           git config --global core.autocrlf false
@@ -58,4 +60,4 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - run: az acr build -t typeagent:latest -r typeagentContainerRegistry --file ${{ github.workspace }}/ts/Dockerfile --subscription b64471de-f2ac-4075-a3cb-7656bca768d0 ${{ github.workspace }}/ts
+      - run: az acr build -t typeagent:latest -r typeagentContainerRegistry --file ${{ github.workspace }}/ts/Dockerfile --subscription ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_F36C1F2C4B2C49CA8DD5C52FAB98FA30 }} ${{ github.workspace }}/ts

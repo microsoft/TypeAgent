@@ -16,7 +16,7 @@ import {
  */
 export interface IConversationSecondaryIndexes {
     termToRelatedTermsIndex?: ITermToRelatedTermsIndex | undefined;
-    propertyToSemanticRefIndex: IPropertyToSemanticRefIndex | undefined;
+    propertyToSemanticRefIndex?: IPropertyToSemanticRefIndex | undefined;
     timestampIndex?: ITimestampToTextRangeIndex | undefined;
     threads?: IConversationThreads | undefined;
 }
@@ -89,11 +89,6 @@ export interface ITermToRelatedTermsData {
 export interface ITermsToRelatedTermsDataItem {
     termText: string;
     relatedTerms: Term[];
-}
-
-export interface ITermsToRelatedTermsIndexData2 {
-    aliasData?: ITermToRelatedTermsData | undefined;
-    textEmbeddingData?: ITextEmbeddingIndexData | undefined;
 }
 
 export interface ITextEmbeddingIndexData {
