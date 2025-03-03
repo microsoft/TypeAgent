@@ -1,390 +1,309 @@
 {
-    // Use IntelliSense to learn about possible attributes.
-    // Hover to view descriptions of existing attributes.
-    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
-    "version": "0.2.0",
-    "configurations": [
-        {
-            "name": "Launch Chat Memory",
-            "type": "node",
-            "request": "launch",
-            "skipFiles": [
-                "<node_internals>/**"
-            ],
-            "program": "${workspaceFolder}/examples/chat/src/main.ts",
-            "console": "externalTerminal",
-            "outFiles": [
-                "${workspaceFolder}/**/*.js"
-            ],
-        },
-        
-        {
-          "name": "Attach",
-          "port": 9229,
-          "request": "attach",
-          "skipFiles": [
-            "<node_internals>/**"
-          ],
-          "type": "node"
-        },
-        {
-            "name": "Shell (Main process)",
-            "type": "node",
-            "request": "launch",
-            "cwd": "${workspaceRoot}/packages/shell",
-            "runtimeExecutable": "${workspaceRoot}/packages/shell/node_modules/.bin/electron-vite",
-            "windows": {
-              "runtimeExecutable": "${workspaceRoot}/packages/shell/node_modules/.bin/electron-vite.cmd"
-            },
-            "runtimeArgs": ["--sourcemap"],
-            "env": {
-              "REMOTE_DEBUGGING_PORT": "9222"
-            }
-        },       
-        {
-            "name": "Player Service",
-            "type": "node",
-            "request": "launch",
-            "skipFiles": [
-                "<node_internals>/**"
-            ],
-            "cwd": "${workspaceFolder}/packages/player",
-            "program": "./dist/main.js",
-            "console": "externalTerminal",
-            "preLaunchTask": "pnpm: build",
-            "outFiles": [
-                "${workspaceFolder}/**/*.js"
-            ]
-          },
-        {
-          "type": "node",
-          "request": "launch",
-          "name": "CLI interactive",
-          "skipFiles": [
-              "<node_internals>/**"
-          ],
-          "cwd": "${workspaceFolder}/packages/cli",
-          "program": "./bin/run.js",
-          "args": [ "interactive" ],
-          "console": "integratedTerminal",
-          //"preLaunchTask": "pnpm: build",
-          "outFiles": [
-              "${workspaceFolder}/**/*.js"
-          ]
-        },
-        {
-            "type": "node",
-            "request": "launch",
-            "name": "API",
-            "skipFiles": [
-                "<node_internals>/**"
-            ],
-            "cwd": "${workspaceFolder}/packages/api",
-            "program": "./dist/index.js",
-            //"preLaunchTask": "tsc: build - tsconfig.json",
-            "outFiles": ["${workspaceFolder}/**/*.js"],
-            "resolveSourceMapLocations": [
-            ],
-        },        
-        {
-            "type": "node",
-            "request": "launch",
-            "name": "CLI (dev) interactive",
-            "skipFiles": [
-                "<node_internals>/**"
-            ],
-            "cwd": "${workspaceFolder}/packages/cli",
-            "program": "./bin/dev.js",
-            "args": [ "interactive" ],
-            "runtimeArgs": [ "--loader", "ts-node/esm", "--no-warnings=ExperimentalWarning"],
-            "console": "externalTerminal",
-            "outFiles": [
-                "${workspaceFolder}/**/*.js"
-            ]
-        },
-        {
-          // Needed for WSL, which can't spawn a terminal
-          "type": "node",
-          "request": "launch",
-          "name": "CLI (dev) interactive [intergrated terminal]",
-          "skipFiles": [
-              "<node_internals>/**"
-          ],
-          "cwd": "${workspaceFolder}/packages/cli",
-          "program": "./bin/dev.js",
-          "args": [ "interactive" ],
-          "runtimeArgs": [ "--loader", "ts-node/esm", "--no-warnings=ExperimentalWarning"],
-          "console": "integratedTerminal",
-          "outFiles": [
-              "${workspaceFolder}/**/*.js"
-          ]
-        },
-        {
-            "name": "Launch Playground",
-            "type": "node",
-            "request": "launch",
-            "skipFiles": [
-                "<node_internals>/**"
-            ],
-            "program": "${workspaceFolder}/examples/playground/src/main.ts",
-            "console": "externalTerminal",
-            //"preLaunchTask": "pnpm: build",
-            "outFiles": [
-                "${workspaceFolder}/**/*.js"
-            ],
-            //"args": [ "batch", "/data/variations/play.bat" ],
-        },
-        {
-            "name": "Launch Chat Tests",
-            "type": "node",
-            "request": "launch",
-            "skipFiles": [
-                "<node_internals>/**"
-            ],
-            "program": "${workspaceFolder}/examples/chat/src/main.ts",
-            "console": "externalTerminal",
-            //"preLaunchTask": "pnpm: build",
-            "outFiles": [
-                "${workspaceFolder}/**/*.js"
-            ],
-            "cwd": "${workspaceFolder}/examples/chat/src/codeChat",
-            //"args": ["codeMemory"]
-            //"args": ["code"]
-            //"args": ["tests"]
-        },
-        {
-            "name": "Launch YOUR Example",
-            "type": "node",
-            "request": "launch",
-            "skipFiles": [
-                "<node_internals>/**"
-            ],
-            "program": "${workspaceFolder}/examples/schemaStudio/src/main.ts",
-            "console": "externalTerminal",
-            //"preLaunchTask": "pnpm: build",
-            "outFiles": [
-                "${workspaceFolder}/**/*.js"
-            ],
-            //"args": [ "batch", "/data/variations/play.bat" ],
-            //"args": [ "@fromSchema", "--count", "20", "--facets", "phrase structure, band names" ],
-        },
-        {
-            "name": "Launch Example - WSL",
-            "type": "node",
-            "request": "launch",
-            "skipFiles": [
-                "<node_internals>/**"
-            ],
-            "program": "${workspaceFolder}/examples/chat/src/main.ts",
-            "console": "internalConsole",
-            //"preLaunchTask": "pnpm: build",
-            "outFiles": [
-                "${workspaceFolder}/**/*.js"
-            ]
-        },
-        {
-            "name": "Launch Classify",
-            "type": "node",
-            "request": "launch",
-            "skipFiles": [
-                "<node_internals>/**"
-            ],
-            "program": "${workspaceFolder}/examples/classify/src/main.ts",
-            "console": "externalTerminal",
-            //"preLaunchTask": "pnpm: build",
-            "outFiles": [
-                "${workspaceFolder}/**/*.js"
-            ]
-        },
-        {
-            "name": "Launch Classify - WSL",
-            "type": "node",
-            "request": "launch",
-            "skipFiles": [
-                "<node_internals>/**"
-            ],
-            "program": "${workspaceFolder}/examples/classify/src/main.ts",
-            "console": "internalConsole",
-            //"preLaunchTask": "pnpm: build",
-            "outFiles": [
-                "${workspaceFolder}/**/*.js"
-            ]
-        },
-        {
-            "name": "Launch Parser-Test",
-            "type": "node",
-            "request": "launch",
-            "skipFiles": [
-                "<node_internals>/**"
-            ],
-            "program": "${workspaceFolder}/examples/parser-test/src/main.ts",
-            "console": "externalTerminal",
-            //"preLaunchTask": "pnpm: build",
-            "outFiles": [
-                "${workspaceFolder}/**/*.js"
-            ]
-        },
-        {
-            "name": "Launch Parser-Test - WSL",
-            "type": "node",
-            "request": "launch",
-            "skipFiles": [
-                "<node_internals>/**"
-            ],
-            "program": "${workspaceFolder}/examples/parser-test/src/main.ts",
-            "console": "internalConsole",
-            //"preLaunchTask": "pnpm: build",
-            "outFiles": [
-                "${workspaceFolder}/**/*.js"
-            ]
-        },
-        {
-            "name": "Launch Parser-Test",
-            "type": "node",
-            "request": "launch",
-            "skipFiles": [
-                "<node_internals>/**"
-            ],
-            "program": "${workspaceFolder}/examples/parser-test/src/main.ts",
-            "console": "externalTerminal",
-            //"preLaunchTask": "pnpm: build",
-            "outFiles": [
-                "${workspaceFolder}/**/*.js"
-            ]
-        },
-        {
-			"name": "VSCODE SchemaGen -dataprep",
-			"type": "node",
-			"request": "launch",
-            "skipFiles": [
-                "<node_internals>/**"
-            ],
-            "cwd": "${workspaceFolder}/examples/vscodeSchemaGen",
-            "program": "./dist/main.js",
-            "args": [ "-dataprep" ],
-            "console": "externalTerminal",
-            "outFiles": [
-                "${workspaceFolder}/**/*.js"
-            ]
-		},
-		{
-			"name": "VSCODE SchemaGen -schemagen",
-			"type": "node",
-			"request": "launch",
-            "skipFiles": [
-                "<node_internals>/**"
-            ],
-            "cwd": "${workspaceFolder}/examples/vscodeSchemaGen",
-            "program": "./dist/main.js",
-            "args": [ "-schemagen" ],
-            "console": "externalTerminal",
-            "outFiles": [
-                "${workspaceFolder}/**/*.js"
-            ]
-		},
-        {
-			"name": "VSCODE SchemaGen -schemagen-actionprefix",
-			"type": "node",
-			"request": "launch",
-            "skipFiles": [
-                "<node_internals>/**"
-            ],
-            "cwd": "${workspaceFolder}/examples/vscodeSchemaGen",
-            "program": "./dist/main.js",
-            "args": [ "-schemagen-actionprefix=editor.action" ],
-            "console": "externalTerminal",
-            "outFiles": [
-                "${workspaceFolder}/**/*.js"
-            ]
-		},
-        {
-			"name": "VSCODE SchemaGen -genembeddings",
-			"type": "node",
-			"request": "launch",
-            "skipFiles": [
-                "<node_internals>/**"
-            ],
-            "cwd": "${workspaceFolder}/examples/vscodeSchemaGen",
-            "program": "./dist/main.js",
-           "args": [ "-genembeddings",
-                "-schemaFile",
-                "",
-                "-actionPrefix",
-                "workbench.action"
-            ],
-            "console": "externalTerminal",
-            "outFiles": [
-                "${workspaceFolder}/**/*.js"
-            ]
-		},
-        {
-			"name": "VSCODE SchemaGen -statgen",
-			"type": "node",
-			"request": "launch",
-            "skipFiles": [
-                "<node_internals>/**"
-            ],
-            "cwd": "${workspaceFolder}/examples/vscodeSchemaGen",
-            "program": "./dist/main.js",
-            "args": [ "-statgen",
-                "-actionreqEmbeddingsFile",
-                "",
-                "-statGenFile",
-                "",
-                "-schemaFile",
-                ""
-            ],
-            "console": "externalTerminal",
-            "outFiles": [
-                "${workspaceFolder}/**/*.js"
-            ]
-		},
-        {
-            "name": "Knowledge Visualizier (Main process)",
-            "type": "node",
-            "request": "launch",
-            "cwd": "${workspaceRoot}/packages/knowledgeVisualizer",
-            "runtimeExecutable": "${workspaceRoot}/packages/knowledgeVisualizer/node_modules/.bin/electron-vite",
-            "windows": {
-              "runtimeExecutable": "${workspaceRoot}/packages/knowledgeVisualizer/node_modules/.bin/electron-vite.cmd"
-            },
-            "runtimeArgs": ["--sourcemap"],
-            "env": {
-              "REMOTE_DEBUGGING_PORT": "9222"
-            }
-        },
-        {
-            "type": "node",
-            "request": "launch",
-            "name": "Launch getKeys (shared key vault)",
-            "skipFiles": [
-                "<node_internals>/**"
-            ],
-            "cwd": "${workspaceFolder}",
-            "program": "tools/scripts/getKeys.mjs",
-            "args": [ ],
-            "console": "externalTerminal",
-            //"preLaunchTask": "pnpm: build",
-            "outFiles": [
-                "${workspaceFolder}/**/*.js"
-            ]
-          },
-          {
-            "type": "node",
-            "request": "launch",
-            "name": "Launch getKeys (private key vault)",
-            "skipFiles": [
-                "<node_internals>/**"
-            ],
-            "cwd": "${workspaceFolder}",
-            "program": "tools/scripts/getKeys.mjs",
-            "args": [ "--vault", "build-pipeline-kv" ],
-            "console": "externalTerminal",
-            //"preLaunchTask": "pnpm: build",
-            "outFiles": [
-                "${workspaceFolder}/**/*.js"
-            ]
-          },                  
-    ]
+  // Use IntelliSense to learn about possible attributes.
+  // Hover to view descriptions of existing attributes.
+  // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Launch Chat Memory",
+      "type": "node",
+      "request": "launch",
+      "skipFiles": ["<node_internals>/**"],
+      "program": "${workspaceFolder}/examples/chat/src/main.ts",
+      "console": "externalTerminal",
+      "outFiles": ["${workspaceFolder}/**/*.js"]
+    },
+    {
+      "name": "Attach",
+      "port": 9229,
+      "request": "attach",
+      "skipFiles": ["<node_internals>/**"],
+      "type": "node"
+    },
+    {
+      "name": "Shell (Main process)",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceRoot}/packages/shell",
+      "runtimeExecutable": "${workspaceRoot}/packages/shell/node_modules/.bin/electron-vite",
+      "windows": {
+        "runtimeExecutable": "${workspaceRoot}/packages/shell/node_modules/.bin/electron-vite.cmd"
+      },
+      "runtimeArgs": ["--sourcemap"],
+      "env": {
+        "REMOTE_DEBUGGING_PORT": "9222"
+      }
+    },
+    {
+      "name": "Player Service",
+      "type": "node",
+      "request": "launch",
+      "skipFiles": ["<node_internals>/**"],
+      "cwd": "${workspaceFolder}/packages/player",
+      "program": "./dist/main.js",
+      "console": "externalTerminal",
+      "preLaunchTask": "pnpm: build",
+      "outFiles": ["${workspaceFolder}/**/*.js"]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "CLI interactive",
+      "skipFiles": ["<node_internals>/**"],
+      "cwd": "${workspaceFolder}/packages/cli",
+      "program": "./bin/run.js",
+      "args": ["interactive"],
+      "console": "integratedTerminal",
+      "outFiles": ["${workspaceFolder}/**/*.js"]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "API",
+      "skipFiles": ["<node_internals>/**"],
+      "cwd": "${workspaceFolder}/packages/api",
+      "program": "./dist/index.js",
+      "outFiles": ["${workspaceFolder}/**/*.js"],
+      "resolveSourceMapLocations": []
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "CLI (dev) interactive",
+      "skipFiles": ["<node_internals>/**"],
+      "cwd": "${workspaceFolder}/packages/cli",
+      "program": "./bin/dev.js",
+      "args": ["interactive"],
+      "runtimeArgs": [
+        "--loader",
+        "ts-node/esm",
+        "--no-warnings=ExperimentalWarning"
+      ],
+      "console": "externalTerminal",
+      "outFiles": ["${workspaceFolder}/**/*.js"]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "CLI (dev) interactive [intergrated terminal]",
+      "skipFiles": ["<node_internals>/**"],
+      "cwd": "${workspaceFolder}/packages/cli",
+      "program": "./bin/dev.js",
+      "args": ["interactive"],
+      "runtimeArgs": [
+        "--loader",
+        "ts-node/esm",
+        "--no-warnings=ExperimentalWarning"
+      ],
+      "console": "integratedTerminal",
+      "outFiles": ["${workspaceFolder}/**/*.js"]
+    },
+    {
+      "name": "Launch Playground",
+      "type": "node",
+      "request": "launch",
+      "skipFiles": ["<node_internals>/**"],
+      "program": "${workspaceFolder}/examples/playground/src/main.ts",
+      "console": "externalTerminal",
+      "outFiles": ["${workspaceFolder}/**/*.js"]
+    },
+    {
+      "name": "Launch Chat Tests",
+      "type": "node",
+      "request": "launch",
+      "skipFiles": ["<node_internals>/**"],
+      "program": "${workspaceFolder}/examples/chat/src/main.ts",
+      "console": "externalTerminal",
+      "outFiles": ["${workspaceFolder}/**/*.js"],
+      "cwd": "${workspaceFolder}/examples/chat/src/codeChat"
+    },
+    {
+      "name": "Launch YOUR Example",
+      "type": "node",
+      "request": "launch",
+      "skipFiles": ["<node_internals>/**"],
+      "program": "${workspaceFolder}/examples/schemaStudio/src/main.ts",
+      "console": "externalTerminal",
+      "outFiles": ["${workspaceFolder}/**/*.js"]
+    },
+    {
+      "name": "Launch Example - WSL",
+      "type": "node",
+      "request": "launch",
+      "skipFiles": ["<node_internals>/**"],
+      "program": "${workspaceFolder}/examples/chat/src/main.ts",
+      "console": "internalConsole",
+      "outFiles": ["${workspaceFolder}/**/*.js"]
+    },
+    {
+      "name": "Launch Classify",
+      "type": "node",
+      "request": "launch",
+      "skipFiles": ["<node_internals>/**"],
+      "program": "${workspaceFolder}/examples/classify/src/main.ts",
+      "console": "externalTerminal",
+      "outFiles": ["${workspaceFolder}/**/*.js"]
+    },
+    {
+      "name": "Launch Classify - WSL",
+      "type": "node",
+      "request": "launch",
+      "skipFiles": ["<node_internals>/**"],
+      "program": "${workspaceFolder}/examples/classify/src/main.ts",
+      "console": "internalConsole",
+      "outFiles": ["${workspaceFolder}/**/*.js"]
+    },
+    {
+      "name": "Launch Parser-Test",
+      "type": "node",
+      "request": "launch",
+      "skipFiles": ["<node_internals>/**"],
+      "program": "${workspaceFolder}/examples/parser-test/src/main.ts",
+      "console": "externalTerminal",
+      "outFiles": ["${workspaceFolder}/**/*.js"]
+    },
+    {
+      "name": "Launch Parser-Test - WSL",
+      "type": "node",
+      "request": "launch",
+      "skipFiles": ["<node_internals>/**"],
+      "program": "${workspaceFolder}/examples/parser-test/src/main.ts",
+      "console": "internalConsole",
+      "outFiles": ["${workspaceFolder}/**/*.js"]
+    },
+    {
+      "name": "Launch Parser-Test",
+      "type": "node",
+      "request": "launch",
+      "skipFiles": ["<node_internals>/**"],
+      "program": "${workspaceFolder}/examples/parser-test/src/main.ts",
+      "console": "externalTerminal",
+      "outFiles": ["${workspaceFolder}/**/*.js"]
+    },
+    {
+      "name": "VSCODE SchemaGen -dataprep",
+      "type": "node",
+      "request": "launch",
+      "skipFiles": ["<node_internals>/**"],
+      "cwd": "${workspaceFolder}/examples/vscodeSchemaGen",
+      "program": "./dist/main.js",
+      "args": ["-dataprep"],
+      "console": "externalTerminal",
+      "outFiles": ["${workspaceFolder}/**/*.js"]
+    },
+    {
+      "name": "VSCODE SchemaGen -schemagen",
+      "type": "node",
+      "request": "launch",
+      "skipFiles": ["<node_internals>/**"],
+      "cwd": "${workspaceFolder}/examples/vscodeSchemaGen",
+      "program": "./dist/main.js",
+      "args": ["-schemagen"],
+      "console": "externalTerminal",
+      "outFiles": ["${workspaceFolder}/**/*.js"]
+    },
+    {
+      "name": "VSCODE SchemaGen -schemagen-actionprefix",
+      "type": "node",
+      "request": "launch",
+      "skipFiles": ["<node_internals>/**"],
+      "cwd": "${workspaceFolder}/examples/vscodeSchemaGen",
+      "program": "./dist/main.js",
+      "args": ["-schemagen-actionprefix=editor.action"],
+      "console": "externalTerminal",
+      "outFiles": ["${workspaceFolder}/**/*.js"]
+    },
+    {
+      "name": "VSCODE SchemaGen -genembeddings",
+      "type": "node",
+      "request": "launch",
+      "skipFiles": ["<node_internals>/**"],
+      "cwd": "${workspaceFolder}/examples/vscodeSchemaGen",
+      "program": "./dist/main.js",
+      "args": [
+        "-genembeddings",
+        "-schemaFile",
+        "",
+        "-actionPrefix",
+        "workbench.action"
+      ],
+      "console": "externalTerminal",
+      "outFiles": ["${workspaceFolder}/**/*.js"]
+    },
+    {
+      "name": "VSCODE SchemaGen -statgen",
+      "type": "node",
+      "request": "launch",
+      "skipFiles": ["<node_internals>/**"],
+      "cwd": "${workspaceFolder}/examples/vscodeSchemaGen",
+      "program": "./dist/main.js",
+      "args": [
+        "-statgen",
+        "-actionreqEmbeddingsFile",
+        "",
+        "-statGenFile",
+        "",
+        "-schemaFile",
+        ""
+      ],
+      "console": "externalTerminal",
+      "outFiles": ["${workspaceFolder}/**/*.js"]
+    },
+    {
+      "name": "Knowledge Visualizier (Main process)",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceRoot}/packages/knowledgeVisualizer",
+      "runtimeExecutable": "${workspaceRoot}/packages/knowledgeVisualizer/node_modules/.bin/electron-vite",
+      "windows": {
+        "runtimeExecutable": "${workspaceRoot}/packages/knowledgeVisualizer/node_modules/.bin/electron-vite.cmd"
+      },
+      "runtimeArgs": ["--sourcemap"],
+      "env": {
+        "REMOTE_DEBUGGING_PORT": "9222"
+      }
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Launch getKeys (shared key vault)",
+      "skipFiles": ["<node_internals>/**"],
+      "cwd": "${workspaceFolder}",
+      "program": "tools/scripts/getKeys.mjs",
+      "args": [],
+      "console": "externalTerminal",
+      "outFiles": ["${workspaceFolder}/**/*.js"]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Launch getKeys (private key vault)",
+      "skipFiles": ["<node_internals>/**"],
+      "cwd": "${workspaceFolder}",
+      "program": "tools/scripts/getKeys.mjs",
+      "args": ["--vault", "build-pipeline-kv"],
+      "console": "externalTerminal",
+      "outFiles": ["${workspaceFolder}/**/*.js"]
+    },
+    {
+      "type": "node",
+      "name": "vscode-jest-tests.v2.dispatcher",
+      "request": "launch",
+      "args": [
+        "--no-warnings",
+        "--experimental-vm-modules",
+        "./node_modules/jest/bin/jest.js",
+        "--runInBand",
+        "--watchAll=false",
+        "--testNamePattern",
+        "${jest.testNamePattern}",
+        "--runTestsByPath",
+        "${jest.testFile}"
+      ],
+      "cwd": "/home/curtism/src/TypeAgent/ts/packages/dispatcher",
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen",
+      "disableOptimisticBPs": true
+    }
+  ]
 }
-
