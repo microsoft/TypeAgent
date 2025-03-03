@@ -3,6 +3,4 @@
 
 import { defineTranslateTest } from "./translateTestCommon.js";
 const dataFiles = ["test/data/translate-image-history-e2e.json"];
-import registerDebug from "debug";
-registerDebug.enable("*");
 await defineTranslateTest("translate image request (w/history)", dataFiles);
