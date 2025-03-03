@@ -441,6 +441,7 @@ export class ImageCollection implements IConversation<ImageMeta> {
  */
 export async function importImages(
     imagePath: string,
+    cachePath: string | undefined,
     recursive: boolean = true,
     callback?: (text: string, count: number, max: number) => void,
 ): Promise<ImageCollection> {
@@ -452,14 +453,22 @@ export async function importImages(
         );
     }
 
+    if (cachePath !== undefined) {
+        if (!fs.existsSync(cachePath)) {
+            fs.mkdirSync(cachePath);
+        }
+    } else {
+        cachePath = path.dirname(imagePath);
+    }
+
     // create a model used to extract data from the images
     const chatModel = createKnowledgeModel();
 
     let images: Image[] = [];
     if (isDir) {
-        images = await indexImages(imagePath, recursive, chatModel, callback);
+        images = await indexImages(imagePath, cachePath, recursive, chatModel, callback);
     } else {
-        const img = await indexImage(imagePath, chatModel);
+        const img = await indexImage(imagePath, cachePath, chatModel);
         if (img !== undefined) {
             images.push(img);
         }
@@ -472,12 +481,14 @@ export async function importImages(
  * Imports images from the supplied folder.
  *
  * @param sourcePath - The folder to import.
+ * @param cachePath - The folder to cache the knowledge responses in
  * @param recursive - A flag indicating whether or not subfolders are imported.
  * @param chatModel - The model used to extract data from the image.
  * @returns - The imported images from the supplied folder.
  */
 async function indexImages(
     sourcePath: string,
+    cachePath: string,
     recursive: boolean,
     chatModel: ChatModel,
     callback?: (text: string, count: number, max: number) => void,
@@ -492,7 +503,7 @@ async function indexImages(
     for (let i = 0; i < fileNames.length; i++) {
         const fullFilePath: string = path.join(sourcePath, fileNames[i]);
         //console.log(`${fullFilePath} [${i+1} of ${fileNames.length}] (estimated time remaining: ${clock.elapsedSeconds / (i + 1) * (fileNames.length - i)})`);
-        const img = await indexImage(fullFilePath, chatModel);
+        const img = await indexImage(fullFilePath, cachePath, chatModel);
 
         if (callback) {
             callback(fileNames[i], i, fileNames.length);
@@ -510,11 +521,13 @@ async function indexImages(
  * Imports the supplied image file (if it's an image)
  *
  * @param fileName - The file to import
+ * @param cachePath - The folder to cache the knowledge response in.
  * @param chatModel - The model used to extract data from the image.
  * @returns - The imported image.
  */
 async function indexImage(
     fileName: string,
+    cachePath: string,
     chatModel: ChatModel,
 ): Promise<Image | undefined> {
     if (!fs.existsSync(fileName)) {
@@ -527,6 +540,7 @@ async function indexImage(
 
     const img: image.Image | undefined = await image.loadImageWithKnowledge(
         fileName,
+        cachePath,
         chatModel,
     );
 
