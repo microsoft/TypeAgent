@@ -1,40 +1,40 @@
 {
-  "editor.defaultFormatter": "esbenp.prettier-vscode",
-  "cSpell.words": [
-    "aiclient",
-    "AUTOINCREMENT",
-    "Exif",
-    "exifreader",
-    "Knowpro",
-    "lightgray",
-    "NOCASE",
-    "oclif",
-    "openai",
-    "regen",
-    "tsbuildinfo",
-    "typeagent",
-    "typechat"
-  ],
-  "[html]": {
-    "editor.defaultFormatter": "vscode.html-language-features"
-  },
-  "jest.virtualFolders": [
-    {"name": "aiclient", "rootPath": "packages/aiclient"},
-    {"name": "api", "rootPath": "packages/api"},
-    {"name": "cache", "rootPath": "packages/cache"},
-    {"name": "commonUtils", "rootPath": "packages/commonUtils"},
-    {"name": "dispatcher", "rootPath": "packages/dispatcher"},
-    {"name": "defaultAgentProvider", "rootPath": "packages/defaultAgentProvider"},
-    {"name": "knowledgeProcessor", "rootPath": "packages/knowledgeProcessor"},
-    {"name": "memoryProviders", "rootPath": "examples/memoryProviders"},
-    {"name": "typeagent", "rootPath": "packages/typeagent"}
-  ],
-  "jest.runMode": "on-demand",
-  "[json]": {
-    "editor.defaultFormatter": "esbenp.prettier-vscode"
-  },
-  "[typescript]": {
-    "editor.defaultFormatter": "esbenp.prettier-vscode"
-  },
-  "jest.jestCommandLine": "node --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js"
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "cSpell.words": [
+        "aiclient",
+        "AUTOINCREMENT",
+        "Exif",
+        "exifreader",
+        "Knowpro",
+        "lightgray",
+        "NOCASE",
+        "oclif",
+        "openai",
+        "regen",
+        "tsbuildinfo",
+        "typeagent",
+        "typechat"
+    ],
+    "[html]": {
+        "editor.defaultFormatter": "vscode.html-language-features"
+    },
+    "jest.virtualFolders": [
+        {"name": "aiclient", "rootPath": "packages/aiclient"},
+        {"name": "api", "rootPath": "packages/api"},
+        {"name": "cache", "rootPath": "packages/cache"},
+        {"name": "commonUtils", "rootPath": "packages/commonUtils"},
+        {"name": "dispatcher", "rootPath": "packages/dispatcher"},
+        {"name": "defaultAgentProvider", "rootPath": "packages/defaultAgentProvider"},
+        {"name": "knowledgeProcessor", "rootPath": "packages/knowledgeProcessor"},
+        {"name": "memoryProviders", "rootPath": "examples/memoryProviders"},
+        {"name": "typeagent", "rootPath": "packages/typeagent"}
+    ],
+    "jest.runMode": "on-demand",
+    "[json]": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode"
+    },
+    "[typescript]": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode"
+    },
+    "jest.jestCommandLine": "node --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js"
 }
