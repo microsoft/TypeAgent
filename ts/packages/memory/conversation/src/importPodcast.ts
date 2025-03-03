@@ -11,8 +11,8 @@ import {
     IndexingResults,
     ITermsToRelatedTermsIndexData,
     IConversationThreadData,
-    deserializeEmbeddings,
-    serializeEmbeddings,
+    //deserializeEmbeddings,
+    //serializeEmbeddings,
     ConversationSettings,
     createConversationSettings,
     addMetadataToIndex,
@@ -22,6 +22,9 @@ import {
     ConversationThreads,
     IndexingEventHandlers,
     buildConversationIndex,
+    writeConversationToFile,
+    IPersistedConversationData,
+    readConversationFromFile,
 } from "knowpro";
 import { conversation as kpLib, split } from "knowledge-processor";
 import {
@@ -29,12 +32,12 @@ import {
     dateTime,
     getFileName,
     readAllText,
-    readFile,
-    readJsonFile,
-    writeFile,
-    writeJsonFile,
+    //readFile,
+    //readJsonFile,
+    //writeFile,
+    //writeJsonFile,
 } from "typeagent";
-import path from "path";
+//import path from "path";
 
 // metadata for podcast messages
 export class PodcastMessageMeta implements IKnowledgeSource {
@@ -197,7 +200,7 @@ export class Podcast implements IConversation<PodcastMessageMeta> {
         }
         await this.buildSecondaryIndexes(true);
     }
-
+    /*
     public async writeToFile(
         dirPath: string,
         baseFileName: string,
@@ -245,6 +248,56 @@ export class Podcast implements IConversation<PodcastMessageMeta> {
             }
         }
         await podcast.deserialize(data);
+        return podcast;
+    }
+    */
+
+    public async writeToFile(
+        dirPath: string,
+        baseFileName: string,
+    ): Promise<void> {
+        await writeConversationToFile(
+            this,
+            dirPath,
+            baseFileName,
+            async (conversation) => {
+                const conversationData = await this.serialize();
+                let serializationData: IPersistedConversationData<PodcastData> =
+                    {
+                        conversationData,
+                    };
+                const embeddingData =
+                    conversationData.relatedTermsIndexData?.textEmbeddingData;
+                if (embeddingData) {
+                    serializationData.embeddings = embeddingData.embeddings;
+                    embeddingData.embeddings = [];
+                }
+                return serializationData;
+            },
+        );
+    }
+
+    public static async readFromFile(
+        dirPath: string,
+        baseFileName: string,
+    ): Promise<Podcast | undefined> {
+        const podcast = new Podcast();
+        await readConversationFromFile<PodcastData>(
+            dirPath,
+            baseFileName,
+            podcast.settings.relatedTermIndexSettings.embeddingIndexSettings
+                ?.embeddingSize,
+            async (persistentData) => {
+                const embeddingData =
+                    persistentData.conversationData.relatedTermsIndexData
+                        ?.textEmbeddingData;
+                if (persistentData.embeddings && embeddingData) {
+                    embeddingData.embeddings = persistentData.embeddings;
+                }
+                podcast.deserialize(persistentData.conversationData);
+                return podcast;
+            },
+        );
         return podcast;
     }
 
@@ -304,8 +357,8 @@ export class PodcastSecondaryIndexes extends ConversationSecondaryIndexes {
     }
 }
 
-const DataFileSuffix = "_data.json";
-const EmbeddingFileSuffix = "_embeddings.bin";
+//const DataFileSuffix = "_data.json";
+//const EmbeddingFileSuffix = "_embeddings.bin";
 
 export interface PodcastData extends IConversationData<PodcastMessage> {
     relatedTermsIndexData?: ITermsToRelatedTermsIndexData | undefined;
