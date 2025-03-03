@@ -114,18 +114,7 @@ async function handleChatResponse(
                 const needDisplay = context.streamingContext !== generatedText ;//|| generateResponseAction.parameters.showImageToUser;
                 let result;
                 if (needDisplay) {
-                    // if (
-                    //     generateResponseAction.parameters
-                    //         .showImageToUser &&
-                    //     generateResponseAction.parameters.relatedFiles !==
-                    //         undefined
-                    // ) {
-                    //     result = createActionResultFromHtmlDisplay(
-                    //         `<div>${generatedText} ${await rehydrateImages(context, generateResponseAction.parameters.relatedFiles)}</div>`,
-                    //     );
-                    // } else {
                       result = createActionResult(generatedText, true);  
-                    //}
                 } else {
                     result = createActionResultNoDisplay(generatedText);
                 }
