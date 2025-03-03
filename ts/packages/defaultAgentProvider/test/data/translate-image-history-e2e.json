@@ -1,20 +1,19 @@
 [
     [
         {
-            "request": "Caption the first image in no less than 150 words without making any assumptions.",            
+            "request": "Describe the image in the chat history.",            
             "action": {
                 "translatorName": "chat",
                 "actionName": "lookupAndGenerateResponse",
                 "parameters": {
-                    "originalRequest": "Caption the first image in no less than 150 words without making any assumptions.",
+                    "originalRequest": "Describe the image in the chat history.",
                     "conversationLookupFilters": [
                       {
                         "terms": [
-                          "first image"
+                          "image"
                         ]
                       }
-                    ],
-                    "retrieveRelatedFilesFromStorage": true                    
+                    ]
                 }
             },
             "history": {

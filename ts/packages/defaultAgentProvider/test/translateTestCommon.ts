@@ -22,7 +22,7 @@ type TranslateTestStep = {
 type TranslateTestEntry = TranslateTestStep | TranslateTestStep[];
 type TranslateTestFile = TranslateTestEntry[];
 
-const repeat = 1;
+const repeat = 5;
 const defaultAppAgentProviders = getDefaultAppAgentProviders(undefined);
 
 export async function defineTranslateTest(name: string, dataFiles: string[]) {
