@@ -1,12 +1,12 @@
 [
     [
         {
-            "request": "Describe the image in the chat history.",            
+            "request": "Tell me about the image in the chat history.",            
             "action": {
                 "translatorName": "chat",
                 "actionName": "lookupAndGenerateResponse",
                 "parameters": {
-                    "originalRequest": "Describe the image in the chat history.",
+                    "originalRequest": "Tell me about the image in the chat history.",
                     "conversationLookupFilters": [
                       {
                         "terms": [
