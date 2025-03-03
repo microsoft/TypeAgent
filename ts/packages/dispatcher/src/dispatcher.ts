@@ -28,6 +28,7 @@ import { FullAction } from "agent-cache";
 
 export type CommandResult = {
     hasError?: boolean;
+    exception?: string;
     actions?: FullAction[];
     metrics?: RequestMetrics;
 };

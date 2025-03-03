@@ -35,5 +35,6 @@
     },
     "[typescript]": {
         "editor.defaultFormatter": "esbenp.prettier-vscode"
-    }
+    },
+    "jest.jestCommandLine": "node --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js"
 }
