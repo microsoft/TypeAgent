@@ -28,6 +28,7 @@ class Blob:
     blob_type: str                                 # e.g. "text", "table", "image"
     start: int                                     # Page number (0-based)
     content: Optional[Union[str, List[str]]] = None
+    img_name: Optional[str] = None                     # Name of the image blob, if this is an image blob
     img_path: Optional[str] = None                 # Path to the saved image file, if this is an image blob
     para_id: Optional[int] = None                  # Paragraph ID if needed
     image_chunk_ref: Optional[str] = None          # Pointer to the chunk that has the associated image (if this is a caption)
@@ -328,7 +329,6 @@ class PDFChunker:
             for row in table_data:
                 print(f"    {' | '.join(row)}")  # Format table rows nicely
 
-
     def _find_nearest_image_bbox(self, line_bbox: List[float], image_bboxes: List[List[float]]) -> Optional[List[float]]:
         """
         Return the bounding box of the closest image to the given line_bbox,
@@ -356,6 +356,63 @@ class PDFChunker:
 
         return best_bbox
 
+    def _find_nearest_image_chunk(
+        self,
+        page_num: int,
+        line_bbox: List[float],
+        image_title_buffer: float = 30.0,
+        image_label_buffer: float = 50.0
+    ) -> Optional[tuple[int, List[Chunk]]]:
+        """
+        Determines if the line_bbox qualifies as an 'image title' or 'image caption'
+        for one or more images on the given page. 
+        Returns (page_num, [list_of_chunks]) if it is; otherwise None.
+
+        The chunk is considered 'title' if it lies within or above the image 
+        by image_title_buffer. 
+        The chunk is considered 'caption' if it lies below the image 
+        within image_label_buffer.
+        """
+
+        x0_line, y0_line, x1_line, y1_line = line_bbox
+        close_chunks: List[Chunk] = []
+
+        # Retrieve the images for this page (already in chunk form)
+        page_images = self.doc_image_chunksmap.get(page_num, {})
+        for _, img_chunk in page_images.items():
+            if not img_chunk.blobs:
+                continue
+
+            img_blob = img_chunk.blobs[0]
+            if img_blob.blob_type != "image" or not img_blob.bbox:
+                continue
+
+            x0_img, y0_img, x1_img, y1_img = img_blob.bbox
+
+            # Title logic: Slightly above or inside
+            is_image_title = (
+                (y0_line >= y0_img - image_title_buffer) and 
+                (y1_line <= y1_img) and 
+                (x0_line >= x0_img - 30) and 
+                (x1_line <= x1_img + 30)
+            )
+
+            # Caption logic: Below image within buffer
+            is_image_caption = (
+                (y0_line >= y1_img) and
+                (y1_line <= y1_img + image_label_buffer) and
+                (x0_line >= x0_img - 30) and
+                (x1_line <= x1_img + 30)
+            )
+
+            if is_image_title or is_image_caption:
+                close_chunks.append(img_chunk)
+
+        if close_chunks:
+            return (page_num, close_chunks)
+        return None
+
+   
     def get_lines_from_dict(self, page: fitz.Page) -> list[tuple[str, str]]:
         # Thresholds for merging lines
         Y_THRESHOLD = 2.0  
@@ -376,22 +433,12 @@ class PDFChunker:
             if img_rects:
                 image_bboxes.append(list(img_rects[0]))  # Store first rectangle found
 
-        # Extract table bounding boxes heuristically
-        table_bboxes = self.extract_tables_from_page(page)
-        # for block in page.get_text("blocks"):
-        #     x0, y0, x1, y1, text, block_type = block[:6]
-        #     # Heuristic: If the block is wide and contains structured content, assume table
-        #     if (x1 - x0) > 200 and len(text.split()) > 5:
-        #         table_bboxes.append([x0, y0, x1, y1])
-       
-        # Debug: Print image bounding boxes
-        print(f"\n--- DEBUG: Found {len(image_bboxes)} images on the page ---")
-        for idx, (x0, y0, x1, y1) in enumerate(image_bboxes):
-            print(f"  Image {idx}: BBox ({x0}, {y0}, {x1}, {y1})")
+        if self.debug:
+            print(f"\n--- DEBUG: Found {len(image_bboxes)} images on the page ---")
+            for idx, (x0, y0, x1, y1) in enumerate(image_bboxes):
+                print(f"  Image {idx}: BBox ({x0}, {y0}, {x1}, {y1})")
 
-        # Debug: Print image bounding boxes
-        #self.print_tables(table_bboxes)
-
+        page_num = page.number
         for block in data["blocks"]:
             if block["type"] == 0:  # Text block
                 for ln in block["lines"]:
@@ -401,8 +448,9 @@ class PDFChunker:
 
                     x0, y0, x1, y1 = ln["bbox"]
                     # Debug: Print line bounding boxes
-                    print(f"\n--- DEBUG: Checking line '{line_text}' ---")
-                    print(f"  Line BBox: ({x0}, {y0}, {x1}, {y1})")
+                    if self.debug:
+                        print(f"\n--- DEBUG: Checking line '{line_text}' ---")
+                        print(f"  Line BBox: ({x0}, {y0}, {x1}, {y1})")
                     
                     is_image_title = any(
                         (y0 >= img_y0 - IMAGE_TITLE_BUFFER and y1 <= img_y1) and  # Slightly above or inside
@@ -417,25 +465,8 @@ class PDFChunker:
                     )
 
                     is_image_label = is_image_title or is_image_caption
-                    if is_image_label:
+                    if is_image_label and self.debug:
                         print(f" 🖼️ Marked as IMAGE label")
-
-                    # Check if text is near a table
-                    # is_table_label = not is_image_label and any(
-                    #     (y0 >= tbl_y0 - 10 and y1 <= tbl_y1 + IMAGE_LABEL_BUFFER) and  
-                    #     (x0 >= tbl_x0 and x1 <= tbl_x1)  
-                    #     for tbl_x0, tbl_y0, tbl_x1, tbl_y1 in table_bboxes
-                    # )
-                    # if is_table_label:
-                    #     print(f"  🟦 Marked as TABLE label")
-
-                    is_table_label = not is_image_label and any(
-                        (y0 >= tbl_bbox[0][1] - 10 and y1 <= tbl_bbox[0][3] + IMAGE_LABEL_BUFFER) and  # Check Y-bounds
-                        (x0 >= tbl_bbox[0][0] and x1 <= tbl_bbox[0][2])  # Check X-bounds
-                        for tbl_bbox in table_bboxes  # Unpack (bbox, table_data)                        
-                    )
-                    # if is_table_label:
-                    #     print(f"  🟦 Marked as TABLE label")
                     
                     # debug setting this to false
                     is_table_label = False
@@ -627,7 +658,6 @@ class PDFChunker:
 
         for page_num in range(len(doc)):
             page = doc[page_num]
-            print(f"\n--- 🚀 DEBUG: Page {page_num} ---")
             page_lines_with_labels = self.get_lines_from_dict(page)
             if page_lines_with_labels and page_lines_with_labels[-1][0].strip().isdigit():
                 page_lines_with_labels.pop()
@@ -636,6 +666,7 @@ class PDFChunker:
             page_lines = [text for text, _ in page_lines_with_labels]
 
             if self.debug:
+                print(f"\n--- 🚀 DEBUG: Page {page_num} ---")
                 print_lines_with_label(page_num, page_lines_with_labels)
 
             # Create a parent chunk for this page
@@ -667,10 +698,10 @@ class PDFChunker:
             #    This removes the tokens from the actual content while preserving paragraph boundaries.
             paragraphs = split_paragraphs(page_lines)
 
-            # 5) Possibly merge single-line headings with a following large paragraph.
+            # 4) Possibly merge single-line headings with a following large paragraph.
             paragraphs = merge_single_line_headings(paragraphs)
 
-            # 6) For each paragraph, chunk by sentences (or any logic you want)
+            # 5) For each paragraph, chunk by sentences (or any logic you want)
             para_id = 0
             for paragraph_lines in paragraphs:
                 splitted_chunks = chunk_paragraph_by_sentence(paragraph_lines, max_tokens=200)
@@ -768,7 +799,7 @@ class PDFChunker:
 
     def get_imagechunks_for_doc(self) -> dict[int, dict[str, Chunk]]:
         doc = fitz.open(self.file_path)
-        doc_image_map: dict[int, dict[str, Chunk]] = {}  # NEW: page-index-based dictionary
+        page_imagechunk_map: dict[int, dict[str, Chunk]] = {}  # NEW: page-index-based dictionary
 
         for page_num in range(len(doc)):
             img_chunks = self.extract_imageblobs_from_page(page_num)
@@ -780,18 +811,12 @@ class PDFChunker:
                 # Build a unique key for the image
                 unique_name = f"image_{page_num}_{img_index}"
                 blob = chunk.blobs[0]
-
-                # Optionally store this unique name in the blob (if you want to reference it later)
-                if blob.other_labels is None:
-                    blob.other_labels = []
-                blob.other_labels.append(unique_name)
+                blob.img_name = unique_name
 
                 page_dict[unique_name] = chunk
 
-            doc_image_map[page_num] = page_dict
-
-        self.doc_image_chunksmap = doc_image_map  # Store in the class attribute
-        return self.doc_image_chunksmap
+            page_imagechunk_map[page_num] = page_dict
+        return page_imagechunk_map
 
     def extract_imageblobs_from_page(self, page_num: int) -> list[Chunk]:
         chunks = []
@@ -846,12 +871,14 @@ class PDFChunker:
 
     def chunkify(self) -> ChunkedFile:
         with pdfplumber.open(self.file_path) as pdf:
+            self.doc_image_chunksmap = self.get_imagechunks_for_doc()
             text_chunks, page_chunks = self.extract_text_chunks()
             if self.debug:
                 self.debug_print_lines(text_chunks)
             #table_chunks = self.extract_tables(pdf, page_chunks=page_chunks)
-            image_chunks = self.extract_image_chunks(page_chunks)
-        all_chunks = text_chunks + image_chunks
+            #image_chunks = self.extract_image_chunks(page_chunks)
+        #all_chunks = text_chunks + image_chunks
+        all_chunks = text_chunks
         return all_chunks
 
     def save_json(self, output_path: str) -> list[Chunk] | ErrorItem:
