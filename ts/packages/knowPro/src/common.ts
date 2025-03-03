@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { DateRange, TextLocation, TextRange } from "./dataFormat.js";
+import { DateRange, TextLocation, TextRange } from "./interfaces.js";
 import { SearchTerm } from "./search.js";
 /**
  * Common types and methods INTERNAL to the library.

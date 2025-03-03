@@ -138,7 +138,7 @@ export async function generateTextEmbeddingsWithRetry(
     retryMaxAttempts: number = DefaultRetryAttempts,
     retryPauseMs: number = DefaultRetryPauseMs,
     maxCharsPerChunk: number = Number.MAX_SAFE_INTEGER,
-) {
+): Promise<NormalizedEmbedding[]> {
     return callWithRetry(
         () => generateTextEmbeddings(model, values, maxCharsPerChunk),
         retryMaxAttempts,

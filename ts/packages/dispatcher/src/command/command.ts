@@ -193,7 +193,7 @@ async function parseCommand(
         } catch (e: any) {
             const command = getParsedCommand(result);
             throw new Error(
-                `${e.message}\n\n${chalk.black(getUsage(command, result.descriptor))}`,
+                `${e.message}\n\n${chalk.reset(getUsage(command, result.descriptor))}`,
             );
         }
     }
@@ -219,7 +219,7 @@ async function parseCommand(
               : `'${result.suffix}' is not a subcommand for '@${command}'.`;
 
     throw new Error(
-        `${message}\n\n${chalk.black(getHandlerTableUsage(result.table, command, context))}`,
+        `${message}\n\n${chalk.reset(getHandlerTableUsage(result.table, command, context))}`,
     );
 }
 

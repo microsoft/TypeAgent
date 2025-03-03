@@ -17,3 +17,14 @@ export function getTimeRangeForConversation(
     }
     return undefined;
 }
+
+export function textLocationToString(location: kp.TextLocation): string {
+    let text = `MessageIndex: ${location.messageIndex}`;
+    if (location.chunkIndex) {
+        text += `\nChunkIndex: ${location.chunkIndex}`;
+    }
+    if (location.charIndex) {
+        text += `\nCharIndex: ${location.charIndex}`;
+    }
+    return text;
+}

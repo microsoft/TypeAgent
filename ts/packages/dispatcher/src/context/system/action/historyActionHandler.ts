@@ -15,20 +15,20 @@ export async function executeHistoryAction(
 ) {
     const historyAction = action as HistoryAction;
     switch (historyAction.actionName) {
-        case "delete":
+        case "deleteHistory":
             const deleteAction = historyAction as DeleteHistoryAction;
             await processCommandNoLock(
                 `@history delete ${deleteAction.parameters.messageNumber}`,
                 context.sessionContext.agentContext,
             );
             break;
-        case "clear":
+        case "clearHistory":
             await processCommandNoLock(
                 `@history clear`,
                 context.sessionContext.agentContext,
             );
             break;
-        case "list":
+        case "listHistory":
             await processCommandNoLock(
                 `@history list`,
                 context.sessionContext.agentContext,

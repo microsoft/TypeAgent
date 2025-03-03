@@ -2,62 +2,35 @@
 // Licensed under the MIT License.
 
 import {
+    IConversation,
+    IKnowledgeSource,
+    IMessage,
+    IndexingResults,
     ITermToSemanticRefIndex,
     ITermToSemanticRefIndexData,
     ITermToSemanticRefIndexItem,
-    ScoredSemanticRef,
-    IConversation,
-    IKnowledgeSource,
-    SemanticRef,
-    Topic,
-    TextRange,
-    TextLocation,
-    IMessage,
-    SemanticRefIndex,
-    MessageIndex,
     Knowledge,
     KnowledgeType,
-} from "./dataFormat.js";
+    MessageIndex,
+    ScoredSemanticRef,
+    SemanticRef,
+    SemanticRefIndex,
+    TextRange,
+    Topic,
+} from "./interfaces.js";
+import { IndexingEventHandlers } from "./interfaces.js";
 import { conversation as kpLib } from "knowledge-processor";
 import { openai } from "aiclient";
-import { Result } from "typechat";
 import { async } from "typeagent";
 import { facetValueToString } from "./knowledge.js";
-import { IConversationSecondaryIndexes } from "./secondaryIndexes.js";
-import { addPropertiesToIndex, PropertyIndex } from "./propertyIndex.js";
-import { TimestampToTextRangeIndex } from "./timestampIndex.js";
-
-export interface IConversationIndexes {
-    semanticRefIndex?: ITermToSemanticRefIndex | undefined;
-    secondaryIndexes?: IConversationSecondaryIndexes | undefined;
-}
-
-export function createKnowledgeModel() {
-    const chatModelSettings = openai.apiSettingsFromEnv(
-        openai.ModelType.Chat,
-        undefined,
-        "GPT_4_O",
-    );
-    chatModelSettings.retryPauseMs = 10000;
-    const chatModel = openai.createJsonChatModel(chatModelSettings, [
-        "chatExtractor",
-    ]);
-    return chatModel;
-}
-
-function textLocationFromLocation(
-    messageIndex: MessageIndex,
-    chunkIndex = 0,
-): TextLocation {
-    return { messageIndex, chunkIndex };
-}
+import { buildSecondaryIndexes } from "./secondaryIndexes.js";
 
 export function textRangeFromLocation(
     messageIndex: MessageIndex,
     chunkIndex = 0,
 ): TextRange {
     return {
-        start: textLocationFromLocation(messageIndex, chunkIndex),
+        start: { messageIndex, chunkIndex },
         end: undefined,
     };
 }
@@ -205,7 +178,7 @@ export function addKnowledgeToIndex(
     semanticRefIndex: ITermToSemanticRefIndex,
     messageIndex: MessageIndex,
     knowledge: kpLib.KnowledgeResponse,
-) {
+): void {
     for (const entity of knowledge.entities) {
         addEntityToIndex(entity, semanticRefs, semanticRefIndex, messageIndex);
     }
@@ -226,90 +199,77 @@ export function addKnowledgeToIndex(
     }
 }
 
-export type ConversationIndexingResult = {
-    index: ConversationIndex;
-    failedMessages: { message: IMessage; error: string }[];
-};
-
-export async function buildConversationIndex<TMeta extends IKnowledgeSource>(
-    convo: IConversation<TMeta>,
-    progressCallback?: (
-        text: string,
-        knowledgeResult: Result<kpLib.KnowledgeResponse>,
-    ) => boolean,
-): Promise<ConversationIndexingResult> {
-    const semanticRefIndex = new ConversationIndex();
-    convo.semanticRefIndex = semanticRefIndex;
-    if (convo.semanticRefs === undefined) {
-        convo.semanticRefs = [];
+export async function buildSemanticRefIndex<TMeta extends IKnowledgeSource>(
+    conversation: IConversation<TMeta>,
+    eventHandler?: IndexingEventHandlers,
+): Promise<IndexingResults> {
+    conversation.semanticRefIndex ??= new ConversationIndex();
+    const semanticRefIndex = conversation.semanticRefIndex;
+    conversation.semanticRefIndex = semanticRefIndex;
+    if (conversation.semanticRefs === undefined) {
+        conversation.semanticRefs = [];
     }
-    const semanticRefs = convo.semanticRefs;
+    const semanticRefs = conversation.semanticRefs;
     const chatModel = createKnowledgeModel();
     const extractor = kpLib.createKnowledgeExtractor(chatModel, {
         maxContextLength: 4096,
         mergeActionKnowledge: false,
     });
     const maxRetries = 4;
-    let indexingResult: ConversationIndexingResult = {
-        index: semanticRefIndex,
-        failedMessages: [],
-    };
-    for (let i = 0; i < convo.messages.length; i++) {
-        const msg = convo.messages[i];
+    let indexingResult: IndexingResults = {};
+    for (let i = 0; i < conversation.messages.length; i++) {
+        let messageIndex: MessageIndex = i;
+        const chunkIndex = 0;
+        const msg = conversation.messages[messageIndex];
         // only one chunk per message for now
-        const text = msg.textChunks[0];
-        try {
-            const knowledgeResult = await async.callWithRetry(() =>
-                extractor.extractWithRetry(text, maxRetries),
+        const text = msg.textChunks[chunkIndex];
+        const knowledgeResult = await async.callWithRetry(() =>
+            extractor.extractWithRetry(text, maxRetries),
+        );
+        if (!knowledgeResult.success) {
+            indexingResult.error = knowledgeResult.message;
+            break;
+        }
+        const knowledge = knowledgeResult.data;
+        if (knowledge) {
+            addKnowledgeToIndex(
+                semanticRefs,
+                semanticRefIndex,
+                messageIndex,
+                knowledge,
             );
-            if (progressCallback && !progressCallback(text, knowledgeResult)) {
-                break;
-            }
-            if (knowledgeResult.success) {
-                const knowledge = knowledgeResult.data;
-                if (knowledge) {
-                    addKnowledgeToIndex(
-                        semanticRefs,
-                        semanticRefIndex,
-                        i,
-                        knowledge,
-                    );
-                }
-            } else {
-                indexingResult.failedMessages.push({
-                    message: msg,
-                    error: knowledgeResult.message,
-                });
-            }
-        } catch (ex) {
-            indexingResult.failedMessages.push({
-                message: msg,
-                error: `${ex}`,
-            });
+        }
+        const completedChunk = { messageIndex, chunkIndex };
+        indexingResult.chunksIndexedUpto = completedChunk;
+        if (
+            eventHandler?.onKnowledgeExtracted &&
+            !eventHandler.onKnowledgeExtracted(completedChunk, knowledge)
+        ) {
+            break;
         }
     }
     return indexingResult;
 }
 
 export function addToConversationIndex<TMeta extends IKnowledgeSource>(
-    convo: IConversation<TMeta>,
+    conversation: IConversation<TMeta>,
     messages: IMessage<TMeta>[],
     knowledgeResponses: kpLib.KnowledgeResponse[],
 ): void {
-    if (convo.semanticRefIndex === undefined) {
-        convo.semanticRefIndex = new ConversationIndex();
+    if (conversation.semanticRefIndex === undefined) {
+        conversation.semanticRefIndex = new ConversationIndex();
     }
-    if (convo.semanticRefs === undefined) {
-        convo.semanticRefs = [];
+    if (conversation.semanticRefs === undefined) {
+        conversation.semanticRefs = [];
     }
     for (let i = 0; i < messages.length; i++) {
-        const messageIndex: MessageIndex = convo.messages.length;
-        convo.messages.push(messages[i]);
+        const messageIndex: MessageIndex = conversation.messages.length;
+        conversation.messages.push(messages[i]);
         const knowledge = knowledgeResponses[i];
         if (knowledge) {
             addKnowledgeToIndex(
-                convo.semanticRefs,
-                convo.semanticRefIndex,
+                conversation.semanticRefs,
+                conversation.semanticRefIndex,
                 messageIndex,
                 knowledge,
             );
@@ -403,26 +363,26 @@ export class ConversationIndex implements ITermToSemanticRefIndex {
     }
 }
 
-export async function buildSecondaryIndexes(
+export function createKnowledgeModel() {
+    const chatModelSettings = openai.apiSettingsFromEnv(
+        openai.ModelType.Chat,
+        undefined,
+        "GPT_4_O",
+    );
+    chatModelSettings.retryPauseMs = 10000;
+    const chatModel = openai.createJsonChatModel(chatModelSettings, [
+        "chatExtractor",
+    ]);
+    return chatModel;
+}
+
+export async function buildConversationIndex(
     conversation: IConversation,
-    secondaryIndexes?: IConversationSecondaryIndexes,
-): Promise<IConversationSecondaryIndexes> {
-    secondaryIndexes ??= {};
-    const semanticRefs = conversation.semanticRefs;
-    if (
-        semanticRefs &&
-        secondaryIndexes.propertyToSemanticRefIndex === undefined
-    ) {
-        secondaryIndexes.propertyToSemanticRefIndex = new PropertyIndex();
-        addPropertiesToIndex(
-            semanticRefs,
-            secondaryIndexes.propertyToSemanticRefIndex,
-        );
+    eventHandler?: IndexingEventHandlers,
+): Promise<IndexingResults> {
+    const result = await buildSemanticRefIndex(conversation, eventHandler);
+    if (!result.error && conversation.semanticRefIndex) {
+        await buildSecondaryIndexes(conversation, true, eventHandler);
     }
-    if (secondaryIndexes.timestampIndex === undefined) {
-        secondaryIndexes.timestampIndex = new TimestampToTextRangeIndex(
-            conversation.messages,
-        );
-    }
-    return secondaryIndexes;
+    return result;
 }
