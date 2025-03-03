@@ -390,6 +390,9 @@ export class TermEditDistanceIndex
     }
 }
 
+/**
+ * Work in progress; Simplifying related terms
+ */
 export interface ITermToRelatedTermsIndex2 {
     addTerms(
         termTexts: string[],
