@@ -466,7 +466,13 @@ export async function importImages(
 
     let images: Image[] = [];
     if (isDir) {
-        images = await indexImages(imagePath, cachePath, recursive, chatModel, callback);
+        images = await indexImages(
+            imagePath,
+            cachePath,
+            recursive,
+            chatModel,
+            callback,
+        );
     } else {
         const img = await indexImage(imagePath, cachePath, chatModel);
         if (img !== undefined) {

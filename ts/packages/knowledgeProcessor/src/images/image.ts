@@ -513,9 +513,8 @@ export async function loadImage(
     fileName: string,
     model: ChatModel,
     loadCachedDetails: boolean = true,
-    cacheFolder: string | undefined = undefined
+    cacheFolder: string | undefined = undefined,
 ): Promise<Image | undefined> {
-
     if (cacheFolder === undefined) {
         cacheFolder = path.dirname(fileName);
     }
@@ -617,7 +616,10 @@ export async function loadImageWithKnowledge(
     model: ChatModel,
     loadCachedDetails: boolean = true,
 ): Promise<Image | undefined> {
-    const cachedFileName: string = path.join(cachePath, path.basename(fileName) + ".kr.json");
+    const cachedFileName: string = path.join(
+        cachePath,
+        path.basename(fileName) + ".kr.json",
+    );
     if (loadCachedDetails && fs.existsSync(cachedFileName)) {
         return JSON.parse(fs.readFileSync(cachedFileName, "utf8"));
     }

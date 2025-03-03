@@ -247,7 +247,7 @@ export async function createKnowproCommands(
                 related: argBool("Index related terms", true),
                 indexFilePath: arg("Output path for index file"),
                 maxMessages: argNum("Maximum images to index"),
-                cachePath: arg("Path to image knowledge response cache.")
+                cachePath: arg("Path to image knowledge response cache."),
             },
         };
     }

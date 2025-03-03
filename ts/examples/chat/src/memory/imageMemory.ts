@@ -131,9 +131,18 @@ export function createImageCommands(
             TokenCounter.getInstance().total;
 
         if (isDir) {
-            await indexImages(sourcePath, namedArgs.value("cachePath", "string", false), context, clock);
+            await indexImages(
+                sourcePath,
+                namedArgs.value("cachePath", "string", false),
+                context,
+                clock,
+            );
         } else {
-            await indexImage(sourcePath, namedArgs.value("cachePath", "string", false), context);
+            await indexImage(
+                sourcePath,
+                namedArgs.value("cachePath", "string", false),
+                context,
+            );
         }
 
         const tokenCountFinish: CompletionUsageStats =
@@ -180,7 +189,11 @@ export function createImageCommands(
         }
     }
 
-    async function indexImage(fileName: string, cachePath: string, context: ChatContext) {
+    async function indexImage(
+        fileName: string,
+        cachePath: string,
+        context: ChatContext,
+    ) {
         if (!fs.existsSync(fileName)) {
             console.log(`Could not find part of the file path '${fileName}'`);
             return;
@@ -191,7 +204,12 @@ export function createImageCommands(
 
         // load the image
         const image: knowLib.image.Image | undefined =
-            await knowLib.image.loadImage(fileName, context.models.chatModel, true, cachePath);
+            await knowLib.image.loadImage(
+                fileName,
+                context.models.chatModel,
+                true,
+                cachePath,
+            );
 
         if (image) {
             await knowLib.image.addImageToConversation(
