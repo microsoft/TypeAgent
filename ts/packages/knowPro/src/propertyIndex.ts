@@ -2,13 +2,14 @@
 // Licensed under the MIT License.
 
 import {
+    IConversation,
     ScoredSemanticRef,
     SemanticRef,
     SemanticRefIndex,
     Tag,
-} from "./dataFormat.js";
+} from "./interfaces.js";
 import { conversation as kpLib } from "knowledge-processor";
-import { IPropertyToSemanticRefIndex } from "./secondaryIndexes.js";
+import { IPropertyToSemanticRefIndex } from "./interfaces.js";
 import { TextRangesInScope } from "./collections.js";
 import { facetValueToString } from "./knowledge.js";
 
@@ -103,13 +104,26 @@ export function addActionPropertiesToIndex(
     }
 }
 
-export function addPropertiesToIndex(
-    semanticRefs: SemanticRef[],
+export function buildPropertyIndex(conversation: IConversation) {
+    if (conversation.secondaryIndexes && conversation.semanticRefs) {
+        conversation.secondaryIndexes.propertyToSemanticRefIndex ??=
+            new PropertyIndex();
+        addToPropertyIndex(
+            conversation.secondaryIndexes.propertyToSemanticRefIndex,
+            conversation.semanticRefs,
+            0,
+        );
+    }
+}
+
+export function addToPropertyIndex(
     propertyIndex: IPropertyToSemanticRefIndex,
+    semanticRefs: SemanticRef[],
+    baseSemanticRefIndex: SemanticRefIndex,
 ) {
     for (let i = 0; i < semanticRefs.length; ++i) {
         const semanticRef = semanticRefs[i];
-        const semanticRefIndex: SemanticRefIndex = i;
+        const semanticRefIndex: SemanticRefIndex = i + baseSemanticRefIndex;
         switch (semanticRef.knowledgeType) {
             default:
                 break;
@@ -175,6 +189,10 @@ export class PropertyIndex implements IPropertyToSemanticRefIndex {
         } else {
             this.map.set(termText, [semanticRefIndex]);
         }
+    }
+
+    public clear(): void {
+        this.map.clear();
     }
 
     lookupProperty(

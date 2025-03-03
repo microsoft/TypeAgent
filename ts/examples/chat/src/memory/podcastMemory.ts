@@ -211,7 +211,7 @@ export function createPodcastCommands(
             podcastMessages,
             knowledgeResponses,
         );
-        kpPodcast.threads.threads.push(...podcastThreads);
+        kpPodcast.secondaryIndexes.threads.threads.push(...podcastThreads);
         await kpPodcast.buildIndex();
 
         const podcastData = kpPodcast.serialize();

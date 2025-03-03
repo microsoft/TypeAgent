@@ -360,11 +360,7 @@ export class AppAgentManager implements ActionConfigProvider {
         return Array.from(this.actionConfigs.keys());
     }
     public getActionConfigs() {
-        return Array.from(this.actionConfigs.entries());
-    }
-
-    public getInjectedSchemaForActionName(actionName: string) {
-        return this.injectedSchemaForActionName.get(actionName);
+        return Array.from(this.actionConfigs.values());
     }
 
     public getAppAgent(appAgentName: string): AppAgent {

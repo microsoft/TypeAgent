@@ -4,26 +4,24 @@
 import {
     IConversation,
     IMessage,
-    IKnowledgeSource,
     SemanticRef,
     IConversationData,
     Term,
     ConversationIndex,
-    buildConversationIndex,
-    ConversationIndexingResult,
-    TermToRelatedTermsIndex,
-    IPropertyToSemanticRefIndex,
+    IndexingResults,
     ITermsToRelatedTermsIndexData,
-    ITimestampToTextRangeIndex,
     IConversationThreadData,
-    ConversationThreads,
-    IConversationSecondaryIndexes,
     deserializeEmbeddings,
     serializeEmbeddings,
     ConversationSettings,
     createConversationSettings,
     addMetadataToIndex,
     buildSecondaryIndexes,
+    IKnowledgeSource,
+    ConversationSecondaryIndexes,
+    ConversationThreads,
+    IndexingEventHandlers,
+    buildConversationIndex,
 } from "knowpro";
 import { conversation as kpLib, split } from "knowledge-processor";
 import {
@@ -36,7 +34,6 @@ import {
     writeFile,
     writeJsonFile,
 } from "typeagent";
-import { Result } from "typechat";
 import path from "path";
 
 // metadata for podcast messages
@@ -117,15 +114,10 @@ export class PodcastMessage implements IMessage<PodcastMessageMeta> {
     }
 }
 
-export class Podcast
-    implements IConversation<PodcastMessageMeta>, IConversationSecondaryIndexes
-{
+export class Podcast implements IConversation<PodcastMessageMeta> {
     public settings: ConversationSettings;
-    public semanticRefIndex: ConversationIndex | undefined;
-    public termToRelatedTermsIndex: TermToRelatedTermsIndex | undefined;
-    public timestampIndex: ITimestampToTextRangeIndex | undefined;
-    public propertyToSemanticRefIndex: IPropertyToSemanticRefIndex | undefined;
-    public threads: ConversationThreads;
+    public semanticRefIndex: ConversationIndex;
+    public secondaryIndexes: PodcastSecondaryIndexes;
 
     constructor(
         public nameTag: string = "",
@@ -134,7 +126,8 @@ export class Podcast
         public semanticRefs: SemanticRef[] = [],
     ) {
         this.settings = createConversationSettings();
-        this.threads = new ConversationThreads(this.settings.threadSettings);
+        this.semanticRefIndex = new ConversationIndex();
+        this.secondaryIndexes = new PodcastSecondaryIndexes(this.settings);
     }
 
     public addMetadataToIndex() {
@@ -156,44 +149,28 @@ export class Podcast
     }
 
     public async buildIndex(
-        progressCallback?: (
-            text: string,
-            knowledgeResult: Result<kpLib.KnowledgeResponse>,
-        ) => boolean,
-    ): Promise<ConversationIndexingResult> {
+        eventHandler?: IndexingEventHandlers,
+    ): Promise<IndexingResults> {
         this.addMetadataToIndex();
-        const result = await buildConversationIndex(this, progressCallback);
-        await this.buildSecondaryIndexes();
-        await this.threads.buildIndex();
+        const result = await buildConversationIndex(this, eventHandler);
+        if (!result.error) {
+            // buildConversationIndex already built all aliases
+            await this.buildSecondaryIndexes(false);
+            await this.secondaryIndexes.threads.buildIndex();
+        }
         return result;
     }
 
-    public async buildRelatedTermsIndex(
-        batchSize: number = 8,
-        progressCallback?: (batch: string[], batchStartAt: number) => boolean,
-    ): Promise<void> {
-        if (this.semanticRefIndex) {
-            this.termToRelatedTermsIndex = new TermToRelatedTermsIndex(
-                this.settings.relatedTermIndexSettings,
-            );
-            const allTerms = this.semanticRefIndex?.getTerms();
-            await this.termToRelatedTermsIndex.buildEmbeddingsIndex(
-                allTerms,
-                batchSize,
-                progressCallback,
-            );
-        }
-    }
-
-    public serialize(): PodcastData {
+    public async serialize(): Promise<PodcastData> {
         return {
             nameTag: this.nameTag,
             messages: this.messages,
             tags: this.tags,
             semanticRefs: this.semanticRefs,
             semanticIndexData: this.semanticRefIndex?.serialize(),
-            relatedTermsIndexData: this.termToRelatedTermsIndex?.serialize(),
-            threadData: this.threads.serialize(),
+            relatedTermsIndexData:
+                this.secondaryIndexes.termToRelatedTermsIndex.serialize(),
+            threadData: this.secondaryIndexes.threads.serialize(),
         };
     }
 
@@ -208,27 +185,24 @@ export class Podcast
             );
         }
         if (data.relatedTermsIndexData) {
-            this.termToRelatedTermsIndex = new TermToRelatedTermsIndex(
-                this.settings.relatedTermIndexSettings,
-            );
-            this.termToRelatedTermsIndex.deserialize(
+            this.secondaryIndexes.termToRelatedTermsIndex.deserialize(
                 data.relatedTermsIndexData,
             );
         }
         if (data.threadData) {
-            this.threads = new ConversationThreads(
+            this.secondaryIndexes.threads = new ConversationThreads(
                 this.settings.threadSettings,
             );
-            this.threads.deserialize(data.threadData);
+            this.secondaryIndexes.threads.deserialize(data.threadData);
         }
-        await this.buildSecondaryIndexes();
+        await this.buildSecondaryIndexes(true);
     }
 
     public async writeToFile(
         dirPath: string,
         baseFileName: string,
     ): Promise<void> {
-        const podcastData = this.serialize();
+        const podcastData = await this.serialize();
         const embeddingData =
             podcastData.relatedTermsIndexData?.textEmbeddingData;
         if (embeddingData?.embeddings) {
@@ -260,11 +234,13 @@ export class Podcast
             const embeddings = await readFile(
                 path.join(dirPath, baseFileName + EmbeddingFileSuffix),
             );
-            if (embeddings) {
+            const embeddingSettings =
+                podcast.settings.relatedTermIndexSettings
+                    .embeddingIndexSettings;
+            if (embeddings && embeddingSettings) {
                 embeddingData.embeddings = deserializeEmbeddings(
                     embeddings,
-                    podcast.settings.relatedTermIndexSettings
-                        .embeddingIndexSettings.embeddingSize,
+                    embeddingSettings.embeddingSize,
                 );
             }
         }
@@ -272,25 +248,24 @@ export class Podcast
         return podcast;
     }
 
-    private async buildSecondaryIndexes() {
+    private async buildSecondaryIndexes(all: boolean) {
+        if (all) {
+            await buildSecondaryIndexes(this, false);
+        }
         this.buildParticipantAliases();
-        await buildSecondaryIndexes(this, this);
     }
 
     private buildParticipantAliases(): void {
-        if (this.termToRelatedTermsIndex) {
-            const nameToAliasMap = this.collectParticipantAliases();
-            for (const name of nameToAliasMap.keys()) {
-                const relatedTerms: Term[] = nameToAliasMap
-                    .get(name)!
-                    .map((alias) => {
-                        return { text: alias };
-                    });
-                this.termToRelatedTermsIndex.aliases.addRelatedTerm(
-                    name,
-                    relatedTerms,
-                );
-            }
+        const aliases = this.secondaryIndexes.termToRelatedTermsIndex.aliases;
+        aliases.clear();
+        const nameToAliasMap = this.collectParticipantAliases();
+        for (const name of nameToAliasMap.keys()) {
+            const relatedTerms: Term[] = nameToAliasMap
+                .get(name)!
+                .map((alias) => {
+                    return { text: alias };
+                });
+            aliases.addRelatedTerm(name, relatedTerms);
         }
     }
 
@@ -317,6 +292,15 @@ export class Podcast
             }
         }
         return aliases;
+    }
+}
+
+export class PodcastSecondaryIndexes extends ConversationSecondaryIndexes {
+    public threads: ConversationThreads;
+
+    constructor(settings: ConversationSettings) {
+        super(settings.relatedTermIndexSettings);
+        this.threads = new ConversationThreads(settings.threadSettings);
     }
 }
 

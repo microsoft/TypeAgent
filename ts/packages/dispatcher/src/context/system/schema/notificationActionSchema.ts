@@ -8,7 +8,7 @@ export type NotificationAction =
 
 // Shows notifications based on the supplied filter
 export type ShowNotificationsAction = {
-    actionName: "show";
+    actionName: "showNotifications";
     parameters: {
         filter: NotificationFilter;
     };
@@ -18,10 +18,10 @@ export type NotificationFilter = "all" | "unread";
 
 // Shows notification summary
 export type ShowNotificationSummaryAction = {
-    actionName: "summary";
+    actionName: "showNotificationSummary";
 };
 
 // Clears the notifications
 export type ClearNotificationsAction = {
-    actionName: "clear";
+    actionName: "clearNotifications";
 };

@@ -23,7 +23,6 @@ import {
     TypeAgentJsonValidator,
 } from "common-utils";
 import {
-    getInjectedActionConfigs,
     createChangeAssistantActionSchema,
     TranslatedAction,
 } from "./agentTranslators.js";
@@ -48,7 +47,7 @@ function convertJsonSchemaOutput(
     return (jsonObject as any).response;
 }
 
-function createActionSchemaJsonValidator<T extends TranslatedAction>(
+export function createActionSchemaJsonValidator<T extends TranslatedAction>(
     actionSchemaGroup: ActionSchemaGroup,
     generateOptions?: GenerateSchemaOptions,
 ): TypeAgentJsonValidator<T> {
@@ -204,76 +203,52 @@ class ActionSchemaBuilder {
 }
 
 export function composeActionSchema(
-    schemaName: string,
+    actionConfigs: ActionConfig[],
+    switchActionConfigs: ActionConfig[],
     provider: ActionConfigProvider,
-    activeSchemas: { [key: string]: boolean },
-    changeAgentAction: boolean,
     multipleActionOptions: MultipleActionOptions,
 ) {
     const builder = new ActionSchemaBuilder(provider);
-    builder.addActionConfig(provider.getActionConfig(schemaName));
+    builder.addActionConfig(...actionConfigs);
     return finalizeActionSchemaBuilder(
         builder,
-        schemaName,
-        provider,
-        activeSchemas,
-        changeAgentAction,
+        switchActionConfigs,
         multipleActionOptions,
-        false,
     );
 }
 
 export function composeSelectedActionSchema(
     definitions: ActionSchemaTypeDefinition[],
-    schemaName: string,
+    actionConfig: ActionConfig,
+    additionalActionConfigs: ActionConfig[],
+    switchActionConfigs: ActionConfig[],
     provider: ActionConfigProvider,
-    activeSchemas: { [key: string]: boolean },
-    changeAgentAction: boolean,
     multipleActionOptions: MultipleActionOptions,
 ) {
     const builder = new ActionSchemaBuilder(provider);
     const union = sc.union(definitions.map((definition) => sc.ref(definition)));
-    const config = provider.getActionConfig(schemaName);
-    const typeName = `Partial${config.schemaType}`;
-    const comments = `${typeName} is a partial list of actions available in schema group '${schemaName}'.`;
+    const typeName = `Partial${actionConfig.schemaType}`;
+    const comments = `${typeName} is a partial list of actions available in schema group '${actionConfig.schemaName}'.`;
 
     const entry = sc.type(typeName, union, comments);
     builder.addTypeDefinition(entry);
-
+    builder.addActionConfig(...additionalActionConfigs);
     return finalizeActionSchemaBuilder(
         builder,
-        schemaName,
-        provider,
-        activeSchemas,
-        changeAgentAction,
+        switchActionConfigs,
         multipleActionOptions,
-        true,
     );
 }
 
 function finalizeActionSchemaBuilder(
     builder: ActionSchemaBuilder,
-    schemaName: string,
-    provider: ActionConfigProvider,
-    activeSchemas: { [key: string]: boolean },
-    changeAgentAction: boolean,
+    switchActionConfigs: ActionConfig[],
     multipleActionOptions: MultipleActionOptions,
-    partial: boolean,
 ) {
-    builder.addActionConfig(
-        ...getInjectedActionConfigs(schemaName, provider, activeSchemas),
-    );
-
-    if (changeAgentAction) {
-        const changeAssistantActionSchema = createChangeAssistantActionSchema(
-            provider,
-            schemaName,
-            activeSchemas,
-            partial,
+    if (switchActionConfigs.length > 0) {
+        builder.addTypeDefinition(
+            createChangeAssistantActionSchema(switchActionConfigs),
         );
-        if (changeAssistantActionSchema) {
-            builder.addTypeDefinition(changeAssistantActionSchema);
-        }
     }
 
     if (

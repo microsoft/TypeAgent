@@ -1,15 +1,15 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { IMessage } from "./dataFormat.js";
+import { IMessage } from "./interfaces.js";
 import {
     createTextEmbeddingIndexSettings,
     TextEmbeddingIndexSettings,
 } from "./fuzzyIndex.js";
-import { TermsToRelatedTermIndexSettings } from "./relatedTermsIndex.js";
+import { RelatedTermIndexSettings } from "./relatedTermsIndex.js";
 
 export type ConversationSettings = {
-    relatedTermIndexSettings: TermsToRelatedTermIndexSettings;
+    relatedTermIndexSettings: RelatedTermIndexSettings;
     threadSettings: TextEmbeddingIndexSettings;
 };
 

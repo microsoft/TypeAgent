@@ -5,7 +5,10 @@ import * as kp from "knowpro";
 import * as knowLib from "knowledge-processor";
 import { ChatPrinter } from "../chatPrinter.js";
 import chalk from "chalk";
-import { getTimeRangeForConversation } from "./knowproCommon.js";
+import {
+    getTimeRangeForConversation,
+    textLocationToString,
+} from "./knowproCommon.js";
 import * as cm from "conversation-memory";
 import * as im from "image-memory";
 
@@ -320,23 +323,14 @@ export class KnowProPrinter extends ChatPrinter {
         return this;
     }
 
-    public writeIndexingResults(
-        results: kp.ConversationIndexingResult,
-        verbose = false,
-    ) {
-        if (results.failedMessages.length > 0) {
-            this.writeError(
-                `Errors for ${results.failedMessages.length} messages`,
+    public writeIndexingResults(results: kp.IndexingResults) {
+        if (results.chunksIndexedUpto) {
+            this.writeLine(
+                `Indexed upto: ${textLocationToString(results.chunksIndexedUpto)}`,
             );
-            if (verbose) {
-                for (const failedMessage of results.failedMessages) {
-                    this.writeInColor(
-                        chalk.cyan,
-                        failedMessage.message.textChunks[0],
-                    );
-                    this.writeError(failedMessage.error);
-                }
-            }
+        }
+        if (results.error) {
+            this.writeError(results.error);
         }
         return this;
     }

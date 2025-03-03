@@ -5,7 +5,7 @@ import { conversation as kpLib } from "knowledge-processor";
 
 // an object that can provide a KnowledgeResponse structure
 export interface IKnowledgeSource {
-    getKnowledge: () => kpLib.KnowledgeResponse;
+    getKnowledge(): kpLib.KnowledgeResponse;
 }
 
 export interface DeletionInfo {
@@ -27,6 +27,7 @@ export interface ITermToSemanticRefIndexItem {
     term: string;
     semanticRefIndices: ScoredSemanticRef[];
 }
+
 // persistent form of a term index
 export interface ITermToSemanticRefIndexData {
     items: ITermToSemanticRefIndexItem[];
@@ -73,8 +74,7 @@ export interface IConversation<TMeta extends IKnowledgeSource = any> {
     messages: IMessage<TMeta>[];
     semanticRefs: SemanticRef[] | undefined;
     semanticRefIndex?: ITermToSemanticRefIndex | undefined;
-
-    serialize(): IConversationData<IMessage<TMeta>>;
+    secondaryIndexes?: IConversationSecondaryIndexes | undefined;
 }
 
 export type MessageIndex = number;
@@ -122,4 +122,110 @@ export type ScoredKnowledge = {
     knowledgeType: KnowledgeType;
     knowledge: Knowledge;
     score: number;
+};
+
+export interface IConversationSecondaryIndexes {
+    propertyToSemanticRefIndex?: IPropertyToSemanticRefIndex | undefined;
+    timestampIndex?: ITimestampToTextRangeIndex | undefined;
+    termToRelatedTermsIndex?: ITermToRelatedTermsIndex | undefined;
+    threads?: IConversationThreads | undefined;
+}
+
+/**
+ * Allows for faster retrieval of name, value properties
+ */
+export interface IPropertyToSemanticRefIndex {
+    getValues(): string[];
+    addProperty(
+        propertyName: string,
+        value: string,
+        semanticRefIndex: SemanticRefIndex | ScoredSemanticRef,
+    ): void;
+    lookupProperty(
+        propertyName: string,
+        value: string,
+    ): ScoredSemanticRef[] | undefined;
+}
+
+export type TimestampedTextRange = {
+    timestamp: string;
+    range: TextRange;
+};
+
+/**
+ * Return text ranges in the given date range
+ */
+export interface ITimestampToTextRangeIndex {
+    addTimestamp(messageIndex: MessageIndex, timestamp: string): boolean;
+    addTimestamps(messageTimestamps: [MessageIndex, string][]): void;
+    lookupRange(dateRange: DateRange): TimestampedTextRange[];
+}
+
+export interface ITermToRelatedTerms {
+    lookupTerm(text: string): Term[] | undefined;
+}
+
+export interface ITermToRelatedTermsFuzzy {
+    addTerms(
+        terms: string[],
+        eventHandler?: IndexingEventHandlers,
+    ): Promise<void>;
+    lookupTerm(
+        text: string,
+        maxMatches?: number,
+        thresholdScore?: number,
+    ): Promise<Term[]>;
+    lookupTerms(
+        textArray: string[],
+        maxMatches?: number,
+        thresholdScore?: number,
+    ): Promise<Term[][]>;
+}
+
+export interface ITermToRelatedTermsIndex {
+    get aliases(): ITermToRelatedTerms | undefined;
+    get fuzzyIndex(): ITermToRelatedTermsFuzzy | undefined;
+}
+
+/**
+ * A Thread is a set of text ranges in a conversation
+ */
+export type Thread = {
+    description: string;
+    ranges: TextRange[];
+};
+
+export type ThreadIndex = number;
+
+export type ScoredThreadIndex = {
+    threadIndex: ThreadIndex;
+    score: number;
+};
+
+export interface IConversationThreads {
+    readonly threads: Thread[];
+
+    addThread(thread: Thread): Promise<void>;
+    lookupThread(
+        threadDescription: string,
+        maxMatches?: number,
+        thresholdScore?: number,
+    ): Promise<ScoredThreadIndex[] | undefined>;
+    removeThread(threadIndex: ThreadIndex): void;
+}
+
+export interface IndexingEventHandlers {
+    onKnowledgeExtracted?: (
+        chunk: TextLocation,
+        knowledgeResult: kpLib.KnowledgeResponse,
+    ) => boolean;
+    onEmbeddingsCreated?: (
+        sourceTexts: string[],
+        batch: string[],
+        batchStartAt: number,
+    ) => boolean;
+}
+export type IndexingResults = {
+    chunksIndexedUpto?: TextLocation | undefined;
+    error?: string | undefined;
 };
