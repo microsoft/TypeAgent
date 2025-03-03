@@ -376,7 +376,7 @@ export class ImageCollection implements IConversation<ImageMeta> {
                 this.semanticRefIndex,
                 (type, knowledge) => {
                     if (type === "entity") {
-                        return isDuplicateEntity(
+                        return !isDuplicateEntity(
                             knowledge as kpLib.ConcreteEntity,
                             this.semanticRefs,
                         );
