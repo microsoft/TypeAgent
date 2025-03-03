@@ -454,13 +454,13 @@ class PDFChunker:
                     
                     is_image_title = any(
                         (y0 >= img_y0 - IMAGE_TITLE_BUFFER and y1 <= img_y1) and  # Slightly above or inside
-                        (x0 >= img_x0 - 30 and x1 <= img_x1 + 30)  # Extend x-range tolerance
+                        (x0 >= img_x0 - 250 and x1 <= img_x1 + 250)  # Extend x-range tolerance
                         for img_x0, img_y0, img_x1, img_y1 in image_bboxes
                     )
 
                     is_image_caption = any(
                         (y0 >= img_y1 and y1 <= img_y1 + IMAGE_LABEL_BUFFER) and  # Below image
-                        (x0 >= img_x0 - 30 and x1 <= img_x1 + 30)  # Extend x-range tolerance
+                        (x0 >= img_x0 - 250 and x1 <= img_x1 + 250)  # Extend x-range tolerance
                         for img_x0, img_y0, img_x1, img_y1 in image_bboxes
                     )
 
