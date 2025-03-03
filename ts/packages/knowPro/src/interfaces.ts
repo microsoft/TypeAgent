@@ -23,16 +23,6 @@ export interface IMessage<TMeta extends IKnowledgeSource = any> {
     deletionInfo?: DeletionInfo;
 }
 
-export interface ITermToSemanticRefIndexItem {
-    term: string;
-    semanticRefIndices: ScoredSemanticRef[];
-}
-
-// persistent form of a term index
-export interface ITermToSemanticRefIndexData {
-    items: ITermToSemanticRefIndexItem[];
-}
-
 export type SemanticRefIndex = number;
 
 export type ScoredSemanticRef = {
@@ -94,14 +84,6 @@ export interface TextRange {
     start: TextLocation;
     // the end of the range  (exclusive)
     end?: TextLocation | undefined;
-}
-
-export interface IConversationData<TMessage = any> {
-    nameTag: string;
-    messages: TMessage[];
-    tags: string[];
-    semanticRefs: SemanticRef[];
-    semanticIndexData?: ITermToSemanticRefIndexData | undefined;
 }
 
 export type DateRange = {
@@ -213,6 +195,32 @@ export interface IConversationThreads {
     ): Promise<ScoredThreadIndex[] | undefined>;
     removeThread(threadIndex: ThreadIndex): void;
 }
+
+//------------------------
+// Serialization formats
+//------------------------
+
+export interface IConversationData<TMessage = any> {
+    nameTag: string;
+    messages: TMessage[];
+    tags: string[];
+    semanticRefs: SemanticRef[];
+    semanticIndexData?: ITermToSemanticRefIndexData | undefined;
+}
+
+// persistent form of a term index
+export interface ITermToSemanticRefIndexData {
+    items: ITermToSemanticRefIndexItem[];
+}
+
+export interface ITermToSemanticRefIndexItem {
+    term: string;
+    semanticRefIndices: ScoredSemanticRef[];
+}
+
+//------------------------
+// Indexing
+//------------------------
 
 export interface IndexingEventHandlers {
     onKnowledgeExtracted?: (
