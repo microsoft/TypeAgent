@@ -18,7 +18,8 @@ export function textLocationToString(location: kp.TextLocation): string {
 export async function matchFilterToConversation(
     conversation: kp.IConversation,
     filter: knowLib.conversation.TermFilterV2,
-    knowledgeType?: kp.KnowledgeType | undefined,
+    knowledgeType: kp.KnowledgeType | undefined,
+    searchOptions: kp.SearchOptions,
     useAnd: boolean = false,
 ) {
     let termGroup: kp.SearchTermGroup = termFilterToSearchGroup(filter, useAnd);
@@ -36,6 +37,7 @@ export async function matchFilterToConversation(
         conversation,
         termGroup,
         when,
+        searchOptions,
     );
     if (useAnd && (!searchResults || searchResults.size === 0)) {
         // Try again with OR
@@ -103,9 +105,7 @@ export function actionFilterToSearchGroup(
         );
     }
     if (action.object) {
-        searchTermGroup.terms.push(
-            kp.createPropertySearchTerm(kp.PropertyNames.Object, action.object),
-        );
+        searchTermGroup.terms.push(kp.createSearchTerm(action.object));
     }
     return searchTermGroup;
 }

@@ -454,6 +454,7 @@ export async function createKnowproCommands(
             },
             options: {
                 maxToDisplay: argNum("Maximum matches to display", 25),
+                exact: argBool("Exact match only. No related terms", false),
                 ktype: arg("Knowledge type"),
             },
         };
@@ -485,6 +486,9 @@ export async function createKnowproCommands(
                 context.conversation!,
                 filter,
                 namedArgs.ktype,
+                {
+                    exactMatch: namedArgs.exact,
+                },
             );
             if (searchResults) {
                 context.printer.writeSearchResults(
