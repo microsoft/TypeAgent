@@ -94,9 +94,6 @@ function getActionContext(
                 ),
             );
         },
-        setDisplayInfo(agentName, id, index, cmdAction): void {
-            context.clientIO.setDisplayInfo(agentName, id, index, cmdAction);
-        },
         appendDisplay(
             content: DisplayContent,
             mode: DisplayAppendMode = "inline",
@@ -115,6 +112,9 @@ function getActionContext(
         takeAction(action: string, data: unknown): void {
             context.clientIO.takeAction(action, data);
         },
+        appendDiagnosticData(data): void {
+            context.clientIO.appendDiagnosticData(requestId, data);
+        }
     };
     const actionContext: ActionContext<unknown> = {
         streamingContext: undefined,
@@ -123,9 +123,6 @@ function getActionContext(
         },
         get actionIO() {
             return actionIO;
-        },
-        get requestId() {
-            return requestId;
         },
     };
     return {

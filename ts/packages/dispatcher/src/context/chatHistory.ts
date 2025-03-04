@@ -1,10 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { Entity, RequestId } from "@typeagent/agent-sdk";
+import { Entity } from "@typeagent/agent-sdk";
 import { CachedImageWithDetails, extractRelevantExifTags } from "common-utils";
 import { PromptSection } from "typechat";
 import { normalizeParamString, PromptEntity } from "agent-cache";
+import { RequestId } from "./interactiveIO.js";
 
 type UserEntry = {
     role: "user";

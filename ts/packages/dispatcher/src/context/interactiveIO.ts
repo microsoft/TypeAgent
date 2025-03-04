@@ -9,10 +9,11 @@ import {
 import {
     DisplayContent,
     DisplayAppendMode,
-    RequestId,
     TypeAgentAction,
 } from "@typeagent/agent-sdk";
 import { RequestMetrics } from "../utils/metrics.js";
+
+export type RequestId = string | undefined;
 
 export enum NotifyCommands {
     ShowSummary = "summarize",
@@ -50,6 +51,7 @@ export interface ClientIO {
     ): void;
     setDisplay(message: IAgentMessage): void;
     appendDisplay(message: IAgentMessage, mode: DisplayAppendMode): void;
+    appendDiagnosticData(requestId: RequestId, data: any): void;
     setDynamicDisplay(
         source: string,
         requestId: RequestId,
@@ -134,6 +136,7 @@ export const nullClientIO: ClientIO = {
     setDisplayInfo: () => {},
     setDisplay: () => {},
     appendDisplay: () => {},
+    appendDiagnosticData: () => {},
     setDynamicDisplay: () => {},
     askYesNo: async (
         message: string,

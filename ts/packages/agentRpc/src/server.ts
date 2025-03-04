@@ -409,7 +409,6 @@ export function createAgentRpcServer(
                 "Invalid action context param: missing actionContextId",
             );
         }
-        const requestId = param.requestId;
         const sessionContext = getSessionContextShim(param);
         const actionIO: ActionIO = {
             setDisplay(content: DisplayContent): void {
@@ -418,14 +417,8 @@ export function createAgentRpcServer(
                     content,
                 });
             },
-            setDisplayInfo(source, requestId, actionIndex, action): void {
-                rpc.send("setDisplayInfo", {
-                    actionContextId,
-                    source,
-                    requestId,
-                    actionIndex,
-                    action,
-                });
+            appendDiagnosticData(data): void {
+                rpc.send("appendDiagnosticData", { actionContextId, data });
             },
             appendDisplay(
                 content: DisplayContent,
@@ -453,9 +446,6 @@ export function createAgentRpcServer(
             },
             get actionIO() {
                 return actionIO;
-            },
-            get requestId() {
-                return requestId;
             },
         };
     }

@@ -8,13 +8,13 @@ import {
     DisplayAppendMode,
     DisplayContent,
     DynamicDisplay,
-    RequestId,
     TypeAgentAction,
 } from "@typeagent/agent-sdk";
 import { TTS } from "./tts/tts";
 import {
     IAgentMessage,
     NotifyExplainedData,
+    RequestId,
     TemplateEditConfig,
 } from "agent-dispatcher";
 
@@ -463,6 +463,10 @@ export class ChatView {
             actionIndex,
             action,
         );
+    }
+
+    setActionData(requestId: RequestId, data: any) {
+        this.getMessageGroup(requestId)?.setActionData(requestId, data);
     }
 
     addAgentMessage(

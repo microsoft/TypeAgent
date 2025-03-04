@@ -3,10 +3,9 @@
 
 import {
     DisplayAppendMode,
-    RequestId,
     TypeAgentAction,
 } from "@typeagent/agent-sdk";
-import { IAgentMessage } from "../context/interactiveIO.js";
+import { IAgentMessage, RequestId } from "../context/interactiveIO.js";
 import { TemplateEditConfig } from "../translation/actionTemplate.js";
 
 export type ClientIOInvokeFunctions = {
@@ -37,6 +36,7 @@ export type ClientIOCallFunctions = {
         message: IAgentMessage;
         mode: DisplayAppendMode;
     }): void;
+    appendDiagnosticData(params: { requestId: RequestId, data: any }): void;
     setDynamicDisplay(params: {
         source: string;
         requestId: RequestId;

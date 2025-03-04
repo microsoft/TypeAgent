@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { createRpc } from "agent-rpc/rpc";
-import { ClientIO, IAgentMessage } from "../context/interactiveIO.js";
+import { ClientIO, IAgentMessage, RequestId } from "../context/interactiveIO.js";
 import {
     ClientIOCallFunctions,
     ClientIOInvokeFunctions,
@@ -11,7 +11,6 @@ import { TemplateEditConfig } from "../translation/actionTemplate.js";
 import { RpcChannel } from "agent-rpc/channel";
 import {
     DisplayAppendMode,
-    RequestId,
     TypeAgentAction,
 } from "@typeagent/agent-sdk";
 
@@ -44,6 +43,9 @@ export function createClientIORpcClient(channel: RpcChannel): ClientIO {
         },
         appendDisplay(message: IAgentMessage, mode: DisplayAppendMode): void {
             return rpc.send("appendDisplay", { message, mode });
+        },
+        appendDiagnosticData(requestId: RequestId, data: any) {
+            return rpc.send("appendDiagnosticData", { requestId, data })
         },
         setDynamicDisplay(
             source: string,

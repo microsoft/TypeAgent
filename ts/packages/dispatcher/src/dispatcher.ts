@@ -4,7 +4,6 @@
 import {
     DisplayType,
     DynamicDisplay,
-    RequestId,
     TemplateSchema,
 } from "@typeagent/agent-sdk";
 import {
@@ -25,6 +24,7 @@ import {
 } from "./context/commandHandlerContext.js";
 import { RequestMetrics } from "./utils/metrics.js";
 import { FullAction } from "agent-cache";
+import { RequestId } from "./context/interactiveIO.js";
 
 export type CommandResult = {
     hasError?: boolean;

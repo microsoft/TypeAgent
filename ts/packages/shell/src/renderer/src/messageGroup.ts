@@ -6,6 +6,7 @@ import {
     CommandResult,
     IAgentMessage,
     NotifyExplainedData,
+    RequestId,
 } from "agent-dispatcher";
 import { RequestMetrics } from "agent-dispatcher";
 
@@ -82,6 +83,16 @@ export class MessageGroup {
         });
         agentMessage.setDisplayInfo(source, action);
     }
+
+    public setActionData(_requestId: RequestId, data: any) {
+        const agentMessage = this.ensureAgentMessage({
+            message: "",
+            source: "",
+            actionIndex: undefined,
+        });
+
+        agentMessage.updateActionData(data);
+    }    
 
     private requestCompleted(metrics: RequestMetrics | undefined) {
         this.updateMetrics(metrics);

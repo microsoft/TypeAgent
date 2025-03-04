@@ -1,8 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { TypeAgentAction } from "./action.js";
-
 // Display content to the dispatcher host.  It is up to the host to determine how to display the content
 // Support for some display options varies from host to host.
 
@@ -11,8 +9,6 @@ import { TypeAgentAction } from "./action.js";
 //   - depending on host support, host is expected to strip ANI escape code if not supported.
 // - html and iframe might not be supported by all hosts.
 export type DisplayType = "markdown" | "html" | "iframe" | "text";
-
-export type RequestId = string | undefined;
 
 export type DynamicDisplay = {
     content: DisplayContent;
@@ -58,13 +54,8 @@ export interface ActionIO {
     // Set the display to the content provided
     setDisplay(content: DisplayContent): void;
 
-    // Set additional information about the action being taken
-    setDisplayInfo(
-        source: string,
-        requestId: RequestId,
-        actionIndex?: number,
-        action?: TypeAgentAction | string[],
-    ): void;
+    // Send diagnostic information back to the client
+    appendDiagnosticData(data: any): void;
 
     // Append content to the display, default mode is "inline"
     appendDisplay(content: DisplayContent, mode?: DisplayAppendMode): void;

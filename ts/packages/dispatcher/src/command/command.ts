@@ -3,7 +3,7 @@
 
 import chalk from "chalk";
 import registerDebug from "debug";
-import { makeClientIOMessage } from "../context/interactiveIO.js";
+import { makeClientIOMessage, RequestId } from "../context/interactiveIO.js";
 import { getDefaultExplainerName } from "agent-cache";
 import {
     CommandHandlerContext,
@@ -15,7 +15,6 @@ import {
     CommandDescriptor,
     CommandDescriptors,
     CommandDescriptorTable,
-    RequestId,
 } from "@typeagent/agent-sdk";
 import { executeCommand } from "../execute/actionHandlers.js";
 import { isCommandDescriptorTable } from "@typeagent/agent-sdk/helpers/command";

@@ -104,8 +104,10 @@ export class MessageContainer {
 
     public setDisplayInfo(source: string, action?: TypeAgentAction | string[]) {
         this.defaultSource = source;
-        this.action = action;
         this.updateSource();
+        if (action !== undefined) {
+            this.updateActionData(action);
+        }        
     }
 
     private get sourceLabel() {
@@ -115,10 +117,11 @@ export class MessageContainer {
         if (this.action !== undefined) {
             if (Array.isArray(this.action)) {
                 return `${this.source} ${this.action.join(" ")}`;
+            } else if ((this.action as TypeAgentAction).translatorName !== undefined) {
+                return `${this.action.translatorName}.${this.action.actionName}`;
             }
-            return `${this.action.translatorName}.${this.action.actionName}`;
         }
-        return this.source;
+        return this.defaultSource;
     }
 
     private get sourceIcon() {
@@ -138,19 +141,23 @@ export class MessageContainer {
                 label.innerText = sourceLabel;
             }
 
-            if (this.action !== undefined && !Array.isArray(this.action)) {
-                label.setAttribute(
-                    "action-data",
-                    "<pre>" +
-                        JSON.stringify(this.action, undefined, 2) +
-                        "</pre>",
-                );
-
-                // mark the span as clickable
-                this.nameSpan.classList.add("clickable");
-            }
-
             this.iconDiv.innerText = this.sourceIcon;
+        }
+    }
+
+    public updateActionData(data: any) {
+        this.action = data;
+        const label = this.timestampDiv.firstChild as HTMLSpanElement;
+        if (this.action !== undefined && !Array.isArray(this.action)) {
+            label.setAttribute(
+                "action-data",
+                "<pre>" +
+                    JSON.stringify(this.action, undefined, 2) +
+                    "</pre>",
+            );
+
+            // mark the span as clickable
+            this.nameSpan.classList.add("clickable");
         }
     }
 
