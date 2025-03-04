@@ -14,6 +14,7 @@ import {
     DynamicDisplay,
     ParameterDefinitions,
     ParsedCommandParams,
+    RequestId,
     StorageListOptions,
     TemplateSchema,
     TypeAgentAction,
@@ -39,6 +40,13 @@ export type AgentContextCallFunctions = {
         action: ClientAction;
         data?: unknown;
     }) => void;
+    setDisplayInfo: (param: {
+        actionContextId: number;
+        source: string;
+        requestId: RequestId;
+        actionIndex: number | undefined;
+        action: TypeAgentAction | string[] | undefined;
+    }) => void;        
 };
 
 export type AgentContextInvokeFunctions = {
@@ -178,4 +186,5 @@ export type ContextParams = {
 
 export type ActionContextParams = ContextParams & {
     actionContextId: number;
+    requestId: RequestId;
 };

@@ -16,6 +16,7 @@ import {
     AppAgentManifest,
     AppAction,
     TypeAgentAction,
+    RequestId,
 } from "@typeagent/agent-sdk";
 import {
     AgentCallFunctions,
@@ -119,12 +120,13 @@ export async function createAgentRpcClient(
     }
     async function withActionContextAsync<T>(
         actionContext: ActionContext<ShimContext>,
-        fn: (contextParams: { actionContextId: number }) => Promise<T>,
+        fn: (contextParams: { actionContextId: number, requestId: RequestId }) => Promise<T>,
     ) {
         try {
             return await fn({
                 actionContextId: actionContextMap.getId(actionContext),
                 ...getContextParam(actionContext.sessionContext),
+                requestId: actionContext.requestId
             });
         } finally {
             actionContextMap.close(actionContext);
@@ -266,6 +268,17 @@ export async function createAgentRpcClient(
             actionContextMap
                 .get(param.actionContextId)
                 .actionIO.setDisplay(param.content);
+        },
+        setDisplayInfo: (param: {
+            actionContextId: number;
+            source: string;
+            requestId: RequestId;
+            actionIndex: number | undefined;
+            action: TypeAgentAction | string[] | undefined;
+        }) => {
+            actionContextMap
+                .get(param.actionContextId)
+                .actionIO.setDisplayInfo(param.source, param.requestId, param.actionIndex, param.action);
         },
         appendDisplay: (param: {
             actionContextId: number;
