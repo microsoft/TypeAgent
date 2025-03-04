@@ -8,13 +8,13 @@ import {
     DisplayAppendMode,
     DisplayContent,
     DynamicDisplay,
+    RequestId,
     TypeAgentAction,
 } from "@typeagent/agent-sdk";
 import { TTS } from "./tts/tts";
 import {
     IAgentMessage,
     NotifyExplainedData,
-    RequestId,
     TemplateEditConfig,
 } from "agent-dispatcher";
 

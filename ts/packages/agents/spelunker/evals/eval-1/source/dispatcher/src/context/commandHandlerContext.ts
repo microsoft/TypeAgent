@@ -10,6 +10,7 @@ import {
     MultiSinkLogger,
     createDebugLoggerSink,
     createMongoDBLoggerSink,
+    Profiler
 } from "telemetry";
 import { AgentCache } from "agent-cache";
 import { randomUUID } from "crypto";
@@ -24,7 +25,7 @@ import { TypeAgentTranslator } from "../translation/agentTranslators.js";
 import { ActionConfigProvider } from "../translation/actionConfigProvider.js";
 import { getCacheFactory } from "../utils/cacheFactory.js";
 import { createServiceHost } from "./system/handlers/serviceHost/serviceHostCommandHandler.js";
-import { ClientIO, RequestId, nullClientIO } from "./interactiveIO.js";
+import { ClientIO, nullClientIO } from "./interactiveIO.js";
 import { ChatHistory, createChatHistory } from "./chatHistory.js";
 import {
     ensureCacheDir,
@@ -32,8 +33,7 @@ import {
     getUserId,
     lockInstanceDir,
 } from "../utils/userData.js";
-import { ActionContext, AppAgentEvent } from "@typeagent/agent-sdk";
-import { Profiler } from "telemetry";
+import { ActionContext, AppAgentEvent, RequestId } from "@typeagent/agent-sdk";
 import { conversation as Conversation } from "knowledge-processor";
 import {
     AppAgentManager,

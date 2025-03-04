@@ -5,7 +5,6 @@ import { createRpc } from "agent-rpc/rpc";
 import {
     ClientIO,
     IAgentMessage,
-    RequestId,
 } from "../context/interactiveIO.js";
 import {
     ClientIOCallFunctions,
@@ -13,7 +12,7 @@ import {
 } from "./clientIOTypes.js";
 import { TemplateEditConfig } from "../translation/actionTemplate.js";
 import { RpcChannel } from "agent-rpc/channel";
-import { DisplayAppendMode, TypeAgentAction } from "@typeagent/agent-sdk";
+import { DisplayAppendMode, RequestId, TypeAgentAction } from "@typeagent/agent-sdk";
 
 export function createClientIORpcClient(channel: RpcChannel): ClientIO {
     const rpc = createRpc<ClientIOInvokeFunctions, ClientIOCallFunctions>(

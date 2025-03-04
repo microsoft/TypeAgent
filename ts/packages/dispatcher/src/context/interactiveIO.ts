@@ -9,11 +9,10 @@ import {
 import {
     DisplayContent,
     DisplayAppendMode,
+    RequestId,
     TypeAgentAction,
 } from "@typeagent/agent-sdk";
 import { RequestMetrics } from "../utils/metrics.js";
-
-export type RequestId = string | undefined;
 
 export enum NotifyCommands {
     ShowSummary = "summarize",

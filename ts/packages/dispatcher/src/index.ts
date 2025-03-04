@@ -11,7 +11,6 @@ export type {
 } from "./agentProvider/agentProvider.js";
 export type {
     ClientIO,
-    RequestId,
     IAgentMessage,
     NotifyExplainedData,
 } from "./context/interactiveIO.js";

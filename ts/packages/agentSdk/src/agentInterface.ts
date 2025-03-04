@@ -3,7 +3,7 @@
 
 import { AppAction, ActionResult, TypeAgentAction } from "./action.js";
 import { AppAgentCommandInterface } from "./command.js";
-import { ActionIO, DisplayType, DynamicDisplay } from "./display.js";
+import { ActionIO, DisplayType, DynamicDisplay, RequestId } from "./display.js";
 import { Profiler } from "./profiler.js";
 import { TemplateSchema } from "./templateInput.js";
 
@@ -152,4 +152,5 @@ export interface ActionContext<T = void> {
     streamingContext: unknown;
     readonly actionIO: ActionIO;
     readonly sessionContext: SessionContext<T>;
+    readonly requestId: RequestId;
 }
