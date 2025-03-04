@@ -555,7 +555,7 @@ export async function createKnowproCommands(
             const allValues = splitTermValues(keyValues[propertyName]);
             for (const value of allValues) {
                 propertySearchTerms.push(
-                    kp.propertySearchTermFromKeyValue(propertyName, value),
+                    kp.createPropertySearchTerm(propertyName, value),
                 );
             }
         }
