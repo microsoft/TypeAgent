@@ -7,8 +7,11 @@ import { BrowserConnector } from "../browserConnector.mjs";
 import { createDiscoveryPageTranslator } from "./translator.mjs";
 import {
     ActionSchemaTypeDefinition,
+    ActionSchemaObject,
+    ActionParamType,
     generateActionSchema,
     parseActionSchemaSource,
+    generateSchemaTypeDefinition,
 } from "action-schema";
 import { ActionSchemaCreator as sc } from "action-schema";
 import path from "path";
@@ -18,6 +21,7 @@ import { UserActionsList } from "./schema/userActionsPool.mjs";
 import { PageDescription } from "./schema/pageSummary.mjs";
 import { createTempAgentForSchema } from "./tempAgentActionHandler.mjs";
 import { SchemaDiscoveryActions } from "./schema/discoveryActions.mjs";
+import { UserIntent } from "./schema/recordedActions.mjs";
 
 export async function handleSchemaDiscoveryAction(
     action: SchemaDiscoveryActions,
@@ -271,6 +275,48 @@ export async function handleSchemaDiscoveryAction(
         return response.data;
     }
 
+    async function getIntentSchemaFromJSON(
+        userIntentJson: UserIntent,
+        actionDescription: string,
+    ) {
+        let fields: Map<string, any> = new Map<string, any>();
+
+        userIntentJson.parameters.forEach((p) => {
+            let t: ActionParamType = sc.string();
+            switch (p.type) {
+                case "string":
+                    t = sc.string();
+                    break;
+                case "number":
+                    t = sc.number();
+                    break;
+                case "boolean":
+                    t = sc.number();
+                    break;
+            }
+
+            if (p.required && !p.defaultValue) {
+                fields.set(p.shortName, sc.field(t, p.description));
+            } else {
+                fields.set(p.shortName, sc.optional(t, p.description));
+            }
+        });
+
+        const obj: ActionSchemaObject = sc.obj({
+            actionName: sc.string(userIntentJson.actiontName),
+            parameters: sc.obj(Object.fromEntries(fields)),
+        } as const);
+
+        const schema = sc.type(
+            userIntentJson.actiontName,
+            obj,
+            actionDescription,
+            true,
+        );
+
+        return await generateSchemaTypeDefinition(schema, { exact: true });
+    }
+
     async function handleGetIntentFromReccording(action: any) {
         const timerName = `Getting intent schema`;
         console.time(timerName);
@@ -291,8 +337,13 @@ export async function handleSchemaDiscoveryAction(
         }
 
         console.timeEnd(timerName);
-        message =
-            "Intent schema: \n" + JSON.stringify(intentResponse.data, null, 2);
+
+        const intentSchema = await getIntentSchemaFromJSON(
+            intentResponse.data as UserIntent,
+            action.parameters.recordedActionDescription,
+        );
+
+        message = "Intent schema: \n" + intentSchema;
 
         const timerName2 = `Getting action schema`;
         console.time(timerName2);
@@ -318,7 +369,8 @@ export async function handleSchemaDiscoveryAction(
         console.timeEnd(timerName2);
 
         return {
-            intent: intentResponse.data,
+            intent: intentSchema,
+            intentJson: intentResponse.data,
             actions: stepsResponse.data,
         };
     }
