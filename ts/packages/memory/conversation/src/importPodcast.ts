@@ -5,12 +5,9 @@ import {
     IConversation,
     IMessage,
     SemanticRef,
-    IConversationData,
     Term,
     ConversationIndex,
     IndexingResults,
-    ITermsToRelatedTermsIndexData,
-    IConversationThreadData,
     ConversationSettings,
     createConversationSettings,
     addMetadataToIndex,
@@ -23,6 +20,7 @@ import {
     writeConversationToFile,
     IPersistedConversationData,
     readConversationFromFile,
+    IConversationDataWithIndexes,
 } from "knowpro";
 import { conversation as kpLib, split } from "knowledge-processor";
 import { collections, dateTime, getFileName, readAllText } from "typeagent";
@@ -298,10 +296,8 @@ export class PodcastSecondaryIndexes extends ConversationSecondaryIndexes {
 //const DataFileSuffix = "_data.json";
 //const EmbeddingFileSuffix = "_embeddings.bin";
 
-export interface PodcastData extends IConversationData<PodcastMessage> {
-    relatedTermsIndexData?: ITermsToRelatedTermsIndexData | undefined;
-    threadData?: IConversationThreadData;
-}
+export interface PodcastData
+    extends IConversationDataWithIndexes<PodcastMessage> {}
 
 export async function importPodcast(
     transcriptFilePath: string,

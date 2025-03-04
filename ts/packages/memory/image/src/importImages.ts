@@ -3,15 +3,12 @@
 
 import {
     IConversation,
-    IConversationData,
     IKnowledgeSource,
     IMessage,
     SemanticRef,
     ConversationIndex,
     IndexingResults,
     createKnowledgeModel,
-    ITermsToRelatedTermsIndexData,
-    IConversationThreadData,
     ConversationSettings,
     createConversationSettings,
     addMetadataToIndex,
@@ -21,6 +18,7 @@ import {
     IPersistedConversationData,
     writeConversationToFile,
     readConversationFromFile,
+    IConversationDataWithIndexes,
 } from "knowpro";
 import { conversation as kpLib, image } from "knowledge-processor";
 import fs from "node:fs";
@@ -30,14 +28,8 @@ import { ChatModel } from "aiclient";
 import { AddressOutput } from "@azure-rest/maps-search";
 import { isDirectoryPath } from "typeagent";
 
-export interface ImageCollectionData extends IConversationData<Image> {
-    relatedTermsIndexData?: ITermsToRelatedTermsIndexData | undefined;
-    threadData?: IConversationThreadData;
-}
-
-export interface ImageCollectionData extends IConversationData<Image> {
-    relatedTermsIndexData?: ITermsToRelatedTermsIndexData | undefined;
-}
+export interface ImageCollectionData
+    extends IConversationDataWithIndexes<Image> {}
 
 export class Image implements IMessage<ImageMeta> {
     public timestamp: string | undefined;

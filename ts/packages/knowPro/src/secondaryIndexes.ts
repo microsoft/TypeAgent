@@ -1,8 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { IConversationThreadData } from "./conversationThread.js";
 import {
     IConversation,
+    IConversationData,
     IConversationSecondaryIndexes,
     IndexingEventHandlers,
     Term,
@@ -62,4 +64,10 @@ export interface ITermsToRelatedTermsDataItem {
 export interface ITextEmbeddingIndexData {
     textItems: string[];
     embeddings: Float32Array[];
+}
+
+export interface IConversationDataWithIndexes<TMessage = any>
+    extends IConversationData<TMessage> {
+    relatedTermsIndexData?: ITermsToRelatedTermsIndexData | undefined;
+    threadData?: IConversationThreadData;
 }
