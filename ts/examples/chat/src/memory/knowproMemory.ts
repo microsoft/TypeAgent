@@ -241,6 +241,7 @@ export async function createKnowproCommands(
                 related: argBool("Index related terms", true),
                 indexFilePath: arg("Output path for index file"),
                 maxMessages: argNum("Maximum images to index"),
+                cachePath: arg("Path to image knowledge response cache."),
             },
         };
     }
@@ -255,6 +256,7 @@ export async function createKnowproCommands(
         let progress = new ProgressBar(context.printer, 165);
         context.images = await im.importImages(
             namedArgs.filePath,
+            namedArgs.cachePath,
             true,
             (text, _index, max) => {
                 progress.total = max;

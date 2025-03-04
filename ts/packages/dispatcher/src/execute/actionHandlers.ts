@@ -157,8 +157,8 @@ export function createSessionContext<T = unknown>(
     const storage = sessionDirPath
         ? getStorage(name, sessionDirPath)
         : undefined;
-    const instanceStorage = context.instanceDir
-        ? getStorage(name, context.instanceDir)
+    const instanceStorage = context.persistDir
+        ? getStorage(name, context.persistDir)
         : undefined;
     const addDynamicAgent = allowDynamicAgent
         ? (agentName: string, manifest: AppAgentManifest, appAgent: AppAgent) =>
