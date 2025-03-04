@@ -5,10 +5,7 @@ import * as kp from "knowpro";
 import * as knowLib from "knowledge-processor";
 import { ChatPrinter } from "../chatPrinter.js";
 import chalk from "chalk";
-import {
-    getTimeRangeForConversation,
-    textLocationToString,
-} from "./knowproCommon.js";
+import { textLocationToString } from "./knowproCommon.js";
 import * as cm from "conversation-memory";
 import * as im from "image-memory";
 
@@ -298,7 +295,7 @@ export class KnowProPrinter extends ChatPrinter {
 
     public writeConversationInfo(conversation: kp.IConversation) {
         this.writeTitle(conversation.nameTag);
-        const timeRange = getTimeRangeForConversation(conversation);
+        const timeRange = kp.getTimeRangeForConversation(conversation);
         if (timeRange) {
             this.write("Time range: ");
             this.writeDateRange(timeRange);
@@ -333,6 +330,17 @@ export class KnowProPrinter extends ChatPrinter {
             this.writeError(results.error);
         }
         return this;
+    }
+
+    public writeSearchFilter(
+        action: knowLib.conversation.GetAnswerWithTermsActionV2,
+    ) {
+        this.writeInColor(
+            chalk.cyanBright,
+            `Question: ${action.parameters.question}`,
+        );
+        this.writeLine();
+        this.writeJson(action.parameters.filters);
     }
 }
 
