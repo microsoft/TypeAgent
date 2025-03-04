@@ -25,13 +25,7 @@ import {
     parseFreeAndNamedArguments,
     keyValuesFromNamedArgs,
 } from "./common.js";
-import {
-    dateTime,
-    ensureDir,
-    getFileName,
-    readJsonFile,
-    writeJsonFile,
-} from "typeagent";
+import { dateTime, ensureDir, getFileName } from "typeagent";
 import path from "path";
 import chalk from "chalk";
 import { KnowProPrinter } from "./knowproPrinter.js";
@@ -310,9 +304,12 @@ export async function createKnowproCommands(
         context.printer.writeLine("Saving index");
         context.printer.writeLine(namedArgs.filePath);
         if (context.images) {
-            const cData = await context.images.serialize();
-            await ensureDir(path.dirname(namedArgs.filePath));
-            await writeJsonFile(namedArgs.filePath, cData);
+            const dirName = path.dirname(namedArgs.filePath);
+            await ensureDir(dirName);
+            await context.images.writeToFile(
+                dirName,
+                getFileName(namedArgs.filePath),
+            );
         }
     }
 
@@ -337,24 +334,15 @@ export async function createKnowproCommands(
             context.printer.writeError("No filepath or name provided");
             return;
         }
-        if (!fs.existsSync(imagesFilePath)) {
-            context.printer.writeError(`${imagesFilePath} not found`);
-            return;
-        }
-
-        const data = await readJsonFile<im.ImageCollectionData>(imagesFilePath);
-        if (!data) {
-            context.printer.writeError("Could not load image collection data");
-            return;
-        }
-        context.images = new im.ImageCollection(
-            data.nameTag,
-            data.messages,
-            data.tags,
-            data.semanticRefs,
+        context.images = await im.ImageCollection.readFromFile(
+            path.dirname(imagesFilePath),
+            getFileName(imagesFilePath),
         );
-        await context.images.deserialize(data);
-        context.conversation = context.podcast;
+        if (!context.images) {
+            context.printer.writeLine("ImageCollection not found");
+            return;
+        }
+        context.conversation = context.images;
         context.printer.conversation = context.conversation;
         context.printer.writeImageCollectionInfo(context.images);
     }

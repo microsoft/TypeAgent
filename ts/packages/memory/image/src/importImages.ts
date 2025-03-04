@@ -18,6 +18,9 @@ import {
     buildSecondaryIndexes,
     ConversationSecondaryIndexes,
     IndexingEventHandlers,
+    IPersistedConversationData,
+    writeConversationToFile,
+    readConversationFromFile,
 } from "knowpro";
 import { conversation as kpLib, image } from "knowledge-processor";
 import fs from "node:fs";
@@ -356,8 +359,8 @@ export class ImageCollection implements IConversation<ImageMeta> {
     public semanticRefIndex: ConversationIndex;
     public secondaryIndexes: ConversationSecondaryIndexes;
     constructor(
-        public nameTag: string,
-        public messages: Image[],
+        public nameTag: string = "",
+        public messages: Image[] = [],
         public tags: string[] = [],
         public semanticRefs: SemanticRef[] = [],
     ) {
@@ -397,7 +400,7 @@ export class ImageCollection implements IConversation<ImageMeta> {
         }
 
         this.addMetadataToIndex();
-        await buildSecondaryIndexes(this, true);
+        await buildSecondaryIndexes(this, true, eventHandler);
 
         let indexingResult: IndexingResults = {
             chunksIndexedUpto: { messageIndex: this.messages.length - 1 },
@@ -405,8 +408,10 @@ export class ImageCollection implements IConversation<ImageMeta> {
         return indexingResult;
     }
 
-    public async serialize(): Promise<ImageCollectionData> {
-        return {
+    public async serialize(): Promise<
+        IPersistedConversationData<ImageCollectionData>
+    > {
+        const conversationData: ImageCollectionData = {
             nameTag: this.nameTag,
             messages: this.messages,
             tags: this.tags,
@@ -415,9 +420,33 @@ export class ImageCollection implements IConversation<ImageMeta> {
             relatedTermsIndexData:
                 this.secondaryIndexes.termToRelatedTermsIndex.serialize(),
         };
+        let persistentData: IPersistedConversationData<ImageCollectionData> = {
+            conversationData,
+        };
+        const embeddingData =
+            conversationData.relatedTermsIndexData?.textEmbeddingData;
+        if (embeddingData) {
+            persistentData.embeddings = embeddingData.embeddings;
+            embeddingData.embeddings = [];
+        }
+        return persistentData;
     }
 
-    public async deserialize(data: ImageCollectionData): Promise<void> {
+    public async deserialize(
+        persistentData: IPersistedConversationData<ImageCollectionData>,
+    ): Promise<void> {
+        const data = persistentData.conversationData;
+        const embeddingData =
+            persistentData.conversationData.relatedTermsIndexData
+                ?.textEmbeddingData;
+        if (persistentData.embeddings && embeddingData) {
+            embeddingData.embeddings = persistentData.embeddings;
+        }
+
+        this.nameTag = data.nameTag;
+        this.messages = data.messages;
+        this.semanticRefs = data.semanticRefs;
+        this.tags = data.tags;
         if (data.semanticIndexData) {
             this.semanticRefIndex = new ConversationIndex(
                 data.semanticIndexData,
@@ -429,6 +458,36 @@ export class ImageCollection implements IConversation<ImageMeta> {
             );
         }
         await buildSecondaryIndexes(this, false);
+    }
+
+    public async writeToFile(
+        dirPath: string,
+        baseFileName: string,
+    ): Promise<void> {
+        await writeConversationToFile(
+            this,
+            dirPath,
+            baseFileName,
+            async (conversation) => this.serialize(),
+        );
+    }
+
+    public static async readFromFile(
+        dirPath: string,
+        baseFileName: string,
+    ): Promise<ImageCollection | undefined> {
+        const imageCollection = new ImageCollection();
+        await readConversationFromFile<ImageCollectionData>(
+            dirPath,
+            baseFileName,
+            imageCollection.settings.relatedTermIndexSettings
+                .embeddingIndexSettings?.embeddingSize,
+            async (persistentData) => {
+                await imageCollection.deserialize(persistentData);
+                return imageCollection;
+            },
+        );
+        return imageCollection;
     }
 }
 
@@ -540,7 +599,7 @@ async function indexImage(
         console.log(`Could not find part of the file path '${fileName}'`);
         return;
     } else if (!isImageFileType(path.extname(fileName))) {
-        console.log(`Skipping '${fileName}', not a known image file.`);
+        //console.log(`Skipping '${fileName}', not a known image file.`);
         return;
     }
 
