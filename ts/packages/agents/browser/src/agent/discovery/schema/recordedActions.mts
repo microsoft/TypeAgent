@@ -7,6 +7,7 @@ export type UserIntentParameter = {
     shortName: string;
     // a longer, descriptive name for the parameter. This value can contain non-alphanumeric characters
     name: string;
+    // The valid values are "string", "number" and "boolean"
     type: string;
     // The default value for the parameter. If this value is set based on a HTML
     // page, check whether the target element has a default value. For dropdown elements, use the

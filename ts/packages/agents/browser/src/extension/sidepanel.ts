@@ -357,10 +357,8 @@ function renderTimeline(action: any, index: number) {
         }
 
         const card = document.createElement("div");
-        const intentSchema = JSON.stringify(response.intent, null, 2);
-
         card.innerHTML = `        
-            <pre class="card-text"><code class="language-json">${intentSchema}</code></pre>
+            <pre class="card-text"><code class="language-json">${response.intent}</code></pre>
         `;
 
         intentViewContainer.replaceChildren(card);
