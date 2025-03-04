@@ -35,6 +35,7 @@ import * as im from "image-memory";
 
 type KnowProContext = {
     knowledgeModel: ChatModel;
+    knowledgeExtractor: knowLib.conversation.KnowledgeExtractor;
     basePath: string;
     printer: KnowProPrinter;
     podcast?: cm.Podcast | undefined;
@@ -48,6 +49,9 @@ export async function createKnowproCommands(
 ): Promise<void> {
     const context: KnowProContext = {
         knowledgeModel: chatContext.models.chatModel,
+        knowledgeExtractor: kp.createKnowledgeProcessor(
+            chatContext.models.chatModel,
+        ),
         basePath: "/data/testChat/knowpro",
         printer: new KnowProPrinter(),
     };
@@ -58,6 +62,7 @@ export async function createKnowproCommands(
     commands.kpPodcastSave = podcastSave;
     commands.kpPodcastLoad = podcastLoad;
     commands.kpSearchTerms = searchTerms;
+    commands.kpSearch = search;
     commands.kpEntities = entities;
     commands.kpPodcastBuildIndex = podcastBuildIndex;
 
@@ -433,6 +438,39 @@ export async function createKnowproCommands(
             context.printer.writeTiming(chalk.gray, timer);
         } else {
             context.printer.writeError("Conversation is not indexed");
+        }
+    }
+
+    function searchDef(): CommandMetadata {
+        return {
+            description: "Search using natural language",
+            args: {
+                query: arg("Search query"),
+            },
+        };
+    }
+
+    commands.kpSearch.metadata = searchDef();
+    async function search(args: string[]): Promise<void> {
+        const namedArgs = parseNamedArguments(args, searchDef());
+        const query = namedArgs.query;
+        const knowledge = await context.knowledgeExtractor.extract(query);
+        if (knowledge) {
+            context.printer.writeTitle("Topics");
+            for (const topic of knowledge.topics) {
+                context.printer.writeLine(topic);
+                context.printer.writeLine();
+            }
+            context.printer.writeTitle("Actions");
+            for (const action of knowledge.actions) {
+                context.printer.writeAction(action);
+                context.printer.writeLine();
+            }
+            context.printer.writeTitle("Entities");
+            for (const entity of knowledge.entities) {
+                context.printer.writeEntity(entity);
+                context.printer.writeLine();
+            }
         }
     }
 
