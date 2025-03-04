@@ -243,6 +243,11 @@ export function swapContent(
     const data: string = sourceElement.getAttribute("action-data") ?? "";
     const originalMessage: string = targetElement.innerHTML;
 
+    // don't do anything if there's no data in the action-data attribute
+    if (data.length === 0) {
+        return;
+    }
+
     if (targetElement.classList.contains("chat-message-action-data")) {
         targetElement.classList.remove("chat-message-action-data");
     } else {

@@ -33,7 +33,7 @@ import {
     ensureDirectory,
     lockInstanceDir,
 } from "../utils/fsUtils.js";
-import { ActionContext, AppAgentEvent } from "@typeagent/agent-sdk";
+import { ActionContext, AppAgentEvent, RequestId } from "@typeagent/agent-sdk";
 import { Profiler } from "telemetry";
 import { conversation as Conversation } from "knowledge-processor";
 import {
