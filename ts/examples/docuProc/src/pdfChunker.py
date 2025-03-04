@@ -28,6 +28,7 @@ class Blob:
     blob_type: str                                 # e.g. "text", "table", "image"
     start: int                                     # Page number (0-based)
     content: Optional[Union[str, List[str]]] = None
+    bbox: Optional[List[float]] = None
     img_name: Optional[str] = None                     # Name of the image blob, if this is an image blob
     img_path: Optional[str] = None                 # Path to the saved image file, if this is an image blob
     para_id: Optional[int] = None                  # Paragraph ID if needed
@@ -46,6 +47,8 @@ class Blob:
             result["para_id"] = self.para_id
         if self.image_chunk_ref is not None:
             result["image_chunk_ref"] = self.image_chunk_ref
+        if self.bbox:
+            result["bbox"] = self.bbox
         return result
 
 @dataclass
@@ -384,7 +387,7 @@ class PDFChunker:
                 continue
 
             img_blob = img_chunk.blobs[0]
-            if img_blob.blob_type != "image" or not img_blob.bbox:
+            if img_blob.blob_type != "image":
                 continue
 
             x0_img, y0_img, x1_img, y1_img = img_blob.bbox
@@ -393,16 +396,16 @@ class PDFChunker:
             is_image_title = (
                 (y0_line >= y0_img - image_title_buffer) and 
                 (y1_line <= y1_img) and 
-                (x0_line >= x0_img - 30) and 
-                (x1_line <= x1_img + 30)
+                (x0_line >= x0_img - 250) and 
+                (x1_line <= x1_img + 250)
             )
 
             # Caption logic: Below image within buffer
             is_image_caption = (
                 (y0_line >= y1_img) and
                 (y1_line <= y1_img + image_label_buffer) and
-                (x0_line >= x0_img - 30) and
-                (x1_line <= x1_img + 30)
+                (x0_line >= x0_img - 250) and
+                (x1_line <= x1_img + 250)
             )
 
             if is_image_title or is_image_caption:
@@ -451,52 +454,40 @@ class PDFChunker:
                     if self.debug:
                         print(f"\n--- DEBUG: Checking line '{line_text}' ---")
                         print(f"  Line BBox: ({x0}, {y0}, {x1}, {y1})")
-                    
-                    is_image_title = any(
-                        (y0 >= img_y0 - IMAGE_TITLE_BUFFER and y1 <= img_y1) and  # Slightly above or inside
-                        (x0 >= img_x0 - 250 and x1 <= img_x1 + 250)  # Extend x-range tolerance
-                        for img_x0, img_y0, img_x1, img_y1 in image_bboxes
-                    )
 
-                    is_image_caption = any(
-                        (y0 >= img_y1 and y1 <= img_y1 + IMAGE_LABEL_BUFFER) and  # Below image
-                        (x0 >= img_x0 - 250 and x1 <= img_x1 + 250)  # Extend x-range tolerance
-                        for img_x0, img_y0, img_x1, img_y1 in image_bboxes
-                    )
-
-                    is_image_label = is_image_title or is_image_caption
-                    if is_image_label and self.debug:
-                        print(f" 🖼️ Marked as IMAGE label")
-                    
-                    # debug setting this to false
-                    is_table_label = False
-
-                    # Assign label based on detected type
-                    if is_image_label:
+                    nearby_images = self._find_nearest_image_chunk(page_num, [x0, y0, x1, y1])
+                    # We'll assume it's "image" if we got any images back
+                    if nearby_images is not None:
+                        _, chunk_list = nearby_images
                         label = "image"
-                    elif is_table_label:
-                        label = "table"
+                        if self.debug:
+                            print("  🖼️ Marked as IMAGE label (title or caption logic)")
+                        related_chunks = chunk_list
                     else:
+                        # we can do table detection or skip
                         label = "text"
+                        related_chunks = []
 
                     line_entries.append({
                         "text": line_text,
+                        "label": label,
                         "x0": x0,
                         "y0": y0,
                         "x1": x1,
                         "y1": y1,
-                        "label": label  # Store the type of content
+                        "related_chunks": related_chunks  # store the image/table chunk(s) if any
                     })
 
         # Sort the line_entries top-to-bottom, then left-to-right.
         line_entries.sort(key=lambda e: (e["y0"], e["x0"]))
 
-        merged_lines: list[tuple[str, str]] = []
+        merged_lines: list[tuple[str, str, List[Chunk]]] = []
         i = 0
         while i < len(line_entries):
             current = line_entries[i]
             current_text = current["text"]
             current_label = current["label"]
+            current_chunks = current["related_chunks"]
             x0_c, y0_c, x1_c, y1_c = current["x0"], current["y0"], current["x1"], current["y1"]
 
             if current_label in ["image", "table"]:
@@ -506,13 +497,16 @@ class PDFChunker:
                     next_y0, next_y1 = next_line["y0"], next_line["y1"]
                     if next_y0 - y1_c < PARA_GAP_THRESHOLD:  # Close enough to be part of the caption
                         next_line["label"] = current_label  # Inherit label
+                        next_line["related_chunks"] = current_chunks
                         j += 1
                     else:
                         break
 
             if i < len(line_entries) - 1:
                 next_line = line_entries[i + 1]
-                x0_n, y0_n, x1_n, y1_n, text_n, label_n = next_line["x0"], next_line["y0"], next_line["x1"], next_line["y1"], next_line["text"], next_line["label"]
+                #x0_n, y0_n, x1_n, y1_n, text_n, label_n = next_line["x0"], next_line["y0"], next_line["x1"], next_line["y1"], next_line["text"], next_line["label"]
+                x0_n, y0_n, x1_n, y1_n = next_line["x0"], next_line["y0"], next_line["x1"], next_line["y1"]
+                text_n, label_n, chunks_n = next_line["text"], next_line["label"], next_line["related_chunks"]
 
                 midY_c = (y0_c + y1_c) / 2.0
                 midY_n = (y0_n + y1_n) / 2.0
@@ -523,35 +517,36 @@ class PDFChunker:
                     if 0 <= x_gap < X_GAP_THRESHOLD:
                         unified_text = current_text.rstrip() + " " + text_n.lstrip()
 
-                        # Keep the highest-priority label (prefer "image" or "table" over "text")
                         if current_label == "image" or label_n == "image":
                             final_label = "image"
+                            final_chunks = current_chunks or chunks_n
                         elif current_label == "table" or label_n == "table":
                             final_label = "table"
+                            final_chunks = current_chunks or chunks_n
                         else:
                             final_label = "text"
+                            final_chunks = []
 
                         new_entry = {
                             "text": unified_text,
+                            "label": final_label,
                             "x0": x0_c,
                             "y0": min(y0_c, y0_n),
                             "x1": x1_n,
                             "y1": max(y1_c, y1_n),
-                            "label": final_label  # Preserve the merged label
+                            "related_chunks": final_chunks
                         }
                         line_entries[i] = new_entry
                         del line_entries[i + 1]
                         continue  
 
-            # Append the current line as a tuple (text, label)
-            merged_lines.append((current_text, current_label))
+            merged_lines.append((current_text, current_label, current_chunks))
 
-            # Handle paragraph breaks
             if i < len(line_entries) - 1:
                 next_line = line_entries[i + 1]
                 gap = next_line["y0"] - current["y1"]
                 if gap >= PARA_GAP_THRESHOLD:
-                    merged_lines.append((PARA_MARKER, "text"))
+                    merged_lines.append((PARA_MARKER, "text", []))
             i += 1
 
         return merged_lines
@@ -615,7 +610,7 @@ class PDFChunker:
 
         def print_lines_with_label(page_num: int, page_lines: list[tuple[str, str]]) -> None:
             print(f"\n--- 🚀 DEBUG: Page {page_num} raw lines ---")
-            for idx, (text, label) in enumerate(page_lines):
+            for idx, (text, label, _) in enumerate(page_lines):
                 print(f"  Raw line {idx}: '{text}' (Label: {label})")
 
         def chunk_paragraph_by_sentence(paragraph_lines: list[str], max_tokens: int = 100) -> list[str]:
@@ -663,7 +658,7 @@ class PDFChunker:
                 page_lines_with_labels.pop()
 
             # Extract only text after filtering
-            page_lines = [text for text, _ in page_lines_with_labels]
+            page_lines = [text for text, _, _ in page_lines_with_labels]
 
             if self.debug:
                 print(f"\n--- 🚀 DEBUG: Page {page_num} ---")
@@ -833,6 +828,7 @@ class PDFChunker:
             image_blob = Blob(
                 blob_type="image",
                 start=page_num,
+                bbox=bbox,
                 content=json.dumps(bbox),
                 img_path=img_path
             )
