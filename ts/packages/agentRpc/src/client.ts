@@ -120,13 +120,16 @@ export async function createAgentRpcClient(
     }
     async function withActionContextAsync<T>(
         actionContext: ActionContext<ShimContext>,
-        fn: (contextParams: { actionContextId: number, requestId: RequestId }) => Promise<T>,
+        fn: (contextParams: {
+            actionContextId: number;
+            requestId: RequestId;
+        }) => Promise<T>,
     ) {
         try {
             return await fn({
                 actionContextId: actionContextMap.getId(actionContext),
                 ...getContextParam(actionContext.sessionContext),
-                requestId: actionContext.requestId
+                requestId: actionContext.requestId,
             });
         } finally {
             actionContextMap.close(actionContext);
@@ -278,7 +281,12 @@ export async function createAgentRpcClient(
         }) => {
             actionContextMap
                 .get(param.actionContextId)
-                .actionIO.setDisplayInfo(param.source, param.requestId, param.actionIndex, param.action);
+                .actionIO.setDisplayInfo(
+                    param.source,
+                    param.requestId,
+                    param.actionIndex,
+                    param.action,
+                );
         },
         appendDisplay: (param: {
             actionContextId: number;

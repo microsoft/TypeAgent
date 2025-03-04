@@ -10,7 +10,7 @@ import {
     MultiSinkLogger,
     createDebugLoggerSink,
     createMongoDBLoggerSink,
-    Profiler
+    Profiler,
 } from "telemetry";
 import { AgentCache } from "agent-cache";
 import { randomUUID } from "crypto";

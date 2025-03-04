@@ -46,7 +46,7 @@ export type AgentContextCallFunctions = {
         requestId: RequestId;
         actionIndex: number | undefined;
         action: TypeAgentAction | string[] | undefined;
-    }) => void;        
+    }) => void;
 };
 
 export type AgentContextInvokeFunctions = {

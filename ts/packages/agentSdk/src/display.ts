@@ -59,7 +59,12 @@ export interface ActionIO {
     setDisplay(content: DisplayContent): void;
 
     // Set additional information about the action being taken
-    setDisplayInfo(source: string, requestId: RequestId, actionIndex?: number, action?: TypeAgentAction | string[]): void;
+    setDisplayInfo(
+        source: string,
+        requestId: RequestId,
+        actionIndex?: number,
+        action?: TypeAgentAction | string[],
+    ): void;
 
     // Append content to the display, default mode is "inline"
     appendDisplay(content: DisplayContent, mode?: DisplayAppendMode): void;

@@ -39,7 +39,7 @@ export {
     DisplayContent,
     DisplayAppendMode,
     DisplayMessageKind,
-    RequestId
+    RequestId,
 } from "./display.js";
 
 export {

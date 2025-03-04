@@ -95,12 +95,7 @@ function getActionContext(
             );
         },
         setDisplayInfo(agentName, id, index, cmdAction): void {
-            context.clientIO.setDisplayInfo(
-                agentName,
-                id,
-                index,
-                cmdAction,
-            );
+            context.clientIO.setDisplayInfo(agentName, id, index, cmdAction);
         },
         appendDisplay(
             content: DisplayContent,
@@ -131,7 +126,7 @@ function getActionContext(
         },
         get requestId() {
             return requestId;
-        }
+        },
     };
     return {
         actionContext,

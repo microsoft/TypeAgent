@@ -424,9 +424,9 @@ export function createAgentRpcServer(
                     source,
                     requestId,
                     actionIndex,
-                    action
+                    action,
                 });
-            },            
+            },
             appendDisplay(
                 content: DisplayContent,
                 mode: DisplayAppendMode,
@@ -456,7 +456,7 @@ export function createAgentRpcServer(
             },
             get requestId() {
                 return requestId;
-            }
+            },
         };
     }
 

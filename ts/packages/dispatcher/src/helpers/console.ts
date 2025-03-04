@@ -6,12 +6,9 @@ import {
     DisplayAppendMode,
     DisplayContent,
     MessageContent,
-    RequestId
+    RequestId,
 } from "@typeagent/agent-sdk";
-import {
-    ClientIO,
-    IAgentMessage,
-} from "../context/interactiveIO.js";
+import { ClientIO, IAgentMessage } from "../context/interactiveIO.js";
 import { TemplateEditConfig } from "../translation/actionTemplate.js";
 import chalk from "chalk";
 import stringWidth from "string-width";

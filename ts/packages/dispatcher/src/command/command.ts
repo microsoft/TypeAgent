@@ -15,7 +15,7 @@ import {
     CommandDescriptor,
     CommandDescriptors,
     CommandDescriptorTable,
-    RequestId
+    RequestId,
 } from "@typeagent/agent-sdk";
 import { executeCommand } from "../execute/actionHandlers.js";
 import { isCommandDescriptorTable } from "@typeagent/agent-sdk/helpers/command";

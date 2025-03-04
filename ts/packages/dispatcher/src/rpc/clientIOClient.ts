@@ -2,17 +2,18 @@
 // Licensed under the MIT License.
 
 import { createRpc } from "agent-rpc/rpc";
-import {
-    ClientIO,
-    IAgentMessage,
-} from "../context/interactiveIO.js";
+import { ClientIO, IAgentMessage } from "../context/interactiveIO.js";
 import {
     ClientIOCallFunctions,
     ClientIOInvokeFunctions,
 } from "./clientIOTypes.js";
 import { TemplateEditConfig } from "../translation/actionTemplate.js";
 import { RpcChannel } from "agent-rpc/channel";
-import { DisplayAppendMode, RequestId, TypeAgentAction } from "@typeagent/agent-sdk";
+import {
+    DisplayAppendMode,
+    RequestId,
+    TypeAgentAction,
+} from "@typeagent/agent-sdk";
 
 export function createClientIORpcClient(channel: RpcChannel): ClientIO {
     const rpc = createRpc<ClientIOInvokeFunctions, ClientIOCallFunctions>(
