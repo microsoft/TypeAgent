@@ -4,8 +4,8 @@
 import { Entity } from "@typeagent/agent-sdk";
 import { CachedImageWithDetails, extractRelevantExifTags } from "common-utils";
 import { PromptSection } from "typechat";
-import { normalizeParamString, PromptEntity } from "agent-cache";
 import { RequestId } from "./interactiveIO.js";
+import { normalizeParamString, PromptEntity } from "agent-cache";
 
 type UserEntry = {
     role: "user";
