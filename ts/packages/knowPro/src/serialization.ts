@@ -3,23 +3,15 @@
 
 import { readFile, readJsonFile, writeFile, writeJsonFile } from "typeagent";
 import { deserializeEmbeddings, serializeEmbeddings } from "./fuzzyIndex.js";
-import { IConversation, IConversationData } from "./interfaces.js";
 import path from "path";
+import { IConversationDataWithIndexes } from "./secondaryIndexes.js";
 
-export interface IPersistedConversationData<T extends IConversationData> {
-    conversationData: T;
-    embeddings?: Float32Array[] | undefined;
-}
-
-export async function writeConversationToFile<T extends IConversationData>(
-    conversation: IConversation,
+export async function writeConversationDataToFile(
+    conversationData: IConversationDataWithIndexes,
     dirPath: string,
     baseFileName: string,
-    serializer: (
-        conversation: IConversation,
-    ) => Promise<IPersistedConversationData<T>>,
 ): Promise<void> {
-    const serializationData = await serializer(conversation);
+    const serializationData = conversationDataToPersistent(conversationData);
     if (serializationData.embeddings) {
         const embeddingsBuffer = serializeEmbeddings(
             serializationData.embeddings,
@@ -35,15 +27,12 @@ export async function writeConversationToFile<T extends IConversationData>(
     );
 }
 
-export async function readConversationFromFile<T extends IConversationData>(
+export async function readConversationDataFromFile(
     dirPath: string,
     baseFileName: string,
     embeddingSize: number | undefined,
-    deserializer: (
-        data: IPersistedConversationData<T>,
-    ) => Promise<IConversation>,
-): Promise<IConversation | undefined> {
-    const conversationData = await readJsonFile<T>(
+): Promise<IConversationDataWithIndexes | undefined> {
+    const conversationData = await readJsonFile<IConversationDataWithIndexes>(
         path.join(dirPath, baseFileName + DataFileSuffix),
     );
     if (!conversationData) {
@@ -58,12 +47,44 @@ export async function readConversationFromFile<T extends IConversationData>(
             embeddings = deserializeEmbeddings(embeddingsBuffer, embeddingSize);
         }
     }
-    let serializationData: IPersistedConversationData<T> = {
+    let serializationData: IPersistedConversationData = {
         conversationData,
         embeddings,
     };
-    return deserializer(serializationData);
+    return persistentToConversationData(serializationData);
 }
 
 const DataFileSuffix = "_data.json";
 const EmbeddingFileSuffix = "_embeddings.bin";
+
+interface IPersistedConversationData {
+    conversationData: IConversationDataWithIndexes;
+    embeddings?: Float32Array[] | undefined;
+}
+
+function conversationDataToPersistent(
+    conversationData: IConversationDataWithIndexes,
+): IPersistedConversationData {
+    let persistentData: IPersistedConversationData = {
+        conversationData,
+    };
+    const embeddingData =
+        conversationData.relatedTermsIndexData?.textEmbeddingData;
+    if (embeddingData) {
+        persistentData.embeddings = embeddingData.embeddings;
+        embeddingData.embeddings = [];
+    }
+    return persistentData;
+}
+
+function persistentToConversationData(
+    persistentData: IPersistedConversationData,
+): IConversationDataWithIndexes {
+    const embeddingData =
+        persistentData.conversationData.relatedTermsIndexData
+            ?.textEmbeddingData;
+    if (persistentData.embeddings && embeddingData) {
+        embeddingData.embeddings = persistentData.embeddings;
+    }
+    return persistentData.conversationData;
+}

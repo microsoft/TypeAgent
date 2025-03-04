@@ -3,24 +3,21 @@
 
 import {
     IConversation,
-    IConversationData,
     IKnowledgeSource,
     IMessage,
     SemanticRef,
     ConversationIndex,
     IndexingResults,
     createKnowledgeModel,
-    ITermsToRelatedTermsIndexData,
-    IConversationThreadData,
     ConversationSettings,
     createConversationSettings,
     addMetadataToIndex,
     buildSecondaryIndexes,
     ConversationSecondaryIndexes,
     IndexingEventHandlers,
-    IPersistedConversationData,
-    writeConversationToFile,
-    readConversationFromFile,
+    IConversationDataWithIndexes,
+    writeConversationDataToFile,
+    readConversationDataFromFile,
 } from "knowpro";
 import { conversation as kpLib, image } from "knowledge-processor";
 import fs from "node:fs";
@@ -30,14 +27,8 @@ import { ChatModel } from "aiclient";
 import { AddressOutput } from "@azure-rest/maps-search";
 import { isDirectoryPath } from "typeagent";
 
-export interface ImageCollectionData extends IConversationData<Image> {
-    relatedTermsIndexData?: ITermsToRelatedTermsIndexData | undefined;
-    threadData?: IConversationThreadData;
-}
-
-export interface ImageCollectionData extends IConversationData<Image> {
-    relatedTermsIndexData?: ITermsToRelatedTermsIndexData | undefined;
-}
+export interface ImageCollectionData
+    extends IConversationDataWithIndexes<Image> {}
 
 export class Image implements IMessage<ImageMeta> {
     public timestamp: string | undefined;
@@ -408,9 +399,7 @@ export class ImageCollection implements IConversation<ImageMeta> {
         return indexingResult;
     }
 
-    public async serialize(): Promise<
-        IPersistedConversationData<ImageCollectionData>
-    > {
+    public async serialize(): Promise<ImageCollectionData> {
         const conversationData: ImageCollectionData = {
             nameTag: this.nameTag,
             messages: this.messages,
@@ -420,29 +409,10 @@ export class ImageCollection implements IConversation<ImageMeta> {
             relatedTermsIndexData:
                 this.secondaryIndexes.termToRelatedTermsIndex.serialize(),
         };
-        let persistentData: IPersistedConversationData<ImageCollectionData> = {
-            conversationData,
-        };
-        const embeddingData =
-            conversationData.relatedTermsIndexData?.textEmbeddingData;
-        if (embeddingData) {
-            persistentData.embeddings = embeddingData.embeddings;
-            embeddingData.embeddings = [];
-        }
-        return persistentData;
+        return conversationData;
     }
 
-    public async deserialize(
-        persistentData: IPersistedConversationData<ImageCollectionData>,
-    ): Promise<void> {
-        const data = persistentData.conversationData;
-        const embeddingData =
-            persistentData.conversationData.relatedTermsIndexData
-                ?.textEmbeddingData;
-        if (persistentData.embeddings && embeddingData) {
-            embeddingData.embeddings = persistentData.embeddings;
-        }
-
+    public async deserialize(data: ImageCollectionData): Promise<void> {
         this.nameTag = data.nameTag;
         this.messages = data.messages;
         this.semanticRefs = data.semanticRefs;
@@ -464,12 +434,8 @@ export class ImageCollection implements IConversation<ImageMeta> {
         dirPath: string,
         baseFileName: string,
     ): Promise<void> {
-        await writeConversationToFile(
-            this,
-            dirPath,
-            baseFileName,
-            async (conversation) => this.serialize(),
-        );
+        const data = await this.serialize();
+        await writeConversationDataToFile(data, dirPath, baseFileName);
     }
 
     public static async readFromFile(
@@ -477,16 +443,15 @@ export class ImageCollection implements IConversation<ImageMeta> {
         baseFileName: string,
     ): Promise<ImageCollection | undefined> {
         const imageCollection = new ImageCollection();
-        await readConversationFromFile<ImageCollectionData>(
+        const data = await readConversationDataFromFile(
             dirPath,
             baseFileName,
             imageCollection.settings.relatedTermIndexSettings
                 .embeddingIndexSettings?.embeddingSize,
-            async (persistentData) => {
-                await imageCollection.deserialize(persistentData);
-                return imageCollection;
-            },
         );
+        if (data) {
+            imageCollection.deserialize(data);
+        }
         return imageCollection;
     }
 }
