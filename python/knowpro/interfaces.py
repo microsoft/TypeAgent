@@ -123,7 +123,7 @@ class IConversation[TMeta: IKnowledgeSource = Any](Protocol):
     messages: Sequence[IMessage[TMeta]]
     semantic_refs: Sequence[SemanticRef] | None
     semantic_ref_index: ITermToSemanticRefIndex | None
-    secondaryIndexes: IConversationSecondaryIndexes | None
+    secondaryIndexes: "IConversationSecondaryIndexes | None"
 
 
 @runtime_checkable
@@ -149,10 +149,10 @@ class ScoredKnowledge(Protocol):
 
 @runtime_checkable
 class IConversationSecondaryIndexes(Protocol):
-    property_to_semantic_ref_index: IPropertyToSemanticRefIndex | None
-    timestampIndex: ITimestampToTextRangeIndex | None
-    termToRelatedTermsIndex: ITermToRelatedTermsIndex | None
-    threads: IConversationThreads | None
+    property_to_semantic_ref_index: "IPropertyToSemanticRefIndex | None"
+    timestampIndex: "ITimestampToTextRangeIndex | None"
+    termToRelatedTermsIndex: "ITermToRelatedTermsIndex | None"
+    threads: "IConversationThreads | None"
 
 
 # Allows for faster retrieval of name, value properties
@@ -205,7 +205,7 @@ class ITermToRelatedTerms(Protocol):
 @runtime_checkable
 class ITermToRelatedTermsFuzzy(Protocol):
     async def add_terms(
-        self, terms: Sequence[str], event_handler: IndexingEventHandlers | None = None
+        self, terms: Sequence[str], event_handler: "IndexingEventHandlers | None" = None
     ) -> None:
         raise NotImplementedError
 
@@ -277,12 +277,9 @@ class IConversationThreads(Protocol):
 
 
 @runtime_checkable
-class IConversationData[TMessage](Protocol):
-    name_tag: str
-    messages: Sequence[TMessage]
-    tags: Sequence[str]
-    semantic_refs: Sequence[SemanticRef]
-    semantic_index_data: ITermToSemanticRefIndexData | None
+class ITermToSemanticRefIndexItem(Protocol):
+    term: str
+    semantic_ref_indices: Sequence[ScoredSemanticRef]
 
 
 # Persistent form of a term index.
@@ -292,9 +289,12 @@ class ITermToSemanticRefIndexData(Protocol):
 
 
 @runtime_checkable
-class ITermToSemanticRefIndexItem(Protocol):
-    term: str
-    semantic_ref_indices: Sequence[ScoredSemanticRef]
+class IConversationData[TMessage](Protocol):
+    name_tag: str
+    messages: Sequence[TMessage]
+    tags: Sequence[str]
+    semantic_refs: Sequence[SemanticRef]
+    semantic_index_data: ITermToSemanticRefIndexData | None
 
 
 # ------------------------
