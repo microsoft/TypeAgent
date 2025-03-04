@@ -190,17 +190,6 @@ export class MessageContainer {
         this.nameSpan.className = "agent-name";
         this.nameSpan.addEventListener("click", () => {
             swapContent(this.nameSpan, this.messageDiv);
-            // const data: string = this.nameSpan.getAttribute("action-data") ?? "";
-            // const originalMessage: string = this.messageDiv.innerHTML;
-
-            // if (this.messageDiv.classList.contains("chat-message-action-data")) {
-            //     this.messageDiv.classList.remove("chat-message-action-data");
-            // } else {
-            //     this.messageDiv.classList.add("chat-message-action-data");
-            // }
-
-            // this.nameSpan.setAttribute("action-data", originalMessage);
-            // this.messageDiv.innerHTML = data;
         });
 
         const timestampDiv = this.createTimestampDiv(
