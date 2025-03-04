@@ -214,5 +214,50 @@
         }
       }
     }
+  ],
+  [
+    {
+      "request": "add eggs to the grocery list",
+      "action": {
+        "translatorName": "list",
+        "actionName": "addItems",
+        "parameters": {
+          "items": ["eggs"],
+          "listName": "grocery"
+        }
+      },
+      "history": {
+        "text": "Added items: eggs to list grocery",
+        "source": "list",
+        "entities": [
+          {
+            "name": "grocery",
+            "type": ["list"]
+          },
+          {
+            "name": "eggs",
+            "type": ["item"]
+          }
+        ]
+      }
+    },
+    {
+      "request": "add cheese",
+      "action": {
+        "translatorName": "list",
+        "actionName": "addItems",
+        "parameters": {
+          "items": ["cheese"],
+          "listName": "grocery"
+        },
+        "entities": {
+          "listName": {
+            "name": "grocery",
+            "sourceAppAgentName": "list",
+            "type": ["list"]
+          }
+        }
+      }
+    }
   ]
 ]

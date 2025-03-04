@@ -416,17 +416,15 @@ export class Session {
 
     private async newCacheDataFilePath() {
         if (this.sessionDirPath) {
-            const cacheDirPath = getSessionConstructionDirPath(
-                this.sessionDirPath,
-            );
-            await fs.promises.mkdir(cacheDirPath, { recursive: true });
+            const cacheDir = getSessionConstructionDirPath(this.sessionDirPath);
+            await fs.promises.mkdir(cacheDir, { recursive: true });
             const filePath = getUniqueFileName(
-                cacheDirPath,
+                cacheDir,
                 `${this.explainerName}_${getYMDPrefix()}`,
                 ".json",
             );
             this.setConstructionDataFilePath(filePath);
-            return path.join(cacheDirPath, filePath);
+            return path.join(cacheDir, filePath);
         }
         return undefined;
     }

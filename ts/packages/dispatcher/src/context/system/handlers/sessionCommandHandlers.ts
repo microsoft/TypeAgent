@@ -53,7 +53,7 @@ class SessionNewCommandHandler implements CommandHandler {
     ) {
         const systemContext = context.sessionContext.agentContext;
         const { flags } = params;
-        if (flags.persist && systemContext.instanceDir === undefined) {
+        if (flags.persist && systemContext.persistDir === undefined) {
             throw new Error("User data storage disabled.");
         }
         await setSessionOnCommandHandlerContext(
@@ -62,7 +62,7 @@ class SessionNewCommandHandler implements CommandHandler {
                 flags.keep ? systemContext.session.getConfig() : undefined,
                 flags.persist ??
                     systemContext.session.sessionDirPath !== undefined
-                    ? systemContext.instanceDir
+                    ? systemContext.persistDir
                     : undefined,
             ),
         );
@@ -94,11 +94,11 @@ class SessionOpenCommandHandler implements CommandHandler {
         params: ParsedCommandParams<typeof this.parameters>,
     ) {
         const systemContext = context.sessionContext.agentContext;
-        if (systemContext.instanceDir === undefined) {
+        if (systemContext.persistDir === undefined) {
             throw new Error("User data storage disabled.");
         }
         const session = await Session.load(
-            systemContext.instanceDir,
+            systemContext.persistDir,
             params.args.session,
         );
         await setSessionOnCommandHandlerContext(systemContext, session);
@@ -166,7 +166,7 @@ class SessionDeleteCommandHandler implements CommandHandler {
         params: ParsedCommandParams<typeof this.parameters>,
     ) {
         const systemContext = context.sessionContext.agentContext;
-        if (systemContext.instanceDir === undefined) {
+        if (systemContext.persistDir === undefined) {
             throw new Error("Persist profile disabled.");
         }
         const persist = systemContext.session.sessionDirPath !== undefined;
@@ -181,7 +181,7 @@ class SessionDeleteCommandHandler implements CommandHandler {
                 displayWarn("Cancelled!", context);
                 return;
             }
-            await deleteAllSessions(systemContext.instanceDir);
+            await deleteAllSessions(systemContext.persistDir);
             displaySuccess("All session deleted.", context);
         } else {
             const currentSessionName = systemContext.session.sessionDirPath
@@ -194,7 +194,7 @@ class SessionDeleteCommandHandler implements CommandHandler {
                 );
             }
             const sessionNames = await getSessionNames(
-                systemContext.instanceDir,
+                systemContext.persistDir,
             );
             if (!sessionNames.includes(del)) {
                 throw new Error(`'${del}' is not a session name`);
@@ -209,7 +209,7 @@ class SessionDeleteCommandHandler implements CommandHandler {
                 displayWarn("Cancelled!", context);
                 return;
             }
-            await deleteSession(systemContext.instanceDir, del);
+            await deleteSession(systemContext.persistDir, del);
             displaySuccess(`Session '${del}' deleted.`, context);
             if (del !== currentSessionName) {
                 return;
@@ -224,10 +224,10 @@ class SessionListCommandHandler implements CommandHandlerNoParams {
         "List all sessions. The current session is marked green.";
     public async run(context: ActionContext<CommandHandlerContext>) {
         const systemContext = context.sessionContext.agentContext;
-        if (systemContext.instanceDir === undefined) {
+        if (systemContext.persistDir === undefined) {
             throw new Error("User data storage disabled.");
         }
-        const names = await getSessionNames(systemContext.instanceDir);
+        const names = await getSessionNames(systemContext.persistDir);
         displayResult(
             names
                 .map((n) =>
@@ -252,7 +252,7 @@ class SessionInfoCommandHandler implements CommandHandlerNoParams {
             : [];
 
         displayResult(
-            `${chalk.bold("Instance Dir:")} ${systemContext.instanceDir}`,
+            `${chalk.bold("Instance Dir:")} ${systemContext.persistDir}`,
             context,
         );
         const session = systemContext.session;
