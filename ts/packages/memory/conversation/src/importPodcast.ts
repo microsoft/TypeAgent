@@ -17,10 +17,9 @@ import {
     ConversationThreads,
     IndexingEventHandlers,
     buildConversationIndex,
-    writeConversationToFile,
-    IPersistedConversationData,
-    readConversationFromFile,
     IConversationDataWithIndexes,
+    writeConversationDataToFile,
+    readConversationDataFromFile,
 } from "knowpro";
 import { conversation as kpLib, split } from "knowledge-processor";
 import { collections, dateTime, getFileName, readAllText } from "typeagent";
@@ -150,8 +149,8 @@ export class Podcast implements IConversation<PodcastMessageMeta> {
         return result;
     }
 
-    public async serialize(): Promise<IPersistedConversationData<PodcastData>> {
-        const conversationData: PodcastData = {
+    public async serialize(): Promise<PodcastData> {
+        const data: PodcastData = {
             nameTag: this.nameTag,
             messages: this.messages,
             tags: this.tags,
@@ -161,29 +160,10 @@ export class Podcast implements IConversation<PodcastMessageMeta> {
                 this.secondaryIndexes.termToRelatedTermsIndex.serialize(),
             threadData: this.secondaryIndexes.threads.serialize(),
         };
-        let persistentData: IPersistedConversationData<PodcastData> = {
-            conversationData,
-        };
-        const embeddingData =
-            conversationData.relatedTermsIndexData?.textEmbeddingData;
-        if (embeddingData) {
-            persistentData.embeddings = embeddingData.embeddings;
-            embeddingData.embeddings = [];
-        }
-        return persistentData;
+        return data;
     }
 
-    public async deserialize(
-        persistentData: IPersistedConversationData<PodcastData>,
-    ): Promise<void> {
-        const podcastData = persistentData.conversationData;
-        const embeddingData =
-            persistentData.conversationData.relatedTermsIndexData
-                ?.textEmbeddingData;
-        if (persistentData.embeddings && embeddingData) {
-            embeddingData.embeddings = persistentData.embeddings;
-        }
-
+    public async deserialize(podcastData: PodcastData): Promise<void> {
         this.nameTag = podcastData.nameTag;
         this.messages = podcastData.messages;
         this.semanticRefs = podcastData.semanticRefs;
@@ -211,12 +191,8 @@ export class Podcast implements IConversation<PodcastMessageMeta> {
         dirPath: string,
         baseFileName: string,
     ): Promise<void> {
-        await writeConversationToFile(
-            this,
-            dirPath,
-            baseFileName,
-            async (conversation) => this.serialize(),
-        );
+        const data = await this.serialize();
+        await writeConversationDataToFile(data, dirPath, baseFileName);
     }
 
     public static async readFromFile(
@@ -224,16 +200,15 @@ export class Podcast implements IConversation<PodcastMessageMeta> {
         baseFileName: string,
     ): Promise<Podcast | undefined> {
         const podcast = new Podcast();
-        await readConversationFromFile<PodcastData>(
+        const data = await readConversationDataFromFile(
             dirPath,
             baseFileName,
             podcast.settings.relatedTermIndexSettings.embeddingIndexSettings
                 ?.embeddingSize,
-            async (persistentData) => {
-                await podcast.deserialize(persistentData);
-                return podcast;
-            },
         );
+        if (data) {
+            podcast.deserialize(data);
+        }
         return podcast;
     }
 
