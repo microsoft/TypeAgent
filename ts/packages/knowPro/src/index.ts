@@ -11,3 +11,4 @@ export * from "./conversationThread.js";
 export * from "./fuzzyIndex.js";
 export * from "./propertyIndex.js";
 export * from "./timestampIndex.js";
+export * from "./serialization.js";

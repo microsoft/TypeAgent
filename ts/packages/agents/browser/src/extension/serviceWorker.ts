@@ -1548,7 +1548,10 @@ chrome.runtime.onMessage.addListener(
                         },
                     });
 
-                    sendResponse({ schema: schemaResult });
+                    sendResponse({
+                        intent: schemaResult.intent,
+                        actions: schemaResult.actions,
+                    });
                     break;
                 }
                 case "startRecording": {

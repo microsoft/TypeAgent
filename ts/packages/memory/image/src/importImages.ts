@@ -3,21 +3,21 @@
 
 import {
     IConversation,
-    IConversationData,
     IKnowledgeSource,
     IMessage,
     SemanticRef,
     ConversationIndex,
     IndexingResults,
     createKnowledgeModel,
-    ITermsToRelatedTermsIndexData,
-    IConversationThreadData,
     ConversationSettings,
     createConversationSettings,
     addMetadataToIndex,
     buildSecondaryIndexes,
     ConversationSecondaryIndexes,
     IndexingEventHandlers,
+    IConversationDataWithIndexes,
+    writeConversationDataToFile,
+    readConversationDataFromFile,
 } from "knowpro";
 import { conversation as kpLib, image } from "knowledge-processor";
 import fs from "node:fs";
@@ -27,14 +27,8 @@ import { ChatModel } from "aiclient";
 import { AddressOutput } from "@azure-rest/maps-search";
 import { isDirectoryPath } from "typeagent";
 
-export interface ImageCollectionData extends IConversationData<Image> {
-    relatedTermsIndexData?: ITermsToRelatedTermsIndexData | undefined;
-    threadData?: IConversationThreadData;
-}
-
-export interface ImageCollectionData extends IConversationData<Image> {
-    relatedTermsIndexData?: ITermsToRelatedTermsIndexData | undefined;
-}
+export interface ImageCollectionData
+    extends IConversationDataWithIndexes<Image> {}
 
 export class Image implements IMessage<ImageMeta> {
     public timestamp: string | undefined;
@@ -356,8 +350,8 @@ export class ImageCollection implements IConversation<ImageMeta> {
     public semanticRefIndex: ConversationIndex;
     public secondaryIndexes: ConversationSecondaryIndexes;
     constructor(
-        public nameTag: string,
-        public messages: Image[],
+        public nameTag: string = "",
+        public messages: Image[] = [],
         public tags: string[] = [],
         public semanticRefs: SemanticRef[] = [],
     ) {
@@ -376,7 +370,7 @@ export class ImageCollection implements IConversation<ImageMeta> {
                 this.semanticRefIndex,
                 (type, knowledge) => {
                     if (type === "entity") {
-                        return isDuplicateEntity(
+                        return !isDuplicateEntity(
                             knowledge as kpLib.ConcreteEntity,
                             this.semanticRefs,
                         );
@@ -397,7 +391,7 @@ export class ImageCollection implements IConversation<ImageMeta> {
         }
 
         this.addMetadataToIndex();
-        await buildSecondaryIndexes(this, true);
+        await buildSecondaryIndexes(this, true, eventHandler);
 
         let indexingResult: IndexingResults = {
             chunksIndexedUpto: { messageIndex: this.messages.length - 1 },
@@ -406,7 +400,7 @@ export class ImageCollection implements IConversation<ImageMeta> {
     }
 
     public async serialize(): Promise<ImageCollectionData> {
-        return {
+        const conversationData: ImageCollectionData = {
             nameTag: this.nameTag,
             messages: this.messages,
             tags: this.tags,
@@ -415,9 +409,14 @@ export class ImageCollection implements IConversation<ImageMeta> {
             relatedTermsIndexData:
                 this.secondaryIndexes.termToRelatedTermsIndex.serialize(),
         };
+        return conversationData;
     }
 
     public async deserialize(data: ImageCollectionData): Promise<void> {
+        this.nameTag = data.nameTag;
+        this.messages = data.messages;
+        this.semanticRefs = data.semanticRefs;
+        this.tags = data.tags;
         if (data.semanticIndexData) {
             this.semanticRefIndex = new ConversationIndex(
                 data.semanticIndexData,
@@ -429,6 +428,31 @@ export class ImageCollection implements IConversation<ImageMeta> {
             );
         }
         await buildSecondaryIndexes(this, false);
+    }
+
+    public async writeToFile(
+        dirPath: string,
+        baseFileName: string,
+    ): Promise<void> {
+        const data = await this.serialize();
+        await writeConversationDataToFile(data, dirPath, baseFileName);
+    }
+
+    public static async readFromFile(
+        dirPath: string,
+        baseFileName: string,
+    ): Promise<ImageCollection | undefined> {
+        const imageCollection = new ImageCollection();
+        const data = await readConversationDataFromFile(
+            dirPath,
+            baseFileName,
+            imageCollection.settings.relatedTermIndexSettings
+                .embeddingIndexSettings?.embeddingSize,
+        );
+        if (data) {
+            imageCollection.deserialize(data);
+        }
+        return imageCollection;
     }
 }
 
@@ -540,7 +564,7 @@ async function indexImage(
         console.log(`Could not find part of the file path '${fileName}'`);
         return;
     } else if (!isImageFileType(path.extname(fileName))) {
-        console.log(`Skipping '${fileName}', not a known image file.`);
+        //console.log(`Skipping '${fileName}', not a known image file.`);
         return;
     }
 

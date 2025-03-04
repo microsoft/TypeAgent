@@ -14,6 +14,9 @@ import {
     TopNCollection,
 } from "typeagent";
 import { TextEmbeddingModel, openai } from "aiclient";
+import registerDebug from "debug";
+
+const debug = registerDebug("typeagent:dispatcher:semantic");
 
 type Entry = {
     embedding: NormalizedEmbedding;
@@ -45,7 +48,7 @@ export class ActionSchemaSemanticMap {
 
         const actionSemanticMap = new Map<string, Entry>();
         this.actionSemanticMaps.set(config.schemaName, actionSemanticMap);
-
+        let reuseCount = 0;
         for (const [name, definition] of actionSchemaFile.actionSchemas) {
             const key = `${config.schemaName} ${name} ${definition.comments?.[0] ?? ""}`;
             const embedding = cache?.get(key);
@@ -55,11 +58,16 @@ export class ActionSchemaSemanticMap {
                     actionSchemaFile,
                     definition,
                 });
+                reuseCount++;
             } else {
                 keys.push(key);
                 definitions.push(definition);
             }
         }
+
+        debug(
+            `Reused ${reuseCount}/${actionSchemaFile.actionSchemas.size} embeddings for ${config.schemaName} ${cache === undefined}`,
+        );
         const embeddings = await generateTextEmbeddingsWithRetry(
             this.model,
             keys,

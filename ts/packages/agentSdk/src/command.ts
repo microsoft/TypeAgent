@@ -5,7 +5,7 @@ import { ActionContext, SessionContext } from "./agentInterface.js";
 import { ParameterDefinitions, ParsedCommandParams } from "./parameters.js";
 
 /*============================================================================================================
- * Dispatcher Command Extention
+ * Dispatcher Command Extension
  *
  * AppAgentCommandInterface
  * ------------------------

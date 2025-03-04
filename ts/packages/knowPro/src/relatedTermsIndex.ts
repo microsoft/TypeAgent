@@ -389,3 +389,57 @@ export class TermEditDistanceIndex
         });
     }
 }
+
+/**
+ * Work in progress; Simplifying related terms
+ */
+export interface ITermToRelatedTermsIndex2 {
+    addTerms(
+        termTexts: string[],
+        eventHandler?: IndexingEventHandlers,
+    ): Promise<void>;
+    addSynonyms(termText: string, relatedTerms: Term[]): void;
+    lookupSynonym(termText: string): Term[] | undefined;
+    lookupTermsFuzzy(
+        termTexts: string[],
+        maxMatches?: number,
+        thresholdScore?: number,
+    ): Promise<Term[][]>;
+}
+
+export class TermToRelatedTermsIndex2 implements ITermToRelatedTermsIndex2 {
+    private synonyms: TermToRelatedTermsMap;
+    private termEmbeddings: TermEmbeddingIndex;
+
+    constructor(settings: TextEmbeddingIndexSettings) {
+        this.synonyms = new TermToRelatedTermsMap();
+        this.termEmbeddings = new TermEmbeddingIndex(settings);
+    }
+
+    public addTerms(
+        termTexts: string[],
+        eventHandler?: IndexingEventHandlers,
+    ): Promise<void> {
+        return this.termEmbeddings.addTerms(termTexts, eventHandler);
+    }
+
+    public addSynonyms(termText: string, relatedTerm: Term[]): void {
+        this.synonyms.addRelatedTerm(termText, relatedTerm);
+    }
+
+    public lookupSynonym(termText: string): Term[] | undefined {
+        return this.synonyms.lookupTerm(termText);
+    }
+
+    public lookupTermsFuzzy(
+        termTexts: string[],
+        maxMatches?: number,
+        thresholdScore?: number,
+    ): Promise<Term[][]> {
+        return this.termEmbeddings.lookupTerms(
+            termTexts,
+            maxMatches,
+            thresholdScore,
+        );
+    }
+}

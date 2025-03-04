@@ -8,6 +8,7 @@ import { getDefaultExplainerName } from "agent-cache";
 import {
     CommandHandlerContext,
     ensureCommandResult,
+    getCommandResult,
 } from "../context/commandHandlerContext.js";
 
 import {
@@ -44,6 +45,10 @@ export type ResolveCommandResult = {
 
     // The descriptor of the resolved command.  Undefined if the last command index is not a command in the table.
     descriptor: CommandDescriptor | undefined;
+
+    // True if the command is matched to a command descriptor.
+    // False if the command is not matched or the we resolved to the default.
+    matched: boolean;
 };
 
 export function getDefaultSubCommandDescriptor(
@@ -109,7 +114,7 @@ export async function resolveCommand(
     const sessionContext = context.agents.getSessionContext(actualAppAgentName);
     const descriptors = await appAgent.getCommands?.(sessionContext);
     const commands: string[] = [];
-
+    let matched = false;
     let table: CommandDescriptorTable | undefined;
     let descriptor: CommandDescriptor | undefined;
     if (descriptors === undefined || !isCommandDescriptorTable(descriptors)) {
@@ -133,6 +138,7 @@ export async function resolveCommand(
             commands.push(subcommand);
             if (!isCommandDescriptorTable(current)) {
                 descriptor = current;
+                matched = true;
                 break;
             }
             table = current;
@@ -150,6 +156,7 @@ export async function resolveCommand(
         suffix: curr.trim(),
         table,
         descriptor,
+        matched,
     };
 
     if (debugCommand.enabled) {
@@ -183,6 +190,14 @@ async function parseCommand(
             suffix: result.suffix,
         });
         try {
+            if (
+                result.suffix !== "" &&
+                result.descriptor.parameters === undefined
+            ) {
+                throw new Error(
+                    `Command '@${getParsedCommand(result)}' does not accept parameters.`,
+                );
+            }
             const params = result.descriptor.parameters
                 ? parseParams(result.suffix, result.descriptor.parameters)
                 : undefined;
@@ -192,10 +207,18 @@ async function parseCommand(
                 params,
             };
         } catch (e: any) {
-            const command = getParsedCommand(result);
-            throw new Error(
-                `${e.message}\n\n${chalk.reset(getUsage(command, result.descriptor))}`,
-            );
+            if (
+                result.matched ||
+                result.suffix.length === 0 ||
+                result.suffix.startsWith("-")
+            ) {
+                // Error with with the subcommand if it is not a default, or suffix started as a "flag".
+                const command = getParsedCommand(result);
+                throw new Error(
+                    `${e.message}\n\n${chalk.reset(getUsage(command, result.descriptor))}`,
+                );
+            }
+            // if we matched only default subcommand fall thru and error assuming that we matched only the table
         }
     }
     const command = getParsedCommand(result);
@@ -264,6 +287,11 @@ export async function processCommandNoLock(
             "block",
         );
         debugCommandError(e.stack);
+
+        const commandResult = getCommandResult(context);
+        if (commandResult !== undefined) {
+            commandResult.exception = e.message;
+        }
     }
 }
 

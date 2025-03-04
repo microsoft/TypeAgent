@@ -262,7 +262,8 @@ function* getIndexingBatches(
 }
 
 export function serializeEmbeddings(embeddings: NormalizedEmbedding[]): Buffer {
-    return Buffer.concat(embeddings.map((e) => Buffer.from(e.buffer)));
+    const buffers = embeddings.map((e) => Buffer.from(e.buffer));
+    return Buffer.concat(buffers);
 }
 
 export function deserializeEmbeddings(
@@ -276,10 +277,12 @@ export function deserializeEmbeddings(
         startAt < buffer.length;
         startAt += embeddingByteCount
     ) {
+        const sliceStartAt = buffer.byteOffset + startAt;
         const embedding = new Float32Array(
-            buffer.buffer,
-            buffer.byteOffset + startAt,
-            embeddingSize,
+            buffer.buffer.slice(
+                sliceStartAt,
+                sliceStartAt + embeddingByteCount,
+            ),
         );
         embeddings.push(embedding);
     }
