@@ -274,7 +274,7 @@ export async function handleSchemaDiscoveryAction(
     async function handleGetIntentFromReccording(action: any) {
         const timerName = `Getting intent schema`;
         console.time(timerName);
-        const response = await agent.getIntentSchemaFromRecording(
+        const intentResponse = await agent.getIntentSchemaFromRecording(
             action.parameters.recordedActionName,
             action.parameters.recordedActionDescription,
             action.parameters.recordedActionSteps,
@@ -283,17 +283,44 @@ export async function handleSchemaDiscoveryAction(
             "",
         );
 
-        if (!response.success) {
+        if (!intentResponse.success) {
             console.error("Attempt to process recorded action failed");
-            console.error(response.message);
+            console.error(intentResponse.message);
             message = "Action could not be completed";
             return;
         }
 
         console.timeEnd(timerName);
-        message = "Intent schema: \n" + JSON.stringify(response.data, null, 2);
+        message =
+            "Intent schema: \n" + JSON.stringify(intentResponse.data, null, 2);
 
-        return response.data;
+        const timerName2 = `Getting action schema`;
+        console.time(timerName2);
+        const stepsResponse = await agent.getActionStepsSchemaFromRecording(
+            action.parameters.recordedActionName,
+            action.parameters.recordedActionDescription,
+            intentResponse.data,
+            action.parameters.recordedActionSteps,
+            action.parameters.htmlFragments,
+            // action.parameters.screenshot,
+            "",
+        );
+
+        if (!stepsResponse.success) {
+            console.error("Attempt to process recorded action failed");
+            console.error(stepsResponse.message);
+            message = "Action could not be completed";
+            return {
+                intent: intentResponse.data,
+            };
+        }
+
+        console.timeEnd(timerName2);
+
+        return {
+            intent: intentResponse.data,
+            actions: stepsResponse.data,
+        };
     }
 
     //
