@@ -6,7 +6,6 @@ import {
     CommandHandler,
     CommandMetadata,
     InteractiveIo,
-    NamedArgs,
     parseNamedArguments,
     StopWatch,
 } from "interactive-app";
@@ -132,9 +131,18 @@ export function createImageCommands(
             TokenCounter.getInstance().total;
 
         if (isDir) {
-            await indexImages(namedArgs, sourcePath, context, clock);
+            await indexImages(
+                sourcePath,
+                namedArgs.value("cachePath", "string", false),
+                context,
+                clock,
+            );
         } else {
-            await indexImage(sourcePath, context);
+            await indexImage(
+                sourcePath,
+                namedArgs.value("cachePath", "string", false),
+                context,
+            );
         }
 
         const tokenCountFinish: CompletionUsageStats =
@@ -161,8 +169,8 @@ export function createImageCommands(
     }
 
     async function indexImages(
-        namesArgs: NamedArgs,
         sourcePath: string,
+        cachePath: string,
         context: ChatContext,
         clock: StopWatch,
     ) {
@@ -177,11 +185,15 @@ export function createImageCommands(
             console.log(
                 `${fullFilePath} [${i + 1} of ${fileNames.length}] (estimated time remaining: ${(clock.elapsedSeconds / (i + 1)) * (fileNames.length - i)})`,
             );
-            await indexImage(fullFilePath, context);
+            await indexImage(fullFilePath, cachePath, context);
         }
     }
 
-    async function indexImage(fileName: string, context: ChatContext) {
+    async function indexImage(
+        fileName: string,
+        cachePath: string,
+        context: ChatContext,
+    ) {
         if (!fs.existsSync(fileName)) {
             console.log(`Could not find part of the file path '${fileName}'`);
             return;
@@ -192,7 +204,12 @@ export function createImageCommands(
 
         // load the image
         const image: knowLib.image.Image | undefined =
-            await knowLib.image.loadImage(fileName, context.models.chatModel);
+            await knowLib.image.loadImage(
+                fileName,
+                context.models.chatModel,
+                true,
+                cachePath,
+            );
 
         if (image) {
             await knowLib.image.addImageToConversation(

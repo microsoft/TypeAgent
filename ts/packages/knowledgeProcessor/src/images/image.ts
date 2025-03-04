@@ -506,14 +506,20 @@ export interface imageDetailExtractionSchema {
  * @param fileName The image file to load
  * @param model The language model being used to describe the image.
  * @param loadCachedDetails A flag indicating if cached image descriptions should be loaded if available.
+ * @param cacheFolder The folder to find cached image data. If not supplied defaults to the image folder.
  * @returns The described image.
  */
 export async function loadImage(
     fileName: string,
     model: ChatModel,
     loadCachedDetails: boolean = true,
+    cacheFolder: string | undefined = undefined,
 ): Promise<Image | undefined> {
-    const cachedFileName: string = fileName + ".eat";
+    if (cacheFolder === undefined) {
+        cacheFolder = path.dirname(fileName);
+    }
+
+    const cachedFileName: string = path.join(cacheFolder, fileName + ".eat");
     if (loadCachedDetails && fs.existsSync(cachedFileName)) {
         return JSON.parse(fs.readFileSync(cachedFileName, "utf8"));
     }
@@ -599,16 +605,21 @@ export async function loadImage(
  * Loads the image and then uses the LLM and other APIs to get POI, KnowledgeResponse, address, etc.
  *
  * @param fileName The image file to load
+ * @param cachePath The path where the image knowledge response is to be cached
  * @param model The language model being used to describe the image.
  * @param loadCachedDetails A flag indicating if cached image descriptions should be loaded if available.
  * @returns The described image.
  */
 export async function loadImageWithKnowledge(
     fileName: string,
+    cachePath: string,
     model: ChatModel,
     loadCachedDetails: boolean = true,
 ): Promise<Image | undefined> {
-    const cachedFileName: string = fileName + ".kr.json";
+    const cachedFileName: string = path.join(
+        cachePath,
+        path.basename(fileName) + ".kr.json",
+    );
     if (loadCachedDetails && fs.existsSync(cachedFileName)) {
         return JSON.parse(fs.readFileSync(cachedFileName, "utf8"));
     }
