@@ -22,9 +22,9 @@ import {
     DispatcherOptions,
     initializeCommandHandlerContext,
 } from "./context/commandHandlerContext.js";
+import { RequestId } from "./context/interactiveIO.js";
 import { RequestMetrics } from "./utils/metrics.js";
 import { FullAction } from "agent-cache";
-import { RequestId } from "./context/interactiveIO.js";
 
 export type CommandResult = {
     hasError?: boolean;
