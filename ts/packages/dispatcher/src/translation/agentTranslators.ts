@@ -39,6 +39,7 @@ import {
 import { ActionConfig } from "./actionConfig.js";
 import { ActionConfigProvider } from "./actionConfigProvider.js";
 import { createTypeScriptJsonValidator } from "typechat/ts";
+import { CompleteUsageStatsCallback } from "aiclient";
 
 export function getAppAgentName(schemaName: string) {
     return schemaName.split(".")[0];
@@ -171,6 +172,7 @@ export type TypeAgentTranslator<T = TranslatedAction> = {
         history?: HistoryContext,
         attachments?: CachedImageWithDetails[],
         cb?: IncrementalJsonValueCallBack,
+        usageCallback?: CompleteUsageStatsCallback,
     ): Promise<Result<T>>;
     checkTranslate(request: string): Promise<Result<T>>;
     getSchemaName(actionName: string): string | undefined;
@@ -315,6 +317,7 @@ function createTypeAgentTranslator<
             history?: HistoryContext,
             attachments?: CachedImageWithDetails[],
             cb?: IncrementalJsonValueCallBack,
+            usageCallback?: CompleteUsageStatsCallback,
         ) => {
             // Expand the request prompt up front with the history and attachments
             const requestPrompt = createTypeAgentRequestPrompt(
@@ -327,8 +330,9 @@ function createTypeAgentTranslator<
             return streamingTranslator.translate(
                 requestPrompt,
                 history?.promptSections,
-                cb,
                 attachments,
+                cb,
+                usageCallback,
             );
         },
         // No streaming, no history, no attachments.

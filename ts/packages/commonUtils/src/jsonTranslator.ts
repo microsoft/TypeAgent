@@ -14,7 +14,11 @@ import {
 import { createTypeScriptJsonValidator } from "typechat/ts";
 import { TypeChatConstraintsValidator } from "./constraints.js";
 import registerDebug from "debug";
-import { openai as ai, CompletionJsonSchema } from "aiclient";
+import {
+    openai as ai,
+    CompleteUsageStatsCallback,
+    CompletionJsonSchema,
+} from "aiclient";
 import {
     createIncrementalJsonParser,
     IncrementalJsonParser,
@@ -59,57 +63,68 @@ export interface TypeChatJsonTranslatorWithStreaming<T extends object>
     translate: (
         request: string,
         promptPreamble?: string | PromptSection[],
-        cb?: IncrementalJsonValueCallBack,
         attachments?: CachedImageWithDetails[] | undefined,
+        cb?: IncrementalJsonValueCallBack,
+        usageCallback?: CompleteUsageStatsCallback,
     ) => Promise<Result<T>>;
 }
 
 // This rely on the fact that the prompt preamble based to typechat are copied to the final prompt.
 // Add a internal section so we can pass information from the caller to the model.complete function.
-type StreamingSection = {
-    role: "streaming";
-    content: IncrementalJsonParser;
+type ModelParamSection = {
+    role: "model";
+    content: {
+        parser: IncrementalJsonParser | undefined;
+        usageCallback: CompleteUsageStatsCallback | undefined;
+    };
 };
 
-function initializeStreamingParser(
+function addModelParamSection(
     promptPreamble?: string | PromptSection[],
     cb?: IncrementalJsonValueCallBack,
+    usageCallback?: CompleteUsageStatsCallback,
 ) {
-    if (cb === undefined) {
+    if (cb === undefined && usageCallback === undefined) {
         return promptPreamble;
     }
-    const prompts: (PromptSection | StreamingSection)[] =
+    const prompts: (PromptSection | ModelParamSection)[] =
         typeof promptPreamble === "string"
             ? [{ role: "user", content: promptPreamble }]
             : promptPreamble
               ? [...promptPreamble] // Make a copy so that we don't modify the original array
               : [];
-    const parser = createIncrementalJsonParser(cb, {
-        partial: true,
-    });
+    const parser = cb
+        ? createIncrementalJsonParser(cb, {
+              partial: true,
+          })
+        : undefined;
     prompts.unshift({
-        role: "streaming",
-        content: parser,
+        role: "model",
+        content: {
+            parser,
+            usageCallback,
+        },
     });
 
     return prompts as PromptSection[];
 }
 
-function getStreamingParser(
-    prompt: string | ReadonlyArray<PromptSection | StreamingSection>,
+function getModelParams(
+    prompt: string | ReadonlyArray<PromptSection | ModelParamSection>,
 ) {
     if (typeof prompt === "string") {
         return undefined;
     }
-    const internalIndex = prompt.findIndex((p) => p.role === "streaming");
+    const internalIndex = prompt.findIndex((p) => p.role === "model");
     if (internalIndex === -1) {
         return undefined;
     }
     // Make a copy so that we don't modify the original array;
     const newPrompt = [...prompt];
-    const internal = newPrompt.splice(internalIndex, 1) as [StreamingSection];
+    const internal = newPrompt.splice(internalIndex, 1) as [ModelParamSection];
     return {
-        parser: internal[0].content,
+        parser: internal[0].content.parser,
+        usageCallback: internal[0].content.usageCallback,
         actualPrompt: newPrompt as PromptSection[],
     };
 }
@@ -122,15 +137,18 @@ export function enableJsonTranslatorStreaming<T extends object>(
         throw new Error("Model does not support streaming");
     }
 
-    const originalComplete = model.complete;
+    const originalComplete = model.complete.bind(model);
     model.complete = async (prompt: string | PromptSection[]) => {
-        const streamingParser = getStreamingParser(prompt);
-        if (streamingParser === undefined) {
+        const modelParams = getModelParams(prompt);
+        if (modelParams === undefined) {
             return originalComplete(prompt);
         }
-        const { parser, actualPrompt } = streamingParser;
+        const { parser, usageCallback, actualPrompt } = modelParams;
+        if (parser === undefined) {
+            return originalComplete(actualPrompt, usageCallback);
+        }
         const chunks = [];
-        const result = await model.completeStream(actualPrompt);
+        const result = await model.completeStream(actualPrompt, usageCallback);
         if (!result.success) {
             return result;
         }
@@ -142,19 +160,20 @@ export function enableJsonTranslatorStreaming<T extends object>(
         return success(chunks.join(""));
     };
 
-    const originalTranslate = translator.translate;
+    const originalTranslate = translator.translate.bind(translator);
     const translatorWithStreaming =
         translator as TypeChatJsonTranslatorWithStreaming<T>;
     translatorWithStreaming.translate = async (
         request: string,
         promptPreamble?: string | PromptSection[],
-        cb?: IncrementalJsonValueCallBack,
         attachments?: CachedImageWithDetails[],
+        cb?: IncrementalJsonValueCallBack,
+        usageCallback?: CompleteUsageStatsCallback,
     ) => {
         await attachAttachments(attachments, promptPreamble);
         return originalTranslate(
             request,
-            initializeStreamingParser(promptPreamble, cb),
+            addModelParamSection(promptPreamble, cb, usageCallback),
         );
     };
 
@@ -246,25 +265,31 @@ export function createJsonTranslatorWithValidator<T extends object>(
         `typeagent:translate:${name}:jsonschema`,
     );
     const debugResult = registerDebug(`typeagent:translate:${name}:result`);
-    const complete = model.complete.bind(model);
-    model.complete = async (prompt: string | PromptSection[]) => {
+    const originalComplete = model.complete.bind(model);
+    model.complete = async (
+        prompt: string | PromptSection[],
+        usageCallback?: CompleteUsageStatsCallback,
+    ) => {
         debugPrompt(prompt);
         const jsonSchema = validator.getJsonSchema?.();
         if (jsonSchema !== undefined) {
             debugJsonSchema(jsonSchema);
         }
-        return complete(prompt, jsonSchema);
+        return originalComplete(prompt, usageCallback, jsonSchema);
     };
 
     if (ai.supportsStreaming(model)) {
-        const completeStream = model.completeStream.bind(model);
-        model.completeStream = async (prompt: string | PromptSection[]) => {
+        const originalCompleteStream = model.completeStream.bind(model);
+        model.completeStream = async (
+            prompt: string | PromptSection[],
+            usageCallback?: CompleteUsageStatsCallback,
+        ) => {
             debugPrompt(prompt);
             const jsonSchema = validator.getJsonSchema?.();
             if (jsonSchema !== undefined) {
                 debugJsonSchema(jsonSchema);
             }
-            return completeStream(prompt, jsonSchema);
+            return originalCompleteStream(prompt, usageCallback, jsonSchema);
         };
     }
 
@@ -288,12 +313,12 @@ export function createJsonTranslatorWithValidator<T extends object>(
             return;
         }
 
-        const streamingParser = getStreamingParser(prompt);
-        if (streamingParser === undefined) {
+        const parser = getModelParams(prompt)?.parser;
+        if (parser === undefined) {
             return;
         }
-        const callback = streamingParser.parser.callback;
-        streamingParser.parser.callback = Array.isArray(jsonSchema)
+        const callback = parser.callback;
+        parser.callback = Array.isArray(jsonSchema)
             ? (prop, value, delta) => {
                   let actualPropName = "actionName";
                   if (prop !== "name") {

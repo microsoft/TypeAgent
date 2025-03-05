@@ -13,7 +13,10 @@ import {
     toFullActions,
 } from "agent-cache";
 
-import { CommandHandlerContext } from "../../commandHandlerContext.js";
+import {
+    CommandHandlerContext,
+    getCommandResult,
+} from "../../commandHandlerContext.js";
 
 import { CachedImageWithDetails } from "common-utils";
 import { Logger } from "telemetry";
@@ -373,7 +376,16 @@ export class RequestCommandHandler implements CommandHandler {
                 return;
             }
 
-            const { requestAction, fromUser, fromCache } = translationResult;
+            const { requestAction, fromUser, fromCache, tokenUsage } =
+                translationResult;
+
+            if (tokenUsage) {
+                const commandResult = getCommandResult(systemContext);
+                if (commandResult !== undefined) {
+                    commandResult.tokenUsage = tokenUsage;
+                }
+            }
+
             if (
                 requestAction !== null &&
                 requestAction !== undefined &&

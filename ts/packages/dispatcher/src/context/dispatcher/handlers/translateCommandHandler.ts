@@ -27,8 +27,14 @@ export class TranslateCommandHandler implements CommandHandler {
             context,
         );
         if (translationResult) {
+            const elapsedStr = getColorElapsedString(
+                translationResult.elapsedMs,
+            );
+            const usageStr = translationResult.tokenUsage
+                ? `(Tokens: ${translationResult.tokenUsage.prompt_tokens} + ${translationResult.tokenUsage.completion_tokens} = ${translationResult.tokenUsage.total_tokens})`
+                : "";
             displayResult(
-                `${translationResult.requestAction} ${getColorElapsedString(translationResult.elapsedMs)}\n\nJSON:\n${JSON.stringify(
+                `${translationResult.requestAction} ${elapsedStr}${usageStr}\n\nJSON:\n${JSON.stringify(
                     translationResult.requestAction.actions,
                     undefined,
                     2,

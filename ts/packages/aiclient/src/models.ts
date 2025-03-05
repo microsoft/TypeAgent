@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { PromptSection, Result, TypeChatLanguageModel } from "typechat";
+import { CompletionUsageStats } from "./openai";
 
 /**
  * Translation settings for Chat models
@@ -43,6 +44,8 @@ export type FunctionCallingResult = {
     arguments: any;
 };
 
+export type CompleteUsageStatsCallback = (usage: CompletionUsageStats) => void;
+
 /**
  * A TypeChat language model with greater control on settings
  */
@@ -56,6 +59,7 @@ export interface ChatModel extends TypeChatLanguageModel {
      */
     complete(
         prompt: string | PromptSection[],
+        usageCallback?: CompleteUsageStatsCallback,
         jsonSchema?: CompletionJsonSchema,
     ): Promise<Result<string>>;
 }
@@ -68,6 +72,7 @@ export interface ChatModelWithStreaming extends ChatModel {
      */
     completeStream(
         prompt: string | PromptSection[],
+        usageCallback?: CompleteUsageStatsCallback,
         jsonSchema?: CompletionJsonSchema,
     ): Promise<Result<AsyncIterableIterator<string>>>;
 }
