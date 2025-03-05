@@ -25,7 +25,7 @@ import {
 import { PropertyNames } from "./propertyIndex.js";
 import { conversation as kpLib } from "knowledge-processor";
 import { getTimeRangeForConversation } from "./conversation.js";
-import { IConversation } from "./interfaces.js";
+import { IConversation, KnowledgeType } from "./interfaces.js";
 
 export type SearchTranslator = TypeChatJsonTranslator<SearchFilter>;
 
@@ -152,6 +152,7 @@ export async function searchConversationWithNaturalLanguage(
     conversation: IConversation,
     searchTranslator: SearchTranslator,
     query: string,
+    knowledgeType?: KnowledgeType,
     options?: SearchOptions,
 ): Promise<Result<[ConversationSearchResult | undefined, SearchFilter]>> {
     const result = await searchTranslator.translate(
@@ -164,6 +165,7 @@ export async function searchConversationWithNaturalLanguage(
     const filter = result.data;
     const terms = createSearchGroupFromSearchFilter(filter);
     const when = createWhenFromSearchFilter(filter);
+    when.knowledgeType = knowledgeType;
     const searchResults = await searchConversation(
         conversation,
         terms,

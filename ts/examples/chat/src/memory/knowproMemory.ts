@@ -526,6 +526,7 @@ export async function createKnowproCommands(
             context.conversation!,
             context.searchTranslator,
             query,
+            namedArgs.ktype,
             {
                 exactMatch: namedArgs.exact,
             },
