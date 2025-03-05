@@ -9,6 +9,7 @@ import {
     ImageModel,
     ImageGeneration,
     CompletionJsonSchema,
+    CompleteUsageStatsCallback,
 } from "./models";
 import { callApi, callJsonApi, FetchThrottler } from "./restClient";
 import { getEnvSetting } from "./common";
@@ -468,6 +469,7 @@ function createAzureOpenAIChatModel(
     }
     async function complete(
         prompt: string | PromptSection[],
+        usageCallback?: CompleteUsageStatsCallback,
         jsonSchema?: CompletionJsonSchema,
     ): Promise<Result<string>> {
         verifyPromptLength(settings, prompt);
@@ -516,6 +518,7 @@ function createAzureOpenAIChatModel(
             }
             // track token usage
             TokenCounter.getInstance().add(data.usage, tags);
+            usageCallback?.(data.usage);
         } catch {}
 
         if (Array.isArray(jsonSchema)) {
@@ -542,6 +545,7 @@ function createAzureOpenAIChatModel(
 
     async function completeStream(
         prompt: string | PromptSection[],
+        usageCallback?: CompleteUsageStatsCallback,
         jsonSchema?: CompletionJsonSchema,
     ): Promise<Result<AsyncIterableIterator<string>>> {
         verifyPromptLength(settings, prompt);
@@ -657,6 +661,7 @@ function createAzureOpenAIChatModel(
                                     data.usage,
                                     tags,
                                 );
+                                usageCallback?.(data.usage);
                             } catch {}
                         }
                     }

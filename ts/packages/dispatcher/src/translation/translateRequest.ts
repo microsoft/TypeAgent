@@ -50,7 +50,7 @@ import { confirmTranslation } from "./confirmTranslation.js";
 import { ActionConfig } from "./actionConfig.js";
 import { AppAgentManager } from "../context/appAgentManager.js";
 import { DispatcherConfig } from "../context/session.js";
-
+import { openai as ai, CompleteUsageStatsCallback } from "aiclient";
 const debugTranslate = registerDebug("typeagent:translate");
 const debugSemanticSearch = registerDebug("typeagent:translate:semantic");
 
@@ -251,9 +251,10 @@ type TranslateStepResult<T = TranslatedAction> = {
 async function translateRequestWithSchema(
     schemaName: string,
     request: string,
+    history: HistoryContext | undefined,
+    attachments: CachedImageWithDetails[] | undefined,
     context: ActionContext<CommandHandlerContext>,
-    history?: HistoryContext,
-    attachments?: CachedImageWithDetails[],
+    usageCallback: (usage: ai.CompletionUsageStats) => void,
     streamingActionIndex?: number,
     disableOptimize: boolean = false,
 ): Promise<TranslateStepResult | undefined> {
@@ -281,6 +282,7 @@ async function translateRequestWithSchema(
                 history,
                 attachments,
                 context,
+                usageCallback,
                 streamingActionIndex,
             );
             if (translatedAction === undefined) {
@@ -302,6 +304,7 @@ async function translateRequestWithSchema(
         history,
         attachments,
         context,
+        usageCallback,
         streamingActionIndex,
     );
 
@@ -319,6 +322,7 @@ async function translateWithTranslator(
     history: HistoryContext | undefined,
     attachments: CachedImageWithDetails[] | undefined,
     context: ActionContext<CommandHandlerContext>,
+    usageCallback: CompleteUsageStatsCallback,
     streamingActionIndex?: number,
 ) {
     const systemContext = context.sessionContext.agentContext;
@@ -388,6 +392,7 @@ async function translateWithTranslator(
             history,
             attachments,
             onProperty,
+            usageCallback,
         );
 
         if (!response.success) {
@@ -480,9 +485,10 @@ async function finalizeAction(
     action: TranslatedAction,
     translator: TypeAgentTranslator,
     schemaName: string,
+    history: HistoryContext | undefined,
+    attachments: CachedImageWithDetails[] | undefined,
     context: ActionContext<CommandHandlerContext>,
-    history?: HistoryContext,
-    attachments?: CachedImageWithDetails[],
+    usageCallback: (usage: ai.CompletionUsageStats) => void,
     resultEntityId?: string,
     streamingActionIndex?: number,
 ): Promise<ExecutableAction | ExecutableAction[] | undefined> {
@@ -513,9 +519,10 @@ async function finalizeAction(
         const result = await translateRequestWithSchema(
             nextSchemaName,
             request,
-            context,
             history,
             attachments,
+            context,
+            usageCallback,
             streamingActionIndex,
             nextSchemaName === currentSchemaName, // If we are retrying the same schema, then disable optimize
         );
@@ -537,8 +544,10 @@ async function finalizeAction(
             currentAction,
             currentTranslator,
             currentSchemaName,
-            context,
             history,
+            attachments,
+            context,
+            usageCallback,
         );
     }
 
@@ -574,9 +583,10 @@ async function finalizeMultipleActions(
     action: MultipleAction,
     translator: TypeAgentTranslator,
     translatorName: string,
+    history: HistoryContext | undefined,
+    attachments: CachedImageWithDetails[] | undefined,
     context: ActionContext<CommandHandlerContext>,
-    history?: HistoryContext,
-    attachments?: CachedImageWithDetails[],
+    usageCallback: CompleteUsageStatsCallback,
 ): Promise<ExecutableAction[] | undefined> {
     if (attachments !== undefined && attachments.length !== 0) {
         // TODO: What to do with attachments with multiple actions?
@@ -594,9 +604,10 @@ async function finalizeMultipleActions(
             request.action,
             translator,
             translatorName,
-            context,
             history,
             undefined, // TODO: What to do with attachments with multiple actions?
+            context,
+            usageCallback,
             request.resultEntityId,
         );
         if (finalizedActions === undefined) {
@@ -638,6 +649,7 @@ export type TranslationResult = {
     elapsedMs: number;
     fromUser: boolean;
     fromCache: boolean;
+    tokenUsage?: ai.CompletionUsageStats;
 };
 
 // null means cancelled because of replacement parse error.
@@ -664,12 +676,25 @@ export async function translateRequest(
     // Start with the last translator used
     const startTime = performance.now();
     const schemaName = await pickInitialSchema(request, systemContext);
+    const tokenUsage: ai.CompletionUsageStats = {
+        completion_tokens: 0,
+        prompt_tokens: 0,
+        total_tokens: 0,
+    };
+
+    const usageCallback = (usage: ai.CompletionUsageStats) => {
+        tokenUsage.completion_tokens += usage.completion_tokens;
+        tokenUsage.prompt_tokens += usage.prompt_tokens;
+        tokenUsage.total_tokens += usage.total_tokens;
+    };
+
     const result = await translateRequestWithSchema(
         schemaName,
         request,
-        context,
         history,
         attachments,
+        context,
+        usageCallback,
         streamingActionIndex,
     );
     if (result === undefined) {
@@ -683,17 +708,19 @@ export async function translateRequest(
               translatedAction,
               translator,
               schemaName,
-              context,
               history,
               attachments,
+              context,
+              usageCallback,
           )
         : await finalizeAction(
               translatedAction,
               translator,
               schemaName,
-              context,
               history,
               attachments,
+              context,
+              usageCallback,
           );
 
     if (executableAction === undefined) {
@@ -731,6 +758,7 @@ export async function translateRequest(
             elapsedMs,
             fromCache: false,
             fromUser: replacedAction !== undefined,
+            tokenUsage,
         };
     }
 
