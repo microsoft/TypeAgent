@@ -169,7 +169,7 @@ class ITimestampToTextRangeIndex(Protocol):
 
     def add_timestamps(
         self, message_imestamps: Sequence[tuple[MessageIndex, str]]
-    ) -> None:
+    ) -> bool:
         raise NotImplementedError
 
     def lookup_range(self, date_range: DateRange) -> Sequence[TimestampedTextRange]:
@@ -194,7 +194,7 @@ class ITermToRelatedTermsFuzzy(Protocol):
         text: str,
         max_matches: int | None = None,
         threshold_score: float | None = None,
-    ) -> Sequence[Term] | None:
+    ) -> Sequence[Term]:
         raise NotImplementedError
 
     async def lookup_terms(
@@ -202,7 +202,7 @@ class ITermToRelatedTermsFuzzy(Protocol):
         text_array: Sequence[str],
         max_matches: int | None = None,
         threshold_score: float | None = None,
-    ) -> Sequence[Sequence[Term]] | None:
+    ) -> Sequence[Sequence[Term]]:
         raise NotImplementedError
 
 
@@ -247,7 +247,7 @@ class IConversationThreads(Protocol):
         thread_description: str,
         max_matches: int | None = None,
         threshold_score: float | None = None,
-    ) -> ScoredThreadIndex | None:
+    ) -> Sequence[ScoredThreadIndex] | None:
         raise NotImplementedError
 
 
