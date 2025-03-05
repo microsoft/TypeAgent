@@ -115,16 +115,6 @@ class SemanticRef(Protocol):
 
 
 @runtime_checkable
-class IConversation[TMeta: IKnowledgeSource = Any](Protocol):
-    name_tag: str
-    tags: Sequence[str]
-    messages: Sequence[IMessage[TMeta]]
-    semantic_refs: Sequence[SemanticRef] | None
-    semantic_ref_index: ITermToSemanticRefIndex | None
-    secondaryIndexes: "IConversationSecondaryIndexes | None"
-
-
-@runtime_checkable
 class DateRange(Protocol):
     start: Date
     # Inclusive.
@@ -143,14 +133,6 @@ class ScoredKnowledge(Protocol):
     knowledge_type: KnowledgeType
     knowledge: Knowledge
     score: float
-
-
-@runtime_checkable
-class IConversationSecondaryIndexes(Protocol):
-    property_to_semantic_ref_index: "IPropertyToSemanticRefIndex | None"
-    timestampIndex: "ITimestampToTextRangeIndex | None"
-    termToRelatedTermsIndex: "ITermToRelatedTermsIndex | None"
-    threads: "IConversationThreads | None"
 
 
 # Allows for faster retrieval of name, value properties
@@ -267,6 +249,24 @@ class IConversationThreads(Protocol):
         threshold_score: float | None = None,
     ) -> ScoredThreadIndex | None:
         raise NotImplementedError
+
+
+@runtime_checkable
+class IConversationSecondaryIndexes(Protocol):
+    property_to_semantic_ref_index: IPropertyToSemanticRefIndex | None
+    timestampIndex: ITimestampToTextRangeIndex | None
+    termToRelatedTermsIndex: ITermToRelatedTermsIndex | None
+    threads: IConversationThreads | None
+
+
+@runtime_checkable
+class IConversation[TMeta: IKnowledgeSource = Any](Protocol):
+    name_tag: str
+    tags: Sequence[str]
+    messages: Sequence[IMessage[TMeta]]
+    semantic_refs: Sequence[SemanticRef] | None
+    semantic_ref_index: ITermToSemanticRefIndex | None
+    secondaryIndexes: IConversationSecondaryIndexes | None
 
 
 # ------------------------
