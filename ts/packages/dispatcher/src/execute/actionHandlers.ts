@@ -114,7 +114,7 @@ function getActionContext(
         },
         appendDiagnosticData(data): void {
             context.clientIO.appendDiagnosticData(requestId, data);
-        }
+        },
     };
     const actionContext: ActionContext<unknown> = {
         streamingContext: undefined,

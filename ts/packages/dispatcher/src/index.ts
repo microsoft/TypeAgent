@@ -13,7 +13,7 @@ export type {
     ClientIO,
     IAgentMessage,
     NotifyExplainedData,
-    RequestId
+    RequestId,
 } from "./context/interactiveIO.js";
 export type { Timing, PhaseTiming, RequestMetrics } from "./utils/metrics.js";
 export type {

@@ -7,7 +7,11 @@ import {
     DisplayContent,
     MessageContent,
 } from "@typeagent/agent-sdk";
-import { ClientIO, IAgentMessage, RequestId } from "../context/interactiveIO.js";
+import {
+    ClientIO,
+    IAgentMessage,
+    RequestId,
+} from "../context/interactiveIO.js";
 import { TemplateEditConfig } from "../translation/actionTemplate.js";
 import chalk from "chalk";
 import stringWidth from "string-width";
@@ -127,7 +131,7 @@ function createConsoleClientIO(rl?: readline.promises.Interface): ClientIO {
             displayContent(message.message, mode);
         },
         appendDiagnosticData(_requestId: RequestId, _data: any) {
-            // Ignored 
+            // Ignored
         },
         setDynamicDisplay(
             source: string,

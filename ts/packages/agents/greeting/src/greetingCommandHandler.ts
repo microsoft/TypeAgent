@@ -83,9 +83,9 @@ export class GreetingCommandHandler implements CommandHandlerNoParams {
         // Initial output to let the user know the agent is thinking...
         displayStatus("...", context);
 
-        const response = await this.getTypeChatResponse(context);        
+        const response = await this.getTypeChatResponse(context);
 
-        if (response.success) {            
+        if (response.success) {
             context.actionIO.appendDiagnosticData(response.data);
 
             let action: GreetingAction = response.data as GreetingAction;

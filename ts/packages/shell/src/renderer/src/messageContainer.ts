@@ -107,7 +107,7 @@ export class MessageContainer {
         this.updateSource();
         if (action !== undefined) {
             this.updateActionData(action);
-        }        
+        }
     }
 
     private get sourceLabel() {
@@ -117,7 +117,9 @@ export class MessageContainer {
         if (this.action !== undefined) {
             if (Array.isArray(this.action)) {
                 return `${this.source} ${this.action.join(" ")}`;
-            } else if ((this.action as TypeAgentAction).translatorName !== undefined) {
+            } else if (
+                (this.action as TypeAgentAction).translatorName !== undefined
+            ) {
                 return `${this.action.translatorName}.${this.action.actionName}`;
             }
         }
@@ -151,9 +153,7 @@ export class MessageContainer {
         if (this.action !== undefined && !Array.isArray(this.action)) {
             label.setAttribute(
                 "action-data",
-                "<pre>" +
-                    JSON.stringify(this.action, undefined, 2) +
-                    "</pre>",
+                "<pre>" + JSON.stringify(this.action, undefined, 2) + "</pre>",
             );
 
             // mark the span as clickable

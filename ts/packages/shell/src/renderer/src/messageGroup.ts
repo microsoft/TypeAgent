@@ -92,7 +92,7 @@ export class MessageGroup {
         });
 
         agentMessage.updateActionData(data);
-    }    
+    }
 
     private requestCompleted(metrics: RequestMetrics | undefined) {
         this.updateMetrics(metrics);

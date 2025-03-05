@@ -1,10 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import {
-    DisplayAppendMode,
-    TypeAgentAction,
-} from "@typeagent/agent-sdk";
+import { DisplayAppendMode, TypeAgentAction } from "@typeagent/agent-sdk";
 import { IAgentMessage, RequestId } from "../context/interactiveIO.js";
 import { TemplateEditConfig } from "../translation/actionTemplate.js";
 
@@ -36,7 +33,7 @@ export type ClientIOCallFunctions = {
         message: IAgentMessage;
         mode: DisplayAppendMode;
     }): void;
-    appendDiagnosticData(params: { requestId: RequestId, data: any }): void;
+    appendDiagnosticData(params: { requestId: RequestId; data: any }): void;
     setDynamicDisplay(params: {
         source: string;
         requestId: RequestId;

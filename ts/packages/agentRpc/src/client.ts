@@ -119,9 +119,7 @@ export async function createAgentRpcClient(
     }
     async function withActionContextAsync<T>(
         actionContext: ActionContext<ShimContext>,
-        fn: (contextParams: {
-            actionContextId: number;
-        }) => Promise<T>,
+        fn: (contextParams: { actionContextId: number }) => Promise<T>,
     ) {
         try {
             return await fn({
@@ -275,9 +273,7 @@ export async function createAgentRpcClient(
         }) => {
             actionContextMap
                 .get(param.actionContextId)
-                .actionIO.appendDiagnosticData(
-                    param.data,
-                );
+                .actionIO.appendDiagnosticData(param.data);
         },
         appendDisplay: (param: {
             actionContextId: number;
