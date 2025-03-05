@@ -130,6 +130,9 @@ function createConsoleClientIO(rl?: readline.promises.Interface): ClientIO {
         appendDisplay(message: IAgentMessage, mode: DisplayAppendMode): void {
             displayContent(message.message, mode);
         },
+        appendDiagnosticData(_requestId: RequestId, _data: any) {
+            // Ignored
+        },
         setDynamicDisplay(
             source: string,
             requestId: RequestId,

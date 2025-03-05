@@ -51,6 +51,7 @@ export interface ClientIO {
     ): void;
     setDisplay(message: IAgentMessage): void;
     appendDisplay(message: IAgentMessage, mode: DisplayAppendMode): void;
+    appendDiagnosticData(requestId: RequestId, data: any): void;
     setDynamicDisplay(
         source: string,
         requestId: RequestId,
@@ -135,6 +136,7 @@ export const nullClientIO: ClientIO = {
     setDisplayInfo: () => {},
     setDisplay: () => {},
     appendDisplay: () => {},
+    appendDiagnosticData: () => {},
     setDynamicDisplay: () => {},
     askYesNo: async (
         message: string,

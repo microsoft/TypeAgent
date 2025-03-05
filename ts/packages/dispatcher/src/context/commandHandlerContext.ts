@@ -25,7 +25,7 @@ import { TypeAgentTranslator } from "../translation/agentTranslators.js";
 import { ActionConfigProvider } from "../translation/actionConfigProvider.js";
 import { getCacheFactory } from "../utils/cacheFactory.js";
 import { createServiceHost } from "./system/handlers/serviceHost/serviceHostCommandHandler.js";
-import { ClientIO, RequestId, nullClientIO } from "./interactiveIO.js";
+import { ClientIO, nullClientIO, RequestId } from "./interactiveIO.js";
 import { ChatHistory, createChatHistory } from "./chatHistory.js";
 
 import {
