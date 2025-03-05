@@ -67,8 +67,8 @@ export async function createKnowproCommands(
     commands.kpPodcastSave = podcastSave;
     commands.kpPodcastLoad = podcastLoad;
     commands.kpSearchTerms = searchTerms;
+    commands.kpSearchV1 = searchV1;
     commands.kpSearch = search;
-    commands.kpSearchNew = searchNew;
     commands.kpEntities = entities;
     commands.kpPodcastBuildIndex = podcastBuildIndex;
 
@@ -463,7 +463,7 @@ export async function createKnowproCommands(
         };
     }
     commands.kpSearch.metadata = searchDef();
-    async function search(args: string[]): Promise<void> {
+    async function searchV1(args: string[]): Promise<void> {
         if (!ensureConversationLoaded()) {
             return;
         }
@@ -511,8 +511,8 @@ export async function createKnowproCommands(
         return def;
     }
 
-    commands.kpSearchNew.metadata = searchDefNew();
-    async function searchNew(args: string[]): Promise<void> {
+    commands.kpSearch.metadata = searchDefNew();
+    async function search(args: string[]): Promise<void> {
         if (!ensureConversationLoaded()) {
             return;
         }
