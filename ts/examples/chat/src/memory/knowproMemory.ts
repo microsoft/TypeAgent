@@ -539,7 +539,7 @@ export async function createKnowproCommands(
         if (filter) {
             context.printer.writeJson(filter, true);
         }
-        if (searchResults) {
+        if (searchResults && searchResults.messageMatches.length > 0) {
             if (namedArgs.showKnowledge) {
                 context.printer.writeKnowledgeSearchResults(
                     context.conversation!,

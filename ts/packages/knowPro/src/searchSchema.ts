@@ -15,8 +15,9 @@ export type FacetTerm = {
 export type EntityTerm = {
     // the name of the entity or thing such as "Bach", "Great Gatsby", "frog" or "piano"
     name: string;
-    // the types of the entity such as "speaker", "person", "artist", "animal", "object", "instrument", "school", "room", "museum", "food" etc.
+    // the specific types of the entity such as "speaker", "person", "artist", "animal", "instrument", "school", "room", "museum", "food" etc.
     // An entity can have multiple types; entity types should be single words
+    // Avoid generic types like "object" or "thing"
     type: string[];
     // A specific, inherent, defining, or non-immediate facet of the entity such as "blue", "old", "famous", "sister", "aunt_of", "weight: 4 kg"
     // trivial actions or state changes are not facets
