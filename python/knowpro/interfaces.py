@@ -9,8 +9,9 @@
 # - I rearranged the order in some cases to ensure def-before-ref.
 # - I translated readonly to @property.
 
-from typing import Any, Callable, Literal, Protocol, runtime_checkable, Sequence
+from collections.abc import Sequence
 from datetime import datetime as Date
+from typing import Any, Callable, Literal, Protocol, runtime_checkable
 
 from . import kplib
 
@@ -25,7 +26,10 @@ class IKnowledgeSource(Protocol):
 @runtime_checkable
 class DeletionInfo(Protocol):
     timestamp: str
-    reason: str | None
+    reason: str | None = None
+
+
+type MessageIndex = int
 
 
 @runtime_checkable
@@ -50,6 +54,12 @@ class ScoredSemanticRef(Protocol):
 
 
 @runtime_checkable
+class ScoredMessageIndex(Protocol):
+    message_index: MessageIndex
+    score: float
+
+
+@runtime_checkable
 class ITermToSemanticRefIndex(Protocol):
     def getTerms(self) -> Sequence[str]:
         raise NotImplementedError
@@ -69,9 +79,6 @@ class ITermToSemanticRefIndex(Protocol):
 
 
 type KnowledgeType = Literal["entity", "action", "topic", "tag"]
-
-
-type MessageIndex = int
 
 
 @runtime_checkable
@@ -287,12 +294,12 @@ class ITermToSemanticRefIndexData(Protocol):
 
 
 @runtime_checkable
-class IConversationData[TMessage](Protocol):
+class IConversationData[TMessage = Any](Protocol):
     name_tag: str
     messages: Sequence[TMessage]
     tags: Sequence[str]
     semantic_refs: Sequence[SemanticRef]
-    semantic_index_data: ITermToSemanticRefIndexData | None
+    semantic_index_data: ITermToSemanticRefIndexData | None = None
 
 
 # ------------------------
@@ -305,8 +312,8 @@ class IndexingEventHandlers(Protocol):
     on_knowledge_xtracted: (
         Callable[
             [
-                TextLocation,
-                kplib.KnowledgeResponse,
+                TextLocation,  # chunk
+                kplib.KnowledgeResponse,  # knowledge_result
             ],
             bool,
         ]
@@ -315,9 +322,9 @@ class IndexingEventHandlers(Protocol):
     on_embeddings_created: (
         Callable[
             [
-                Sequence[str],
-                Sequence[str],
-                int,
+                Sequence[str],  # source_texts
+                Sequence[str],  # batch
+                int,  # batch_start_at
             ],
             bool,
         ]
