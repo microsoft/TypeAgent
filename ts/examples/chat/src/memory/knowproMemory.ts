@@ -365,7 +365,8 @@ export async function createKnowproCommands(
     ): CommandMetadata {
         const meta: CommandMetadata = {
             description:
-                description ?? "Search current knowPro conversation by terms",
+                description ??
+                "Search current knowPro conversation by manually providing terms as arguments",
             options: {
                 maxToDisplay: argNum("Maximum matches to display", 25),
                 displayAsc: argBool("Display results in ascending order", true),
@@ -449,7 +450,8 @@ export async function createKnowproCommands(
 
     function searchDef(): CommandMetadata {
         return {
-            description: "Search using natural language",
+            description:
+                "Search using natural language and knowlege-processor search filters",
             args: {
                 query: arg("Search query"),
             },
@@ -496,23 +498,57 @@ export async function createKnowproCommands(
                     searchResults,
                     namedArgs.maxToDisplay,
                 );
+            } else {
+                context.printer.writeLine("No matches");
             }
         }
     }
 
-    commands.kpSearchNew.metadata = searchDef();
+    function searchDefNew(): CommandMetadata {
+        const def = searchDef();
+        def.description =
+            "Search using natural language and new knowpro filter";
+        return def;
+    }
+
+    commands.kpSearchNew.metadata = searchDefNew();
     async function searchNew(args: string[]): Promise<void> {
         if (!ensureConversationLoaded()) {
             return;
         }
-        const namedArgs = parseNamedArguments(args, searchDef());
+        const namedArgs = parseNamedArguments(args, searchDefNew());
         const query = namedArgs.query;
-        const filter = await context.searchTranslator.translate(
+        const result = await context.searchTranslator.translate(
             query,
             kp.getTimeRangeSectionForConversation(context.conversation!),
         );
+        if (!result.success) {
+            context.printer.writeError(result.message);
+            return;
+        }
+
+        const filter = result.data;
         if (filter) {
-            context.printer.writeJson(filter);
+            context.printer.writeJson(filter, true);
+        }
+        const terms = kp.createSearchGroupFromSearchFilter(filter);
+        const when = kp.createWhenFromSearchFilter(filter);
+        const searchResults = await kp.searchConversation(
+            context.conversation!,
+            terms,
+            when,
+            {
+                exactMatch: namedArgs.exact,
+            },
+        );
+        if (searchResults) {
+            context.printer.writeSearchResults(
+                context.conversation!,
+                searchResults,
+                namedArgs.maxToDisplay,
+            );
+        } else {
+            context.printer.writeLine("No matches");
         }
     }
 
