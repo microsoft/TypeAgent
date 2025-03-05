@@ -12,7 +12,7 @@ from PIL import Image # type: ignore
 
 import datetime
 import csv
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional
 from pathlib import Path
 import re
@@ -32,7 +32,7 @@ class Blob:
     img_name: Optional[str] = None                     # Name of the image blob, if this is an image blob
     img_path: Optional[str] = None                 # Path to the saved image file, if this is an image blob
     para_id: Optional[int] = None                  # Paragraph ID if needed
-    image_chunk_ref: Optional[str] = None          # Pointer to the chunk that has the associated image (if this is a caption)
+    image_chunk_ref: Optional[List[str]] = None          # Pointer to the chunk that has the associated image (if this is a caption)
 
     def to_dict(self) -> Dict[str, Any]:
         result = {
@@ -57,18 +57,21 @@ class Chunk:
     id: str
     pageid: str
     blobs: List[Blob]
-    parentId: str
-    children: List[str]
+    parentId: Optional[str] = None
+    children: Optional[List[str]] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
-        return {
+        result =  {
             "id": self.id,
             "pageid": self.pageid,
             "blobs": [blob.to_dict() for blob in self.blobs],
-            "parentId": self.parentId,
-            "children": self.children
         }
 
+        if self.parentId is not None:
+            result["parentId"] = self.parentId
+        if self.children:
+            result["children"] = self.children
+        return result
 
 @dataclass
 class ChunkedFile:
@@ -216,15 +219,16 @@ class PDFChunker:
     
     def print_tables(self, tables: list[tuple[list[float], list[list[str]]]]) -> None:
         # Debug: Print detected tables with bounding boxes and content
-        print(f"\n--- DEBUG: Found {len(tables)} tables on the page ---")
-        for idx, (bbox, table_data) in enumerate(tables):
-            x0, y0, x1, y1 = bbox
-            print(f"  🟦 Table {idx}: BBox ({x0}, {y0}, {x1}, {y1})")
-            
-            # Print table content
-            print("  Table Content:")
-            for row in table_data:
-                print(f"    {' | '.join(row)}")  # Format table rows nicely
+        if self.debug:
+            print(f"\n--- DEBUG: Found {len(tables)} tables on the page ---")
+            for idx, (bbox, table_data) in enumerate(tables):
+                x0, y0, x1, y1 = bbox
+                print(f"  🟦 Table {idx}: BBox ({x0}, {y0}, {x1}, {y1})")
+                
+                # Print table content
+                print("  Table Content:")
+                for row in table_data:
+                    print(f"    {' | '.join(row)}")  # Format table rows nicely
 
     def _find_nearest_image_bbox(self, line_bbox: List[float], image_bboxes: List[List[float]]) -> Optional[List[float]]:
         """
@@ -301,335 +305,6 @@ class PDFChunker:
             return (page_num, close_chunks)
         return None
 
-    def _find_nearest_image_chunkV1(
-        self,
-        page_num: int,
-        line_bbox: List[float],
-        image_title_buffer: float = 30.0,
-        image_label_buffer: float = 50.0
-    ) -> Optional[tuple[int, List[Chunk]]]:
-        """
-        Determines if the line_bbox qualifies as an 'image title' or 'image caption'
-        for one or more images on the given page. 
-        Returns (page_num, [list_of_chunks]) if it is; otherwise None.
-
-        The chunk is considered 'title' if it lies within or above the image 
-        by image_title_buffer. 
-        The chunk is considered 'caption' if it lies below the image 
-        within image_label_buffer.
-        """
-
-        x0_line, y0_line, x1_line, y1_line = line_bbox
-        close_chunks: List[Chunk] = []
-
-        # Retrieve the images for this page (already in chunk form)
-        page_images = self.doc_image_chunksmap.get(page_num, {})
-        for _, img_chunk in page_images.items():
-            if not img_chunk.blobs:
-                continue
-
-            img_blob = img_chunk.blobs[0]
-            if img_blob.blob_type != "image":
-                continue
-
-            x0_img, y0_img, x1_img, y1_img = img_blob.bbox
-
-            # Title logic: Slightly above or inside
-            is_image_title = (
-                (y0_line >= y0_img - image_title_buffer) and 
-                (y1_line <= y1_img) and 
-                (x0_line >= x0_img - 250) and 
-                (x1_line <= x1_img + 250)
-            )
-
-            # Caption logic: Below image within buffer
-            is_image_caption = (
-                (y0_line >= y1_img) and
-                (y1_line <= y1_img + image_label_buffer) and
-                (x0_line >= x0_img - 250) and
-                (x1_line <= x1_img + 250)
-            )
-
-            if is_image_title or is_image_caption:
-                close_chunks.append(img_chunk)
-
-        if close_chunks:
-            return (page_num, close_chunks)
-        return None
-    
-    def single_pass_merge_lines(
-        self,
-        line_entries: list[dict],
-        Y_THRESHOLD: float,
-        X_GAP_THRESHOLD: float,
-        PARA_GAP_THRESHOLD: float
-    ) -> list[tuple[str, str, list[Chunk]]]:
-    
-        merged_lines: list[tuple[str, str, list[Chunk]]] = []
-        i = 0
-        n = len(line_entries)
-
-        while i < n:
-            current = line_entries[i]
-            current_text = current["text"]
-            current_label = current["label"]
-            current_chunks = current["related_chunks"]
-            x0_c, y0_c, x1_c, y1_c = current["x0"], current["y0"], current["x1"], current["y1"]
-
-            #
-            # 1) Label propagation: If current line is "image"/"table",
-            #    label subsequent lines as the same if they're close in Y.
-            #
-            if current_label in ["image", "table"]:
-                j = i + 1
-                while j < n:
-                    next_line = line_entries[j]
-                    next_y0, next_y1 = next_line["y0"], next_line["y1"]
-                    # Are we close enough to be considered part of the same caption?
-                    if next_y0 - y1_c < PARA_GAP_THRESHOLD:
-                        next_line["label"] = current_label
-                        next_line["related_chunks"] = current_chunks
-                        j += 1
-                    else:
-                        break
-
-            #
-            # 2) Attempt to merge with the next line if conditions meet
-            #
-            merged_this_round = False
-            if i < n - 1:
-                next_line = line_entries[i + 1]
-                x0_n, y0_n, x1_n, y1_n = next_line["x0"], next_line["y0"], next_line["x1"], next_line["y1"]
-                text_n = next_line["text"]
-                label_n = next_line["label"]
-                chunks_n = next_line["related_chunks"]
-
-                # Vertical midpoint distance
-                midY_c = (y0_c + y1_c) / 2.0
-                midY_n = (y0_n + y1_n) / 2.0
-                y_diff = abs(midY_c - midY_n)
-
-                # Horizontal gap
-                x_gap = x0_n - x1_c
-
-                # Merge condition
-                if (y_diff < Y_THRESHOLD) and (0 <= x_gap < X_GAP_THRESHOLD):
-                    # Merge text
-                    unified_text = current_text.rstrip() + " " + text_n.lstrip()
-
-                    # Determine final label & chunks
-                    if current_label == "image" or label_n == "image":
-                        final_label = "image"
-                        final_chunks = current_chunks or chunks_n
-                    elif current_label == "table" or label_n == "table":
-                        final_label = "table"
-                        final_chunks = current_chunks or chunks_n
-                    else:
-                        final_label = "text"
-                        final_chunks = []
-
-                    # Add merged tuple
-                    merged_lines.append((unified_text, final_label, final_chunks))
-                    merged_this_round = True
-
-                    # We'll skip the next line since it's merged
-                    i += 2
-                else:
-                    # Not merging => add current line as is
-                    merged_lines.append((current_text, current_label, current_chunks))
-                    i += 1
-            else:
-                # Last line => can't merge
-                merged_lines.append((current_text, current_label, current_chunks))
-                i += 1
-
-            #
-            # 3) Insert paragraph break if next line is too far below
-            #
-            if not merged_this_round and i < n:
-                # 'current' line was appended to merged_lines, so let's see if next line is a big gap
-                if i < n:  # There's a line below
-                    # The item we just appended is merged_lines[-1]
-                    appended_text, appended_label, appended_chunks = merged_lines[-1]
-                    appended_y1 = y1_c  # from 'current' line
-                    if i < n:
-                        # Next line
-                        next_one = line_entries[i]
-                        gap = next_one["y0"] - appended_y1
-                        if gap >= PARA_GAP_THRESHOLD:
-                            merged_lines.append(("<PARA_BREAK>", "text", []))
-
-        return merged_lines
-    
-    def single_pass_stack_merge(
-        self,
-        line_entries: list[dict],
-        Y_THRESHOLD: float = 2.0,
-        X_GAP_THRESHOLD: float = 15.0
-    ) -> list[dict]:
-        """
-        Performs a single-pass stack-based merge of lines that meet vertical/horizontal conditions,
-        preserving the top-to-bottom order and avoiding reorder issues.
-
-        Args:
-        line_entries: A list of dicts, each with:
-            {
-            "text": str,
-            "label": str,  # e.g. "text", "image", "table"
-            "x0": float, "y0": float, "x1": float, "y1": float,
-            "related_chunks": list[Chunk]
-            }
-        Y_THRESHOLD: Allowed vertical midpoint distance for merging.
-        X_GAP_THRESHOLD: Allowed horizontal gap from current x1 to next x0 for merging.
-
-        Returns:
-        A new list of dicts, each representing either an original line or a merged line.
-        The lines remain in the same top-to-bottom order.
-        """
-        merged: list[dict] = []
-
-        for current in line_entries:
-            # If there’s nothing in the stack yet, just push the current line
-            if not merged:
-                merged.append(current)
-                continue
-
-            # Try merging current line with the last line in 'merged'
-            last = merged[-1]
-
-            # 1) Check vertical alignment using midpoint
-            midY_last = (last["y0"] + last["y1"]) / 2.0
-            midY_current = (current["y0"] + current["y1"]) / 2.0
-            y_diff = abs(midY_last - midY_current)
-
-            # 2) Check horizontal gap from last.x1 → current.x0
-            x_gap = current["x0"] - last["x1"]
-
-            if (y_diff < Y_THRESHOLD) and (0 <= x_gap < X_GAP_THRESHOLD):
-                # Merge them
-                merged_text = last["text"].rstrip() + " " + current["text"].lstrip()
-
-                # Determine final label & combined chunks
-                if last["label"] == "image" or current["label"] == "image":
-                    final_label = "image"
-                    final_chunks = last["related_chunks"] or current["related_chunks"]
-                elif last["label"] == "table" or current["label"] == "table":
-                    final_label = "table"
-                    final_chunks = last["related_chunks"] or current["related_chunks"]
-                else:
-                    final_label = "text"
-                    final_chunks = []
-
-                # Update bounding box
-                new_x0 = last["x0"]
-                new_y0 = min(last["y0"], current["y0"])
-                new_x1 = current["x1"]
-                new_y1 = max(last["y1"], current["y1"])
-
-                # Create merged line
-                merged_line = {
-                    "text": merged_text,
-                    "label": final_label,
-                    "x0": new_x0,
-                    "y0": new_y0,
-                    "x1": new_x1,
-                    "y1": new_y1,
-                    "related_chunks": final_chunks
-                }
-
-                # Replace the last entry with the new merged entry
-                merged[-1] = merged_line
-            else:
-                # Not merging => push current line onto the stack
-                merged.append(current)
-
-        return merged
-
-    def get_lines_from_dictV2(self, page: fitz.Page) -> list[tuple[str, str, list[Chunk]]]:
-        # Thresholds for merging lines
-        Y_THRESHOLD = 2.0  
-        X_GAP_THRESHOLD = 15.0
-        PARA_GAP_THRESHOLD = 10.0  
-        PARA_MARKER = "<PARA_BREAK>"
-        IMAGE_LABEL_BUFFER = 50  # Extended buffer below images
-        IMAGE_TITLE_BUFFER = 30  # Allow small margin above image for titles
-
-        data = page.get_text("dict")  
-        line_entries = []
-
-        # Extract image bounding boxes using fitz (PyMuPDF)
-        image_bboxes = []
-        for img in page.get_images(full=True):
-            xref = img[0]
-            img_rects = page.get_image_rects(xref)
-            if img_rects:
-                image_bboxes.append(list(img_rects[0]))  # Store first rectangle found
-
-        if self.debug:
-            print(f"\n--- DEBUG: Found {len(image_bboxes)} images on the page ---")
-            for idx, (x0, y0, x1, y1) in enumerate(image_bboxes):
-                print(f"  Image {idx}: BBox ({x0}, {y0}, {x1}, {y1})")
-
-        page_num = page.number
-        for block in data["blocks"]:
-            if block["type"] == 0:  # Text block
-                for ln_idx, ln in enumerate(block["lines"]):
-                    line_text = "".join(span["text"] for span in ln["spans"]).strip()
-                    if not line_text:
-                        continue
-
-                    x0, y0, x1, y1 = ln["bbox"]
-                    # if self.debug:
-                    #     print(f"\n--- DEBUG: Checking line '{line_text}' ---")
-                    #     print(f"  Line BBox: ({x0}, {y0}, {x1}, {y1})")
-
-                    nearby_images = self._find_nearest_image_chunk(page_num, [x0, y0, x1, y1])
-                    # Assume it's "image" if we got any images back
-                    if nearby_images is not None:
-                        _, chunk_list = nearby_images
-                        label = "image"
-                        if self.debug:
-                            print("  🖼️ Marked as IMAGE label (title or caption logic)")
-                            print(f"  Related Image Chunks: {[chunk.id for chunk in chunk_list]}")
-                        related_chunks = chunk_list
-                    else:
-                        # we can do table detection or skip
-                        label = "text"
-                        related_chunks = []
-
-                    line_entries.append({
-                        "text": line_text,
-                        "label": label,
-                        "line_index": ln_idx,
-                        "x0": x0,
-                        "y0": y0,
-                        "x1": x1,
-                        "y1": y1,
-                        "related_chunks": related_chunks  # store the image/table chunk(s) if any
-                    })
-
-        # Sort the line_entries top-to-bottom, then left-to-right.
-        #line_entries.sort(key=lambda e: (e["y0"], e["x0"]))
-        line_entries.sort(key=lambda e: (round(e["y0"]), e["line_index"]))
-
-        print(f"\n--- DEBUG: Found {len(line_entries)} lines ---")
-        for entry in line_entries:
-            print(f"  Line: {entry['text']}, Label: {entry['label']}, BBox: ({entry['x0']}, {entry['y0']}, {entry['x1']}, {entry['y1']})")
-
-        # 3. Merge lines using the single-pass stack approach
-        merged_entries = self.single_pass_merge_lines(line_entries, Y_THRESHOLD=2.0, X_GAP_THRESHOLD=15.0, PARA_GAP_THRESHOLD=10.0)
-
-        # 4. Convert merged dicts -> final list of (text, label, related_chunks)
-        final_lines: list[tuple[str, str, list[Chunk]]] = []
-        for entry in merged_entries:
-            final_lines.append((entry["text"], entry["label"], entry["related_chunks"]))
-
-   
-        print(f"\n--- DEBUG: Merged {len(final_lines)} lines ---")
-
-        # Then transform merged_entries into final form, or do paragraph splits, etc.
-        return final_lines
-    
     def sort_line_entries_with_threshold(self, line_entries: list[dict], y_threshold: float = 1.0):
         """
         Sorts line_entries by y0, but if two lines are within 'y_threshold' on y0,
@@ -710,12 +385,11 @@ class PDFChunker:
                         "related_chunks": related_chunks  # store the image/table chunk(s) if any
                     })
 
-        # Sort the line_entries top-to-bottom, then left-to-right.
-        # line_entries.sort(key=lambda e: (e["y0"], e["line_index"]))
         self.sort_line_entries_with_threshold(line_entries, y_threshold=1.0)
-        print(f"\n--- DEBUG: Found {len(line_entries)} lines ---")
-        for entry in line_entries:
-            print(f"  Line: {entry['text']}, Label: {entry['label']}, BBox: ({entry['x0']}, {entry['y0']}, {entry['x1']}, {entry['y1']})")
+        if(self.debug):
+            print(f"\n--- DEBUG Line entries: Found {len(line_entries)} lines ---")
+            for entry in line_entries:
+                print(f"  Line: {entry['text']}, Label: {entry['label']}, BBox: ({entry['x0']}, {entry['y0']}, {entry['x1']}, {entry['y1']})")
     
         merged_lines: list[tuple[str, str, List[Chunk]]] = []
         i = 0
@@ -786,8 +460,24 @@ class PDFChunker:
             i += 1
 
         return merged_lines
+    
+    def split_paragraphsV0(self, lines: list[str]) -> list[list[str]]:
+            paragraphs = []
+            current_par = []
+            for line in lines:
+                if line.strip() == "<PARA_BREAK>":
+                    if current_par:
+                        paragraphs.append(current_par)
+                        current_par = []
+                    # optionally keep a marker here if needed (e.g., append an empty list) 
+                    # but here we simply use it to break paragraphs.
+                else:
+                    current_par.append(line)
+            if current_par:
+                paragraphs.append(current_par)
+            return paragraphs
 
-    def split_paragraphs(
+    def split_paragraphsV1(
         self, 
         lines: list[tuple[str, str, list[Chunk]]]
     ) -> list[tuple[list[str], str, list[Chunk]]]:
@@ -827,6 +517,180 @@ class PDFChunker:
 
         return paragraphs
 
+    def split_paragraphs(
+        self, 
+        lines: list[tuple[str, str, list[Chunk]]]
+    ) -> list[tuple[list[str], str, list[Chunk]]]:
+        """
+        1) Builds paragraphs from lines, splitting on <PARA_BREAK>.
+        2) Merges consecutive paragraphs that have labels != 'text'.
+        (e.g., if 3 or more image paragraphs appear in a row, they become one merged paragraph.)
+        """
+
+        # --------------------- STEP 1: Build Paragraphs ----------------------
+        paragraphs = []
+        current_par_texts: list[str] = []
+        current_par_label: str | None = None
+        current_par_chunks: list[Chunk] = []
+
+        for text, label, related_chunks in lines:
+            if text.strip() == "<PARA_BREAK>":
+                if current_par_texts:
+                    paragraphs.append(
+                        (current_par_texts, current_par_label or "text", current_par_chunks)
+                    )
+                    current_par_texts = []
+                    current_par_label = None
+                    current_par_chunks = []
+            else:
+                current_par_texts.append(text)
+
+                if current_par_label is None:
+                    current_par_label = label
+                elif current_par_label == "text" and label in {"image", "table"}:
+                    current_par_label = label
+
+                # Combine chunk lists (unique references)
+                for c in related_chunks:
+                    if c not in current_par_chunks:
+                        current_par_chunks.append(c)
+
+        # Last paragraph if leftover lines
+        if current_par_texts:
+            paragraphs.append(
+                (current_par_texts, current_par_label or "text", current_par_chunks)
+            )
+
+        # --------------------- STEP 2: Merge Consecutive Non-Text Paragraphs ----------------------
+        merged_paragraphs: list[tuple[list[str], str, list[Chunk]]] = []
+        i = 0
+        n = len(paragraphs)
+
+        while i < n:
+            par_texts, par_label, par_chunks = paragraphs[i]
+
+            if par_label == "text":
+                # Just append and move on
+                merged_paragraphs.append((par_texts, par_label, par_chunks))
+                i += 1
+            else:
+                # We have a non-text paragraph => gather consecutive paragraphs that are also non-text
+                merged_texts = list(par_texts)       # copy
+                merged_chunks = list(par_chunks)     # copy
+                j = i + 1
+
+                while j < n:
+                    nxt_texts, nxt_label, nxt_chunks = paragraphs[j]
+                    if nxt_label != "text":
+                        # Merge in texts
+                        merged_texts.extend(nxt_texts)
+                        # Merge in chunks (deduplicate)
+                        for c in nxt_chunks:
+                            if c not in merged_chunks:
+                                merged_chunks.append(c)
+                        j += 1
+                    else:
+                        break
+                
+                # Use the label from the first paragraph in this run (e.g. "image" or "table")
+                # If you want a priority system for multiple different non-text labels, you can implement it here.
+                final_label = par_label
+
+                merged_paragraphs.append((merged_texts, final_label, merged_chunks))
+
+                # Skip all paragraphs we merged
+                i = j
+        return merged_paragraphs
+
+    def merge_single_line_headingsV0(self, paragraphs: list[list[str]]) -> list[list[str]]:
+        merged_pars: list[list[str]] = []
+        i = 0
+        while i < len(paragraphs):
+            current_par = paragraphs[i]
+            if len(current_par) == 1:
+                line = current_par[0].strip()
+                # Check if the line is a potential header candidate.
+                if line and (len(line.split()) <= 10) and (line[-1] not in ".?!"):
+                    # Candidate header found.
+                    if i + 1 < len(paragraphs):
+                        next_par = paragraphs[i + 1]
+                        # Define "large" as either having multiple lines or a single line with >10 words.
+                        if (len(next_par) > 1) or (len(next_par) == 1 and len(next_par[0].split()) > 10):
+                            # Merge: Prepend header (wrapped in [ ]) with a colon to the next paragraph.
+                            next_par[0] = f"[{line}]: " + next_par[0]
+                            merged_pars.append(next_par)
+                            i += 2  # Skip the next paragraph since it has been merged.
+                            continue
+                        else:
+                            # Not large; keep header as its own paragraph (wrapped in [ ]).
+                            merged_pars.append([f"[{line}]"])
+                            i += 1
+                            continue
+                    else:
+                        # No following paragraph exists; keep header as its own.
+                        merged_pars.append([f"[{line}]"])
+                        i += 1
+                        continue
+            # Default: add the current paragraph unchanged.
+            merged_pars.append(current_par)
+            i += 1
+        return merged_pars
+
+    def merge_single_line_headings(
+        self, 
+        paragraphs: list[tuple[list[str], str, list[Chunk]]]
+    ) -> list[tuple[list[str], str, list[Chunk]]]:
+
+        merged_pars: list[tuple[list[str], str, list[Chunk]]] = []
+        i = 0
+
+        while i < len(paragraphs):
+            p_texts, p_label, p_chunks = paragraphs[i]
+
+            # Check if this paragraph is a single-line potential header
+            if len(p_texts) == 1:
+                line = p_texts[0].strip()
+                # Potential header check
+                if line and (len(line.split()) <= 10) and (line[-1] not in ".?!"):
+                    # Candidate header found
+                    if i + 1 < len(paragraphs):
+                        n_texts, n_label, n_chunks = paragraphs[i + 1]
+                        # Define "large" as multiple lines, or a single line with >10 words
+                        if (len(n_texts) > 1) or (len(n_texts) == 1 and len(n_texts[0].split()) > 10):
+                            # Merge header with the next paragraph
+                            n_texts[0] = f"[{line}]: " + n_texts[0]
+
+                            # Combine chunk references (deduplicate)
+                            combined_chunks = p_chunks + n_chunks
+                            seen = set()
+                            dedup_chunks: list[Chunk] = []
+                            for c in combined_chunks:
+                                if c not in seen:
+                                    seen.add(c)
+                                    dedup_chunks.append(c)
+
+                            # Keep the next paragraph's label
+                            merged_pars.append((n_texts, n_label, dedup_chunks))
+                            i += 2  # Skip the next paragraph (it's merged)
+                            continue
+                        else:
+                            # Not large → keep heading as its own paragraph, wrapped in [ ]
+                            header_line = f"[{line}]"
+                            merged_pars.append(([header_line], p_label, p_chunks))
+                            i += 1
+                            continue
+                    else:
+                        # No following paragraph, keep heading as its own
+                        header_line = f"[{line}]"
+                        merged_pars.append(([header_line], p_label, p_chunks))
+                        i += 1
+                        continue
+
+            # Default case: add the current paragraph unchanged
+            merged_pars.append((p_texts, p_label, p_chunks))
+            i += 1
+        return merged_pars
+
     def debug_print_paragraphs(
         self, 
         paragraphs: list[tuple[list[str], str, list[Chunk]]]
@@ -851,100 +715,45 @@ class PDFChunker:
             print("-" * 40)  # Separator for readability
         print("\n=== END DEBUG ===\n")
 
-    def extract_text_chunks(self) -> tuple[list[Chunk], dict[int, Chunk]]:
-        def split_paragraphs(lines: list[str]) -> list[list[str]]:
-            paragraphs = []
-            current_par = []
-            for line in lines:
-                if line.strip() == "<PARA_BREAK>":
-                    if current_par:
-                        paragraphs.append(current_par)
-                        current_par = []
-                    # optionally keep a marker here if needed (e.g., append an empty list) 
-                    # but here we simply use it to break paragraphs.
-                else:
-                    current_par.append(line)
-            if current_par:
-                paragraphs.append(current_par)
-            return paragraphs
+    def chunk_paragraph_by_sentence(self, paragraph_lines: list[str], max_tokens: int = 100) -> list[str]:
+        """
+        A simplified approach:
+        1) Join lines into one string.
+        2) Regex split into sentences by punctuation + whitespace.
+        3) Accumulate sentences up to 'max_tokens'.
+        """
+        joined_text = " ".join(paragraph_lines).strip()
+        sentences = re.split(r'(?<=[.?!])\s+', joined_text)
 
-        # Updated merge function that checks if a candidate header is followed by a large paragraph chunk.
-        def merge_single_line_headings(paragraphs: list[list[str]]) -> list[list[str]]:
-            merged_pars: list[list[str]] = []
-            i = 0
-            while i < len(paragraphs):
-                current_par = paragraphs[i]
-                if len(current_par) == 1:
-                    line = current_par[0].strip()
-                    # Check if the line is a potential header candidate.
-                    if line and (len(line.split()) <= 10) and (line[-1] not in ".?!"):
-                        # Candidate header found.
-                        if i + 1 < len(paragraphs):
-                            next_par = paragraphs[i + 1]
-                            # Define "large" as either having multiple lines or a single line with >10 words.
-                            if (len(next_par) > 1) or (len(next_par) == 1 and len(next_par[0].split()) > 10):
-                                # Merge: Prepend header (wrapped in [ ]) with a colon to the next paragraph.
-                                next_par[0] = f"[{line}]: " + next_par[0]
-                                merged_pars.append(next_par)
-                                i += 2  # Skip the next paragraph since it has been merged.
-                                continue
-                            else:
-                                # Not large; keep header as its own paragraph (wrapped in [ ]).
-                                merged_pars.append([f"[{line}]"])
-                                i += 1
-                                continue
-                        else:
-                            # No following paragraph exists; keep header as its own.
-                            merged_pars.append([f"[{line}]"])
-                            i += 1
-                            continue
-                # Default: add the current paragraph unchanged.
-                merged_pars.append(current_par)
-                i += 1
-            return merged_pars
+        chunks: list[str] = []
+        current_tokens: list[str] = []
+        token_count = 0
 
-        def print_lines(page_num: int, page_lines: list[str]) -> None:
-            print(f"\n--- 🚀 DEBUG: Page {page_num} raw lines ---")
-            for idx, ln in enumerate(page_lines):
-                print(f"  Raw line {idx}: '{ln}'")
+        for sent in sentences:
+            tokens = sent.split()
+            if not tokens:
+                continue
 
+            if token_count + len(tokens) > max_tokens:
+                if current_tokens:
+                    chunks.append(" ".join(current_tokens))
+                current_tokens = []
+                token_count = 0
+
+            current_tokens.extend(tokens)
+            token_count += len(tokens)
+
+        if current_tokens:
+            chunks.append(" ".join(current_tokens))
+
+        return chunks
+
+    def extract_document_chunks(self) -> tuple[list[Chunk], dict[int, Chunk]]:
+        
         def print_lines_with_label(page_num: int, page_lines: list[tuple[str, str]]) -> None:
             print(f"\n--- 🚀 DEBUG: Page {page_num} raw lines ---")
             for idx, (text, label, _) in enumerate(page_lines):
                 print(f"  Raw line {idx}: '{text}' (Label: {label})")
-
-        def chunk_paragraph_by_sentence(paragraph_lines: list[str], max_tokens: int = 100) -> list[str]:
-            """
-            A simplified approach:
-            1) Join lines into one string.
-            2) Regex split into sentences by punctuation + whitespace.
-            3) Accumulate sentences up to 'max_tokens'.
-            """
-            joined_text = " ".join(paragraph_lines).strip()
-            sentences = re.split(r'(?<=[.?!])\s+', joined_text)
-
-            chunks: list[str] = []
-            current_tokens: list[str] = []
-            token_count = 0
-
-            for sent in sentences:
-                tokens = sent.split()
-                if not tokens:
-                    continue
-
-                if token_count + len(tokens) > max_tokens:
-                    if current_tokens:
-                        chunks.append(" ".join(current_tokens))
-                    current_tokens = []
-                    token_count = 0
-
-                current_tokens.extend(tokens)
-                token_count += len(tokens)
-
-            if current_tokens:
-                chunks.append(" ".join(current_tokens))
-
-            return chunks
 
         # ------------------- MAIN LOGIC --------------------
         doc = fitz.open(self.file_path)
@@ -970,7 +779,6 @@ class PDFChunker:
                 id=page_chunk_id,
                 pageid=str(page_num),
                 blobs=[],
-                parentId="",
                 children=[]
             )
             page_chunks[page_num] = page_chunk
@@ -988,6 +796,12 @@ class PDFChunker:
                 img_path=page_image_path
             )
             page_chunk.blobs.append(page_image_blob)
+            # append the page's id for the images in the page
+            image_chunks = self.doc_image_chunksmap[page_num]
+            for img_chunk in image_chunks.values():
+                img_chunk.parentId = page_chunk_id
+                page_chunk.children.append(img_chunk.id)
+                chunks.append(img_chunk)
 
             # 3) Split paragraphs using the <PARA_BREAK> markers.
             # paragraphs = split_paragraphs(page_lines)
@@ -996,23 +810,59 @@ class PDFChunker:
                 print(f"\n--- 🚀 DEBUG: Page {page_num} paragraphs ---")
                 self.debug_print_paragraphs(paragraphs)
             
-            all_paragraph_texts = [texts for texts, _, _ in paragraphs]
+            # all_paragraph_texts = [texts for texts, _, _ in paragraphs]
 
             # 4) Possibly merge single-line headings with a following large paragraph.
-            all_paragraph_texts = merge_single_line_headings(all_paragraph_texts)
+            all_paragraph_texts = self.merge_single_line_headings(paragraphs)
 
             # 5) For each paragraph, chunk by sentences (or any logic)
             para_id = 0
-            for paragraph_lines in all_paragraph_texts:
-                splitted_chunks = chunk_paragraph_by_sentence(paragraph_lines, max_tokens=200)
-                for chunk_text in splitted_chunks:
+            for (para_lines, para_label, para_chunks) in all_paragraph_texts:
+                if para_label == "text":
+                    # 1) TEXT paragraphs => split into sentence chunks
+                    splitted_chunks = self.chunk_paragraph_by_sentence(para_lines, max_tokens=200)
+                    for chunk_text in splitted_chunks:
+                        #print the chunk text
+                        if self.debug:
+                            print(f"  Chunk text: {chunk_text}")
+                        para_chunk_id = generate_id()
+
+                        # Build a text blob
+                        para_blob = Blob(
+                            blob_type="text",
+                            content=chunk_text,          # single string
+                            start=page_num,
+                            para_id=para_id,
+                            # For text paragraphs, no image_chunk_ref needed
+                            image_chunk_ref=None 
+                        )
+                        para_chunk = Chunk(
+                            id=para_chunk_id,
+                            pageid=str(page_num),
+                            blobs=[para_blob],
+                            parentId=page_chunk_id,
+                            children=[]
+                        )
+                        page_chunk.children.append(para_chunk_id)
+                        chunks.append(para_chunk)
+                        para_id += 1
+                else:
+                    # 2) NON-TEXT paragraphs => keep para_lines as a list in the blob
                     para_chunk_id = generate_id()
+
+                    # If you want to reference the chunk IDs from 'para_chunks', collect them here:
+                    chunk_ids = [c.id for c in para_chunks]
+
+                    # Build a blob with the entire 'para_lines' array
                     para_blob = Blob(
-                        blob_type="text",
-                        content=chunk_text,
+                        blob_type=para_label+"_label",         # e.g., "image", "table", etc.
+                        content=para_lines,          # store the lines as a list
                         start=page_num,
-                        para_id=para_id
+                        para_id=para_id,
+                        # Add the chunk references from this paragraph
+                        image_chunk_ref=chunk_ids
                     )
+
                     para_chunk = Chunk(
                         id=para_chunk_id,
                         pageid=str(page_num),
@@ -1020,6 +870,7 @@ class PDFChunker:
                         parentId=page_chunk_id,
                         children=[]
                     )
+
                     page_chunk.children.append(para_chunk_id)
                     chunks.append(para_chunk)
                     para_id += 1
@@ -1097,7 +948,7 @@ class PDFChunker:
                 chunks.append(table_chunk)
         return chunks
 
-    def get_imagechunks_for_doc(self) -> dict[int, dict[str, Chunk]]:
+    def get_imagechunkmap_for_doc(self) -> dict[int, dict[str, Chunk]]:
         doc = fitz.open(self.file_path)
         page_imagechunk_map: dict[int, dict[str, Chunk]] = {}  # NEW: page-index-based dictionary
 
@@ -1106,13 +957,11 @@ class PDFChunker:
 
             # Initialize the nested dict for this page
             page_dict: dict[str, Chunk] = {}
-
             for img_index, chunk in enumerate(img_chunks):
                 # Build a unique key for the image
                 unique_name = f"image_{page_num}_{img_index}"
                 blob = chunk.blobs[0]
                 blob.img_name = unique_name
-
                 page_dict[unique_name] = chunk
 
             page_imagechunk_map[page_num] = page_dict
@@ -1143,6 +992,14 @@ class PDFChunker:
             chunks.append(image_chunk)
         return chunks
     
+    def getAllImageChunks(self) -> List[Chunk]:
+        image_chunks = []
+        for page_num in range(len(self.doc_image_chunksmap)):
+            image_chunksmap = self.doc_image_chunksmap[page_num]
+            for img_name, chunk in image_chunksmap.items():
+                image_chunks.append(chunk)
+        return image_chunks
+    
     def extract_image_chunks(self, page_chunks) -> List[Chunk]:
         chunks = []
         doc = fitz.open(self.file_path)
@@ -1172,14 +1029,15 @@ class PDFChunker:
 
     def chunkify(self) -> ChunkedFile:
         with pdfplumber.open(self.file_path) as pdf:
-            self.doc_image_chunksmap = self.get_imagechunks_for_doc()
-            text_chunks, page_chunks = self.extract_text_chunks()
+            self.doc_image_chunksmap = self.get_imagechunkmap_for_doc()
+            doc_chunks, page_chunks = self.extract_document_chunks()
             if self.debug:
-                self.debug_print_lines(text_chunks)
+                self.debug_print_lines(doc_chunks)
+            
             #table_chunks = self.extract_tables(pdf, page_chunks=page_chunks)
             #image_chunks = self.extract_image_chunks(page_chunks)
         #all_chunks = text_chunks + image_chunks
-        all_chunks = text_chunks
+        all_chunks = doc_chunks
         return all_chunks
 
     def save_json(self, output_path: str) -> list[Chunk] | ErrorItem:
