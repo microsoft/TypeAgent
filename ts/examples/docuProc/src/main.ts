@@ -37,7 +37,6 @@ Actual args: '${process.argv[0]}' '${process.argv[1]}'
 `;
 
 async function main(): Promise<void> {
-    
     const helpFlags = ["-h", "--help", "-?", "--?"];
     const help = helpFlags.some((arg) => process.argv.includes(arg));
     if (help) {
@@ -74,10 +73,11 @@ function parseCommandLine(): string[] {
             // Load all PDF files from the data directory
             try {
                 const items = fs.readdirSync(dataFolder);
-                files = items.filter(item => item.toLowerCase().endsWith('.pdf'))
-                             .map(item => path.join(dataFolder, item));
+                files = items
+                    .filter((item) => item.toLowerCase().endsWith(".pdf"))
+                    .map((item) => path.join(dataFolder, item));
             } catch (err) {
-                console.error('Error reading directory:', err);
+                console.error("Error reading directory:", err);
             }
         } else if (files.length === 2 && files[0] === "--files") {
             // Read list of files from a file.
@@ -95,4 +95,3 @@ function parseCommandLine(): string[] {
 }
 
 await main();
-  

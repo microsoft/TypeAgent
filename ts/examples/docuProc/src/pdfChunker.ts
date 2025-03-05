@@ -20,9 +20,15 @@ export type ChunkId = string;
 
 export interface Blob {
     /** Stores text, table, or image data plus metadata. */
-    blob_type: "text"|"table"|"page_image"|"image"|"image_label"|"table_label";  // e.g. "text", "table", "image"
+    blob_type:
+        | "text"
+        | "table"
+        | "page_image"
+        | "image"
+        | "image_label"
+        | "table_label"; // e.g. "text", "table", "image"
     start: number; // Page number (0-based)
-    content?: string|string[];  // e.g. chunk of text
+    content?: string | string[]; // e.g. chunk of text
     bbox?: number[]; // Optional bounding box
     img_name?: string; // Optional image name
     img_path?: string; // Optional image path
@@ -39,7 +45,7 @@ export interface Chunk {
     parentId?: ChunkId;
     children?: ChunkId[];
     fileName?: string;
-    docs?: PdfDocChunk
+    docs?: PdfDocChunk;
     docInfo?: PdfDocumentInfo; // Computed later by fileDocumenter.
 }
 export interface ChunkedFile {
@@ -61,7 +67,9 @@ export async function chunkifyPdfFiles(
     try {
         const chunkerPath = path.join(__dirname, "pdfChunker.py");
         const absChunkerPath = resolve(chunkerPath);
-        const absFilenames = filenames.map(f => `"${path.join(__dirname, f)}"`);
+        const absFilenames = filenames.map(
+            (f) => `"${path.join(__dirname, f)}"`,
+        );
         const outputDir = path.join(__dirname, "output");
         let { stdout, stderr } = await execPromise(
             `python3 -X utf8 "${absChunkerPath}" -files ${absFilenames.join(" ")} -outdir ${outputDir}`,
@@ -89,7 +97,7 @@ export async function chunkifyPdfFiles(
     for (const result of results) {
         if ("error" in result) {
             console.error("Error in chunker output:", result.error);
-            continue
+            continue;
         }
     }
     return results;
@@ -122,7 +130,7 @@ function splitFile(file: ChunkedFile): ChunkedFile[] {
     const parentMap: Map<ChunkId, Chunk> = new Map();
     for (const chunk of file.chunks) {
         // Only nodes with children will be looked up in this map.
-        if (chunk.children && chunk.children.length) 
+        if (chunk.children && chunk.children.length)
             parentMap.set(chunk.id, chunk);
     }
 
@@ -184,7 +192,10 @@ function chunkSize(chunk: Chunk): number {
     for (const blob of chunk.blobs) {
         if (blob.blob_type === "text" && blob.content) {
             if (Array.isArray(blob.content)) {
-                totalChars += blob.content.reduce((sum, line) => sum + line.length, 0);
+                totalChars += blob.content.reduce(
+                    (sum, line) => sum + line.length,
+                    0,
+                );
             } else {
                 totalChars += blob.content.length;
             }
@@ -192,4 +203,3 @@ function chunkSize(chunk: Chunk): number {
     }
     return totalChars;
 }
-

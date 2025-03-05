@@ -97,14 +97,16 @@ async function importPdfFiles(
                     if (blob.content) {
                         if (Array.isArray(blob.content)) {
                             numLines += blob.content
-                                .flatMap(text => text.split(/[\n.]+/)) // Split each string and flatten the results
-                                .filter(line => line.trim().length > 0) // Remove empty lines
-                                .length;
+                                .flatMap((text) => text.split(/[\n.]+/)) // Split each string and flatten the results
+                                .filter(
+                                    (line) => line.trim().length > 0,
+                                ).length; // Remove empty lines
                         } else {
                             numLines += blob.content
                                 .split(/[\n.]+/)
-                                .filter(line => line.trim().length > 0)
-                                .length;
+                                .filter(
+                                    (line) => line.trim().length > 0,
+                                ).length;
                         }
                     }
                 }
@@ -120,7 +122,7 @@ async function importPdfFiles(
     );
 
     const chunkingErrors = results.filter(
-        (result:any): result is ErrorItem => "error" in result,
+        (result: any): result is ErrorItem => "error" in result,
     );
     for (const error of chunkingErrors) {
         log(
@@ -131,7 +133,7 @@ async function importPdfFiles(
     }
 
     const chunkedFiles = results.filter(
-        (result:any): result is ChunkedFile => "chunks" in result,
+        (result: any): result is ChunkedFile => "chunks" in result,
     );
     log(io, `[Documenting ${chunkedFiles.length} files]`, chalk.grey);
 
@@ -238,10 +240,16 @@ async function embedChunk(
     //const t0 = Date.now();
     const lineCount = chunk.blobs.reduce((acc, blob) => {
         if (!blob.content) return acc;
-    
+
         if (Array.isArray(blob.content)) {
-            return acc + blob.content.reduce((sum, text) => sum + text.split("\n").length, 0);
-        } 
+            return (
+                acc +
+                blob.content.reduce(
+                    (sum, text) => sum + text.split("\n").length,
+                    0,
+                )
+            );
+        }
         return acc + blob.content.split("\n").length;
     }, 0);
     console.log("Line count:", lineCount);

@@ -2,8 +2,7 @@
 // Licensed under the MIT License.
 
 // Extracted information for a chunk of text.
-export interface PdfDocChunk{
-
+export interface PdfDocChunk {
     // Optional file identifier for this chunk.
     fileName?: string;
 
@@ -43,4 +42,3 @@ export interface PdfDocumentInfo {
 export type PdfFileDocumentation = {
     chunkDocs?: PdfDocChunk[];
 };
-

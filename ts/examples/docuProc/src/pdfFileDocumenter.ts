@@ -23,7 +23,7 @@ export function createPdfDocumenter(model: ChatModel): PdfFileDocumenter {
     function convertImageToBase64(imagePath: string): string {
         try {
             const imageBuffer = fs.readFileSync(imagePath);
-            return `data:image/png;base64,${imageBuffer.toString('base64')}`;
+            return `data:image/png;base64,${imageBuffer.toString("base64")}`;
         } catch (error) {
             console.error(`Error converting image to base64: ${error}`);
             return "";
@@ -31,8 +31,11 @@ export function createPdfDocumenter(model: ChatModel): PdfFileDocumenter {
     }
 
     async function document(chunks: Chunk[]): Promise<PdfFileDocumentation> {
-        const pageChunksMap: Record<string, { pageChunk: Chunk; blocks: Chunk[] }> = {};
-        
+        const pageChunksMap: Record<
+            string,
+            { pageChunk: Chunk; blocks: Chunk[] }
+        > = {};
+
         // Organize chunks by page
         for (const chunk of chunks) {
             if (!chunk.parentId) {
@@ -50,14 +53,16 @@ export function createPdfDocumenter(model: ChatModel): PdfFileDocumenter {
         for (const pageid in pageChunksMap) {
             const { pageChunk, blocks } = pageChunksMap[pageid];
             let text = `***: Document the following Page (Id: ${pageChunk.id}, Page: ${pageChunk.pageid}):\n`;
-            
+
             let pageImageBase64 = "";
-            const pageImageBlob = pageChunk.blobs.find(blob => blob.blob_type === "page_image" && blob.img_path);
+            const pageImageBlob = pageChunk.blobs.find(
+                (blob) => blob.blob_type === "page_image" && blob.img_path,
+            );
             if (pageImageBlob) {
                 pageImageBase64 = convertImageToBase64(pageImageBlob.img_path!);
                 text += `Page Image: ${pageImageBase64}\n`;
             }
-            
+
             for (const block of blocks) {
                 const blockIdentifier = `Chunk Id: ${block.id}, Page: ${block.pageid}`;
                 for (const blob of block.blobs) {
@@ -73,7 +78,7 @@ export function createPdfDocumenter(model: ChatModel): PdfFileDocumenter {
                     }
                 }
             }
-            
+
             const request =
                 "Summarize the given document sections based on the extracted content and page image.\n" +
                 "For text, provide a concise summary of the main points.\n" +
@@ -81,22 +86,26 @@ export function createPdfDocumenter(model: ChatModel): PdfFileDocumenter {
                 "For images, infer their purpose based on the context. For page level image summarze for the entire page.\n" +
                 "Include a high-level summary of the entire page based on the extracted image and paragraph level text.\n" +
                 "Also fill in the lists of keywords, tags, synonyms, and dependencies.\n";
-            
+
             const result = await pdfDocTranslator.translate(request, text);
-            
+
             if (result.success) {
                 const fileDocs: PdfFileDocumentation = result.data;
                 const chunkDocs = fileDocs.chunkDocs ?? [];
-                 
+
                 let iDoc = 0;
                 for (const chunk of chunks) {
-                    if (chunk.parentId === "" && !chunk.parentId || (chunk.children && chunk.children.length === 0)) {
+                    if (
+                        (chunk.parentId === "" && !chunk.parentId) ||
+                        (chunk.children && chunk.children.length === 0)
+                    ) {
                         chunk.docs = chunkDocs[iDoc++];
-                    }
-                    else {
-                        if(chunk.children && chunk.children.length > 0) {
+                    } else {
+                        if (chunk.children && chunk.children.length > 0) {
                             for (const blobid of chunk.children) {
-                                const blob = chunk.children.find(cid => cid === blobid);
+                                const blob = chunk.children.find(
+                                    (cid) => cid === blobid,
+                                );
                                 if (blob !== undefined) {
                                     chunk.docs = chunkDocs[iDoc++];
                                 }
@@ -104,11 +113,12 @@ export function createPdfDocumenter(model: ChatModel): PdfFileDocumenter {
                         }
                     }
                 }
-                
             } else {
             }
         }
-        return { chunkDocs: chunks.map(chunk => chunk.docs) } as PdfFileDocumentation;
+        return {
+            chunkDocs: chunks.map((chunk) => chunk.docs),
+        } as PdfFileDocumentation;
     }
 }
 

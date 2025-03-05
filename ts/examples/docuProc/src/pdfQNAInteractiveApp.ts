@@ -16,7 +16,12 @@ import { QuerySpec, QuerySpecs } from "./pdfDocQuerySchema.js";
 import { Chunk, ChunkId } from "./pdfChunker.js";
 import { importAllFiles } from "./pdfImporter.js";
 import { AnswerSpecs } from "./pdfDocAnswerSchema.js";
-import { createJsonTranslator, PromptSection, TypeChatJsonTranslator, TypeChatLanguageModel } from "typechat";
+import {
+    createJsonTranslator,
+    PromptSection,
+    TypeChatJsonTranslator,
+    TypeChatLanguageModel,
+} from "typechat";
 import { PdfDownloadQuery } from "./pdfDownloadSchema.js";
 import { createTypeScriptJsonValidator } from "typechat/ts";
 import { openai } from "aiclient";
@@ -130,8 +135,7 @@ export async function interactiveDocQueryLoop(
         if (!result.success) {
             writeError(io, `[Error: ${result.message}]`);
             return;
-        }
-        else {
+        } else {
             const pdfDownloadQuery = result.data;
             const pdfs = await downloadArxivPapers(pdfDownloadQuery);
             if (pdfs !== undefined) {
@@ -276,7 +280,7 @@ export async function interactiveDocQueryLoop(
             },
         };
     }
-    
+
     handlers.search.metadata = searchDef();
     async function search(
         args: string[] | iapp.NamedArgs,
@@ -415,7 +419,7 @@ export async function interactiveDocQueryLoop(
         const filter = namedArgs.filter;
         const filesPopularity: Map<string, number> = new Map();
         for await (const chunk of chunkyIndex.chunkFolder.allObjects()) {
-            if (chunk.fileName !== undefined) {    
+            if (chunk.fileName !== undefined) {
                 filesPopularity.set(
                     chunk.fileName,
                     (filesPopularity.get(chunk.fileName) ?? 0) + 1,
@@ -1096,4 +1100,3 @@ export function writeChunkLines(
     writeMain(io, `\nCHUNK ID: ${chunk.id}`);
     writeMain(io, `Content: ${chunk.blobs[0].content}`);
 }
-

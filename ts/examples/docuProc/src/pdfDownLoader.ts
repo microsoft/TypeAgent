@@ -26,7 +26,11 @@ interface ArxivPaper {
     journal_ref?: string;
 }
 
-const PAPER_CATALOG_PATH = path.join(__dirname, "papers","downloaded_papers.json");
+const PAPER_CATALOG_PATH = path.join(
+    __dirname,
+    "papers",
+    "downloaded_papers.json",
+);
 function loadDownloadedPapers(): Set<string> {
     try {
         if (fs.existsSync(PAPER_CATALOG_PATH)) {
@@ -41,7 +45,11 @@ function loadDownloadedPapers(): Set<string> {
 
 function saveDownloadedPapers(downloadedPapers: Set<string>) {
     try {
-        fs.writeFileSync(PAPER_CATALOG_PATH, JSON.stringify([...downloadedPapers], null, 2), "utf8");
+        fs.writeFileSync(
+            PAPER_CATALOG_PATH,
+            JSON.stringify([...downloadedPapers], null, 2),
+            "utf8",
+        );
     } catch (error) {
         console.error("Error saving downloaded papers catalog:", error);
     }
@@ -98,10 +106,10 @@ export async function downloadArxivPapers(
             const papers: ArxivPaper[] = Array.isArray(entries)
                 ? entries
                 : [entries];
-        
-            if(papers.length > 0) {
+
+            if (papers.length > 0) {
                 const downloadedPapers = loadDownloadedPapers();
-                const newPapers = papers.filter(paper => {
+                const newPapers = papers.filter((paper) => {
                     const paperId = paper.id;
                     if (downloadedPapers.has(paperId)) {
                         return false;
@@ -110,10 +118,14 @@ export async function downloadArxivPapers(
                     return true;
                 });
 
-                await Promise.all(newPapers.map(async paper => await downloadArxivPaper(paper)));
+                await Promise.all(
+                    newPapers.map(
+                        async (paper) => await downloadArxivPaper(paper),
+                    ),
+                );
                 saveDownloadedPapers(downloadedPapers);
             }
-            return papers
+            return papers;
         }
     } catch (error) {
         console.error("Error fetching arXiv papers:", error);
