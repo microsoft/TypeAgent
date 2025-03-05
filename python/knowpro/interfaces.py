@@ -18,8 +18,6 @@ from . import kplib
 # An object that can provide a KnowledgeResponse structure.
 @runtime_checkable
 class IKnowledgeSource(Protocol):
-    """An object that can provide a KnowledgeResponse structure."""
-
     def get_knowledge(self) -> kplib.KnowledgeResponse:
         raise NotImplementedError
 
