@@ -134,6 +134,37 @@ An eval run needs to do the following:
   - Print some JSON with the question, the F1 score, and the algorithm
     (and perhaps a timestamp).
 
+### Schema for evaluation scoring
+
+The database needs to store for each run, for each question,
+for each chunk, whether it was selected or not. Runs identify
+the algorithm and its variations. Run names must be unique.
+Since most algorithms have it available, we also store the score.
+
+```sql
+CREATE TABLE IF NOT EXISTS Runs (
+  runId TEXT PRIMARY KEY,
+  runName TEXT UNIQUE,
+  comments TEXT,
+  startTimestamp TEXT,
+  endTimestamp TEXT
+);
+CREATE TABLE IF NOT EXISTS RunScores (
+  runId TEXT REFERENCES Runs(runId),
+  questionId TEXT REFERENCES Questions(questionId),
+  chunkHash TEXT REFERENCES Hashes(chunkHash),
+  score INTEGER,  -- 0 or 1
+  relevance FLOAT,  -- Range [0.0 ... 1.0]
+  CONSTRAINT triple UNIQUE (runId, questionId, chunkHash)
+);
+```
+
+To compute precision and recall (all numbers in range [0.0 ... 1.0])
+
+- p(recision) = fraction of selected chunks that have score==1 in Scores
+- r(ecall) = fraction of chunks with score==1 in Scores that were selected
+- `f1 = 2 * (p * r) / (p + r)`
+
 ## Tooling needed for automatic eval runs
 
 We need to write a new TypeScript program that reuses much of
@@ -149,9 +180,32 @@ APIs available.
 
 Do we need more versatility in the scoring tool? E.g.
 
-- Pass the question _ID_ on the command line instead of the text.
 - A way to set a fixed score for all chunks in a given file
   (or a file pattern).
 - A way to review scores (possibly by date range).
 - A way to set a fixed score for a list of chunk IDs
   (e.g. the References section of an actual answer).
+
+# Refactoring the selector
+
+Currently we have these steps:
+
+1. Using embeddings for fuzzy matching, select N nearest neighbors
+2. For those N chunks, ask an AI for a relevance score
+3. Pick the highest-scoring K chunks
+
+We can envision other steps:
+
+a. Ask an AI to construct a set of words or phrases to select nearest
+neighbors
+b. Ask an AI to select which files to pay attention to (bool or score?)
+
+In a sense we are collecting multiple types of scores, and we should
+combine them using
+[RRF ranking](https://learn.microsoft.com/en-us/azure/search/hybrid-search-ranking#how-rrf-ranking-works).
+
+For this to work, everything that returns a list of chunks/chunk IDs,
+should return a list of _scored_ chunk/chunk IDs. In practice, this
+just means that we have to change (1) (embeddings) to return the score.
+Or perhaps we just sort the results from highest to lowest score,
+since the RRF algorithm just takes the rank order for each score type.

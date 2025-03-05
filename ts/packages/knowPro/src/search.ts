@@ -11,13 +11,13 @@ import {
     SemanticRef,
     Term,
     IConversationSecondaryIndexes,
+    ScoredMessageIndex,
 } from "./interfaces.js";
 import { mergedEntities, mergeTopics } from "./knowledge.js";
 import * as q from "./query.js";
 import { IQueryOpExpr } from "./query.js";
 import { resolveRelatedTerms } from "./relatedTermsIndex.js";
 import { conversation as kpLib } from "knowledge-processor";
-import { PromptSection } from "typechat";
 
 export type SearchTerm = {
     /**
@@ -116,20 +116,63 @@ export type SearchOptions = {
     useTimestampIndex?: boolean | undefined;
 };
 
-export type SearchResult = {
+export type SemanticRefSearchResult = {
     termMatches: Set<string>;
     semanticRefMatches: ScoredSemanticRef[];
 };
 
+export type ConversationSearchResult = {
+    messageMatches: ScoredMessageIndex[];
+    knowledgeMatches: Map<KnowledgeType, SemanticRefSearchResult>;
+};
+
 /**
- * Searches conversation for terms
+ * Search a conversation for matching messages and knowledge
+ * @param conversation
+ * @param searchTermGroup
+ * @param filter
+ * @param options
+ * @returns
  */
 export async function searchConversation(
     conversation: IConversation,
     searchTermGroup: SearchTermGroup,
     filter?: WhenFilter,
     options?: SearchOptions,
-): Promise<Map<KnowledgeType, SearchResult> | undefined> {
+): Promise<ConversationSearchResult | undefined> {
+    const knowledgeMatches = await searchConversationKnowledge(
+        conversation,
+        searchTermGroup,
+        filter,
+        options,
+    );
+    if (!knowledgeMatches) {
+        return undefined;
+    }
+    const messageMatches = q.messageMatchesFromKnowledgeMatches(
+        conversation.semanticRefs!,
+        knowledgeMatches,
+    );
+    return {
+        messageMatches: messageMatches.toScoredMessageIndexes(),
+        knowledgeMatches,
+    };
+}
+
+/**
+ * Search a conversation for matching knowledge
+ * @param conversation
+ * @param searchTermGroup
+ * @param filter
+ * @param options
+ * @returns
+ */
+export async function searchConversationKnowledge(
+    conversation: IConversation,
+    searchTermGroup: SearchTermGroup,
+    filter?: WhenFilter,
+    options?: SearchOptions,
+): Promise<Map<KnowledgeType, SemanticRefSearchResult> | undefined> {
     if (!q.isConversationSearchable(conversation)) {
         return undefined;
     }
@@ -466,34 +509,4 @@ function isActionPropertyTerm(term: PropertySearchTerm): boolean {
     }
 
     return false;
-}
-
-export function getTimeRangeForConversation(
-    conversation: IConversation,
-): DateRange | undefined {
-    const messages = conversation.messages;
-    const start = messages[0].timestamp;
-    const end = messages[messages.length - 1].timestamp;
-    if (start !== undefined) {
-        return {
-            start: new Date(start),
-            end: end ? new Date(end) : undefined,
-        };
-    }
-    return undefined;
-}
-
-export function getTimeRangeSectionForConversation(
-    conversation: IConversation,
-): PromptSection[] {
-    const timeRange = getTimeRangeForConversation(conversation);
-    if (timeRange) {
-        return [
-            {
-                role: "system",
-                content: `ONLY IF user request explicitly asks for time ranges, THEN use the CONVERSATION TIME RANGE: "${timeRange.start} to ${timeRange.end}"`,
-            },
-        ];
-    }
-    return [];
 }

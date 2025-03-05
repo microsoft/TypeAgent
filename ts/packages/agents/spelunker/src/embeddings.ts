@@ -126,6 +126,18 @@ export async function preSelectChunks(
     input: string,
     maxChunks = 1000,
 ): Promise<ChunkId[]> {
+    const tb0 = new Date().getTime();
+    const queryEmbedding = await getEmbedding(context, input);
+    const tb1 = new Date().getTime();
+    const tail = !queryEmbedding ? " (failure)" : "";
+    console_log(
+        `  [Embedding input of ${input.length} characters took ${((tb1 - tb0) / 1000).toFixed(3)} seconds${tail}]`,
+    );
+    if (!queryEmbedding) {
+        // Fail fast if we can't get an embedding.
+        return [];
+    }
+
     const ta0 = new Date().getTime();
     const db = context.queryContext!.database!;
     const prepAllEmbeddings = db.prepare(
@@ -142,17 +154,6 @@ export async function preSelectChunks(
     if (allEmbeddingRows.length <= maxChunks) {
         console_log(`  [Returning all ${allEmbeddingRows.length} chunk IDs]`);
         return allEmbeddingRows.map((row) => row.chunkId);
-    }
-
-    const tb0 = new Date().getTime();
-    const queryEmbedding = await getEmbedding(context, input);
-    const tb1 = new Date().getTime();
-    const tail = !queryEmbedding ? " (failure)" : "";
-    console_log(
-        `  [Embedding input of ${input.length} characters took ${((tb1 - tb0) / 1000).toFixed(3)} seconds${tail}]`,
-    );
-    if (!queryEmbedding) {
-        return [];
     }
 
     const embeddings = allEmbeddingRows.map(

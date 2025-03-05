@@ -93,6 +93,8 @@ def main():
     copy_table(src_cur, dst_cur, "Files", filename_prefix)
     copy_table(src_cur, dst_cur, "Chunks")
     copy_table(src_cur, dst_cur, "Blobs")
+    copy_table(src_cur, dst_cur, "Summaries")
+    copy_table(src_cur, dst_cur, "ChunkEmbeddings")
     src_conn.close()
 
     add_new_tables(dst_cur)
@@ -115,7 +117,10 @@ def copy_table(src_cur, dst_cur, table_name, prefix=None):
 
     # Read rows
     rows = src_cur.execute(f"SELECT * FROM {table_name}").fetchall()
-    if prefix and  table_name.lower() == "files":
+    if not rows:
+        print(f"Table {table_name} is empty")
+        return
+    if prefix and table_name.lower() == "files":
         # Check the filenames start with the prefix
         for row in rows:
             filename = row[0]
@@ -143,6 +148,21 @@ CREATE TABLE IF NOT EXISTS Scores (
     score INTEGER,  -- 0 or 1
     timestamp TEXT
 );
+CREATE TABLE IF NOT EXISTS Runs (
+  runId INTEGER PRIMARY KEY,
+  runName TEXT UNIQUE,
+  questionId INTEGER REFERENCES Questions(questionId),
+  comments TEXT,
+  startTimestamp TEXT,
+  endTimestamp TEXT
+);
+CREATE TABLE IF NOT EXISTS RunScores (
+  runId INTEGER REFERENCES Runs(runId),
+  chunkHash TEXT REFERENCES Hashes(chunkHash),
+  score INTEGER,  -- 0 or 1
+  relevance FLOAT,  -- Range [0.0 ... 1.0]
+  CONSTRAINT unique_columns UNIQUE (runId, chunkHash)
+);
 """
 # TODO: Table to record eval runs (the eval tool can create-or-insert that)
 
@@ -155,12 +175,11 @@ def add_new_tables(dst_cur):
         table_name = sql.split()[5]
         print(f"Creating table {table_name}")
         dst_cur.execute(sql)
-        if table_name == "Hashes":
-            print(f"Clearing contents of table {table_name}")
-            dst_cur.execute(f"DELETE FROM {table_name}")
 
 
 def fill_in_hashes(dst_cur, prefix):
+    print(f"Clearing Hashes")
+    dst_cur.execute(f"DELETE FROM Hashes")
     count = 0
     # Fetch all chunks
     selection = dst_cur.execute(

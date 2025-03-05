@@ -15,15 +15,17 @@ export class KnowProPrinter extends ChatPrinter {
         super();
     }
 
-    public writeDateRange(dateTime: kp.DateRange) {
+    public writeDateRange(dateTime: kp.DateRange): KnowProPrinter {
         this.writeLine(`Started: ${dateTime.start}`);
         if (dateTime.end) {
             this.writeLine(`Ended: ${dateTime.end}`);
         }
+        return this;
     }
 
-    public writeMetadata(metadata: any) {
+    public writeMetadata(metadata: any): KnowProPrinter {
         this.write("Metadata: ").writeJson(metadata);
+        return this;
     }
 
     public writeMessage(message: kp.IMessage) {
@@ -42,9 +44,51 @@ export class KnowProPrinter extends ChatPrinter {
         return this;
     }
 
+    public writeScoredMessages(
+        messageIndexMatches: kp.ScoredMessageIndex[],
+        messages: kp.IMessage[],
+        maxToDisplay: number,
+    ) {
+        this.writeLine(
+            `Displaying ${maxToDisplay} matches of total ${messages.length}`,
+        );
+        if (this.sortAsc) {
+            this.writeLine(`Sorted in ascending order (lowest first)`);
+        }
+        const matchesToDisplay = messageIndexMatches.slice(0, maxToDisplay);
+        for (let i = 0; i < matchesToDisplay.length; ++i) {
+            let pos = this.sortAsc ? matchesToDisplay.length - (i + 1) : i;
+            this.writeScoredMessage(
+                pos,
+                matchesToDisplay.length,
+                matchesToDisplay[pos],
+                messages,
+            );
+        }
+
+        return this;
+    }
+
+    private writeScoredMessage(
+        matchNumber: number,
+        totalMatches: number,
+        scoredMessage: kp.ScoredMessageIndex,
+        messages: kp.IMessage[],
+    ) {
+        const message = messages[scoredMessage.messageIndex];
+        this.writeInColor(
+            chalk.green,
+            `#${matchNumber + 1} / ${totalMatches}: <${scoredMessage.messageIndex}> [${scoredMessage.score}]`,
+        );
+        if (message) {
+            this.writeMessage(message);
+        }
+        this.writeLine();
+    }
+
     public writeEntity(
         entity: knowLib.conversation.ConcreteEntity | undefined,
-    ) {
+    ): KnowProPrinter {
         if (entity !== undefined) {
             this.writeLine(entity.name.toUpperCase());
             this.writeList(entity.type, { type: "csv" });
@@ -58,14 +102,16 @@ export class KnowProPrinter extends ChatPrinter {
         return this;
     }
 
-    public writeAction(action: knowLib.conversation.Action | undefined) {
+    public writeAction(
+        action: knowLib.conversation.Action | undefined,
+    ): KnowProPrinter {
         if (action !== undefined) {
             this.writeLine(knowLib.conversation.actionToString(action));
         }
         return this;
     }
 
-    public writeTopic(topic: kp.Topic | undefined) {
+    public writeTopic(topic: kp.Topic | undefined): KnowProPrinter {
         if (topic !== undefined) {
             this.writeLine(topic.text);
         }
@@ -173,9 +219,9 @@ export class KnowProPrinter extends ChatPrinter {
         this.writeLine();
     }
 
-    public writeSearchResult(
+    public writeSemanticRefSearchResult(
         conversation: kp.IConversation,
-        result: kp.SearchResult | undefined,
+        result: kp.SemanticRefSearchResult | undefined,
         maxToDisplay: number,
     ) {
         if (result) {
@@ -196,9 +242,9 @@ export class KnowProPrinter extends ChatPrinter {
         return this;
     }
 
-    public writeSearchResults(
+    public writeKnowledgeSearchResults(
         conversation: kp.IConversation,
-        results: Map<kp.KnowledgeType, kp.SearchResult>,
+        results: Map<kp.KnowledgeType, kp.SemanticRefSearchResult>,
         maxToDisplay: number,
         distinct: boolean = false,
     ) {
@@ -227,13 +273,17 @@ export class KnowProPrinter extends ChatPrinter {
     private writeResult(
         conversation: kp.IConversation,
         type: kp.KnowledgeType,
-        results: Map<kp.KnowledgeType, kp.SearchResult>,
+        results: Map<kp.KnowledgeType, kp.SemanticRefSearchResult>,
         maxToDisplay: number,
     ) {
         const result = results.get(type);
         if (result !== undefined) {
             this.writeTitle(type.toUpperCase());
-            this.writeSearchResult(conversation, result, maxToDisplay);
+            this.writeSemanticRefSearchResult(
+                conversation,
+                result,
+                maxToDisplay,
+            );
         }
         return this;
     }
@@ -241,7 +291,7 @@ export class KnowProPrinter extends ChatPrinter {
     private writeResultDistinct(
         conversation: kp.IConversation,
         type: kp.KnowledgeType,
-        results: Map<kp.KnowledgeType, kp.SearchResult>,
+        results: Map<kp.KnowledgeType, kp.SemanticRefSearchResult>,
         maxToDisplay: number,
     ) {
         if (type !== "topic" && type !== "entity") {
