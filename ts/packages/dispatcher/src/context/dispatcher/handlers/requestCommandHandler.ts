@@ -13,7 +13,10 @@ import {
     toFullActions,
 } from "agent-cache";
 
-import { CommandHandlerContext } from "../../commandHandlerContext.js";
+import {
+    CommandHandlerContext,
+    getCommandResult,
+} from "../../commandHandlerContext.js";
 
 import { CachedImageWithDetails } from "common-utils";
 import { Logger } from "telemetry";
@@ -42,7 +45,7 @@ const debugExplain = registerDebug("typeagent:explain");
 
 async function canTranslateWithoutContext(
     requestAction: RequestAction,
-    usedTranslators: Map<string, TypeAgentTranslator<object>>,
+    usedTranslators: Map<string, TypeAgentTranslator>,
     logger?: Logger,
 ) {
     if (requestAction.history === undefined) {
@@ -60,7 +63,7 @@ async function canTranslateWithoutContext(
             if (!result.success) {
                 throw new Error("Failed to translate without history context");
             }
-            const newActions = result.data as TranslatedAction;
+            const newActions = result.data;
             const count = isMultipleAction(newActions)
                 ? newActions.parameters.requests.length
                 : 1;
@@ -68,7 +71,7 @@ async function canTranslateWithoutContext(
             if (count !== oldActions.length) {
                 throw new Error("Action count mismatch without context");
             }
-            translations.set(translatorName, result.data as TranslatedAction);
+            translations.set(translatorName, result.data);
         }
 
         let index = 0;
@@ -85,8 +88,17 @@ async function canTranslateWithoutContext(
             } else {
                 newAction = newTranslatedActions;
             }
+            const schemaName = usedTranslators
+                .get(translatorName)!
+                .getSchemaName(newAction.actionName);
+            if (schemaName === undefined) {
+                // Should not happen
+                throw new Error(
+                    `Internal Error: Unable to match schema name for action '${newAction.actionName}'`,
+                );
+            }
             newActions.push({
-                translatorName,
+                translatorName: schemaName,
                 ...newAction,
             });
         }
@@ -156,7 +168,7 @@ function getExplainerOptions(
     }
 
     if (hasAdditionalInstructions(requestAction.history)) {
-        // Translation with additional instructions are not cachable.
+        // Translation with additional instructions are not cacheable.
         return undefined;
     }
 
@@ -168,7 +180,7 @@ function getExplainerOptions(
         return undefined;
     }
 
-    const usedTranslators = new Map<string, TypeAgentTranslator<object>>();
+    const usedTranslators = new Map<string, TypeAgentTranslator>();
     const actions = requestAction.actions;
     for (const { action } of actions) {
         if (isUnknownAction(action)) {
@@ -304,7 +316,10 @@ export class RequestCommandHandler implements CommandHandler {
 
             // store attachments for later reuse
             const cachedAttachments: CachedImageWithDetails[] = [];
-            if (attachments) {
+            if (
+                attachments &&
+                systemContext.session.sessionDirPath !== undefined
+            ) {
                 for (let i = 0; i < attachments?.length; i++) {
                     const [attachmentName, tags]: [string, ExifReader.Tags] =
                         await systemContext.session.storeUserSuppliedFile(
@@ -361,7 +376,16 @@ export class RequestCommandHandler implements CommandHandler {
                 return;
             }
 
-            const { requestAction, fromUser, fromCache } = translationResult;
+            const { requestAction, fromUser, fromCache, tokenUsage } =
+                translationResult;
+
+            if (tokenUsage) {
+                const commandResult = getCommandResult(systemContext);
+                if (commandResult !== undefined) {
+                    commandResult.tokenUsage = tokenUsage;
+                }
+            }
+
             if (
                 requestAction !== null &&
                 requestAction !== undefined &&

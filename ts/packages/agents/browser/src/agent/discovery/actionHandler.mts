@@ -7,8 +7,11 @@ import { BrowserConnector } from "../browserConnector.mjs";
 import { createDiscoveryPageTranslator } from "./translator.mjs";
 import {
     ActionSchemaTypeDefinition,
+    ActionSchemaObject,
+    ActionParamType,
     generateActionSchema,
     parseActionSchemaSource,
+    generateSchemaTypeDefinition,
 } from "action-schema";
 import { ActionSchemaCreator as sc } from "action-schema";
 import path from "path";
@@ -18,6 +21,7 @@ import { UserActionsList } from "./schema/userActionsPool.mjs";
 import { PageDescription } from "./schema/pageSummary.mjs";
 import { createTempAgentForSchema } from "./tempAgentActionHandler.mjs";
 import { SchemaDiscoveryActions } from "./schema/discoveryActions.mjs";
+import { UserIntent } from "./schema/recordedActions.mjs";
 
 export async function handleSchemaDiscoveryAction(
     action: SchemaDiscoveryActions,
@@ -31,7 +35,8 @@ export async function handleSchemaDiscoveryAction(
 
     const browser: BrowserConnector = context.agentContext.browserConnector;
 
-    const agent = await createDiscoveryPageTranslator("GPT_4_O_MINI");
+    // const agent = await createDiscoveryPageTranslator("GPT_4_O_MINI");
+    const agent = await createDiscoveryPageTranslator("GPT_4_O");
 
     switch (action.actionName) {
         case "initializePageSchema":
@@ -49,6 +54,9 @@ export async function handleSchemaDiscoveryAction(
             break;
         case "getSiteType":
             actionData = await handleGetSiteType(action);
+            break;
+        case "getIntentFromRecording":
+            actionData = await handleGetIntentFromReccording(action);
             break;
     }
 
@@ -266,6 +274,108 @@ export async function handleSchemaDiscoveryAction(
 
         return response.data;
     }
+
+    async function getIntentSchemaFromJSON(
+        userIntentJson: UserIntent,
+        actionDescription: string,
+    ) {
+        let fields: Map<string, any> = new Map<string, any>();
+
+        userIntentJson.parameters.forEach((p) => {
+            let t: ActionParamType = sc.string();
+            switch (p.type) {
+                case "string":
+                    t = sc.string();
+                    break;
+                case "number":
+                    t = sc.number();
+                    break;
+                case "boolean":
+                    t = sc.number();
+                    break;
+            }
+
+            if (p.required && !p.defaultValue) {
+                fields.set(p.shortName, sc.field(t, p.description));
+            } else {
+                fields.set(p.shortName, sc.optional(t, p.description));
+            }
+        });
+
+        const obj: ActionSchemaObject = sc.obj({
+            actionName: sc.string(userIntentJson.actiontName),
+            parameters: sc.obj(Object.fromEntries(fields)),
+        } as const);
+
+        const schema = sc.type(
+            userIntentJson.actiontName,
+            obj,
+            actionDescription,
+            true,
+        );
+
+        return await generateSchemaTypeDefinition(schema, { exact: true });
+    }
+
+    async function handleGetIntentFromReccording(action: any) {
+        const timerName = `Getting intent schema`;
+        console.time(timerName);
+        const intentResponse = await agent.getIntentSchemaFromRecording(
+            action.parameters.recordedActionName,
+            action.parameters.recordedActionDescription,
+            action.parameters.recordedActionSteps,
+            action.parameters.htmlFragments,
+            // action.parameters.screenshot,
+            "",
+        );
+
+        if (!intentResponse.success) {
+            console.error("Attempt to process recorded action failed");
+            console.error(intentResponse.message);
+            message = "Action could not be completed";
+            return;
+        }
+
+        console.timeEnd(timerName);
+
+        const intentSchema = await getIntentSchemaFromJSON(
+            intentResponse.data as UserIntent,
+            action.parameters.recordedActionDescription,
+        );
+
+        message = "Intent schema: \n" + intentSchema;
+
+        const timerName2 = `Getting action schema`;
+        console.time(timerName2);
+        const stepsResponse = await agent.getActionStepsSchemaFromRecording(
+            action.parameters.recordedActionName,
+            action.parameters.recordedActionDescription,
+            intentResponse.data,
+            action.parameters.recordedActionSteps,
+            action.parameters.htmlFragments,
+            // action.parameters.screenshot,
+            "",
+        );
+
+        if (!stepsResponse.success) {
+            console.error("Attempt to process recorded action failed");
+            console.error(stepsResponse.message);
+            message = "Action could not be completed";
+            return {
+                intent: intentResponse.data,
+            };
+        }
+
+        console.timeEnd(timerName2);
+
+        return {
+            intent: intentSchema,
+            intentJson: intentResponse.data,
+            actions: stepsResponse.data,
+        };
+    }
+
+    //
 
     return {
         displayText: message,

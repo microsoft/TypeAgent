@@ -7,9 +7,9 @@ import { RequestAction, fromJsonActions } from "agent-cache";
 import {
     createActionConfigProvider,
     getCacheFactory,
-    getInstanceDir,
     getSchemaNamesForActionConfigProvider,
 } from "agent-dispatcher/internal";
+import { getClientId, getInstanceDir } from "agent-dispatcher/helpers/data";
 import { getDefaultAppAgentProviders } from "default-agent-provider";
 import { withConsoleClientIO } from "agent-dispatcher/helpers/console";
 import { ClientIO, createDispatcher } from "agent-dispatcher";
@@ -26,7 +26,8 @@ const testRequest = new RequestAction(
     }),
 );
 
-const defaultAgentProviders = getDefaultAppAgentProviders(getInstanceDir());
+const instanceDir = getInstanceDir();
+const defaultAgentProviders = getDefaultAppAgentProviders(instanceDir);
 const schemaNames = getSchemaNamesForActionConfigProvider(
     await createActionConfigProvider(defaultAgentProviders),
 );
@@ -72,9 +73,6 @@ export default class ExplainCommand extends Command {
 
     async run(): Promise<void> {
         const { args, flags } = await this.parse(ExplainCommand);
-        const schemas = flags.schema
-            ? Object.fromEntries(flags.schema.map((name) => [name, true]))
-            : undefined;
 
         const command = ["@dispatcher explain"];
         if (flags.filter?.includes("refValue")) {
@@ -98,16 +96,19 @@ export default class ExplainCommand extends Command {
         await withConsoleClientIO(async (clientIO: ClientIO) => {
             const dispatcher = await createDispatcher("cli run explain", {
                 appAgentProviders: defaultAgentProviders,
-                schemas,
-                actions: null, // We don't need any actions
-                commands: { dispatcher: true },
+                agents: {
+                    schemas: flags.schema,
+                    actions: false, // We don't need any actions
+                    commands: ["dispatcher"],
+                },
                 explainer: {
                     name: flags.explainer,
                 },
                 cache: { enabled: false },
                 clientIO,
-                persist: true,
+                persistDir: instanceDir,
                 dblogging: true,
+                clientId: getClientId(),
             });
             try {
                 await dispatcher.processCommand(command.join(" "));

@@ -1,0 +1,89 @@
+[
+    [
+        {
+            "request": "Tell me about the image in the chat history.",            
+            "action": {
+                "translatorName": "chat",
+                "actionName": "lookupAndGenerateResponse",
+                "parameters": {
+                    "originalRequest": "Tell me about the image in the chat history.",
+                    "conversationLookupFilters": [
+                      {
+                        "terms": [
+                          "image"
+                        ]
+                      }
+                    ]
+                }
+            },
+            "history": {
+              "text": "It's an image!",
+              "source": "chat",
+              "entities": [
+                {
+                  "name": "image",
+                  "type": [
+                    "object"
+                  ]
+                },
+                {
+                  "name": "non-existent image",
+                  "type": [
+                    "object"
+                  ]
+                },
+                {
+                  "name": "attachment__0.png",
+                  "type": [
+                    "file",
+                    "image",
+                    "data"
+                  ]
+                }
+              ]
+            },
+            "attachments": [ "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAABhSURBVDhPY6AdqJ9vwFA/5wAEA9kkAbDmuR8YGub+B2MQm2hD0DWTZAiyZnQXEGUIyL/ICuEGIBsMVIMT1M+dgBJoMANAAGwISA6ohmiAbABZYNSAwWBA/dwFYEw7wMAAAAOtdVt9DPxQAAAAAElFTkSuQmCC" ]
+        },
+        {
+          "request": "show me attachment__0.png",
+          "action" : {
+            "translatorName": "chat",
+            "actionName": "lookupAndGenerateResponse",
+            "parameters": {
+              "originalRequest": "show me attachment__0.png",
+              "relatedFiles": [
+                "attachment__0.png"
+              ],
+              "retrieveRelatedFilesFromStorage": true            
+            },
+            "entities": {
+              "relatedFiles": [
+                {
+                  "name": "attachment__0.png",
+                  "type": [
+                    "file",
+                    "image",
+                    "data"
+                  ],
+                  "sourceAppAgentName": "chat"
+                }
+              ]
+            }
+          },
+          "history": {
+            "text":"Action chat.lookupAndGenerateResponse completed.",
+            "source": "chat",
+            "entities": [
+                {
+                  "name": "attachment__0.png",
+                  "type": [
+                    "file",
+                    "image",
+                    "data"
+                  ]
+                }
+            ]
+          }
+        }
+    ]
+]

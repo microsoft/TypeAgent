@@ -5,6 +5,9 @@ import * as kp from "knowpro";
 import * as knowLib from "knowledge-processor";
 import { ChatPrinter } from "../chatPrinter.js";
 import chalk from "chalk";
+import { textLocationToString } from "./knowproCommon.js";
+import * as cm from "conversation-memory";
+import * as im from "image-memory";
 
 export class KnowProPrinter extends ChatPrinter {
     public sortAsc: boolean = true;
@@ -133,6 +136,28 @@ export class KnowProPrinter extends ChatPrinter {
         return this;
     }
 
+    public writeScoredKnowledge(scoredKnowledge: kp.ScoredKnowledge) {
+        switch (scoredKnowledge.knowledgeType) {
+            default:
+                this.writeLine(scoredKnowledge.knowledgeType);
+                break;
+            case "entity":
+                this.writeEntity(
+                    scoredKnowledge.knowledge as knowLib.conversation.ConcreteEntity,
+                );
+                break;
+            case "action":
+                this.writeAction(
+                    scoredKnowledge.knowledge as knowLib.conversation.Action,
+                );
+                break;
+            case "topic":
+                this.writeTopic(scoredKnowledge.knowledge as kp.Topic);
+                break;
+        }
+        return this;
+    }
+
     private writeScoredRef(
         matchNumber: number,
         totalMatches: number,
@@ -175,12 +200,27 @@ export class KnowProPrinter extends ChatPrinter {
         conversation: kp.IConversation,
         results: Map<kp.KnowledgeType, kp.SearchResult>,
         maxToDisplay: number,
+        distinct: boolean = false,
     ) {
-        // Do entities before actions...
-        this.writeResult(conversation, "entity", results, maxToDisplay);
-        this.writeResult(conversation, "action", results, maxToDisplay);
-        this.writeResult(conversation, "topic", results, maxToDisplay);
-        this.writeResult(conversation, "tag", results, maxToDisplay);
+        if (distinct) {
+            this.writeResultDistinct(
+                conversation,
+                "topic",
+                results,
+                maxToDisplay,
+            );
+            this.writeResultDistinct(
+                conversation,
+                "entity",
+                results,
+                maxToDisplay,
+            );
+        } else {
+            this.writeResult(conversation, "tag", results, maxToDisplay);
+            this.writeResult(conversation, "topic", results, maxToDisplay);
+            this.writeResult(conversation, "action", results, maxToDisplay);
+            this.writeResult(conversation, "entity", results, maxToDisplay);
+        }
         return this;
     }
 
@@ -198,6 +238,61 @@ export class KnowProPrinter extends ChatPrinter {
         return this;
     }
 
+    private writeResultDistinct(
+        conversation: kp.IConversation,
+        type: kp.KnowledgeType,
+        results: Map<kp.KnowledgeType, kp.SearchResult>,
+        maxToDisplay: number,
+    ) {
+        if (type !== "topic" && type !== "entity") {
+            return;
+        }
+
+        let distinctKnowledge: kp.ScoredKnowledge[] | undefined;
+        switch (type) {
+            default:
+                return;
+
+            case "topic":
+                const topics = results.get("topic");
+                if (topics) {
+                    this.writeTitle(type.toUpperCase());
+                    distinctKnowledge = kp.getDistinctTopicMatches(
+                        conversation.semanticRefs!,
+                        topics.semanticRefMatches,
+                        maxToDisplay,
+                    );
+                }
+                break;
+
+            case "entity":
+                const entities = results.get("entity");
+                if (entities) {
+                    this.writeTitle(type.toUpperCase());
+                    distinctKnowledge = kp.getDistinctEntityMatches(
+                        conversation.semanticRefs!,
+                        entities.semanticRefMatches,
+                        maxToDisplay,
+                    );
+                }
+                break;
+        }
+        if (distinctKnowledge) {
+            for (let i = 0; i < distinctKnowledge.length; ++i) {
+                let pos = this.sortAsc ? distinctKnowledge.length - (i + 1) : i;
+                const knowledge = distinctKnowledge[pos];
+                this.writeInColor(
+                    chalk.green,
+                    `#${pos + 1} / ${distinctKnowledge.length}: [${knowledge.score}]`,
+                );
+                this.writeScoredKnowledge(knowledge);
+                this.writeLine();
+            }
+        }
+
+        return this;
+    }
+
     public writeConversationInfo(conversation: kp.IConversation) {
         this.writeTitle(conversation.nameTag);
         const timeRange = kp.getTimeRangeForConversation(conversation);
@@ -209,7 +304,7 @@ export class KnowProPrinter extends ChatPrinter {
         return this;
     }
 
-    public writePodcastInfo(podcast: kp.Podcast) {
+    public writePodcastInfo(podcast: cm.Podcast) {
         this.writeConversationInfo(podcast);
         this.writeList(getPodcastParticipants(podcast), {
             type: "csv",
@@ -218,29 +313,38 @@ export class KnowProPrinter extends ChatPrinter {
         return this;
     }
 
-    public writeIndexingResults(
-        results: kp.ConversationIndexingResult,
-        verbose = false,
-    ) {
-        if (results.failedMessages.length > 0) {
-            this.writeError(
-                `Errors for ${results.failedMessages.length} messages`,
+    public writeImageCollectionInfo(imageCollection: im.ImageCollection) {
+        this.writeLine(
+            `${imageCollection.nameTag}: ${imageCollection.messages.length} images.`,
+        );
+        return this;
+    }
+
+    public writeIndexingResults(results: kp.IndexingResults) {
+        if (results.chunksIndexedUpto) {
+            this.writeLine(
+                `Indexed upto: ${textLocationToString(results.chunksIndexedUpto)}`,
             );
-            if (verbose) {
-                for (const failedMessage of results.failedMessages) {
-                    this.writeInColor(
-                        chalk.cyan,
-                        failedMessage.message.textChunks[0],
-                    );
-                    this.writeError(failedMessage.error);
-                }
-            }
+        }
+        if (results.error) {
+            this.writeError(results.error);
         }
         return this;
     }
+
+    public writeSearchFilter(
+        action: knowLib.conversation.GetAnswerWithTermsActionV2,
+    ) {
+        this.writeInColor(
+            chalk.cyanBright,
+            `Question: ${action.parameters.question}`,
+        );
+        this.writeLine();
+        this.writeJson(action.parameters.filters);
+    }
 }
 
-function getPodcastParticipants(podcast: kp.Podcast) {
+function getPodcastParticipants(podcast: cm.Podcast) {
     const participants = new Set<string>();
     for (let message of podcast.messages) {
         const meta = message.metadata;

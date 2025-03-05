@@ -267,6 +267,14 @@ export async function createAgentRpcClient(
                 .get(param.actionContextId)
                 .actionIO.setDisplay(param.content);
         },
+        appendDiagnosticData: (param: {
+            actionContextId: number;
+            data: any;
+        }) => {
+            actionContextMap
+                .get(param.actionContextId)
+                .actionIO.appendDiagnosticData(param.data);
+        },
         appendDisplay: (param: {
             actionContextId: number;
             content: DisplayContent;

@@ -111,16 +111,19 @@ async function handleChatResponse(
                         "...",
                 );
 
-                const needDisplay = context.streamingContext !== generatedText;
-                const result = needDisplay
-                    ? createActionResult(generatedText, true)
-                    : createActionResultNoDisplay(generatedText);
+                const needDisplay = context.streamingContext !== generatedText; //|| generateResponseAction.parameters.showImageToUser;
+                let result;
+                if (needDisplay) {
+                    result = createActionResult(generatedText, true);
+                } else {
+                    result = createActionResultNoDisplay(generatedText);
+                }
 
                 let entities = parameters.generatedTextEntities || [];
                 if (parameters.userRequestEntities !== undefined) {
-                    entities = parameters.userRequestEntities.concat(entities);
+                    result.entities =
+                        parameters.userRequestEntities.concat(entities);
                 }
-                result.entities = entities;
 
                 if (
                     generateResponseAction.parameters.relatedFiles !== undefined
@@ -139,7 +142,7 @@ async function handleChatResponse(
                     }
 
                     logEntities("File Entities:", fileEntities);
-                    result.entities.concat(fileEntities);
+                    result.entities = result.entities.concat(fileEntities);
                 }
 
                 return result;
@@ -224,6 +227,13 @@ async function handleChatResponse(
                 } else {
                     console.log("Conversation manager is undefined!");
                 }
+            } else if (
+                lookupAction.parameters.retrieveRelatedFilesFromStorage &&
+                lookupAction.parameters.relatedFiles !== undefined
+            ) {
+                return createActionResultFromHtmlDisplay(
+                    `<div>${await rehydrateImages(context, lookupAction.parameters.relatedFiles)}</div>`,
+                );
             }
         }
     }

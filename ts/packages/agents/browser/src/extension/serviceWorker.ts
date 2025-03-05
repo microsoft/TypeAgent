@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { AppAction } from "@typeagent/agent-sdk";
-import { WebSocketMessageV2 } from "../../../../commonUtils/dist/indexBrowser";
+import { WebSocketMessageV2 } from "common-utils";
 import {
     isWebAgentMessage,
     isWebAgentMessageFromDispatcher,
@@ -1536,6 +1536,24 @@ chrome.runtime.onMessage.addListener(
                     sendResponse({ schema: schemaResult });
                     break;
                 }
+                case "getIntentFromRecording": {
+                    const schemaResult = await sendActionToAgent({
+                        actionName: "getIntentFromRecording",
+                        parameters: {
+                            recordedActionName: message.actionName,
+                            recordedActionDescription: message.description,
+                            recordedActionSteps: message.steps,
+                            fragments: message.html,
+                            screenshot: message.screenshot,
+                        },
+                    });
+
+                    sendResponse({
+                        intent: schemaResult.intent,
+                        actions: schemaResult.actions,
+                    });
+                    break;
+                }
                 case "startRecording": {
                     const targetTab = await getActiveTab();
                     const response = await chrome.tabs.sendMessage(
@@ -1624,7 +1642,7 @@ chrome.runtime.onMessage.addListener(
                     const data =
                         await chrome.storage.local.get("recordedActions");
                     if (data) {
-                        chrome.storage.local.remove("recordedActions");
+                        await chrome.storage.local.remove("recordedActions");
                     }
                     sendResponse({});
                     break;

@@ -7,13 +7,14 @@ import { getDefaultAppAgentProviders } from "default-agent-provider";
 import { getChatModelNames } from "aiclient";
 import {
     createActionConfigProvider,
-    getInstanceDir,
     getSchemaNamesForActionConfigProvider,
 } from "agent-dispatcher/internal";
 import { withConsoleClientIO } from "agent-dispatcher/helpers/console";
+import { getClientId, getInstanceDir } from "agent-dispatcher/helpers/data";
 
 const modelNames = await getChatModelNames();
-const defaultAppAgentProviders = getDefaultAppAgentProviders(getInstanceDir());
+const instanceDir = getInstanceDir();
+const defaultAppAgentProviders = getDefaultAppAgentProviders(instanceDir);
 const schemaNames = getSchemaNamesForActionConfigProvider(
     await createActionConfigProvider(defaultAppAgentProviders),
 );
@@ -56,6 +57,25 @@ export default class TranslateCommand extends Command {
             default: true, // follow DispatcherOptions default
             allowNo: true,
         }),
+        schemaOptimization: Flags.boolean({
+            description: "Enable schema optimization",
+        }),
+        switchEmbedding: Flags.boolean({
+            description: "Use embedding to determine the first schema to use",
+            default: true, // follow DispatcherOptions default
+            allowNo: true,
+        }),
+        switchInline: Flags.boolean({
+            description: "Use inline switch schema to select schema group",
+            default: true, // follow DispatcherOptions default
+            allowNo: true,
+        }),
+        switchSearch: Flags.boolean({
+            description:
+                "Enable second chance full switch schema to find schema group",
+            default: true, // follow DispatcherOptions default
+            allowNo: true,
+        }),
     };
 
     static description = "Translate a request into action";
@@ -65,16 +85,14 @@ export default class TranslateCommand extends Command {
 
     async run(): Promise<void> {
         const { args, flags } = await this.parse(TranslateCommand);
-        const schemas = flags.schema
-            ? Object.fromEntries(flags.schema.map((name) => [name, true]))
-            : undefined;
-
         await withConsoleClientIO(async (clientIO: ClientIO) => {
             const dispatcher = await createDispatcher("cli run translate", {
                 appAgentProviders: defaultAppAgentProviders,
-                schemas,
-                actions: null,
-                commands: { dispatcher: true },
+                agents: {
+                    schemas: flags.schema,
+                    actions: false,
+                    commands: ["dispatcher"],
+                },
                 translation: {
                     model: flags.model,
                     multiple: { enabled: flags.multiple },
@@ -84,12 +102,21 @@ export default class TranslateCommand extends Command {
                             jsonSchemaFunction: flags.jsonSchemaFunction,
                             jsonSchemaValidate: flags.jsonSchemaValidate,
                         },
+                        optimize: {
+                            enabled: flags.schemaOptimization,
+                        },
+                    },
+                    switch: {
+                        embedding: flags.switchEmbedding,
+                        inline: flags.switchInline,
+                        search: flags.switchSearch,
                     },
                 },
                 cache: { enabled: false },
                 clientIO,
-                persist: true,
+                persistDir: instanceDir,
                 dblogging: true,
+                clientId: getClientId(),
             });
             try {
                 await dispatcher.processCommand(

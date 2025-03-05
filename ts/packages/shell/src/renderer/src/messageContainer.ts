@@ -104,8 +104,10 @@ export class MessageContainer {
 
     public setDisplayInfo(source: string, action?: TypeAgentAction | string[]) {
         this.defaultSource = source;
-        this.action = action;
         this.updateSource();
+        if (action !== undefined) {
+            this.updateActionData(action);
+        }
     }
 
     private get sourceLabel() {
@@ -115,10 +117,13 @@ export class MessageContainer {
         if (this.action !== undefined) {
             if (Array.isArray(this.action)) {
                 return `${this.source} ${this.action.join(" ")}`;
+            } else if (
+                (this.action as TypeAgentAction).translatorName !== undefined
+            ) {
+                return `${this.action.translatorName}.${this.action.actionName}`;
             }
-            return `${this.action.translatorName}.${this.action.actionName}`;
         }
-        return this.source;
+        return this.defaultSource;
     }
 
     private get sourceIcon() {
@@ -138,19 +143,21 @@ export class MessageContainer {
                 label.innerText = sourceLabel;
             }
 
-            if (this.action !== undefined && !Array.isArray(this.action)) {
-                label.setAttribute(
-                    "action-data",
-                    "<pre>" +
-                        JSON.stringify(this.action, undefined, 2) +
-                        "</pre>",
-                );
-
-                // mark the span as clickable
-                this.nameSpan.classList.add("clickable");
-            }
-
             this.iconDiv.innerText = this.sourceIcon;
+        }
+    }
+
+    public updateActionData(data: any) {
+        this.action = data;
+        const label = this.timestampDiv.firstChild as HTMLSpanElement;
+        if (this.action !== undefined && !Array.isArray(this.action)) {
+            label.setAttribute(
+                "action-data",
+                "<pre>" + JSON.stringify(this.action, undefined, 2) + "</pre>",
+            );
+
+            // mark the span as clickable
+            this.nameSpan.classList.add("clickable");
         }
     }
 
@@ -190,17 +197,6 @@ export class MessageContainer {
         this.nameSpan.className = "agent-name";
         this.nameSpan.addEventListener("click", () => {
             swapContent(this.nameSpan, this.messageDiv);
-            // const data: string = this.nameSpan.getAttribute("action-data") ?? "";
-            // const originalMessage: string = this.messageDiv.innerHTML;
-
-            // if (this.messageDiv.classList.contains("chat-message-action-data")) {
-            //     this.messageDiv.classList.remove("chat-message-action-data");
-            // } else {
-            //     this.messageDiv.classList.add("chat-message-action-data");
-            // }
-
-            // this.nameSpan.setAttribute("action-data", originalMessage);
-            // this.messageDiv.innerHTML = data;
         });
 
         const timestampDiv = this.createTimestampDiv(

@@ -51,7 +51,7 @@ export async function createActionConfigProvider(
             return config;
         },
         getActionConfigs() {
-            return Object.entries(actionConfigs);
+            return Object.values(actionConfigs);
         },
         getActionSchemaFileForConfig(actionConfig: ActionConfig) {
             return actionSchemaFileCache.getActionSchemaFile(actionConfig);
@@ -64,5 +64,7 @@ export async function createActionConfigProvider(
 export function getSchemaNamesForActionConfigProvider(
     provider: ActionConfigProvider,
 ): string[] {
-    return provider.getActionConfigs().map(([name]) => name);
+    return provider
+        .getActionConfigs()
+        .map((actionConfig) => actionConfig.schemaName);
 }

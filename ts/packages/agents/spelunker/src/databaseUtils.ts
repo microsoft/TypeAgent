@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS Chunks (
     treeName TEXT NOT NULL,
     codeName TEXT NOT NULL,
     parentId TEXT KEY REFERENCES Chunks(chunkId), -- May be null
-    fileName TEXT KEY REFERENCES files(fileName) NOT NULL,
+    fileName TEXT KEY REFERENCES Files(fileName) NOT NULL,
     lineNo INTEGER NOT NULL -- 1-based
 );
 CREATE TABLE IF NOT EXISTS Blobs (

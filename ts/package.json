@@ -41,7 +41,7 @@
     "test:local": "pnpm -r --no-sort --stream --workspace-concurrency=0 run test:local"
   },
   "devDependencies": {
-    "@fluidframework/build-tools": "^0.35.0-247707",
+    "@fluidframework/build-tools": "^0.54.0",
     "@types/node": "^20.8.9",
     "concurrently": "^8.2.2",
     "markdown-link-check": "^3.12.2",

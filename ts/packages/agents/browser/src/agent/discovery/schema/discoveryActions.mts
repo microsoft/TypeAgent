@@ -50,6 +50,24 @@ export type AddUserAction = {
     };
 };
 
+export type HtmlFragments = {
+    frameId: string;
+    content: string;
+    text?: string;
+    cssSelector?: string;
+};
+
+export type GetIntentFromRecording = {
+    actionName: "getIntentFromRecording";
+    parameters: {
+        recordedActionName: string;
+        recordedActionDescription: string;
+        recordedActionSteps?: string;
+        fragments?: HtmlFragments[];
+        screenshot?: string;
+    };
+};
+
 export type SchemaDiscoveryActions =
     | FindPageComponents
     | FindUserActions
@@ -58,4 +76,5 @@ export type SchemaDiscoveryActions =
     | InitializePageSchema
     | SummarizePage
     | SaveUserActions
-    | AddUserAction;
+    | AddUserAction
+    | GetIntentFromRecording;

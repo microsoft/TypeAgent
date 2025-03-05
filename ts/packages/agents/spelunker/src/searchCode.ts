@@ -15,10 +15,17 @@ import {
 } from "@typeagent/agent-sdk/helpers/action";
 
 import { keepBestChunks, makeBatches } from "./batching.js";
-import { Blob, Chunk, ChunkedFile, ChunkerErrorItem } from "./chunkSchema.js";
+import {
+    Blob,
+    Chunk,
+    ChunkId,
+    ChunkedFile,
+    ChunkerErrorItem,
+} from "./chunkSchema.js";
 import { createDatabase, purgeFile } from "./databaseUtils.js";
 import { loadEmbeddings, preSelectChunks } from "./embeddings.js";
 import { console_log, resetEpoch } from "./logging.js";
+import { OracleSpecs } from "./oracleSchema.js";
 import { chunkifyPythonFiles } from "./pythonChunker.js";
 import { createQueryContext } from "./queryContext.js";
 import { retryOn429 } from "./retryLogic.js";
@@ -45,7 +52,7 @@ export async function searchCode(
     if (!context.queryContext) {
         context.queryContext = createQueryContext();
     }
-    await createDatabase(context);
+    createDatabase(context);
     await loadDatabase(context);
     const db = context.queryContext!.database!;
 
@@ -55,7 +62,9 @@ export async function searchCode(
     // 3. Ask a fast LLM for the most relevant chunk Ids, rank them, and keep the best ones.
     const chunks = await selectChunks(context, allChunks, input);
     if (!chunks.length) {
-        throw new Error("No chunks selected");
+        return createActionResultFromError(
+            "No chunks selected (server access problem?)",
+        );
     }
 
     // 4. Construct a prompt from those chunks.
@@ -70,8 +79,17 @@ export async function searchCode(
     }
 
     // 6. Extract answer from result.
-    const result = wrappedResult.data;
-    const answer = result.answer;
+    const result: OracleSpecs = wrappedResult.data;
+    const answer =
+        result.answer.trimEnd() + formatReferences(result.references);
+
+    // 6a. Log the answer to a permanent place.
+    // Wrong place in the hierarchy, but avoids accidental deletion
+    const logFile: string = path.join(process.env.HOME ?? "", ".spelunker.log");
+    const logRecord = JSON.stringify(result);
+    const fd = fs.openSync(logFile, "a");
+    fs.writeSync(fd, logRecord + "\n");
+    fs.closeSync(fd);
 
     // 7. Produce entities and an action result from the result.
     const outputEntities = produceEntitiesFromResult(result, allChunks, db);
@@ -84,7 +102,18 @@ export async function searchCode(
     );
 }
 
-async function readAllChunksFromDatabase(
+function formatReferences(references: ChunkId[]): string {
+    if (!references.length) return "";
+    const answer: string[] = ["\n\nReferences: "];
+    let prefix: string = " ";
+    for (const ref of references) {
+        answer.push(`${prefix}${ref}`);
+        prefix = ", ";
+    }
+    return answer.join("");
+}
+
+export async function readAllChunksFromDatabase(
     db: sqlite.Database,
 ): Promise<Chunk[]> {
     console_log(`[Step 2: Load chunks from database]`);
@@ -142,7 +171,7 @@ function constructPrompt(input: string, chunks: Chunk[]): string {
 async function queryOracle(
     context: SpelunkerContext,
     prompt: string,
-): Promise<Result<any>> {
+): Promise<Result<OracleSpecs>> {
     console_log(`[Step 5: Ask the oracle]`);
     return await context.queryContext!.oracle.translate(prompt);
 }
@@ -193,6 +222,11 @@ export async function selectChunks(
     );
     console_log(`[Step 3a: Pre-select with fuzzy matching]`);
     const nearestChunkIds = await preSelectChunks(context, input, 500);
+    if (!nearestChunkIds.length) {
+        // Fail fast if preselection failed.
+        console_log(`  [Preselection failed -- server access problem?]`);
+        return [];
+    }
     allChunks = allChunks.filter((c) => nearestChunkIds.includes(c.chunkId));
     console_log(`  [Pre-selected ${allChunks.length} chunks]`);
 
@@ -324,7 +358,7 @@ function getAllSourceFiles(dir: string): FileMtimeSize[] {
 
 // TODO: Break into multiple functions.
 // Notably the part that compares files in the database and files on disk.
-async function loadDatabase(context: SpelunkerContext): Promise<void> {
+export async function loadDatabase(context: SpelunkerContext): Promise<void> {
     console_log(`[Step 1: Load database]`);
     if (!context.queryContext) {
         context.queryContext = createQueryContext();

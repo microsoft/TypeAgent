@@ -6,9 +6,9 @@ import { createDispatcher, Dispatcher } from "agent-dispatcher";
 import {
     createActionConfigProvider,
     getCacheFactory,
-    getInstanceDir,
     getSchemaNamesForActionConfigProvider,
 } from "agent-dispatcher/internal";
+import { getClientId, getInstanceDir } from "agent-dispatcher/helpers/data";
 import {
     getDefaultAppAgentProviders,
     getDefaultConstructionProvider,
@@ -30,7 +30,7 @@ const schemaNames = getSchemaNamesForActionConfigProvider(
 export default class Interactive extends Command {
     static description = "Interactive mode";
     static flags = {
-        schema: Flags.string({
+        agent: Flags.string({
             description: "Schema names",
             options: schemaNames,
             multiple: true,
@@ -72,21 +72,19 @@ export default class Interactive extends Command {
             inspector.open(undefined, undefined, true);
         }
 
-        const schemas = flags.schema
-            ? Object.fromEntries(flags.schema.map((name) => [name, true]))
-            : undefined;
-
         await withConsoleClientIO(async (clientIO) => {
             const dispatcher = await createDispatcher("cli interactive", {
                 appAgentProviders: defaultAppAgentProviders,
                 agentInstaller: getDefaultAppAgentInstaller(instanceDir),
-                schemas,
+                agents: flags.agent,
                 translation: { model: flags.model },
                 explainer: { name: flags.explainer },
                 persistSession: !flags.memory,
+                persistDir: !flags.memory ? getInstanceDir() : undefined,
                 enableServiceHost: true,
                 clientIO,
                 dblogging: true,
+                clientId: getClientId(),
                 constructionProvider: getDefaultConstructionProvider(),
             });
             try {

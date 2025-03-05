@@ -1,8 +1,15 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import type {
+    PointOfInterest,
+    ReverseGeocodeAddressLookup,
+} from "common-utils";
+import { KnowledgeResponse } from "../conversation/knowledgeSchema.js";
+
 export type Image = {
     title: string;
+    altText: string;
     caption: string;
     width: number;
     height: number;
@@ -15,5 +22,10 @@ export type Image = {
     longitude?: number;
     altitude?: number;
 
-    metaData?: any | undefined;
+    exifData?: any | undefined;
+
+    nearbyPOI?: PointOfInterest[] | undefined;
+    reverseGeocode?: ReverseGeocodeAddressLookup[] | undefined;
+
+    knowledge?: KnowledgeResponse | undefined;
 };

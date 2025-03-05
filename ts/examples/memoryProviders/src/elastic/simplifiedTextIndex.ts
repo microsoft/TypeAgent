@@ -9,15 +9,16 @@ import {
     TextIndexSettings,
     ValueDataType,
     ValueType,
+    sets,
 } from "knowledge-processor";
 import { generateTextId, toValidIndexName } from "./common.js";
 import { ScoredItem, generateEmbedding } from "typeagent";
-import {
-    ModelType,
-    createEmbeddingModel,
-} from "../../../../packages/aiclient/dist/openai.js";
+import { openai } from "aiclient";
+
+const { ModelType, createEmbeddingModel } = openai;
+
 import { openAIApiSettingsFromEnv } from "../../../../packages/aiclient/dist/openaiSettings.js";
-import { HitTable } from "../../../../packages/knowledgeProcessor/dist/setOperations.js";
+type HitTable<T = any> = sets.HitTable<T>;
 
 export async function createTextIndex<
     TTexId extends ValueType = string,

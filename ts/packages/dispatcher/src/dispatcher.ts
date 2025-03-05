@@ -25,11 +25,14 @@ import {
 import { RequestId } from "./context/interactiveIO.js";
 import { RequestMetrics } from "./utils/metrics.js";
 import { FullAction } from "agent-cache";
+import { openai as ai } from "aiclient";
 
 export type CommandResult = {
     hasError?: boolean;
+    exception?: string;
     actions?: FullAction[];
     metrics?: RequestMetrics;
+    tokenUsage?: ai.CompletionUsageStats;
 };
 
 export interface Dispatcher {

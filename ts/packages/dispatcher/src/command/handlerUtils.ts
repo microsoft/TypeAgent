@@ -3,7 +3,10 @@
 
 import { ActionContext } from "@typeagent/agent-sdk";
 import { CommandHandlerContext } from "../context/commandHandlerContext.js";
-import { CommandHandlerTable } from "@typeagent/agent-sdk/helpers/command";
+import {
+    CommandHandlerNoParams,
+    CommandHandlerTable,
+} from "@typeagent/agent-sdk/helpers/command";
 import { displaySuccess } from "@typeagent/agent-sdk/helpers/display";
 
 export function getToggleCommandHandlers(
@@ -12,7 +15,7 @@ export function getToggleCommandHandlers(
         context: ActionContext<CommandHandlerContext>,
         enable: boolean,
     ) => Promise<void>,
-) {
+): Record<string, CommandHandlerNoParams> {
     return {
         on: {
             description: `Turn on ${name}`,

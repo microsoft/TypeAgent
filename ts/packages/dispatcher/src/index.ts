@@ -11,14 +11,12 @@ export type {
 } from "./agentProvider/agentProvider.js";
 export type {
     ClientIO,
-    RequestId,
     IAgentMessage,
     NotifyExplainedData,
+    RequestId,
 } from "./context/interactiveIO.js";
 export type { Timing, PhaseTiming, RequestMetrics } from "./utils/metrics.js";
 export type {
     TemplateEditConfig,
     TemplateData,
 } from "./translation/actionTemplate.js";
-export { getUserDataDir, getInstanceDir } from "./utils/userData.js";
-export { getChatHistoryForTranslation } from "./translation/translateRequest.js";

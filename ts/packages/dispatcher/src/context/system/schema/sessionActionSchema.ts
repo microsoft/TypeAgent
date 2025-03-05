@@ -2,33 +2,24 @@
 // Licensed under the MIT License.
 
 export type SessionAction =
-    | NewAction
-    | ListAction
-    | ShowInfoAction
-    | ToggleHistoryAction;
+    | NewSessionAction
+    | ListSessionAction
+    | ShowSessionInfoAction;
 
 // Create a new session.
-export type NewAction = {
-    actionName: "new";
+export type NewSessionAction = {
+    actionName: "newSession";
     parameters: {
         name?: string;
     };
 };
 
 // List all sessions.
-export type ListAction = {
-    actionName: "list";
+export type ListSessionAction = {
+    actionName: "listSession";
 };
 
 // Show information about a session.
-export type ShowInfoAction = {
-    actionName: "showInfo";
-};
-
-// Toggle history flag for the session.
-export type ToggleHistoryAction = {
-    actionName: "toggleHistory";
-    parameters: {
-        enable: boolean;
-    };
+export type ShowSessionInfoAction = {
+    actionName: "showSessionInfo";
 };

@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { ChildProcess } from "child_process";
-import { Limiter, createLimiter } from "common-utils";
+import { DeepPartialUndefined, Limiter, createLimiter } from "common-utils";
 import {
     ChildLogger,
     Logger,
@@ -14,6 +14,7 @@ import {
 import { AgentCache } from "agent-cache";
 import { randomUUID } from "crypto";
 import {
+    DispatcherConfig,
     getSessionName,
     Session,
     SessionOptions,
@@ -24,20 +25,22 @@ import { TypeAgentTranslator } from "../translation/agentTranslators.js";
 import { ActionConfigProvider } from "../translation/actionConfigProvider.js";
 import { getCacheFactory } from "../utils/cacheFactory.js";
 import { createServiceHost } from "./system/handlers/serviceHost/serviceHostCommandHandler.js";
-import { ClientIO, RequestId, nullClientIO } from "./interactiveIO.js";
+import { ClientIO, nullClientIO, RequestId } from "./interactiveIO.js";
 import { ChatHistory, createChatHistory } from "./chatHistory.js";
+
 import {
     ensureCacheDir,
-    getInstanceDir,
-    getUserId,
+    ensureDirectory,
     lockInstanceDir,
-} from "../utils/userData.js";
+} from "../utils/fsUtils.js";
 import { ActionContext, AppAgentEvent } from "@typeagent/agent-sdk";
 import { Profiler } from "telemetry";
 import { conversation as Conversation } from "knowledge-processor";
 import {
     AppAgentManager,
-    AppAgentStateOptions,
+    AppAgentStateInitSettings,
+    AppAgentStateSettings,
+    getAppAgentStateSettings,
     SetStateResult,
 } from "./appAgentManager.js";
 import {
@@ -64,6 +67,7 @@ import { createSchemaInfoProvider } from "../translation/actionSchemaFileCache.j
 import { createInlineAppAgentProvider } from "./inlineAgentProvider.js";
 import { CommandResult } from "../dispatcher.js";
 import { DispatcherName } from "./dispatcher/dispatcherUtils.js";
+import lockfile from "proper-lockfile";
 
 const debug = registerDebug("typeagent:dispatcher:init");
 const debugError = registerDebug("typeagent:dispatcher:init:error");
@@ -94,12 +98,14 @@ export function ensureCommandResult(
 
 // Command Handler Context definition.
 export type CommandHandlerContext = {
-    agents: AppAgentManager;
-    agentInstaller: AppAgentInstaller | undefined;
+    readonly agents: AppAgentManager;
+    readonly agentInstaller: AppAgentInstaller | undefined;
     session: Session;
 
-    instanceDir?: string | undefined;
-    cacheDirPath?: string | undefined;
+    readonly persistDir: string | undefined;
+    readonly cacheDir: string | undefined;
+    readonly embeddingCacheDir: string | undefined;
+
     conversationManager?: Conversation.ConversationManager | undefined;
     // Per activation configs
     developerMode?: boolean;
@@ -157,18 +163,25 @@ async function getAgentCache(
     return agentCache;
 }
 
-export type DispatcherOptions = SessionOptions & {
+export type DispatcherOptions = DeepPartialUndefined<DispatcherConfig> & {
     appAgentProviders?: AppAgentProvider[];
-    explanationAsynchronousMode?: boolean; // default to false
+    persistDir?: string | undefined;
     persistSession?: boolean; // default to false,
-    persist?: boolean; // default to false,
+    clientId?: string;
     clientIO?: ClientIO | undefined; // undefined to disable any IO.
+
+    agentInstaller?: AppAgentInstaller;
+    agents?: AppAgentStateInitSettings;
     enableServiceHost?: boolean; // default to false,
     metrics?: boolean; // default to false
     dblogging?: boolean; // default to false
+
     constructionProvider?: ConstructionProvider;
-    agentInstaller?: AppAgentInstaller;
+    explanationAsynchronousMode?: boolean; // default to false
     collectCommandResult?: boolean; // default to false
+
+    // Use for tests so that embedding can be cached without 'persistDir'
+    embeddingCacheDir?: string | undefined; // default to 'cache' under 'persistDir' if specified
 };
 
 async function getSession(instanceDir?: string) {
@@ -221,6 +234,20 @@ function getLoggerSink(isDbEnabled: () => boolean, clientIO: ClientIO) {
     );
 }
 
+async function lockEmbeddingCacheDir(context: CommandHandlerContext) {
+    return context.embeddingCacheDir
+        ? await lockfile.lock(context.embeddingCacheDir, {
+              retries: {
+                  minTimeout: 50,
+                  maxTimeout: 1000,
+                  randomize: true,
+                  forever: true, // embedding cache dir is used for test, so only to retry forever.
+                  maxRetryTime: 1000 * 60 * 5, // but place a time limit of 5 minutes
+              },
+          })
+        : undefined;
+}
+
 async function addAppAgentProviders(
     context: CommandHandlerContext,
     appAgentProviders?: AppAgentProvider[],
@@ -228,35 +255,40 @@ async function addAppAgentProviders(
     const embeddingCachePath = getEmbeddingCachePath(context);
     let embeddingCache: EmbeddingCache | undefined;
 
-    if (embeddingCachePath) {
-        try {
-            embeddingCache = await readEmbeddingCache(embeddingCachePath);
-            debug(
-                `Action Schema Embedding cache loaded: ${embeddingCachePath}`,
-            );
-        } catch {
-            // Ignore error
+    const unlock = await lockEmbeddingCacheDir(context);
+    try {
+        if (embeddingCachePath) {
+            try {
+                embeddingCache = await readEmbeddingCache(embeddingCachePath);
+                debug(
+                    `Action Schema Embedding cache loaded: ${embeddingCachePath}`,
+                );
+            } catch {
+                // Ignore error
+            }
         }
-    }
 
-    const inlineAppProvider = createInlineAppAgentProvider(context);
-    await context.agents.addProvider(inlineAppProvider, embeddingCache);
+        const inlineAppProvider = createInlineAppAgentProvider(context);
+        await context.agents.addProvider(inlineAppProvider, embeddingCache);
 
-    if (appAgentProviders) {
-        for (const provider of appAgentProviders) {
-            await context.agents.addProvider(provider, embeddingCache);
+        if (appAgentProviders) {
+            for (const provider of appAgentProviders) {
+                await context.agents.addProvider(provider, embeddingCache);
+            }
         }
-    }
-    if (embeddingCachePath) {
-        return saveActionEmbeddings(context, embeddingCachePath);
+        if (embeddingCachePath) {
+            return saveActionEmbeddings(context, embeddingCachePath);
+        }
+    } finally {
+        if (unlock) {
+            await unlock();
+        }
     }
 }
 
 function getEmbeddingCachePath(context: CommandHandlerContext) {
-    const cacheDirPath = context.cacheDirPath;
-    return cacheDirPath
-        ? path.join(cacheDirPath, "embeddingCache.json")
-        : undefined;
+    const cacheDir = context.embeddingCacheDir ?? context.cacheDir;
+    return cacheDir ? path.join(cacheDir, "embeddingCache.json") : undefined;
 }
 
 async function saveActionEmbeddings(
@@ -285,7 +317,14 @@ export async function installAppProvider(
 
     const embeddingCachePath = getEmbeddingCachePath(context);
     if (embeddingCachePath !== undefined) {
-        await saveActionEmbeddings(context, embeddingCachePath);
+        const unlock = await lockEmbeddingCacheDir(context);
+        try {
+            await saveActionEmbeddings(context, embeddingCachePath);
+        } finally {
+            if (unlock) {
+                await unlock();
+            }
+        }
     }
 }
 
@@ -298,18 +337,26 @@ export async function initializeCommandHandlerContext(
         options?.explanationAsynchronousMode ?? false;
 
     const persistSession = options?.persistSession ?? false;
-    const persist = options?.persist ?? persistSession;
-    const instanceDir = persist ? getInstanceDir() : undefined;
-    const instanceDirLock = instanceDir
-        ? await lockInstanceDir(instanceDir)
+    const persistDir = options?.persistDir;
+
+    if (persistDir === undefined && persistSession) {
+        throw new Error(
+            "Persist session requires persistDir to be set in options.",
+        );
+    }
+
+    const instanceDirLock = persistDir
+        ? await lockInstanceDir(persistDir)
         : undefined;
 
     try {
         const session = await getSession(
-            persistSession ? instanceDir : undefined,
+            persistSession ? persistDir : undefined,
         );
+
+        // initialization options set the default, but persisted configuration will still overrides it.
         if (options) {
-            session.setConfig(options);
+            session.updateDefaultConfig(options);
         }
         const sessionDirPath = session.getSessionDirPath();
         debug(`Session directory: ${sessionDirPath}`);
@@ -326,7 +373,7 @@ export async function initializeCommandHandlerContext(
         const loggerSink = getLoggerSink(() => context.dblogging, clientIO);
         const logger = new ChildLogger(loggerSink, DispatcherName, {
             hostName,
-            userId: getUserId(),
+            clientId: options?.clientId,
             sessionId: () =>
                 context.session.sessionDirPath
                     ? getSessionName(context.session.sessionDirPath)
@@ -339,17 +386,20 @@ export async function initializeCommandHandlerContext(
             serviceHost = await createServiceHost();
         }
 
-        const cacheDirPath = instanceDir
-            ? ensureCacheDir(instanceDir)
-            : undefined;
-        const agents = new AppAgentManager(cacheDirPath);
+        const cacheDir = persistDir ? ensureCacheDir(persistDir) : undefined;
+        const embeddingCacheDir = options?.embeddingCacheDir;
+        if (embeddingCacheDir) {
+            ensureDirectory(embeddingCacheDir);
+        }
+        const agents = new AppAgentManager(cacheDir);
         const constructionProvider = options?.constructionProvider;
         const context: CommandHandlerContext = {
             agents,
             agentInstaller: options?.agentInstaller,
             session,
-            instanceDir,
-            cacheDirPath,
+            persistDir,
+            cacheDir,
+            embeddingCacheDir,
             conversationManager,
             explanationAsynchronousMode,
             dblogging: options?.dblogging ?? false,
@@ -380,7 +430,15 @@ export async function initializeCommandHandlerContext(
 
         await addAppAgentProviders(context, options?.appAgentProviders);
 
-        await setAppAgentStates(context, options);
+        const appAgentStateSettings = getAppAgentStateSettings(
+            options?.agents,
+            agents,
+        );
+        if (appAgentStateSettings !== undefined) {
+            // initialization options set the default, but persisted configuration will still overrides it.
+            session.updateDefaultConfig(appAgentStateSettings);
+        }
+        await setAppAgentStates(context);
         debug("Context initialized");
         return context;
     } catch (e) {
@@ -391,20 +449,16 @@ export async function initializeCommandHandlerContext(
     }
 }
 
-async function setAppAgentStates(
-    context: CommandHandlerContext,
-    options?: AppAgentStateOptions,
-) {
+async function setAppAgentStates(context: CommandHandlerContext) {
     const result = await context.agents.setState(
         context,
         context.session.getConfig(),
-        options,
     );
 
     // Only rollback if user explicitly change state.
     // Ignore the returned rollback state for initialization and keep the session setting as is.
 
-    processSetAppAgentStateResult(result, context, (message) =>
+    const rollback = processSetAppAgentStateResult(result, context, (message) =>
         context.clientIO.notify(
             AppAgentEvent.Error,
             undefined,
@@ -412,18 +466,19 @@ async function setAppAgentStates(
             DispatcherName,
         ),
     );
+
+    if (rollback) {
+        context.session.updateConfig(rollback);
+    }
 }
 
 async function updateAppAgentStates(
     context: ActionContext<CommandHandlerContext>,
-    changed: AppAgentStateOptions,
-): Promise<AppAgentStateOptions> {
+): Promise<AppAgentStateSettings> {
     const systemContext = context.sessionContext.agentContext;
     const result = await systemContext.agents.setState(
         systemContext,
-        changed,
-        undefined,
-        false,
+        systemContext.session.getConfig(),
     );
 
     const rollback = processSetAppAgentStateResult(
@@ -433,12 +488,12 @@ async function updateAppAgentStates(
     );
 
     if (rollback) {
-        systemContext.session.setConfig(rollback);
+        systemContext.session.updateConfig(rollback);
     }
-    const resultState: AppAgentStateOptions = {};
+    const resultState: AppAgentStateSettings = {};
     for (const [stateName, changed] of Object.entries(result.changed)) {
         if (changed.length !== 0) {
-            resultState[stateName as keyof AppAgentStateOptions] =
+            resultState[stateName as keyof AppAgentStateSettings] =
                 Object.fromEntries(changed);
         }
     }
@@ -449,9 +504,9 @@ function processSetAppAgentStateResult(
     result: SetStateResult,
     systemContext: CommandHandlerContext,
     cbError: (message: string) => void,
-): AppAgentStateOptions | undefined {
+): AppAgentStateSettings | undefined {
     let hasFailed = false;
-    const rollback = { actions: {}, commands: {} };
+    const rollback = { schemas: {}, actions: {}, commands: {} };
     for (const [stateName, failed] of Object.entries(result.failed)) {
         for (const [translatorName, enable, e] of failed) {
             hasFailed = true;
@@ -502,7 +557,7 @@ export async function reloadSessionOnCommandHandlerContext(
     context: CommandHandlerContext,
     persist: boolean,
 ) {
-    const session = await getSession(persist ? context.instanceDir : undefined);
+    const session = await getSession(persist ? context.persistDir : undefined);
     await setSessionOnCommandHandlerContext(context, session);
 }
 
@@ -512,14 +567,17 @@ export async function changeContextConfig(
 ) {
     const systemContext = context.sessionContext.agentContext;
     const session = systemContext.session;
-    const changed = session.setConfig(options);
+    const changed = session.updateSettings(options);
+    if (changed === undefined) {
+        return undefined;
+    }
 
-    const translatorChanged = changed.hasOwnProperty("schemas");
+    const schemasChanged = changed.hasOwnProperty("schemas");
     const actionsChanged = changed.hasOwnProperty("actions");
     const commandsChanged = changed.hasOwnProperty("commands");
 
     if (
-        translatorChanged ||
+        schemasChanged ||
         changed.translation?.model !== undefined ||
         changed.translation?.switch?.inline !== undefined ||
         changed.translation?.multiple !== undefined ||
@@ -530,8 +588,8 @@ export async function changeContextConfig(
         systemContext.translatorCache.clear();
     }
 
-    if (translatorChanged || actionsChanged || commandsChanged) {
-        Object.assign(changed, await updateAppAgentStates(context, changed));
+    if (schemasChanged || actionsChanged || commandsChanged) {
+        Object.assign(changed, await updateAppAgentStates(context));
     }
 
     if (changed.explainer?.name !== undefined) {
@@ -546,7 +604,7 @@ export async function changeContextConfig(
             displayError(`Failed to change explainer: ${e.message}`, context);
             delete changed.explainer?.name;
             // Restore old explainer name
-            session.setConfig({
+            session.updateSettings({
                 explainer: {
                     name: systemContext.agentCache.explainerName,
                 },

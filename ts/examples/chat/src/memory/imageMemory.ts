@@ -6,7 +6,6 @@ import {
     CommandHandler,
     CommandMetadata,
     InteractiveIo,
-    NamedArgs,
     parseNamedArguments,
     StopWatch,
 } from "interactive-app";
@@ -26,8 +25,9 @@ import * as knowLib from "knowledge-processor";
 import path from "node:path";
 import { sqlite } from "memory-providers";
 import { isImageFileType } from "common-utils";
-import { TokenCounter } from "aiclient";
-import { CompletionUsageStats } from "../../../../packages/aiclient/dist/openai.js";
+import { TokenCounter, openai } from "aiclient";
+
+type CompletionUsageStats = openai.CompletionUsageStats;
 
 export async function createImageMemory(
     models: Models,
@@ -131,9 +131,18 @@ export function createImageCommands(
             TokenCounter.getInstance().total;
 
         if (isDir) {
-            await indexImages(namedArgs, sourcePath, context);
+            await indexImages(
+                sourcePath,
+                namedArgs.value("cachePath", "string", false),
+                context,
+                clock,
+            );
         } else {
-            await indexImage(sourcePath, context);
+            await indexImage(
+                sourcePath,
+                namedArgs.value("cachePath", "string", false),
+                context,
+            );
         }
 
         const tokenCountFinish: CompletionUsageStats =
@@ -160,9 +169,10 @@ export function createImageCommands(
     }
 
     async function indexImages(
-        namesArgs: NamedArgs,
         sourcePath: string,
+        cachePath: string,
         context: ChatContext,
+        clock: StopWatch,
     ) {
         // load files from directory
         const fileNames = await fs.promises.readdir(sourcePath, {
@@ -172,12 +182,18 @@ export function createImageCommands(
         // index each image
         for (let i = 0; i < fileNames.length; i++) {
             const fullFilePath: string = path.join(sourcePath, fileNames[i]);
-            console.log(fullFilePath);
-            await indexImage(fullFilePath, context);
+            console.log(
+                `${fullFilePath} [${i + 1} of ${fileNames.length}] (estimated time remaining: ${(clock.elapsedSeconds / (i + 1)) * (fileNames.length - i)})`,
+            );
+            await indexImage(fullFilePath, cachePath, context);
         }
     }
 
-    async function indexImage(fileName: string, context: ChatContext) {
+    async function indexImage(
+        fileName: string,
+        cachePath: string,
+        context: ChatContext,
+    ) {
         if (!fs.existsSync(fileName)) {
             console.log(`Could not find part of the file path '${fileName}'`);
             return;
@@ -188,10 +204,15 @@ export function createImageCommands(
 
         // load the image
         const image: knowLib.image.Image | undefined =
-            await knowLib.image.loadImage(fileName, context.models.chatModel);
+            await knowLib.image.loadImage(
+                fileName,
+                context.models.chatModel,
+                true,
+                cachePath,
+            );
 
         if (image) {
-            knowLib.image.addImageToConversation(
+            await knowLib.image.addImageToConversation(
                 context.imageMemory,
                 image,
                 context.maxCharsPerChunk,

@@ -40,7 +40,7 @@ function captureTokenStats(req: any, response: any): void {
     );
 }
 
-export function createQueryContext(): QueryContext {
+export function createQueryContext(dbFile?: string): QueryContext {
     const chatModel = openai.createChatModelDefault("spelunkerChat");
     chatModel.completionCallback = captureTokenStats;
     chatModel.retryMaxAttempts = 0;
@@ -84,7 +84,8 @@ export function createQueryContext(): QueryContext {
     };
     fs.mkdirSync(databaseFolder, mkdirOptions);
 
-    const databaseLocation = path.join(databaseFolder, "codeSearchDatabase.db");
+    const databaseLocation =
+        dbFile || path.join(makeDatabaseFolder(), "codeSearchDatabase.db");
     const database = undefined;
     return {
         chatModel,
@@ -96,6 +97,21 @@ export function createQueryContext(): QueryContext {
         databaseLocation,
         database,
     };
+}
+
+function makeDatabaseFolder(): string {
+    const databaseFolder = path.join(
+        process.env.HOME ?? "",
+        ".typeagent",
+        "agents",
+        "spelunker",
+    );
+    const mkdirOptions: fs.MakeDirectoryOptions = {
+        recursive: true,
+        mode: 0o700,
+    };
+    fs.mkdirSync(databaseFolder, mkdirOptions);
+    return databaseFolder;
 }
 
 function createTranslator<T extends object>(

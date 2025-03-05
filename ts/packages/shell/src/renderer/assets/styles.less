@@ -482,22 +482,6 @@ table.table-message td {
   font-weight: bolder;
 }
 
-.agent-name[action-data]:hover:after {
-  content: attr(action-data);
-  position: absolute;
-  top: 30px;
-  left: 10px;
-  white-space: pre-wrap;
-  background-color: #86d9fd;
-  color: gray;
-  border: 1px solid #d6f3ff;
-  border-radius: 5px;
-  padding: 5px;
-  font-size: 100%;
-  font-family: "Courier New", Courier, monospace;
-  z-index: 100;
-}
-
 .timeString {
   font-style: normal;
 }
@@ -519,6 +503,20 @@ table.table-message td {
 .chat-message-action-data {
   white-space: nowrap;
   font-size: 80%;
+}
+
+.chat-message-explained[data-expl]:hover:after {
+  content: attr(data-expl);
+  position: absolute;
+  text-align: right;
+  top: -10px;
+  right: 0px;
+  white-space: nowrap;
+  color: gray;
+  background-color: lightyellow;
+  border: 1px solid black;
+  padding: 1px 5px 1px 5px;
+  font-size: 70%;
 }
 
 .chat-input-button {
@@ -582,7 +580,7 @@ table.table-message td {
   }
 }
 
-@import url("https://fonts.googleapis.com/css?family=Lato");
+@import "@fontsource/lato";
 
 .autocomplete-container {
   box-sizing: border-box;

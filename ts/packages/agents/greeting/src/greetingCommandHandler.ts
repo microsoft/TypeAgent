@@ -26,8 +26,6 @@ import {
     GreetingAction,
     PersonalizedGreetingAction,
 } from "./greetingActionSchema.js";
-//import { getLookupInstructions, getLookupSettings, LookupSettings } from "../../chat/dist/chatResponseHandler.js";
-//import { StopWatch } from "telemetry";
 import { conversation as Conversation } from "knowledge-processor";
 
 export function instantiate(): AppAgent {
@@ -88,6 +86,8 @@ export class GreetingCommandHandler implements CommandHandlerNoParams {
         const response = await this.getTypeChatResponse(context);
 
         if (response.success) {
+            context.actionIO.appendDiagnosticData(response.data);
+
             let action: GreetingAction = response.data as GreetingAction;
             let result: ActionResultSuccess | undefined = undefined;
             switch (action.actionName) {

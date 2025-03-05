@@ -6,16 +6,17 @@ import { createDispatcher } from "agent-dispatcher";
 import {
     createActionConfigProvider,
     getCacheFactory,
-    getInstanceDir,
     getSchemaNamesForActionConfigProvider,
 } from "agent-dispatcher/internal";
+import { getClientId, getInstanceDir } from "agent-dispatcher/helpers/data";
 import { getDefaultAppAgentProviders } from "default-agent-provider";
 import chalk from "chalk";
 import { getChatModelNames } from "aiclient";
 import { readFileSync, existsSync } from "fs";
 
 const modelNames = await getChatModelNames();
-const defaultAppAgentProviders = getDefaultAppAgentProviders(getInstanceDir());
+const instanceDir = getInstanceDir();
+const defaultAppAgentProviders = getDefaultAppAgentProviders(instanceDir);
 const schemaNames = getSchemaNamesForActionConfigProvider(
     await createActionConfigProvider(defaultAppAgentProviders),
 );
@@ -57,21 +58,21 @@ export default class RequestCommand extends Command {
 
     async run(): Promise<void> {
         const { args, flags } = await this.parse(RequestCommand);
-        const schemas = flags.schema
-            ? Object.fromEntries(flags.schema.map((name) => [name, true]))
-            : undefined;
         const dispatcher = await createDispatcher("cli run request", {
             appAgentProviders: defaultAppAgentProviders,
-            schemas,
-            actions: schemas,
-            commands: { dispatcher: true },
+            agents: {
+                schemas: flags.schema,
+                actions: flags.schema,
+                commands: ["dispatcher"],
+            },
             translation: { model: flags.model },
             explainer: flags.explainer
                 ? { enabled: true, name: flags.explainer }
                 : { enabled: false },
             cache: { enabled: false },
-            persist: true,
+            persistDir: instanceDir,
             dblogging: true,
+            clientId: getClientId(),
         });
         await dispatcher.processCommand(
             `@dispatcher request ${args.request}`,

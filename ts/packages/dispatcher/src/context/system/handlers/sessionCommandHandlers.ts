@@ -12,7 +12,6 @@ import {
     deleteAllSessions,
     deleteSession,
     getSessionNames,
-    getDefaultSessionConfig,
     getSessionConstructionDirPaths,
     getSessionName,
 } from "../../session.js";
@@ -29,6 +28,7 @@ import {
     displayWarn,
 } from "@typeagent/agent-sdk/helpers/display";
 import { askYesNoWithContext } from "../../interactiveIO.js";
+import { appAgentStateKeys } from "../../appAgentManager.js";
 
 class SessionNewCommandHandler implements CommandHandler {
     public readonly description = "Create a new empty session";
@@ -53,7 +53,7 @@ class SessionNewCommandHandler implements CommandHandler {
     ) {
         const systemContext = context.sessionContext.agentContext;
         const { flags } = params;
-        if (flags.persist && systemContext.instanceDir === undefined) {
+        if (flags.persist && systemContext.persistDir === undefined) {
             throw new Error("User data storage disabled.");
         }
         await setSessionOnCommandHandlerContext(
@@ -62,7 +62,7 @@ class SessionNewCommandHandler implements CommandHandler {
                 flags.keep ? systemContext.session.getConfig() : undefined,
                 flags.persist ??
                     systemContext.session.sessionDirPath !== undefined
-                    ? systemContext.instanceDir
+                    ? systemContext.persistDir
                     : undefined,
             ),
         );
@@ -94,11 +94,11 @@ class SessionOpenCommandHandler implements CommandHandler {
         params: ParsedCommandParams<typeof this.parameters>,
     ) {
         const systemContext = context.sessionContext.agentContext;
-        if (systemContext.instanceDir === undefined) {
+        if (systemContext.persistDir === undefined) {
             throw new Error("User data storage disabled.");
         }
         const session = await Session.load(
-            systemContext.instanceDir,
+            systemContext.persistDir,
             params.args.session,
         );
         await setSessionOnCommandHandlerContext(systemContext, session);
@@ -109,15 +109,7 @@ class SessionOpenCommandHandler implements CommandHandler {
 class SessionResetCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Reset config on session and keep the data";
     public async run(context: ActionContext<CommandHandlerContext>) {
-        await changeContextConfig(getDefaultSessionConfig(), context);
-        await changeContextConfig(
-            {
-                schemas: null,
-                actions: null,
-                commands: null,
-            },
-            context,
-        );
+        await changeContextConfig(null, context);
         displaySuccess(`Session settings revert to default.`, context);
     }
 }
@@ -174,7 +166,7 @@ class SessionDeleteCommandHandler implements CommandHandler {
         params: ParsedCommandParams<typeof this.parameters>,
     ) {
         const systemContext = context.sessionContext.agentContext;
-        if (systemContext.instanceDir === undefined) {
+        if (systemContext.persistDir === undefined) {
             throw new Error("Persist profile disabled.");
         }
         const persist = systemContext.session.sessionDirPath !== undefined;
@@ -189,7 +181,7 @@ class SessionDeleteCommandHandler implements CommandHandler {
                 displayWarn("Cancelled!", context);
                 return;
             }
-            await deleteAllSessions(systemContext.instanceDir);
+            await deleteAllSessions(systemContext.persistDir);
             displaySuccess("All session deleted.", context);
         } else {
             const currentSessionName = systemContext.session.sessionDirPath
@@ -202,7 +194,7 @@ class SessionDeleteCommandHandler implements CommandHandler {
                 );
             }
             const sessionNames = await getSessionNames(
-                systemContext.instanceDir,
+                systemContext.persistDir,
             );
             if (!sessionNames.includes(del)) {
                 throw new Error(`'${del}' is not a session name`);
@@ -217,7 +209,7 @@ class SessionDeleteCommandHandler implements CommandHandler {
                 displayWarn("Cancelled!", context);
                 return;
             }
-            await deleteSession(systemContext.instanceDir, del);
+            await deleteSession(systemContext.persistDir, del);
             displaySuccess(`Session '${del}' deleted.`, context);
             if (del !== currentSessionName) {
                 return;
@@ -232,10 +224,10 @@ class SessionListCommandHandler implements CommandHandlerNoParams {
         "List all sessions. The current session is marked green.";
     public async run(context: ActionContext<CommandHandlerContext>) {
         const systemContext = context.sessionContext.agentContext;
-        if (systemContext.instanceDir === undefined) {
+        if (systemContext.persistDir === undefined) {
             throw new Error("User data storage disabled.");
         }
-        const names = await getSessionNames(systemContext.instanceDir);
+        const names = await getSessionNames(systemContext.persistDir);
         displayResult(
             names
                 .map((n) =>
@@ -258,45 +250,67 @@ class SessionInfoCommandHandler implements CommandHandlerNoParams {
                   systemContext.session.sessionDirPath,
               )
             : [];
-        displayResult((log: (message?: string) => void) => {
-            log(`${chalk.bold("Instance Dir:")} ${systemContext.instanceDir}`);
-            log(
-                `${chalk.bold("Session settings")} (${
-                    systemContext.session.sessionDirPath
-                        ? chalk.green(
-                              getSessionName(
-                                  systemContext.session.sessionDirPath,
-                              ),
-                          )
-                        : "in-memory"
-                }):`,
-            );
-            const printConfig = (options: any, prefix: number = 2) => {
-                for (const [key, value] of Object.entries(options)) {
-                    const name = `${" ".repeat(prefix)}${key.padEnd(
-                        20 - prefix,
-                    )}:`;
-                    if (typeof value === "object") {
-                        log(name);
-                        printConfig(value, prefix + 2);
-                    } else {
-                        log(`${name} ${value}`);
-                    }
-                }
-            };
-            printConfig(systemContext.session.getConfig());
 
-            if (constructionFiles.length) {
-                log(`\n${chalk.bold("Construction Files:")}`);
-                for (const file of constructionFiles) {
-                    log(
-                        `  ${
-                            file.current ? chalk.green(file.name) : file.name
-                        } (${file.explainer})`,
-                    );
+        displayResult(
+            `${chalk.bold("Instance Dir:")} ${systemContext.persistDir}`,
+            context,
+        );
+        const session = systemContext.session;
+        displayResult(
+            `${chalk.bold("Session settings")} (${
+                session.sessionDirPath
+                    ? chalk.green(getSessionName(session.sessionDirPath))
+                    : "in-memory"
+            }):`,
+            context,
+        );
+
+        const table: string[][] = [["Name", "Value"]];
+        const addConfig = (
+            options: any,
+            settings: any,
+            override: readonly string[] | boolean = false,
+            prefix: number = 0,
+        ) => {
+            for (const [key, value] of Object.entries(options)) {
+                const name = `${" ".repeat(prefix)}${key.padEnd(20 - prefix)}`;
+                const currentSetting = settings?.[key];
+                const overrideKey = Array.isArray(override)
+                    ? override.includes(key)
+                    : override;
+                if (typeof value === "object") {
+                    table.push([chalk.bold(name), ""]);
+                    addConfig(value, currentSetting, overrideKey, prefix + 2);
+                } else {
+                    const valueStr =
+                        !overrideKey && currentSetting === undefined
+                            ? chalk.grey(value)
+                            : currentSetting !== value
+                              ? chalk.yellow(value)
+                              : String(value);
+                    table.push([name, valueStr]);
                 }
             }
-        }, context);
+        };
+        addConfig(
+            session.getConfig(),
+            session.getSettings(),
+            appAgentStateKeys,
+        );
+
+        displayResult(table, context);
+
+        if (constructionFiles.length) {
+            displayResult(`\n${chalk.bold("Construction Files:")}`, context);
+            for (const file of constructionFiles) {
+                displayResult(
+                    `  ${
+                        file.current ? chalk.green(file.name) : file.name
+                    } (${file.explainer})`,
+                    context,
+                );
+            }
+        }
     }
 }
 

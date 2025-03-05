@@ -8,17 +8,17 @@ export type HistoryAction =
 
 // Shows the chat history
 export type ListHistoryAction = {
-    actionName: "list";
+    actionName: "listHistory";
 };
 
 // Clears the chat history
 export type ClearHistoryAction = {
-    actionName: "clear";
+    actionName: "clearHistory";
 };
 
 // Deletes a specific message from the chat history
 export type DeleteHistoryAction = {
-    actionName: "delete";
+    actionName: "deleteHistory";
     parameters: {
         messageNumber: number;
     };

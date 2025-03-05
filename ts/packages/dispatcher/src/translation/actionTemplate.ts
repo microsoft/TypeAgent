@@ -37,19 +37,19 @@ export type TemplateEditConfig = {
 };
 
 function getDefaultActionTemplate(
-    translators: string[],
+    schemas: string[],
     discriminator: string = "",
 ): TemplateSchema {
-    const translatorName: TemplateFieldStringUnion = {
+    const schemaNames: TemplateFieldStringUnion = {
         type: "string-union",
-        typeEnum: translators,
+        typeEnum: schemas,
         discriminator,
     };
     const template: TemplateSchema = {
         type: "object",
         fields: {
             translatorName: {
-                type: translatorName,
+                type: schemaNames,
             },
         },
     };
@@ -113,17 +113,17 @@ function toTemplateType(type: ActionParamType): TemplateType | undefined {
 }
 function toTemplate(
     context: CommandHandlerContext,
-    translators: string[],
+    schemas: string[],
     action: ExecutableAction,
 ) {
     const actionSchemaFile = context.agents.tryGetActionSchemaFile(
         action.action.translatorName,
     );
     if (actionSchemaFile === undefined) {
-        return getDefaultActionTemplate(translators);
+        return getDefaultActionTemplate(schemas);
     }
     const template = getDefaultActionTemplate(
-        translators,
+        schemas,
         action.action.translatorName,
     );
     const actionSchemas = actionSchemaFile.actionSchemas;
@@ -163,10 +163,10 @@ export function getActionTemplateEditConfig(
 ): TemplateEditConfig {
     const templateData: TemplateData[] = [];
 
-    const translators = context.agents.getActiveSchemas();
+    const schemas = context.agents.getActiveSchemas();
     for (const action of actions) {
         templateData.push({
-            schema: toTemplate(context, translators, action),
+            schema: toTemplate(context, schemas, action),
             data: action.action,
         });
     }
@@ -178,7 +178,7 @@ export function getActionTemplateEditConfig(
         editPreface,
         templateData,
         completion: true,
-        defaultTemplate: getDefaultActionTemplate(translators),
+        defaultTemplate: getDefaultActionTemplate(schemas),
     };
 }
 
@@ -203,8 +203,8 @@ export async function getSystemTemplateSchema(
         data.actionName = "";
     }
 
-    const translators = systemContext.agents.getActiveSchemas();
-    return toTemplate(systemContext, translators, data);
+    const schemas = systemContext.agents.getActiveSchemas();
+    return toTemplate(systemContext, schemas, data);
 }
 
 export async function getSystemTemplateCompletion(

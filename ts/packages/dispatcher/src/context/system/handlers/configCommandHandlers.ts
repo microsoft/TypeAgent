@@ -369,10 +369,7 @@ class AgentToggleCommandHandler implements CommandHandler {
             context,
         );
 
-        const changedEntries = Object.entries(changed).filter(
-            ([_, value]) => value !== undefined,
-        );
-        if (changedEntries.length === 0) {
+        if (changed === undefined) {
             displayWarn("No change", context);
         } else {
             showAgentStatus(this.toggle, context, changed);
@@ -428,11 +425,13 @@ class ExplainerCommandHandler implements CommandHandler {
             { explainer: { name: params.args.explainerName } },
             context,
         );
-        if (changed.explainer?.name === params.args.explainerName) {
+        if (changed?.explainer?.name === params.args.explainerName) {
             displayResult(
                 `Explainer is set to ${params.args.explainerName}`,
                 context,
             );
+        } else {
+            displayWarn(`Explainer is unchanged`, context);
         }
     }
 
@@ -731,7 +730,7 @@ const configTranslationCommandHandlers: CommandHandlerTable = {
                     },
                 ),
                 search: getToggleHandlerTable(
-                    "inject inline switch",
+                    "search switch",
                     async (context, enable: boolean) => {
                         await changeContextConfig(
                             {

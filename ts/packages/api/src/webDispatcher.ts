@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { createDispatcher } from "agent-dispatcher";
-import { getInstanceDir } from "agent-dispatcher/internal";
+import { getInstanceDir, getClientId } from "agent-dispatcher/helpers/data";
 import { createClientIORpcClient } from "agent-dispatcher/rpc/clientio/client";
 import { createDispatcherRpcServer } from "agent-dispatcher/rpc/dispatcher/server";
 import { createGenericChannel } from "agent-rpc/channel";
@@ -27,14 +27,17 @@ export async function createWebDispatcher(): Promise<WebDispatcher> {
         ),
     );
 
+    const instanceDir = getInstanceDir();
     const clientIO = createClientIORpcClient(clientIOChannel.channel);
     const dispatcher = await createDispatcher("api", {
-        appAgentProviders: getDefaultAppAgentProviders(getInstanceDir()),
+        appAgentProviders: getDefaultAppAgentProviders(instanceDir),
         explanationAsynchronousMode: true,
         persistSession: true,
+        persistDir: instanceDir,
         enableServiceHost: true,
         metrics: true,
         dblogging: true,
+        clientId: getClientId(),
         clientIO: clientIO,
         constructionProvider: getDefaultConstructionProvider(),
     });

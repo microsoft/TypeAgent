@@ -29,6 +29,7 @@
     "better-sqlite3": "11.8.1",
     "code-processor": "workspace:*",
     "common-utils": "workspace:*",
+    "dotenv": "^16.3.1",
     "typeagent": "workspace:*",
     "typechat": "^0.1.1",
     "typescript": "^5.4.2"

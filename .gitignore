@@ -3,6 +3,8 @@
 # --------------------
 # Rules SqlLite db
 *.db
+*.db-shm
+*.db-wal
 
 # --------------------
 # VS Code

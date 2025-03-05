@@ -22,15 +22,11 @@ export { getAssistantSelectionSchemas } from "./translation/unknownSwitcher.js";
 export { getActionSchema } from "./translation/actionSchemaFileCache.js";
 export { getFullSchemaText } from "./translation/agentTranslators.js";
 
-export {
-    loadAgentJsonTranslator,
-    getAppAgentName,
-} from "./translation/agentTranslators.js";
+export { getAppAgentName } from "./translation/agentTranslators.js";
 export { createSchemaInfoProvider } from "./translation/actionSchemaFileCache.js";
 export {
     createActionConfigProvider,
     getSchemaNamesForActionConfigProvider,
 } from "./agentProvider/agentProviderUtils.js";
-export { getInstanceDir } from "./utils/userData.js";
 
 export type { ChatHistoryInput } from "./context/system/handlers/historyCommandHandler.js";
