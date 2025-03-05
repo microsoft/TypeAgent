@@ -13,7 +13,7 @@ import { loadSchema } from "typeagent";
 export function createSearchTranslator(
     model: TypeChatLanguageModel,
 ): TypeChatJsonTranslator<SearchFilter> {
-    const typeName = "SearchAction";
+    const typeName = "SearchFilter";
     const searchActionSchema = loadSchema(
         ["dateTimeSchema.ts", "searchSchema.ts"],
         import.meta.url,

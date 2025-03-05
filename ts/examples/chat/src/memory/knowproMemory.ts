@@ -32,16 +32,17 @@ import { KnowProPrinter } from "./knowproPrinter.js";
 import * as cm from "conversation-memory";
 import * as im from "image-memory";
 import { matchFilterToConversation } from "./knowproCommon.js";
+import { TypeChatJsonTranslator } from "typechat";
 
 type KnowProContext = {
     knowledgeModel: ChatModel;
-    knowledgeExtractor: knowLib.conversation.KnowledgeExtractor;
     knowledgeActions: knowLib.conversation.KnowledgeActionTranslator;
     basePath: string;
     printer: KnowProPrinter;
     podcast?: cm.Podcast | undefined;
     images?: im.ImageCollection | undefined;
     conversation?: kp.IConversation | undefined;
+    searchTranslator: TypeChatJsonTranslator<kp.SearchFilter>;
 };
 
 export async function createKnowproCommands(
@@ -51,11 +52,11 @@ export async function createKnowproCommands(
     const knowledgeModel = chatContext.models.chatModel;
     const context: KnowProContext = {
         knowledgeModel,
-        knowledgeExtractor: kp.createKnowledgeProcessor(knowledgeModel),
         knowledgeActions:
             knowLib.conversation.createKnowledgeActionTranslator(
                 knowledgeModel,
             ),
+        searchTranslator: kp.createSearchTranslator(knowledgeModel),
         basePath: "/data/testChat/knowpro",
         printer: new KnowProPrinter(),
     };
@@ -67,7 +68,7 @@ export async function createKnowproCommands(
     commands.kpPodcastLoad = podcastLoad;
     commands.kpSearchTerms = searchTerms;
     commands.kpSearch = search;
-    commands.kpSearchK = knowledgeSearch;
+    commands.kpSearchNew = searchNew;
     commands.kpEntities = entities;
     commands.kpPodcastBuildIndex = podcastBuildIndex;
 
@@ -462,7 +463,6 @@ export async function createKnowproCommands(
     commands.kpSearch.metadata = searchDef();
     async function search(args: string[]): Promise<void> {
         if (!ensureConversationLoaded()) {
-            context.printer.writeError("No conversation loaded");
             return;
         }
         const namedArgs = parseNamedArguments(args, searchDef());
@@ -500,27 +500,19 @@ export async function createKnowproCommands(
         }
     }
 
-    commands.kpSearchK.metadata = searchDef();
-    async function knowledgeSearch(args: string[]): Promise<void> {
+    commands.kpSearchNew.metadata = searchDef();
+    async function searchNew(args: string[]): Promise<void> {
+        if (!ensureConversationLoaded()) {
+            return;
+        }
         const namedArgs = parseNamedArguments(args, searchDef());
         const query = namedArgs.query;
-        const knowledge = await context.knowledgeExtractor.extract(query);
-        if (knowledge) {
-            context.printer.writeTitle("Topics");
-            for (const topic of knowledge.topics) {
-                context.printer.writeLine(topic);
-                context.printer.writeLine();
-            }
-            context.printer.writeTitle("Actions");
-            for (const action of knowledge.actions) {
-                context.printer.writeAction(action);
-                context.printer.writeLine();
-            }
-            context.printer.writeTitle("Entities");
-            for (const entity of knowledge.entities) {
-                context.printer.writeEntity(entity);
-                context.printer.writeLine();
-            }
+        const filter = await context.searchTranslator.translate(
+            query,
+            kp.getTimeRangeSectionForConversation(context.conversation!),
+        );
+        if (filter) {
+            context.printer.writeJson(filter);
         }
     }
 

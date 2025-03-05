@@ -43,8 +43,6 @@ export type ActionTerm = {
     to?: SourceTerm | undefined;
 };
 
-export type SearchTerm = string;
-
 // Search indexes for following search terms: typically single word keywords.
 export type SearchFilter = {
     action?: ActionTerm;
@@ -54,7 +52,7 @@ export type SearchFilter = {
     // - Remove generic terms like "topic/s", "subject", "discussion" etc
     // - Phrases like 'email address' or 'first name' are a single term
     // - use empty searchTerms array when use asks for summaries
-    searchTerms?: SearchTerm[];
+    searchTerms?: string[];
     // Use only if request explicitly asks for time range, particular year, month etc.
     timeRange?: DateTimeRange | undefined; // in this time range
 };
