@@ -70,13 +70,37 @@ export type PropertySearchTerm = {
     propertyValue: SearchTerm;
 };
 
-function createSearchTerm(text: string, score?: number): SearchTerm {
+export function createSearchTerm(text: string, score?: number): SearchTerm {
     return {
         term: {
             text,
             weight: score,
         },
     };
+}
+
+export function createPropertySearchTerm(
+    key: string,
+    value: string,
+): PropertySearchTerm {
+    let propertyName: KnowledgePropertyName | SearchTerm;
+    let propertyValue: SearchTerm;
+    switch (key) {
+        default:
+            propertyName = createSearchTerm(key);
+            break;
+        case "name":
+        case "type":
+        case "verb":
+        case "subject":
+        case "object":
+        case "indirectObject":
+        case "tag":
+            propertyName = key;
+            break;
+    }
+    propertyValue = createSearchTerm(value);
+    return { propertyName, propertyValue };
 }
 
 export type WhenFilter = {
@@ -411,30 +435,6 @@ class SearchQueryBuilder {
         }
         return scoredRef;
     }
-}
-
-export function propertySearchTermFromKeyValue(
-    key: string,
-    value: string,
-): PropertySearchTerm {
-    let propertyName: KnowledgePropertyName | SearchTerm;
-    let propertyValue: SearchTerm;
-    switch (key) {
-        default:
-            propertyName = createSearchTerm(key);
-            break;
-        case "name":
-        case "type":
-        case "verb":
-        case "subject":
-        case "object":
-        case "indirectObject":
-        case "tag":
-            propertyName = key;
-            break;
-    }
-    propertyValue = createSearchTerm(value);
-    return { propertyName, propertyValue };
 }
 
 function isPropertyTerm(

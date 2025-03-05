@@ -32,16 +32,17 @@ import { KnowProPrinter } from "./knowproPrinter.js";
 import * as cm from "conversation-memory";
 import * as im from "image-memory";
 import { matchFilterToConversation } from "./knowproCommon.js";
+import { TypeChatJsonTranslator } from "typechat";
 
 type KnowProContext = {
     knowledgeModel: ChatModel;
-    knowledgeExtractor: knowLib.conversation.KnowledgeExtractor;
     knowledgeActions: knowLib.conversation.KnowledgeActionTranslator;
     basePath: string;
     printer: KnowProPrinter;
     podcast?: cm.Podcast | undefined;
     images?: im.ImageCollection | undefined;
     conversation?: kp.IConversation | undefined;
+    searchTranslator: TypeChatJsonTranslator<kp.SearchFilter>;
 };
 
 export async function createKnowproCommands(
@@ -51,11 +52,11 @@ export async function createKnowproCommands(
     const knowledgeModel = chatContext.models.chatModel;
     const context: KnowProContext = {
         knowledgeModel,
-        knowledgeExtractor: kp.createKnowledgeProcessor(knowledgeModel),
         knowledgeActions:
             knowLib.conversation.createKnowledgeActionTranslator(
                 knowledgeModel,
             ),
+        searchTranslator: kp.createSearchTranslator(knowledgeModel),
         basePath: "/data/testChat/knowpro",
         printer: new KnowProPrinter(),
     };
@@ -66,8 +67,8 @@ export async function createKnowproCommands(
     commands.kpPodcastSave = podcastSave;
     commands.kpPodcastLoad = podcastLoad;
     commands.kpSearchTerms = searchTerms;
+    commands.kpSearchV1 = searchV1;
     commands.kpSearch = search;
-    commands.kpSearchK = knowledgeSearch;
     commands.kpEntities = entities;
     commands.kpPodcastBuildIndex = podcastBuildIndex;
 
@@ -364,7 +365,8 @@ export async function createKnowproCommands(
     ): CommandMetadata {
         const meta: CommandMetadata = {
             description:
-                description ?? "Search current knowPro conversation by terms",
+                description ??
+                "Search current knowPro conversation by manually providing terms as arguments",
             options: {
                 maxToDisplay: argNum("Maximum matches to display", 25),
                 displayAsc: argBool("Display results in ascending order", true),
@@ -448,20 +450,21 @@ export async function createKnowproCommands(
 
     function searchDef(): CommandMetadata {
         return {
-            description: "Search using natural language",
+            description:
+                "Search using natural language and knowlege-processor search filters",
             args: {
                 query: arg("Search query"),
             },
             options: {
                 maxToDisplay: argNum("Maximum matches to display", 25),
+                exact: argBool("Exact match only. No related terms", false),
                 ktype: arg("Knowledge type"),
             },
         };
     }
     commands.kpSearch.metadata = searchDef();
-    async function search(args: string[]): Promise<void> {
+    async function searchV1(args: string[]): Promise<void> {
         if (!ensureConversationLoaded()) {
-            context.printer.writeError("No conversation loaded");
             return;
         }
         const namedArgs = parseNamedArguments(args, searchDef());
@@ -485,6 +488,9 @@ export async function createKnowproCommands(
                 context.conversation!,
                 filter,
                 namedArgs.ktype,
+                {
+                    exactMatch: namedArgs.exact,
+                },
             );
             if (searchResults) {
                 context.printer.writeSearchResults(
@@ -492,31 +498,57 @@ export async function createKnowproCommands(
                     searchResults,
                     namedArgs.maxToDisplay,
                 );
+            } else {
+                context.printer.writeLine("No matches");
             }
         }
     }
 
-    commands.kpSearchK.metadata = searchDef();
-    async function knowledgeSearch(args: string[]): Promise<void> {
-        const namedArgs = parseNamedArguments(args, searchDef());
+    function searchDefNew(): CommandMetadata {
+        const def = searchDef();
+        def.description =
+            "Search using natural language and new knowpro filter";
+        return def;
+    }
+
+    commands.kpSearch.metadata = searchDefNew();
+    async function search(args: string[]): Promise<void> {
+        if (!ensureConversationLoaded()) {
+            return;
+        }
+        const namedArgs = parseNamedArguments(args, searchDefNew());
         const query = namedArgs.query;
-        const knowledge = await context.knowledgeExtractor.extract(query);
-        if (knowledge) {
-            context.printer.writeTitle("Topics");
-            for (const topic of knowledge.topics) {
-                context.printer.writeLine(topic);
-                context.printer.writeLine();
-            }
-            context.printer.writeTitle("Actions");
-            for (const action of knowledge.actions) {
-                context.printer.writeAction(action);
-                context.printer.writeLine();
-            }
-            context.printer.writeTitle("Entities");
-            for (const entity of knowledge.entities) {
-                context.printer.writeEntity(entity);
-                context.printer.writeLine();
-            }
+        const result = await context.searchTranslator.translate(
+            query,
+            kp.getTimeRangeSectionForConversation(context.conversation!),
+        );
+        if (!result.success) {
+            context.printer.writeError(result.message);
+            return;
+        }
+
+        const filter = result.data;
+        if (filter) {
+            context.printer.writeJson(filter, true);
+        }
+        const terms = kp.createSearchGroupFromSearchFilter(filter);
+        const when = kp.createWhenFromSearchFilter(filter);
+        const searchResults = await kp.searchConversation(
+            context.conversation!,
+            terms,
+            when,
+            {
+                exactMatch: namedArgs.exact,
+            },
+        );
+        if (searchResults) {
+            context.printer.writeSearchResults(
+                context.conversation!,
+                searchResults,
+                namedArgs.maxToDisplay,
+            );
+        } else {
+            context.printer.writeLine("No matches");
         }
     }
 
@@ -555,7 +587,7 @@ export async function createKnowproCommands(
             const allValues = splitTermValues(keyValues[propertyName]);
             for (const value of allValues) {
                 propertySearchTerms.push(
-                    kp.propertySearchTermFromKeyValue(propertyName, value),
+                    kp.createPropertySearchTerm(propertyName, value),
                 );
             }
         }

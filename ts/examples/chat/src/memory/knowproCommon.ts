@@ -18,26 +18,33 @@ export function textLocationToString(location: kp.TextLocation): string {
 export async function matchFilterToConversation(
     conversation: kp.IConversation,
     filter: knowLib.conversation.TermFilterV2,
-    knowledgeType?: kp.KnowledgeType | undefined,
+    knowledgeType: kp.KnowledgeType | undefined,
+    searchOptions: kp.SearchOptions,
     useAnd: boolean = false,
 ) {
-    let searchTermGroup: kp.SearchTermGroup = termFilterToSearchGroup(
-        filter,
-        useAnd,
-    );
+    let termGroup: kp.SearchTermGroup = termFilterToSearchGroup(filter, useAnd);
+    if (filter.action) {
+        let actionGroup: kp.SearchTermGroup = actionFilterToSearchGroup(
+            filter.action,
+            useAnd,
+        );
+        // Just flatten for now...
+        termGroup.terms.push(...actionGroup.terms);
+    }
     let when: kp.WhenFilter = termFilterToWhenFilter(filter);
     when.knowledgeType = knowledgeType;
     let searchResults = await kp.searchConversation(
         conversation,
-        searchTermGroup,
+        termGroup,
         when,
+        searchOptions,
     );
     if (useAnd && (!searchResults || searchResults.size === 0)) {
         // Try again with OR
-        searchTermGroup = termFilterToSearchGroup(filter, false);
+        termGroup = termFilterToSearchGroup(filter, false);
         searchResults = await kp.searchConversation(
             conversation,
-            searchTermGroup,
+            termGroup,
             when,
         );
     }
@@ -62,7 +69,7 @@ export function termFilterToSearchGroup(
 
 export function termFilterToWhenFilter(
     filter: knowLib.conversation.TermFilterV2,
-) {
+): kp.WhenFilter {
     let when: kp.WhenFilter = {};
     if (filter.timeRange) {
         when.dateRange = {
@@ -71,4 +78,34 @@ export function termFilterToWhenFilter(
         };
     }
     return when;
+}
+
+export function actionFilterToSearchGroup(
+    action: knowLib.conversation.ActionTerm,
+    and: boolean,
+): kp.SearchTermGroup {
+    const searchTermGroup: kp.SearchTermGroup = {
+        booleanOp: and ? "and" : "or",
+        terms: [],
+    };
+
+    if (action.verbs) {
+        searchTermGroup.terms.push(
+            ...action.verbs.words.map((v) => {
+                return kp.createPropertySearchTerm(kp.PropertyNames.Verb, v);
+            }),
+        );
+    }
+    if (action.subject !== "none") {
+        searchTermGroup.terms.push(
+            kp.createPropertySearchTerm(
+                kp.PropertyNames.Subject,
+                action.subject.subject,
+            ),
+        );
+    }
+    if (action.object) {
+        searchTermGroup.terms.push(kp.createSearchTerm(action.object));
+    }
+    return searchTermGroup;
 }
