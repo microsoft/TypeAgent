@@ -3,5 +3,3 @@
 
 pdfplumber
 pymupdf
-pytesseract
-Pillow

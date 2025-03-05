@@ -9,8 +9,7 @@ import path, { resolve } from "path";
 import { fileURLToPath } from "url";
 import { promisify } from "util";
 
-import { PdfDocChunk } from "./pdfDocChunkSchema.js";
-
+import { PdfDocChunk, PdfDocumentInfo } from "./pdfDocChunkSchema.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -21,12 +20,14 @@ export type ChunkId = string;
 
 export interface Blob {
     /** Stores text, table, or image data plus metadata. */
-    blob_type: string;  // e.g. "text", "table", "image"
+    blob_type: "text"|"table"|"page_image"|"image"|"image_label"|"table_label";  // e.g. "text", "table", "image"
     start: number; // Page number (0-based)
-    content?: any;  // e.g. chunk of text
+    content?: string|string[];  // e.g. chunk of text
     bbox?: number[]; // Optional bounding box
+    img_name?: string; // Optional image name
     img_path?: string; // Optional image path
     para_id?: number; // Optional paragraph ID
+    image_chunk_ref?: string[]; // Optional reference to image chunk(s)
 }
 
 export interface Chunk {
@@ -35,17 +36,16 @@ export interface Chunk {
     id: string;
     pageid: string;
     blobs: Blob[];
-    parentId: ChunkId;
-    children: ChunkId[];
-    fileName: string; // Set upon receiving end from ChunkedFile.fileName.
-    docs?: PdfDocChunk; // Computed later by fileDocumenter.
+    parentId?: ChunkId;
+    children?: ChunkId[];
+    fileName?: string;
+    docs?: PdfDocChunk
+    docInfo?: PdfDocumentInfo; // Computed later by fileDocumenter.
 }
-
 export interface ChunkedFile {
     fileName: string;
     chunks: Chunk[];
 }
-
 export interface ErrorItem {
     error: string;
     filename?: string;
@@ -86,18 +86,13 @@ export async function chunkifyPdfFiles(
     }
 
     const results: (ChunkedFile | ErrorItem)[] = JSON.parse(output);
-    // TODO: validate that JSON matches our schema.
-
-    // Ensure all chunks have a filename.
     for (const result of results) {
-        if (!("error" in result)) {
-            for (const chunk of result.chunks) {
-                chunk.fileName = result.fileName;
-            }
+        if ("error" in result) {
+            console.error("Error in chunker output:", result.error);
+            continue
         }
     }
     return results;
-    //return splitLargeFiles(results);
 }
 
 const CHUNK_COUNT_LIMIT = 25; // How many chunks at most.
@@ -127,7 +122,8 @@ function splitFile(file: ChunkedFile): ChunkedFile[] {
     const parentMap: Map<ChunkId, Chunk> = new Map();
     for (const chunk of file.chunks) {
         // Only nodes with children will be looked up in this map.
-        if (chunk.children.length) parentMap.set(chunk.id, chunk);
+        if (chunk.children && chunk.children.length) 
+            parentMap.set(chunk.id, chunk);
     }
 
     const results: ChunkedFile[] = []; // Where output accumulates.
@@ -161,7 +157,7 @@ function splitFile(file: ChunkedFile): ChunkedFile[] {
             let c: Chunk | undefined = currentChunk;
             do {
                 ancestors.unshift(c);
-                c = parentMap.get(c.parentId);
+                c = c.parentId ? parentMap.get(c.parentId) : undefined;
             } while (c);
             // Note that the current chunk is the last ancestor.
             chunks = [...ancestors, ...rest];
@@ -186,17 +182,14 @@ function fileSize(file: ChunkedFile): number {
 function chunkSize(chunk: Chunk): number {
     let totalChars = 0;
     for (const blob of chunk.blobs) {
-        if(blob.blob_type === "text") {
+        if (blob.blob_type === "text" && blob.content) {
             if (Array.isArray(blob.content)) {
-                // content is an array of strings
-                for (const line of blob.content) {
-                    totalChars += line.length;
-                }
+                totalChars += blob.content.reduce((sum, line) => sum + line.length, 0);
             } else {
-                // content is a single string
                 totalChars += blob.content.length;
             }
         }
     }
     return totalChars;
 }
+

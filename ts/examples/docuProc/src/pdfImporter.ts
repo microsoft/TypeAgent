@@ -94,9 +94,19 @@ async function importPdfFiles(
             for (const chunk of chunkedFile.chunks) {
                 numBlobs += chunk.blobs.length;
                 for (const blob of chunk.blobs) {
-                    if(blob.content && blob.content !== "")
-                        //numLines += blob.content.split("\n").length;
-                        numLines += blob.content.split(/[\n.]+/).filter((line: any) => line.trim().length > 0).length;
+                    if (blob.content) {
+                        if (Array.isArray(blob.content)) {
+                            numLines += blob.content
+                                .flatMap(text => text.split(/[\n.]+/)) // Split each string and flatten the results
+                                .filter(line => line.trim().length > 0) // Remove empty lines
+                                .length;
+                        } else {
+                            numLines += blob.content
+                                .split(/[\n.]+/)
+                                .filter(line => line.trim().length > 0)
+                                .length;
+                        }
+                    }
                 }
             }
         }
@@ -226,10 +236,14 @@ async function embedChunk(
     verbose = false,
 ): Promise<void> {
     //const t0 = Date.now();
-    const lineCount = chunk.blobs.reduce(
-        (acc, blob) => acc + blob.content.split("\n").length,
-        0,
-    );
+    const lineCount = chunk.blobs.reduce((acc, blob) => {
+        if (!blob.content) return acc;
+    
+        if (Array.isArray(blob.content)) {
+            return acc + blob.content.reduce((sum, text) => sum + text.split("\n").length, 0);
+        } 
+        return acc + blob.content.split("\n").length;
+    }, 0);
     console.log("Line count:", lineCount);
     await exponentialBackoff(io, chunkyIndex.chunkFolder.put, chunk, chunk.id);
 

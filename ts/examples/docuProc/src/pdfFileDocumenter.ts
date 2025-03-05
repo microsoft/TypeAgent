@@ -90,14 +90,16 @@ export function createPdfDocumenter(model: ChatModel): PdfFileDocumenter {
                  
                 let iDoc = 0;
                 for (const chunk of chunks) {
-                    if (chunk.parentId === "" && !chunk.parentId || chunk.children.length === 0) {
+                    if (chunk.parentId === "" && !chunk.parentId || (chunk.children && chunk.children.length === 0)) {
                         chunk.docs = chunkDocs[iDoc++];
                     }
                     else {
-                        for (const blobid of chunk.children) {
-                            const blob = chunk.children.find(cid => cid === blobid);
-                            if (blob !== undefined) {
-                                chunk.docs = chunkDocs[iDoc++];
+                        if(chunk.children && chunk.children.length > 0) {
+                            for (const blobid of chunk.children) {
+                                const blob = chunk.children.find(cid => cid === blobid);
+                                if (blob !== undefined) {
+                                    chunk.docs = chunkDocs[iDoc++];
+                                }
                             }
                         }
                     }

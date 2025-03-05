@@ -33,6 +33,13 @@ export interface PdfDocChunk{
     dependencies?: string[];
 }
 
+export interface PdfDocumentInfo {
+    title?: string; // this is the title of the document
+    authors?: string[]; // this is the author of the document
+    otherDocReferences?: string[]; // these are the other document references from the document
+    links?: string[]; // these are the links from the document
+}
+
 export type PdfFileDocumentation = {
     chunkDocs?: PdfDocChunk[];
 };

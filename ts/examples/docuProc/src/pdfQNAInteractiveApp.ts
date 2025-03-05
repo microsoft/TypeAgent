@@ -415,10 +415,12 @@ export async function interactiveDocQueryLoop(
         const filter = namedArgs.filter;
         const filesPopularity: Map<string, number> = new Map();
         for await (const chunk of chunkyIndex.chunkFolder.allObjects()) {
-            filesPopularity.set(
-                chunk.fileName,
-                (filesPopularity.get(chunk.fileName) ?? 0) + 1,
-            );
+            if (chunk.fileName !== undefined) {    
+                filesPopularity.set(
+                    chunk.fileName,
+                    (filesPopularity.get(chunk.fileName) ?? 0) + 1,
+                );
+            }
         }
         if (!filesPopularity.size) {
             writeMain(io, "[No files]");
