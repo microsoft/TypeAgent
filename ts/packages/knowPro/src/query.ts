@@ -1088,10 +1088,12 @@ export function messageMatchesFromKnowledgeMatches(
     semanticRefs: SemanticRef[],
     knowledgeMatches: Map<KnowledgeType, SemanticRefSearchResult>,
 ): MessageAccumulator {
-    const messageMatches = new MessageAccumulator();
+    let messageMatches = new MessageAccumulator();
+    let expectedHitCount = 0;
     for (const knowledgeType of knowledgeMatches.keys()) {
         const matchesByType = knowledgeMatches.get(knowledgeType);
-        if (matchesByType) {
+        if (matchesByType && matchesByType.semanticRefMatches.length > 0) {
+            expectedHitCount++;
             for (const match of matchesByType.semanticRefMatches) {
                 messageMatches.addMessagesForSemanticRef(
                     semanticRefs[match.semanticRefIndex],
@@ -1100,7 +1102,13 @@ export function messageMatchesFromKnowledgeMatches(
             }
         }
     }
-    const maxHitCount = messageMatches.getMaxHitCount();
-    messageMatches.selectWithHitCount(maxHitCount);
+    if (expectedHitCount > 0) {
+        const relevantMessages =
+            messageMatches.getWithHitCount(expectedHitCount);
+        if (relevantMessages.length > 0) {
+            messageMatches = new MessageAccumulator(relevantMessages);
+        }
+    }
+    //messageMatches.smoothScores();
     return messageMatches;
 }
