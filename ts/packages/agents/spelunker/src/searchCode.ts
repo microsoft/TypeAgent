@@ -52,7 +52,7 @@ export async function searchCode(
     if (!context.queryContext) {
         context.queryContext = createQueryContext();
     }
-    await createDatabase(context);
+    createDatabase(context);
     await loadDatabase(context);
     const db = context.queryContext!.database!;
 
@@ -62,7 +62,9 @@ export async function searchCode(
     // 3. Ask a fast LLM for the most relevant chunk Ids, rank them, and keep the best ones.
     const chunks = await selectChunks(context, allChunks, input);
     if (!chunks.length) {
-        throw new Error("No chunks selected");
+        return createActionResultFromError(
+            "No chunks selected (server access problem?)",
+        );
     }
 
     // 4. Construct a prompt from those chunks.
@@ -111,7 +113,7 @@ function formatReferences(references: ChunkId[]): string {
     return answer.join("");
 }
 
-async function readAllChunksFromDatabase(
+export async function readAllChunksFromDatabase(
     db: sqlite.Database,
 ): Promise<Chunk[]> {
     console_log(`[Step 2: Load chunks from database]`);
@@ -220,6 +222,11 @@ export async function selectChunks(
     );
     console_log(`[Step 3a: Pre-select with fuzzy matching]`);
     const nearestChunkIds = await preSelectChunks(context, input, 500);
+    if (!nearestChunkIds.length) {
+        // Fail fast if preselection failed.
+        console_log(`  [Preselection failed -- server access problem?]`);
+        return [];
+    }
     allChunks = allChunks.filter((c) => nearestChunkIds.includes(c.chunkId));
     console_log(`  [Pre-selected ${allChunks.length} chunks]`);
 
@@ -351,7 +358,7 @@ function getAllSourceFiles(dir: string): FileMtimeSize[] {
 
 // TODO: Break into multiple functions.
 // Notably the part that compares files in the database and files on disk.
-async function loadDatabase(context: SpelunkerContext): Promise<void> {
+export async function loadDatabase(context: SpelunkerContext): Promise<void> {
     console_log(`[Step 1: Load database]`);
     if (!context.queryContext) {
         context.queryContext = createQueryContext();
