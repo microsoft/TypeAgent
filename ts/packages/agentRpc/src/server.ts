@@ -417,6 +417,9 @@ export function createAgentRpcServer(
                     content,
                 });
             },
+            appendDiagnosticData(data): void {
+                rpc.send("appendDiagnosticData", { actionContextId, data });
+            },
             appendDisplay(
                 content: DisplayContent,
                 mode: DisplayAppendMode,

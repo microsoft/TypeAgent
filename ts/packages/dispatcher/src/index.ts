@@ -11,9 +11,9 @@ export type {
 } from "./agentProvider/agentProvider.js";
 export type {
     ClientIO,
-    RequestId,
     IAgentMessage,
     NotifyExplainedData,
+    RequestId,
 } from "./context/interactiveIO.js";
 export type { Timing, PhaseTiming, RequestMetrics } from "./utils/metrics.js";
 export type {

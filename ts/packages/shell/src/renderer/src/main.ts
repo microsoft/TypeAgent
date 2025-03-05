@@ -80,6 +80,9 @@ function addEvents(
         appendDisplay: (message, mode) => {
             chatView.addAgentMessage(message, { appendMode: mode });
         },
+        appendDiagnosticData: (requestId, data) => {
+            chatView.setActionData(requestId, data);
+        },
         setDynamicDisplay: (
             source,
             requestId,

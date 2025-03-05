@@ -26,8 +26,6 @@ export function createClientIORpcClient(channel: RpcChannel): ClientIO {
         exit(): void {
             return rpc.send("exit", undefined);
         },
-
-        // Display
         setDisplayInfo(
             source: string,
             requestId: RequestId,
@@ -46,6 +44,9 @@ export function createClientIORpcClient(channel: RpcChannel): ClientIO {
         },
         appendDisplay(message: IAgentMessage, mode: DisplayAppendMode): void {
             return rpc.send("appendDisplay", { message, mode });
+        },
+        appendDiagnosticData(requestId: RequestId, data: any) {
+            return rpc.send("appendDiagnosticData", { requestId, data });
         },
         setDynamicDisplay(
             source: string,

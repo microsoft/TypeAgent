@@ -10,6 +10,7 @@ import {
     MultiSinkLogger,
     createDebugLoggerSink,
     createMongoDBLoggerSink,
+    Profiler,
 } from "telemetry";
 import { AgentCache } from "agent-cache";
 import { randomUUID } from "crypto";
@@ -33,7 +34,6 @@ import {
     lockInstanceDir,
 } from "../utils/userData.js";
 import { ActionContext, AppAgentEvent } from "@typeagent/agent-sdk";
-import { Profiler } from "telemetry";
 import { conversation as Conversation } from "knowledge-processor";
 import {
     AppAgentManager,

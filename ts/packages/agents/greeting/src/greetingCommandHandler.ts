@@ -86,6 +86,8 @@ export class GreetingCommandHandler implements CommandHandlerNoParams {
         const response = await this.getTypeChatResponse(context);
 
         if (response.success) {
+            context.actionIO.appendDiagnosticData(response.data);
+
             let action: GreetingAction = response.data as GreetingAction;
             let result: ActionResultSuccess | undefined = undefined;
             switch (action.actionName) {

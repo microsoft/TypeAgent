@@ -33,6 +33,7 @@ export type ClientIOCallFunctions = {
         message: IAgentMessage;
         mode: DisplayAppendMode;
     }): void;
+    appendDiagnosticData(params: { requestId: RequestId; data: any }): void;
     setDynamicDisplay(params: {
         source: string;
         requestId: RequestId;

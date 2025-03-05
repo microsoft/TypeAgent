@@ -43,6 +43,9 @@ export function createClientIORpcServer(
         setDisplay: (params) => clientIO.setDisplay(params.message),
         appendDisplay: (params) =>
             clientIO.appendDisplay(params.message, params.mode),
+        appendDiagnosticData: (params) => {
+            clientIO.appendDiagnosticData(params.requestId, params.data);
+        },
         setDynamicDisplay: (params) =>
             clientIO.setDynamicDisplay(
                 params.source,

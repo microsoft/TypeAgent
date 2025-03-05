@@ -17,7 +17,7 @@ import {
 import chalk from "chalk";
 import fs from "node:fs";
 import { getElapsedString } from "common-utils";
-import { getChatModelNames } from "aiclient";
+import { getChatModelNames, openai as ai } from "aiclient";
 
 type TestResult = {
     request: string;
@@ -86,8 +86,20 @@ const defaultAppAgentProviders = getDefaultAppAgentProviders(getInstanceDir());
 const schemaNames = getSchemaNamesForActionConfigProvider(
     await createActionConfigProvider(defaultAppAgentProviders),
 );
-
 const defaultRepeat = 5;
+
+function addTokenUsage(
+    total: ai.CompletionUsageStats,
+    usage: ai.CompletionUsageStats,
+) {
+    total.prompt_tokens += usage.prompt_tokens;
+    total.completion_tokens += usage.completion_tokens;
+    total.total_tokens += usage.total_tokens;
+}
+
+function getTokenUsageStr(usage: ai.CompletionUsageStats, count: number = 1) {
+    return `${Math.round(usage.prompt_tokens / count)}+${Math.round(usage.completion_tokens / count)}=${Math.round(usage.total_tokens / count)}`;
+}
 export default class TestTranslateCommand extends Command {
     static args = {
         files: Args.string({
@@ -327,6 +339,11 @@ export default class TestTranslateCommand extends Command {
 
         let totalExecTime = 0;
         let maxExecTime = 0;
+        const totalTokenUsage: ai.CompletionUsageStats = {
+            prompt_tokens: 0,
+            completion_tokens: 0,
+            total_tokens: 0,
+        };
         async function worker() {
             const dispatcher = await createDispatcher("cli test translate", {
                 appAgentProviders: defaultAppAgentProviders,
@@ -367,6 +384,17 @@ export default class TestTranslateCommand extends Command {
 
                 let currentTotalExecTime = 0;
                 let currentMaxExecTime = 0;
+                const currentTokenUsage: ai.CompletionUsageStats = {
+                    prompt_tokens: 0,
+                    completion_tokens: 0,
+                    total_tokens: 0,
+                };
+                let maxTokenUsage: ai.CompletionUsageStats = {
+                    prompt_tokens: 0,
+                    completion_tokens: 0,
+                    total_tokens: 0,
+                };
+
                 for (let i = 0; i < repeat; i++) {
                     const time = performance.now();
                     const commandResult =
@@ -374,13 +402,24 @@ export default class TestTranslateCommand extends Command {
                     const execTime = performance.now() - time;
                     currentMaxExecTime = Math.max(currentMaxExecTime, execTime);
                     currentTotalExecTime += execTime;
+
+                    const tokenUsage = commandResult?.tokenUsage;
+                    if (tokenUsage) {
+                        addTokenUsage(currentTokenUsage, tokenUsage);
+                        addTokenUsage(totalTokenUsage, tokenUsage);
+
+                        if (
+                            tokenUsage.total_tokens > maxTokenUsage.total_tokens
+                        ) {
+                            maxTokenUsage = tokenUsage;
+                        }
+                    }
                     results.push(commandResult?.actions);
                 }
 
                 maxExecTime = Math.max(maxExecTime, currentMaxExecTime);
                 totalExecTime += currentTotalExecTime;
 
-                const timeStr = `${getElapsedString(currentTotalExecTime)} (${getElapsedString(currentTotalExecTime / repeat)}/call) Max: ${getElapsedString(currentMaxExecTime)}`;
                 const expected = results[0];
                 let failed = false;
                 for (let i = 1; i < results.length; i++) {
@@ -456,7 +495,25 @@ export default class TestTranslateCommand extends Command {
                         noActions++;
                         msg = "Passed (no actions)";
                     }
-                    print(`${chalk.green(msg)} ${chalk.grey(timeStr)}`);
+                    const timeStr =
+                        repeat === 1
+                            ? getElapsedString(currentTotalExecTime)
+                            : `${getElapsedString(currentTotalExecTime)} (${getElapsedString(currentTotalExecTime / repeat)}/call) Max: ${getElapsedString(currentMaxExecTime)}`;
+                    const avgTokenStr = getTokenUsageStr(
+                        currentTokenUsage,
+                        repeat,
+                    );
+                    const maxTokenStr = getTokenUsageStr(maxTokenUsage);
+
+                    const tokenStr =
+                        repeat === 1
+                            ? `(Token: ${avgTokenStr})`
+                            : avgTokenStr === maxTokenStr
+                              ? `(Token Avg: ${avgTokenStr})`
+                              : `(Token Avg: ${avgTokenStr} Max: ${maxTokenStr})`;
+                    print(
+                        `${chalk.green(msg)} ${chalk.grey(timeStr)} ${tokenStr}`,
+                    );
                 }
             }
             await dispatcher.close();
@@ -514,6 +571,9 @@ export default class TestTranslateCommand extends Command {
         const executionTimePerCall = executionTimePerRequest / repeat;
         console.log(
             `Execution Time: ${getElapsedString(totalExecTime)}, Avg: ${getElapsedString(executionTimePerRequest)} (${getElapsedString(executionTimePerCall)}/call) Max: ${getElapsedString(maxExecTime)}`,
+        );
+        console.log(
+            `Token Usage: ${getTokenUsageStr(totalTokenUsage)}, Avg per call: ${getTokenUsageStr(totalTokenUsage, processed * repeat)}`,
         );
     }
 }
