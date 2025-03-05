@@ -2,26 +2,36 @@
 // Licensed under the MIT License.
 
 import {
+    PromptSection,
+    Result,
     TypeChatJsonTranslator,
     TypeChatLanguageModel,
     createJsonTranslator,
+    success,
 } from "typechat";
 import { createTypeScriptJsonValidator } from "typechat/ts";
 import { ActionTerm, EntityTerm, SearchFilter } from "./searchSchema.js";
 import { loadSchema } from "typeagent";
 import {
+    ConversationSearchResult,
     createPropertySearchTerm,
     createSearchTerm,
     PropertySearchTerm,
+    searchConversation,
+    SearchOptions,
     SearchTermGroup,
     WhenFilter,
 } from "./search.js";
 import { PropertyNames } from "./propertyIndex.js";
 import { conversation as kpLib } from "knowledge-processor";
+import { getTimeRangeForConversation } from "./conversation.js";
+import { IConversation, KnowledgeType } from "./interfaces.js";
+
+export type SearchTranslator = TypeChatJsonTranslator<SearchFilter>;
 
 export function createSearchTranslator(
     model: TypeChatLanguageModel,
-): TypeChatJsonTranslator<SearchFilter> {
+): SearchTranslator {
     const typeName = "SearchFilter";
     const searchActionSchema = loadSchema(
         ["dateTimeSchema.ts", "searchSchema.ts"],
@@ -121,4 +131,46 @@ function createPropertySearchTermFromActionTerm(
         );
     }
     return terms;
+}
+
+export function getTimeRangePromptSectionForConversation(
+    conversation: IConversation,
+): PromptSection[] {
+    const timeRange = getTimeRangeForConversation(conversation);
+    if (timeRange) {
+        return [
+            {
+                role: "system",
+                content: `ONLY IF user request explicitly asks for time ranges, THEN use the CONVERSATION TIME RANGE: "${timeRange.start} to ${timeRange.end}"`,
+            },
+        ];
+    }
+    return [];
+}
+
+export async function searchConversationWithNaturalLanguage(
+    conversation: IConversation,
+    searchTranslator: SearchTranslator,
+    query: string,
+    knowledgeType?: KnowledgeType,
+    options?: SearchOptions,
+): Promise<Result<[ConversationSearchResult | undefined, SearchFilter]>> {
+    const result = await searchTranslator.translate(
+        query,
+        getTimeRangePromptSectionForConversation(conversation),
+    );
+    if (!result.success) {
+        return result;
+    }
+    const filter = result.data;
+    const terms = createSearchGroupFromSearchFilter(filter);
+    const when = createWhenFromSearchFilter(filter);
+    when.knowledgeType = knowledgeType;
+    const searchResults = await searchConversation(
+        conversation,
+        terms,
+        when,
+        options,
+    );
+    return success([searchResults, filter]);
 }

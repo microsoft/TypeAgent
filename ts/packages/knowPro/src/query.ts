@@ -18,12 +18,13 @@ import {
 import {
     KnowledgePropertyName,
     PropertySearchTerm,
-    SearchResult,
+    SemanticRefSearchResult,
     SearchTerm,
 } from "./search.js";
 import {
     Match,
     MatchAccumulator,
+    MessageAccumulator,
     PropertyTermSet,
     SemanticRefAccumulator,
     TermSet,
@@ -824,7 +825,7 @@ export class SelectTopNKnowledgeGroupExpr extends QueryOpExpr<
 }
 
 export class GroupSearchResultsExpr extends QueryOpExpr<
-    Map<KnowledgeType, SearchResult>
+    Map<KnowledgeType, SemanticRefSearchResult>
 > {
     constructor(
         public srcExpr: IQueryOpExpr<
@@ -834,7 +835,9 @@ export class GroupSearchResultsExpr extends QueryOpExpr<
         super();
     }
 
-    public eval(context: QueryEvalContext): Map<KnowledgeType, SearchResult> {
+    public eval(
+        context: QueryEvalContext,
+    ): Map<KnowledgeType, SemanticRefSearchResult> {
         return toGroupedSearchResults(this.srcExpr.eval(context));
     }
 }
@@ -1065,8 +1068,11 @@ export class ThreadSelector implements IQueryTextRangeSelector {
 
 export function toGroupedSearchResults(
     evalResults: Map<KnowledgeType, SemanticRefAccumulator>,
-): Map<KnowledgeType, SearchResult> {
-    const semanticRefMatches = new Map<KnowledgeType, SearchResult>();
+): Map<KnowledgeType, SemanticRefSearchResult> {
+    const semanticRefMatches = new Map<
+        KnowledgeType,
+        SemanticRefSearchResult
+    >();
     for (const [type, accumulator] of evalResults) {
         if (accumulator.size > 0) {
             semanticRefMatches.set(type, {
@@ -1076,4 +1082,25 @@ export function toGroupedSearchResults(
         }
     }
     return semanticRefMatches;
+}
+
+export function messageMatchesFromKnowledgeMatches(
+    semanticRefs: SemanticRef[],
+    knowledgeMatches: Map<KnowledgeType, SemanticRefSearchResult>,
+): MessageAccumulator {
+    const messageMatches = new MessageAccumulator();
+    for (const knowledgeType of knowledgeMatches.keys()) {
+        const matchesByType = knowledgeMatches.get(knowledgeType);
+        if (matchesByType) {
+            for (const match of matchesByType.semanticRefMatches) {
+                messageMatches.addMessagesForSemanticRef(
+                    semanticRefs[match.semanticRefIndex],
+                    match.score,
+                );
+            }
+        }
+    }
+    const maxHitCount = messageMatches.getMaxHitCount();
+    messageMatches.selectWithHitCount(maxHitCount);
+    return messageMatches;
 }

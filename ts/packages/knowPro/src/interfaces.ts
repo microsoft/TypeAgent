@@ -8,10 +8,7 @@ export interface IKnowledgeSource {
     getKnowledge(): kpLib.KnowledgeResponse;
 }
 
-export interface DeletionInfo {
-    timestamp: string;
-    reason?: string;
-}
+export type MessageIndex = number;
 
 export interface IMessage<TMeta extends IKnowledgeSource = any> {
     // the text of the message, split into chunks
@@ -23,25 +20,20 @@ export interface IMessage<TMeta extends IKnowledgeSource = any> {
     deletionInfo?: DeletionInfo;
 }
 
-export type SemanticRefIndex = number;
-
-export type ScoredSemanticRef = {
-    semanticRefIndex: SemanticRefIndex;
+export type ScoredMessageIndex = {
+    messageIndex: MessageIndex;
     score: number;
 };
 
-export interface ITermToSemanticRefIndex {
-    getTerms(): string[];
-    addTerm(
-        term: string,
-        semanticRefIndex: SemanticRefIndex | ScoredSemanticRef,
-    ): void;
-    removeTerm(term: string, semanticRefIndex: SemanticRefIndex): void;
-    lookupTerm(term: string): ScoredSemanticRef[] | undefined;
+export interface DeletionInfo {
+    timestamp: string;
+    reason?: string;
 }
 
 export type KnowledgeType = "entity" | "action" | "topic" | "tag";
 export type Knowledge = kpLib.ConcreteEntity | kpLib.Action | Topic | Tag;
+
+export type SemanticRefIndex = number;
 
 export interface SemanticRef {
     semanticRefIndex: SemanticRefIndex;
@@ -67,7 +59,20 @@ export interface IConversation<TMeta extends IKnowledgeSource = any> {
     secondaryIndexes?: IConversationSecondaryIndexes | undefined;
 }
 
-export type MessageIndex = number;
+export type ScoredSemanticRef = {
+    semanticRefIndex: SemanticRefIndex;
+    score: number;
+};
+
+export interface ITermToSemanticRefIndex {
+    getTerms(): string[];
+    addTerm(
+        term: string,
+        semanticRefIndex: SemanticRefIndex | ScoredSemanticRef,
+    ): void;
+    removeTerm(term: string, semanticRefIndex: SemanticRefIndex): void;
+    lookupTerm(term: string): ScoredSemanticRef[] | undefined;
+}
 
 export interface TextLocation {
     // the index of the message
