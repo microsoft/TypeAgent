@@ -173,9 +173,9 @@ export class KnowProPrinter extends ChatPrinter {
         this.writeLine();
     }
 
-    public writeSearchResult(
+    public writeSemanticRefSearchResult(
         conversation: kp.IConversation,
-        result: kp.SearchResult | undefined,
+        result: kp.SemanticRefSearchResult | undefined,
         maxToDisplay: number,
     ) {
         if (result) {
@@ -198,7 +198,7 @@ export class KnowProPrinter extends ChatPrinter {
 
     public writeSearchResults(
         conversation: kp.IConversation,
-        results: Map<kp.KnowledgeType, kp.SearchResult>,
+        results: Map<kp.KnowledgeType, kp.SemanticRefSearchResult>,
         maxToDisplay: number,
         distinct: boolean = false,
     ) {
@@ -227,13 +227,17 @@ export class KnowProPrinter extends ChatPrinter {
     private writeResult(
         conversation: kp.IConversation,
         type: kp.KnowledgeType,
-        results: Map<kp.KnowledgeType, kp.SearchResult>,
+        results: Map<kp.KnowledgeType, kp.SemanticRefSearchResult>,
         maxToDisplay: number,
     ) {
         const result = results.get(type);
         if (result !== undefined) {
             this.writeTitle(type.toUpperCase());
-            this.writeSearchResult(conversation, result, maxToDisplay);
+            this.writeSemanticRefSearchResult(
+                conversation,
+                result,
+                maxToDisplay,
+            );
         }
         return this;
     }
@@ -241,7 +245,7 @@ export class KnowProPrinter extends ChatPrinter {
     private writeResultDistinct(
         conversation: kp.IConversation,
         type: kp.KnowledgeType,
-        results: Map<kp.KnowledgeType, kp.SearchResult>,
+        results: Map<kp.KnowledgeType, kp.SemanticRefSearchResult>,
         maxToDisplay: number,
     ) {
         if (type !== "topic" && type !== "entity") {

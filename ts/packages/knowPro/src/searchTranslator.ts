@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import {
+    PromptSection,
     TypeChatJsonTranslator,
     TypeChatLanguageModel,
     createJsonTranslator,
@@ -18,6 +19,8 @@ import {
 } from "./search.js";
 import { PropertyNames } from "./propertyIndex.js";
 import { conversation as kpLib } from "knowledge-processor";
+import { getTimeRangeForConversation } from "./conversation.js";
+import { IConversation } from "./interfaces.js";
 
 export function createSearchTranslator(
     model: TypeChatLanguageModel,
@@ -121,4 +124,19 @@ function createPropertySearchTermFromActionTerm(
         );
     }
     return terms;
+}
+
+export function getTimeRangePromptSectionForConversation(
+    conversation: IConversation,
+): PromptSection[] {
+    const timeRange = getTimeRangeForConversation(conversation);
+    if (timeRange) {
+        return [
+            {
+                role: "system",
+                content: `ONLY IF user request explicitly asks for time ranges, THEN use the CONVERSATION TIME RANGE: "${timeRange.start} to ${timeRange.end}"`,
+            },
+        ];
+    }
+    return [];
 }

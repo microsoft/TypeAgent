@@ -415,7 +415,7 @@ export async function createKnowproCommands(
 
             const timer = new StopWatch();
             timer.start();
-            const matches = await kp.searchConversation(
+            const matches = await kp.searchConversationKnowledge(
                 conversation,
                 createSearchGroup(
                     termArgs,
@@ -471,7 +471,7 @@ export async function createKnowproCommands(
         const query = namedArgs.query;
         const result = await context.knowledgeActions.translateSearchTermsV2(
             query,
-            kp.getTimeRangeSectionForConversation(context.conversation!),
+            kp.getTimeRangePromptSectionForConversation(context.conversation!),
         );
         if (!result.success) {
             context.printer.writeError(result.message);
@@ -520,7 +520,7 @@ export async function createKnowproCommands(
         const query = namedArgs.query;
         const result = await context.searchTranslator.translate(
             query,
-            kp.getTimeRangeSectionForConversation(context.conversation!),
+            kp.getTimeRangePromptSectionForConversation(context.conversation!),
         );
         if (!result.success) {
             context.printer.writeError(result.message);
@@ -533,7 +533,7 @@ export async function createKnowproCommands(
         }
         const terms = kp.createSearchGroupFromSearchFilter(filter);
         const when = kp.createWhenFromSearchFilter(filter);
-        const searchResults = await kp.searchConversation(
+        const searchResults = await kp.searchConversationKnowledge(
             context.conversation!,
             terms,
             when,
