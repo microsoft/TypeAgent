@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { TextLocation } from "./interfaces.js";
+import { IMessage, MessageIndex, TextLocation } from "./interfaces.js";
 import { IndexingEventHandlers } from "./interfaces.js";
 import {
     TextEmbeddingIndex,
@@ -14,6 +14,11 @@ export type ScoredTextLocation = {
 };
 
 export interface ITextToTextLocationIndexFuzzy {
+    addTextLocation(text: string, textLocation: TextLocation): Promise<void>;
+    addTextLocationsBatched(
+        textAndLocations: [string, TextLocation][],
+        eventHandler?: IndexingEventHandlers,
+    ): Promise<void>;
     lookupText(
         text: string,
         maxMatches?: number,
@@ -93,4 +98,41 @@ export class TextToTextLocationIndexFuzzy
         this.textLocations = data.textLocations;
         this.embeddingIndex.deserialize(data.embeddings);
     }
+}
+
+export async function addMessagesToIndex(
+    textLocationIndex: TextToTextLocationIndexFuzzy,
+    messages: IMessage[],
+    baseMessageIndex: MessageIndex,
+    eventHandler?: IndexingEventHandlers,
+): Promise<void> {
+    for (let i = 0; i < messages.length; ++i) {
+        const message = messages[i];
+        let messageIndex = baseMessageIndex + i;
+        let chunkBatch: [string, TextLocation][] = [];
+        for (
+            let chunkIndex = 0;
+            chunkIndex < message.textChunks.length;
+            ++chunkIndex
+        ) {
+            chunkBatch.push([
+                message.textChunks[chunkIndex],
+                { messageIndex, chunkIndex },
+            ]);
+        }
+        await textLocationIndex.addTextLocationsBatched(
+            chunkBatch,
+            eventHandler,
+        );
+    }
+}
+
+export async function buildMessageIndex(
+    messages: IMessage[],
+    settings: TextEmbeddingIndexSettings,
+    eventHandler?: IndexingEventHandlers,
+) {
+    const textLocationIndex = new TextToTextLocationIndexFuzzy(settings);
+    await addMessagesToIndex(textLocationIndex, messages, 0, eventHandler);
+    return textLocationIndex;
 }
