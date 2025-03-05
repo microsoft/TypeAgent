@@ -51,7 +51,11 @@ export type ClientAction =
     | "automate-phone-ui";
 
 export interface ActionIO {
+    // Set the display to the content provided
     setDisplay(content: DisplayContent): void;
+
+    // Send diagnostic information back to the client
+    appendDiagnosticData(data: any): void;
 
     // Append content to the display, default mode is "inline"
     appendDisplay(content: DisplayContent, mode?: DisplayAppendMode): void;

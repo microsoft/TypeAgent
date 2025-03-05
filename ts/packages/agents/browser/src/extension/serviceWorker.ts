@@ -1548,7 +1548,10 @@ chrome.runtime.onMessage.addListener(
                         },
                     });
 
-                    sendResponse({ schema: schemaResult });
+                    sendResponse({
+                        intent: schemaResult.intent,
+                        actions: schemaResult.actions,
+                    });
                     break;
                 }
                 case "startRecording": {
@@ -1639,7 +1642,7 @@ chrome.runtime.onMessage.addListener(
                     const data =
                         await chrome.storage.local.get("recordedActions");
                     if (data) {
-                        chrome.storage.local.remove("recordedActions");
+                        await chrome.storage.local.remove("recordedActions");
                     }
                     sendResponse({});
                     break;

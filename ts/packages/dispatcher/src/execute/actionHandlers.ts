@@ -112,6 +112,9 @@ function getActionContext(
         takeAction(action: string, data: unknown): void {
             context.clientIO.takeAction(action, data);
         },
+        appendDiagnosticData(data): void {
+            context.clientIO.appendDiagnosticData(requestId, data);
+        },
     };
     const actionContext: ActionContext<unknown> = {
         streamingContext: undefined,
@@ -157,8 +160,8 @@ export function createSessionContext<T = unknown>(
     const storage = sessionDirPath
         ? getStorage(name, sessionDirPath)
         : undefined;
-    const instanceStorage = context.instanceDir
-        ? getStorage(name, context.instanceDir)
+    const instanceStorage = context.persistDir
+        ? getStorage(name, context.persistDir)
         : undefined;
     const addDynamicAgent = allowDynamicAgent
         ? (agentName: string, manifest: AppAgentManifest, appAgent: AppAgent) =>

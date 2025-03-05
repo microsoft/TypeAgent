@@ -465,6 +465,10 @@ export class ChatView {
         );
     }
 
+    setActionData(requestId: RequestId, data: any) {
+        this.getMessageGroup(requestId)?.setActionData(requestId, data);
+    }
+
     addAgentMessage(
         msg: IAgentMessage,
         options?: {

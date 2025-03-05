@@ -3,7 +3,7 @@
 
 import chalk from "chalk";
 import registerDebug from "debug";
-import { RequestId, makeClientIOMessage } from "../context/interactiveIO.js";
+import { makeClientIOMessage, RequestId } from "../context/interactiveIO.js";
 import { getDefaultExplainerName } from "agent-cache";
 import {
     CommandHandlerContext,

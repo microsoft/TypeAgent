@@ -39,6 +39,10 @@ export type AgentContextCallFunctions = {
         action: ClientAction;
         data?: unknown;
     }) => void;
+    appendDiagnosticData: (param: {
+        actionContextId: number;
+        data: any;
+    }) => void;
 };
 
 export type AgentContextInvokeFunctions = {
