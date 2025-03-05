@@ -11,6 +11,7 @@ import {
     SemanticRef,
     Term,
     IConversationSecondaryIndexes,
+    ScoredMessageIndex,
 } from "./interfaces.js";
 import { mergedEntities, mergeTopics } from "./knowledge.js";
 import * as q from "./query.js";
@@ -120,8 +121,51 @@ export type SemanticRefSearchResult = {
     semanticRefMatches: ScoredSemanticRef[];
 };
 
+export type ConversationSearchResult = {
+    messageMatches: ScoredMessageIndex[];
+    knowledgeMatches: Map<KnowledgeType, SemanticRefSearchResult>;
+};
+
 /**
- * Searches conversation for terms
+ * Search a conversation for matching messages and knowledge
+ * @param conversation
+ * @param searchTermGroup
+ * @param filter
+ * @param options
+ * @returns
+ */
+export async function searchConversation(
+    conversation: IConversation,
+    searchTermGroup: SearchTermGroup,
+    filter?: WhenFilter,
+    options?: SearchOptions,
+): Promise<ConversationSearchResult | undefined> {
+    const knowledgeMatches = await searchConversationKnowledge(
+        conversation,
+        searchTermGroup,
+        filter,
+        options,
+    );
+    if (!knowledgeMatches) {
+        return undefined;
+    }
+    const messageMatches = q.messageMatchesFromKnowledgeMatches(
+        conversation.semanticRefs!,
+        knowledgeMatches,
+    );
+    return {
+        messageMatches: messageMatches.toScoredMessageIndexes(),
+        knowledgeMatches,
+    };
+}
+
+/**
+ * Search a conversation for matching knowledge
+ * @param conversation
+ * @param searchTermGroup
+ * @param filter
+ * @param options
+ * @returns
  */
 export async function searchConversationKnowledge(
     conversation: IConversation,

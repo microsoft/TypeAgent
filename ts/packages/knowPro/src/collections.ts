@@ -6,6 +6,7 @@ import {
     Knowledge,
     KnowledgeType,
     MessageIndex,
+    ScoredMessageIndex,
     ScoredSemanticRef,
     SemanticRef,
     SemanticRefIndex,
@@ -373,6 +374,15 @@ export class MessageAccumulator extends MatchAccumulator<MessageIndex> {
         } else {
             this.add(messageIndexStart, score, true);
         }
+    }
+
+    public toScoredMessageIndexes(): ScoredMessageIndex[] {
+        return this.getSortedByScore(0).map((m) => {
+            return {
+                messageIndex: m.value,
+                score: m.score,
+            };
+        }, 0);
     }
 }
 

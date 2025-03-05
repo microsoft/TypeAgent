@@ -3,17 +3,22 @@
 
 import {
     PromptSection,
+    Result,
     TypeChatJsonTranslator,
     TypeChatLanguageModel,
     createJsonTranslator,
+    success,
 } from "typechat";
 import { createTypeScriptJsonValidator } from "typechat/ts";
 import { ActionTerm, EntityTerm, SearchFilter } from "./searchSchema.js";
 import { loadSchema } from "typeagent";
 import {
+    ConversationSearchResult,
     createPropertySearchTerm,
     createSearchTerm,
     PropertySearchTerm,
+    searchConversation,
+    SearchOptions,
     SearchTermGroup,
     WhenFilter,
 } from "./search.js";
@@ -22,9 +27,11 @@ import { conversation as kpLib } from "knowledge-processor";
 import { getTimeRangeForConversation } from "./conversation.js";
 import { IConversation } from "./interfaces.js";
 
+export type SearchTranslator = TypeChatJsonTranslator<SearchFilter>;
+
 export function createSearchTranslator(
     model: TypeChatLanguageModel,
-): TypeChatJsonTranslator<SearchFilter> {
+): SearchTranslator {
     const typeName = "SearchFilter";
     const searchActionSchema = loadSchema(
         ["dateTimeSchema.ts", "searchSchema.ts"],
@@ -139,4 +146,29 @@ export function getTimeRangePromptSectionForConversation(
         ];
     }
     return [];
+}
+
+export async function searchConversationWithNaturalLanguage(
+    conversation: IConversation,
+    searchTranslator: SearchTranslator,
+    query: string,
+    options?: SearchOptions,
+): Promise<Result<[ConversationSearchResult | undefined, SearchFilter]>> {
+    const result = await searchTranslator.translate(
+        query,
+        getTimeRangePromptSectionForConversation(conversation),
+    );
+    if (!result.success) {
+        return result;
+    }
+    const filter = result.data;
+    const terms = createSearchGroupFromSearchFilter(filter);
+    const when = createWhenFromSearchFilter(filter);
+    const searchResults = await searchConversation(
+        conversation,
+        terms,
+        when,
+        options,
+    );
+    return success([searchResults, filter]);
 }

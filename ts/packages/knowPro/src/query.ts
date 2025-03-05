@@ -1084,17 +1084,17 @@ export function toGroupedSearchResults(
     return semanticRefMatches;
 }
 
-export function collectMessageMatches(
+export function messageMatchesFromKnowledgeMatches(
     semanticRefs: SemanticRef[],
-    semanticRefMatches: Map<KnowledgeType, SemanticRefAccumulator>,
-): MatchAccumulator {
+    knowledgeMatches: Map<KnowledgeType, SemanticRefSearchResult>,
+): MessageAccumulator {
     const messageMatches = new MessageAccumulator();
-    for (const knowledgeType of semanticRefMatches.keys()) {
-        const matchesByType = semanticRefMatches.get(knowledgeType);
+    for (const knowledgeType of knowledgeMatches.keys()) {
+        const matchesByType = knowledgeMatches.get(knowledgeType);
         if (matchesByType) {
-            for (const match of matchesByType.getMatches()) {
+            for (const match of matchesByType.semanticRefMatches) {
                 messageMatches.addMessagesForSemanticRef(
-                    semanticRefs[match.value],
+                    semanticRefs[match.semanticRefIndex],
                     match.score,
                 );
             }
