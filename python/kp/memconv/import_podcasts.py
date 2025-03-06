@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from datetime import datetime as Datetime, timedelta as Timedelta
 from typing import Any, Sequence
 
-from ..knowpro import interfaces, kplib
+from ..knowpro import convindex, interfaces, kplib
 
 
 class PodcastMessageMeta(interfaces.IKnowledgeSource):
@@ -87,43 +87,59 @@ class PodcastMessage(interfaces.IMessage[PodcastMessageMeta]):
 
 @dataclass
 class Podcast(interfaces.IConversation[PodcastMessageMeta]):
-    # Instance variables not passed to __init__().
-    settings: Any = field(init=False, default=None)  # ConversationSettings
-    semantic_ref_index: Any = field(init=False, default=None)  # ConversationIndex
-    secondary_indexes: Any = field(init=False, default=None)  # PodcastSecondaryIndexes
+    # Instance variables not passed to `__init__()`.
+    # settings: ConversationSettings = field(
+    #     init=False, default_factory=createConversationSettings
+    # )
+    semantic_ref_index: convindex.ConversationIndex = field(
+        init=False, default=convindex.ConversationIndex
+    )
+    # secondary_indexes: PodcastSecondaryIndexes = field(
+    #     # This default factory probably doesn't work. :-(
+    #     init=False, default_factory=lambda self: PodcastSecondaryIndexes(self.settings)
+    # )
+    # Work in progress.
+    # message_index: TextToTextLocationIndexFuzzy | None = None
 
-    # __init__() parameters.
+    # __init__() parameters (via `@dataclass`).
     name_tag: str = field(default="")
     tags: list[str] = field(default_factory=list)
-    # NOTE: `messages: list[PodcastMessage]` causes problems due to invariance.
-    messages: list[interfaces.IMessage[PodcastMessageMeta]] = field(default_factory=list)
+    # NOTE: `messages: list[PodcastMessage]` doesn't work because of invariance.
+    messages: list[interfaces.IMessage[PodcastMessageMeta]] = field(
+        default_factory=list
+    )
     semantic_refs: list[interfaces.SemanticRef] | None = field(default_factory=list)
 
     def add_metadata_to_index(self) -> None:
-        raise NotImplementedError
-        # if self.semantic_ref_index:
-        #     add_metadata_to_index(
-        #         self.messages,
-        #         self.semantic_refs,
-        #         self.semantic_ref_index,
-        #     )
+        if self.semantic_ref_index:
+            convindex.add_metadata_to_index(
+                self.messages,
+                self.semantic_refs,
+                self.semantic_ref_index,
+            )
 
-    def generate_timestamps(self, start_date: Datetime, length_minutes: float = 60.0) -> None:
-        timestamp_messages(self.messages, start_date, start_date + Timedelta(minutes=length_minutes))
+    def generate_timestamps(
+        self, start_date: Datetime, length_minutes: float = 60.0
+    ) -> None:
+        timestamp_messages(
+            self.messages, start_date, start_date + Timedelta(minutes=length_minutes)
+        )
 
-    # async def build_index(
-    #         self,
-    #         event_handler: interfaces.IndexingEventHandlers | None = None,
-    # ) -> None:
-    #     self.add_metadata_to_index()
-    #     result = await build_conversation_index(self, event_handler)
-    #     if not result.error:
-    #         await self.build_secondary_indexes(False)
-    #         await self.secondary_indexes.threads.build_index()
-    #     return result
+    async def build_index(
+        self,
+        event_handler: interfaces.IndexingEventHandlers | None = None,
+    ) -> None:
+        self.add_metadata_to_index()
+        result = await convindex.build_conversation_index(self, event_handler)
+        if not result.error:
+            # build_conversation_index already built all aliases.
+            await self.build_secondary_indexes(False)
+            await self.secondary_indexes.threads.build_index()
+        return result
 
+    # Work in progress. This will get merged into "build_index" soon.
     # async def build_message_index...
-    
+
     # TODO: Wait unti PodcastData is implemented
     # async def serialize(self) -> PodcastData:
     #     return PodcastData(

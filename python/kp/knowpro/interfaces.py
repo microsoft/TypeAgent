@@ -12,6 +12,7 @@
 # - I translated readonly to @property.
 
 from collections.abc import Sequence
+from dataclasses import dataclass, field
 from datetime import datetime as Datetime
 from typing import Any, Callable, Literal, Protocol, runtime_checkable
 
@@ -96,45 +97,45 @@ class Tag(Protocol):
 type Knowledge = kplib.ConcreteEntity | kplib.Action | Topic | Tag
 
 
-@runtime_checkable
-class TextLocation(Protocol):
+@dataclass
+class TextLocation:
     # The index of the message.
     message_index: MessageIndex
     # The index of the chunk.
-    chunkIndex: int | None
+    chunk_index: int = 0
     # The index of the character within the chunk.
-    charIndex: int | None
+    char_index: int = 0
 
 
 # A text range within a session.
-@runtime_checkable
-class TextRange(Protocol):
+@dataclass
+class TextRange:
     # The start of the range.
     start: TextLocation
     # The end of the range (exclusive).
-    end: TextLocation | None
+    end: TextLocation | None = None
 
 
-@runtime_checkable
-class SemanticRef(Protocol):
+@dataclass
+class SemanticRef:
     semantic_ref_index: SemanticRefIndex
     range: TextRange
     knowledge_type: KnowledgeType
     knowledge: Knowledge
 
 
-@runtime_checkable
-class DateRange(Protocol):
+@dataclass
+class DateRange:
     start: Datetime
-    # Inclusive.
-    end: Datetime | None
+    # Inclusive.  # TODO: Really? Shouldn't this be exclusive?
+    end: Datetime | None = None
 
 
-@runtime_checkable
-class Term(Protocol):
+@dataclass
+class Term:
     text: str
     # Optional weighting for these matches.
-    weight: float | None
+    weight: float | None = None
 
 
 @runtime_checkable
