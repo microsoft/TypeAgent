@@ -16,6 +16,7 @@ import * as levenshtein from "fast-levenshtein";
 import { createEmbeddingCache } from "knowledge-processor";
 import { Scored } from "./common.js";
 import { IndexingEventHandlers } from "./interfaces.js";
+import { error, Result, success } from "typechat";
 
 export class EmbeddingIndex {
     private embeddings: NormalizedEmbedding[];
@@ -90,6 +91,28 @@ export class EmbeddingIndex {
     }
 }
 
+export async function generateTextEmbeddingsForIndex(
+    embeddingModel: TextEmbeddingModel,
+    texts: string | string[],
+): Promise<Result<NormalizedEmbedding[]>> {
+    try {
+        let embeddings: NormalizedEmbedding[];
+        const textsToEmbed = Array.isArray(texts) ? texts : [texts];
+        embeddings = await generateTextEmbeddingsWithRetry(
+            embeddingModel,
+            textsToEmbed,
+        );
+        return success(embeddings);
+    } catch (ex) {
+        return error(`generateTExtEmbeddingsForIndex failed: ${ex}`);
+    }
+}
+
+export type EmbeddingIndexingResult = {
+    numberCompleted: number;
+    error?: string | undefined;
+};
+
 export class TextEmbeddingIndex {
     private embeddingIndex: EmbeddingIndex;
 
@@ -106,27 +129,33 @@ export class TextEmbeddingIndex {
      * This can throw
      * @param texts
      */
-    public async addText(texts: string | string[]): Promise<void> {
-        if (Array.isArray(texts)) {
-            const embeddings = await generateTextEmbeddingsWithRetry(
-                this.settings.embeddingModel,
-                texts,
-            );
-            this.embeddingIndex.push(embeddings);
-        } else {
-            const embedding = await generateEmbedding(
-                this.settings.embeddingModel,
-                texts,
-            );
-            this.embeddingIndex.push(embedding);
+    public async addText(
+        texts: string | string[],
+    ): Promise<Result<NormalizedEmbedding[]>> {
+        const embeddingResult = await generateTextEmbeddingsForIndex(
+            this.settings.embeddingModel,
+            texts,
+        );
+        if (!embeddingResult.success) {
+            return embeddingResult;
         }
+        this.embeddingIndex.push(embeddingResult.data);
+        return embeddingResult;
     }
 
+    /**
+     * Add text to the index in batches
+     * @param textToIndex
+     * @param eventHandler
+     * @param batchSize
+     * @returns Returns the index of the last item in textToIndex which was successfully completed
+     */
     public async addTextBatch(
         textToIndex: string[],
         eventHandler?: IndexingEventHandlers,
         batchSize?: number,
-    ): Promise<void> {
+    ): Promise<EmbeddingIndexingResult> {
+        let result: EmbeddingIndexingResult = { numberCompleted: 0 };
         for (const batch of getIndexingBatches(
             textToIndex,
             batchSize ?? this.settings.batchSize,
@@ -141,9 +170,14 @@ export class TextEmbeddingIndex {
             ) {
                 break;
             }
-            // TODO: return IndexingResult to track how far we got before a non-recoverable failure
-            await this.addText(batch.values);
+            const batchResult = await this.addText(batch.values);
+            if (!batchResult.success) {
+                result.error = batchResult.message;
+                break;
+            }
+            result.numberCompleted = batch.startAt + batch.values.length;
         }
+        return result;
     }
 
     public get(pos: number): NormalizedEmbedding {
