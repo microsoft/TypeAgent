@@ -3,9 +3,10 @@
 
 import { collections, createTopNList } from "typeagent";
 import {
-    IMessage,
     Knowledge,
     KnowledgeType,
+    MessageIndex,
+    ScoredMessageIndex,
     ScoredSemanticRef,
     SemanticRef,
     SemanticRefIndex,
@@ -351,7 +352,39 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
     }
 }
 
-export class MessageAccumulator extends MatchAccumulator<IMessage> {}
+export class MessageAccumulator extends MatchAccumulator<MessageIndex> {
+    constructor() {
+        super();
+    }
+
+    public addMessagesForSemanticRef(
+        semanticRef: SemanticRef,
+        score: number,
+    ): void {
+        const messageIndexStart = semanticRef.range.start.messageIndex;
+        if (semanticRef.range.end) {
+            const messageIndexEnd = semanticRef.range.end.messageIndex;
+            for (
+                let messageIndex = messageIndexStart;
+                messageIndex < messageIndexEnd;
+                ++messageIndex
+            ) {
+                this.add(messageIndex, score, true);
+            }
+        } else {
+            this.add(messageIndexStart, score, true);
+        }
+    }
+
+    public toScoredMessageIndexes(): ScoredMessageIndex[] {
+        return this.getSortedByScore(0).map((m) => {
+            return {
+                messageIndex: m.value,
+                score: m.score,
+            };
+        }, 0);
+    }
+}
 
 export class TextRangeCollection {
     // Maintains ranges sorted by message index
