@@ -12,7 +12,7 @@
 # - I translated readonly to @property.
 
 from collections.abc import Sequence
-from datetime import datetime as Date
+from datetime import datetime as Datetime
 from typing import Any, Callable, Literal, Protocol, runtime_checkable
 
 from . import kplib
@@ -125,9 +125,9 @@ class SemanticRef(Protocol):
 
 @runtime_checkable
 class DateRange(Protocol):
-    start: Date
+    start: Datetime
     # Inclusive.
-    end: Date | None
+    end: Datetime | None
 
 
 @runtime_checkable
@@ -271,9 +271,9 @@ class IConversationSecondaryIndexes(Protocol):
 @runtime_checkable
 class IConversation[TMeta: IKnowledgeSource = Any](Protocol):
     name_tag: str
-    tags: Sequence[str]
-    messages: Sequence[IMessage[TMeta]]
-    semantic_refs: Sequence[SemanticRef] | None
+    tags: list[str]
+    messages: list[IMessage[TMeta]]
+    semantic_refs: list[SemanticRef] | None
     semantic_ref_index: ITermToSemanticRefIndex | None
     secondaryIndexes: IConversationSecondaryIndexes | None
 
