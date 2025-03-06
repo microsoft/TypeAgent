@@ -37,12 +37,12 @@ type MessageIndex = int
 @runtime_checkable
 class IMessage[TMeta: IKnowledgeSource = Any](Protocol):
     # The text of the message, split into chunks.
-    text_chunks: Sequence[str]
+    text_chunks: list[str]
     # For example, e-mail has subject, from and to fields;
     # a chat message has a sender and a recipient.
     metadata: TMeta
     timestamp: str | None = None
-    tags: Sequence[str]
+    tags: list[str]
     deletion_info: DeletionInfo | None = None
 
 

@@ -1,10 +1,13 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
+from dataclasses import dataclass, field
+from typing import Sequence
+
 from ..knowpro import interfaces, kplib
 
 
-class PodcastMessagesMeta(interfaces.IKnowledgeSource):
+class PodcastMessageMeta(interfaces.IKnowledgeSource):
     """Metadata for podcast messages."""
 
     # Instance variables types.
@@ -16,7 +19,7 @@ class PodcastMessagesMeta(interfaces.IKnowledgeSource):
         self.listeners = []
 
     def get_knowledge(self) -> kplib.KnowledgeResponse:
-        if self.speaker is None:
+        if not self.speaker:
             return kplib.KnowledgeResponse(
                 entities=[],
                 actions=[],
@@ -55,4 +58,27 @@ class PodcastMessagesMeta(interfaces.IKnowledgeSource):
                 inverse_actions=[],
                 topics=[],
             )
-    
+
+
+def assign_message_listeners(
+    msgs: Sequence[interfaces.IMessage[PodcastMessageMeta]],
+    participants: set[str],
+) -> None:
+    for msg in msgs:
+        if msg.metadata.speaker:
+            listeners = [p for p in participants if p != msg.metadata.speaker]
+            msg.metadata.listeners = listeners
+
+
+@dataclass
+class PodcastMessage(interfaces.IMessage[PodcastMessageMeta]):
+    timestamp: str | None = field(init=False, default=None)
+    text_chunks: list[str]
+    metadata: PodcastMessageMeta
+    tags: list[str] = field(default_factory=list)
+
+    def add_timestamp(self, timestamp: str) -> None:
+        self.timestamp = timestamp
+
+    def add_content(self, content: str) -> None:
+        self.text_chunks[0] += content
