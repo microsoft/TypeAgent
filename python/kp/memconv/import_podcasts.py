@@ -88,12 +88,14 @@ class PodcastMessage(interfaces.IMessage[PodcastMessageMeta]):
 @dataclass
 class Podcast(interfaces.IConversation[PodcastMessageMeta]):
     # Instance variables not passed to `__init__()`.
+    # TODO
     # settings: ConversationSettings = field(
     #     init=False, default_factory=createConversationSettings
     # )
-    semantic_ref_index: convindex.ConversationIndex = field(
-        init=False, default=convindex.ConversationIndex
+    semantic_ref_index: convindex.ITermToSemanticRefIndex | None = field(
+        init=False, default_factory=convindex.ConversationIndex
     )
+    # TODO
     # secondary_indexes: PodcastSecondaryIndexes = field(
     #     # This default factory probably doesn't work. :-(
     #     init=False, default_factory=lambda self: PodcastSecondaryIndexes(self.settings)
@@ -112,6 +114,7 @@ class Podcast(interfaces.IConversation[PodcastMessageMeta]):
 
     def add_metadata_to_index(self) -> None:
         if self.semantic_ref_index:
+            assert self.semantic_refs is not None
             convindex.add_metadata_to_index(
                 self.messages,
                 self.semantic_refs,
@@ -128,15 +131,17 @@ class Podcast(interfaces.IConversation[PodcastMessageMeta]):
     async def build_index(
         self,
         event_handler: interfaces.IndexingEventHandlers | None = None,
-    ) -> None:
+    ) -> interfaces.IndexingResults:
         self.add_metadata_to_index()
         result = await convindex.build_conversation_index(self, event_handler)
-        if not result.error:
-            # build_conversation_index already built all aliases.
-            await self.build_secondary_indexes(False)
-            await self.secondary_indexes.threads.build_index()
+        # TODO
+        # if not result.error:
+        #     build_conversation_index already built all aliases.
+        #     await self.build_secondary_indexes(False)
+        #     await self.secondary_indexes.threads.build_index()
         return result
 
+    # TODO
     # Work in progress. This will get merged into "build_index" soon.
     # async def build_message_index...
 
@@ -152,6 +157,8 @@ class Podcast(interfaces.IConversation[PodcastMessageMeta]):
     #             self.secondary_indexes.term_to_related_terms_index.serialize(),
     #         thread_data=self.secondary_indexes.threads.serialize(),
     #     )
+
+    # TODO
 
     # async def deserialoze...
 
@@ -171,6 +178,7 @@ class Podcast(interfaces.IConversation[PodcastMessageMeta]):
 # class PodcastData(secondary_indexes.IConversationDataWithIndexes[PodcastMessage]):
 #     pass
 
+# TODO
 # async def import_podcast...
 
 
