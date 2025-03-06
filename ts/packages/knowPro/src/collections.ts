@@ -353,8 +353,34 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
 }
 
 export class MessageAccumulator extends MatchAccumulator<MessageIndex> {
-    constructor() {
+    constructor(matches?: Match<MessageIndex>[]) {
         super();
+        if (matches && matches.length > 0) {
+            this.setMatches(matches);
+        }
+    }
+
+    public override add(
+        value: number,
+        score: number,
+        isExactMatch: boolean,
+    ): void {
+        if (isExactMatch) {
+            let match = this.getMatch(value);
+            if (match === undefined) {
+                match = {
+                    value,
+                    score,
+                    hitCount: 1,
+                    relatedHitCount: 0,
+                    relatedScore: 0,
+                };
+                this.setMatch(match);
+            } else if (score > match.score) {
+                match.score = score;
+                match.hitCount++;
+            }
+        }
     }
 
     public addMessagesForSemanticRef(
@@ -373,6 +399,16 @@ export class MessageAccumulator extends MatchAccumulator<MessageIndex> {
             }
         } else {
             this.add(messageIndexStart, score, true);
+        }
+    }
+
+    public smoothScores() {
+        // Normalize the score relative to # of hits. Use log to reduce impact of very high score
+        for (const match of this.getMatches()) {
+            if (match.hitCount > 0) {
+                const avgScore = match.score / match.hitCount;
+                match.score = Math.log(avgScore + 1);
+            }
         }
     }
 

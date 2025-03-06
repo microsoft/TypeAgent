@@ -16,3 +16,4 @@ export * from "./serialization.js";
 export * from "./dateTimeSchema.js";
 export * from "./searchSchema.js";
 export * from "./searchTranslator.js";
+export * from "./textLocationIndex.js";
