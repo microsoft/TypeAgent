@@ -8,6 +8,7 @@ import {
     addTextToEmbeddingIndex,
     EmbeddingIndex,
     indexOfNearestTextInIndex,
+    indexOfNearestTextInIndexSubset,
     TextEmbeddingIndexSettings,
 } from "./fuzzyIndex.js";
 
@@ -16,7 +17,7 @@ export type ScoredTextLocation = {
     textLocation: TextLocation;
 };
 
-export interface ITextToTextLocationIndexFuzzy {
+export interface ITextToTextLocationIndex {
     addTextLocation(
         text: string,
         textLocation: TextLocation,
@@ -40,15 +41,21 @@ export interface ITextToTextLocationIndexData {
     embeddings: Float32Array[];
 }
 
-export class TextToTextLocationIndexFuzzy
-    implements ITextToTextLocationIndexFuzzy
-{
+export class TextToTextLocationIndex implements ITextToTextLocationIndex {
     private textLocations: TextLocation[];
     private embeddingIndex: EmbeddingIndex;
 
     constructor(public settings: TextEmbeddingIndexSettings) {
         this.textLocations = [];
         this.embeddingIndex = new EmbeddingIndex();
+    }
+
+    public get size(): number {
+        return this.embeddingIndex.size;
+    }
+
+    public get(pos: number): TextLocation {
+        return this.textLocations[pos];
     }
 
     public async addTextLocation(
@@ -97,6 +104,28 @@ export class TextToTextLocationIndexFuzzy
             this.embeddingIndex,
             this.settings.embeddingModel,
             text,
+            maxMatches,
+            thresholdScore,
+        );
+        return matches.map((m) => {
+            return {
+                textLocation: this.textLocations[m.item],
+                score: m.score,
+            };
+        });
+    }
+
+    public async lookupTextInSubset(
+        text: string,
+        indicesToSearch: number[],
+        maxMatches?: number,
+        thresholdScore?: number,
+    ): Promise<ScoredTextLocation[]> {
+        const matches = await indexOfNearestTextInIndexSubset(
+            this.embeddingIndex,
+            this.settings.embeddingModel,
+            text,
+            indicesToSearch,
             maxMatches,
             thresholdScore,
         );

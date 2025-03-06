@@ -728,6 +728,9 @@ export async function createKnowproCommands(
     commands.kpPodcastBuildMessageIndex.metadata =
         podcastBuildMessageIndexDef();
     async function podcastBuildMessageIndex(args: string[]): Promise<void> {
+        if (!ensureConversationLoaded()) {
+            return;
+        }
         const namedArgs = parseNamedArguments(
             args,
             podcastBuildMessageIndexDef(),
@@ -736,7 +739,7 @@ export async function createKnowproCommands(
             `Indexing ${context.conversation?.messages.length} messages`,
         );
         let progress = new ProgressBar(context.printer, namedArgs.maxMessages);
-        await context.podcast?.buildMessageIndex(
+        const result = await context.podcast!.buildMessageIndex(
             createIndexingEventHandler(
                 context,
                 progress,
@@ -745,6 +748,7 @@ export async function createKnowproCommands(
             namedArgs.batchSize,
         );
         progress.complete();
+        context.printer.writeListIndexingResult(result);
     }
 
     function imageCollectionBuildIndexDef(): CommandMetadata {

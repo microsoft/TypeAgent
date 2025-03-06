@@ -29,6 +29,10 @@ export class EmbeddingIndex {
         return this.embeddings.length;
     }
 
+    public get(pos: number): NormalizedEmbedding {
+        return this.embeddings[pos];
+    }
+
     public push(embeddings: NormalizedEmbedding | NormalizedEmbedding[]): void {
         if (Array.isArray(embeddings)) {
             this.embeddings.push(...embeddings);
@@ -48,16 +52,54 @@ export class EmbeddingIndex {
         }
     }
 
-    public get(pos: number): NormalizedEmbedding {
-        return this.embeddings[pos];
-    }
-
     public getIndexesOfNearest(
         embedding: NormalizedEmbedding,
         maxMatches?: number,
         minScore?: number,
     ): Scored[] {
-        return this.indexesOfNearest(embedding, maxMatches, minScore);
+        return this.indexesOfNearest(
+            this.embeddings,
+            embedding,
+            maxMatches,
+            minScore,
+        );
+    }
+
+    /**
+     * Finds the indexes of the nearest embeddings within a specified subset.
+     *
+     * This function searches for the nearest embeddings to a given embedding
+     * within a subset of the embeddings array, defined by the provided indices.
+     *
+     * @param {NormalizedEmbedding} embedding - The embedding to compare against.
+     * @param {number[]} indicesToSearch - An array of indices specifying the subset of embeddings to search.
+     * @param {number} [maxMatches] - Optional. The maximum number of matches to return. If not specified, all matches are returned.
+     * @param {number} [minScore] - Optional. The minimum similarity score required for a match to be considered valid.
+     * @returns {Scored[]} An array of objects, each containing the index of a matching embedding and its similarity score.
+     */
+    public getIndexesOfNearestInSubset(
+        embedding: NormalizedEmbedding,
+        indicesToSearch: number[],
+        maxMatches?: number,
+        minScore?: number,
+    ): Scored[] {
+        const embeddingsToSearch = indicesToSearch.map(
+            (i) => this.embeddings[i],
+        );
+        // This gives us the offsets within in the embeddingsToSearch array
+        const nearestInSubset = this.indexesOfNearest(
+            embeddingsToSearch,
+            embedding,
+            maxMatches,
+            minScore,
+        );
+        // We need to map back to actual positions
+        return nearestInSubset.map((match) => {
+            return {
+                item: indicesToSearch[match.item],
+                score: match.score,
+            };
+        });
     }
 
     public removeAt(pos: number): void {
@@ -77,6 +119,7 @@ export class EmbeddingIndex {
     }
 
     private indexesOfNearest(
+        embeddingsToSearch: NormalizedEmbedding[],
         embedding: NormalizedEmbedding,
         maxMatches?: number,
         minScore?: number,
@@ -84,7 +127,7 @@ export class EmbeddingIndex {
         let matches: Scored[];
         if (maxMatches && maxMatches > 0) {
             matches = indexesOfNearest(
-                this.embeddings,
+                embeddingsToSearch,
                 embedding,
                 maxMatches,
                 SimilarityType.Dot,
@@ -92,7 +135,7 @@ export class EmbeddingIndex {
             );
         } else {
             matches = indexesOfAllNearest(
-                this.embeddings,
+                embeddingsToSearch,
                 embedding,
                 SimilarityType.Dot,
                 minScore,
@@ -181,6 +224,23 @@ export async function indexOfNearestTextInIndex(
     const textEmbedding = await generateEmbedding(embeddingModel, text);
     return embeddingIndex.getIndexesOfNearest(
         textEmbedding,
+        maxMatches,
+        minScore,
+    );
+}
+
+export async function indexOfNearestTextInIndexSubset(
+    embeddingIndex: EmbeddingIndex,
+    embeddingModel: TextEmbeddingModel,
+    text: string,
+    indicesToSearch: number[],
+    maxMatches?: number,
+    minScore?: number,
+): Promise<Scored[]> {
+    const textEmbedding = await generateEmbedding(embeddingModel, text);
+    return embeddingIndex.getIndexesOfNearestInSubset(
+        textEmbedding,
+        indicesToSearch,
         maxMatches,
         minScore,
     );

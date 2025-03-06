@@ -382,6 +382,13 @@ export class KnowProPrinter extends ChatPrinter {
         return this;
     }
 
+    public writeListIndexingResult(result: kp.ListIndexingResult) {
+        this.writeLine(`Indexed ${result.numberCompleted} items`);
+        if (result.error) {
+            this.writeError(result.error);
+        }
+    }
+
     public writeSearchFilter(
         action: knowLib.conversation.GetAnswerWithTermsActionV2,
     ) {

@@ -7,19 +7,23 @@ import {
     TextEmbeddingIndexSettings,
 } from "./fuzzyIndex.js";
 import { RelatedTermIndexSettings } from "./relatedTermsIndex.js";
+import { MessageTextIndexSettings } from "./messageIndex.js";
 
 export type ConversationSettings = {
     relatedTermIndexSettings: RelatedTermIndexSettings;
     threadSettings: TextEmbeddingIndexSettings;
+    messageTextIndexSettings: MessageTextIndexSettings;
 };
 
 export function createConversationSettings(): ConversationSettings {
-    const embeddingIndexSettings = createTextEmbeddingIndexSettings();
     return {
         relatedTermIndexSettings: {
-            embeddingIndexSettings,
+            embeddingIndexSettings: createTextEmbeddingIndexSettings(),
         },
-        threadSettings: embeddingIndexSettings,
+        threadSettings: createTextEmbeddingIndexSettings(),
+        messageTextIndexSettings: {
+            embeddingIndexSettings: createTextEmbeddingIndexSettings(),
+        },
     };
 }
 

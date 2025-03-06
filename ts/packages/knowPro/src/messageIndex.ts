@@ -7,29 +7,34 @@ import {
     IndexingEventHandlers,
     TextLocation,
     ListIndexingResult,
+    ScoredMessageIndex,
+    IConversation,
+    IMessageTextIndex,
 } from "./interfaces.js";
-import { TextToTextLocationIndexFuzzy } from "./textLocationIndex.js";
+import { TextToTextLocationIndex } from "./textLocationIndex.js";
 
-export interface MessageTextIndexFuzzy {
-    addMessages(
-        messages: IMessage[],
-        baseMessageIndex: MessageIndex,
-        eventHandler?: IndexingEventHandlers,
-    ): Promise<ListIndexingResult>;
-}
+export type MessageTextIndexSettings = {
+    embeddingIndexSettings: TextEmbeddingIndexSettings;
+};
 
-export class MessageTextIndexFuzzy implements MessageTextIndexFuzzy {
-    private textLocationIndex: TextToTextLocationIndexFuzzy;
+export class MessageTextIndex implements IMessageTextIndex {
+    private textLocationIndex: TextToTextLocationIndex;
 
-    constructor(settings: TextEmbeddingIndexSettings) {
-        this.textLocationIndex = new TextToTextLocationIndexFuzzy(settings);
+    constructor(public settings: MessageTextIndexSettings) {
+        this.textLocationIndex = new TextToTextLocationIndex(
+            settings.embeddingIndexSettings,
+        );
+    }
+
+    public get size(): number {
+        return this.textLocationIndex.size;
     }
 
     public addMessages(
         messages: IMessage[],
-        baseMessageIndex: MessageIndex,
         eventHandler?: IndexingEventHandlers,
     ): Promise<ListIndexingResult> {
+        const baseMessageIndex: MessageIndex = this.size;
         const allChunks: [string, TextLocation][] = [];
         // Collect everything so we can batch efficiently
         for (let i = 0; i < messages.length; ++i) {
@@ -48,52 +53,60 @@ export class MessageTextIndexFuzzy implements MessageTextIndexFuzzy {
         }
         return this.textLocationIndex.addTextLocations(allChunks, eventHandler);
     }
-}
 
-export async function addMessagesToIndex(
-    textLocationIndex: TextToTextLocationIndexFuzzy,
-    messages: IMessage[],
-    baseMessageIndex: MessageIndex,
-    eventHandler?: IndexingEventHandlers,
-    batchSize?: number,
-): Promise<void> {
-    const allChunks: [string, TextLocation][] = [];
-    // Collect everything so we can batch efficiently
-    for (let i = 0; i < messages.length; ++i) {
-        const message = messages[i];
-        let messageIndex = baseMessageIndex + i;
-        for (
-            let chunkIndex = 0;
-            chunkIndex < message.textChunks.length;
-            ++chunkIndex
-        ) {
-            allChunks.push([
-                message.textChunks[chunkIndex],
-                { messageIndex, chunkIndex },
-            ]);
-        }
+    public async lookupMessages(
+        messageText: string,
+        maxMatches?: number,
+        thresholdScore?: number,
+    ): Promise<ScoredMessageIndex[]> {
+        const scoredLocations = await this.textLocationIndex.lookupText(
+            messageText,
+            maxMatches,
+            thresholdScore,
+        );
+        return scoredLocations.map((sl) => {
+            return {
+                messageIndex: sl.textLocation.messageIndex,
+                score: sl.score,
+            };
+        });
     }
-    // Todo: return an IndexingResult
-    await textLocationIndex.addTextLocations(
-        allChunks,
-        eventHandler,
-        batchSize,
-    );
+
+    public async lookupMessagesInSubset(
+        messageText: string,
+        indicesToSearch: MessageIndex[],
+        maxMatches?: number,
+        thresholdScore?: number,
+    ): Promise<ScoredMessageIndex[]> {
+        const scoredLocations = await this.textLocationIndex.lookupTextInSubset(
+            messageText,
+            indicesToSearch,
+            maxMatches,
+            thresholdScore,
+        );
+        return scoredLocations.map((sl) => {
+            return {
+                messageIndex: sl.textLocation.messageIndex,
+                score: sl.score,
+            };
+        });
+    }
 }
 
 export async function buildMessageIndex(
-    messages: IMessage[],
-    settings: TextEmbeddingIndexSettings,
+    conversation: IConversation,
+    settings: MessageTextIndexSettings,
     eventHandler?: IndexingEventHandlers,
-    batchSize?: number,
-) {
-    const textLocationIndex = new TextToTextLocationIndexFuzzy(settings);
-    await addMessagesToIndex(
-        textLocationIndex,
-        messages,
-        0,
-        eventHandler,
-        batchSize,
-    );
-    return textLocationIndex;
+): Promise<ListIndexingResult> {
+    if (conversation.secondaryIndexes) {
+        conversation.secondaryIndexes.messageIndex ??= new MessageTextIndex(
+            settings,
+        );
+        const messageIndex = conversation.secondaryIndexes.messageIndex;
+        const messages = conversation.messages;
+        return messageIndex.addMessages(messages, eventHandler);
+    }
+    return {
+        numberCompleted: 0,
+    };
 }
