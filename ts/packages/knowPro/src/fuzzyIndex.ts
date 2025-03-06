@@ -17,30 +17,108 @@ import { createEmbeddingCache } from "knowledge-processor";
 import { Scored } from "./common.js";
 import { IndexingEventHandlers } from "./interfaces.js";
 
-export class TextEmbeddingIndex {
+export class EmbeddingIndex {
     private embeddings: NormalizedEmbedding[];
 
-    constructor(public settings: TextEmbeddingIndexSettings) {
-        this.embeddings = [];
+    constructor(embeddings?: NormalizedEmbedding[]) {
+        this.embeddings = embeddings ?? [];
     }
 
     public get size(): number {
         return this.embeddings.length;
     }
 
+    public push(embeddings: NormalizedEmbedding | NormalizedEmbedding[]): void {
+        if (Array.isArray(embeddings)) {
+            this.embeddings.push(...embeddings);
+        } else {
+            this.embeddings.push(embeddings);
+        }
+    }
+
+    public get(pos: number): NormalizedEmbedding {
+        return this.embeddings[pos];
+    }
+
+    public getIndexesOfNearest(
+        embedding: NormalizedEmbedding,
+        maxMatches?: number,
+        minScore?: number,
+    ): Scored[] {
+        return this.indexesOfNearest(embedding, maxMatches, minScore);
+    }
+
+    public removeAt(pos: number): void {
+        this.embeddings.splice(pos, 1);
+    }
+
+    public clear(): void {
+        this.embeddings = [];
+    }
+
+    public serialize(): Float32Array[] {
+        return this.embeddings;
+    }
+
+    public deserialize(embeddings: Float32Array[]): void {
+        this.embeddings = embeddings;
+    }
+
+    private indexesOfNearest(
+        embedding: NormalizedEmbedding,
+        maxMatches?: number,
+        minScore?: number,
+    ): Scored[] {
+        let matches: Scored[];
+        if (maxMatches && maxMatches > 0) {
+            matches = indexesOfNearest(
+                this.embeddings,
+                embedding,
+                maxMatches,
+                SimilarityType.Dot,
+                minScore,
+            );
+        } else {
+            matches = indexesOfAllNearest(
+                this.embeddings,
+                embedding,
+                SimilarityType.Dot,
+                minScore,
+            );
+        }
+        return matches;
+    }
+}
+
+export class TextEmbeddingIndex {
+    private embeddingIndex: EmbeddingIndex;
+
+    constructor(public settings: TextEmbeddingIndexSettings) {
+        this.embeddingIndex = new EmbeddingIndex();
+    }
+
+    public get size(): number {
+        return this.embeddingIndex.size;
+    }
+
+    /**
+     * Convert text into embeddings and add them to the internal index.
+     * This can throw
+     * @param texts
+     */
     public async addText(texts: string | string[]): Promise<void> {
         if (Array.isArray(texts)) {
             const embeddings = await generateTextEmbeddingsWithRetry(
                 this.settings.embeddingModel,
                 texts,
             );
-            this.embeddings.push(...embeddings);
+            this.embeddingIndex.push(embeddings);
         } else {
             const embedding = await generateEmbedding(
                 this.settings.embeddingModel,
                 texts,
             );
-            this.embeddings.push(embedding);
+            this.embeddingIndex.push(embedding);
         }
     }
 
@@ -69,11 +147,7 @@ export class TextEmbeddingIndex {
     }
 
     public get(pos: number): NormalizedEmbedding {
-        return this.embeddings[pos];
-    }
-
-    public add(embedding: NormalizedEmbedding): void {
-        this.embeddings.push(embedding);
+        return this.embeddingIndex.get(pos);
     }
 
     public async getIndexesOfNearest(
@@ -85,7 +159,11 @@ export class TextEmbeddingIndex {
             this.settings.embeddingModel,
             text,
         );
-        return this.indexesOfNearestText(textEmbedding, maxMatches, minScore);
+        return this.embeddingIndex.getIndexesOfNearest(
+            textEmbedding,
+            maxMatches,
+            minScore,
+        );
     }
 
     public async getIndexesOfNearestMultiple(
@@ -100,53 +178,30 @@ export class TextEmbeddingIndex {
         const results = [];
         for (const embedding of textEmbeddings) {
             results.push(
-                await this.getIndexesOfNearest(embedding, maxMatches, minScore),
+                this.embeddingIndex.getIndexesOfNearest(
+                    embedding,
+                    maxMatches,
+                    minScore,
+                ),
             );
         }
         return results;
     }
 
     public removeAt(pos: number): void {
-        this.embeddings.splice(pos, 1);
+        this.embeddingIndex.removeAt(pos);
     }
 
     public clear(): void {
-        this.embeddings = [];
+        this.embeddingIndex.clear();
     }
 
     public serialize(): Float32Array[] {
-        return this.embeddings;
+        return this.embeddingIndex.serialize();
     }
 
     public deserialize(embeddings: Float32Array[]): void {
-        this.embeddings = embeddings;
-    }
-
-    private indexesOfNearestText(
-        textEmbedding: NormalizedEmbedding,
-        maxMatches?: number,
-        minScore?: number,
-    ): Scored[] {
-        maxMatches ??= this.settings.maxMatches;
-        minScore ??= this.settings.minScore;
-        let matches: Scored[];
-        if (maxMatches && maxMatches > 0) {
-            matches = indexesOfNearest(
-                this.embeddings,
-                textEmbedding,
-                maxMatches,
-                SimilarityType.Dot,
-                minScore,
-            );
-        } else {
-            matches = indexesOfAllNearest(
-                this.embeddings,
-                textEmbedding,
-                SimilarityType.Dot,
-                minScore,
-            );
-        }
-        return matches;
+        this.embeddingIndex.deserialize(embeddings);
     }
 }
 
