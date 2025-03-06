@@ -159,6 +159,8 @@ export class TextEmbeddingIndex {
             this.settings.embeddingModel,
             text,
         );
+        maxMatches ??= this.settings.maxMatches;
+        minScore ??= this.settings.minScore;
         return this.embeddingIndex.getIndexesOfNearest(
             textEmbedding,
             maxMatches,
@@ -176,6 +178,8 @@ export class TextEmbeddingIndex {
             textArray,
         );
         const results = [];
+        maxMatches ??= this.settings.maxMatches;
+        minScore ??= this.settings.minScore;
         for (const embedding of textEmbeddings) {
             results.push(
                 this.embeddingIndex.getIndexesOfNearest(
