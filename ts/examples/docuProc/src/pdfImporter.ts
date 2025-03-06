@@ -70,7 +70,7 @@ async function importPdfFiles(
 
     // Chunkify PDF files using a helper program.
     const t0 = Date.now();
-    const results = await chunkifyPdfFiles(filenames);
+    const results = await chunkifyPdfFiles(chunkyIndex.rootDir, filenames);
     const t1 = Date.now();
     if (results.length !== filenames.length) {
         log(

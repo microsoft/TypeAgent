@@ -59,6 +59,7 @@ export interface ErrorItem {
 }
 
 export async function chunkifyPdfFiles(
+    rootDir: string,
     filenames: string[],
 ): Promise<(ChunkedFile | ErrorItem)[]> {
     let output,
@@ -70,7 +71,7 @@ export async function chunkifyPdfFiles(
         const absFilenames = filenames.map(
             (f) => `"${path.join(__dirname, f)}"`,
         );
-        const outputDir = path.join(__dirname, "output");
+        const outputDir = path.join(rootDir, "chunked-docs");
         let { stdout, stderr } = await execPromise(
             `python3 -X utf8 "${absChunkerPath}" -files ${absFilenames.join(" ")} -outdir ${outputDir}`,
             { maxBuffer: 64 * 1024 * 1024 }, // Super large buffer

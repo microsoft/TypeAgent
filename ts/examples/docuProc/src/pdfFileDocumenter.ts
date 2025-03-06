@@ -31,95 +31,132 @@ export function createPdfDocumenter(model: ChatModel): PdfFileDocumenter {
     }
 
     async function document(chunks: Chunk[]): Promise<PdfFileDocumentation> {
-        const pageChunksMap: Record<
-            string,
-            { pageChunk: Chunk; blocks: Chunk[] }
-        > = {};
-
+       
+        const base64ImageCache: Record<string, string> = {};
+        function getBase64IfNeeded(imagePath: string): string {
+            if (base64ImageCache[imagePath]) {
+                return base64ImageCache[imagePath];
+            }
+            const base64 = convertImageToBase64(imagePath);
+            base64ImageCache[imagePath] = base64;
+            return base64;
+        }
+    
         // Organize chunks by page
+        const pageChunksMap: Record<string, { pageChunk: Chunk; blocks: Chunk[] }> = {};
         for (const chunk of chunks) {
             if (!chunk.parentId) {
                 pageChunksMap[chunk.pageid] = { pageChunk: chunk, blocks: [] };
             }
         }
-
-        // Associate blocks with their corresponding page
+    
+        // Associate child chunks with pages
         for (const chunk of chunks) {
             if (chunk.parentId && pageChunksMap[chunk.pageid]) {
                 pageChunksMap[chunk.pageid].blocks.push(chunk);
             }
         }
 
+        let maxPagesToProcess = 3;
+    
+        // Process each page
+        let pageCount = 0;
         for (const pageid in pageChunksMap) {
+            pageCount++;
             const { pageChunk, blocks } = pageChunksMap[pageid];
-            let text = `***: Document the following Page (Id: ${pageChunk.id}, Page: ${pageChunk.pageid}):\n`;
-
-            let pageImageBase64 = "";
-            const pageImageBlob = pageChunk.blobs.find(
-                (blob) => blob.blob_type === "page_image" && blob.img_path,
-            );
-            if (pageImageBlob) {
-                pageImageBase64 = convertImageToBase64(pageImageBlob.img_path!);
-                text += `Page Image: ${pageImageBase64}\n`;
-            }
-
+    
+            // Build the prompt text for this page
+            let text = `***: Document Page (Id: ${pageChunk.id}, Page: ${pageChunk.pageid}):\n`;
+    
+            // For each block/child chunk
             for (const block of blocks) {
                 const blockIdentifier = `Chunk Id: ${block.id}, Page: ${block.pageid}`;
+    
+                // Check each blob
                 for (const blob of block.blobs) {
                     if (blob.blob_type === "text") {
+                        // Text processing
                         text += `Text Content (${blockIdentifier}):\n`;
-                        text += `[$Start:{blob.start+1}]: ${blob.content}\n`;
-                    } else if (blob.blob_type === "table") {
-                        text += `Table Data (${blockIdentifier}):\n`;
-                        text += `CSV Path: ${blob.content}\n`;
-                    } else if (blob.blob_type === "image") {
+                        text += `[Start:${blob.start + 1}]: ${blob.content}\n`;
+                    } else if (blob.blob_type === "image_label") {
+                        // Image label logic
+                        text += `Image Label (${blockIdentifier}):\n`;
+                        text += `Label: ${blob.content}\n`;
+    
+                        // If references images, embed them
+                        if (blob.image_chunk_ref) {
+                            for (const imgChunkId of blob.image_chunk_ref) {
+                                const imgChunk = chunks.find((ch) => ch.id === imgChunkId);
+                                if (imgChunk) {
+                                    // We expect exactly one 'image' blob inside that chunk
+                                    const imageBlob = imgChunk.blobs.find(
+                                        (b) => b.blob_type === "image" && b.img_path
+                                    );
+                                    if (imageBlob && imageBlob.img_path) {
+                                        // Check cache
+                                        const base64 = getBase64IfNeeded(imageBlob.img_path);
+                                        text += `Associated Image (Chunk ${imgChunkId}): ${base64}\n`;
+                                    }
+                                }
+                            }
+                        }
+                    } else if (blob.blob_type === "image" && blob.img_path) {
+                        // Image chunk that might not be referenced by an image_label
                         text += `Image (${blockIdentifier}):\n`;
-                        text += `Image Path: ${blob.img_path}\n`;
+                        const base64 = getBase64IfNeeded(blob.img_path);
+                        text += `Base64 encoded image: ${base64}\n`;
                     }
                 }
             }
-
-            const request =
-                "Summarize the given document sections based on the extracted content and page image.\n" +
-                "For text, provide a concise summary of the main points.\n" +
-                //"For tables, describe their contents and significance.\n" +
-                "For images, infer their purpose based on the context. For page level image summarze for the entire page.\n" +
-                "Include a high-level summary of the entire page based on the extracted image and paragraph level text.\n" +
-                "Also fill in the lists of keywords, tags, synonyms, and dependencies.\n";
-
+    
+            // Build request for the LLM
+            const request = `
+                Summarize the given document sections based on text, images content and associated images.
+                For text, provide a concise summary of the main points.
+                For images, infer purpose based on the context.
+                Also fill in lists: keywords, tags, synonyms, and dependencies.
+            `;
+    
+            // Send to LLM
             const result = await pdfDocTranslator.translate(request, text);
-
             if (result.success) {
                 const fileDocs: PdfFileDocumentation = result.data;
                 const chunkDocs = fileDocs.chunkDocs ?? [];
+    
+                const pageAndBlocks = [pageChunk, ...blocks];
 
                 let iDoc = 0;
-                for (const chunk of chunks) {
+                for (const c of pageAndBlocks) {
+                    if (iDoc >= chunkDocs.length) break;
                     if (
-                        (chunk.parentId === "" && !chunk.parentId) ||
-                        (chunk.children && chunk.children.length === 0)
+                        (c.parentId === "" && !c.parentId) ||
+                        (c.children && c.children.length === 0)
                     ) {
-                        chunk.docs = chunkDocs[iDoc++];
-                    } else {
-                        if (chunk.children && chunk.children.length > 0) {
-                            for (const blobid of chunk.children) {
-                                const blob = chunk.children.find(
-                                    (cid) => cid === blobid,
-                                );
-                                if (blob !== undefined) {
-                                    chunk.docs = chunkDocs[iDoc++];
-                                }
+                        c.docs = chunkDocs[iDoc++];
+                    } else if (c.children && c.children.length > 0) {
+                        // assign docs to its children
+                        for (const childId of c.children) {
+                            if (iDoc >= chunkDocs.length) break;
+                            const childChunk = pageAndBlocks.find((blk) => blk.id === childId);
+                            if (childChunk) {
+                                childChunk.docs = chunkDocs[iDoc++];
                             }
                         }
                     }
                 }
             } else {
+                // handle error if needed
             }
+
+            if (pageCount >= maxPagesToProcess) {
+                break; // Limit processing to a certain number of pages
+            }   
         }
+    
         return {
-            chunkDocs: chunks.map((chunk) => chunk.docs),
+            chunkDocs: chunks.map((c) => c.docs),
         } as PdfFileDocumentation;
-    }
+    }    
 }
 
 function createPdfFileDocTranslator(
