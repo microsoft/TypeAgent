@@ -69,6 +69,7 @@ export async function createKnowproCommands(
     commands.kpSearchTerms = searchTerms;
     commands.kpSearchV1 = searchV1;
     commands.kpSearch = search;
+    commands.kpPodcastRag = podcastRag;
     commands.kpEntities = entities;
     commands.kpPodcastBuildIndex = podcastBuildIndex;
     commands.kpPodcastBuildMessageIndex = podcastBuildMessageIndex;
@@ -454,7 +455,7 @@ export async function createKnowproCommands(
     function searchDef(): CommandMetadata {
         return {
             description:
-                "Search using natural language and knowlege-processor search filters",
+                "Search using natural language and old knowlege-processor search filters",
             args: {
                 query: arg("Search query"),
             },
@@ -560,88 +561,37 @@ export async function createKnowproCommands(
         }
     }
 
-    function createSearchGroup(
-        termArgs: string[],
-        namedArgs: NamedArgs,
-        commandDef: CommandMetadata,
-        andTerms: boolean = false,
-    ): kp.SearchTermGroup {
-        const searchTerms = parseQueryTerms(termArgs);
-        const propertyTerms = propertyTermsFromNamedArgs(namedArgs, commandDef);
+    function ragDef(): CommandMetadata {
         return {
-            booleanOp: andTerms ? "and" : "or",
-            terms: [...searchTerms, ...propertyTerms],
+            description: "Classic rag",
+            args: {
+                query: arg("Search query"),
+            },
+            options: {
+                maxToDisplay: argNum("Maximum matches to display", 25),
+            },
         };
     }
-
-    function propertyTermsFromNamedArgs(
-        namedArgs: NamedArgs,
-        commandDef: CommandMetadata,
-    ): kp.PropertySearchTerm[] {
-        return createPropertyTerms(namedArgs, commandDef);
-    }
-
-    function createPropertyTerms(
-        namedArgs: NamedArgs,
-        commandDef: CommandMetadata,
-        nameFilter?: (name: string) => boolean,
-    ): kp.PropertySearchTerm[] {
-        const keyValues = keyValuesFromNamedArgs(namedArgs, commandDef);
-        const propertyNames = nameFilter
-            ? Object.keys(keyValues).filter(nameFilter)
-            : Object.keys(keyValues);
-        const propertySearchTerms: kp.PropertySearchTerm[] = [];
-        for (const propertyName of propertyNames) {
-            const allValues = splitTermValues(keyValues[propertyName]);
-            for (const value of allValues) {
-                propertySearchTerms.push(
-                    kp.createPropertySearchTerm(propertyName, value),
-                );
-            }
+    commands.kpPodcastRag.metadata = ragDef();
+    async function podcastRag(args: string[]): Promise<void> {
+        if (!ensureConversationLoaded()) {
+            return;
         }
-        return propertySearchTerms;
-    }
-
-    function whenFilterFromNamedArgs(
-        namedArgs: NamedArgs,
-        commandDef: CommandMetadata,
-    ): kp.WhenFilter {
-        let filter: kp.WhenFilter = {
-            knowledgeType: namedArgs.ktype,
-        };
-        const conv: kp.IConversation | undefined =
-            context.podcast ?? context.images;
-        const dateRange = kp.getTimeRangeForConversation(conv!);
-        if (dateRange) {
-            let startDate: Date | undefined;
-            let endDate: Date | undefined;
-            // Did they provide an explicit date range?
-            if (namedArgs.startDate || namedArgs.endDate) {
-                startDate = argToDate(namedArgs.startDate) ?? dateRange.start;
-                endDate = argToDate(namedArgs.endDate) ?? dateRange.end;
-            } else {
-                // They may have provided a relative date range
-                if (namedArgs.startMinute >= 0) {
-                    startDate = dateTime.addMinutesToDate(
-                        dateRange.start,
-                        namedArgs.startMinute,
-                    );
-                }
-                if (namedArgs.endMinute > 0) {
-                    endDate = dateTime.addMinutesToDate(
-                        dateRange.start,
-                        namedArgs.endMinute,
-                    );
-                }
-            }
-            if (startDate) {
-                filter.dateRange = {
-                    start: startDate,
-                    end: endDate,
-                };
-            }
+        const messageIndex =
+            context.conversation?.secondaryIndexes?.messageIndex;
+        if (!messageIndex) {
+            context.printer.writeError(
+                "No message text index. Run kpPodcastBuildMessageIndex",
+            );
+            return;
         }
-        return filter;
+        const namedArgs = parseNamedArguments(args, ragDef());
+        const matches = await messageIndex.lookupMessages(namedArgs.query);
+        context.printer.writeScoredMessages(
+            matches,
+            context.conversation?.messages!,
+            namedArgs.maxToDisplay,
+        );
     }
 
     function entitiesDef(): CommandMetadata {
@@ -751,6 +701,9 @@ export async function createKnowproCommands(
         context.printer.writeListIndexingResult(result);
     }
 
+    //-------------------------
+    // Index Image Building
+    //--------------------------
     function imageCollectionBuildIndexDef(): CommandMetadata {
         return {
             description: "Build image collection index",
@@ -792,6 +745,90 @@ export async function createKnowproCommands(
     /*---------- 
       End COMMANDS
     ------------*/
+
+    function createSearchGroup(
+        termArgs: string[],
+        namedArgs: NamedArgs,
+        commandDef: CommandMetadata,
+        andTerms: boolean = false,
+    ): kp.SearchTermGroup {
+        const searchTerms = parseQueryTerms(termArgs);
+        const propertyTerms = propertyTermsFromNamedArgs(namedArgs, commandDef);
+        return {
+            booleanOp: andTerms ? "and" : "or",
+            terms: [...searchTerms, ...propertyTerms],
+        };
+    }
+
+    function propertyTermsFromNamedArgs(
+        namedArgs: NamedArgs,
+        commandDef: CommandMetadata,
+    ): kp.PropertySearchTerm[] {
+        return createPropertyTerms(namedArgs, commandDef);
+    }
+
+    function createPropertyTerms(
+        namedArgs: NamedArgs,
+        commandDef: CommandMetadata,
+        nameFilter?: (name: string) => boolean,
+    ): kp.PropertySearchTerm[] {
+        const keyValues = keyValuesFromNamedArgs(namedArgs, commandDef);
+        const propertyNames = nameFilter
+            ? Object.keys(keyValues).filter(nameFilter)
+            : Object.keys(keyValues);
+        const propertySearchTerms: kp.PropertySearchTerm[] = [];
+        for (const propertyName of propertyNames) {
+            const allValues = splitTermValues(keyValues[propertyName]);
+            for (const value of allValues) {
+                propertySearchTerms.push(
+                    kp.createPropertySearchTerm(propertyName, value),
+                );
+            }
+        }
+        return propertySearchTerms;
+    }
+
+    function whenFilterFromNamedArgs(
+        namedArgs: NamedArgs,
+        commandDef: CommandMetadata,
+    ): kp.WhenFilter {
+        let filter: kp.WhenFilter = {
+            knowledgeType: namedArgs.ktype,
+        };
+        const conv: kp.IConversation | undefined =
+            context.podcast ?? context.images;
+        const dateRange = kp.getTimeRangeForConversation(conv!);
+        if (dateRange) {
+            let startDate: Date | undefined;
+            let endDate: Date | undefined;
+            // Did they provide an explicit date range?
+            if (namedArgs.startDate || namedArgs.endDate) {
+                startDate = argToDate(namedArgs.startDate) ?? dateRange.start;
+                endDate = argToDate(namedArgs.endDate) ?? dateRange.end;
+            } else {
+                // They may have provided a relative date range
+                if (namedArgs.startMinute >= 0) {
+                    startDate = dateTime.addMinutesToDate(
+                        dateRange.start,
+                        namedArgs.startMinute,
+                    );
+                }
+                if (namedArgs.endMinute > 0) {
+                    endDate = dateTime.addMinutesToDate(
+                        dateRange.start,
+                        namedArgs.endMinute,
+                    );
+                }
+            }
+            if (startDate) {
+                filter.dateRange = {
+                    start: startDate,
+                    end: endDate,
+                };
+            }
+        }
+        return filter;
+    }
 
     function ensureConversationLoaded(): kp.IConversation | undefined {
         if (context.conversation) {
