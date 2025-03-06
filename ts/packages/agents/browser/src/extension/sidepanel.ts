@@ -118,22 +118,32 @@ function copySchemaToClipboard() {
 async function registerTempSchema() {
     const button = document.getElementById("trySchema") as HTMLButtonElement;
     const originalContent = button.innerHTML;
+    const originalClass = button.className;
+
+    function showTemporaryStatus(text: string, newClass: string) {
+        button.innerHTML = text;
+        button.className = `btn btn-sm ${newClass}`;
+
+        setTimeout(() => {
+            button.innerHTML = originalContent;
+            button.className = originalClass;
+            button.disabled = false;
+        }, 5000);
+    }
 
     button.innerHTML = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Processing...`;
     button.disabled = true;
-
-    const response = await chrome.runtime.sendMessage({
-        type: "registerTempSchema",
-    });
+    try {
+        const response = await chrome.runtime.sendMessage({
+            type: "registerTempSchema",
+        });
+    } catch {}
     if (chrome.runtime.lastError) {
         console.error("Error fetching schema:", chrome.runtime.lastError);
-        button.innerHTML = originalContent;
-        button.disabled = false;
-        return;
+        showTemporaryStatus("✖ Failed", "btn-outline-danger");
+    } else {
+        showTemporaryStatus("✔ Succeeded", "btn-outline-success");
     }
-
-    button.innerHTML = originalContent;
-    button.disabled = false;
 }
 
 function toggleActionForm() {
