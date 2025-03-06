@@ -37,6 +37,17 @@ export class EmbeddingIndex {
         }
     }
 
+    public insertAt(
+        index: number,
+        embeddings: NormalizedEmbedding | NormalizedEmbedding[],
+    ): void {
+        if (Array.isArray(embeddings)) {
+            this.embeddings.splice(index, 0, ...embeddings);
+        } else {
+            this.embeddings.splice(index, 0, embeddings);
+        }
+    }
+
     public get(pos: number): NormalizedEmbedding {
         return this.embeddings[pos];
     }
@@ -113,6 +124,58 @@ export type EmbeddingIndexingResult = {
     error?: string | undefined;
 };
 
+export async function addTextToEmbeddingIndex(
+    embeddingIndex: EmbeddingIndex,
+    embeddingModel: TextEmbeddingModel,
+    textToIndex: string[],
+): Promise<EmbeddingIndexingResult> {
+    let result: EmbeddingIndexingResult = { numberCompleted: 0 };
+    const embeddingResult = await generateTextEmbeddingsForIndex(
+        embeddingModel,
+        textToIndex,
+    );
+    if (embeddingResult.success) {
+        embeddingIndex.push(embeddingResult.data);
+        result.numberCompleted = textToIndex.length;
+    } else {
+        result.error = embeddingResult.message;
+    }
+    return result;
+}
+
+export async function addTextBatchToEmbeddingIndex(
+    embeddingIndex: EmbeddingIndex,
+    embeddingModel: TextEmbeddingModel,
+    textToIndex: string[],
+    batchSize: number,
+    eventHandler?: IndexingEventHandlers,
+): Promise<EmbeddingIndexingResult> {
+    let result: EmbeddingIndexingResult = { numberCompleted: 0 };
+    for (const batch of getIndexingBatches(textToIndex, batchSize)) {
+        if (
+            eventHandler?.onEmbeddingsCreated &&
+            !eventHandler.onEmbeddingsCreated(
+                textToIndex,
+                batch.values,
+                batch.startAt,
+            )
+        ) {
+            break;
+        }
+        const batchResult = await generateTextEmbeddingsForIndex(
+            embeddingModel,
+            batch.values,
+        );
+        if (!batchResult.success) {
+            result.error = batchResult.message;
+            break;
+        }
+        embeddingIndex.push(batchResult.data);
+        result.numberCompleted = batch.startAt + batch.values.length;
+    }
+    return result;
+}
+
 export class TextEmbeddingIndex {
     private embeddingIndex: EmbeddingIndex;
 
@@ -127,20 +190,16 @@ export class TextEmbeddingIndex {
     /**
      * Convert text into embeddings and add them to the internal index.
      * This can throw
-     * @param texts
+     * @param textToIndex
      */
     public async addText(
-        texts: string | string[],
-    ): Promise<Result<NormalizedEmbedding[]>> {
-        const embeddingResult = await generateTextEmbeddingsForIndex(
+        textToIndex: string | string[],
+    ): Promise<EmbeddingIndexingResult> {
+        return addTextToEmbeddingIndex(
+            this.embeddingIndex,
             this.settings.embeddingModel,
-            texts,
+            Array.isArray(textToIndex) ? textToIndex : [textToIndex],
         );
-        if (!embeddingResult.success) {
-            return embeddingResult;
-        }
-        this.embeddingIndex.push(embeddingResult.data);
-        return embeddingResult;
     }
 
     /**
@@ -155,29 +214,13 @@ export class TextEmbeddingIndex {
         eventHandler?: IndexingEventHandlers,
         batchSize?: number,
     ): Promise<EmbeddingIndexingResult> {
-        let result: EmbeddingIndexingResult = { numberCompleted: 0 };
-        for (const batch of getIndexingBatches(
+        return addTextBatchToEmbeddingIndex(
+            this.embeddingIndex,
+            this.settings.embeddingModel,
             textToIndex,
             batchSize ?? this.settings.batchSize,
-        )) {
-            if (
-                eventHandler?.onEmbeddingsCreated &&
-                !eventHandler.onEmbeddingsCreated(
-                    textToIndex,
-                    batch.values,
-                    batch.startAt,
-                )
-            ) {
-                break;
-            }
-            const batchResult = await this.addText(batch.values);
-            if (!batchResult.success) {
-                result.error = batchResult.message;
-                break;
-            }
-            result.numberCompleted = batch.startAt + batch.values.length;
-        }
-        return result;
+            eventHandler,
+        );
     }
 
     public get(pos: number): NormalizedEmbedding {
