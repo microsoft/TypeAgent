@@ -3,17 +3,16 @@
 
 # TODO:
 # - What does the comment "Very concise values" in class Facet mean?
-# - Do the protocols need to be @runtime_checkable?
 # - Should the field names be camelCase to match the JSON schema?
 # - For things of type float, should we add `| int` to emphasize that int is okay?
-# - How to allow totally missing attributes? (facets, params, subject_entity_facet)
-# - Should we use ABC instead of Protocol for certain classes?
+#   (Some users think float means float only.)
 
-from typing import Literal, Protocol, runtime_checkable
+from dataclasses import dataclass
+from typing import Literal
 
 
-@runtime_checkable
-class Quantity(Protocol):
+@dataclass
+class Quantity:
     amount: float
     units: str
 
@@ -21,16 +20,16 @@ class Quantity(Protocol):
 type Value = str | float | bool | Quantity
 
 
-@runtime_checkable
-class Facet(Protocol):
+@dataclass
+class Facet:
     name: str
     # Very concise values.
     value: Value
 
 
 # Specific, tangible people, places, institutions or things only
-@runtime_checkable
-class ConcreteEntity(Protocol):
+@dataclass
+class ConcreteEntity:
     # The name of the entity or thing such as "Bach", "Great Gatsby",
     # "frog" or "piano".
     name: str
@@ -45,8 +44,8 @@ class ConcreteEntity(Protocol):
     facets: list[Facet] | None = None
 
 
-@runtime_checkable
-class ActionParam(Protocol):
+@dataclass
+class ActionParam:
     name: str
     value: Value
 
@@ -54,10 +53,10 @@ class ActionParam(Protocol):
 type VerbTense = Literal["past", "present", "future"]
 
 
-@runtime_checkable
-class Action(Protocol):
+@dataclass
+class Action:
     # Each verb is typically a word.
-    verb: list[str]
+    verbs: list[str]
     verb_tense: VerbTense
     subject_entity_name: str | Literal["none"]
     object_entity_name: str | Literal["none"]
@@ -69,8 +68,8 @@ class Action(Protocol):
 
 
 # Detailed and comprehensive knowledge response.
-@runtime_checkable
-class KnowledgeResponse(Protocol):
+@dataclass
+class KnowledgeResponse:
     entities: list[ConcreteEntity]
     # The 'subject_entity_name' and 'object_entity_name' must correspond
     # to the 'name' of an entity listed in the 'entities' array.

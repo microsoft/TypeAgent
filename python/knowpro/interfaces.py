@@ -3,6 +3,8 @@
 
 # TODO:
 # - See TODOs in kplib.py.
+# - Do the Protocol classes need to be @runtime_checkable?
+# - Should we use ABC instead of Protocol for certain classes?
 #
 # NOTE:
 # - I took some liberty with index types and made them int.
