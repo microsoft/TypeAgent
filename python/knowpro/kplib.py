@@ -28,14 +28,13 @@ class Facet(Protocol):
     value: Value
 
 
+# Specific, tangible people, places, institutions or things only
 @runtime_checkable
 class ConcreteEntity(Protocol):
-    """Specific, tangible people, places, institutions or things only."""
-
-    # the name of the entity or thing such as "Bach", "Great Gatsby",
+    # The name of the entity or thing such as "Bach", "Great Gatsby",
     # "frog" or "piano".
     name: str
-    # the types of the entity such as "speaker", "person", "artist", "animal",
+    # The types of the entity such as "speaker", "person", "artist", "animal",
     # "object", "instrument", "school", "room", "museum", "food" etc.
     # An entity can have multiple types; entity types should be single words.
     type: list[str]
@@ -43,7 +42,7 @@ class ConcreteEntity(Protocol):
     # such as "blue", "old", "famous", "sister", "aunt_of", "weight: 4 kg".
     # Trivial actions or state changes are not facets.
     # Facets are concise "properties".
-    facets: list[Facet] | None
+    facets: list[Facet] | None = None
 
 
 @runtime_checkable
@@ -63,22 +62,21 @@ class Action(Protocol):
     subject_entity_name: str | Literal["none"]
     object_entity_name: str | Literal["none"]
     indirect_object_entity_name: str | Literal["none"]
-    params: list[str | ActionParam] | None
-    # If the action implies this additional facet or property of the subject entity,
-    # such as hobbies, activities, interests, personality.
-    subject_entity_facet: Facet | None
+    params: list[str | ActionParam] | None = None
+    # If the action implies this additional facet or property of the
+    # subject entity, such as hobbies, activities, interests, personality.
+    subject_entity_facet: Facet | None = None
 
 
+# Detailed and comprehensive knowledge response.
 @runtime_checkable
 class KnowledgeResponse(Protocol):
-    """Detailed and comprehensive knowledge response."""
-
-    # The 'subjectEntityName' and 'objectEntityName' must correspond to the
-    # 'name' of an entity listed in the 'entities' array.
     entities: list[ConcreteEntity]
+    # The 'subject_entity_name' and 'object_entity_name' must correspond
+    # to the 'name' of an entity listed in the 'entities' array.
     actions: list[Action]
     # Some actions can ALSO be expressed in a reverse way...
-    # e.g. (A give to B) --> (B receive from A) and vice versa.
+    # E.g. (A give to B) --> (B receive from A) and vice versa.
     # If so, also return the reverse form of the action, full filled out.
     inverse_actions: list[Action]
     # Detailed, descriptive topics and keywords.
