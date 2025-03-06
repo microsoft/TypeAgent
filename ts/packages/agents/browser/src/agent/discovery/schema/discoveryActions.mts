@@ -5,8 +5,8 @@ export type FindPageComponents = {
     actionName: "findPageComponents";
 };
 
-export type FindUserActions = {
-    actionName: "findUserActions";
+export type DetectPageActions = {
+    actionName: "detectPageActions";
     parameters: {
         registerAgent?: boolean;
         agentName?: string;
@@ -25,10 +25,9 @@ export type SummarizePage = {
     actionName: "summarizePage";
 };
 
-export type InitializePageSchema = {
-    actionName: "initializePageSchema";
+export type RegisterPageDynamicAgent = {
+    actionName: "registerPageDynamicAgent";
     parameters: {
-        registerAgent?: boolean;
         agentName?: string;
     };
 };
@@ -70,10 +69,10 @@ export type GetIntentFromRecording = {
 
 export type SchemaDiscoveryActions =
     | FindPageComponents
-    | FindUserActions
+    | DetectPageActions
     | GetSiteType
     | GetPageType
-    | InitializePageSchema
+    | RegisterPageDynamicAgent
     | SummarizePage
     | SaveUserActions
     | AddUserAction

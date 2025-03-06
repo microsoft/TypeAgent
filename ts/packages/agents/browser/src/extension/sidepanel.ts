@@ -1,35 +1,79 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { setStoredPageProperty, getStoredPageProperty } from "./storage";
+
 let recording = false;
 let recordedActions: any[] = [];
+let launchUrl: string | null = "";
 
-async function requestSchemaUpdate() {
+async function getActiveTabUrl(): Promise<string | null> {
+    try {
+        const tabs = await chrome.tabs.query({
+            active: true,
+            currentWindow: true,
+        });
+        return tabs.length > 0 ? tabs[0].url || null : null;
+    } catch (error) {
+        console.error("Error getting active tab URL:", error);
+        return null;
+    }
+}
+
+async function requestSchemaUpdate(forceRefresh?: boolean) {
     const schemaAccordion = document.getElementById(
         "schemaAccordion",
     ) as HTMLDivElement;
     schemaAccordion.innerHTML = "<p>Loading...</p>";
 
-    const response = await chrome.runtime.sendMessage({
-        type: "refreshSchema",
-    });
-    if (chrome.runtime.lastError) {
-        console.error("Error fetching schema:", chrome.runtime.lastError);
-        return;
-    }
+    const currentSchema = await getStoredPageProperty(
+        launchUrl!,
+        "detectedActions",
+    );
+    const currentActionDefinitions = await getStoredPageProperty(
+        launchUrl!,
+        "detectedActionDefinitions",
+    );
 
-    renderSchemaResults(response);
+    if (
+        currentSchema === null ||
+        currentActionDefinitions === null ||
+        forceRefresh
+    ) {
+        const response = await chrome.runtime.sendMessage({
+            type: "refreshSchema",
+        });
+        if (chrome.runtime.lastError) {
+            console.error("Error fetching schema:", chrome.runtime.lastError);
+            return;
+        }
+
+        await setStoredPageProperty(
+            launchUrl!,
+            "detectedActions",
+            response.schema,
+        );
+        await setStoredPageProperty(
+            launchUrl!,
+            "detectedActionDefinitions",
+            response.actionDefinitions,
+        );
+
+        renderSchemaResults(response.schema);
+    } else {
+        renderSchemaResults(currentSchema);
+    }
 }
 
-function renderSchemaResults(response: any) {
+function renderSchemaResults(schema: any) {
     const schemaAccordion = document.getElementById(
         "schemaAccordion",
     ) as HTMLDivElement;
 
-    if (response && response.schema && response.schema.actions) {
+    if (schema && schema.actions) {
         schemaAccordion.innerHTML = "";
 
-        response.schema.actions.forEach((action: any, index: number) => {
+        schema.actions.forEach((action: any, index: number) => {
             const { actionName, parameters } = action;
             const paramsText = parameters
                 ? JSON.stringify(parameters, null, 2)
@@ -72,20 +116,34 @@ function copySchemaToClipboard() {
 }
 
 async function registerTempSchema() {
-    const schemaAccordion = document.getElementById(
-        "schemaAccordion",
-    ) as HTMLDivElement;
-    schemaAccordion.innerHTML = "<p>Loading...</p>";
+    const button = document.getElementById("trySchema") as HTMLButtonElement;
+    const originalContent = button.innerHTML;
+    const originalClass = button.className;
 
-    const response = await chrome.runtime.sendMessage({
-        type: "registerTempSchema",
-    });
-    if (chrome.runtime.lastError) {
-        console.error("Error fetching schema:", chrome.runtime.lastError);
-        return;
+    function showTemporaryStatus(text: string, newClass: string) {
+        button.innerHTML = text;
+        button.className = `btn btn-sm ${newClass}`;
+
+        setTimeout(() => {
+            button.innerHTML = originalContent;
+            button.className = originalClass;
+            button.disabled = false;
+        }, 5000);
     }
 
-    renderSchemaResults(response);
+    button.innerHTML = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Processing...`;
+    button.disabled = true;
+    try {
+        const response = await chrome.runtime.sendMessage({
+            type: "registerTempSchema",
+        });
+    } catch {}
+    if (chrome.runtime.lastError) {
+        console.error("Error fetching schema:", chrome.runtime.lastError);
+        showTemporaryStatus("✖ Failed", "btn-outline-danger");
+    } else {
+        showTemporaryStatus("✔ Succeeded", "btn-outline-success");
+    }
 }
 
 function toggleActionForm() {
@@ -214,6 +272,7 @@ async function clearRecordedUserAction() {
 
     await chrome.runtime.sendMessage({ type: "clearRecordedActions" });
 
+    await setStoredPageProperty(launchUrl!, "authoredActionDefinitions", null);
     // Update UI
     await updateUserActionsUI();
 }
@@ -369,6 +428,21 @@ function renderTimeline(action: any, index: number) {
         `;
 
         actionsViewContainer.replaceChildren(actionsCard);
+
+        let currentTypeDefinitions = new Map(
+            Object.entries(
+                (await getStoredPageProperty(
+                    launchUrl!,
+                    "authoredActionDefinitions",
+                )) ?? {},
+            ),
+        );
+        currentTypeDefinitions.set(actionName, response.intentTypeDefinition);
+        await setStoredPageProperty(
+            launchUrl!,
+            "authoredActionDefinitions",
+            Object.fromEntries(currentTypeDefinitions),
+        );
     }
 
     userActionsListContainer.appendChild(timelineHeader);
@@ -516,7 +590,7 @@ function renderTimelineSteps(
     }
 }
 
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
     document
         .getElementById("addPageAction")!
         .addEventListener("click", toggleActionForm);
@@ -526,7 +600,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     document
         .getElementById("refreshDetectedActions")!
-        .addEventListener("click", requestSchemaUpdate);
+        .addEventListener("click", () => requestSchemaUpdate(true));
 
     document
         .getElementById("trySchema")!
@@ -546,6 +620,8 @@ document.addEventListener("DOMContentLoaded", () => {
     document
         .getElementById("clearRecordedActions")!
         .addEventListener("click", clearRecordedUserAction);
+
+    launchUrl = await getActiveTabUrl();
 
     // Fetch schema on panel load
     requestSchemaUpdate();
