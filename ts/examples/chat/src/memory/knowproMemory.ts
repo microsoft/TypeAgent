@@ -71,6 +71,7 @@ export async function createKnowproCommands(
     commands.kpSearch = search;
     commands.kpEntities = entities;
     commands.kpPodcastBuildIndex = podcastBuildIndex;
+    commands.kpPodcastBuildMessageIndex = podcastBuildMessageIndex;
 
     commands.kpImages = showImages;
     commands.kpImagesImport = imagesImport;
@@ -715,6 +716,37 @@ export async function createKnowproCommands(
         progress.complete();
     }
 
+    function podcastBuildMessageIndexDef(): CommandMetadata {
+        return {
+            description: "Build fuzzy message index for the podcast",
+            options: {
+                maxMessages: argNum("Maximum messages to index"),
+                batchSize: argNum("Batch size", 4),
+            },
+        };
+    }
+    commands.kpPodcastBuildMessageIndex.metadata =
+        podcastBuildMessageIndexDef();
+    async function podcastBuildMessageIndex(args: string[]): Promise<void> {
+        const namedArgs = parseNamedArguments(
+            args,
+            podcastBuildMessageIndexDef(),
+        );
+        context.printer.writeLine(
+            `Indexing ${context.conversation?.messages.length} messages`,
+        );
+        let progress = new ProgressBar(context.printer, namedArgs.maxMessages);
+        await context.podcast?.buildMessageIndex(
+            createIndexingEventHandler(
+                context,
+                progress,
+                namedArgs.maxMessages,
+            ),
+            namedArgs.batchSize,
+        );
+        progress.complete();
+    }
+
     function imageCollectionBuildIndexDef(): CommandMetadata {
         return {
             description: "Build image collection index",
@@ -831,7 +863,7 @@ function createIndexingEventHandler(
             if (!startedRelated) {
                 progress.reset(sourceTexts.length);
                 context.printer.writeLine(
-                    `Indexing ${sourceTexts.length} related terms`,
+                    `Creating ${sourceTexts.length} embeddings`,
                 );
                 startedRelated = true;
             }

@@ -47,10 +47,11 @@ export class TextEmbeddingIndex {
     public async addTextBatch(
         textToIndex: string[],
         eventHandler?: IndexingEventHandlers,
+        batchSize?: number,
     ): Promise<void> {
         for (const batch of getIndexingBatches(
             textToIndex,
-            this.settings.batchSize,
+            batchSize ?? this.settings.batchSize,
         )) {
             if (
                 eventHandler?.onEmbeddingsCreated &&
@@ -62,6 +63,7 @@ export class TextEmbeddingIndex {
             ) {
                 break;
             }
+            // TODO: return IndexingResult to track how far we got before a non-recoverable failure
             await this.addText(batch.values);
         }
     }

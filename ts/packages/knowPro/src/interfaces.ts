@@ -238,6 +238,7 @@ export interface IndexingEventHandlers {
         batchStartAt: number,
     ) => boolean;
 }
+
 export type IndexingResults = {
     chunksIndexedUpto?: TextLocation | undefined;
     error?: string | undefined;

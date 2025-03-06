@@ -56,10 +56,12 @@ export class TextToTextLocationIndexFuzzy
     public async addTextLocationsBatched(
         textAndLocations: [string, TextLocation][],
         eventHandler?: IndexingEventHandlers,
+        batchSize?: number,
     ): Promise<void> {
         await this.embeddingIndex.addTextBatch(
             textAndLocations.map((tl) => tl[0]),
             eventHandler,
+            batchSize,
         );
         this.textLocations.push(...textAndLocations.map((tl) => tl[1]));
     }
@@ -105,34 +107,45 @@ export async function addMessagesToIndex(
     messages: IMessage[],
     baseMessageIndex: MessageIndex,
     eventHandler?: IndexingEventHandlers,
+    batchSize?: number,
 ): Promise<void> {
+    const allChunks: [string, TextLocation][] = [];
+    // Collect everything so we can batch efficiently
     for (let i = 0; i < messages.length; ++i) {
         const message = messages[i];
         let messageIndex = baseMessageIndex + i;
-        let chunkBatch: [string, TextLocation][] = [];
         for (
             let chunkIndex = 0;
             chunkIndex < message.textChunks.length;
             ++chunkIndex
         ) {
-            chunkBatch.push([
+            allChunks.push([
                 message.textChunks[chunkIndex],
                 { messageIndex, chunkIndex },
             ]);
         }
-        await textLocationIndex.addTextLocationsBatched(
-            chunkBatch,
-            eventHandler,
-        );
     }
+    // Todo: return an IndexingResult
+    await textLocationIndex.addTextLocationsBatched(
+        allChunks,
+        eventHandler,
+        batchSize,
+    );
 }
 
 export async function buildMessageIndex(
     messages: IMessage[],
     settings: TextEmbeddingIndexSettings,
     eventHandler?: IndexingEventHandlers,
+    batchSize?: number,
 ) {
     const textLocationIndex = new TextToTextLocationIndexFuzzy(settings);
-    await addMessagesToIndex(textLocationIndex, messages, 0, eventHandler);
+    await addMessagesToIndex(
+        textLocationIndex,
+        messages,
+        0,
+        eventHandler,
+        batchSize,
+    );
     return textLocationIndex;
 }

@@ -20,6 +20,8 @@ import {
     IConversationDataWithIndexes,
     writeConversationDataToFile,
     readConversationDataFromFile,
+    TextToTextLocationIndexFuzzy,
+    buildMessageIndex,
 } from "knowpro";
 import { conversation as kpLib, split } from "knowledge-processor";
 import { collections, dateTime, getFileName, readAllText } from "typeagent";
@@ -88,12 +90,13 @@ function assignMessageListeners(
 }
 
 export class PodcastMessage implements IMessage<PodcastMessageMeta> {
-    public timestamp: string | undefined;
     constructor(
         public textChunks: string[],
         public metadata: PodcastMessageMeta,
         public tags: string[] = [],
+        public timestamp: string | undefined = undefined,
     ) {}
+
     addTimestamp(timestamp: string) {
         this.timestamp = timestamp;
     }
@@ -106,6 +109,10 @@ export class Podcast implements IConversation<PodcastMessageMeta> {
     public settings: ConversationSettings;
     public semanticRefIndex: ConversationIndex;
     public secondaryIndexes: PodcastSecondaryIndexes;
+    /**
+     * Work in progress
+     */
+    public messageIndex?: TextToTextLocationIndexFuzzy | undefined;
 
     constructor(
         public nameTag: string = "",
@@ -149,6 +156,21 @@ export class Podcast implements IConversation<PodcastMessageMeta> {
         return result;
     }
 
+    /**
+     * Work in progress. This will get merged into "buildIndex" soon
+     */
+    public async buildMessageIndex(
+        eventHandler?: IndexingEventHandlers,
+        batchSize?: number,
+    ): Promise<void> {
+        this.messageIndex = await buildMessageIndex(
+            this.messages,
+            this.settings.relatedTermIndexSettings.embeddingIndexSettings!,
+            eventHandler,
+            batchSize,
+        );
+    }
+
     public async serialize(): Promise<PodcastData> {
         const data: PodcastData = {
             nameTag: this.nameTag,
@@ -165,7 +187,16 @@ export class Podcast implements IConversation<PodcastMessageMeta> {
 
     public async deserialize(podcastData: PodcastData): Promise<void> {
         this.nameTag = podcastData.nameTag;
-        this.messages = podcastData.messages;
+        this.messages = podcastData.messages.map((m) => {
+            const metadata = new PodcastMessageMeta(m.metadata.speaker);
+            metadata.listeners = m.metadata.listeners;
+            return new PodcastMessage(
+                m.textChunks,
+                metadata,
+                m.tags,
+                m.timestamp,
+            );
+        });
         this.semanticRefs = podcastData.semanticRefs;
         this.tags = podcastData.tags;
         if (podcastData.semanticIndexData) {
