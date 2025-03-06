@@ -244,7 +244,7 @@ export type IndexingResults = {
     error?: string | undefined;
 };
 
-export type ArrayIndexingResult = {
+export type ListIndexingResult = {
     numberCompleted: number;
     error?: string | undefined;
 };

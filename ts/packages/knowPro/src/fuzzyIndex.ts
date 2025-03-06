@@ -15,7 +15,7 @@ import { openai, TextEmbeddingModel } from "aiclient";
 import * as levenshtein from "fast-levenshtein";
 import { createEmbeddingCache } from "knowledge-processor";
 import { Scored } from "./common.js";
-import { ArrayIndexingResult, IndexingEventHandlers } from "./interfaces.js";
+import { ListIndexingResult, IndexingEventHandlers } from "./interfaces.js";
 import { error, Result, success } from "typechat";
 
 export class EmbeddingIndex {
@@ -123,8 +123,8 @@ export async function addTextToEmbeddingIndex(
     embeddingIndex: EmbeddingIndex,
     embeddingModel: TextEmbeddingModel,
     textToIndex: string[],
-): Promise<ArrayIndexingResult> {
-    let result: ArrayIndexingResult = { numberCompleted: 0 };
+): Promise<ListIndexingResult> {
+    let result: ListIndexingResult = { numberCompleted: 0 };
     const embeddingResult = await generateTextEmbeddingsForIndex(
         embeddingModel,
         textToIndex,
@@ -144,8 +144,8 @@ export async function addTextBatchToEmbeddingIndex(
     textToIndex: string[],
     batchSize: number,
     eventHandler?: IndexingEventHandlers,
-): Promise<ArrayIndexingResult> {
-    let result: ArrayIndexingResult = { numberCompleted: 0 };
+): Promise<ListIndexingResult> {
+    let result: ListIndexingResult = { numberCompleted: 0 };
     for (const batch of getIndexingBatches(textToIndex, batchSize)) {
         if (
             eventHandler?.onEmbeddingsCreated &&
@@ -224,7 +224,7 @@ export class TextEmbeddingIndex {
      */
     public async addText(
         textToIndex: string | string[],
-    ): Promise<ArrayIndexingResult> {
+    ): Promise<ListIndexingResult> {
         return addTextToEmbeddingIndex(
             this.embeddingIndex,
             this.settings.embeddingModel,
@@ -243,7 +243,7 @@ export class TextEmbeddingIndex {
         textToIndex: string[],
         eventHandler?: IndexingEventHandlers,
         batchSize?: number,
-    ): Promise<ArrayIndexingResult> {
+    ): Promise<ListIndexingResult> {
         return addTextBatchToEmbeddingIndex(
             this.embeddingIndex,
             this.settings.embeddingModel,
