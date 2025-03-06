@@ -243,3 +243,8 @@ export type IndexingResults = {
     chunksIndexedUpto?: TextLocation | undefined;
     error?: string | undefined;
 };
+
+export type ArrayIndexingResult = {
+    numberCompleted: number;
+    error?: string | undefined;
+};

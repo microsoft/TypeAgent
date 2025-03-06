@@ -15,7 +15,7 @@ import { openai, TextEmbeddingModel } from "aiclient";
 import * as levenshtein from "fast-levenshtein";
 import { createEmbeddingCache } from "knowledge-processor";
 import { Scored } from "./common.js";
-import { IndexingEventHandlers } from "./interfaces.js";
+import { ArrayIndexingResult, IndexingEventHandlers } from "./interfaces.js";
 import { error, Result, success } from "typechat";
 
 export class EmbeddingIndex {
@@ -119,17 +119,12 @@ export async function generateTextEmbeddingsForIndex(
     }
 }
 
-export type EmbeddingIndexingResult = {
-    numberCompleted: number;
-    error?: string | undefined;
-};
-
 export async function addTextToEmbeddingIndex(
     embeddingIndex: EmbeddingIndex,
     embeddingModel: TextEmbeddingModel,
     textToIndex: string[],
-): Promise<EmbeddingIndexingResult> {
-    let result: EmbeddingIndexingResult = { numberCompleted: 0 };
+): Promise<ArrayIndexingResult> {
+    let result: ArrayIndexingResult = { numberCompleted: 0 };
     const embeddingResult = await generateTextEmbeddingsForIndex(
         embeddingModel,
         textToIndex,
@@ -149,8 +144,8 @@ export async function addTextBatchToEmbeddingIndex(
     textToIndex: string[],
     batchSize: number,
     eventHandler?: IndexingEventHandlers,
-): Promise<EmbeddingIndexingResult> {
-    let result: EmbeddingIndexingResult = { numberCompleted: 0 };
+): Promise<ArrayIndexingResult> {
+    let result: ArrayIndexingResult = { numberCompleted: 0 };
     for (const batch of getIndexingBatches(textToIndex, batchSize)) {
         if (
             eventHandler?.onEmbeddingsCreated &&
@@ -176,6 +171,41 @@ export async function addTextBatchToEmbeddingIndex(
     return result;
 }
 
+export async function indexOfNearestTextInIndex(
+    embeddingIndex: EmbeddingIndex,
+    embeddingModel: TextEmbeddingModel,
+    text: string,
+    maxMatches?: number,
+    minScore?: number,
+): Promise<Scored[]> {
+    const textEmbedding = await generateEmbedding(embeddingModel, text);
+    return embeddingIndex.getIndexesOfNearest(
+        textEmbedding,
+        maxMatches,
+        minScore,
+    );
+}
+
+export async function indexesOfNearestTextBatchInIndex(
+    embeddingIndex: EmbeddingIndex,
+    embeddingModel: TextEmbeddingModel,
+    textArray: string[],
+    maxMatches?: number,
+    minScore?: number,
+): Promise<Scored[][]> {
+    const textEmbeddings = await generateTextEmbeddings(
+        embeddingModel,
+        textArray,
+    );
+    const results = [];
+    for (const embedding of textEmbeddings) {
+        results.push(
+            embeddingIndex.getIndexesOfNearest(embedding, maxMatches, minScore),
+        );
+    }
+    return results;
+}
+
 export class TextEmbeddingIndex {
     private embeddingIndex: EmbeddingIndex;
 
@@ -194,7 +224,7 @@ export class TextEmbeddingIndex {
      */
     public async addText(
         textToIndex: string | string[],
-    ): Promise<EmbeddingIndexingResult> {
+    ): Promise<ArrayIndexingResult> {
         return addTextToEmbeddingIndex(
             this.embeddingIndex,
             this.settings.embeddingModel,
@@ -213,7 +243,7 @@ export class TextEmbeddingIndex {
         textToIndex: string[],
         eventHandler?: IndexingEventHandlers,
         batchSize?: number,
-    ): Promise<EmbeddingIndexingResult> {
+    ): Promise<ArrayIndexingResult> {
         return addTextBatchToEmbeddingIndex(
             this.embeddingIndex,
             this.settings.embeddingModel,
@@ -228,45 +258,35 @@ export class TextEmbeddingIndex {
     }
 
     public async getIndexesOfNearest(
-        text: string | NormalizedEmbedding,
+        text: string,
         maxMatches?: number,
         minScore?: number,
     ): Promise<Scored[]> {
-        const textEmbedding = await generateEmbedding(
-            this.settings.embeddingModel,
-            text,
-        );
         maxMatches ??= this.settings.maxMatches;
         minScore ??= this.settings.minScore;
-        return this.embeddingIndex.getIndexesOfNearest(
-            textEmbedding,
+        return indexOfNearestTextInIndex(
+            this.embeddingIndex,
+            this.settings.embeddingModel,
+            text,
             maxMatches,
             minScore,
         );
     }
 
     public async getIndexesOfNearestMultiple(
-        textArray: string[],
+        textBatch: string[],
         maxMatches?: number,
         minScore?: number,
     ): Promise<Scored[][]> {
-        const textEmbeddings = await generateTextEmbeddings(
-            this.settings.embeddingModel,
-            textArray,
-        );
-        const results = [];
         maxMatches ??= this.settings.maxMatches;
         minScore ??= this.settings.minScore;
-        for (const embedding of textEmbeddings) {
-            results.push(
-                this.embeddingIndex.getIndexesOfNearest(
-                    embedding,
-                    maxMatches,
-                    minScore,
-                ),
-            );
-        }
-        return results;
+        return indexesOfNearestTextBatchInIndex(
+            this.embeddingIndex,
+            this.settings.embeddingModel,
+            textBatch,
+            maxMatches,
+            minScore,
+        );
     }
 
     public removeAt(pos: number): void {
