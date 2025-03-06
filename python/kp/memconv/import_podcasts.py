@@ -87,14 +87,16 @@ class PodcastMessage(interfaces.IMessage[PodcastMessageMeta]):
 
 @dataclass
 class Podcast(interfaces.IConversation[PodcastMessageMeta]):
+    # Instance variables not passed to __init__().
     settings: Any = field(init=False, default=None)  # ConversationSettings
-    semanticRefIndex: Any = field(init=False, default=None)  # ConversationIndex
-    secondaryIndexes: Any = field(init=False, default=None)  # PodcastSecondaryIndexes
+    semantic_ref_index: Any = field(init=False, default=None)  # ConversationIndex
+    secondary_indexes: Any = field(init=False, default=None)  # PodcastSecondaryIndexes
 
-    # __init__ parameters
+    # __init__() parameters.
     name_tag: str = field(default="")
-    messages: list[PodcastMessage] = field(default_factory=list)
     tags: list[str] = field(default_factory=list)
+    # NOTE: `messages: list[PodcastMessage]` causes problems due to invariance.
+    messages: list[interfaces.IMessage[PodcastMessageMeta]] = field(default_factory=list)
     semantic_refs: list[interfaces.SemanticRef] | None = field(default_factory=list)
 
     def add_metadata_to_index(self) -> None:
@@ -109,37 +111,61 @@ class Podcast(interfaces.IConversation[PodcastMessageMeta]):
     def generate_timestamps(self, start_date: Datetime, length_minutes: float = 60.0) -> None:
         timestamp_messages(self.messages, start_date, start_date + Timedelta(minutes=length_minutes))
 
-    async def build_index(
-            self,
-            event_handler: interfaces.IndexingEventHandlers | None = None,
-    ) -> None:
-        self.add_metadata_to_index()
-        result = await build_conversation_index(self, event_handler)
-        if not result.error:
-            await self.build_secondary_indexes(False)
-            await self.secondary_indexes.threads.build_index()
-        return result
+    # async def build_index(
+    #         self,
+    #         event_handler: interfaces.IndexingEventHandlers | None = None,
+    # ) -> None:
+    #     self.add_metadata_to_index()
+    #     result = await build_conversation_index(self, event_handler)
+    #     if not result.error:
+    #         await self.build_secondary_indexes(False)
+    #         await self.secondary_indexes.threads.build_index()
+    #     return result
     
-    async def serialize(self) -> PodcastData:
-        return PodcastData(
-            name_tag=self.name_tag,
-            messages=self.messages,
-            tags=self.tags,
-            selantic_refs=self.semantic_refs,
-            semantic_index_data=self.semantic_ref_index or self.semantic_ref_index.serialize(),
-            related_terms_index_data=
-                self.secondary_indexes.term_to_related_terms_index.serialize(),
-            thread_data=self.secondary_indexes.threads.serialize(),
-        )
+    # TODO: Wait unti PodcastData is implemented
+    # async def serialize(self) -> PodcastData:
+    #     return PodcastData(
+    #         name_tag=self.name_tag,
+    #         messages=self.messages,
+    #         tags=self.tags,
+    #         selantic_refs=self.semantic_refs,
+    #         semantic_index_data=self.semantic_ref_index or self.semantic_ref_index.serialize(),
+    #         related_terms_index_data=
+    #             self.secondary_indexes.term_to_related_terms_index.serialize(),
+    #         thread_data=self.secondary_indexes.threads.serialize(),
+    #     )
 
 
+# TODO: Wait until secondary_indexes.py is implemented
+# @dataclass
+# class PodcastData(secondary_indexes.IConversationDataWithIndexes[PodcastMessage]):
+#     pass
 
 
+# Text (such as a transcript) can be collected over a time range.
+# This text can be partitioned into blocks.
+# However, timestamps for individual blocks are not available.
+# Assigns individual timestamps to blocks proportional to their lengths.
+# @param messages The messages to assign timestamps to
+# @param start_time
+# @param end_time
+def timestamp_messages(
+    messages: Sequence[interfaces.IMessage],
+    start_time: Datetime,
+    end_time: Datetime,
+) -> None:
+    # ticks ~~ posix timestamp
+    start_ticks = start_time.timestamp()
+    ticks_length = end_time.timestamp() - start_ticks
+    if ticks_length <= 0:
+        raise RuntimeError(f"{start_time} is not < {end_time}")
 
+    def message_length(message: interfaces.IMessage) -> int:
+        return sum(len(chunk) for chunk in message.text_chunks)
 
-@dataclass
-class PodcastData(interfaces.IConversationDataWithIndexes[PodcastMessage]):
-    pass
-
-
-
+    message_lengths = [message_length(m) for m in messages]
+    text_length = sum(message_lengths)
+    ticks_per_char = ticks_length / text_length
+    for message, length in zip(messages, message_lengths):
+        message.timestamp = Datetime.fromtimestamp(start_ticks).isoformat()
+        start_ticks += ticks_per_char * length
