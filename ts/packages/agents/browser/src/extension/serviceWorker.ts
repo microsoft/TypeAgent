@@ -8,6 +8,7 @@ import {
     isWebAgentMessageFromDispatcher,
     WebAgentDisconnectMessage,
 } from "../../dist/common/webAgentMessageTypes.mjs";
+import { setStoredPageProperty, getStoredPageProperty } from "./storage";
 
 async function getConfigValues(): Promise<Record<string, string>> {
     const envLocation = chrome.runtime.getURL(".env");
@@ -1243,6 +1244,21 @@ async function runBrowserAction(action: any) {
 
             break;
         }
+        case "getPageStoredProperty": {
+            responseObject = await getStoredPageProperty(
+                action.parameters.url,
+                action.parameters.key,
+            );
+            break;
+        }
+        case "setPageStoredProperty": {
+            await setStoredPageProperty(
+                action.parameters.url,
+                action.parameters.key,
+                action.parameters.value,
+            );
+            break;
+        }
         case "getConfiguration": {
             responseObject = await getConfigValues();
             break;
@@ -1516,20 +1532,23 @@ chrome.runtime.onMessage.addListener(
                 }
                 case "refreshSchema": {
                     const schemaResult = await sendActionToAgent({
-                        actionName: "initializePageSchema",
+                        actionName: "detectPageActions",
                         parameters: {
                             registerAgent: false,
                         },
                     });
 
-                    sendResponse({ schema: schemaResult });
+                    sendResponse({
+                        schema: schemaResult.schema,
+                        actionDefinitions: schemaResult.typeDefinitions,
+                    });
                     break;
                 }
                 case "registerTempSchema": {
                     const schemaResult = await sendActionToAgent({
-                        actionName: "initializePageSchema",
+                        actionName: "registerPageDynamicAgent",
                         parameters: {
-                            registerAgent: true,
+                            agentName: message.agentName,
                         },
                     });
 
@@ -1551,6 +1570,7 @@ chrome.runtime.onMessage.addListener(
                     sendResponse({
                         intent: schemaResult.intent,
                         actions: schemaResult.actions,
+                        intentTypeDefinition: schemaResult.intentTypeDefinition,
                     });
                     break;
                 }
