@@ -141,16 +141,10 @@ export class MatchAccumulator<T = any> {
         match.relatedScore += other.relatedScore;
     }
 
-    public calculateTotalScore(): void {
+    public calculateTotalScore(scorer?: (match: Match) => void): void {
+        scorer ??= addSmoothAvgRelatedScore;
         for (const match of this.getMatches()) {
-            if (match.relatedHitCount > 0) {
-                // Smooth the impact of multiple related term matches
-                // If we just add up scores, a larger number of moderately related
-                // but noisy matches can overwhelm a small # of highly related matches... etc
-                const avgScore = match.relatedScore / match.relatedHitCount;
-                const normalizedScore = Math.log(1 + avgScore);
-                match.score += normalizedScore;
-            }
+            scorer(match);
         }
     }
 
@@ -226,6 +220,27 @@ export class MatchAccumulator<T = any> {
         return minHitCount !== undefined && minHitCount > 0
             ? this.getMatches((m) => m.hitCount >= minHitCount)
             : this.matches.values();
+    }
+}
+
+function addSmoothAvgRelatedScore(match: Match): void {
+    if (match.relatedHitCount > 0) {
+        // Smooth the impact of multiple related term matches
+        // If we just add up scores, a larger number of moderately related
+        // but noisy matches can overwhelm a small # of highly related matches... etc
+        //const avgScore = match.relatedScore / match.relatedHitCount;
+        //const normalizedScore = Math.log(1 + avgScore);
+        const normalizedRelatedScore =
+            match.relatedScore / Math.log(match.relatedHitCount + 1);
+
+        match.score += normalizedRelatedScore;
+    }
+}
+
+function smoothTotalScore(match: Match): void {
+    if (match.hitCount > 0) {
+        const normalizedScore = match.score / Math.log(match.hitCount + 1);
+        match.score = normalizedScore;
     }
 }
 
@@ -405,10 +420,7 @@ export class MessageAccumulator extends MatchAccumulator<MessageIndex> {
     public smoothScores() {
         // Normalize the score relative to # of hits. Use log to reduce impact of very high score
         for (const match of this.getMatches()) {
-            if (match.hitCount > 0) {
-                const avgScore = match.score / match.hitCount;
-                match.score = Math.log(avgScore + 1);
-            }
+            smoothTotalScore(match);
         }
     }
 
