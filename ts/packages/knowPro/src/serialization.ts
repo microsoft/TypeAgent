@@ -12,7 +12,10 @@ export async function writeConversationDataToFile(
     baseFileName: string,
 ): Promise<void> {
     const serializationData = conversationDataToPersistent(conversationData);
-    if (serializationData.embeddings) {
+    if (
+        serializationData.embeddings &&
+        serializationData.embeddings.length > 0
+    ) {
         const embeddingsBuffer = serializeEmbeddings(
             serializationData.embeddings,
         );
@@ -47,7 +50,7 @@ export async function readConversationDataFromFile(
             embeddings = deserializeEmbeddings(embeddingsBuffer, embeddingSize);
         }
     }
-    let serializationData: IPersistedConversationData = {
+    let serializationData: PersistedConversationData = {
         conversationData,
         embeddings,
     };
@@ -57,34 +60,77 @@ export async function readConversationDataFromFile(
 const DataFileSuffix = "_data.json";
 const EmbeddingFileSuffix = "_embeddings.bin";
 
-interface IPersistedConversationData {
-    conversationData: IConversationDataWithIndexes;
-    embeddings?: Float32Array[] | undefined;
+type EmbeddingFileHeader = {
+    relatedCount?: number | undefined;
+    messageCount?: number | undefined;
+};
+
+interface ConversationFileData extends IConversationDataWithIndexes {
+    embeddingFileHeader?: EmbeddingFileHeader | undefined;
 }
+
+type PersistedConversationData = {
+    conversationData: ConversationFileData;
+    embeddings?: Float32Array[] | undefined;
+};
 
 function conversationDataToPersistent(
     conversationData: IConversationDataWithIndexes,
-): IPersistedConversationData {
-    let persistentData: IPersistedConversationData = {
-        conversationData,
+): PersistedConversationData {
+    let persistentData: PersistedConversationData = {
+        conversationData: {
+            ...conversationData,
+            embeddingFileHeader: {},
+        },
     };
-    const embeddingData =
+    const embeddingFileHeader =
+        persistentData.conversationData.embeddingFileHeader!;
+    const relatedEmbeddings =
         conversationData.relatedTermsIndexData?.textEmbeddingData;
-    if (embeddingData) {
-        persistentData.embeddings = embeddingData.embeddings;
-        embeddingData.embeddings = [];
+    if (relatedEmbeddings && relatedEmbeddings.embeddings.length > 0) {
+        persistentData.embeddings ??= [];
+        persistentData.embeddings.push(...relatedEmbeddings.embeddings);
+        embeddingFileHeader.relatedCount = relatedEmbeddings.embeddings.length;
+        relatedEmbeddings.embeddings = [];
     }
+    const messageEmbeddings = conversationData.messageIndexData?.indexData;
+    if (messageEmbeddings && messageEmbeddings.embeddings.length > 0) {
+        persistentData.embeddings ??= [];
+        persistentData.embeddings.push(...messageEmbeddings.embeddings);
+        embeddingFileHeader.messageCount = messageEmbeddings.embeddings.length;
+        messageEmbeddings.embeddings = [];
+    }
+
     return persistentData;
 }
 
 function persistentToConversationData(
-    persistentData: IPersistedConversationData,
+    persistentData: PersistedConversationData,
 ): IConversationDataWithIndexes {
-    const embeddingData =
-        persistentData.conversationData.relatedTermsIndexData
-            ?.textEmbeddingData;
-    if (persistentData.embeddings && embeddingData) {
-        embeddingData.embeddings = persistentData.embeddings;
+    let embeddingFileHeader = persistentData.conversationData
+        .embeddingFileHeader ?? {
+        relatedCount: persistentData.embeddings?.length,
+    };
+    if (persistentData.embeddings) {
+        const relatedEmbeddings =
+            persistentData.conversationData.relatedTermsIndexData
+                ?.textEmbeddingData;
+        let startAt = 0;
+        if (relatedEmbeddings && embeddingFileHeader.relatedCount) {
+            relatedEmbeddings.embeddings = persistentData.embeddings.slice(
+                startAt,
+                startAt + embeddingFileHeader.relatedCount,
+            );
+            startAt += embeddingFileHeader.relatedCount;
+        }
+        const messageEmbeddings =
+            persistentData.conversationData.messageIndexData?.indexData;
+        if (messageEmbeddings && embeddingFileHeader.messageCount) {
+            messageEmbeddings.embeddings = persistentData.embeddings.slice(
+                startAt,
+                startAt + embeddingFileHeader.messageCount,
+            );
+        }
     }
     return persistentData.conversationData;
 }
