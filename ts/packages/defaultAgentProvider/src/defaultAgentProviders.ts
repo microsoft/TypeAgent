@@ -8,15 +8,15 @@ import path from "node:path";
 import fs from "node:fs";
 import { getConfig, AppAgentConfig } from "./utils/config.js";
 
-let builtinAppAgentProvider: AppAgentProvider | undefined;
-export function getBuiltinAppAgentProvider(): AppAgentProvider {
-    if (builtinAppAgentProvider === undefined) {
-        builtinAppAgentProvider = createNpmAppAgentProvider(
+let defaultAppAgentProvider: AppAgentProvider | undefined;
+export function getDefaultAppAgentProvider(): AppAgentProvider {
+    if (defaultAppAgentProvider === undefined) {
+        defaultAppAgentProvider = createNpmAppAgentProvider(
             getConfig().agents,
             import.meta.url,
         );
     }
-    return builtinAppAgentProvider;
+    return defaultAppAgentProvider;
 }
 
 function getExternalAgentsConfigPath(instanceDir: string): string {
@@ -40,7 +40,7 @@ function getExternalAppAgentProvider(instanceDir: string): AppAgentProvider {
 export function getDefaultAppAgentProviders(
     instanceDir: string | undefined,
 ): AppAgentProvider[] {
-    const providers = [getBuiltinAppAgentProvider()];
+    const providers = [getDefaultAppAgentProvider()];
     if (instanceDir !== undefined) {
         providers.push(getExternalAppAgentProvider(instanceDir));
     }

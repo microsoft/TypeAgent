@@ -64,7 +64,7 @@ import {
 import registerDebug from "debug";
 import path from "node:path";
 import { createSchemaInfoProvider } from "../translation/actionSchemaFileCache.js";
-import { createInlineAppAgentProvider } from "./inlineAgentProvider.js";
+import { createBuiltinAppAgentProvider } from "./inlineAgentProvider.js";
 import { CommandResult } from "../dispatcher.js";
 import { DispatcherName } from "./dispatcher/dispatcherUtils.js";
 import lockfile from "proper-lockfile";
@@ -268,7 +268,7 @@ async function addAppAgentProviders(
             }
         }
 
-        const inlineAppProvider = createInlineAppAgentProvider(context);
+        const inlineAppProvider = createBuiltinAppAgentProvider(context);
         await context.agents.addProvider(inlineAppProvider, embeddingCache);
 
         if (appAgentProviders) {
