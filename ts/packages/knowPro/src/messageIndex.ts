@@ -11,11 +11,18 @@ import {
     IConversation,
     IMessageTextIndex,
 } from "./interfaces.js";
-import { TextToTextLocationIndex } from "./textLocationIndex.js";
+import {
+    ITextToTextLocationIndexData,
+    TextToTextLocationIndex,
+} from "./textLocationIndex.js";
 
 export type MessageTextIndexSettings = {
     embeddingIndexSettings: TextEmbeddingIndexSettings;
 };
+
+export interface IMessageTextIndexData {
+    indexData?: ITextToTextLocationIndexData | undefined;
+}
 
 export class MessageTextIndex implements IMessageTextIndex {
     private textLocationIndex: TextToTextLocationIndex;
@@ -90,6 +97,19 @@ export class MessageTextIndex implements IMessageTextIndex {
                 score: sl.score,
             };
         });
+    }
+
+    public serialize(): IMessageTextIndexData {
+        return {
+            indexData: this.textLocationIndex.serialize(),
+        };
+    }
+
+    public deserialize(data: IMessageTextIndexData): void {
+        if (data.indexData) {
+            this.textLocationIndex.clear();
+            this.textLocationIndex.deserialize(data.indexData);
+        }
     }
 }
 

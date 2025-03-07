@@ -137,6 +137,11 @@ export class TextToTextLocationIndex implements ITextToTextLocationIndex {
         });
     }
 
+    public clear(): void {
+        this.textLocations = [];
+        this.embeddingIndex.clear();
+    }
+
     public serialize(): ITextToTextLocationIndexData {
         return {
             textLocations: this.textLocations,
