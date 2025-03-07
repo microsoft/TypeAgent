@@ -98,14 +98,13 @@ class Podcast(interfaces.IConversation[PodcastMessageMeta]):
         init=False, default_factory=convindex.ConversationIndex
     )
     # TODO
-    # secondary_indexes: PodcastSecondaryIndexes = field(
-    #     # This default factory probably doesn't work. :-(
-    #     init=False, default_factory=lambda self: PodcastSecondaryIndexes(self.settings)
-    # )
+    secondary_indexes: interfaces.IConversationSecondaryIndexes | None = field(
+        init=False, default=None
+    )
     # Work in progress.
     # message_index: TextToTextLocationIndexFuzzy | None = None
 
-    # __init__() parameters (via `@dataclass`).
+    # __init__() parameters, in that order (via `@dataclass`).
     name_tag: str = field(default="")
     # NOTE: `messages: list[PodcastMessage]` doesn't work because of invariance.
     messages: list[interfaces.IMessage[PodcastMessageMeta]] = field(

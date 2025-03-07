@@ -276,7 +276,7 @@ class IConversation[TMeta: IKnowledgeSource = Any](Protocol):
     messages: list[IMessage[TMeta]]
     semantic_refs: list[SemanticRef] | None
     semantic_ref_index: ITermToSemanticRefIndex | None
-    secondaryIndexes: IConversationSecondaryIndexes | None
+    secondary_indexes: IConversationSecondaryIndexes | None
 
 
 # ------------------------
