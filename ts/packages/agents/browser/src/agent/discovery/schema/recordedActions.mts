@@ -5,15 +5,26 @@
 export type UserIntentParameter = {
     // a concise name for the parameter, in camelCase. This should only contain alphanumeric characters
     shortName: string;
+
     // a longer, descriptive name for the parameter. This value can contain non-alphanumeric characters
     name: string;
+
     // The valid values are "string", "number" and "boolean"
     type: string;
+
     // The default value for the parameter. If this value is set based on a HTML
     // page, check whether the target element has a default value. For dropdown elements, use the
     // selected value for this entry
     defaultValue?: any;
+
+    // The text for the various options for this control. This is useful for HTML elements
+    // that only accept a fixed set of values e.g. dropdown elements, radio-button lists etc.
+    valueOptions?: string[];
+
+    // The description for this parameter. Always include a list of Options as part of the description if the
+    // HTML control only accepts a fixed set of values e.g. dropdown elements, radio-button lists etc.
     description: string;
+
     // Indicates whether a parameter is required. If a parameter has a default value
     // then it is not required.
     required: boolean;
@@ -48,7 +59,7 @@ export type EnterText = {
     actionName: "enterText";
     parameters: {
         // the shortName of the UserIntentParameter to use for this value
-        text: string;
+        textParameter: string;
     };
 };
 
@@ -64,7 +75,7 @@ export type ClickOnButton = {
     actionName: "clickOnButton";
     parameters: {
         // the shortName of the UserIntentParameter to use for this value
-        buttonText: string;
+        buttonTextParameter: string;
     };
 };
 

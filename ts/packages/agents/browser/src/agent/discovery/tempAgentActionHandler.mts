@@ -8,7 +8,16 @@ import {
     NavigateToPage,
 } from "./schema/userActionsPool.mjs";
 import { handleCommerceAction } from "../commerce/actionHandler.mjs";
-import { NavigationLink } from "./schema/pageComponents.mjs";
+import {
+    Button,
+    DropdownControl,
+    NavigationLink,
+} from "./schema/pageComponents.mjs";
+import {
+    PageManipulationActions,
+    PageManipulationActionsList,
+    UserIntent,
+} from "./schema/recordedActions.mjs";
 
 export function createTempAgentForSchema(
     browser: BrowserConnector,
@@ -40,6 +49,9 @@ export function createTempAgentForSchema(
                 case "removeFromCartAction":
                     break;
                 case "signUpForNewsletterAction":
+                    break;
+                default:
+                    handleUserDefinedAction(action);
                     break;
             }
         },
@@ -101,5 +113,134 @@ export function createTempAgentForSchema(
         console.log(link);
 
         await followLink(link?.linkCssSelector);
+    }
+
+    async function handleUserDefinedAction(action: any) {
+        const url = await browser.getPageUrl();
+        const intentJson = new Map(
+            Object.entries(
+                (await browser.getCurrentPageStoredProperty(
+                    url!,
+                    "authoredIntentJson",
+                )) ?? {},
+            ),
+        );
+
+        const actionsJson = new Map(
+            Object.entries(
+                (await browser.getCurrentPageStoredProperty(
+                    url!,
+                    "authoredActionsJson",
+                )) ?? {},
+            ),
+        );
+
+        if (
+            !intentJson.has(action.actionName) ||
+            !actionsJson.has(action.actionName)
+        ) {
+            console.log(
+                `Action ${actionsJson} was not found on the list of user-defined actions`,
+            );
+            return;
+        }
+
+        const targetIntent = intentJson.get(action.actionName) as UserIntent;
+        const targetPlan = actionsJson.get(
+            action.actionName,
+        ) as PageManipulationActionsList;
+
+        console.log(`Running ${targetPlan.planName}`);
+
+        targetPlan.steps.forEach(async (step: PageManipulationActions) => {
+            switch (step.actionName) {
+                case "ClickOnLink":
+                    const linkParameter = targetIntent.parameters.find(
+                        (param) =>
+                            param.shortName ==
+                            step.parameters.linkTextParameter,
+                    );
+                    const link = (await getComponentFromPage(
+                        "NavigationLink",
+                        `link text ${linkParameter?.name}`,
+                    )) as NavigationLink;
+
+                    await followLink(link?.linkCssSelector);
+                    break;
+                case "clickOnButton":
+                    const buttonParameter = targetIntent.parameters.find(
+                        (param) =>
+                            param.shortName ==
+                            step.parameters.buttonTextParameter,
+                    );
+                    const button = (await getComponentFromPage(
+                        "Button",
+                        `button text ${buttonParameter?.name}`,
+                    )) as Button;
+                    await browser.clickOn(button.cssSelector);
+                    await browser.awaitPageInteraction();
+                    await browser.awaitPageLoad();
+
+                    break;
+                case "enterText":
+                    const textParameter = targetIntent.parameters.find(
+                        (param) =>
+                            param.shortName == step.parameters.textParameter,
+                    );
+                    const textElement = (await getComponentFromPage(
+                        "TextInput",
+                        `input label ${textParameter?.name}`,
+                    )) as Button;
+
+                    const userProvidedTextValue =
+                        action.parameters[step.parameters.textParameter];
+
+                    if (userProvidedTextValue !== undefined) {
+                        await browser.enterTextIn(
+                            userProvidedTextValue,
+                            textElement.cssSelector,
+                        );
+                    }
+                    break;
+                case "selectElementByText":
+                    break;
+                case "selectValueFromDropdown":
+                    const selectParameter = targetIntent.parameters.find(
+                        (param) =>
+                            param.shortName ==
+                            step.parameters.valueTextParameter,
+                    );
+
+                    const userProvidedValue =
+                        action.parameters[step.parameters.valueTextParameter];
+
+                    if (userProvidedValue !== undefined) {
+                        const selectElement = (await getComponentFromPage(
+                            "DropdownControl",
+                            `text ${selectParameter?.name}`,
+                        )) as DropdownControl;
+
+                        await browser.clickOn(selectElement.cssSelector);
+                        const selectValue = selectElement.values.find(
+                            (value) =>
+                                value.text ===
+                                action.parameters[
+                                    step.parameters.valueTextParameter
+                                ],
+                        );
+                        if (selectValue) {
+                            await browser.setDropdown(
+                                selectElement.cssSelector,
+                                selectValue.text,
+                            );
+                        } else {
+                            console.error(`Could not find a dropdown option with text ${action.parameters[step.parameters.valueTextParameter]} 
+                                on the ${selectElement.title} dropdown.`);
+                        }
+                    }
+
+                    break;
+            }
+        });
     }
 }
