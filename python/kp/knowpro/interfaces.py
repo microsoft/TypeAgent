@@ -64,20 +64,20 @@ class ScoredMessageIndex(Protocol):
 
 @runtime_checkable
 class ITermToSemanticRefIndex(Protocol):
-    def getTerms(self) -> Sequence[str]:
+    def get_terms(self) -> Sequence[str]:
         raise NotImplementedError
 
-    def addTerm(
+    def add_term(
         self,
         term: str,
         semantic_ref_index: SemanticRefIndex | ScoredSemanticRef,
     ) -> None:
         raise NotImplementedError
 
-    def removeTerm(self, term: str, semantic_ref_index: SemanticRefIndex) -> None:
+    def remove_term(self, term: str, semantic_ref_index: SemanticRefIndex) -> None:
         raise NotImplementedError
 
-    def lookupTerm(self, term: str) -> Sequence[ScoredSemanticRef] | None:
+    def lookup_term(self, term: str) -> Sequence[ScoredSemanticRef] | None:
         raise NotImplementedError
 
 
@@ -264,8 +264,8 @@ class IConversationThreads(Protocol):
 @runtime_checkable
 class IConversationSecondaryIndexes(Protocol):
     property_to_semantic_ref_index: IPropertyToSemanticRefIndex | None
-    timestampIndex: ITimestampToTextRangeIndex | None
-    termToRelatedTermsIndex: ITermToRelatedTermsIndex | None
+    timestamp_index: ITimestampToTextRangeIndex | None
+    terms_to_related_terms_index: ITermToRelatedTermsIndex | None
     threads: IConversationThreads | None
 
 
@@ -337,5 +337,5 @@ class IndexingEventHandlers(Protocol):
 
 @runtime_checkable
 class IndexingResults(Protocol):
-    chunksIndexedUpto: TextLocation | None = None
+    chunks_indexed_upto: TextLocation | None = None
     error: str | None = None

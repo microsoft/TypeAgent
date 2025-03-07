@@ -35,7 +35,7 @@ def text_range_from_location(
 
 type KnowledgeValidator = Callable[
     [
-        KnowledgeType,  # knowledgeType
+        KnowledgeType,  # knowledge_type
         Knowledge,  # knowledge
     ],
     bool,

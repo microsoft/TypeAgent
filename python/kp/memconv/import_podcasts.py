@@ -93,7 +93,7 @@ class Podcast(interfaces.IConversation[PodcastMessageMeta]):
     # Instance variables not passed to `__init__()`.
     # TODO
     # settings: ConversationSettings = field(
-    #     init=False, default_factory=createConversationSettings
+    #     init=False, default_factory=create_conversation_settings
     # )
     semantic_ref_index: convindex.ITermToSemanticRefIndex | None = field(
         init=False, default_factory=convindex.ConversationIndex
@@ -186,7 +186,7 @@ def import_podcast(
     transcript_file_path: str,
     podcast_name: str | None = None,
     start_date: Datetime | None = None,
-    lengthMinutes: float = 60.0,
+    length_minutes: float = 60.0,
 ) -> Podcast:
     with open(transcript_file_path, "r") as f:
         transcript_lines = f.readlines()
@@ -221,7 +221,7 @@ def import_podcast(
     assign_message_listeners(msgs, participants)
     pod = Podcast(podcast_name, msgs, [podcast_name])
     if start_date:
-        pod.generate_timestamps(start_date, lengthMinutes)
+        pod.generate_timestamps(start_date, length_minutes)
     # TODO: Add more tags.
     return pod
 
