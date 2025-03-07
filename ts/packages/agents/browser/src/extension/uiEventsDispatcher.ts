@@ -52,6 +52,7 @@ function enterTextInElement(
         clearExisting?: boolean; // Whether to clear existing content first
         triggerBlur?: boolean; // Whether to trigger blur event after typing
         triggerSubmit?: boolean; // Whether to trigger form submit after typing
+        enterAtPageScope?: boolean; // whether to enter the text in whatever the document.activeElement is
     } = {},
 ): Promise<void> {
     return new Promise((resolve, reject) => {
@@ -62,14 +63,21 @@ function enterTextInElement(
                 clearExisting: options.clearExisting ?? false,
                 triggerBlur: options.triggerBlur ?? false,
                 triggerSubmit: options.triggerSubmit ?? false,
+                enterAtPageScope: options.enterAtPageScope ?? false,
             };
 
-            const inputElement = document.querySelector(
-                selector,
-            ) as HTMLElement;
+            let inputElement = config.enterAtPageScope
+                ? (document.activeElement as HTMLElement)
+                : (document.querySelector(selector) as HTMLElement);
+
+            if (inputElement == undefined) {
+                inputElement = document.body;
+                config.enterAtPageScope = true;
+            }
 
             // Check if inputElement is an input or textarea
             if (
+                !config.enterAtPageScope &&
                 !(inputElement instanceof HTMLInputElement) &&
                 !(inputElement instanceof HTMLTextAreaElement) &&
                 !inputElement.isContentEditable
@@ -166,8 +174,9 @@ function simulateKeyEvent(inputElement: HTMLElement, char: string) {
     inputElement.dispatchEvent(textInputEvent);
 
     if (
-        inputElement instanceof HTMLInputElement ||
-        inputElement instanceof HTMLTextAreaElement
+        (inputElement instanceof HTMLInputElement ||
+            inputElement instanceof HTMLTextAreaElement) &&
+        inputElement.type !== "hidden"
     ) {
         // Get current position of cursor
         const startPos = inputElement.selectionStart || 0;
@@ -307,6 +316,7 @@ document.addEventListener("toUIEventsDispatcher", async function (e: any) {
             message.parameters.value,
             escapeCssSelector(message.parameters.cssSelector),
             {
+                delay: 20,
                 clearExisting: true,
                 triggerBlur: true,
                 triggerSubmit: message.parameters.submitForm ?? false,
@@ -314,7 +324,14 @@ document.addEventListener("toUIEventsDispatcher", async function (e: any) {
         );
     }
     if (actionName === "enterTextOnPage") {
-        await enterTextOnPage(message.parameters.value.toUpperCase());
+        // await enterTextOnPage(message.parameters.value.toUpperCase());
+        await enterTextInElement(message.parameters.value, "body", {
+            delay: 20,
+            clearExisting: true,
+            triggerBlur: true,
+            triggerSubmit: message.parameters.submitForm ?? false,
+            enterAtPageScope: true,
+        });
     }
     if (actionName === "setDropdownValue") {
         await selectDropdownOption(

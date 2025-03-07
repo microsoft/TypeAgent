@@ -83,6 +83,12 @@ export type Button = {
     cssSelector: string;
 };
 
+export type Element = {
+    title: string;
+    // CSS Selector for the element
+    cssSelector: string;
+};
+
 export type Link = {
     title: string;
     // CSS Selector for the link

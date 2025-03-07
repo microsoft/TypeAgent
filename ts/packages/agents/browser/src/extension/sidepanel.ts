@@ -65,15 +65,15 @@ async function requestSchemaUpdate(forceRefresh?: boolean) {
     }
 }
 
-function renderSchemaResults(schema: any) {
+function renderSchemaResults(schemaActions: any) {
     const schemaAccordion = document.getElementById(
         "schemaAccordion",
     ) as HTMLDivElement;
 
-    if (schema && schema.actions) {
+    if (schemaActions) {
         schemaAccordion.innerHTML = "";
 
-        schema.actions.forEach((action: any, index: number) => {
+        schemaActions.forEach((action: any, index: number) => {
             const { actionName, parameters } = action;
             const paramsText = parameters
                 ? JSON.stringify(parameters, null, 2)
