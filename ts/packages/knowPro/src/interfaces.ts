@@ -116,6 +116,7 @@ export interface IConversationSecondaryIndexes {
     timestampIndex?: ITimestampToTextRangeIndex | undefined;
     termToRelatedTermsIndex?: ITermToRelatedTermsIndex | undefined;
     threads?: IConversationThreads | undefined;
+    messageIndex?: IMessageTextIndex | undefined;
 }
 
 /**
@@ -201,6 +202,24 @@ export interface IConversationThreads {
     removeThread(threadIndex: ThreadIndex): void;
 }
 
+export interface IMessageTextIndex {
+    addMessages(
+        messages: IMessage[],
+        eventHandler?: IndexingEventHandlers,
+    ): Promise<ListIndexingResult>;
+    lookupMessages(
+        messageText: string,
+        maxMatches?: number,
+        thresholdScore?: number,
+    ): Promise<ScoredMessageIndex[]>;
+    lookupMessagesInSubset(
+        messageText: string,
+        indicesToSearch: MessageIndex[],
+        maxMatches?: number,
+        thresholdScore?: number,
+    ): Promise<ScoredMessageIndex[]>;
+}
+
 //------------------------
 // Serialization formats
 //------------------------
@@ -241,5 +260,10 @@ export interface IndexingEventHandlers {
 
 export type IndexingResults = {
     chunksIndexedUpto?: TextLocation | undefined;
+    error?: string | undefined;
+};
+
+export type ListIndexingResult = {
+    numberCompleted: number;
     error?: string | undefined;
 };

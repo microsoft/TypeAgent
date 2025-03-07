@@ -9,6 +9,7 @@ import {
     IndexingEventHandlers,
     Term,
 } from "./interfaces.js";
+import { IMessageTextIndexData } from "./messageIndex.js";
 import { PropertyIndex, buildPropertyIndex } from "./propertyIndex.js";
 import {
     buildRelatedTermsIndex,
@@ -69,5 +70,6 @@ export interface ITextEmbeddingIndexData {
 export interface IConversationDataWithIndexes<TMessage = any>
     extends IConversationData<TMessage> {
     relatedTermsIndexData?: ITermsToRelatedTermsIndexData | undefined;
-    threadData?: IConversationThreadData;
+    threadData?: IConversationThreadData | undefined;
+    messageIndexData?: IMessageTextIndexData | undefined;
 }

@@ -13,6 +13,7 @@ import {
     TextEmbeddingIndex,
     TextEmbeddingIndexSettings,
 } from "./fuzzyIndex.js";
+import { NormalizedEmbedding } from "typeagent";
 
 export interface IConversationThreadData {
     threads?: IThreadDataItem[] | undefined;
@@ -91,13 +92,15 @@ export class ConversationThreads implements IConversationThreads {
         if (data.threads) {
             this.threads = [];
             this.embeddingIndex.clear();
+            const embeddings: NormalizedEmbedding[] = [];
             for (let i = 0; i < data.threads.length; ++i) {
                 this.threads.push(data.threads[i].thread);
                 const embedding = deserializeEmbedding(
                     data.threads[i].embedding,
                 );
-                this.embeddingIndex.add(embedding);
+                embeddings.push(embedding);
             }
+            this.embeddingIndex.deserialize(embeddings);
         }
     }
 }

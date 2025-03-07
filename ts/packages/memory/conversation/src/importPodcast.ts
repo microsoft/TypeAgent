@@ -20,8 +20,10 @@ import {
     IConversationDataWithIndexes,
     writeConversationDataToFile,
     readConversationDataFromFile,
-    TextToTextLocationIndexFuzzy,
     buildMessageIndex,
+    MessageTextIndexSettings,
+    MessageTextIndex,
+    ListIndexingResult,
 } from "knowpro";
 import { conversation as kpLib, split } from "knowledge-processor";
 import { collections, dateTime, getFileName, readAllText } from "typeagent";
@@ -109,10 +111,7 @@ export class Podcast implements IConversation<PodcastMessageMeta> {
     public settings: ConversationSettings;
     public semanticRefIndex: ConversationIndex;
     public secondaryIndexes: PodcastSecondaryIndexes;
-    /**
-     * Work in progress
-     */
-    public messageIndex?: TextToTextLocationIndexFuzzy | undefined;
+    public messageIndex?: MessageTextIndex | undefined;
 
     constructor(
         public nameTag: string = "",
@@ -162,13 +161,19 @@ export class Podcast implements IConversation<PodcastMessageMeta> {
     public async buildMessageIndex(
         eventHandler?: IndexingEventHandlers,
         batchSize?: number,
-    ): Promise<void> {
-        this.messageIndex = await buildMessageIndex(
-            this.messages,
-            this.settings.relatedTermIndexSettings.embeddingIndexSettings!,
+    ): Promise<ListIndexingResult> {
+        const settings: MessageTextIndexSettings = {
+            ...this.settings.messageTextIndexSettings,
+        };
+        if (batchSize !== undefined && batchSize > 0) {
+            settings.embeddingIndexSettings.batchSize = batchSize;
+        }
+        const indexingResult = await buildMessageIndex(
+            this,
+            settings,
             eventHandler,
-            batchSize,
         );
+        return indexingResult;
     }
 
     public async serialize(): Promise<PodcastData> {
