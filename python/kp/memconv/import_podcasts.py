@@ -65,17 +65,17 @@ class PodcastMessageMeta(interfaces.IKnowledgeSource):
 
 
 def assign_message_listeners(
-    msgs: Sequence[interfaces.IMessage[PodcastMessageMeta]],
+    msgs: Sequence[PodcastMessage],
     participants: set[str],
 ) -> None:
     for msg in msgs:
         if msg.metadata.speaker:
-            listeners = [p for p in participants if p != msg.metadata.speaker]
-            msg.metadata.listeners = listeners
+            listeners = [p for p in participants if p != msg.speaker]
+            msg.listeners = listeners
 
 
 @dataclass
-class PodcastMessage(interfaces.IMessage[PodcastMessageMeta]):
+class PodcastMessage(interfaces.IMessage, PodcastMessageMeta):
     timestamp: str | None = field(init=False, default=None)
     text_chunks: list[str]
     metadata: PodcastMessageMeta
@@ -108,7 +108,7 @@ class Podcast(interfaces.IConversation[PodcastMessageMeta]):
     # __init__() parameters, in that order (via `@dataclass`).
     name_tag: str = field(default="")
     # NOTE: `messages: list[PodcastMessage]` doesn't work because of invariance.
-    messages: list[interfaces.IMessage[PodcastMessageMeta]] = field(
+    messages: list[PodcastMessage] = field(
         default_factory=list
     )
     tags: list[str] = field(default_factory=list)
@@ -195,7 +195,7 @@ def import_podcast(
     transcript_lines = [line.rstrip() for line in transcript_lines if line.strip()]
     turn_parse_regex = re.compile(r"^(?P<speaker>[A-Z0-9 ]+:)?(?P<speech>.*)$")
     participants: set[str] = set()
-    msgs: list[interfaces.IMessage[PodcastMessageMeta]] = []
+    msgs: list[PodcastMessage] = []
     cur_msg: PodcastMessage | None = None
     for line in transcript_lines:
         match = turn_parse_regex.match(line)
