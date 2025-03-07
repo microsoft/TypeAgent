@@ -3,6 +3,8 @@
 
 # TODO:
 # - See TODOs in kplib.py.
+# - Do the Protocol classes need to be @runtime_checkable?
+# - Should we use ABC instead of Protocol for certain classes?
 #
 # NOTE:
 # - I took some liberty with index types and made them int.
@@ -10,7 +12,8 @@
 # - I translated readonly to @property.
 
 from collections.abc import Sequence
-from datetime import datetime as Date
+from dataclasses import dataclass, field
+from datetime import datetime as Datetime
 from typing import Any, Callable, Literal, Protocol, runtime_checkable
 
 from . import kplib
@@ -35,12 +38,12 @@ type MessageIndex = int
 @runtime_checkable
 class IMessage[TMeta: IKnowledgeSource = Any](Protocol):
     # The text of the message, split into chunks.
-    text_chunks: Sequence[str]
+    text_chunks: list[str]
     # For example, e-mail has subject, from and to fields;
     # a chat message has a sender and a recipient.
     metadata: TMeta
     timestamp: str | None = None
-    tags: Sequence[str]
+    tags: list[str]
     deletion_info: DeletionInfo | None = None
 
 
@@ -61,20 +64,20 @@ class ScoredMessageIndex(Protocol):
 
 @runtime_checkable
 class ITermToSemanticRefIndex(Protocol):
-    def getTerms(self) -> Sequence[str]:
+    def get_terms(self) -> Sequence[str]:
         raise NotImplementedError
 
-    def addTerm(
+    def add_term(
         self,
         term: str,
         semantic_ref_index: SemanticRefIndex | ScoredSemanticRef,
     ) -> None:
         raise NotImplementedError
 
-    def removeTerm(self, term: str, semantic_ref_index: SemanticRefIndex) -> None:
+    def remove_term(self, term: str, semantic_ref_index: SemanticRefIndex) -> None:
         raise NotImplementedError
 
-    def lookupTerm(self, term: str) -> Sequence[ScoredSemanticRef] | None:
+    def lookup_term(self, term: str) -> Sequence[ScoredSemanticRef] | None:
         raise NotImplementedError
 
 
@@ -94,45 +97,45 @@ class Tag(Protocol):
 type Knowledge = kplib.ConcreteEntity | kplib.Action | Topic | Tag
 
 
-@runtime_checkable
-class TextLocation(Protocol):
+@dataclass
+class TextLocation:
     # The index of the message.
     message_index: MessageIndex
     # The index of the chunk.
-    chunkIndex: int | None
+    chunk_index: int = 0
     # The index of the character within the chunk.
-    charIndex: int | None
+    char_index: int = 0
 
 
 # A text range within a session.
-@runtime_checkable
-class TextRange(Protocol):
+@dataclass
+class TextRange:
     # The start of the range.
     start: TextLocation
     # The end of the range (exclusive).
-    end: TextLocation | None
+    end: TextLocation | None = None
 
 
-@runtime_checkable
-class SemanticRef(Protocol):
+@dataclass
+class SemanticRef:
     semantic_ref_index: SemanticRefIndex
     range: TextRange
     knowledge_type: KnowledgeType
     knowledge: Knowledge
 
 
-@runtime_checkable
-class DateRange(Protocol):
-    start: Date
-    # Inclusive.
-    end: Date | None
+@dataclass
+class DateRange:
+    start: Datetime
+    # Inclusive.  # TODO: Really? Shouldn't this be exclusive?
+    end: Datetime | None = None
 
 
-@runtime_checkable
-class Term(Protocol):
+@dataclass
+class Term:
     text: str
     # Optional weighting for these matches.
-    weight: float | None
+    weight: float | None = None
 
 
 @runtime_checkable
@@ -261,19 +264,19 @@ class IConversationThreads(Protocol):
 @runtime_checkable
 class IConversationSecondaryIndexes(Protocol):
     property_to_semantic_ref_index: IPropertyToSemanticRefIndex | None
-    timestampIndex: ITimestampToTextRangeIndex | None
-    termToRelatedTermsIndex: ITermToRelatedTermsIndex | None
+    timestamp_index: ITimestampToTextRangeIndex | None
+    terms_to_related_terms_index: ITermToRelatedTermsIndex | None
     threads: IConversationThreads | None
 
 
 @runtime_checkable
 class IConversation[TMeta: IKnowledgeSource = Any](Protocol):
     name_tag: str
-    tags: Sequence[str]
-    messages: Sequence[IMessage[TMeta]]
-    semantic_refs: Sequence[SemanticRef] | None
+    tags: list[str]
+    messages: list[IMessage[TMeta]]
+    semantic_refs: list[SemanticRef] | None
     semantic_ref_index: ITermToSemanticRefIndex | None
-    secondaryIndexes: IConversationSecondaryIndexes | None
+    secondary_indexes: IConversationSecondaryIndexes | None
 
 
 # ------------------------
@@ -334,5 +337,5 @@ class IndexingEventHandlers(Protocol):
 
 @runtime_checkable
 class IndexingResults(Protocol):
-    chunksIndexedUpto: TextLocation | None = None
+    chunks_indexed_upto: TextLocation | None = None
     error: str | None = None
