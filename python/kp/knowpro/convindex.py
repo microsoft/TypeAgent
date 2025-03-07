@@ -53,9 +53,10 @@ def add_metadata_to_index(
 
 @dataclass
 class ConversationIndex(ITermToSemanticRefIndex):
-    _map: dict[str, list[ScoredSemanticRef]] = field(default_factory=dict)
+    _map: dict[str, list[ScoredSemanticRef]]
 
     def __init__(self, data: ITermToSemanticRefIndexData | None = None):
+        self._map = {}
         if data:
             self.deserialize(data)
 

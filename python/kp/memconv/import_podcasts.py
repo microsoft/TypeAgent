@@ -192,7 +192,7 @@ def import_podcast(
     if not podcast_name:
         podcast_name = os.path.basename(transcript_file_path)
     transcript_lines = [line.rstrip() for line in transcript_lines if line.strip()]
-    turn_parse_regex = re.compile(r"^(?<speaker>[A-Z0-9 ]+:)?(?<speech>.*)$")
+    turn_parse_regex = re.compile(r"^(?P<speaker>[A-Z0-9 ]+:)?(?P<speech>.*)$")
     participants: set[str] = set()
     msgs: list[interfaces.IMessage[PodcastMessageMeta]] = []
     cur_msg: PodcastMessage | None = None
