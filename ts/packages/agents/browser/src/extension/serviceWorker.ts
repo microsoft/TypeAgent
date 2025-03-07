@@ -1205,6 +1205,14 @@ async function runBrowserAction(action: any) {
             });
             break;
         }
+        case "setDropdownValue": {
+            const targetTab = await getActiveTab();
+            const response = await chrome.tabs.sendMessage(targetTab.id!, {
+                type: "run_ui_event",
+                action: action,
+            });
+            break;
+        }
         case "getPageSchema": {
             const targetTab = await getActiveTab();
             const key = action.parameters.url ?? targetTab.url;
@@ -1569,6 +1577,7 @@ chrome.runtime.onMessage.addListener(
 
                     sendResponse({
                         intent: schemaResult.intent,
+                        intentJson: schemaResult.intentJson,
                         actions: schemaResult.actions,
                         intentTypeDefinition: schemaResult.intentTypeDefinition,
                     });

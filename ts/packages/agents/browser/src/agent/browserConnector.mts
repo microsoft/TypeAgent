@@ -225,6 +225,17 @@ export class BrowserConnector {
         return this.sendActionToBrowser(clickAction);
     }
 
+    async setDropdown(cssSelector: string, optionLabel: string) {
+        const clickAction = {
+            actionName: "setDropdownValue",
+            parameters: {
+                cssSelector: cssSelector,
+                optionLabel: optionLabel,
+            },
+        };
+        return this.sendActionToBrowser(clickAction);
+    }
+
     async enterTextIn(textValue: string, cssSelector?: string) {
         let actionName = cssSelector ? "enterTextInElement" : "enterTextOnPage";
 

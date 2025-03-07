@@ -149,7 +149,7 @@ export async function handleSchemaDiscoveryAction(
 
     async function handleRegisterSiteSchema(action: any) {
         const url = await browser.getPageUrl();
-        let detectedActions = new Map(
+        const detectedActions = new Map(
             Object.entries(
                 (await browser.getCurrentPageStoredProperty(
                     url!,
@@ -157,7 +157,7 @@ export async function handleSchemaDiscoveryAction(
                 )) ?? {},
             ),
         );
-        let authoredActions = new Map(
+        const authoredActions = new Map(
             Object.entries(
                 (await browser.getCurrentPageStoredProperty(
                     url!,
@@ -165,7 +165,7 @@ export async function handleSchemaDiscoveryAction(
                 )) ?? {},
             ),
         );
-        let typeDefinitions: ActionSchemaTypeDefinition[] = [
+        const typeDefinitions: ActionSchemaTypeDefinition[] = [
             ...detectedActions.values(),
             ...authoredActions.values(),
         ];
@@ -184,7 +184,7 @@ export async function handleSchemaDiscoveryAction(
 
         const hostName = new URL(url!).hostname.replace(/\./g, "_");
         const agentName = `temp_${hostName}`;
-        let schemaDescription = `A schema that enables interactions with the ${hostName} page`;
+        const schemaDescription = `A schema that enables interactions with the ${hostName} page`;
 
         const manifest: AppAgentManifest = {
             emojiChar: "🚧",
