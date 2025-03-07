@@ -3,6 +3,8 @@
 
 from dataclasses import dataclass, field
 from datetime import datetime as Datetime, timedelta as Timedelta
+import os
+import re
 from typing import Any, Sequence
 
 from ..knowpro import convindex, interfaces, kplib
@@ -105,11 +107,11 @@ class Podcast(interfaces.IConversation[PodcastMessageMeta]):
 
     # __init__() parameters (via `@dataclass`).
     name_tag: str = field(default="")
-    tags: list[str] = field(default_factory=list)
     # NOTE: `messages: list[PodcastMessage]` doesn't work because of invariance.
     messages: list[interfaces.IMessage[PodcastMessageMeta]] = field(
         default_factory=list
     )
+    tags: list[str] = field(default_factory=list)
     semantic_refs: list[interfaces.SemanticRef] | None = field(default_factory=list)
 
     def add_metadata_to_index(self) -> None:
@@ -178,8 +180,50 @@ class Podcast(interfaces.IConversation[PodcastMessageMeta]):
 # class PodcastData(secondary_indexes.IConversationDataWithIndexes[PodcastMessage]):
 #     pass
 
-# TODO
-# async def import_podcast...
+
+# NOTE: Doesn't need to be async (Python file I/O is synchronous)
+def import_podcast(
+    transcript_file_path: str,
+    podcast_name: str | None = None,
+    start_date: Datetime | None = None,
+    lengthMinutes: float = 60.0,
+) -> Podcast:
+    with open(transcript_file_path, "r") as f:
+        transcript_lines = f.readlines()
+    if not podcast_name:
+        podcast_name = os.path.basename(transcript_file_path)
+    transcript_lines = [line.rstrip() for line in transcript_lines if line.strip()]
+    turn_parse_regex = re.compile(r"^(?<speaker>[A-Z0-9 ]+:)?(?<speech>.*)$")
+    participants: set[str] = set()
+    msgs: list[interfaces.IMessage[PodcastMessageMeta]] = []
+    cur_msg: PodcastMessage | None = None
+    for line in transcript_lines:
+        match = turn_parse_regex.match(line)
+        if match:
+            speaker = match.group("speaker")
+            speech = match.group("speech")
+            if cur_msg:
+                if not speaker:
+                    cur_msg.add_content("\n" + speech)
+                else:
+                    msgs.append(cur_msg)
+                    cur_msg = None
+            if not cur_msg:
+                if speaker:
+                    speaker = speaker.strip()
+                    if speaker.endswith(":"):
+                        speaker = speaker[:-1]
+                    speaker = speaker.lower()  # TODO: locale
+                    participants.add(speaker)
+                cur_msg = PodcastMessage([speech], PodcastMessageMeta(speaker))
+    if cur_msg:
+        msgs.append(cur_msg)
+    assign_message_listeners(msgs, participants)
+    pod = Podcast(podcast_name, msgs, [podcast_name])
+    if start_date:
+        pod.generate_timestamps(start_date, lengthMinutes)
+    # TODO: Add more tags.
+    return pod
 
 
 # Text (such as a transcript) can be collected over a time range.
