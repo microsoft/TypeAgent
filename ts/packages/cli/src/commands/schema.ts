@@ -8,7 +8,7 @@ import {
     getFullSchemaText,
     getActionSchema,
     createActionConfigProvider,
-    getSchemaNamesForActionConfigProvider,
+    getAllSchemaNames,
 } from "agent-dispatcher/internal";
 import { getInstanceDir } from "agent-dispatcher/helpers/data";
 import { generateSchemaTypeDefinition } from "action-schema";
@@ -17,7 +17,7 @@ import { getDefaultAppAgentProviders } from "default-agent-provider";
 const provider = await createActionConfigProvider(
     getDefaultAppAgentProviders(getInstanceDir()),
 );
-const schemaNames = getSchemaNamesForActionConfigProvider(provider);
+const schemaNames = getAllSchemaNames(provider);
 
 export default class Schema extends Command {
     static description = "Show schema used by translators";
