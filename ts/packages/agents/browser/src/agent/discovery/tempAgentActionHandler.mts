@@ -9,9 +9,10 @@ import {
 } from "./schema/userActionsPool.mjs";
 import { handleCommerceAction } from "../commerce/actionHandler.mjs";
 import {
-    Button,
     DropdownControl,
+    Element,
     NavigationLink,
+    TextInput,
 } from "./schema/pageComponents.mjs";
 import {
     PageManipulationActions,
@@ -167,20 +168,21 @@ export function createTempAgentForSchema(
 
                     await followLink(link?.linkCssSelector);
                     break;
-                case "clickOnButton":
-                    const buttonParameter = targetIntent.parameters.find(
+                case "clickOnElement":
+                    const elementParameter = targetIntent.parameters.find(
                         (param) =>
                             param.shortName ==
-                            step.parameters.buttonTextParameter,
+                            step.parameters.elementTextParameter,
                     );
-                    const button = (await getComponentFromPage(
-                        "Button",
-                        `button text ${buttonParameter?.name}`,
-                    )) as Button;
-                    await browser.clickOn(button.cssSelector);
-                    await browser.awaitPageInteraction();
-                    await browser.awaitPageLoad();
-
+                    const element = (await getComponentFromPage(
+                        "Element",
+                        `element text ${elementParameter?.name}`,
+                    )) as Element;
+                    if (element !== undefined) {
+                        await browser.clickOn(element.cssSelector);
+                        await browser.awaitPageInteraction();
+                        await browser.awaitPageLoad();
+                    }
                     break;
                 case "enterText":
                     const textParameter = targetIntent.parameters.find(
@@ -190,7 +192,7 @@ export function createTempAgentForSchema(
                     const textElement = (await getComponentFromPage(
                         "TextInput",
                         `input label ${textParameter?.name}`,
-                    )) as Button;
+                    )) as TextInput;
 
                     const userProvidedTextValue =
                         action.parameters[step.parameters.textParameter];
@@ -198,7 +200,7 @@ export function createTempAgentForSchema(
                     if (userProvidedTextValue !== undefined) {
                         await browser.enterTextIn(
                             userProvidedTextValue,
-                            textElement.cssSelector,
+                            textElement?.cssSelector,
                         );
                     }
                     break;

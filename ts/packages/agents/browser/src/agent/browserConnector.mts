@@ -236,7 +236,11 @@ export class BrowserConnector {
         return this.sendActionToBrowser(clickAction);
     }
 
-    async enterTextIn(textValue: string, cssSelector?: string) {
+    async enterTextIn(
+        textValue: string,
+        cssSelector?: string,
+        submitForm?: boolean,
+    ) {
         let actionName = cssSelector ? "enterTextInElement" : "enterTextOnPage";
 
         const textAction = {
@@ -244,6 +248,7 @@ export class BrowserConnector {
             parameters: {
                 value: textValue,
                 cssSelector: cssSelector,
+                submitForm: submitForm,
             },
         };
 
