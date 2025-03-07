@@ -10,12 +10,13 @@ from typing import Any, Sequence
 from ..knowpro import convindex, interfaces, kplib
 
 
+@dataclass
 class PodcastMessageMeta(interfaces.IKnowledgeSource):
     """Metadata for podcast messages."""
 
     # Instance variables types.
-    listeners: list[str]
     speaker: str
+    listeners: list[str]
 
     def __init__(self, speaker: str):
         self.speaker = speaker
