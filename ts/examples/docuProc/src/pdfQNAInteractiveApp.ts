@@ -186,7 +186,16 @@ export async function interactiveDocQueryLoop(
             writeError(io, "[No files to import (use --? for help)]");
             return;
         }
-        await importAllFiles(files, chunkyIndex, io, namedArgs.verbose);
+
+        const chunkPdfs =
+            namedArgs.chunkPdfs?.toString().toLowerCase() === "true";
+        await importAllFiles(
+            files,
+            chunkyIndex,
+            io,
+            namedArgs.verbose,
+            chunkPdfs,
+        );
     }
 
     handlers.clearMemory.metadata = "Clear all memory (and all indexes)";

@@ -8,6 +8,7 @@ import { exec } from "child_process";
 import path, { resolve } from "path";
 import { fileURLToPath } from "url";
 import { promisify } from "util";
+import fs from "fs/promises";
 
 import { PdfDocChunk, PdfDocumentInfo } from "./pdfDocChunkSchema.js";
 
@@ -56,6 +57,52 @@ export interface ErrorItem {
     error: string;
     filename?: string;
     output?: string;
+}
+
+export async function loadPdfChunksFromJson(
+    rootDir: string,
+    filenames: string[],
+): Promise<(ChunkedFile | ErrorItem)[]> {
+    let results: (ChunkedFile | ErrorItem)[] = [];
+    try {
+        const chunkedDocsDir = path.join(rootDir, "chunked-docs");
+        for (const filename of filenames) {
+            const chunkedFilename = path.join(
+                chunkedDocsDir,
+                path.parse(filename).name,
+                path.basename(filename) + "-chunked.json",
+            );
+            try {
+                if (
+                    await fs
+                        .access(chunkedFilename)
+                        .then(() => true)
+                        .catch(() => false)
+                ) {
+                    const data = JSON.parse(
+                        await fs.readFile(chunkedFilename, "utf-8"),
+                    );
+                    results.push(data);
+                } else {
+                    results.push({
+                        error: "File not found",
+                        filename: chunkedFilename,
+                    } as ErrorItem);
+                }
+            } catch (error: any) {
+                const errors =
+                    error?.stderr || error.message || "Unknown error";
+                results.push({
+                    error: errors,
+                    filename: chunkedFilename,
+                } as ErrorItem);
+            }
+        }
+    } catch (error: any) {
+        const errors = error?.stderr || error.message || "Unknown error";
+        results.push({ error: errors } as ErrorItem);
+    }
+    return results;
 }
 
 export async function chunkifyPdfFiles(

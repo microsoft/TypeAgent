@@ -16,6 +16,7 @@ import {
     ChunkedFile,
     ChunkId,
     chunkifyPdfFiles,
+    loadPdfChunksFromJson,
     ErrorItem,
 } from "./pdfChunker.js";
 import { purgeNormalizedFile } from "./pdfQNAInteractiveApp.js";
@@ -38,11 +39,12 @@ export async function importAllFiles(
     chunkyIndex: ChunkyIndex,
     io: iapp.InteractiveIo | undefined,
     verbose: boolean,
+    fChunkPdfFiles: boolean = true,
 ): Promise<void> {
     log(io, `[Importing ${files.length} files]`, chalk.grey);
 
     const t0 = Date.now();
-    await importPdfFiles(files, chunkyIndex, io, verbose);
+    await importPdfFiles(files, chunkyIndex, io, verbose, fChunkPdfFiles);
     const t1 = Date.now();
 
     log(
@@ -57,6 +59,7 @@ async function importPdfFiles(
     chunkyIndex: ChunkyIndex,
     io: iapp.InteractiveIo | undefined,
     verbose = false,
+    fChunkPdfFiles: boolean = true,
 ): Promise<void> {
     // Canonicalize filenames.
     let filenames = files.map((file) =>
@@ -70,14 +73,21 @@ async function importPdfFiles(
 
     // Chunkify PDF files using a helper program.
     const t0 = Date.now();
-    const results = await chunkifyPdfFiles(chunkyIndex.rootDir, filenames);
-    const t1 = Date.now();
-    if (results.length !== filenames.length) {
-        log(
-            io,
-            `[Some over-long files were split into multiple partial files]`,
-            chalk.yellow,
-        );
+    let t1 = t0;
+    let results = undefined;
+    if (fChunkPdfFiles) {
+        results = await chunkifyPdfFiles(chunkyIndex.rootDir, filenames);
+        t1 = Date.now();
+        if (results.length !== filenames.length) {
+            log(
+                io,
+                `[Some over-long files were split into multiple partial files]`,
+                chalk.yellow,
+            );
+        }
+    } else {
+        results = await loadPdfChunksFromJson(chunkyIndex.rootDir, filenames);
+        t1 = Date.now();
     }
 
     // Print stats for chunkifying.
@@ -237,10 +247,9 @@ async function embedChunk(
     io: iapp.InteractiveIo | undefined,
     verbose = false,
 ): Promise<void> {
-    //const t0 = Date.now();
+    const t0 = Date.now();
     const lineCount = chunk.blobs.reduce((acc, blob) => {
         if (!blob.content) return acc;
-
         if (Array.isArray(blob.content)) {
             return (
                 acc +
@@ -274,6 +283,8 @@ async function embedChunk(
         }
     }
 
+    */
+
     const t1 = Date.now();
     if (verbose) {
         log(
@@ -282,7 +293,7 @@ async function embedChunk(
                 `in ${((t1 - t0) * 0.001).toFixed(3)} seconds for ${chunk.fileName}]`,
             chalk.gray,
         );
-    }*/
+    }
 }
 
 export async function writeToIndex(
