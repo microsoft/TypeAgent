@@ -63,9 +63,6 @@ export function createTempAgentForSchema(
         selectionCondition?: string,
     ) {
         const htmlFragments = await browser.getHtmlFragments();
-        const timerName = `getting ${componentType} section`;
-
-        console.time(timerName);
         const response = await agent.getPageComponentSchema(
             componentType,
             selectionCondition,
@@ -79,7 +76,6 @@ export function createTempAgentForSchema(
             return;
         }
 
-        console.timeEnd(timerName);
         return response.data;
     }
 
@@ -141,7 +137,7 @@ export function createTempAgentForSchema(
             !actionsJson.has(action.actionName)
         ) {
             console.log(
-                `Action ${actionsJson} was not found on the list of user-defined actions`,
+                `Action ${action.actionName} was not found on the list of user-defined actions`,
             );
             return;
         }
@@ -169,17 +165,23 @@ export function createTempAgentForSchema(
                     await followLink(link?.linkCssSelector);
                     break;
                 case "clickOnElement":
-                    const elementParameter = targetIntent.parameters.find(
-                        (param) =>
-                            param.shortName ==
-                            step.parameters.elementTextParameter,
-                    );
                     const element = (await getComponentFromPage(
                         "Element",
-                        `element text ${elementParameter?.name}`,
+                        `element text ${step.parameters?.elementText}`,
                     )) as Element;
                     if (element !== undefined) {
                         await browser.clickOn(element.cssSelector);
+                        await browser.awaitPageInteraction();
+                        await browser.awaitPageLoad();
+                    }
+                    break;
+                case "clickOnButton":
+                    const button = (await getComponentFromPage(
+                        "Element",
+                        `element text ${step.parameters?.buttonText}`,
+                    )) as Element;
+                    if (button !== undefined) {
+                        await browser.clickOn(button.cssSelector);
                         await browser.awaitPageInteraction();
                         await browser.awaitPageLoad();
                     }
