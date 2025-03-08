@@ -91,7 +91,7 @@ class Podcast(interfaces.IConversation[PodcastMessage]):
 
     # __init__() parameters, in that order (via `@dataclass`).
     name_tag: str = field(default="")
-    messages: list[PodcastMessage] = field(  # type: ignore
+    messages: list[PodcastMessage] = field(
         default_factory=list
     )
     tags: list[str] = field(default_factory=list)
@@ -101,7 +101,7 @@ class Podcast(interfaces.IConversation[PodcastMessage]):
         if self.semantic_ref_index:
             assert self.semantic_refs is not None
             convindex.add_metadata_to_index(
-                self.messages,  # type: ignore
+                self.messages,
                 self.semantic_refs,
                 self.semantic_ref_index,
             )

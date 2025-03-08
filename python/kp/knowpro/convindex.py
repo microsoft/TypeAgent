@@ -42,8 +42,8 @@ type KnowledgeValidator = Callable[
 ]
 
 
-def add_metadata_to_index(
-    messages: list[IMessage],
+def add_metadata_to_index[TMessage: IMessage](
+    messages: list[TMessage],
     semantic_refs: list[SemanticRef],
     semantic_ref_index: ITermToSemanticRefIndex,
     knowledge_validator: KnowledgeValidator | None = None,
