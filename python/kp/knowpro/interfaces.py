@@ -36,12 +36,9 @@ type MessageIndex = int
 
 
 @runtime_checkable
-class IMessage[TMeta: IKnowledgeSource = Any](Protocol):
+class IMessage(IKnowledgeSource, Protocol):
     # The text of the message, split into chunks.
     text_chunks: list[str]
-    # For example, e-mail has subject, from and to fields;
-    # a chat message has a sender and a recipient.
-    metadata: TMeta
     timestamp: str | None = None
     tags: list[str]
     deletion_info: DeletionInfo | None = None
@@ -270,10 +267,10 @@ class IConversationSecondaryIndexes(Protocol):
 
 
 @runtime_checkable
-class IConversation[TMeta: IKnowledgeSource = Any](Protocol):
+class IConversation[TMessage: IMessage = Any](Protocol):
     name_tag: str
     tags: list[str]
-    messages: list[IMessage[TMeta]]
+    messages: list[TMessage]
     semantic_refs: list[SemanticRef] | None
     semantic_ref_index: ITermToSemanticRefIndex | None
     secondary_indexes: IConversationSecondaryIndexes | None

@@ -11,16 +11,11 @@ from ..knowpro import convindex, interfaces, kplib
 
 
 @dataclass
-class PodcastMessageMeta(interfaces.IKnowledgeSource):
-    """Metadata for podcast messages."""
+class PodcastMessageBase(interfaces.IKnowledgeSource):
+    """Base class for podcast messages."""
 
-    # Instance variables types.
     speaker: str
-    listeners: list[str]
-
-    def __init__(self, speaker: str):
-        self.speaker = speaker
-        self.listeners = []
+    listeners: list[str] = field(init=False, default_factory=list)
 
     def get_knowledge(self) -> kplib.KnowledgeResponse:
         if not self.speaker:
@@ -64,21 +59,10 @@ class PodcastMessageMeta(interfaces.IKnowledgeSource):
             )
 
 
-def assign_message_listeners(
-    msgs: Sequence[interfaces.IMessage[PodcastMessageMeta]],
-    participants: set[str],
-) -> None:
-    for msg in msgs:
-        if msg.metadata.speaker:
-            listeners = [p for p in participants if p != msg.metadata.speaker]
-            msg.metadata.listeners = listeners
-
-
 @dataclass
-class PodcastMessage(interfaces.IMessage[PodcastMessageMeta]):
+class PodcastMessage(interfaces.IMessage, PodcastMessageBase):
     timestamp: str | None = field(init=False, default=None)
     text_chunks: list[str]
-    metadata: PodcastMessageMeta
     tags: list[str] = field(default_factory=list)
 
     def add_timestamp(self, timestamp: str) -> None:
@@ -89,7 +73,7 @@ class PodcastMessage(interfaces.IMessage[PodcastMessageMeta]):
 
 
 @dataclass
-class Podcast(interfaces.IConversation[PodcastMessageMeta]):
+class Podcast(interfaces.IConversation[PodcastMessage]):
     # Instance variables not passed to `__init__()`.
     # TODO
     # settings: ConversationSettings = field(
@@ -107,10 +91,7 @@ class Podcast(interfaces.IConversation[PodcastMessageMeta]):
 
     # __init__() parameters, in that order (via `@dataclass`).
     name_tag: str = field(default="")
-    # NOTE: `messages: list[PodcastMessage]` doesn't work because of invariance.
-    messages: list[interfaces.IMessage[PodcastMessageMeta]] = field(
-        default_factory=list
-    )
+    messages: list[PodcastMessage] = field(default_factory=list)
     tags: list[str] = field(default_factory=list)
     semantic_refs: list[interfaces.SemanticRef] | None = field(default_factory=list)
 
@@ -181,6 +162,16 @@ class Podcast(interfaces.IConversation[PodcastMessageMeta]):
 #     pass
 
 
+def assign_message_listeners(
+    msgs: Sequence[PodcastMessage],
+    participants: set[str],
+) -> None:
+    for msg in msgs:
+        if msg.speaker:
+            listeners = [p for p in participants if p != msg.speaker]
+            msg.listeners = listeners
+
+
 # NOTE: Doesn't need to be async (Python file I/O is synchronous)
 def import_podcast(
     transcript_file_path: str,
@@ -195,7 +186,7 @@ def import_podcast(
     transcript_lines = [line.rstrip() for line in transcript_lines if line.strip()]
     turn_parse_regex = re.compile(r"^(?P<speaker>[A-Z0-9 ]+:)?(?P<speech>.*)$")
     participants: set[str] = set()
-    msgs: list[interfaces.IMessage[PodcastMessageMeta]] = []
+    msgs: list[PodcastMessage] = []
     cur_msg: PodcastMessage | None = None
     for line in transcript_lines:
         match = turn_parse_regex.match(line)
@@ -215,7 +206,7 @@ def import_podcast(
                         speaker = speaker[:-1]
                     speaker = speaker.lower()  # TODO: locale
                     participants.add(speaker)
-                cur_msg = PodcastMessage([speech], PodcastMessageMeta(speaker))
+                cur_msg = PodcastMessage(speaker, [speech])
     if cur_msg:
         msgs.append(cur_msg)
     assign_message_listeners(msgs, participants)
