@@ -11,22 +11,24 @@ export async function writeConversationDataToFile(
     dirPath: string,
     baseFileName: string,
 ): Promise<void> {
-    const serializationData = conversationDataToPersistent(conversationData);
-    if (
-        serializationData.embeddings &&
-        serializationData.embeddings.length > 0
-    ) {
-        const embeddingsBuffer = serializeEmbeddings(
-            serializationData.embeddings,
-        );
-        await writeFile(
-            path.join(dirPath, baseFileName + EmbeddingFileSuffix),
-            embeddingsBuffer,
-        );
+    const fileData = toConversationFileData(conversationData);
+    if (fileData.binaryData) {
+        if (
+            fileData.binaryData.embeddings &&
+            fileData.binaryData.embeddings.length > 0
+        ) {
+            const embeddingsBuffer = serializeEmbeddings(
+                fileData.binaryData.embeddings,
+            );
+            await writeFile(
+                path.join(dirPath, baseFileName + EmbeddingFileSuffix),
+                embeddingsBuffer,
+            );
+        }
     }
     await writeJsonFile(
         path.join(dirPath, baseFileName + DataFileSuffix),
-        serializationData.conversationData,
+        fileData.jsonData,
     );
 }
 
@@ -35,10 +37,10 @@ export async function readConversationDataFromFile(
     baseFileName: string,
     embeddingSize: number | undefined,
 ): Promise<IConversationDataWithIndexes | undefined> {
-    const conversationData = await readJsonFile<IConversationDataWithIndexes>(
+    const jsonData = await readJsonFile<ConversationJsonData>(
         path.join(dirPath, baseFileName + DataFileSuffix),
     );
-    if (!conversationData) {
+    if (!jsonData) {
         return undefined;
     }
     let embeddings: Float32Array[] | undefined;
@@ -50,87 +52,121 @@ export async function readConversationDataFromFile(
             embeddings = deserializeEmbeddings(embeddingsBuffer, embeddingSize);
         }
     }
-    let serializationData: PersistedConversationData = {
-        conversationData,
-        embeddings,
+    let serializationData: ConversationFileData = {
+        jsonData: jsonData,
+        binaryData: { embeddings },
     };
-    return persistentToConversationData(serializationData);
+    return fromConversationFileData(serializationData);
 }
 
 const DataFileSuffix = "_data.json";
 const EmbeddingFileSuffix = "_embeddings.bin";
+
+type ConversationFileData = {
+    // This data goes into a JSON text file
+    jsonData: ConversationJsonData;
+    // This goes into a single binary file
+    binaryData: ConversationBinaryData;
+};
 
 type EmbeddingFileHeader = {
     relatedCount?: number | undefined;
     messageCount?: number | undefined;
 };
 
-interface ConversationFileData extends IConversationDataWithIndexes {
+type EmbeddingData = {
+    embeddings: Float32Array[];
+};
+
+interface ConversationJsonData extends IConversationDataWithIndexes {
     embeddingFileHeader?: EmbeddingFileHeader | undefined;
 }
 
-type PersistedConversationData = {
-    conversationData: ConversationFileData;
+type ConversationBinaryData = {
+    // This goes into a single binary file
     embeddings?: Float32Array[] | undefined;
 };
 
-function conversationDataToPersistent(
+function toConversationFileData(
     conversationData: IConversationDataWithIndexes,
-): PersistedConversationData {
-    let persistentData: PersistedConversationData = {
-        conversationData: {
+): ConversationFileData {
+    let fileData: ConversationFileData = {
+        jsonData: {
             ...conversationData,
             embeddingFileHeader: {},
         },
+        binaryData: {},
     };
-    const embeddingFileHeader =
-        persistentData.conversationData.embeddingFileHeader!;
-    const relatedEmbeddings =
-        conversationData.relatedTermsIndexData?.textEmbeddingData;
-    if (relatedEmbeddings && relatedEmbeddings.embeddings.length > 0) {
-        persistentData.embeddings ??= [];
-        persistentData.embeddings.push(...relatedEmbeddings.embeddings);
-        embeddingFileHeader.relatedCount = relatedEmbeddings.embeddings.length;
-        relatedEmbeddings.embeddings = [];
-    }
-    const messageEmbeddings = conversationData.messageIndexData?.indexData;
-    if (messageEmbeddings && messageEmbeddings.embeddings.length > 0) {
-        persistentData.embeddings ??= [];
-        persistentData.embeddings.push(...messageEmbeddings.embeddings);
-        embeddingFileHeader.messageCount = messageEmbeddings.embeddings.length;
-        messageEmbeddings.embeddings = [];
-    }
+    const embeddingFileHeader = fileData.jsonData.embeddingFileHeader!;
+    embeddingFileHeader.relatedCount = addEmbeddingsToBinaryData(
+        fileData.binaryData,
+        conversationData.relatedTermsIndexData?.textEmbeddingData,
+    );
+    embeddingFileHeader.messageCount = addEmbeddingsToBinaryData(
+        fileData.binaryData,
+        conversationData.messageIndexData?.indexData,
+    );
 
-    return persistentData;
+    return fileData;
 }
 
-function persistentToConversationData(
-    persistentData: PersistedConversationData,
-): IConversationDataWithIndexes {
-    let embeddingFileHeader = persistentData.conversationData
-        .embeddingFileHeader ?? {
-        relatedCount: persistentData.embeddings?.length,
-    };
-    if (persistentData.embeddings) {
-        const relatedEmbeddings =
-            persistentData.conversationData.relatedTermsIndexData
-                ?.textEmbeddingData;
-        let startAt = 0;
-        if (relatedEmbeddings && embeddingFileHeader.relatedCount) {
-            relatedEmbeddings.embeddings = persistentData.embeddings.slice(
-                startAt,
-                startAt + embeddingFileHeader.relatedCount,
-            );
-            startAt += embeddingFileHeader.relatedCount;
-        }
-        const messageEmbeddings =
-            persistentData.conversationData.messageIndexData?.indexData;
-        if (messageEmbeddings && embeddingFileHeader.messageCount) {
-            messageEmbeddings.embeddings = persistentData.embeddings.slice(
-                startAt,
-                startAt + embeddingFileHeader.messageCount,
-            );
-        }
+function addEmbeddingsToBinaryData(
+    binaryData: ConversationBinaryData,
+    embeddingData?: EmbeddingData | undefined,
+): number | undefined {
+    let lengthPushed: number | undefined;
+    if (
+        embeddingData &&
+        embeddingData.embeddings &&
+        embeddingData.embeddings.length > 0
+    ) {
+        binaryData.embeddings ??= [];
+        binaryData.embeddings.push(...embeddingData.embeddings);
+        lengthPushed = embeddingData.embeddings.length;
+        embeddingData.embeddings = [];
     }
-    return persistentData.conversationData;
+    return lengthPushed;
+}
+
+function fromConversationFileData(
+    fileData: ConversationFileData,
+): IConversationDataWithIndexes {
+    let embeddingFileHeader = fileData.jsonData.embeddingFileHeader ?? {};
+    if (fileData.binaryData) {
+        let startAt = 0;
+        startAt += getEmbeddingsFromBinaryData(
+            fileData.binaryData,
+            fileData.jsonData.relatedTermsIndexData?.textEmbeddingData,
+            startAt,
+            embeddingFileHeader.relatedCount,
+        );
+        startAt += getEmbeddingsFromBinaryData(
+            fileData.binaryData,
+            fileData.jsonData.messageIndexData?.indexData,
+            startAt,
+            embeddingFileHeader.messageCount,
+        );
+    }
+    return fileData.jsonData;
+}
+
+function getEmbeddingsFromBinaryData(
+    binaryData: ConversationBinaryData,
+    embeddingData: EmbeddingData | undefined,
+    startAt: number,
+    length?: number | undefined,
+): number {
+    if (binaryData.embeddings && embeddingData && length && length > 0) {
+        embeddingData.embeddings = binaryData.embeddings.slice(
+            startAt,
+            startAt + length,
+        );
+        if (embeddingData.embeddings.length !== length) {
+            throw new Error(
+                `Embedding file corrupt: expected ${length}, got ${embeddingData.embeddings.length}`,
+            );
+        }
+        return length;
+    }
+    return 0;
 }

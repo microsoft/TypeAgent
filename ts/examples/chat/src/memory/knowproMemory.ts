@@ -569,7 +569,7 @@ export async function createKnowproCommands(
             },
             options: {
                 maxToDisplay: argNum("Maximum matches to display", 25),
-                minScore: argNum("Min threshold score", 0.85),
+                minScore: argNum("Min threshold score"),
             },
         };
     }
