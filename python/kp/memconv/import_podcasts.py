@@ -91,9 +91,7 @@ class Podcast(interfaces.IConversation[PodcastMessage]):
 
     # __init__() parameters, in that order (via `@dataclass`).
     name_tag: str = field(default="")
-    messages: list[PodcastMessage] = field(
-        default_factory=list
-    )
+    messages: list[PodcastMessage] = field(default_factory=list)
     tags: list[str] = field(default_factory=list)
     semantic_refs: list[interfaces.SemanticRef] | None = field(default_factory=list)
 
