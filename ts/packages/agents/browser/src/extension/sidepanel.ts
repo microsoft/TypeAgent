@@ -197,7 +197,7 @@ async function saveUserAction() {
         }, 5000);
     }
 
-    button.innerHTML = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Processing...`;
+    button.innerHTML = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Saving...`;
     button.disabled = true;
 
     // Get schema based on the recorded action info
@@ -213,8 +213,9 @@ async function saveUserAction() {
         console.error("Error fetching schema:", chrome.runtime.lastError);
         showTemporaryStatus("✖ Failed", "btn-outline-danger");
     } else {
+        const processedActionName = response.intentJson.actionName;
         await addEntryToStoredPageProperties(actionName!, "userActions", {
-            name: actionName,
+            name: processedActionName,
             description: actionDescription,
             steps,
             screenshot,
@@ -224,17 +225,17 @@ async function saveUserAction() {
         });
 
         await addEntryToStoredPageProperties(
-            actionName!,
+            processedActionName,
             "authoredActionDefinitions",
             response.intentTypeDefinition,
         );
         await addEntryToStoredPageProperties(
-            actionName!,
+            processedActionName,
             "authoredActionsJson",
             response.actions,
         );
         await addEntryToStoredPageProperties(
-            actionName!,
+            processedActionName,
             "authoredIntentJson",
             response.intentJson,
         );

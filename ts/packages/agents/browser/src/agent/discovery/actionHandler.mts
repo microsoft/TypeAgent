@@ -175,6 +175,11 @@ export async function handleSchemaDiscoveryAction(
             ...authoredActions.values(),
         ];
 
+        if (typeDefinitions.length === 0) {
+            console.log("No actions for this schema.");
+            return;
+        }
+
         const union = sc.union(
             typeDefinitions.map((definition) => sc.ref(definition)),
         );
@@ -383,12 +388,12 @@ export async function handleSchemaDiscoveryAction(
         });
 
         const obj: ActionSchemaObject = sc.obj({
-            actionName: sc.string(userIntentJson.actiontName),
+            actionName: sc.string(userIntentJson.actionName),
             parameters: sc.obj(Object.fromEntries(fields)),
         } as const);
 
         const schema = sc.type(
-            userIntentJson.actiontName,
+            userIntentJson.actionName,
             obj,
             actionDescription,
             true,
