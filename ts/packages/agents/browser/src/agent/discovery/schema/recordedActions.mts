@@ -63,6 +63,16 @@ export type EnterText = {
     };
 };
 
+// This is used on pages where the user can type anywhere in the document body
+// and the page captures input
+export type EnterTextAtPageScope = {
+    actionName: "EnterTextAtPageScope";
+    parameters: {
+        // the shortName of the UserIntentParameter to use for this value
+        textParameter: string;
+    };
+};
+
 export type SelectValueFromDropdown = {
     actionName: "selectValueFromDropdown";
     parameters: {
@@ -71,11 +81,11 @@ export type SelectValueFromDropdown = {
     };
 };
 
-export type ClickOnButton = {
-    actionName: "clickOnButton";
+export type ClickOnElement = {
+    actionName: "clickOnElement";
     parameters: {
         // the shortName of the UserIntentParameter to use for this value
-        buttonTextParameter: string;
+        elementTextParameter: string;
     };
 };
 
@@ -91,7 +101,7 @@ export type PageManipulationActions =
     | SelectElementByText
     | EnterText
     | SelectValueFromDropdown
-    | ClickOnButton
+    | ClickOnElement
     | ClickOnLink;
 
 export type PageManipulationActionsList = {

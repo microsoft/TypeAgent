@@ -544,8 +544,13 @@ let actionIndex = 1;
 let recordedActionHtml: string = "";
 let recordedActionScreenshot: string = "";
 
-function startRecording() {
+async function startRecording() {
     if (recording) return;
+
+    await chrome.runtime.sendMessage({
+        type: "clearRecordedActions",
+    });
+
     recording = true;
     recordedActions = [];
     actionIndex = 1;
@@ -559,8 +564,6 @@ function startRecording() {
     document.addEventListener("input", recordInput, true);
     // document.addEventListener("scroll", recordScroll, true);
     document.addEventListener("keyup", recordTextEntry, true);
-
-    saveRecordedActions();
 }
 
 // Stop recording and return data
@@ -587,9 +590,6 @@ async function stopRecording() {
         recordedActionScreenshot,
         recordedActionHtml,
     });
-    chrome.storage.session.remove("recordedActions");
-    chrome.storage.session.remove("recordedActionScreenshot");
-    chrome.storage.session.remove("recordedActionHtml");
 }
 
 // Record click events
@@ -634,9 +634,21 @@ function recordInput(event: Event) {
     saveRecordedActions();
 }
 
-function recordTextEntry(event: Event) {
-    const target = event.target as HTMLInputElement | HTMLTextAreaElement;
-    if (target.tagName === "INPUT" || target.tagName === "TEXTAREA") {
+function recordTextEntry(event: KeyboardEvent) {
+    const target = event.target as HTMLElement;
+    if (
+        target.tagName === "INPUT" ||
+        target.tagName === "TEXTAREA" ||
+        target.isContentEditable
+    ) {
+        let value = target.textContent;
+        if (
+            target instanceof HTMLInputElement ||
+            target instanceof HTMLTextAreaElement
+        ) {
+            value = target.value;
+        }
+
         const action = {
             id: actionIndex++,
             type: "textInput",
@@ -644,10 +656,32 @@ function recordTextEntry(event: Event) {
             tag: target.tagName,
             selector: getCSSSelector(target),
             boundingBox: getBoundingBox(target),
-            value: target.value, // Capture final text value
+            value: value, // Capture final text value
         };
 
         recordedActions.push(action);
+    }
+    if (target.tagName === "BODY") {
+        if (
+            recordedActions.length > 0 &&
+            recordedActions[recordedActions.length - 1].type ===
+                "pageLevelTextInput"
+        ) {
+            // accumulate entered text value
+            recordedActions[recordedActions.length - 1].value += event.key;
+        } else {
+            const action = {
+                id: actionIndex++,
+                type: "pageLevelTextInput",
+                timestamp: Date.now(),
+                tag: target.tagName,
+                selector: "body",
+                boundingBox: getBoundingBox(target),
+                value: event.key,
+            };
+
+            recordedActions.push(action);
+        }
     }
 
     saveRecordedActions();
@@ -730,32 +764,14 @@ async function captureAnnotatedScreenshot() {
     };
 }
 
-function saveRecordedActions() {
-    chrome.storage.session.set({
+async function saveRecordedActions() {
+    await chrome.runtime.sendMessage({
+        type: "saveRecordedActions",
         recordedActions,
         recordedActionScreenshot,
         recordedActionHtml,
     });
 }
-
-// Restore actions if page is refreshed
-chrome.storage.session.get("recordedActions", (data) => {
-    if (data !== undefined && data.recordedActions) {
-        recordedActions = data.recordedActions;
-    }
-});
-
-chrome.storage.session.get("recordedActionScreenshot", (data) => {
-    if (data !== undefined && data.recordedActionScreenshot) {
-        recordedActionScreenshot = data.recordedActionScreenshot;
-    }
-});
-
-chrome.storage.session.get("recordedActionHtml", (data) => {
-    if (data !== undefined && data.recordedActionHtml) {
-        recordedActionHtml = data.recordedActionHtml;
-    }
-});
 
 // Detect navigation and push it as an action
 window.addEventListener("beforeunload", recordNavigation);
@@ -966,7 +982,7 @@ async function handleScriptAction(
             break;
         }
         case "startRecording": {
-            startRecording();
+            await startRecording();
             sendResponse({});
             break;
         }
@@ -1021,4 +1037,15 @@ window.addEventListener(
 
 document.addEventListener("DOMContentLoaded", async () => {
     console.log("Content Script initialized");
+
+    // Restore actions e.g. if page is refreshed
+    const restoredData = await chrome.runtime.sendMessage({
+        type: "getRecordedActions",
+    });
+
+    if (restoredData) {
+        recordedActions = restoredData.recordedActions;
+        recordedActionScreenshot = restoredData.recordedActionScreenshot;
+        recordedActionHtml = restoredData.recordedActionHtml;
+    }
 });
