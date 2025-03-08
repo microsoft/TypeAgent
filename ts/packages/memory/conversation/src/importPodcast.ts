@@ -111,7 +111,6 @@ export class Podcast implements IConversation<PodcastMessageMeta> {
     public settings: ConversationSettings;
     public semanticRefIndex: ConversationIndex;
     public secondaryIndexes: PodcastSecondaryIndexes;
-    public messageIndex?: MessageTextIndex | undefined;
 
     constructor(
         public nameTag: string = "",
@@ -148,7 +147,7 @@ export class Podcast implements IConversation<PodcastMessageMeta> {
         this.addMetadataToIndex();
         const result = await buildConversationIndex(this, eventHandler);
         if (!result.error) {
-            // buildConversationIndex already built all aliases
+            // false: only build additional none base indexes
             await this.buildSecondaryIndexes(false);
             await this.secondaryIndexes.threads.buildIndex();
         }
@@ -186,6 +185,7 @@ export class Podcast implements IConversation<PodcastMessageMeta> {
             relatedTermsIndexData:
                 this.secondaryIndexes.termToRelatedTermsIndex.serialize(),
             threadData: this.secondaryIndexes.threads.serialize(),
+            messageIndexData: this.secondaryIndexes.messageIndex.serialize(),
         };
         return data;
     }
@@ -219,6 +219,14 @@ export class Podcast implements IConversation<PodcastMessageMeta> {
                 this.settings.threadSettings,
             );
             this.secondaryIndexes.threads.deserialize(podcastData.threadData);
+        }
+        if (podcastData.messageIndexData) {
+            this.secondaryIndexes.messageIndex = new MessageTextIndex(
+                this.settings.messageTextIndexSettings,
+            );
+            this.secondaryIndexes.messageIndex.deserialize(
+                podcastData.messageIndexData,
+            );
         }
         await this.buildSecondaryIndexes(true);
     }
@@ -297,10 +305,14 @@ export class Podcast implements IConversation<PodcastMessageMeta> {
 
 export class PodcastSecondaryIndexes extends ConversationSecondaryIndexes {
     public threads: ConversationThreads;
+    public messageIndex: MessageTextIndex;
 
     constructor(settings: ConversationSettings) {
         super(settings.relatedTermIndexSettings);
         this.threads = new ConversationThreads(settings.threadSettings);
+        this.messageIndex = new MessageTextIndex(
+            settings.messageTextIndexSettings,
+        );
     }
 }
 

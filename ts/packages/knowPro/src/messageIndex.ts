@@ -66,6 +66,8 @@ export class MessageTextIndex implements IMessageTextIndex {
         maxMatches?: number,
         thresholdScore?: number,
     ): Promise<ScoredMessageIndex[]> {
+        maxMatches ??= this.settings.embeddingIndexSettings.maxMatches;
+        thresholdScore ??= this.settings.embeddingIndexSettings.minScore;
         const scoredLocations = await this.textLocationIndex.lookupText(
             messageText,
             maxMatches,

@@ -157,7 +157,7 @@ export interface ITermToRelatedTermsFuzzy {
     addTerms(
         terms: string[],
         eventHandler?: IndexingEventHandlers,
-    ): Promise<void>;
+    ): Promise<ListIndexingResult>;
     lookupTerm(
         text: string,
         maxMatches?: number,
