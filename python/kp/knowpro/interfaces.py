@@ -36,7 +36,7 @@ type MessageIndex = int
 
 
 @runtime_checkable
-class IMessage(IKnowledgeSource):
+class IMessage(IKnowledgeSource, Protocol):
     # The text of the message, split into chunks.
     text_chunks: list[str]
     timestamp: str | None = None
