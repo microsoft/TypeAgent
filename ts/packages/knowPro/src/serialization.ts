@@ -131,7 +131,11 @@ function addEmbeddingsToBinaryData(
 function fromConversationFileData(
     fileData: ConversationFileData,
 ): IConversationDataWithIndexes {
-    let embeddingFileHeader = fileData.jsonData.embeddingFileHeader ?? {};
+    let embeddingFileHeader = fileData.jsonData.embeddingFileHeader ?? {
+        relatedCount:
+            fileData.jsonData.relatedTermsIndexData?.textEmbeddingData
+                ?.textItems.length,
+    };
     if (fileData.binaryData) {
         let startAt = 0;
         startAt += getEmbeddingsFromBinaryData(

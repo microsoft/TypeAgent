@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { collections } from "typeagent";
-import { IConversation, Term } from "./interfaces.js";
+import { IConversation, ListIndexingResult, Term } from "./interfaces.js";
 import { IndexingEventHandlers } from "./interfaces.js";
 import { Scored } from "./common.js";
 import {
@@ -272,9 +272,15 @@ export class TermEmbeddingIndex implements ITermEmbeddingIndex {
     public async addTerms(
         terms: string[],
         eventHandler?: IndexingEventHandlers,
-    ): Promise<void> {
-        await this.embeddingIndex.addTextBatch(terms, eventHandler);
-        this.textArray.push(...terms);
+    ): Promise<ListIndexingResult> {
+        const result = await this.embeddingIndex.addTextBatch(
+            terms,
+            eventHandler,
+        );
+        if (result.numberCompleted > 0) {
+            this.textArray.push(...terms);
+        }
+        return result;
     }
 
     public async lookupTerm(
@@ -353,8 +359,11 @@ export class TermEditDistanceIndex
         super(textArray);
     }
 
-    public async addTerms(terms: string[]): Promise<void> {
+    public async addTerms(terms: string[]): Promise<ListIndexingResult> {
         this.textArray.push(...terms);
+        return {
+            numberCompleted: terms.length,
+        };
     }
 
     public async lookupTerm(
@@ -391,13 +400,14 @@ export class TermEditDistanceIndex
 }
 
 /**
+ * Note: TEMPORARY. Experimental. May eventually replace ITermToRelatedTermsIndex
  * Work in progress; Simplifying related terms
  */
 export interface ITermToRelatedTermsIndex2 {
     addTerms(
         termTexts: string[],
         eventHandler?: IndexingEventHandlers,
-    ): Promise<void>;
+    ): Promise<ListIndexingResult>;
     addSynonyms(termText: string, relatedTerms: Term[]): void;
     lookupSynonym(termText: string): Term[] | undefined;
     lookupTermsFuzzy(
@@ -419,7 +429,7 @@ export class TermToRelatedTermsIndex2 implements ITermToRelatedTermsIndex2 {
     public addTerms(
         termTexts: string[],
         eventHandler?: IndexingEventHandlers,
-    ): Promise<void> {
+    ): Promise<ListIndexingResult> {
         return this.termEmbeddings.addTerms(termTexts, eventHandler);
     }
 

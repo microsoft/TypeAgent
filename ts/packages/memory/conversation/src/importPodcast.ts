@@ -147,7 +147,7 @@ export class Podcast implements IConversation<PodcastMessageMeta> {
         this.addMetadataToIndex();
         const result = await buildConversationIndex(this, eventHandler);
         if (!result.error) {
-            // buildConversationIndex already built all aliases
+            // false: only build additional none base indexes
             await this.buildSecondaryIndexes(false);
             await this.secondaryIndexes.threads.buildIndex();
         }
