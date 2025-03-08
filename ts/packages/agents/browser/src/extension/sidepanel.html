@@ -10,7 +10,7 @@
     <link rel="stylesheet" href="vendor/bootstrap/bootstrap.min.css" />
     <link
       rel="stylesheet"
-      href="https://cdn.jsdelivr.net/npm/bootstrap-icons/font/bootstrap-icons.css"
+      href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css"
     />
     <style>
       body {
@@ -47,6 +47,16 @@
         position: absolute;
         right: 0px;
         top: 5px;
+      }
+
+      .toggle-button {
+        width: 50px;
+      }
+      .list-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 10px 15px;
       }
 
       /* Timeline styling*/
@@ -167,24 +177,6 @@
     </style>
   </head>
   <body class="container">
-    <div class="d-flex gap-2">
-      <button
-        id="trySchema"
-        class="btn btn-sm btn-outline-primary"
-        title="Try Schema"
-      >
-        <i class="bi bi-play-circle"></i> Try Page Agent
-      </button>
-
-      <button
-        id="saveSchema"
-        class="btn btn-sm btn-outline-primary"
-        title="Save Schema"
-      >
-        <i class="bi bi-floppy"></i> Save
-      </button>
-    </div>
-
     <div class="mt-4"></div>
     <div class="d-flex justify-content-between align-items-center mt-3">
       <h3>Detected Actions</h3>
@@ -195,8 +187,9 @@
         <i class="bi bi-arrow-clockwise"></i>
       </button>
     </div>
-    <!-- Accordion for Schema -->
-    <div class="accordion" id="schemaAccordion"></div>
+    <div class="card">
+      <ul class="list-group list-group-flush" id="detectedSchemaItemsList"></ul>
+    </div>
 
     <!-- User Defined Actions -->
     <div id="userActionsContainer" class="mt-4">

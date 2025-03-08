@@ -1750,11 +1750,13 @@ chrome.runtime.onInstalled.addListener(() => {
     chrome.contextMenus.create({
         title: "Refresh crossword agent",
         id: "reInitCrosswordPage",
+        documentUrlPatterns: ["http://*/*", "https://*/*"],
     });
 
     chrome.contextMenus.create({
         title: "Clear crossword cache",
         id: "clearCrosswordPageCache",
+        documentUrlPatterns: ["http://*/*", "https://*/*"],
     });
 
     // Add separator
@@ -1766,6 +1768,14 @@ chrome.runtime.onInstalled.addListener(() => {
     chrome.contextMenus.create({
         title: "Discover page Schema",
         id: "discoverPageSchema",
+        documentUrlPatterns: ["http://*/*", "https://*/*"],
+    });
+
+    chrome.contextMenus.create({
+        id: "sidepanel-registerAgent",
+        title: "Update Page Agent",
+        contexts: ["all"],
+        documentUrlPatterns: ["chrome-extension://*/sidepanel.html"],
     });
 });
 
@@ -1816,6 +1826,13 @@ chrome.contextMenus?.onClicked.addListener(
             }
             case "discoverPageSchema": {
                 await chrome.sidePanel.open({ tabId: tab.id! });
+                break;
+            }
+            case "sidepanel-registerAgent": {
+                const schemaResult = await sendActionToAgent({
+                    actionName: "registerPageDynamicAgent",
+                    parameters: {},
+                });
                 break;
             }
         }
