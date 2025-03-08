@@ -73,7 +73,7 @@ class PodcastMessage(interfaces.IMessage, PodcastMessageBase):
 
 
 @dataclass
-class Podcast(interfaces.IConversation):
+class Podcast(interfaces.IConversation[PodcastMessage]):
     # Instance variables not passed to `__init__()`.
     # TODO
     # settings: ConversationSettings = field(

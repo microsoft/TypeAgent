@@ -267,10 +267,10 @@ class IConversationSecondaryIndexes(Protocol):
 
 
 @runtime_checkable
-class IConversation(Protocol):
+class IConversation[TMessage: IMessage = Any](Protocol):
     name_tag: str
     tags: list[str]
-    messages: list[IMessage]
+    messages: list[TMessage]
     semantic_refs: list[SemanticRef] | None
     semantic_ref_index: ITermToSemanticRefIndex | None
     secondary_indexes: IConversationSecondaryIndexes | None
