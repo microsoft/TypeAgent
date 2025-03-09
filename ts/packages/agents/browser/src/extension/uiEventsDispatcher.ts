@@ -296,48 +296,72 @@ async function selectDropdownOption(selector: string, optionLabel: string) {
     }
 }
 
-function sendDataToContentScript(data: any) {
-    document.dispatchEvent(
-        new CustomEvent("fromUIEventsDispatcher", { detail: data }),
-    );
-}
+window.addEventListener("message", async (event: any) => {
+    const data = event.data;
 
-document.addEventListener("toUIEventsDispatcher", async function (e: any) {
-    var message = e.detail;
-    console.log("received", message);
-    const actionName =
-        message.actionName ?? message.fullActionName.split(".").at(-1);
+    // Check if this is a request from our content script
+    if (data && data.type === "content-script-request") {
+        const { requestId, payload } = data;
 
-    if (actionName === "clickOnElement") {
-        clickOnElement(escapeCssSelector(message.parameters.cssSelector));
-    }
-    if (actionName === "enterTextInElement") {
-        await enterTextInElement(
-            message.parameters.value,
-            escapeCssSelector(message.parameters.cssSelector),
-            {
-                delay: 20,
-                clearExisting: true,
-                triggerBlur: true,
-                triggerSubmit: message.parameters.submitForm ?? false,
-            },
-        );
-    }
-    if (actionName === "enterTextOnPage") {
-        // await enterTextOnPage(message.parameters.value.toUpperCase());
-        await enterTextInElement(message.parameters.value, "body", {
-            delay: 20,
-            clearExisting: true,
-            triggerBlur: true,
-            triggerSubmit: message.parameters.submitForm ?? false,
-            enterAtPageScope: true,
-        });
-    }
-    if (actionName === "setDropdownValue") {
-        await selectDropdownOption(
-            escapeCssSelector(message.parameters.cssSelector),
-            message.parameters.optionLabel,
-        );
+        try {
+            var message = payload;
+            console.log("received", message);
+            const actionName =
+                message.actionName ?? message.fullActionName.split(".").at(-1);
+
+            if (actionName === "clickOnElement") {
+                clickOnElement(
+                    escapeCssSelector(message.parameters.cssSelector),
+                );
+            }
+            if (actionName === "enterTextInElement") {
+                await enterTextInElement(
+                    message.parameters.value,
+                    escapeCssSelector(message.parameters.cssSelector),
+                    {
+                        delay: 20,
+                        clearExisting: true,
+                        triggerBlur: true,
+                        triggerSubmit: message.parameters.submitForm ?? false,
+                    },
+                );
+            }
+            if (actionName === "enterTextOnPage") {
+                // await enterTextOnPage(message.parameters.value.toUpperCase());
+                await enterTextInElement(message.parameters.value, "body", {
+                    delay: 20,
+                    clearExisting: true,
+                    triggerBlur: true,
+                    triggerSubmit: message.parameters.submitForm ?? false,
+                    enterAtPageScope: true,
+                });
+            }
+            if (actionName === "setDropdownValue") {
+                await selectDropdownOption(
+                    escapeCssSelector(message.parameters.cssSelector),
+                    message.parameters.optionLabel,
+                );
+            }
+
+            window.postMessage(
+                {
+                    type: "main-world-response",
+                    requestId: requestId,
+                    result: {},
+                },
+                "*",
+            );
+        } catch (error) {
+            // Send error back
+            window.postMessage(
+                {
+                    type: "main-world-response",
+                    requestId: requestId,
+                    error: error,
+                },
+                "*",
+            );
+        }
     }
 });
 

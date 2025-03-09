@@ -87,10 +87,9 @@ function renderSchemaResults(schemaActions: any) {
     const itemsList = document.getElementById(
         "detectedSchemaItemsList",
     ) as HTMLElement;
+    itemsList.innerHTML = "";
 
-    if (schemaActions) {
-        itemsList.innerHTML = "";
-
+    if (schemaActions !== undefined && schemaActions.length > 0) {
         schemaActions.forEach((action: any, index: number) => {
             const { actionName, parameters } = action;
             const paramsText = parameters
