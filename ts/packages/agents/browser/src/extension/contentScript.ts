@@ -820,10 +820,47 @@ document.addEventListener("fromPaleoDbAutomation", function (e: any) {
     console.log("received", message);
 });
 
-function sendUIEventsRequest(data: any) {
-    document.dispatchEvent(
-        new CustomEvent("toUIEventsDispatcher", { detail: data }),
-    );
+async function sendUIEventsRequest(message: any) {
+    return new Promise((resolve, reject) => {
+        const requestId = `request_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+        const listener = (event: MessageEvent) => {
+            if (event.source !== window) return;
+
+            const data = event.data;
+            if (
+                data &&
+                data.type === "main-world-response" &&
+                data.requestId === requestId
+            ) {
+                window.removeEventListener("message", listener);
+
+                if (data.error) {
+                    reject(new Error(data.error));
+                } else {
+                    resolve(data.result);
+                }
+            }
+        };
+
+        window.addEventListener("message", listener);
+
+        // Send the message with the request ID
+        window.postMessage(
+            {
+                type: "content-script-request",
+                requestId: requestId,
+                payload: message,
+            },
+            "*",
+        );
+
+        // Add a timeout to prevent hanging promises
+        setTimeout(() => {
+            window.removeEventListener("message", listener);
+            reject(new Error("Request to main world timed out"));
+        }, 10000);
+    });
 }
 
 document.addEventListener("fromUIEventsDispatcher", async function (e: any) {
@@ -939,7 +976,7 @@ async function handleScriptAction(
         }
 
         case "run_ui_event": {
-            sendUIEventsRequest(message.action);
+            await sendUIEventsRequest(message.action);
             sendResponse({});
             break;
         }

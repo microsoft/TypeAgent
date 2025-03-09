@@ -15,7 +15,6 @@ import {
     TextInput,
 } from "./schema/pageComponents.mjs";
 import {
-    PageManipulationActions,
     PageManipulationActionsList,
     UserIntent,
 } from "./schema/recordedActions.mjs";
@@ -149,7 +148,7 @@ export function createTempAgentForSchema(
 
         console.log(`Running ${targetPlan.planName}`);
 
-        targetPlan.steps.forEach(async (step: PageManipulationActions) => {
+        for (const step of targetPlan.steps) {
             switch (step.actionName) {
                 case "ClickOnLink":
                     const linkParameter = targetIntent.parameters.find(
@@ -245,6 +244,6 @@ export function createTempAgentForSchema(
 
                     break;
             }
-        });
+        }
     }
 }
