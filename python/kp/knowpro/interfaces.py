@@ -193,7 +193,7 @@ class ITermToRelatedTerms(Protocol):
 class ITermToRelatedTermsFuzzy(Protocol):
     async def add_terms(
         self, terms: Sequence[str], event_handler: "IndexingEventHandlers | None" = None
-    ) -> None:
+    ) -> "ListIndexingResult":
         raise NotImplementedError
 
     async def lookup_term(
@@ -335,4 +335,10 @@ class IndexingEventHandlers(Protocol):
 @runtime_checkable
 class IndexingResults(Protocol):
     chunks_indexed_upto: TextLocation | None = None
+    error: str | None = None
+
+
+@runtime_checkable
+class ListIndexingResult(Protocol):
+    number_completed: int
     error: str | None = None
