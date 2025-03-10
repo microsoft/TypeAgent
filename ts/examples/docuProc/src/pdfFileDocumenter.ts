@@ -22,7 +22,7 @@ export function createPdfDocumenter(model: ChatModel): PdfFileDocumenter {
         document,
     };
 
-    async function getImagePromptSection(imgChunkId: string, imgBlob : Blob): Promise<MultimodalPromptContent[]> {
+    function getImagePromptSection(imgChunkId: string, imgBlob : Blob): MultimodalPromptContent[] {
         const content: MultimodalPromptContent[] = [];
         if (imgBlob && imgBlob.img_path) {
             const base64 = getBase64IfNeeded(
@@ -30,7 +30,7 @@ export function createPdfDocumenter(model: ChatModel): PdfFileDocumenter {
             );
             content.push({
                 type: "text",
-                text: `Base64 encoded Image imgBlob.img_name:\n`,
+                text: `Base64 encoded Image:\n`,
             });
             content.push({
                 type: "image_url",
@@ -93,23 +93,27 @@ export function createPdfDocumenter(model: ChatModel): PdfFileDocumenter {
             // Build the prompt text for this page
             content.push({
                 type: "text",
-                text: `***: Document Page (Id: ${pageChunk.id}, Page: ${pageChunk.pageid}):\n`,
+                text: `***: Document chunks of Page (Id: ${pageChunk.id}, Page: ${pageChunk.pageid}):\n`,
             });
             
             // For each block/child chunk
             for (const chunk of chunks) {
                 const chunkIdentifier = chunk.id;
+                content.push({
+                    type: "text",
+                    text: `Summarize chunk id:(${chunkIdentifier})\n`,
+                });
                 for (const blob of chunk.blobs) {
                     if (blob.blob_type === "text") {
                         // Text processing
                         content.push({
                             type: "text",
-                            text: `Summarize text of chunk id:(${chunkIdentifier})\n` + `${blob.content}`,
+                            text: `Summarize text paragraph:\n` + `${blob.content}`,
                         });
                     } else if (blob.blob_type === "image_label") {
                         content.push({
                             type: "text",
-                            text: `Summarize image and labels content for Chunk Id: ${chunk.id}, Page: ${chunk.pageid}\n`,
+                            text: `Summarize image and labels content:\n`,
                         });
 
                         let chunk_labels = "";
@@ -121,14 +125,14 @@ export function createPdfDocumenter(model: ChatModel): PdfFileDocumenter {
 
                         content.push({
                             type: "text",
-                            text: `Associated labels of chunk id:(${chunkIdentifier})\n` + `${chunk_labels}`,
+                            text: `Associated label(s):\n` + `${chunk_labels}`,
                         });
                         
                         // Embed the images references in the prompt
                         if (blob.image_chunk_ref) {
                             content.push({
                                 type: "text",
-                                text: `Summarize images of chunk id:(${chunkIdentifier})\n`,
+                                text: `Associated image(s):\n`,
                             });
                             for (const imgChunkId of blob.image_chunk_ref) {
                                 const imgChunk = chunks.find(
@@ -142,7 +146,7 @@ export function createPdfDocumenter(model: ChatModel): PdfFileDocumenter {
                                             b.img_path,
                                     );
                                     if (imageBlob) {
-                                        const imagePromptSection = await getImagePromptSection(
+                                        const imagePromptSection = getImagePromptSection(
                                             imgChunkId,
                                             imageBlob,
                                         );
@@ -154,11 +158,11 @@ export function createPdfDocumenter(model: ChatModel): PdfFileDocumenter {
                     } else if (blob.blob_type === "image" && blob.img_path) {
                         content.push({
                             type: "text",
-                            text: `Summarize the image contents of chunk id:(${chunkIdentifier})\n`,
+                            text: `Summarize the image:\n`,
                         });
-                        getImagePromptSection(chunkIdentifier, blob).then((imagePromptSection) => {
-                            content.push(...imagePromptSection);
-                        });
+                        
+                        const imagePromptSection = getImagePromptSection(chunkIdentifier, blob);
+                        content.push(...imagePromptSection);
                     }
                 }
             }
@@ -168,8 +172,9 @@ export function createPdfDocumenter(model: ChatModel): PdfFileDocumenter {
                 Summarize the given document sections based on text, images content and associated images.
                 For text, provide a concise summary of the main points.
                 For images, infer purpose based on the context.
-                Also fill in lists: keywords, tags, synonyms, and dependencies.
-            `;
+                Also fill in lists: keywords, tags, synonyms, and dependencies. Every chunk should be documented.
+                For each chunk, the summary shoube contain most five sentences that covers the main points.
+                For each image, provide a short description of the image and its purpose.`;
 
             let promptSections: PromptSection[] = 
                             [
