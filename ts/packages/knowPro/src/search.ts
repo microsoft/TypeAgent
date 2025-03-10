@@ -14,6 +14,7 @@ import {
     ScoredMessageIndex,
 } from "./interfaces.js";
 import { mergedEntities, mergeTopics } from "./knowledge.js";
+import { isKnownProperty, PropertyNames } from "./propertyIndex.js";
 import * as q from "./query.js";
 import { IQueryOpExpr } from "./query.js";
 import { resolveRelatedTerms } from "./relatedTermsIndex.js";
@@ -403,6 +404,7 @@ class SearchQueryBuilder {
     private async resolveRelatedTerms(
         searchTerms: SearchTerm[],
         dedupe: boolean,
+        filter?: WhenFilter,
     ) {
         this.validateAndPrepareSearchTerms(searchTerms);
         if (this.secondaryIndexes?.termToRelatedTermsIndex) {
@@ -410,10 +412,27 @@ class SearchQueryBuilder {
                 this.secondaryIndexes.termToRelatedTermsIndex,
                 searchTerms,
                 dedupe,
+                (term) => this.shouldFuzzyMatchRelatedTerms(term, filter),
             );
             // Ensure that the resolved terms are valid etc.
             this.validateAndPrepareSearchTerms(searchTerms);
         }
+    }
+
+    private shouldFuzzyMatchRelatedTerms(
+        term: SearchTerm,
+        filter?: WhenFilter,
+    ): boolean {
+        const kType = filter?.knowledgeType;
+        if (kType && kType !== "entity") {
+            return true;
+        }
+        // If the term exactly matches a know property name, don't do fuzzy resolution
+        return !isKnownProperty(
+            this.secondaryIndexes?.propertyToSemanticRefIndex,
+            PropertyNames.EntityName,
+            term.term.text,
+        );
     }
 
     private validateAndPrepareSearchTerms(searchTerms: SearchTerm[]): void {

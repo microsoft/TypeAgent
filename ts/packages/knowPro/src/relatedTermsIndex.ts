@@ -160,6 +160,7 @@ export async function resolveRelatedTerms(
     relatedTermsIndex: ITermToRelatedTermsIndex,
     searchTerms: SearchTerm[],
     ensureSingleOccurrence: boolean = true,
+    shouldResolveFuzzy?: (term: SearchTerm) => boolean,
 ): Promise<void> {
     const searchableTerms = new TermSet();
     const searchTermsNeedingRelated: SearchTerm[] = [];
@@ -177,9 +178,12 @@ export async function resolveRelatedTerms(
             searchTerm.relatedTerms =
                 relatedTermsIndex.aliases.lookupTerm(termText);
         }
-        // If no hard-coded mappings, add this to the list of things for which we do fuzzy retrieval
+        // If no hard-coded mappings to aliases
+        // Then add this to the list of things for which we do fuzzy retrieval
         if (!searchTerm.relatedTerms || searchTerm.relatedTerms.length === 0) {
-            searchTermsNeedingRelated.push(searchTerm);
+            if (!shouldResolveFuzzy || shouldResolveFuzzy(searchTerm)) {
+                searchTermsNeedingRelated.push(searchTerm);
+            }
         }
     }
     if (relatedTermsIndex.fuzzyIndex && searchTermsNeedingRelated.length > 0) {
