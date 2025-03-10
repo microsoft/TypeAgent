@@ -6,7 +6,9 @@ import argparse
 from datetime import datetime as Datetime
 import sys
 
-assert sys.version_info >= (3, 13), "Requires Python 3.13 or later"
+v = 12
+assert sys.version_info >= (3, v), f"Requires Python 3.{v} or later"
+del v
 
 from kp.memconv.import_podcasts import import_podcast
 

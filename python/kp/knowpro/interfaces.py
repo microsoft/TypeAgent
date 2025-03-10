@@ -4,7 +4,6 @@
 # TODO:
 # - See TODOs in kplib.py.
 # - Do the Protocol classes need to be @runtime_checkable?
-# - Should we use ABC instead of Protocol for certain classes?
 #
 # NOTE:
 # - I took some liberty with index types and made them int.
@@ -26,8 +25,8 @@ class IKnowledgeSource(Protocol):
         raise NotImplementedError
 
 
-@runtime_checkable
-class DeletionInfo(Protocol):
+@dataclass
+class DeletionInfo:
     timestamp: str
     reason: str | None = None
 
@@ -47,14 +46,14 @@ class IMessage(IKnowledgeSource, Protocol):
 type SemanticRefIndex = int
 
 
-@runtime_checkable
-class ScoredSemanticRef(Protocol):
+@dataclass
+class ScoredSemanticRef:
     semantic_ref_index: SemanticRefIndex
     score: float
 
 
-@runtime_checkable
-class ScoredMessageIndex(Protocol):
+@dataclass
+class ScoredMessageIndex:
     message_index: MessageIndex
     score: float
 
@@ -81,13 +80,13 @@ class ITermToSemanticRefIndex(Protocol):
 type KnowledgeType = Literal["entity", "action", "topic", "tag"]
 
 
-@runtime_checkable
-class Topic(Protocol):
+@dataclass
+class Topic:
     text: str
 
 
-@runtime_checkable
-class Tag(Protocol):
+@dataclass
+class Tag:
     text: str
 
 
@@ -135,8 +134,8 @@ class Term:
     weight: float | None = None
 
 
-@runtime_checkable
-class ScoredKnowledge(Protocol):
+@dataclass
+class ScoredKnowledge:
     knowledge_type: KnowledgeType
     knowledge: Knowledge
     score: float
@@ -162,8 +161,8 @@ class IPropertyToSemanticRefIndex(Protocol):
         raise NotImplementedError
 
 
-@runtime_checkable
-class TimestampedTextRange(Protocol):
+@dataclass
+class TimestampedTextRange:
     timestamp: str
     range: TextRange
 
@@ -225,8 +224,8 @@ class ITermToRelatedTermsIndex(Protocol):
 
 
 # A Thread is a set of text ranges in a conversation.
-@runtime_checkable
-class Thread(Protocol):
+@dataclass
+class Thread:
     description: str
     ranges: Sequence[TextRange]
 
@@ -234,8 +233,8 @@ class Thread(Protocol):
 type ThreadIndex = int
 
 
-@runtime_checkable
-class ScoredThreadIndex(Protocol):
+@dataclass
+class ScoredThreadIndex:
     thread_index: ThreadIndex
     score: float
 
@@ -268,7 +267,7 @@ class IConversationSecondaryIndexes(Protocol):
 
 
 @runtime_checkable
-class IConversation[TMessage: IMessage = Any](Protocol):
+class IConversation[TMessage: IMessage](Protocol):
     name_tag: str
     tags: list[str]
     messages: list[TMessage]
@@ -323,7 +322,7 @@ class ITermToSemanticRefIndexData(Protocol):
 
 
 @runtime_checkable
-class IConversationData[TMessage = Any](Protocol):
+class IConversationData[TMessage](Protocol):
     name_tag: str
     messages: Sequence[TMessage]
     tags: Sequence[str]
@@ -336,8 +335,8 @@ class IConversationData[TMessage = Any](Protocol):
 # ------------------------
 
 
-@runtime_checkable
-class IndexingEventHandlers(Protocol):
+@dataclass
+class IndexingEventHandlers:
     on_knowledge_extracted: (
         Callable[
             [
@@ -361,13 +360,13 @@ class IndexingEventHandlers(Protocol):
     ) = None
 
 
-@runtime_checkable
-class IndexingResults(Protocol):
+@dataclass
+class IndexingResults:
     chunks_indexed_upto: TextLocation | None = None
     error: str | None = None
 
 
-@runtime_checkable
-class ListIndexingResult(Protocol):
+@dataclass
+class ListIndexingResult:
     number_completed: int
     error: str | None = None
