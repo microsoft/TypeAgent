@@ -605,8 +605,12 @@ export class MatchSearchTermExpr extends MatchTermExpr {
             }
         } else {
             if (!context.matchedTerms.has(relatedTerm)) {
+                // If this related term had not already matched as a related term for some other term
+                // Minimize over counting
                 const semanticRefs = this.lookupTerm(context, relatedTerm);
-                matches.addTermMatches(
+                // This will only consider semantic refs that have not already matched. In other words, if a semantic
+                // ref already matched due to the term 'novel', don't also match it because it matched the related term 'book'
+                matches.addTermMatchesIfNew(
                     term,
                     semanticRefs,
                     false,

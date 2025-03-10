@@ -273,6 +273,30 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
         }
     }
 
+    public addTermMatchesIfNew(
+        searchTerm: Term,
+        scoredRefs:
+            | ScoredSemanticRef[]
+            | IterableIterator<ScoredSemanticRef>
+            | undefined,
+        isExactMatch: boolean,
+        weight?: number,
+    ) {
+        if (scoredRefs) {
+            weight ??= searchTerm.weight ?? 1;
+            for (const scoredRef of scoredRefs) {
+                if (!this.has(scoredRef.semanticRefIndex)) {
+                    this.add(
+                        scoredRef.semanticRefIndex,
+                        scoredRef.score * weight,
+                        isExactMatch,
+                    );
+                }
+            }
+            this.searchTermMatches.add(searchTerm.text);
+        }
+    }
+
     public override getSortedByScore(
         minHitCount?: number,
     ): Match<SemanticRefIndex>[] {
