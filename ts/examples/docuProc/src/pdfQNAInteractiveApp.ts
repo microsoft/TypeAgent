@@ -188,7 +188,9 @@ export async function interactiveDocQueryLoop(
         }
 
         const chunkPdfs =
-            namedArgs.chunkPdfs?.toString().toLowerCase() === "true";
+            namedArgs.chunkPdfs === undefined
+                ? true
+                : namedArgs.chunkPdfs?.toString().toLowerCase() === "true";
         await importAllFiles(
             files,
             chunkyIndex,

@@ -3,7 +3,12 @@
 
 import { ChatModel } from "aiclient";
 import { loadSchema } from "typeagent";
-import { createJsonTranslator, PromptSection, MultimodalPromptContent, TypeChatJsonTranslator } from "typechat";
+import {
+    createJsonTranslator,
+    PromptSection,
+    MultimodalPromptContent,
+    TypeChatJsonTranslator,
+} from "typechat";
 import { createTypeScriptJsonValidator } from "typechat/ts";
 
 import { PdfFileDocumentation } from "./pdfDocChunkSchema.js";
@@ -22,12 +27,13 @@ export function createPdfDocumenter(model: ChatModel): PdfFileDocumenter {
         document,
     };
 
-    function getImagePromptSection(imgChunkId: string, imgBlob : Blob): MultimodalPromptContent[] {
+    function getImagePromptSection(
+        imgChunkId: string,
+        imgBlob: Blob,
+    ): MultimodalPromptContent[] {
         const content: MultimodalPromptContent[] = [];
         if (imgBlob && imgBlob.img_path) {
-            const base64 = getBase64IfNeeded(
-                imgBlob.img_path,
-            );
+            const base64 = getBase64IfNeeded(imgBlob.img_path);
             content.push({
                 type: "text",
                 text: `Base64 encoded Image:\n`,
@@ -39,7 +45,6 @@ export function createPdfDocumenter(model: ChatModel): PdfFileDocumenter {
                     detail: "high",
                 },
             });
-
         }
         return content;
     }
@@ -86,7 +91,7 @@ export function createPdfDocumenter(model: ChatModel): PdfFileDocumenter {
         // Process each page
         let pageCount = 0;
         for (const pageid in pageChunksMap) {
-            let content:MultimodalPromptContent[] = [];
+            let content: MultimodalPromptContent[] = [];
             pageCount++;
             const { pageChunk, chunks } = pageChunksMap[pageid];
 
@@ -95,7 +100,7 @@ export function createPdfDocumenter(model: ChatModel): PdfFileDocumenter {
                 type: "text",
                 text: `***: Document chunks of Page (Id: ${pageChunk.id}, Page: ${pageChunk.pageid}):\n`,
             });
-            
+
             // For each block/child chunk
             for (const chunk of chunks) {
                 const chunkIdentifier = chunk.id;
@@ -108,7 +113,9 @@ export function createPdfDocumenter(model: ChatModel): PdfFileDocumenter {
                         // Text processing
                         content.push({
                             type: "text",
-                            text: `Summarize text paragraph:\n` + `${blob.content}`,
+                            text:
+                                `Summarize text paragraph:\n` +
+                                `${blob.content}`,
                         });
                     } else if (blob.blob_type === "image_label") {
                         content.push({
@@ -127,7 +134,7 @@ export function createPdfDocumenter(model: ChatModel): PdfFileDocumenter {
                             type: "text",
                             text: `Associated label(s):\n` + `${chunk_labels}`,
                         });
-                        
+
                         // Embed the images references in the prompt
                         if (blob.image_chunk_ref) {
                             content.push({
@@ -146,10 +153,11 @@ export function createPdfDocumenter(model: ChatModel): PdfFileDocumenter {
                                             b.img_path,
                                     );
                                     if (imageBlob) {
-                                        const imagePromptSection = getImagePromptSection(
-                                            imgChunkId,
-                                            imageBlob,
-                                        );
+                                        const imagePromptSection =
+                                            getImagePromptSection(
+                                                imgChunkId,
+                                                imageBlob,
+                                            );
                                         content.push(...imagePromptSection);
                                     }
                                 }
@@ -160,8 +168,11 @@ export function createPdfDocumenter(model: ChatModel): PdfFileDocumenter {
                             type: "text",
                             text: `Summarize the image:\n`,
                         });
-                        
-                        const imagePromptSection = getImagePromptSection(chunkIdentifier, blob);
+
+                        const imagePromptSection = getImagePromptSection(
+                            chunkIdentifier,
+                            blob,
+                        );
                         content.push(...imagePromptSection);
                     }
                 }
@@ -176,12 +187,14 @@ export function createPdfDocumenter(model: ChatModel): PdfFileDocumenter {
                 For each chunk, the summary shoube contain most five sentences that covers the main points.
                 For each image, provide a short description of the image and its purpose.`;
 
-            let promptSections: PromptSection[] = 
-                            [
-                                { role: "user", content: content }
-                            ];
-    
-            const result = await pdfDocTranslator.translate(request, promptSections);
+            let promptSections: PromptSection[] = [
+                { role: "user", content: content },
+            ];
+
+            const result = await pdfDocTranslator.translate(
+                request,
+                promptSections,
+            );
             if (result.success) {
                 const fileDocs: PdfFileDocumentation = result.data;
                 const chunkDocs = fileDocs.chunkDocs ?? [];

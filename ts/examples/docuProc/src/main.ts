@@ -53,7 +53,6 @@ async function main(): Promise<void> {
     }
 
     const files = parseCommandLine();
-
     const databaseRootDir = path.join(__dirname, "/papers/docuproc-index");
     const chunkyIndex = await ChunkyIndex.createInstance(databaseRootDir);
 

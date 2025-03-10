@@ -39,8 +39,9 @@ export class ChunkyIndex {
 
     private constructor() {
         //this.chatModel = openai.createChatModelDefault("DocuProc");
-        this.chatModel = openai.createJsonChatModel(
-            "GPT_4_O_MINI", ["DocuProc"]);
+        this.chatModel = openai.createJsonChatModel("GPT_4_O_MINI", [
+            "DocuProc",
+        ]);
         this.miniModel = openai.createChatModel(
             "GPT_35_TURBO",
             undefined,

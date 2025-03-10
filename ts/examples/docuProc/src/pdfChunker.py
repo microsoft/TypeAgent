@@ -25,14 +25,14 @@ from typing import Optional, List, Union, Dict, Any
 @dataclass
 class Blob:
     """Stores text, table, or image data plus metadata."""
-    blob_type: str                                 # e.g. "text", "table", "image"
-    start: int                                     # Page number (0-based)
+    blob_type: str                  # "text", "table", "image", "image_label"
+    start: int                      # Page number (0-based)
     content: Optional[Union[str, List[str]]] = None
     bbox: Optional[List[float]] = None
-    img_name: Optional[str] = None                     # Name of the image blob, if this is an image blob
-    img_path: Optional[str] = None                 # Path to the saved image file, if this is an image blob
-    para_id: Optional[int] = None                  # Paragraph ID if needed
-    image_chunk_ref: Optional[List[str]] = None          # Pointer to the chunk that has the associated image (if this is a caption)
+    img_name: Optional[str] = None  # Name of the image blob, if this is an image blob
+    img_path: Optional[str] = None  # Path to the saved image file, if this is an image blob
+    para_id: Optional[int] = None   # Paragraph ID if needed
+    image_chunk_ref: Optional[List[str]] = None     # Pointer to the chunk that has the associated image (if this is a caption)
 
     def to_dict(self) -> Dict[str, Any]:
         result = {
@@ -180,7 +180,7 @@ class PDFChunker:
                 continue
 
             # **Exclude long text paragraphs**
-            if len(text) > 200:  # Paragraphs tend to have long continuous text
+            if len(text) > 200:
                 continue
 
             # Get individual lines in the block
@@ -213,22 +213,20 @@ class PDFChunker:
             has_columns = max(column_counts, default=0) > 1  # More than 1 distinct column
 
             if is_table_like and has_columns:
-                detected_tables.append(([x0, y0, x1, y1], structured_data))  # Store bbox and table content
+                detected_tables.append(([x0, y0, x1, y1], structured_data))
 
         return detected_tables
     
     def print_tables(self, tables: list[tuple[list[float], list[list[str]]]]) -> None:
-        # Debug: Print detected tables with bounding boxes and content
         if self.debug:
             print(f"\n--- DEBUG: Found {len(tables)} tables on the page ---")
             for idx, (bbox, table_data) in enumerate(tables):
                 x0, y0, x1, y1 = bbox
                 print(f"  🟦 Table {idx}: BBox ({x0}, {y0}, {x1}, {y1})")
                 
-                # Print table content
                 print("  Table Content:")
                 for row in table_data:
-                    print(f"    {' | '.join(row)}")  # Format table rows nicely
+                    print(f"    {' | '.join(row)}")
 
     def _find_nearest_image_bbox(self, line_bbox: List[float], image_bboxes: List[List[float]]) -> Optional[List[float]]:
         """
@@ -240,7 +238,7 @@ class PDFChunker:
         best_bbox: Optional[List[float]] = None
 
         for (x0_img, y0_img, x1_img, y1_img) in image_bboxes:
-            # We'll measure vertical distance if the line is below or above the image
+            # Measure vertical distance if the line is below or above the image
             if y1_line < y0_img:
                 dist = abs(y0_img - y1_line)
             elif y0_line > y1_img:
@@ -262,15 +260,13 @@ class PDFChunker:
         page_num: int,
         line_bbox: List[float],
         image_title_buffer: float = 30.0,
-        image_label_buffer: float = 50.0  # Increased buffer slightly
+        image_label_buffer: float = 50.0
     ) -> Optional[tuple[int, List[Chunk]]]:
 
         x0_line, y0_line, x1_line, y1_line = line_bbox
         close_chunks: List[Chunk] = []
 
-        # Retrieve all images on this page
-        page_images = self.doc_image_chunksmap.get(page_num, {})
-        
+        page_images = self.doc_image_chunksmap.get(page_num, {})        
         for _, img_chunk in page_images.items():
             if not img_chunk.blobs:
                 continue
@@ -281,7 +277,7 @@ class PDFChunker:
             
             x0_img, y0_img, x1_img, y1_img = img_blob.bbox
 
-            # Allow **partial** X-overlap instead of full containment
+            # Allow **partial** X-overlap
             x_overlap = not (x1_line < x0_img or x0_line > x1_img)
 
             # Title logic: Slightly above or inside
@@ -308,14 +304,11 @@ class PDFChunker:
     def sort_line_entries_with_threshold(self, line_entries: list[dict], y_threshold: float = 1.0):
         """
         Sorts line_entries by y0, but if two lines are within 'y_threshold' on y0,
-        we treat them as effectively the same 'rounded' y so that line_index decides.
+        treat them as the same 'rounded' y so that line_index decides.
         """
         def sort_key(e: dict) -> tuple[float, int]:
             raw_y = e["y0"]
             # Round or bucket the y0 to the nearest threshold
-            # e.g. if y_threshold=1.0, and y0=502.82 => 503
-            #                y0=502.09 => 502
-            # so lines within 1 point of each other become the same 'bucket'
             bucketed_y = int(raw_y / y_threshold)
             return (bucketed_y, e["line_index"])
 
@@ -328,9 +321,7 @@ class PDFChunker:
         X_GAP_THRESHOLD = 15.0
         PARA_GAP_THRESHOLD = 8.0  
         PARA_MARKER = "<PARA_BREAK>"
-        IMAGE_LABEL_BUFFER = 50  # Extended buffer below images
-        IMAGE_TITLE_BUFFER = 30  # Allow small margin above image for titles
-
+    
         data = page.get_text("dict")  
         line_entries = []
 
@@ -361,7 +352,6 @@ class PDFChunker:
                     #     print(f"  Line BBox: ({x0}, {y0}, {x1}, {y1})")
 
                     nearby_images = self._find_nearest_image_chunk(page_num, [x0, y0, x1, y1])
-                    # Assume it's "image" if we got any images back
                     if nearby_images is not None:
                         _, chunk_list = nearby_images
                         label = "image"
@@ -414,7 +404,6 @@ class PDFChunker:
 
             if i < len(line_entries) - 1:
                 next_line = line_entries[i + 1]
-                #x0_n, y0_n, x1_n, y1_n, text_n, label_n = next_line["x0"], next_line["y0"], next_line["x1"], next_line["y1"], next_line["text"], next_line["label"]
                 x0_n, y0_n, x1_n, y1_n = next_line["x0"], next_line["y0"], next_line["x1"], next_line["y1"]
                 text_n, label_n, chunks_n = next_line["text"], next_line["label"], next_line["related_chunks"]
 
@@ -469,53 +458,11 @@ class PDFChunker:
                     if current_par:
                         paragraphs.append(current_par)
                         current_par = []
-                    # optionally keep a marker here if needed (e.g., append an empty list) 
-                    # but here we simply use it to break paragraphs.
                 else:
                     current_par.append(line)
             if current_par:
                 paragraphs.append(current_par)
             return paragraphs
-
-    def split_paragraphsV1(
-        self, 
-        lines: list[tuple[str, str, list[Chunk]]]
-    ) -> list[tuple[list[str], str, list[Chunk]]]:
-        paragraphs = []
-        current_paragraph_texts = []
-        current_paragraph_label = None
-        current_paragraph_chunks = []
-
-        for text, label, related_chunks in lines:
-            if text.strip() == "<PARA_BREAK>":
-                if current_paragraph_texts:
-                    paragraphs.append(
-                        (current_paragraph_texts, current_paragraph_label, current_paragraph_chunks)
-                    )
-                    current_paragraph_texts = []
-                    current_paragraph_label = None
-                    current_paragraph_chunks = []
-            else:
-                current_paragraph_texts.append(text)
-
-                # Assign label if it's the first line, or keep 'image'/'table' if already set
-                if current_paragraph_label is None:
-                    current_paragraph_label = label
-                elif current_paragraph_label == "text" and label in {"image", "table"}:
-                    current_paragraph_label = label  # Upgrade label if encountering a more specific one
-                
-                # Merge related image/table chunks
-                for chunk in related_chunks:
-                    if chunk not in current_paragraph_chunks:
-                        current_paragraph_chunks.append(chunk)
-
-        # Add the last paragraph if there are remaining lines
-        if current_paragraph_texts:
-            paragraphs.append(
-                (current_paragraph_texts, current_paragraph_label, current_paragraph_chunks)
-            )
-
-        return paragraphs
 
     def split_paragraphs(
         self, 
@@ -527,7 +474,6 @@ class PDFChunker:
         (e.g., if 3 or more image paragraphs appear in a row, they become one merged paragraph.)
         """
 
-        # --------------------- STEP 1: Build Paragraphs ----------------------
         paragraphs = []
         current_par_texts: list[str] = []
         current_par_label: str | None = None
@@ -561,7 +507,6 @@ class PDFChunker:
                 (current_par_texts, current_par_label or "text", current_par_chunks)
             )
 
-        # --------------------- STEP 2: Merge Consecutive Non-Text Paragraphs ----------------------
         merged_paragraphs: list[tuple[list[str], str, list[Chunk]]] = []
         i = 0
         n = len(paragraphs)
@@ -570,7 +515,6 @@ class PDFChunker:
             par_texts, par_label, par_chunks = paragraphs[i]
 
             if par_label == "text":
-                # Just append and move on
                 merged_paragraphs.append((par_texts, par_label, par_chunks))
                 i += 1
             else:
@@ -582,9 +526,7 @@ class PDFChunker:
                 while j < n:
                     nxt_texts, nxt_label, nxt_chunks = paragraphs[j]
                     if nxt_label != "text":
-                        # Merge in texts
                         merged_texts.extend(nxt_texts)
-                        # Merge in chunks (deduplicate)
                         for c in nxt_chunks:
                             if c not in merged_chunks:
                                 merged_chunks.append(c)
@@ -592,49 +534,10 @@ class PDFChunker:
                     else:
                         break
                 
-                # Use the label from the first paragraph in this run (e.g. "image" or "table")
-                # If you want a priority system for multiple different non-text labels, you can implement it here.
                 final_label = par_label
-
                 merged_paragraphs.append((merged_texts, final_label, merged_chunks))
-
-                # Skip all paragraphs we merged
                 i = j
         return merged_paragraphs
-
-    def merge_single_line_headingsV0(self, paragraphs: list[list[str]]) -> list[list[str]]:
-        merged_pars: list[list[str]] = []
-        i = 0
-        while i < len(paragraphs):
-            current_par = paragraphs[i]
-            if len(current_par) == 1:
-                line = current_par[0].strip()
-                # Check if the line is a potential header candidate.
-                if line and (len(line.split()) <= 10) and (line[-1] not in ".?!"):
-                    # Candidate header found.
-                    if i + 1 < len(paragraphs):
-                        next_par = paragraphs[i + 1]
-                        # Define "large" as either having multiple lines or a single line with >10 words.
-                        if (len(next_par) > 1) or (len(next_par) == 1 and len(next_par[0].split()) > 10):
-                            # Merge: Prepend header (wrapped in [ ]) with a colon to the next paragraph.
-                            next_par[0] = f"[{line}]: " + next_par[0]
-                            merged_pars.append(next_par)
-                            i += 2  # Skip the next paragraph since it has been merged.
-                            continue
-                        else:
-                            # Not large; keep header as its own paragraph (wrapped in [ ]).
-                            merged_pars.append([f"[{line}]"])
-                            i += 1
-                            continue
-                    else:
-                        # No following paragraph exists; keep header as its own.
-                        merged_pars.append([f"[{line}]"])
-                        i += 1
-                        continue
-            # Default: add the current paragraph unchanged.
-            merged_pars.append(current_par)
-            i += 1
-        return merged_pars
 
     def merge_single_line_headings(
         self, 
@@ -680,7 +583,6 @@ class PDFChunker:
                             i += 1
                             continue
                     else:
-                        # No following paragraph, keep heading as its own
                         header_line = f"[{line}]"
                         merged_pars.append(([header_line], p_label, p_chunks))
                         i += 1
@@ -700,11 +602,9 @@ class PDFChunker:
             print(f"\n--- Paragraph {idx + 1} ---")
             print(f"Label: {label}")
 
-            # Print the paragraph text (joined for readability)
             paragraph_text = " ".join(texts)
             print(f"Text: {paragraph_text}")
 
-            # Print related chunk information
             if related_chunks:
                 print("Related Chunks:")
                 for chunk in related_chunks:
@@ -712,7 +612,7 @@ class PDFChunker:
                     chunk_type = chunk.blobs[0].blob_type if chunk.blobs else "Unknown"
                     print(f"  - Chunk ID: {chunk_id}, Type: {chunk_type}")
 
-            print("-" * 40)  # Separator for readability
+            print("-" * 40) 
         print("\n=== END DEBUG ===\n")
 
     def chunk_paragraph_by_sentence(self, paragraph_lines: list[str], max_tokens: int = 100) -> list[str]:
@@ -755,7 +655,7 @@ class PDFChunker:
             for idx, (text, label, _) in enumerate(page_lines):
                 print(f"  Raw line {idx}: '{text}' (Label: {label})")
 
-        # ------------------- MAIN LOGIC --------------------
+        # ------------------- chunk the file --------------------
         doc = fitz.open(self.file_path)
         chunks: list[Chunk] = []
         page_chunks: dict[int, Chunk] = {}
@@ -773,7 +673,6 @@ class PDFChunker:
                 print(f"\n--- 🚀 DEBUG: Page {page_num} ---")
                 print_lines_with_label(page_num, page_lines_with_labels)
 
-            # Create a parent chunk for this page
             page_chunk_id = generate_id()
             page_chunk = Chunk(
                 id=page_chunk_id,
@@ -784,56 +683,45 @@ class PDFChunker:
             page_chunks[page_num] = page_chunk
             chunks.append(page_chunk)
 
-            # 1) Save page as image (as you do in your code)
             pix = page.get_pixmap()
             page_image_path = os.path.join(self.output_dir, f"page_{page_num}.png")
             pix.save(page_image_path)
 
-            # 2) Store page_image blob
             page_image_blob = Blob(
                 blob_type="page_image",
                 start=page_num,
                 img_path=page_image_path
             )
             page_chunk.blobs.append(page_image_blob)
-            # append the page's id for the images in the page
             image_chunks = self.doc_image_chunksmap[page_num]
             for img_chunk in image_chunks.values():
                 img_chunk.parentId = page_chunk_id
                 page_chunk.children.append(img_chunk.id)
                 chunks.append(img_chunk)
 
-            # 3) Split paragraphs using the <PARA_BREAK> markers.
-            # paragraphs = split_paragraphs(page_lines)
+            # paragraphs using the <PARA_BREAK> markers.
             paragraphs= self.split_paragraphs(page_lines_with_labels)
             if self.debug:
                 print(f"\n--- 🚀 DEBUG: Page {page_num} paragraphs ---")
                 self.debug_print_paragraphs(paragraphs)
             
-            # all_paragraph_texts = [texts for texts, _, _ in paragraphs]
-
-            # 4) Possibly merge single-line headings with a following large paragraph.
             all_paragraph_texts = self.merge_single_line_headings(paragraphs)
 
-            # 5) For each paragraph, chunk by sentences (or any logic)
             para_id = 0
             for (para_lines, para_label, para_chunks) in all_paragraph_texts:
                 if para_label == "text":
-                    # 1) TEXT paragraphs => split into sentence chunks
+                    # split into sentence chunks
                     splitted_chunks = self.chunk_paragraph_by_sentence(para_lines, max_tokens=200)
                     for chunk_text in splitted_chunks:
                         #print the chunk text
                         if self.debug:
                             print(f"  Chunk text: {chunk_text}")
                         para_chunk_id = generate_id()
-
-                        # Build a text blob
                         para_blob = Blob(
                             blob_type="text",
                             content=chunk_text,          # single string
                             start=page_num,
                             para_id=para_id,
-                            # For text paragraphs, no image_chunk_ref needed
                             image_chunk_ref=None 
                         )
                         para_chunk = Chunk(
@@ -847,19 +735,15 @@ class PDFChunker:
                         chunks.append(para_chunk)
                         para_id += 1
                 else:
-                    # 2) NON-TEXT paragraphs => keep para_lines as a list in the blob
+                    # non text paragraphs
                     para_chunk_id = generate_id()
-
-                    # If you want to reference the chunk IDs from 'para_chunks', collect them here:
                     chunk_ids = [c.id for c in para_chunks]
 
-                    # Build a blob with the entire 'para_lines' array
                     para_blob = Blob(
-                        blob_type=para_label+"_label",         # e.g., "image", "table", etc.
-                        content=para_lines,          # store the lines as a list
+                        blob_type=para_label+"_label",
+                        content=para_lines,
                         start=page_num,
                         para_id=para_id,
-                        # Add the chunk references from this paragraph
                         image_chunk_ref=chunk_ids
                     )
 
@@ -1033,10 +917,6 @@ class PDFChunker:
             doc_chunks, page_chunks = self.extract_document_chunks()
             if self.debug:
                 self.debug_print_lines(doc_chunks)
-            
-            #table_chunks = self.extract_tables(pdf, page_chunks=page_chunks)
-            #image_chunks = self.extract_image_chunks(page_chunks)
-        #all_chunks = text_chunks + image_chunks
         all_chunks = doc_chunks
         return all_chunks
 
@@ -1112,11 +992,6 @@ def main():
 
         except IOError as err:
             items.append(ErrorItem(str(err), filename))
-
-    # Save a summary JSON file in the output folder
-    summary_json_path = os.path.join(output_folder, "summary.json")
-    with open(summary_json_path, "w", encoding="utf-8") as f:
-        json.dump(items, f, default=custom_json, indent=2)
 
     print(json.dumps(items, default=custom_json, indent=2))
     return 0
