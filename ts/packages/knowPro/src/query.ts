@@ -608,7 +608,7 @@ export class MatchSearchTermExpr extends MatchTermExpr {
                 // If this related term had not already matched as a related term for some other term
                 // Minimize over counting
                 const semanticRefs = this.lookupTerm(context, relatedTerm);
-                // This will only consider semantic refs that have not already matched. In other words, if a semantic
+                // This will only consider semantic refs that have not already matched this expression. In other words, if a semantic
                 // ref already matched due to the term 'novel', don't also match it because it matched the related term 'book'
                 matches.addTermMatchesIfNew(
                     term,
@@ -718,6 +718,8 @@ export class MatchPropertySearchTermExpr extends MatchTermExpr {
                 context.matchedPropertyTerms.add(propertyName, propertyValue);
             }
         } else {
+            // To prevent over-counting, ensure this relatedPropValue was not already used to match
+            // terms earlier
             if (
                 !context.matchedPropertyTerms.has(propertyName, relatedPropVal)
             ) {
@@ -726,7 +728,9 @@ export class MatchPropertySearchTermExpr extends MatchTermExpr {
                     propertyName,
                     relatedPropVal.text,
                 );
-                matches.addTermMatches(
+                // This will only consider semantic refs that were not already matched by this expression.
+                // In other words, if a semantic ref already matched due to the term 'novel', don't also match it because it matched the related term 'book'
+                matches.addTermMatchesIfNew(
                     propertyValue,
                     semanticRefs,
                     false,
