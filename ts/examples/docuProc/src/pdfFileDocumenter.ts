@@ -3,11 +3,11 @@
 
 import { ChatModel } from "aiclient";
 import { loadSchema } from "typeagent";
-import { createJsonTranslator, TypeChatJsonTranslator } from "typechat";
+import { createJsonTranslator, PromptSection, MultimodalPromptContent, TypeChatJsonTranslator } from "typechat";
 import { createTypeScriptJsonValidator } from "typechat/ts";
 
 import { PdfFileDocumentation } from "./pdfDocChunkSchema.js";
-import { Chunk } from "./pdfChunker.js";
+import { Blob, Chunk } from "./pdfChunker.js";
 import fs from "fs";
 
 export interface PdfFileDocumenter {
@@ -16,9 +16,33 @@ export interface PdfFileDocumenter {
 
 export function createPdfDocumenter(model: ChatModel): PdfFileDocumenter {
     const pdfDocTranslator = createPdfFileDocTranslator(model);
+    const base64ImageCache: Record<string, string> = {};
+
     return {
         document,
     };
+
+    async function getImagePromptSection(imgChunkId: string, imgBlob : Blob): Promise<MultimodalPromptContent[]> {
+        const content: MultimodalPromptContent[] = [];
+        if (imgBlob && imgBlob.img_path) {
+            const base64 = getBase64IfNeeded(
+                imgBlob.img_path,
+            );
+            content.push({
+                type: "text",
+                text: `Base64 encoded Image imgBlob.img_name:\n`,
+            });
+            content.push({
+                type: "image_url",
+                image_url: {
+                    url: base64,
+                    detail: "high",
+                },
+            });
+
+        }
+        return content;
+    }
 
     function convertImageToBase64(imagePath: string): string {
         try {
@@ -30,63 +54,82 @@ export function createPdfDocumenter(model: ChatModel): PdfFileDocumenter {
         }
     }
 
-    async function document(chunks: Chunk[]): Promise<PdfFileDocumentation> {
-        const base64ImageCache: Record<string, string> = {};
-        function getBase64IfNeeded(imagePath: string): string {
-            if (base64ImageCache[imagePath]) {
-                return base64ImageCache[imagePath];
-            }
-            const base64 = convertImageToBase64(imagePath);
-            base64ImageCache[imagePath] = base64;
-            return base64;
+    function getBase64IfNeeded(imagePath: string): string {
+        if (base64ImageCache[imagePath]) {
+            return base64ImageCache[imagePath];
         }
+        const base64 = convertImageToBase64(imagePath);
+        base64ImageCache[imagePath] = base64;
+        return base64;
+    }
 
+    async function document(chunks: Chunk[]): Promise<PdfFileDocumentation> {
         // Organize chunks by page
         const pageChunksMap: Record<
             string,
-            { pageChunk: Chunk; blocks: Chunk[] }
+            { pageChunk: Chunk; chunks: Chunk[] }
         > = {};
+
         for (const chunk of chunks) {
             if (!chunk.parentId) {
-                pageChunksMap[chunk.pageid] = { pageChunk: chunk, blocks: [] };
+                pageChunksMap[chunk.pageid] = { pageChunk: chunk, chunks: [] };
             }
         }
-
         // Associate child chunks with pages
         for (const chunk of chunks) {
             if (chunk.parentId && pageChunksMap[chunk.pageid]) {
-                pageChunksMap[chunk.pageid].blocks.push(chunk);
+                pageChunksMap[chunk.pageid].chunks.push(chunk);
             }
         }
 
         let maxPagesToProcess = 3;
-
         // Process each page
         let pageCount = 0;
         for (const pageid in pageChunksMap) {
+            let content:MultimodalPromptContent[] = [];
             pageCount++;
-            const { pageChunk, blocks } = pageChunksMap[pageid];
+            const { pageChunk, chunks } = pageChunksMap[pageid];
 
             // Build the prompt text for this page
-            let text = `***: Document Page (Id: ${pageChunk.id}, Page: ${pageChunk.pageid}):\n`;
-
+            content.push({
+                type: "text",
+                text: `***: Document Page (Id: ${pageChunk.id}, Page: ${pageChunk.pageid}):\n`,
+            });
+            
             // For each block/child chunk
-            for (const block of blocks) {
-                const blockIdentifier = `Chunk Id: ${block.id}, Page: ${block.pageid}`;
-
-                // Check each blob
-                for (const blob of block.blobs) {
+            for (const chunk of chunks) {
+                const chunkIdentifier = chunk.id;
+                for (const blob of chunk.blobs) {
                     if (blob.blob_type === "text") {
                         // Text processing
-                        text += `Text Content (${blockIdentifier}):\n`;
-                        text += `[Start:${blob.start + 1}]: ${blob.content}\n`;
+                        content.push({
+                            type: "text",
+                            text: `Summarize text of chunk id:(${chunkIdentifier})\n` + `${blob.content}`,
+                        });
                     } else if (blob.blob_type === "image_label") {
-                        // Image label logic
-                        text += `Image Label (${blockIdentifier}):\n`;
-                        text += `Label: ${blob.content}\n`;
+                        content.push({
+                            type: "text",
+                            text: `Summarize image and labels content for Chunk Id: ${chunk.id}, Page: ${chunk.pageid}\n`,
+                        });
 
-                        // If references images, embed them
+                        let chunk_labels = "";
+                        if (Array.isArray(blob.content)) {
+                            chunk_labels += `Label: ${blob.content.join("\n")}\n`; // Join array elements with newlines
+                        } else {
+                            chunk_labels += `Label: ${blob.content}\n`; // Directly append if it's a string
+                        }
+
+                        content.push({
+                            type: "text",
+                            text: `Associated labels of chunk id:(${chunkIdentifier})\n` + `${chunk_labels}`,
+                        });
+                        
+                        // Embed the images references in the prompt
                         if (blob.image_chunk_ref) {
+                            content.push({
+                                type: "text",
+                                text: `Summarize images of chunk id:(${chunkIdentifier})\n`,
+                            });
                             for (const imgChunkId of blob.image_chunk_ref) {
                                 const imgChunk = chunks.find(
                                     (ch) => ch.id === imgChunkId,
@@ -98,21 +141,24 @@ export function createPdfDocumenter(model: ChatModel): PdfFileDocumenter {
                                             b.blob_type === "image" &&
                                             b.img_path,
                                     );
-                                    if (imageBlob && imageBlob.img_path) {
-                                        // Check cache
-                                        const base64 = getBase64IfNeeded(
-                                            imageBlob.img_path,
+                                    if (imageBlob) {
+                                        const imagePromptSection = await getImagePromptSection(
+                                            imgChunkId,
+                                            imageBlob,
                                         );
-                                        text += `Associated Image (Chunk ${imgChunkId}): ${base64}\n`;
+                                        content.push(...imagePromptSection);
                                     }
                                 }
                             }
                         }
                     } else if (blob.blob_type === "image" && blob.img_path) {
-                        // Image chunk that might not be referenced by an image_label
-                        text += `Image (${blockIdentifier}):\n`;
-                        const base64 = getBase64IfNeeded(blob.img_path);
-                        text += `Base64 encoded image: ${base64}\n`;
+                        content.push({
+                            type: "text",
+                            text: `Summarize the image contents of chunk id:(${chunkIdentifier})\n`,
+                        });
+                        getImagePromptSection(chunkIdentifier, blob).then((imagePromptSection) => {
+                            content.push(...imagePromptSection);
+                        });
                     }
                 }
             }
@@ -125,13 +171,17 @@ export function createPdfDocumenter(model: ChatModel): PdfFileDocumenter {
                 Also fill in lists: keywords, tags, synonyms, and dependencies.
             `;
 
-            // Send to LLM
-            const result = await pdfDocTranslator.translate(request, text);
+            let promptSections: PromptSection[] = 
+                            [
+                                { role: "user", content: content }
+                            ];
+    
+            const result = await pdfDocTranslator.translate(request, promptSections);
             if (result.success) {
                 const fileDocs: PdfFileDocumentation = result.data;
                 const chunkDocs = fileDocs.chunkDocs ?? [];
 
-                const pageAndBlocks = [pageChunk, ...blocks];
+                const pageAndBlocks = [pageChunk, ...chunks];
 
                 let iDoc = 0;
                 for (const c of pageAndBlocks) {
