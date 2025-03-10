@@ -3,7 +3,6 @@
 
 import {
     IConversation,
-    IKnowledgeSource,
     IMessage,
     IndexingResults,
     ITermToSemanticRefIndex,
@@ -49,7 +48,7 @@ export function addMetadataToIndex(
     knowledgeValidator ??= defaultKnowledgeValidator;
     for (let i = 0; i < messages.length; i++) {
         const msg = messages[i];
-        const knowledgeResponse = msg.metadata.getKnowledge();
+        const knowledgeResponse = msg.getKnowledge();
         if (semanticRefIndex !== undefined) {
             for (const entity of knowledgeResponse.entities) {
                 if (knowledgeValidator("entity", entity)) {
@@ -61,7 +60,8 @@ export function addMetadataToIndex(
                     addActionToIndex(action, semanticRefs, semanticRefIndex, i);
                 }
             }
-            for (const topic of knowledgeResponse.topics) {
+            for (const topicResponse of knowledgeResponse.topics) {
+                const topic: Topic = { text: topicResponse };
                 if (knowledgeValidator("topic", topic)) {
                     addTopicToIndex(topic, semanticRefs, semanticRefIndex, i);
                 }
@@ -199,8 +199,8 @@ export function addKnowledgeToIndex(
     }
 }
 
-export async function buildSemanticRefIndex<TMeta extends IKnowledgeSource>(
-    conversation: IConversation<TMeta>,
+export async function buildSemanticRefIndex(
+    conversation: IConversation,
     extractor?: kpLib.KnowledgeExtractor,
     eventHandler?: IndexingEventHandlers,
 ): Promise<IndexingResults> {
@@ -248,9 +248,9 @@ export async function buildSemanticRefIndex<TMeta extends IKnowledgeSource>(
     return indexingResult;
 }
 
-export function addToConversationIndex<TMeta extends IKnowledgeSource>(
-    conversation: IConversation<TMeta>,
-    messages: IMessage<TMeta>[],
+export function addToConversationIndex(
+    conversation: IConversation,
+    messages: IMessage[],
     knowledgeResponses: kpLib.KnowledgeResponse[],
 ): void {
     if (conversation.semanticRefIndex === undefined) {

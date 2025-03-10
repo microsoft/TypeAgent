@@ -24,6 +24,7 @@ import {
     MessageTextIndexSettings,
     MessageTextIndex,
     ListIndexingResult,
+    IMessageMetadata,
 } from "knowpro";
 import { conversation as kpLib, split } from "knowledge-processor";
 import { collections, dateTime, getFileName, readAllText } from "typeagent";
@@ -75,7 +76,7 @@ export class PodcastMessageMeta implements IKnowledgeSource {
 }
 
 function assignMessageListeners(
-    msgs: IMessage<PodcastMessageMeta>[],
+    msgs: PodcastMessage[],
     participants: Set<string>,
 ) {
     for (const msg of msgs) {
@@ -91,13 +92,19 @@ function assignMessageListeners(
     }
 }
 
-export class PodcastMessage implements IMessage<PodcastMessageMeta> {
+export class PodcastMessage
+    implements IMessage, IMessageMetadata<PodcastMessageMeta>
+{
     constructor(
         public textChunks: string[],
         public metadata: PodcastMessageMeta,
         public tags: string[] = [],
         public timestamp: string | undefined = undefined,
     ) {}
+
+    getKnowledge(): kpLib.KnowledgeResponse {
+        return this.metadata.getKnowledge();
+    }
 
     addTimestamp(timestamp: string) {
         this.timestamp = timestamp;
@@ -107,7 +114,7 @@ export class PodcastMessage implements IMessage<PodcastMessageMeta> {
     }
 }
 
-export class Podcast implements IConversation<PodcastMessageMeta> {
+export class Podcast implements IConversation<PodcastMessage> {
     public settings: ConversationSettings;
     public semanticRefIndex: ConversationIndex;
     public secondaryIndexes: PodcastSecondaryIndexes;

@@ -23,8 +23,12 @@ export class KnowProPrinter extends ChatPrinter {
         return this;
     }
 
-    public writeMetadata(metadata: any): KnowProPrinter {
-        this.write("Metadata: ").writeJson(metadata);
+    public writeMetadata(message: kp.IMessage): KnowProPrinter {
+        const msgMetadata: kp.IMessageMetadata =
+            message as any as kp.IMessageMetadata;
+        if (msgMetadata) {
+            this.write("Metadata: ").writeJson(msgMetadata.metadata);
+        }
         return this;
     }
 
@@ -33,7 +37,7 @@ export class KnowProPrinter extends ChatPrinter {
         try {
             this.writeNameValue("Timestamp", message.timestamp);
             this.writeList(message.tags, { type: "csv", title: "Tags" });
-            this.writeMetadata(message.metadata);
+            this.writeMetadata(message);
         } finally {
             this.setForeColor(prevColor);
         }

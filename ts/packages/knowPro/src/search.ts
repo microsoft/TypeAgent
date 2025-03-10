@@ -14,7 +14,6 @@ import {
     ScoredMessageIndex,
 } from "./interfaces.js";
 import { mergedEntities, mergeTopics } from "./knowledge.js";
-import { isKnownProperty, PropertyNames } from "./propertyIndex.js";
 import * as q from "./query.js";
 import { IQueryOpExpr } from "./query.js";
 import { resolveRelatedTerms } from "./relatedTermsIndex.js";
@@ -371,20 +370,6 @@ class SearchQueryBuilder {
         return predicates;
     }
 
-    /*
-    private compilePropertyMatchPredicates(
-        propertyTerms: PropertySearchTerm[],
-    ) {
-        return propertyTerms.map((p) => {
-            if (typeof p.propertyName !== "string") {
-                this.allPredicateSearchTerms.push(p.propertyName);
-            }
-            this.allPredicateSearchTerms.push(p.propertyValue);
-            return new q.PropertyMatchPredicate(p);
-        });
-    }
-    */
-
     private getActionTermsFromSearchGroup(
         searchGroup: SearchTermGroup,
     ): SearchTermGroup | undefined {
@@ -412,13 +397,14 @@ class SearchQueryBuilder {
                 this.secondaryIndexes.termToRelatedTermsIndex,
                 searchTerms,
                 dedupe,
-                (term) => this.shouldFuzzyMatchRelatedTerms(term, filter),
+                //(term) => this.shouldFuzzyMatchRelatedTerms(term, filter),
             );
             // Ensure that the resolved terms are valid etc.
             this.validateAndPrepareSearchTerms(searchTerms);
         }
     }
 
+    /*
     private shouldFuzzyMatchRelatedTerms(
         term: SearchTerm,
         filter?: WhenFilter,
@@ -434,6 +420,7 @@ class SearchQueryBuilder {
             term.term.text,
         );
     }
+    */
 
     private validateAndPrepareSearchTerms(searchTerms: SearchTerm[]): void {
         for (const searchTerm of searchTerms) {

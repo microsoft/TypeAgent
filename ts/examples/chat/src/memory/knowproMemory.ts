@@ -463,6 +463,7 @@ export async function createKnowproCommands(
                 maxToDisplay: argNum("Maximum matches to display", 25),
                 exact: argBool("Exact match only. No related terms", false),
                 ktype: arg("Knowledge type"),
+                distinct: argBool("Show distinct results", false),
             },
         };
     }
@@ -501,6 +502,7 @@ export async function createKnowproCommands(
                     context.conversation!,
                     searchResults,
                     namedArgs.maxToDisplay,
+                    namedArgs.distinct,
                 );
             } else {
                 context.printer.writeLine("No matches");
@@ -547,6 +549,7 @@ export async function createKnowproCommands(
                     context.conversation!,
                     searchResults.knowledgeMatches,
                     namedArgs.maxToDisplay,
+                    namedArgs.distinct,
                 );
             }
             if (namedArgs.showMessages) {
