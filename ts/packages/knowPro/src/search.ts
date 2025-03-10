@@ -404,6 +404,7 @@ class SearchQueryBuilder {
     private async resolveRelatedTerms(
         searchTerms: SearchTerm[],
         dedupe: boolean,
+        filter?: WhenFilter,
     ) {
         this.validateAndPrepareSearchTerms(searchTerms);
         if (this.secondaryIndexes?.termToRelatedTermsIndex) {
@@ -411,14 +412,21 @@ class SearchQueryBuilder {
                 this.secondaryIndexes.termToRelatedTermsIndex,
                 searchTerms,
                 dedupe,
-                (term) => this.shouldFuzzyMatchRelatedTerms(term),
+                (term) => this.shouldFuzzyMatchRelatedTerms(term, filter),
             );
             // Ensure that the resolved terms are valid etc.
             this.validateAndPrepareSearchTerms(searchTerms);
         }
     }
 
-    private shouldFuzzyMatchRelatedTerms(term: SearchTerm): boolean {
+    private shouldFuzzyMatchRelatedTerms(
+        term: SearchTerm,
+        filter?: WhenFilter,
+    ): boolean {
+        const kType = filter?.knowledgeType;
+        if (kType && kType !== "entity") {
+            return true;
+        }
         // If the term exactly matches a know property name, don't do fuzzy resolution
         return !isKnownProperty(
             this.secondaryIndexes?.propertyToSemanticRefIndex,
