@@ -171,12 +171,12 @@ class TimestampedTextRange(Protocol):
 # Return text ranges in the given date range.
 @runtime_checkable
 class ITimestampToTextRangeIndex(Protocol):
-    def add_timestamp(self, message_index: MessageIndex, timestamp: str) -> None:
+    def add_timestamp(self, message_index: MessageIndex, timestamp: str) -> bool:
         raise NotImplementedError
 
     def add_timestamps(
         self, message_imestamps: Sequence[tuple[MessageIndex, str]]
-    ) -> bool:
+    ) -> None:
         raise NotImplementedError
 
     def lookup_range(self, date_range: DateRange) -> Sequence[TimestampedTextRange]:
@@ -262,9 +262,9 @@ class IConversationThreads(Protocol):
 class IConversationSecondaryIndexes(Protocol):
     property_to_semantic_ref_index: IPropertyToSemanticRefIndex | None
     timestamp_index: ITimestampToTextRangeIndex | None
-    terms_to_related_terms_index: ITermToRelatedTermsIndex | None
+    term_to_related_terms_index: ITermToRelatedTermsIndex | None
     threads: IConversationThreads | None
-    messageIndex: "IMessageTextIndex | None" = None
+    message_index: "IMessageTextIndex | None" = None
 
 
 @runtime_checkable
@@ -338,7 +338,7 @@ class IConversationData[TMessage = Any](Protocol):
 
 @runtime_checkable
 class IndexingEventHandlers(Protocol):
-    on_knowledge_xtracted: (
+    on_knowledge_extracted: (
         Callable[
             [
                 TextLocation,  # chunk
