@@ -460,7 +460,10 @@ export class MatchTermsOrExpr extends MatchTermsBooleanExpr {
         super.beginMatch(context);
         const allMatches = new SemanticRefAccumulator();
         for (const matchExpr of this.termExpressions) {
-            matchExpr.accumulateMatches(context, allMatches);
+            const termMatches = matchExpr.eval(context);
+            if (termMatches && termMatches.size > 0) {
+                allMatches.addUnion(termMatches);
+            }
         }
         allMatches.calculateTotalScore();
         return allMatches;
@@ -524,7 +527,7 @@ export class MatchTermExpr extends QueryOpExpr<
         return undefined;
     }
 
-    public accumulateMatches(
+    protected accumulateMatches(
         context: QueryEvalContext,
         matches: SemanticRefAccumulator,
     ) {
