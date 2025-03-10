@@ -171,12 +171,12 @@ class TimestampedTextRange(Protocol):
 # Return text ranges in the given date range.
 @runtime_checkable
 class ITimestampToTextRangeIndex(Protocol):
-    def add_timestamp(self, message_index: MessageIndex, timestamp: str) -> None:
+    def add_timestamp(self, message_index: MessageIndex, timestamp: str) -> bool:
         raise NotImplementedError
 
     def add_timestamps(
         self, message_imestamps: Sequence[tuple[MessageIndex, str]]
-    ) -> bool:
+    ) -> None:
         raise NotImplementedError
 
     def lookup_range(self, date_range: DateRange) -> Sequence[TimestampedTextRange]:
@@ -193,7 +193,7 @@ class ITermToRelatedTerms(Protocol):
 class ITermToRelatedTermsFuzzy(Protocol):
     async def add_terms(
         self, terms: Sequence[str], event_handler: "IndexingEventHandlers | None" = None
-    ) -> None:
+    ) -> "ListIndexingResult":
         raise NotImplementedError
 
     async def lookup_term(
@@ -262,8 +262,9 @@ class IConversationThreads(Protocol):
 class IConversationSecondaryIndexes(Protocol):
     property_to_semantic_ref_index: IPropertyToSemanticRefIndex | None
     timestamp_index: ITimestampToTextRangeIndex | None
-    terms_to_related_terms_index: ITermToRelatedTermsIndex | None
+    term_to_related_terms_index: ITermToRelatedTermsIndex | None
     threads: IConversationThreads | None
+    message_index: "IMessageTextIndex | None" = None
 
 
 @runtime_checkable
@@ -274,6 +275,34 @@ class IConversation[TMessage: IMessage = Any](Protocol):
     semantic_refs: list[SemanticRef] | None
     semantic_ref_index: ITermToSemanticRefIndex | None
     secondary_indexes: IConversationSecondaryIndexes | None
+
+
+@runtime_checkable
+class IMessageTextIndex(Protocol):
+
+    async def add_messages(
+        self,
+        messages: list[IMessage],
+        event_handler: "IndexingEventHandlers | None" = None,
+    ) -> "ListIndexingResult":
+        raise NotImplementedError
+
+    async def lookup_messages(
+        self,
+        message_text: str,
+        max_matches: int | None = None,
+        threshold_score: float | None = None,
+    ) -> list[ScoredMessageIndex]:
+        raise NotImplementedError
+
+    async def lookup_messages_in_subset(
+        self,
+        message_text: str,
+        indices_to_search: list[MessageIndex],
+        max_matches: int | None = None,
+        threshold_score: float | None = None,
+    ) -> list[ScoredMessageIndex]:
+        raise NotImplementedError
 
 
 # ------------------------
@@ -309,7 +338,7 @@ class IConversationData[TMessage = Any](Protocol):
 
 @runtime_checkable
 class IndexingEventHandlers(Protocol):
-    on_knowledge_xtracted: (
+    on_knowledge_extracted: (
         Callable[
             [
                 TextLocation,  # chunk
@@ -335,4 +364,10 @@ class IndexingEventHandlers(Protocol):
 @runtime_checkable
 class IndexingResults(Protocol):
     chunks_indexed_upto: TextLocation | None = None
+    error: str | None = None
+
+
+@runtime_checkable
+class ListIndexingResult(Protocol):
+    number_completed: int
     error: str | None = None
