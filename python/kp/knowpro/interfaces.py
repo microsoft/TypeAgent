@@ -264,6 +264,7 @@ class IConversationSecondaryIndexes(Protocol):
     timestamp_index: ITimestampToTextRangeIndex | None
     terms_to_related_terms_index: ITermToRelatedTermsIndex | None
     threads: IConversationThreads | None
+    messageIndex: "IMessageTextIndex | None" = None
 
 
 @runtime_checkable
@@ -274,6 +275,34 @@ class IConversation[TMessage: IMessage = Any](Protocol):
     semantic_refs: list[SemanticRef] | None
     semantic_ref_index: ITermToSemanticRefIndex | None
     secondary_indexes: IConversationSecondaryIndexes | None
+
+
+@runtime_checkable
+class IMessageTextIndex(Protocol):
+
+    async def add_messages(
+        self,
+        messages: list[IMessage],
+        event_handler: "IndexingEventHandlers | None" = None,
+    ) -> "ListIndexingResult":
+        raise NotImplementedError
+
+    async def lookup_messages(
+        self,
+        message_text: str,
+        max_matches: int | None = None,
+        threshold_score: float | None = None,
+    ) -> list[ScoredMessageIndex]:
+        raise NotImplementedError
+
+    async def lookup_messages_in_subset(
+        self,
+        message_text: str,
+        indices_to_search: list[MessageIndex],
+        max_matches: int | None = None,
+        threshold_score: float | None = None,
+    ) -> list[ScoredMessageIndex]:
+        raise NotImplementedError
 
 
 # ------------------------
