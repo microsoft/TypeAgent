@@ -148,28 +148,6 @@ export function printAllCommandsWithUsage(
         );
         displayResult("\n", context);
     }
-
-    // Object.keys(table.commands).map((cmd) => {
-    //     const cmdTable: CommandDescriptorTable = table.commands[
-    //         cmd
-    //     ] as CommandDescriptorTable;
-    //     const cmdHandler: CommandDescriptor = table.commands[
-    //         cmd
-    //     ] as CommandDescriptor;
-    //     if (cmdTable.commands !== undefined) {
-    //         printAllCommandsWithUsage(cmdTable, cmd, context);
-    //     } else if (cmdHandler !== undefined) {
-    //         if (command === undefined) {
-    //             displayResult(getUsage(cmd, cmdHandler), context);
-    //         } else {
-    //             displayResult(
-    //                 getUsage(`${command} ${cmd}`, cmdHandler),
-    //                 context,
-    //             );
-    //         }
-    //         displayResult("\n", context);
-    //     }
-    // });
 }
 
 export function printStructuredHandlerTableUsage(
