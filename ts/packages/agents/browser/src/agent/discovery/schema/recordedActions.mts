@@ -32,7 +32,7 @@ export type UserIntentParameter = {
 
 export type UserIntent = {
     // a concise name for the action, in camelCase
-    actiontName: string;
+    actionName: string;
     // a consise list of the parameters that should be captured from the user in order to implenent this action
     parameters: UserIntentParameter[];
 };
@@ -49,7 +49,7 @@ export type WebPlan = {
 export type SelectElementByText = {
     actionName: "selectElementByText";
     parameters: {
-        // the shortName of the UserIntentParameter to use for this value
+        // IMPORTANT: the shortName of the UserIntentParameter to use for this value
         text: string;
         elementType?: string;
     };
@@ -58,7 +58,17 @@ export type SelectElementByText = {
 export type EnterText = {
     actionName: "enterText";
     parameters: {
-        // the shortName of the UserIntentParameter to use for this value
+        // IMPORTANT: the shortName of the UserIntentParameter to use for this value
+        textParameter: string;
+    };
+};
+
+// This is used on pages where the user can type anywhere in the document body
+// and the page captures input
+export type EnterTextAtPageScope = {
+    actionName: "EnterTextAtPageScope";
+    parameters: {
+        // IMPORTANT: the shortName of the UserIntentParameter to use for this value
         textParameter: string;
     };
 };
@@ -66,7 +76,7 @@ export type EnterText = {
 export type SelectValueFromDropdown = {
     actionName: "selectValueFromDropdown";
     parameters: {
-        // the shortName of the UserIntentParameter to use for this value
+        // IMPORTANT: the shortName of the UserIntentParameter to use for this value
         valueTextParameter: string;
     };
 };
@@ -74,8 +84,16 @@ export type SelectValueFromDropdown = {
 export type ClickOnButton = {
     actionName: "clickOnButton";
     parameters: {
-        // the shortName of the UserIntentParameter to use for this value
-        buttonTextParameter: string;
+        // the displayed text of the button to click on
+        buttonText: string;
+    };
+};
+
+export type ClickOnElement = {
+    actionName: "clickOnElement";
+    parameters: {
+        // the displayed text of the element to click on
+        elementText: string;
     };
 };
 
@@ -92,6 +110,7 @@ export type PageManipulationActions =
     | EnterText
     | SelectValueFromDropdown
     | ClickOnButton
+    | ClickOnElement
     | ClickOnLink;
 
 export type PageManipulationActionsList = {

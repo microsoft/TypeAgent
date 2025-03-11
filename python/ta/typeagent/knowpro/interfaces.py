@@ -3,6 +3,7 @@
 
 # TODO:
 # - See TODOs in kplib.py.
+# - Do the Protocol classes need to be @runtime_checkable?
 #
 # NOTE:
 # - I took some liberty with index types and made them int.
@@ -10,7 +11,8 @@
 # - I translated readonly to @property.
 
 from collections.abc import Sequence
-from datetime import datetime as Date
+from dataclasses import dataclass, field
+from datetime import datetime as Datetime
 from typing import Any, Callable, Literal, Protocol, runtime_checkable
 
 from . import kplib
@@ -23,8 +25,8 @@ class IKnowledgeSource(Protocol):
         raise NotImplementedError
 
 
-@runtime_checkable
-class DeletionInfo(Protocol):
+@dataclass
+class DeletionInfo:
     timestamp: str
     reason: str | None = None
 
@@ -33,110 +35,107 @@ type MessageIndex = int
 
 
 @runtime_checkable
-class IMessage[TMeta: IKnowledgeSource = Any](Protocol):
+class IMessage(IKnowledgeSource, Protocol):
     # The text of the message, split into chunks.
-    text_chunks: Sequence[str]
-    # For example, e-mail has subject, from and to fields;
-    # a chat message has a sender and a recipient.
-    metadata: TMeta
+    text_chunks: list[str]
     timestamp: str | None = None
-    tags: Sequence[str]
+    tags: list[str]
     deletion_info: DeletionInfo | None = None
 
 
 type SemanticRefIndex = int
 
 
-@runtime_checkable
-class ScoredSemanticRef(Protocol):
+@dataclass
+class ScoredSemanticRef:
     semantic_ref_index: SemanticRefIndex
     score: float
 
 
-@runtime_checkable
-class ScoredMessageIndex(Protocol):
+@dataclass
+class ScoredMessageIndex:
     message_index: MessageIndex
     score: float
 
 
 @runtime_checkable
 class ITermToSemanticRefIndex(Protocol):
-    def getTerms(self) -> Sequence[str]:
+    def get_terms(self) -> Sequence[str]:
         raise NotImplementedError
 
-    def addTerm(
+    def add_term(
         self,
         term: str,
         semantic_ref_index: SemanticRefIndex | ScoredSemanticRef,
     ) -> None:
         raise NotImplementedError
 
-    def removeTerm(self, term: str, semantic_ref_index: SemanticRefIndex) -> None:
+    def remove_term(self, term: str, semantic_ref_index: SemanticRefIndex) -> None:
         raise NotImplementedError
 
-    def lookupTerm(self, term: str) -> Sequence[ScoredSemanticRef] | None:
+    def lookup_term(self, term: str) -> Sequence[ScoredSemanticRef] | None:
         raise NotImplementedError
 
 
 type KnowledgeType = Literal["entity", "action", "topic", "tag"]
 
 
-@runtime_checkable
-class Topic(Protocol):
+@dataclass
+class Topic:
     text: str
 
 
-@runtime_checkable
-class Tag(Protocol):
+@dataclass
+class Tag:
     text: str
 
 
 type Knowledge = kplib.ConcreteEntity | kplib.Action | Topic | Tag
 
 
-@runtime_checkable
-class TextLocation(Protocol):
+@dataclass
+class TextLocation:
     # The index of the message.
     message_index: MessageIndex
     # The index of the chunk.
-    chunkIndex: int | None
+    chunk_index: int = 0
     # The index of the character within the chunk.
-    charIndex: int | None
+    char_index: int = 0
 
 
 # A text range within a session.
-@runtime_checkable
-class TextRange(Protocol):
+@dataclass
+class TextRange:
     # The start of the range.
     start: TextLocation
     # The end of the range (exclusive).
-    end: TextLocation | None
+    end: TextLocation | None = None
 
 
-@runtime_checkable
-class SemanticRef(Protocol):
+@dataclass
+class SemanticRef:
     semantic_ref_index: SemanticRefIndex
     range: TextRange
     knowledge_type: KnowledgeType
     knowledge: Knowledge
 
 
-@runtime_checkable
-class DateRange(Protocol):
-    start: Date
-    # Inclusive.
-    end: Date | None
+@dataclass
+class DateRange:
+    start: Datetime
+    # Inclusive.  # TODO: Really? Shouldn't this be exclusive?
+    end: Datetime | None = None
 
 
-@runtime_checkable
-class Term(Protocol):
+@dataclass
+class Term:
     text: str
     # Optional weighting for these matches.
-    weight: float | None
+    weight: float | None = None
 
 
-@runtime_checkable
-class ScoredKnowledge(Protocol):
+@dataclass
+class ScoredKnowledge:
     knowledge_type: KnowledgeType
     knowledge: Knowledge
     score: float
@@ -162,8 +161,8 @@ class IPropertyToSemanticRefIndex(Protocol):
         raise NotImplementedError
 
 
-@runtime_checkable
-class TimestampedTextRange(Protocol):
+@dataclass
+class TimestampedTextRange:
     timestamp: str
     range: TextRange
 
@@ -171,12 +170,12 @@ class TimestampedTextRange(Protocol):
 # Return text ranges in the given date range.
 @runtime_checkable
 class ITimestampToTextRangeIndex(Protocol):
-    def add_timestamp(self, message_index: MessageIndex, timestamp: str) -> None:
+    def add_timestamp(self, message_index: MessageIndex, timestamp: str) -> bool:
         raise NotImplementedError
 
     def add_timestamps(
         self, message_imestamps: Sequence[tuple[MessageIndex, str]]
-    ) -> bool:
+    ) -> None:
         raise NotImplementedError
 
     def lookup_range(self, date_range: DateRange) -> Sequence[TimestampedTextRange]:
@@ -193,7 +192,7 @@ class ITermToRelatedTerms(Protocol):
 class ITermToRelatedTermsFuzzy(Protocol):
     async def add_terms(
         self, terms: Sequence[str], event_handler: "IndexingEventHandlers | None" = None
-    ) -> None:
+    ) -> "ListIndexingResult":
         raise NotImplementedError
 
     async def lookup_term(
@@ -225,8 +224,8 @@ class ITermToRelatedTermsIndex(Protocol):
 
 
 # A Thread is a set of text ranges in a conversation.
-@runtime_checkable
-class Thread(Protocol):
+@dataclass
+class Thread:
     description: str
     ranges: Sequence[TextRange]
 
@@ -234,8 +233,8 @@ class Thread(Protocol):
 type ThreadIndex = int
 
 
-@runtime_checkable
-class ScoredThreadIndex(Protocol):
+@dataclass
+class ScoredThreadIndex:
     thread_index: ThreadIndex
     score: float
 
@@ -261,19 +260,48 @@ class IConversationThreads(Protocol):
 @runtime_checkable
 class IConversationSecondaryIndexes(Protocol):
     property_to_semantic_ref_index: IPropertyToSemanticRefIndex | None
-    timestampIndex: ITimestampToTextRangeIndex | None
-    termToRelatedTermsIndex: ITermToRelatedTermsIndex | None
+    timestamp_index: ITimestampToTextRangeIndex | None
+    term_to_related_terms_index: ITermToRelatedTermsIndex | None
     threads: IConversationThreads | None
+    message_index: "IMessageTextIndex | None" = None
 
 
 @runtime_checkable
-class IConversation[TMeta: IKnowledgeSource = Any](Protocol):
+class IConversation[TMessage: IMessage](Protocol):
     name_tag: str
-    tags: Sequence[str]
-    messages: Sequence[IMessage[TMeta]]
-    semantic_refs: Sequence[SemanticRef] | None
+    tags: list[str]
+    messages: list[TMessage]
+    semantic_refs: list[SemanticRef] | None
     semantic_ref_index: ITermToSemanticRefIndex | None
-    secondaryIndexes: IConversationSecondaryIndexes | None
+    secondary_indexes: IConversationSecondaryIndexes | None
+
+
+@runtime_checkable
+class IMessageTextIndex(Protocol):
+
+    async def add_messages(
+        self,
+        messages: list[IMessage],
+        event_handler: "IndexingEventHandlers | None" = None,
+    ) -> "ListIndexingResult":
+        raise NotImplementedError
+
+    async def lookup_messages(
+        self,
+        message_text: str,
+        max_matches: int | None = None,
+        threshold_score: float | None = None,
+    ) -> list[ScoredMessageIndex]:
+        raise NotImplementedError
+
+    async def lookup_messages_in_subset(
+        self,
+        message_text: str,
+        indices_to_search: list[MessageIndex],
+        max_matches: int | None = None,
+        threshold_score: float | None = None,
+    ) -> list[ScoredMessageIndex]:
+        raise NotImplementedError
 
 
 # ------------------------
@@ -294,7 +322,7 @@ class ITermToSemanticRefIndexData(Protocol):
 
 
 @runtime_checkable
-class IConversationData[TMessage = Any](Protocol):
+class IConversationData[TMessage](Protocol):
     name_tag: str
     messages: Sequence[TMessage]
     tags: Sequence[str]
@@ -307,9 +335,9 @@ class IConversationData[TMessage = Any](Protocol):
 # ------------------------
 
 
-@runtime_checkable
-class IndexingEventHandlers(Protocol):
-    on_knowledge_xtracted: (
+@dataclass
+class IndexingEventHandlers:
+    on_knowledge_extracted: (
         Callable[
             [
                 TextLocation,  # chunk
@@ -332,7 +360,13 @@ class IndexingEventHandlers(Protocol):
     ) = None
 
 
-@runtime_checkable
-class IndexingResults(Protocol):
-    chunksIndexedUpto: TextLocation | None = None
+@dataclass
+class IndexingResults:
+    chunks_indexed_upto: TextLocation | None = None
+    error: str | None = None
+
+
+@dataclass
+class ListIndexingResult:
+    number_completed: int
     error: str | None = None

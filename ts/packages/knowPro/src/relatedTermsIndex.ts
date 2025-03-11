@@ -1,8 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { collections } from "typeagent";
-import { IConversation, Term } from "./interfaces.js";
+import { collections, NormalizedEmbedding } from "typeagent";
+import { IConversation, ListIndexingResult, Term } from "./interfaces.js";
 import { IndexingEventHandlers } from "./interfaces.js";
 import { Scored } from "./common.js";
 import {
@@ -20,10 +20,12 @@ import { SearchTerm } from "./search.js";
 import { isSearchTermWildcard } from "./common.js";
 import { TermSet } from "./collections.js";
 import {
+    serializeEmbedding,
     TextEditDistanceIndex,
     TextEmbeddingIndex,
     TextEmbeddingIndexSettings,
 } from "./fuzzyIndex.js";
+import { createEmbeddingCache } from "knowledge-processor";
 
 export class TermToRelatedTermsMap implements ITermToRelatedTerms {
     public map: collections.MultiMap<string, Term> = new collections.MultiMap();
@@ -160,6 +162,7 @@ export async function resolveRelatedTerms(
     relatedTermsIndex: ITermToRelatedTermsIndex,
     searchTerms: SearchTerm[],
     ensureSingleOccurrence: boolean = true,
+    shouldResolveFuzzy?: (term: SearchTerm) => boolean,
 ): Promise<void> {
     const searchableTerms = new TermSet();
     const searchTermsNeedingRelated: SearchTerm[] = [];
@@ -177,9 +180,12 @@ export async function resolveRelatedTerms(
             searchTerm.relatedTerms =
                 relatedTermsIndex.aliases.lookupTerm(termText);
         }
-        // If no hard-coded mappings, add this to the list of things for which we do fuzzy retrieval
+        // If no hard-coded mappings to aliases
+        // Then add this to the list of things for which we do fuzzy retrieval
         if (!searchTerm.relatedTerms || searchTerm.relatedTerms.length === 0) {
-            searchTermsNeedingRelated.push(searchTerm);
+            if (!shouldResolveFuzzy || shouldResolveFuzzy(searchTerm)) {
+                searchTermsNeedingRelated.push(searchTerm);
+            }
         }
     }
     if (relatedTermsIndex.fuzzyIndex && searchTermsNeedingRelated.length > 0) {
@@ -272,9 +278,15 @@ export class TermEmbeddingIndex implements ITermEmbeddingIndex {
     public async addTerms(
         terms: string[],
         eventHandler?: IndexingEventHandlers,
-    ): Promise<void> {
-        await this.embeddingIndex.addTextBatch(terms, eventHandler);
-        this.textArray.push(...terms);
+    ): Promise<ListIndexingResult> {
+        const result = await this.embeddingIndex.addTextBatch(
+            terms,
+            eventHandler,
+        );
+        if (result.numberCompleted > 0) {
+            this.textArray.push(...terms);
+        }
+        return result;
     }
 
     public async lookupTerm(
@@ -338,11 +350,37 @@ export class TermEmbeddingIndex implements ITermEmbeddingIndex {
         this.embeddingIndex.deserialize(data.embeddings);
     }
 
+    public getEmbedding(text: string): NormalizedEmbedding | undefined {
+        const pos = this.textArray.indexOf(text);
+        if (pos >= 0) {
+            return this.embeddingIndex.get(pos);
+        }
+        return undefined;
+    }
+
     private matchesToTerms(matches: Scored[]): Term[] {
         return matches.map((m) => {
             return { text: this.textArray[m.item], weight: m.score };
         });
     }
+}
+
+export function createTermEmbeddingCache(
+    settings: TextEmbeddingIndexSettings,
+    termEmbeddingIndex: TermEmbeddingIndex,
+    cacheSize: number,
+): void {
+    settings.embeddingModel = createEmbeddingCache(
+        settings.embeddingModel,
+        cacheSize,
+        (term) => {
+            const embedding = termEmbeddingIndex.getEmbedding(term);
+            if (embedding) {
+                return serializeEmbedding(embedding);
+            }
+            return undefined;
+        },
+    );
 }
 
 export class TermEditDistanceIndex
@@ -353,8 +391,11 @@ export class TermEditDistanceIndex
         super(textArray);
     }
 
-    public async addTerms(terms: string[]): Promise<void> {
+    public async addTerms(terms: string[]): Promise<ListIndexingResult> {
         this.textArray.push(...terms);
+        return {
+            numberCompleted: terms.length,
+        };
     }
 
     public async lookupTerm(
@@ -391,13 +432,14 @@ export class TermEditDistanceIndex
 }
 
 /**
+ * Note: TEMPORARY. Experimental. May eventually replace ITermToRelatedTermsIndex
  * Work in progress; Simplifying related terms
  */
 export interface ITermToRelatedTermsIndex2 {
     addTerms(
         termTexts: string[],
         eventHandler?: IndexingEventHandlers,
-    ): Promise<void>;
+    ): Promise<ListIndexingResult>;
     addSynonyms(termText: string, relatedTerms: Term[]): void;
     lookupSynonym(termText: string): Term[] | undefined;
     lookupTermsFuzzy(
@@ -419,7 +461,7 @@ export class TermToRelatedTermsIndex2 implements ITermToRelatedTermsIndex2 {
     public addTerms(
         termTexts: string[],
         eventHandler?: IndexingEventHandlers,
-    ): Promise<void> {
+    ): Promise<ListIndexingResult> {
         return this.termEmbeddings.addTerms(termTexts, eventHandler);
     }
 

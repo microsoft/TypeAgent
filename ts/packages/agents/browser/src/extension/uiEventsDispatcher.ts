@@ -52,6 +52,7 @@ function enterTextInElement(
         clearExisting?: boolean; // Whether to clear existing content first
         triggerBlur?: boolean; // Whether to trigger blur event after typing
         triggerSubmit?: boolean; // Whether to trigger form submit after typing
+        enterAtPageScope?: boolean; // whether to enter the text in whatever the document.activeElement is
     } = {},
 ): Promise<void> {
     return new Promise((resolve, reject) => {
@@ -62,14 +63,21 @@ function enterTextInElement(
                 clearExisting: options.clearExisting ?? false,
                 triggerBlur: options.triggerBlur ?? false,
                 triggerSubmit: options.triggerSubmit ?? false,
+                enterAtPageScope: options.enterAtPageScope ?? false,
             };
 
-            const inputElement = document.querySelector(
-                selector,
-            ) as HTMLElement;
+            let inputElement = config.enterAtPageScope
+                ? (document.activeElement as HTMLElement)
+                : (document.querySelector(selector) as HTMLElement);
+
+            if (inputElement == undefined) {
+                inputElement = document.body;
+                config.enterAtPageScope = true;
+            }
 
             // Check if inputElement is an input or textarea
             if (
+                !config.enterAtPageScope &&
                 !(inputElement instanceof HTMLInputElement) &&
                 !(inputElement instanceof HTMLTextAreaElement) &&
                 !inputElement.isContentEditable
@@ -166,8 +174,9 @@ function simulateKeyEvent(inputElement: HTMLElement, char: string) {
     inputElement.dispatchEvent(textInputEvent);
 
     if (
-        inputElement instanceof HTMLInputElement ||
-        inputElement instanceof HTMLTextAreaElement
+        (inputElement instanceof HTMLInputElement ||
+            inputElement instanceof HTMLTextAreaElement) &&
+        inputElement.type !== "hidden"
     ) {
         // Get current position of cursor
         const startPos = inputElement.selectionStart || 0;
@@ -287,40 +296,72 @@ async function selectDropdownOption(selector: string, optionLabel: string) {
     }
 }
 
-function sendDataToContentScript(data: any) {
-    document.dispatchEvent(
-        new CustomEvent("fromUIEventsDispatcher", { detail: data }),
-    );
-}
+window.addEventListener("message", async (event: any) => {
+    const data = event.data;
 
-document.addEventListener("toUIEventsDispatcher", async function (e: any) {
-    var message = e.detail;
-    console.log("received", message);
-    const actionName =
-        message.actionName ?? message.fullActionName.split(".").at(-1);
+    // Check if this is a request from our content script
+    if (data && data.type === "content-script-request") {
+        const { requestId, payload } = data;
 
-    if (actionName === "clickOnElement") {
-        clickOnElement(escapeCssSelector(message.parameters.cssSelector));
-    }
-    if (actionName === "enterTextInElement") {
-        await enterTextInElement(
-            message.parameters.value,
-            escapeCssSelector(message.parameters.cssSelector),
-            {
-                clearExisting: true,
-                triggerBlur: true,
-                triggerSubmit: message.parameters.submitForm ?? false,
-            },
-        );
-    }
-    if (actionName === "enterTextOnPage") {
-        await enterTextOnPage(message.parameters.value.toUpperCase());
-    }
-    if (actionName === "setDropdownValue") {
-        await selectDropdownOption(
-            escapeCssSelector(message.parameters.cssSelector),
-            message.parameters.optionLabel,
-        );
+        try {
+            var message = payload;
+            console.log("received", message);
+            const actionName =
+                message.actionName ?? message.fullActionName.split(".").at(-1);
+
+            if (actionName === "clickOnElement") {
+                clickOnElement(
+                    escapeCssSelector(message.parameters.cssSelector),
+                );
+            }
+            if (actionName === "enterTextInElement") {
+                await enterTextInElement(
+                    message.parameters.value,
+                    escapeCssSelector(message.parameters.cssSelector),
+                    {
+                        delay: 20,
+                        clearExisting: true,
+                        triggerBlur: true,
+                        triggerSubmit: message.parameters.submitForm ?? false,
+                    },
+                );
+            }
+            if (actionName === "enterTextOnPage") {
+                // await enterTextOnPage(message.parameters.value.toUpperCase());
+                await enterTextInElement(message.parameters.value, "body", {
+                    delay: 20,
+                    clearExisting: true,
+                    triggerBlur: true,
+                    triggerSubmit: message.parameters.submitForm ?? false,
+                    enterAtPageScope: true,
+                });
+            }
+            if (actionName === "setDropdownValue") {
+                await selectDropdownOption(
+                    escapeCssSelector(message.parameters.cssSelector),
+                    message.parameters.optionLabel,
+                );
+            }
+
+            window.postMessage(
+                {
+                    type: "main-world-response",
+                    requestId: requestId,
+                    result: {},
+                },
+                "*",
+            );
+        } catch (error) {
+            // Send error back
+            window.postMessage(
+                {
+                    type: "main-world-response",
+                    requestId: requestId,
+                    error: error,
+                },
+                "*",
+            );
+        }
     }
 });
 

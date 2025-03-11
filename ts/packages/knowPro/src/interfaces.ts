@@ -10,14 +10,16 @@ export interface IKnowledgeSource {
 
 export type MessageIndex = number;
 
-export interface IMessage<TMeta extends IKnowledgeSource = any> {
+export interface IMessage extends IKnowledgeSource {
     // the text of the message, split into chunks
     textChunks: string[];
-    // for example, e-mail has a subject, from and to fields; a chat message has a sender and a recipient
-    metadata: TMeta;
     timestamp?: string | undefined;
     tags: string[];
     deletionInfo?: DeletionInfo;
+}
+
+export interface IMessageMetadata<TMeta = any> {
+    metadata: TMeta;
 }
 
 export type ScoredMessageIndex = {
@@ -50,10 +52,10 @@ export interface Tag {
     text: string;
 }
 
-export interface IConversation<TMeta extends IKnowledgeSource = any> {
+export interface IConversation<TMessage extends IKnowledgeSource = any> {
     nameTag: string;
     tags: string[];
-    messages: IMessage<TMeta>[];
+    messages: TMessage[];
     semanticRefs: SemanticRef[] | undefined;
     semanticRefIndex?: ITermToSemanticRefIndex | undefined;
     secondaryIndexes?: IConversationSecondaryIndexes | undefined;
@@ -157,7 +159,7 @@ export interface ITermToRelatedTermsFuzzy {
     addTerms(
         terms: string[],
         eventHandler?: IndexingEventHandlers,
-    ): Promise<void>;
+    ): Promise<ListIndexingResult>;
     lookupTerm(
         text: string,
         maxMatches?: number,

@@ -103,14 +103,16 @@ export async function handleSchemaDiscoveryAction(
 
         console.timeEnd(timerName);
 
+        const selected = response.data as UserActionsList;
+        const uniqueItems = new Map(
+            selected.actions.map((action) => [action.actionName, action]),
+        );
+
         message =
             "Possible user actions: \n" +
-            JSON.stringify(response.data, null, 2);
+            JSON.stringify(Array.from(uniqueItems.values()), null, 2);
 
-        const selected = response.data as UserActionsList;
-        const actionNames = [
-            ...new Set(selected.actions.map((action) => action.actionName)),
-        ];
+        const actionNames = [...new Set(uniqueItems.keys())];
 
         const { schema, typeDefinitions } = await getDynamicSchema(actionNames);
         message += `\n =========== \n Discovered actions schema: \n ${schema} `;
@@ -144,7 +146,10 @@ export async function handleSchemaDiscoveryAction(
             }, 500);
         }
 
-        return { schema: response.data, typeDefinitions: typeDefinitions };
+        return {
+            schema: Array.from(uniqueItems.values()),
+            typeDefinitions: typeDefinitions,
+        };
     }
 
     async function handleRegisterSiteSchema(action: any) {
@@ -169,6 +174,11 @@ export async function handleSchemaDiscoveryAction(
             ...detectedActions.values(),
             ...authoredActions.values(),
         ];
+
+        if (typeDefinitions.length === 0) {
+            console.log("No actions for this schema.");
+            return;
+        }
 
         const union = sc.union(
             typeDefinitions.map((definition) => sc.ref(definition)),
@@ -378,12 +388,12 @@ export async function handleSchemaDiscoveryAction(
         });
 
         const obj: ActionSchemaObject = sc.obj({
-            actionName: sc.string(userIntentJson.actiontName),
+            actionName: sc.string(userIntentJson.actionName),
             parameters: sc.obj(Object.fromEntries(fields)),
         } as const);
 
         const schema = sc.type(
-            userIntentJson.actiontName,
+            userIntentJson.actionName,
             obj,
             actionDescription,
             true,
