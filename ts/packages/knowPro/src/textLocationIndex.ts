@@ -78,12 +78,28 @@ export class TextToTextLocationIndex implements ITextToTextLocationIndex {
         eventHandler?: IndexingEventHandlers,
         batchSize?: number,
     ): Promise<ListIndexingResult> {
+        const indexingEvents: IndexingEventHandlers | undefined =
+            eventHandler && eventHandler.onTextIndexed !== undefined
+                ? {
+                      onEmbeddingsCreated: (texts, batch, batchStartAt) => {
+                          eventHandler.onTextIndexed!(
+                              textAndLocations,
+                              textAndLocations.slice(
+                                  batchStartAt,
+                                  batchStartAt + batch.length,
+                              ),
+                              batchStartAt,
+                          );
+                          return true;
+                      },
+                  }
+                : eventHandler;
         const result = await addTextBatchToEmbeddingIndex(
             this.embeddingIndex,
             this.settings.embeddingModel,
             textAndLocations.map((tl) => tl[0]),
             batchSize ?? this.settings.batchSize,
-            eventHandler,
+            indexingEvents,
         );
         if (result.numberCompleted > 0) {
             textAndLocations =

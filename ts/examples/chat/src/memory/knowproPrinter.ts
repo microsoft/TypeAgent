@@ -375,9 +375,9 @@ export class KnowProPrinter extends ChatPrinter {
     }
 
     public writeIndexingResults(results: kp.IndexingResults) {
-        if (results.chunksIndexedUpto) {
+        if (results.semanticRefsIndexedUpto) {
             this.writeLine(
-                `Indexed upto: ${textLocationToString(results.chunksIndexedUpto)}`,
+                `Indexed upto: ${textLocationToString(results.semanticRefsIndexedUpto)}`,
             );
         }
         if (results.error) {

@@ -258,10 +258,15 @@ export interface IndexingEventHandlers {
         batch: string[],
         batchStartAt: number,
     ) => boolean;
+    onTextIndexed?: (
+        textAndLocations: [string, TextLocation][],
+        batch: [string, TextLocation][],
+        batchStartAt: number,
+    ) => boolean;
 }
 
 export type IndexingResults = {
-    chunksIndexedUpto?: TextLocation | undefined;
+    semanticRefsIndexedUpto?: TextLocation | undefined;
     error?: string | undefined;
 };
 

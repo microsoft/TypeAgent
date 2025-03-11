@@ -400,7 +400,7 @@ export class ImageCollection implements IConversation {
         this.buildCaches();
 
         let indexingResult: IndexingResults = {
-            chunksIndexedUpto: { messageIndex: this.messages.length - 1 },
+            semanticRefsIndexedUpto: { messageIndex: this.messages.length - 1 },
         };
         return indexingResult;
     }

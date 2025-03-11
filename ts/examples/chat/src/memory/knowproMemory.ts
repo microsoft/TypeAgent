@@ -697,9 +697,7 @@ export async function createKnowproCommands(
             args,
             podcastBuildMessageIndexDef(),
         );
-        context.printer.writeLine(
-            `Indexing ${context.conversation?.messages.length} messages`,
-        );
+        context.printer.writeLine(`Indexing messages`);
         let progress = new ProgressBar(context.printer, namedArgs.maxMessages);
         const result = await context.podcast!.buildMessageIndex(
             createIndexingEventHandler(
@@ -902,7 +900,7 @@ function createIndexingEventHandler(
 ): kp.IndexingEventHandlers {
     let startedKnowledge = false;
     let startedRelated = false;
-
+    let startedMessages = false;
     return {
         onKnowledgeExtracted() {
             if (!startedKnowledge) {
@@ -916,9 +914,20 @@ function createIndexingEventHandler(
             if (!startedRelated) {
                 progress.reset(sourceTexts.length);
                 context.printer.writeLine(
-                    `Creating ${sourceTexts.length} embeddings`,
+                    `Generating ${sourceTexts.length} embeddings`,
                 );
                 startedRelated = true;
+            }
+            progress.advance(batch.length);
+            return true;
+        },
+        onTextIndexed(textAndLocations, batch, batchStartAt) {
+            if (!startedMessages) {
+                progress.reset(textAndLocations.length);
+                context.printer.writeLine(
+                    `Indexing ${textAndLocations.length} messages`,
+                );
+                startedMessages = true;
             }
             progress.advance(batch.length);
             return true;

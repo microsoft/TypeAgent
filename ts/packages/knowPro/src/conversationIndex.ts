@@ -237,7 +237,7 @@ export async function buildSemanticRefIndex(
             );
         }
         const completedChunk = { messageIndex, chunkIndex };
-        indexingResult.chunksIndexedUpto = completedChunk;
+        indexingResult.semanticRefsIndexedUpto = completedChunk;
         if (
             eventHandler?.onKnowledgeExtracted &&
             !eventHandler.onKnowledgeExtracted(completedChunk, knowledge)
