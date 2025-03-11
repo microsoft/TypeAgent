@@ -12,8 +12,11 @@ authors = [
   { name = "Umesh Madan" },
   { name = "Guido van Rossum" },
 ]
+requires-python = ">=3.12"
 dependencies = []
+
 [tool.setuptools]
+# Needed so setuptools doesn't complain about testdata.
 packages = [
     "typeagent",
     "typeagent.knowpro",

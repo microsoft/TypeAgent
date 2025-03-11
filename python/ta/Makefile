@@ -18,6 +18,7 @@ help:
 all: test demo build
 
 .PHONY: test
+# To install pyright, use `npm install -g pyright` .
 test:
 	pyright typeagent
 
@@ -36,4 +37,4 @@ venv:
 
 .PHONY: clean
 clean:
-	rm -rf build dist venv
+	rm -rf build dist venv *.egg-info
