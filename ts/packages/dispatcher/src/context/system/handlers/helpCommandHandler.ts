@@ -2,9 +2,20 @@ import { ActionContext, ParsedCommandParams } from "@typeagent/agent-sdk";
 import { CommandHandler } from "@typeagent/agent-sdk/helpers/command";
 import { CommandHandlerContext } from "../../commandHandlerContext.js";
 import { systemHandlers } from "../systemAgent.js";
-import { getUsage, printAllCommandsWithUsage, printStructuredHandlerTableUsage } from "../../../command/commandHelp.js";
-import { getDefaultSubCommandDescriptor, getParsedCommand, resolveCommand } from "../../../command/command.js";
-import { displayError, displayResult } from "@typeagent/agent-sdk/helpers/display";
+import {
+    getUsage,
+    printAllCommandsWithUsage,
+    printStructuredHandlerTableUsage,
+} from "../../../command/commandHelp.js";
+import {
+    getDefaultSubCommandDescriptor,
+    getParsedCommand,
+    resolveCommand,
+} from "../../../command/command.js";
+import {
+    displayError,
+    displayResult,
+} from "@typeagent/agent-sdk/helpers/display";
 
 export class HelpCommandHandler implements CommandHandler {
     public readonly description = "Show help";
@@ -22,8 +33,8 @@ export class HelpCommandHandler implements CommandHandler {
                 description: "shows all commands",
                 char: "a",
                 type: "boolean",
-                default: false
-            }
+                default: false,
+            },
         },
     } as const;
     public async run(
