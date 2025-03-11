@@ -4,6 +4,7 @@
 import {
     ActionContext,
     CommandDescriptor,
+    CommandDescriptors,
     CommandDescriptorTable,
 } from "@typeagent/agent-sdk";
 import chalk from "chalk";
@@ -121,31 +122,50 @@ export function getHandlerTableUsage(
 }
 
 export function printAllCommandsWithUsage(
-    table: CommandDescriptorTable,
+    table: CommandDescriptors,
     command: string | undefined,
     context: ActionContext<CommandHandlerContext>,
 ) {
-    Object.keys(table.commands).map((cmd) => {
-        const cmdTable: CommandDescriptorTable = table.commands[
-            cmd
-        ] as CommandDescriptorTable;
-        const cmdHandler: CommandDescriptor = table.commands[
-            cmd
-        ] as CommandDescriptor;
-        if (cmdTable.commands !== undefined) {
-            printAllCommandsWithUsage(cmdTable, cmd, context);
-        } else if (cmdHandler !== undefined) {
+    const cmdTable: CommandDescriptorTable = table as CommandDescriptorTable;
+    const cmdHandler: CommandDescriptor = table as CommandDescriptor;
+
+    if (cmdTable.commands !== undefined) {
+        Object.keys(cmdTable.commands).map((cmd) => {
             if (command === undefined) {
-                displayResult(getUsage(cmd, cmdHandler), context);
+                printAllCommandsWithUsage(cmdTable.commands[cmd], cmd, context); 
             } else {
-                displayResult(
-                    getUsage(`${command} ${cmd}`, cmdHandler),
-                    context,
-                );
-            }
-            displayResult("\n", context);
-        }
-    });
+                printAllCommandsWithUsage(cmdTable.commands[cmd], `${command} ${cmd}`, context); 
+            }            
+        });
+    } else {
+        displayResult(
+            getUsage(command === undefined ? "" : command, cmdHandler),
+            context,
+        );
+        displayResult("\n", context);
+    }
+
+    // Object.keys(table.commands).map((cmd) => {
+    //     const cmdTable: CommandDescriptorTable = table.commands[
+    //         cmd
+    //     ] as CommandDescriptorTable;
+    //     const cmdHandler: CommandDescriptor = table.commands[
+    //         cmd
+    //     ] as CommandDescriptor;
+    //     if (cmdTable.commands !== undefined) {
+    //         printAllCommandsWithUsage(cmdTable, cmd, context);
+    //     } else if (cmdHandler !== undefined) {
+    //         if (command === undefined) {
+    //             displayResult(getUsage(cmd, cmdHandler), context);
+    //         } else {
+    //             displayResult(
+    //                 getUsage(`${command} ${cmd}`, cmdHandler),
+    //                 context,
+    //             );
+    //         }
+    //         displayResult("\n", context);
+    //     }
+    // });
 }
 
 export function printStructuredHandlerTableUsage(

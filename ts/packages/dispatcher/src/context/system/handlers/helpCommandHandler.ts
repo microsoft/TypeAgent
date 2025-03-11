@@ -43,7 +43,19 @@ export class HelpCommandHandler implements CommandHandler {
     ) {
         const systemContext = context.sessionContext.agentContext;
         if (params.flags.all) {
+            // print all system handlers
             printAllCommandsWithUsage(systemHandlers, undefined, context);
+
+            // print all agent handlers
+            const agentNames: string[] = context.sessionContext.agentContext.agents.getAppAgentNames();
+            for(let i = 0; i < agentNames.length; i++) {
+                const agent = context.sessionContext.agentContext.agents.getAppAgent(agentNames[i]);
+
+                if (agent !== undefined && agent.getCommands) {
+                    printAllCommandsWithUsage(await agent.getCommands!(context.sessionContext), agentNames[i], context);
+                }
+            };
+
             return;
         } else if (params.args.command === undefined) {
             printStructuredHandlerTableUsage(
