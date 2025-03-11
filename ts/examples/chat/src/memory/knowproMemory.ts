@@ -463,6 +463,7 @@ export async function createKnowproCommands(
                 maxToDisplay: argNum("Maximum matches to display", 25),
                 exact: argBool("Exact match only. No related terms", false),
                 ktype: arg("Knowledge type"),
+                distinct: argBool("Show distinct results", false),
             },
         };
     }
@@ -501,6 +502,7 @@ export async function createKnowproCommands(
                     context.conversation!,
                     searchResults,
                     namedArgs.maxToDisplay,
+                    namedArgs.distinct,
                 );
             } else {
                 context.printer.writeLine("No matches");
@@ -547,6 +549,7 @@ export async function createKnowproCommands(
                     context.conversation!,
                     searchResults.knowledgeMatches,
                     namedArgs.maxToDisplay,
+                    namedArgs.distinct,
                 );
             }
             if (namedArgs.showMessages) {
@@ -569,6 +572,7 @@ export async function createKnowproCommands(
             },
             options: {
                 maxToDisplay: argNum("Maximum matches to display", 25),
+                minScore: argNum("Min threshold score"),
             },
         };
     }
@@ -586,12 +590,20 @@ export async function createKnowproCommands(
             return;
         }
         const namedArgs = parseNamedArguments(args, ragDef());
-        const matches = await messageIndex.lookupMessages(namedArgs.query);
-        context.printer.writeScoredMessages(
-            matches,
-            context.conversation?.messages!,
-            namedArgs.maxToDisplay,
+        const matches = await messageIndex.lookupMessages(
+            namedArgs.query,
+            undefined,
+            namedArgs.minScore,
         );
+        if (matches.length > 0) {
+            context.printer.writeScoredMessages(
+                matches,
+                context.conversation?.messages!,
+                namedArgs.maxToDisplay,
+            );
+        } else {
+            context.printer.writeLine("No matches");
+        }
     }
 
     function entitiesDef(): CommandMetadata {

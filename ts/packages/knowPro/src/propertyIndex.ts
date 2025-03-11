@@ -238,6 +238,24 @@ export function lookupPropertyInPropertyIndex(
     return scoredRefs;
 }
 
+export function isKnownProperty(
+    propertyIndex: IPropertyToSemanticRefIndex | undefined,
+    propertyName: PropertyNames,
+    propertyValue: string,
+): boolean {
+    if (propertyIndex) {
+        const semanticRefsWithName = propertyIndex.lookupProperty(
+            propertyName,
+            propertyValue,
+        );
+        return (
+            semanticRefsWithName !== undefined &&
+            semanticRefsWithName.length > 0
+        );
+    }
+    return false;
+}
+
 const PropertyDelimiter = "@@";
 function makePropertyTermText(name: string, value: string) {
     return `prop.${name}${PropertyDelimiter}${value}`;

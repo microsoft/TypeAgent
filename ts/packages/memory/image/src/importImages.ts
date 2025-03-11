@@ -18,6 +18,8 @@ import {
     IConversationDataWithIndexes,
     writeConversationDataToFile,
     readConversationDataFromFile,
+    IMessageMetadata,
+    createTermEmbeddingCache,
 } from "knowpro";
 import { conversation as kpLib, image } from "knowledge-processor";
 import fs from "node:fs";
@@ -30,7 +32,7 @@ import { isDirectoryPath } from "typeagent";
 export interface ImageCollectionData
     extends IConversationDataWithIndexes<Image> {}
 
-export class Image implements IMessage<ImageMeta> {
+export class Image implements IMessage, IMessageMetadata<ImageMeta> {
     public timestamp: string | undefined;
     constructor(
         public textChunks: string[],
@@ -38,6 +40,9 @@ export class Image implements IMessage<ImageMeta> {
         public tags: string[] = [],
     ) {
         this.timestamp = metadata.img.dateTaken;
+    }
+    getKnowledge(): kpLib.KnowledgeResponse {
+        return this.metadata.getKnowledge();
     }
 }
 
@@ -345,7 +350,7 @@ export class ImageMeta implements IKnowledgeSource {
     }
 }
 
-export class ImageCollection implements IConversation<ImageMeta> {
+export class ImageCollection implements IConversation {
     public settings: ConversationSettings;
     public semanticRefIndex: ConversationIndex;
     public secondaryIndexes: ConversationSecondaryIndexes;
@@ -392,6 +397,7 @@ export class ImageCollection implements IConversation<ImageMeta> {
 
         this.addMetadataToIndex();
         await buildSecondaryIndexes(this, true, eventHandler);
+        this.buildCaches();
 
         let indexingResult: IndexingResults = {
             chunksIndexedUpto: { messageIndex: this.messages.length - 1 },
@@ -428,6 +434,15 @@ export class ImageCollection implements IConversation<ImageMeta> {
             );
         }
         await buildSecondaryIndexes(this, false);
+        this.buildCaches();
+    }
+
+    private buildCaches(): void {
+        createTermEmbeddingCache(
+            this.settings.relatedTermIndexSettings.embeddingIndexSettings!,
+            this.secondaryIndexes.termToRelatedTermsIndex.fuzzyIndex!,
+            64,
+        );
     }
 
     public async writeToFile(
