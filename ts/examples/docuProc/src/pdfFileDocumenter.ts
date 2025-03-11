@@ -214,7 +214,7 @@ export function createPdfDocumenter(model: ChatModel): PdfFileDocumenter {
                         (c.parentId === "" && !c.parentId) ||
                         (c.children && c.children.length === 0)
                     ) {
-                        c.docs = chunkDocs[iDoc++];
+                        c.chunkDoc = chunkDocs[iDoc++];
                     } else if (c.children && c.children.length > 0) {
                         // assign docs to its children
                         for (const childId of c.children) {
@@ -223,7 +223,7 @@ export function createPdfDocumenter(model: ChatModel): PdfFileDocumenter {
                                 (blk) => blk.id === childId,
                             );
                             if (childChunk) {
-                                childChunk.docs = chunkDocs[iDoc++];
+                                childChunk.chunkDoc = chunkDocs[iDoc++];
                             }
                         }
                     }
@@ -240,7 +240,7 @@ export function createPdfDocumenter(model: ChatModel): PdfFileDocumenter {
         }
 
         return {
-            chunkDocs: chunks.map((c) => c.docs),
+            chunkDocs: chunks.map((c) => c.chunkDoc),
         } as PdfFileDocumentation;
     }
 }

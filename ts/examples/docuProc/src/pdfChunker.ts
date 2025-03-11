@@ -10,7 +10,7 @@ import { fileURLToPath } from "url";
 import { promisify } from "util";
 import fs from "fs/promises";
 
-import { PdfDocChunk, PdfDocumentInfo } from "./pdfDocChunkSchema.js";
+import { PdfChunkDocumentation, PdfDocumentInfo } from "./pdfDocChunkSchema.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -46,7 +46,7 @@ export interface Chunk {
     parentId?: ChunkId;
     children?: ChunkId[];
     fileName?: string;
-    docs?: PdfDocChunk;
+    chunkDoc?: PdfChunkDocumentation;
     docInfo?: PdfDocumentInfo; // Computed later by documenter.
 }
 export interface ChunkedFile {

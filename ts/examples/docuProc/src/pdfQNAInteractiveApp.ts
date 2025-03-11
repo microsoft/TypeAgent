@@ -1082,7 +1082,7 @@ Use the preceding conversation items as context for the user query given later.
             fileName: chunk.fileName,
             chunkId: chunk.id,
             blobs: chunk.blobs,
-            summary: chunk.docs?.summary,
+            summary: chunk.chunkDoc?.summary,
         };
         preamble.push({ role: "user", content: JSON.stringify(chunkData) });
     }

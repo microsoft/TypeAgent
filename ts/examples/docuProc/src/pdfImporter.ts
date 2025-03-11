@@ -187,7 +187,7 @@ async function importPdfFiles(
     );
 
     const nonEmptyFiles = chunkedFiles.filter(
-        (cf) => cf.chunks.filter((c) => c.docs).length,
+        (cf) => cf.chunks.filter((c) => c.chunkDoc).length,
     );
 
     log(io, `[Embedding ${nonEmptyFiles.length} files]`, chalk.grey);
@@ -258,7 +258,7 @@ async function embedChunk(
     await exponentialBackoff(io, chunkyIndex.chunkFolder.put, chunk, chunk.id);
 
     const summaries: string[] = [];
-    summaries.push(chunk.docs?.summary ?? "");
+    summaries.push(chunk.chunkDoc?.summary ?? "");
     //const combinedSummaries = summaries.join("\n").trimEnd();
 
     /*for (const chunkDoc of chunkDocs) {
