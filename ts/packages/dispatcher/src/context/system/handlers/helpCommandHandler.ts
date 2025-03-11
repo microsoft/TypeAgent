@@ -55,7 +55,7 @@ export class HelpCommandHandler implements CommandHandler {
                         agentNames[i],
                     );
 
-                if (agent !== undefined && agent.getCommands) {
+                if (agent !== undefined && agent.getCommands && agentNames[i] == "system") {
                     printAllCommandsWithUsage(
                         await agent.getCommands!(context.sessionContext),
                         agentNames[i],
