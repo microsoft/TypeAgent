@@ -7,7 +7,7 @@ import * as knowLib from "knowledge-processor";
 import { asyncArray } from "typeagent";
 
 import * as iapp from "interactive-app";
-import { ChunkyIndex } from "./pdfChunkyIndex.js";
+import { ChunkyIndex, IndexNames } from "./pdfChunkyIndex.js";
 import { PdfFileDocumentation } from "./pdfDocChunkSchema.js";
 import {
     Chunk,
@@ -53,6 +53,30 @@ export async function importAllFiles(
     );
 }
 
+async function getLinesInChunk(
+    chunk: Chunk,
+): Promise<number> {
+    let numLines = 0;
+    for (const blob of chunk.blobs) {
+        if (blob.blob_type === "text" && blob.content) {
+            if (Array.isArray(blob.content)) {
+                numLines += blob.content
+                    .flatMap((text) => text.split(/[\n.]+/)) // Split each string and flatten the results
+                    .filter(
+                        (line) => line.trim().length > 0,
+                    ).length;
+            } else {
+                numLines += blob.content
+                    .split(/[\n.]+/)
+                    .filter(
+                        (line) => line.trim().length > 0,
+                    ).length;
+            }
+        }
+    }
+    return numLines;
+}
+
 async function importPdfFiles(
     files: string[],
     chunkyIndex: ChunkyIndex,
@@ -95,23 +119,7 @@ async function importPdfFiles(
             numChunks += chunkedFile.chunks.length;
             for (const chunk of chunkedFile.chunks) {
                 numBlobs += chunk.blobs.length;
-                for (const blob of chunk.blobs) {
-                    if (blob.content) {
-                        if (Array.isArray(blob.content)) {
-                            numLines += blob.content
-                                .flatMap((text) => text.split(/[\n.]+/)) // Split each string and flatten the results
-                                .filter(
-                                    (line) => line.trim().length > 0,
-                                ).length; // Remove empty lines
-                        } else {
-                            numLines += blob.content
-                                .split(/[\n.]+/)
-                                .filter(
-                                    (line) => line.trim().length > 0,
-                                ).length;
-                        }
-                    }
-                }
+                numLines += await getLinesInChunk(chunk);
             }
         }
     }
@@ -257,32 +265,25 @@ async function embedChunk(
     console.log("Approximate line count:", lineCount);
     await exponentialBackoff(io, chunkyIndex.chunkFolder.put, chunk, chunk.id);
 
-    const summaries: string[] = [];
-    summaries.push(chunk.chunkDoc?.summary ?? "");
-    //const combinedSummaries = summaries.join("\n").trimEnd();
-
-    /*for (const chunkDoc of chunkDocs) {
-        for (const indexName of IndexNames) {
-            let data: string[];
-            if (indexName == "summaries") {
-                data = [combinedSummaries];
-            } else {
-                data = (chunkDoc as any)[indexName];
-            }
-            const index = chunkyIndex.indexes.get(indexName)!;
-            if (data && index) {
-                await writeToIndex(io, chunk.id, data, index);
-            }
+    for (const indexName of IndexNames) {
+        let data: string[];
+        if (indexName == "summaries") {
+            data = chunk.chunkDoc?.summary ? [chunk.chunkDoc.summary] : [];
+        } else {
+            data = (chunk.chunkDoc as any)[indexName];
+        }
+        const index = chunkyIndex.indexes.get(indexName)!;
+        if (data && index) {
+            await writeToIndex(io, chunk.id, data, index);
         }
     }
 
-    */
-
     const t1 = Date.now();
     if (verbose) {
+        const numLines = getLinesInChunk(chunk);
         log(
             io,
-            `  [Embedded ${chunk.id} (${lineCount} lines @ ${chunk.blobs[0].start + 1}) ` +
+            `  [Embedded ${chunk.id} of (${chunk.pageid} lines @ ${numLines}) ` +
                 `in ${((t1 - t0) * 0.001).toFixed(3)} seconds for ${chunk.fileName}]`,
             chalk.gray,
         );

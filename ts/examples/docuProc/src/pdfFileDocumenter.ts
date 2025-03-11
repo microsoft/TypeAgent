@@ -202,14 +202,14 @@ export function createPdfDocumenter(model: ChatModel): PdfFileDocumenter {
                 const chunkDocs = fileDocs.chunkDocs ?? [];
 
                 const { pageChunks } = pageChunksMap[pageid];
-                for(const pageChunk of pageChunks) {
-                    pageChunk.fileName = fileName;
+                for(const chunk of pageChunks) {
+                    chunk.fileName = fileName;
                     // get the doc for the pageChunk from chunkDocs
                     const chunkDoc = chunkDocs.find(
-                        (doc) => doc.chunkid === pageChunk.id,
+                        (doc) => doc.chunkid === chunk.id,
                     );
                     if (chunkDoc) {
-                        pageChunk.chunkDoc = chunkDoc;
+                        chunk.chunkDoc = chunkDoc;
                     }                
                 }  
             } else {
