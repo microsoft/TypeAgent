@@ -49,7 +49,7 @@
     "prettier": "^3.2.5",
     "shx": "^0.3.4"
   },
-  "packageManager": "pnpm@10.6.0",
+  "packageManager": "pnpm@10.6.2",
   "engines": {
     "node": ">=18",
     "pnpm": ">=9"
