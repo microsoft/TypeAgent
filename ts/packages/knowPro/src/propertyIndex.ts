@@ -3,6 +3,7 @@
 
 import {
     IConversation,
+    ListIndexingResult,
     ScoredSemanticRef,
     SemanticRef,
     SemanticRefIndex,
@@ -104,23 +105,26 @@ export function addActionPropertiesToIndex(
     }
 }
 
-export function buildPropertyIndex(conversation: IConversation) {
+export function buildPropertyIndex(
+    conversation: IConversation,
+): ListIndexingResult {
     if (conversation.secondaryIndexes && conversation.semanticRefs) {
         conversation.secondaryIndexes.propertyToSemanticRefIndex ??=
             new PropertyIndex();
-        addToPropertyIndex(
+        return addToPropertyIndex(
             conversation.secondaryIndexes.propertyToSemanticRefIndex,
             conversation.semanticRefs,
             0,
         );
     }
+    return { numberCompleted: 0 };
 }
 
 export function addToPropertyIndex(
     propertyIndex: IPropertyToSemanticRefIndex,
     semanticRefs: SemanticRef[],
     baseSemanticRefIndex: SemanticRefIndex,
-) {
+): ListIndexingResult {
     for (let i = 0; i < semanticRefs.length; ++i) {
         const semanticRef = semanticRefs[i];
         const semanticRefIndex: SemanticRefIndex = i + baseSemanticRefIndex;
@@ -151,6 +155,9 @@ export function addToPropertyIndex(
                 break;
         }
     }
+    return {
+        numberCompleted: semanticRefs.length,
+    };
 }
 
 export class PropertyIndex implements IPropertyToSemanticRefIndex {

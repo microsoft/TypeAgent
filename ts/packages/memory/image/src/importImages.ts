@@ -18,8 +18,8 @@ import {
     IConversationDataWithIndexes,
     writeConversationDataToFile,
     readConversationDataFromFile,
-    IMessageMetadata,
     createTermEmbeddingCache,
+    buildTransientSecondaryIndexes,
 } from "knowpro";
 import { conversation as kpLib, image } from "knowledge-processor";
 import fs from "node:fs";
@@ -32,7 +32,7 @@ import { isDirectoryPath } from "typeagent";
 export interface ImageCollectionData
     extends IConversationDataWithIndexes<Image> {}
 
-export class Image implements IMessage, IMessageMetadata<ImageMeta> {
+export class Image implements IMessage {
     public timestamp: string | undefined;
     constructor(
         public textChunks: string[],
@@ -396,12 +396,18 @@ export class ImageCollection implements IConversation {
         }
 
         this.addMetadataToIndex();
-        await buildSecondaryIndexes(this, true, eventHandler);
+        const indexingResult: IndexingResults = {
+            semanticRefs: {
+                completedUpto: { messageIndex: this.messages.length - 1 },
+            },
+        };
+        indexingResult.secondaryIndexResults = await buildSecondaryIndexes(
+            this,
+            this.settings,
+            eventHandler,
+        );
         this.buildCaches();
 
-        let indexingResult: IndexingResults = {
-            chunksIndexedUpto: { messageIndex: this.messages.length - 1 },
-        };
         return indexingResult;
     }
 
@@ -421,6 +427,15 @@ export class ImageCollection implements IConversation {
     public async deserialize(data: ImageCollectionData): Promise<void> {
         this.nameTag = data.nameTag;
         this.messages = data.messages;
+        this.messages = data.messages.map((m) => {
+            const image = new Image(
+                m.textChunks,
+                new ImageMeta(m.metadata.fileName, m.metadata.img),
+                m.tags,
+            );
+            image.timestamp = m.timestamp;
+            return image;
+        });
         this.semanticRefs = data.semanticRefs;
         this.tags = data.tags;
         if (data.semanticIndexData) {
@@ -433,7 +448,7 @@ export class ImageCollection implements IConversation {
                 data.relatedTermsIndexData,
             );
         }
-        await buildSecondaryIndexes(this, false);
+        await buildTransientSecondaryIndexes(this, this.settings);
         this.buildCaches();
     }
 

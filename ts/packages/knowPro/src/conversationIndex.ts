@@ -14,6 +14,7 @@ import {
     ScoredSemanticRef,
     SemanticRef,
     SemanticRefIndex,
+    TextIndexingResult,
     TextRange,
     Topic,
 } from "./interfaces.js";
@@ -23,6 +24,7 @@ import { ChatModel, openai } from "aiclient";
 import { async } from "typeagent";
 import { facetValueToString } from "./knowledge.js";
 import { buildSecondaryIndexes } from "./secondaryIndexes.js";
+import { ConversationSettings } from "./import.js";
 
 export function textRangeFromLocation(
     messageIndex: MessageIndex,
@@ -203,7 +205,7 @@ export async function buildSemanticRefIndex(
     conversation: IConversation,
     extractor?: kpLib.KnowledgeExtractor,
     eventHandler?: IndexingEventHandlers,
-): Promise<IndexingResults> {
+): Promise<TextIndexingResult> {
     conversation.semanticRefIndex ??= new ConversationIndex();
     const semanticRefIndex = conversation.semanticRefIndex;
     conversation.semanticRefIndex = semanticRefIndex;
@@ -213,7 +215,7 @@ export async function buildSemanticRefIndex(
     const semanticRefs = conversation.semanticRefs;
     extractor ??= createKnowledgeProcessor();
     const maxRetries = 4;
-    let indexingResult: IndexingResults = {};
+    let indexingResult: TextIndexingResult = {};
     for (let i = 0; i < conversation.messages.length; i++) {
         let messageIndex: MessageIndex = i;
         const chunkIndex = 0;
@@ -237,7 +239,7 @@ export async function buildSemanticRefIndex(
             );
         }
         const completedChunk = { messageIndex, chunkIndex };
-        indexingResult.chunksIndexedUpto = completedChunk;
+        indexingResult.completedUpto = completedChunk;
         if (
             eventHandler?.onKnowledgeExtracted &&
             !eventHandler.onKnowledgeExtracted(completedChunk, knowledge)
@@ -386,15 +388,21 @@ export function createKnowledgeProcessor(
 
 export async function buildConversationIndex(
     conversation: IConversation,
+    conversationSettings: ConversationSettings,
     eventHandler?: IndexingEventHandlers,
 ): Promise<IndexingResults> {
-    const result = await buildSemanticRefIndex(
+    const indexingResult: IndexingResults = {};
+    indexingResult.semanticRefs = await buildSemanticRefIndex(
         conversation,
         undefined,
         eventHandler,
     );
-    if (!result.error && conversation.semanticRefIndex) {
-        await buildSecondaryIndexes(conversation, true, eventHandler);
+    if (!indexingResult.semanticRefs?.error && conversation.semanticRefIndex) {
+        indexingResult.secondaryIndexResults = await buildSecondaryIndexes(
+            conversation,
+            conversationSettings,
+            eventHandler,
+        );
     }
-    return result;
+    return indexingResult;
 }

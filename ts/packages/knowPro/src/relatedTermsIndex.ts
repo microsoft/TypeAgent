@@ -26,6 +26,7 @@ import {
     TextEmbeddingIndexSettings,
 } from "./fuzzyIndex.js";
 import { createEmbeddingCache } from "knowledge-processor";
+import { ConversationSettings } from "./import.js";
 
 export class TermToRelatedTermsMap implements ITermToRelatedTerms {
     public map: collections.MultiMap<string, Term> = new collections.MultiMap();
@@ -139,16 +140,27 @@ export class RelatedTermsIndex implements ITermToRelatedTermsIndex {
 
 export async function buildRelatedTermsIndex(
     conversation: IConversation,
+    conversationSettings: ConversationSettings,
     eventHandler?: IndexingEventHandlers,
-) {
-    const fuzzyIndex =
-        conversation.secondaryIndexes?.termToRelatedTermsIndex?.fuzzyIndex;
-    if (conversation.semanticRefIndex && fuzzyIndex) {
+): Promise<ListIndexingResult> {
+    if (conversation.semanticRefIndex && conversation.secondaryIndexes) {
+        conversation.secondaryIndexes.termToRelatedTermsIndex ??=
+            new RelatedTermsIndex(
+                conversationSettings.relatedTermIndexSettings,
+            );
+        const fuzzyIndex =
+            conversation.secondaryIndexes.termToRelatedTermsIndex.fuzzyIndex;
         const allTerms = conversation.semanticRefIndex.getTerms();
-        if (allTerms.length > 0) {
-            await fuzzyIndex.addTerms(allTerms, eventHandler);
+        if (fuzzyIndex && allTerms.length > 0) {
+            return await fuzzyIndex.addTerms(allTerms, eventHandler);
         }
+        return {
+            numberCompleted: allTerms.length,
+        };
     }
+    return {
+        numberCompleted: 0,
+    };
 }
 
 /**

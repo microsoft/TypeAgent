@@ -674,7 +674,11 @@ export async function createKnowproCommands(
         }
         // Build partial index
         context.podcast.secondaryIndexes.termToRelatedTermsIndex.fuzzyIndex?.clear();
-        await kp.buildRelatedTermsIndex(context.podcast, eventHandler);
+        await kp.buildRelatedTermsIndex(
+            context.podcast,
+            context.podcast.settings,
+            eventHandler,
+        );
         progress.complete();
     }
 
@@ -697,17 +701,25 @@ export async function createKnowproCommands(
             args,
             podcastBuildMessageIndexDef(),
         );
-        context.printer.writeLine(
-            `Indexing ${context.conversation?.messages.length} messages`,
-        );
+        context.printer.writeLine(`Indexing messages`);
+
+        const podcast = context.podcast!;
+        const settings: kp.MessageTextIndexSettings = {
+            ...context.podcast!.settings.messageTextIndexSettings,
+        };
+        settings.embeddingIndexSettings.batchSize = namedArgs.batchSize;
         let progress = new ProgressBar(context.printer, namedArgs.maxMessages);
-        const result = await context.podcast!.buildMessageIndex(
+        podcast.secondaryIndexes.messageIndex = new kp.MessageTextIndex(
+            settings,
+        );
+        const result = await kp.buildMessageIndex(
+            podcast,
+            settings,
             createIndexingEventHandler(
                 context,
                 progress,
                 namedArgs.maxMessages,
             ),
-            namedArgs.batchSize,
         );
         progress.complete();
         context.printer.writeListIndexingResult(result);
@@ -902,7 +914,7 @@ function createIndexingEventHandler(
 ): kp.IndexingEventHandlers {
     let startedKnowledge = false;
     let startedRelated = false;
-
+    let startedMessages = false;
     return {
         onKnowledgeExtracted() {
             if (!startedKnowledge) {
@@ -916,9 +928,20 @@ function createIndexingEventHandler(
             if (!startedRelated) {
                 progress.reset(sourceTexts.length);
                 context.printer.writeLine(
-                    `Creating ${sourceTexts.length} embeddings`,
+                    `Generating ${sourceTexts.length} embeddings`,
                 );
                 startedRelated = true;
+            }
+            progress.advance(batch.length);
+            return true;
+        },
+        onTextIndexed(textAndLocations, batch, batchStartAt) {
+            if (!startedMessages) {
+                progress.reset(textAndLocations.length);
+                context.printer.writeLine(
+                    `Indexing ${textAndLocations.length} messages`,
+                );
+                startedMessages = true;
             }
             progress.advance(batch.length);
             return true;
