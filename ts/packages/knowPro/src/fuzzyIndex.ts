@@ -16,7 +16,6 @@ import * as levenshtein from "fast-levenshtein";
 import { Scored } from "./common.js";
 import { ListIndexingResult, IndexingEventHandlers } from "./interfaces.js";
 import { error, Result, success } from "typechat";
-import { createEmbeddingCache } from "knowledge-processor";
 
 export class EmbeddingIndex {
     private embeddings: NormalizedEmbedding[];
@@ -398,18 +397,6 @@ export function createTextEmbeddingIndexSettings(
         retryPauseMs: 2000,
         batchSize: 8,
     };
-}
-
-export function createTextEmbeddingCache(
-    settings: TextEmbeddingIndexSettings,
-    cacheSize: number,
-    embeddingLookup?: (text: string) => number[] | undefined,
-): void {
-    settings.embeddingModel = createEmbeddingCache(
-        settings.embeddingModel,
-        cacheSize,
-        embeddingLookup,
-    );
 }
 
 export class TextEditDistanceIndex {

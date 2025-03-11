@@ -25,8 +25,7 @@ import {
     MessageTextIndex,
     ListIndexingResult,
     IMessageMetadata,
-    serializeEmbedding,
-    createTextEmbeddingCache,
+    createTermEmbeddingCache,
 } from "knowpro";
 import { conversation as kpLib, split } from "knowledge-processor";
 import { collections, dateTime, getFileName, readAllText } from "typeagent";
@@ -128,11 +127,6 @@ export class Podcast implements IConversation<PodcastMessage> {
         public semanticRefs: SemanticRef[] = [],
     ) {
         this.settings = createConversationSettings(0);
-        createTextEmbeddingCache(
-            this.settings.relatedTermIndexSettings.embeddingIndexSettings!,
-            64,
-            (term) => this.lookupEmbedding(term),
-        );
         this.semanticRefIndex = new ConversationIndex();
         this.secondaryIndexes = new PodcastSecondaryIndexes(this.settings);
     }
@@ -276,6 +270,7 @@ export class Podcast implements IConversation<PodcastMessage> {
             await buildSecondaryIndexes(this, false);
         }
         this.buildParticipantAliases();
+        this.buildCaches();
     }
 
     private buildParticipantAliases(): void {
@@ -317,15 +312,12 @@ export class Podcast implements IConversation<PodcastMessage> {
         return aliases;
     }
 
-    private lookupEmbedding(text: string): number[] | undefined {
-        const embedding =
-            this.secondaryIndexes.termToRelatedTermsIndex.fuzzyIndex?.getEmbedding(
-                text,
-            );
-        if (embedding) {
-            return serializeEmbedding(embedding);
-        }
-        return undefined;
+    private buildCaches(): void {
+        createTermEmbeddingCache(
+            this.settings.relatedTermIndexSettings.embeddingIndexSettings!,
+            this.secondaryIndexes.termToRelatedTermsIndex.fuzzyIndex!,
+            64,
+        );
     }
 }
 

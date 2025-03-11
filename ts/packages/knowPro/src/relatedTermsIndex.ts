@@ -20,10 +20,12 @@ import { SearchTerm } from "./search.js";
 import { isSearchTermWildcard } from "./common.js";
 import { TermSet } from "./collections.js";
 import {
+    serializeEmbedding,
     TextEditDistanceIndex,
     TextEmbeddingIndex,
     TextEmbeddingIndexSettings,
 } from "./fuzzyIndex.js";
+import { createEmbeddingCache } from "knowledge-processor";
 
 export class TermToRelatedTermsMap implements ITermToRelatedTerms {
     public map: collections.MultiMap<string, Term> = new collections.MultiMap();
@@ -361,6 +363,24 @@ export class TermEmbeddingIndex implements ITermEmbeddingIndex {
             return { text: this.textArray[m.item], weight: m.score };
         });
     }
+}
+
+export function createTermEmbeddingCache(
+    settings: TextEmbeddingIndexSettings,
+    termEmbeddingIndex: TermEmbeddingIndex,
+    cacheSize: number,
+): void {
+    settings.embeddingModel = createEmbeddingCache(
+        settings.embeddingModel,
+        cacheSize,
+        (term) => {
+            const embedding = termEmbeddingIndex.getEmbedding(term);
+            if (embedding) {
+                return serializeEmbedding(embedding);
+            }
+            return undefined;
+        },
+    );
 }
 
 export class TermEditDistanceIndex
