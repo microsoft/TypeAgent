@@ -132,10 +132,14 @@ export function printAllCommandsWithUsage(
     if (cmdTable.commands !== undefined) {
         Object.keys(cmdTable.commands).map((cmd) => {
             if (command === undefined) {
-                printAllCommandsWithUsage(cmdTable.commands[cmd], cmd, context); 
+                printAllCommandsWithUsage(cmdTable.commands[cmd], cmd, context);
             } else {
-                printAllCommandsWithUsage(cmdTable.commands[cmd], `${command} ${cmd}`, context); 
-            }            
+                printAllCommandsWithUsage(
+                    cmdTable.commands[cmd],
+                    `${command} ${cmd}`,
+                    context,
+                );
+            }
         });
     } else {
         displayResult(
