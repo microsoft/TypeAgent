@@ -20,6 +20,7 @@ import {
     readConversationDataFromFile,
     IMessageMetadata,
     createTermEmbeddingCache,
+    buildTransientSecondaryIndexes,
 } from "knowpro";
 import { conversation as kpLib, image } from "knowledge-processor";
 import fs from "node:fs";
@@ -404,7 +405,6 @@ export class ImageCollection implements IConversation {
         indexingResult.secondaryIndexResults = await buildSecondaryIndexes(
             this,
             this.settings,
-            true,
             eventHandler,
         );
         this.buildCaches();
@@ -449,7 +449,7 @@ export class ImageCollection implements IConversation {
                 data.relatedTermsIndexData,
             );
         }
-        await buildSecondaryIndexes(this, this.settings, false);
+        await buildTransientSecondaryIndexes(this, this.settings);
         this.buildCaches();
     }
 

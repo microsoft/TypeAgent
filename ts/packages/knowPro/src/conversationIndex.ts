@@ -397,11 +397,10 @@ export async function buildConversationIndex(
         undefined,
         eventHandler,
     );
-    if (!indexingResult.semanticRefs.error && conversation.semanticRefIndex) {
+    if (!indexingResult.semanticRefs?.error && conversation.semanticRefIndex) {
         indexingResult.secondaryIndexResults = await buildSecondaryIndexes(
             conversation,
             conversationSettings,
-            true,
             eventHandler,
         );
     }

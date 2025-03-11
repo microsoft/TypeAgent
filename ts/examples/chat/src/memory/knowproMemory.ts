@@ -702,14 +702,24 @@ export async function createKnowproCommands(
             podcastBuildMessageIndexDef(),
         );
         context.printer.writeLine(`Indexing messages`);
+
+        const podcast = context.podcast!;
+        const settings: kp.MessageTextIndexSettings = {
+            ...context.podcast!.settings.messageTextIndexSettings,
+        };
+        settings.embeddingIndexSettings.batchSize = namedArgs.batchSize;
         let progress = new ProgressBar(context.printer, namedArgs.maxMessages);
-        const result = await context.podcast!.buildMessageIndex(
+        podcast.secondaryIndexes.messageIndex = new kp.MessageTextIndex(
+            settings,
+        );
+        const result = await kp.buildMessageIndex(
+            podcast,
+            settings,
             createIndexingEventHandler(
                 context,
                 progress,
                 namedArgs.maxMessages,
             ),
-            namedArgs.batchSize,
         );
         progress.complete();
         context.printer.writeListIndexingResult(result);

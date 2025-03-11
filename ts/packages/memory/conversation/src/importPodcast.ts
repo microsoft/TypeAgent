@@ -11,7 +11,6 @@ import {
     ConversationSettings,
     createConversationSettings,
     addMetadataToIndex,
-    buildSecondaryIndexes,
     IKnowledgeSource,
     ConversationSecondaryIndexes,
     ConversationThreads,
@@ -20,12 +19,10 @@ import {
     IConversationDataWithIndexes,
     writeConversationDataToFile,
     readConversationDataFromFile,
-    buildMessageIndex,
-    MessageTextIndexSettings,
     MessageTextIndex,
-    ListIndexingResult,
     IMessageMetadata,
     createTermEmbeddingCache,
+    buildTransientSecondaryIndexes,
 } from "knowpro";
 import { conversation as kpLib, split } from "knowledge-processor";
 import { collections, dateTime, getFileName, readAllText } from "typeagent";
@@ -160,30 +157,9 @@ export class Podcast implements IConversation<PodcastMessage> {
         );
         // buildConversationIndex now automatically builds standard secondary indexes
         // Pass false to build podcast specific secondary indexes only
-        await this.buildSecondaryIndexes(false);
+        await this.buildTransientSecondaryIndexes(false);
         await this.secondaryIndexes.threads.buildIndex();
         return result;
-    }
-
-    /**
-     * Work in progress. This will get merged into "buildIndex" soon
-     */
-    public async buildMessageIndex(
-        eventHandler?: IndexingEventHandlers,
-        batchSize?: number,
-    ): Promise<ListIndexingResult> {
-        const settings: MessageTextIndexSettings = {
-            ...this.settings.messageTextIndexSettings,
-        };
-        if (batchSize !== undefined && batchSize > 0) {
-            settings.embeddingIndexSettings.batchSize = batchSize;
-        }
-        const indexingResult = await buildMessageIndex(
-            this,
-            settings,
-            eventHandler,
-        );
-        return indexingResult;
     }
 
     public async serialize(): Promise<PodcastData> {
@@ -239,7 +215,7 @@ export class Podcast implements IConversation<PodcastMessage> {
                 podcastData.messageIndexData,
             );
         }
-        await this.buildSecondaryIndexes(true);
+        await this.buildTransientSecondaryIndexes(true);
     }
 
     public async writeToFile(
@@ -267,9 +243,12 @@ export class Podcast implements IConversation<PodcastMessage> {
         return podcast;
     }
 
-    private async buildSecondaryIndexes(all: boolean) {
+    private async buildTransientSecondaryIndexes(all: boolean) {
         if (all) {
-            await buildSecondaryIndexes(this, this.settings, false);
+            // Build transient secondary indexes associated with the conversation
+            // These are automatically build by calls to buildConversationIndex, but
+            // may need to get rebuilt when we deserialize persisted conversations
+            await buildTransientSecondaryIndexes(this, this.settings);
         }
         this.buildParticipantAliases();
         this.buildCaches();

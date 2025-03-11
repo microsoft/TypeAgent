@@ -276,7 +276,7 @@ export type SecondaryIndexingResults = {
     properties?: ListIndexingResult | undefined;
     timestamps?: ListIndexingResult | undefined;
     relatedTerms?: ListIndexingResult | undefined;
-    messagesIndexedUpto?: TextLocation | undefined;
+    message?: TextIndexingResult | undefined;
 };
 
 export type TextIndexingResult = {

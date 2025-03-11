@@ -11,7 +11,7 @@ import {
     SecondaryIndexingResults,
     Term,
 } from "./interfaces.js";
-import { IMessageTextIndexData } from "./messageIndex.js";
+import { buildMessageIndex, IMessageTextIndexData } from "./messageIndex.js";
 import { PropertyIndex, buildPropertyIndex } from "./propertyIndex.js";
 import {
     buildRelatedTermsIndex,
@@ -26,20 +26,44 @@ import {
 export async function buildSecondaryIndexes(
     conversation: IConversation,
     conversationSettings: ConversationSettings,
-    buildRelated: boolean,
     eventHandler?: IndexingEventHandlers,
 ): Promise<SecondaryIndexingResults> {
+    conversation.secondaryIndexes ??= new ConversationSecondaryIndexes();
+    let result: SecondaryIndexingResults = buildTransientSecondaryIndexes(
+        conversation,
+        conversationSettings,
+    );
+    result.relatedTerms = await buildRelatedTermsIndex(
+        conversation,
+        conversationSettings,
+        eventHandler,
+    );
+    if (!result.relatedTerms?.error) {
+        result.message = await buildMessageIndex(
+            conversation,
+            conversationSettings.messageTextIndexSettings,
+            eventHandler,
+        );
+    }
+
+    return result;
+}
+
+/**
+ * Some indexes are not persisted because they are cheap to rebuild on the fly
+ * - Property index
+ * - Timestamp index
+ * @param conversation
+ * @returns
+ */
+export function buildTransientSecondaryIndexes(
+    conversation: IConversation,
+    conversationSettings: ConversationSettings,
+): SecondaryIndexingResults {
     conversation.secondaryIndexes ??= new ConversationSecondaryIndexes();
     const result: SecondaryIndexingResults = {};
     result.properties = buildPropertyIndex(conversation);
     result.timestamps = buildTimestampIndex(conversation);
-    if (buildRelated) {
-        result.relatedTerms = await buildRelatedTermsIndex(
-            conversation,
-            conversationSettings,
-            eventHandler,
-        );
-    }
     return result;
 }
 
