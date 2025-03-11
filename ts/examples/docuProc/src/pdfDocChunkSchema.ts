@@ -28,8 +28,9 @@ export interface PdfDocChunk {
     // Additional synonyms or related domain concepts.
     synonyms?: string[];
 
-    // References to other chunks or external files.
-    dependencies?: string[];
+    // References to other papers or documents.
+    // These are the other document references from the document.
+    otherDocReferences?: string[];
 }
 
 export interface PdfDocumentInfo {

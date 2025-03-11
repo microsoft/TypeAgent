@@ -1,8 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-// TODO: Most of this is not Python specific; generalize to other languages.
-
 import chalk, { ChalkInstance } from "chalk";
 import * as fs from "fs";
 import * as knowLib from "knowledge-processor";
@@ -20,6 +18,7 @@ import {
     ErrorItem,
 } from "./pdfChunker.js";
 import { purgeNormalizedFile } from "./pdfQNAInteractiveApp.js";
+import path from "path";
 
 function log(
     io: iapp.InteractiveIo | undefined,
@@ -78,13 +77,6 @@ async function importPdfFiles(
     if (fChunkPdfFiles) {
         results = await chunkifyPdfFiles(chunkyIndex.rootDir, filenames);
         t1 = Date.now();
-        if (results.length !== filenames.length) {
-            log(
-                io,
-                `[Some over-long files were split into multiple partial files]`,
-                chalk.yellow,
-            );
-        }
     } else {
         results = await loadPdfChunksFromJson(chunkyIndex.rootDir, filenames);
         t1 = Date.now();
@@ -149,7 +141,7 @@ async function importPdfFiles(
 
     const tt0 = Date.now();
     const documentedFiles: PdfFileDocumentation[] = [];
-    const concurrency = 8; // TODO: Make this a function argument
+    const concurrency = 8;
     let nChunks = 0;
     await asyncArray.forEachAsync(
         chunkedFiles,
@@ -162,6 +154,7 @@ async function importPdfFiles(
                 docs = await exponentialBackoff(
                     io,
                     chunkyIndex.fileDocumenter.document,
+                    path.basename(chunkedFile.fileName),
                     chunkedFile.chunks,
                 );
             } catch (error) {
@@ -261,7 +254,7 @@ async function embedChunk(
         }
         return acc + blob.content.split("\n").length;
     }, 0);
-    console.log("Line count:", lineCount);
+    console.log("Approximate line count:", lineCount);
     await exponentialBackoff(io, chunkyIndex.chunkFolder.put, chunk, chunk.id);
 
     const summaries: string[] = [];

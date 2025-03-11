@@ -16,7 +16,7 @@ import { Blob, Chunk } from "./pdfChunker.js";
 import fs from "fs";
 
 export interface PdfFileDocumenter {
-    document(chunks: Chunk[]): Promise<PdfFileDocumentation>;
+    document(fileName: string, chunks: Chunk[]): Promise<PdfFileDocumentation>;
 }
 
 export function createPdfDocumenter(model: ChatModel): PdfFileDocumenter {
@@ -68,7 +68,10 @@ export function createPdfDocumenter(model: ChatModel): PdfFileDocumenter {
         return base64;
     }
 
-    async function document(chunks: Chunk[]): Promise<PdfFileDocumentation> {
+    async function document(
+        fileName: string,
+        chunks: Chunk[],
+    ): Promise<PdfFileDocumentation> {
         // Organize chunks by page
         const pageChunksMap: Record<
             string,
@@ -101,7 +104,7 @@ export function createPdfDocumenter(model: ChatModel): PdfFileDocumenter {
                 text: `***: Document chunks of Page (Id: ${pageChunk.id}, Page: ${pageChunk.pageid}):\n`,
             });
 
-            // For each block/child chunk
+            // Summarize each child chunk
             for (const chunk of chunks) {
                 const chunkIdentifier = chunk.id;
                 content.push({
@@ -110,7 +113,6 @@ export function createPdfDocumenter(model: ChatModel): PdfFileDocumenter {
                 });
                 for (const blob of chunk.blobs) {
                     if (blob.blob_type === "text") {
-                        // Text processing
                         content.push({
                             type: "text",
                             text:
@@ -199,11 +201,15 @@ export function createPdfDocumenter(model: ChatModel): PdfFileDocumenter {
                 const fileDocs: PdfFileDocumentation = result.data;
                 const chunkDocs = fileDocs.chunkDocs ?? [];
 
+                // Every page has a pageChunk and its children
+                // Assign the docs to the pageChunk and its children
+                // The first chunk is the pageChunk
                 const pageAndBlocks = [pageChunk, ...chunks];
 
                 let iDoc = 0;
                 for (const c of pageAndBlocks) {
                     if (iDoc >= chunkDocs.length) break;
+                    c.fileName = fileName;
                     if (
                         (c.parentId === "" && !c.parentId) ||
                         (c.children && c.children.length === 0)
@@ -223,11 +229,13 @@ export function createPdfDocumenter(model: ChatModel): PdfFileDocumenter {
                     }
                 }
             } else {
-                // handle error if needed
+                console.error(
+                    `Error in documenter: ${result.message} for pageId: ${pageid}`,
+                );
             }
 
             if (pageCount >= maxPagesToProcess) {
-                break; // Limit processing to a certain number of pages
+                break;
             }
         }
 
