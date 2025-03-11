@@ -120,6 +120,22 @@ export function getHandlerTableUsage(
     return output.join("\n");
 }
 
+export function printAllCommandsWithUsage(table: CommandDescriptorTable, context: ActionContext<CommandHandlerContext>) {
+    
+    // Print command header
+    displayResult(`${chalk.bold(table.description)}`, context);
+    displayResult("\n", context);
+
+    // print each command
+    Object.keys(table.commands).map((cmd) => {
+        //displayResult(`@${cmd}`, context);
+        
+        // TODO: get sub-commamds 
+        getUsage(cmd, table.commands[cmd]);
+
+    });
+}
+
 export function printStructuredHandlerTableUsage(
     table: CommandDescriptorTable,
     command: string | undefined,

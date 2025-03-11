@@ -2,7 +2,7 @@ import { ActionContext, ParsedCommandParams } from "@typeagent/agent-sdk";
 import { CommandHandler } from "@typeagent/agent-sdk/helpers/command";
 import { CommandHandlerContext } from "../../../commandHandlerContext.js";
 import { systemHandlers } from "../../systemAgent.js";
-import { getUsage, printStructuredHandlerTableUsage } from "../../../../command/commandHelp.js";
+import { getUsage, printAllCommandsWithUsage, printStructuredHandlerTableUsage } from "../../../../command/commandHelp.js";
 import { getDefaultSubCommandDescriptor, getParsedCommand, resolveCommand } from "../../../../command/command.js";
 import { displayError, displayResult } from "@typeagent/agent-sdk/helpers/display";
 
@@ -32,19 +32,7 @@ export class HelpCommandHandler implements CommandHandler {
     ) {
         const systemContext = context.sessionContext.agentContext;
         if (params.flags.all) {
-            //displayResult("all commands here", context);
-            // TODO: add remaining handlers here (i.e. agent commands, etc.) 
-            // const allHandlers: CommandHandler[] = [
-            //     ...systemHandlers
-            // ]
-            // printStructuredHandlerTableUsage(
-            //     { 
-            //         description: "All commands",
-            //         commands: { ...allHandlers }
-            //     },
-            //     undefined,
-            //     context,
-            // );
+            printAllCommandsWithUsage(systemHandlers, context);
             return;
         } else if (params.args.command === undefined) {
             printStructuredHandlerTableUsage(

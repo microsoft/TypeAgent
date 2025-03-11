@@ -41,6 +41,7 @@ import {
 } from "./handlers/installCommandHandlers.js";
 import { ActionCommandHandler } from "./handlers/system/actionCommandHandler.js";
 import { RunCommandScriptHandler } from "./handlers/system/runScriptCommandHandler.js";
+import { HelpCommandHandler } from "./handlers/system/helpCommandHandler.js";
 
 export const systemHandlers: CommandHandlerTable = {
     description: "Type Agent System Commands",
@@ -52,7 +53,7 @@ export const systemHandlers: CommandHandlerTable = {
         config: getConfigCommandHandlers(),
         display: new DisplayCommandHandler(),
         trace: new TraceCommandHandler(),
-        help: new DebugCommandHandler(),
+        help: new HelpCommandHandler(),
         debug: new DebugCommandHandler(),
         clear: {
             description: "Clear the console",
