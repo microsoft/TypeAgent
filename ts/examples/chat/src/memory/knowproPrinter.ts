@@ -5,7 +5,7 @@ import * as kp from "knowpro";
 import * as knowLib from "knowledge-processor";
 import { ChatPrinter } from "../chatPrinter.js";
 import chalk from "chalk";
-import { textLocationToString } from "./knowproCommon.js";
+import { IMessageMetadata, textLocationToString } from "./knowproCommon.js";
 import * as cm from "conversation-memory";
 import * as im from "image-memory";
 
@@ -24,8 +24,8 @@ export class KnowProPrinter extends ChatPrinter {
     }
 
     public writeMetadata(message: kp.IMessage): KnowProPrinter {
-        const msgMetadata: kp.IMessageMetadata =
-            message as any as kp.IMessageMetadata;
+        const msgMetadata: IMessageMetadata =
+            message as any as IMessageMetadata;
         if (msgMetadata) {
             this.write("Metadata: ").writeJson(msgMetadata.metadata);
         }

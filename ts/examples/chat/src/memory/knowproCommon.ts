@@ -109,3 +109,7 @@ export function actionFilterToSearchGroup(
     }
     return searchTermGroup;
 }
+
+export interface IMessageMetadata<TMeta = any> {
+    metadata: TMeta;
+}

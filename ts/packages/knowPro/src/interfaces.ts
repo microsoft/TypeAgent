@@ -18,10 +18,6 @@ export interface IMessage extends IKnowledgeSource {
     deletionInfo?: DeletionInfo;
 }
 
-export interface IMessageMetadata<TMeta = any> {
-    metadata: TMeta;
-}
-
 export type ScoredMessageIndex = {
     messageIndex: MessageIndex;
     score: number;

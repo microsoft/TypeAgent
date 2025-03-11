@@ -18,7 +18,6 @@ import {
     IConversationDataWithIndexes,
     writeConversationDataToFile,
     readConversationDataFromFile,
-    IMessageMetadata,
     createTermEmbeddingCache,
     buildTransientSecondaryIndexes,
 } from "knowpro";
@@ -33,7 +32,7 @@ import { isDirectoryPath } from "typeagent";
 export interface ImageCollectionData
     extends IConversationDataWithIndexes<Image> {}
 
-export class Image implements IMessage, IMessageMetadata<ImageMeta> {
+export class Image implements IMessage {
     public timestamp: string | undefined;
     constructor(
         public textChunks: string[],

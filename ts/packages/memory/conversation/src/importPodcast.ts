@@ -20,7 +20,6 @@ import {
     writeConversationDataToFile,
     readConversationDataFromFile,
     MessageTextIndex,
-    IMessageMetadata,
     createTermEmbeddingCache,
     buildTransientSecondaryIndexes,
 } from "knowpro";
@@ -90,9 +89,7 @@ function assignMessageListeners(
     }
 }
 
-export class PodcastMessage
-    implements IMessage, IMessageMetadata<PodcastMessageMeta>
-{
+export class PodcastMessage implements IMessage {
     constructor(
         public textChunks: string[],
         public metadata: PodcastMessageMeta,
