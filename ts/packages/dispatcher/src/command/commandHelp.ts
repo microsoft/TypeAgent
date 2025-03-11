@@ -121,15 +121,7 @@ export function getHandlerTableUsage(
 }
 
 export function printAllCommandsWithUsage(table: CommandDescriptorTable, command: string | undefined, context: ActionContext<CommandHandlerContext>) {
-    
-    // Print command header
-    //displayResult(`${chalk.bold(table.description)}`, context);
-    //displayResult("\n", context);
-
-    // print each command
     Object.keys(table.commands).map((cmd) => {
-        
-        // TODO: get sub-commamds
         const cmdTable: CommandDescriptorTable = table.commands[cmd] as CommandDescriptorTable;
         const cmdHandler: CommandDescriptor = table.commands[cmd] as CommandDescriptor;
         if (cmdTable.commands !== undefined) {
@@ -143,7 +135,6 @@ export function printAllCommandsWithUsage(table: CommandDescriptorTable, command
             }
             displayResult("\n", context);
         }
-
     });
 }
 
