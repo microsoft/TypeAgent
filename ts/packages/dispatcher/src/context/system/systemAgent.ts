@@ -39,9 +39,9 @@ import {
     InstallCommandHandler,
     UninstallCommandHandler,
 } from "./handlers/installCommandHandlers.js";
-import { ActionCommandHandler } from "./handlers/system/actionCommandHandler.js";
-import { RunCommandScriptHandler } from "./handlers/system/runScriptCommandHandler.js";
-import { HelpCommandHandler } from "./handlers/system/helpCommandHandler.js";
+import { ActionCommandHandler } from "./handlers/actionCommandHandler.js";
+import { RunCommandScriptHandler } from "./handlers/runScriptCommandHandler.js";
+import { HelpCommandHandler } from "./handlers/helpCommandHandler.js";
 
 export const systemHandlers: CommandHandlerTable = {
     description: "Type Agent System Commands",

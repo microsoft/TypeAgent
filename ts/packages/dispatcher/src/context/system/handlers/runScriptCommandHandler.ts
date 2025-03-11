@@ -1,8 +1,8 @@
 import { ActionContext, ParsedCommandParams } from "@typeagent/agent-sdk";
 import { CommandHandler } from "@typeagent/agent-sdk/helpers/command";
-import { CommandHandlerContext } from "../../../commandHandlerContext.js";
-import { processCommands } from "../../../../helpers/console.js";
-import { getPrompt, processCommandNoLock } from "../../../../command/command.js";
+import { CommandHandlerContext } from "../../commandHandlerContext.js";
+import { processCommands } from "../../../helpers/console.js";
+import { getPrompt, processCommandNoLock } from "../../../command/command.js";
 import fs from "node:fs";
 import path from "node:path";
 

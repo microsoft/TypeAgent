@@ -120,18 +120,29 @@ export function getHandlerTableUsage(
     return output.join("\n");
 }
 
-export function printAllCommandsWithUsage(table: CommandDescriptorTable, context: ActionContext<CommandHandlerContext>) {
+export function printAllCommandsWithUsage(table: CommandDescriptorTable, command: string | undefined, context: ActionContext<CommandHandlerContext>) {
     
     // Print command header
-    displayResult(`${chalk.bold(table.description)}`, context);
-    displayResult("\n", context);
+    //displayResult(`${chalk.bold(table.description)}`, context);
+    //displayResult("\n", context);
 
     // print each command
     Object.keys(table.commands).map((cmd) => {
-        //displayResult(`@${cmd}`, context);
         
-        // TODO: get sub-commamds 
-        getUsage(cmd, table.commands[cmd]);
+        // TODO: get sub-commamds
+        const cmdTable: CommandDescriptorTable = table.commands[cmd] as CommandDescriptorTable;
+        const cmdHandler: CommandDescriptor = table.commands[cmd] as CommandDescriptor;
+        if (cmdTable.commands !== undefined) {
+            printAllCommandsWithUsage(cmdTable, cmd, context);
+        } else if (cmdHandler !== undefined) {
+
+            if (command === undefined) {
+                displayResult(getUsage(cmd, cmdHandler), context);
+            } else {
+                displayResult(getUsage(`${command} ${cmd}`, cmdHandler), context);
+            }
+            displayResult("\n", context);
+        }
 
     });
 }

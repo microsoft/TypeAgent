@@ -1,12 +1,12 @@
 import { ActionContext, AppAction, ParsedCommandParams, PartialParsedCommandParams, SessionContext } from "@typeagent/agent-sdk";
 import { CommandHandler } from "@typeagent/agent-sdk/helpers/command";
-import { CommandHandlerContext } from "../../../commandHandlerContext.js";
+import { CommandHandlerContext } from "../../commandHandlerContext.js";
 import { getParameterNames, getParameterType, validateAction } from "action-schema";
-import { executeActions } from "../../../../execute/actionHandlers.js";
+import { executeActions } from "../../../execute/actionHandlers.js";
 import { FullAction, toExecutableActions } from "agent-cache";
-import { getActionSchema } from "../../../../internal.js";
+import { getActionSchema } from "../../../internal.js";
 import { getObjectProperty } from "common-utils";
-import { getActionCompletion } from "../../../../translation/actionTemplate.js";
+import { getActionCompletion } from "../../../translation/actionTemplate.js";
 
 export class ActionCommandHandler implements CommandHandler {
     public readonly description = "Execute an action";

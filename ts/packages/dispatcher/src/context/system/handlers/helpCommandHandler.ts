@@ -1,9 +1,9 @@
 import { ActionContext, ParsedCommandParams } from "@typeagent/agent-sdk";
 import { CommandHandler } from "@typeagent/agent-sdk/helpers/command";
-import { CommandHandlerContext } from "../../../commandHandlerContext.js";
-import { systemHandlers } from "../../systemAgent.js";
-import { getUsage, printAllCommandsWithUsage, printStructuredHandlerTableUsage } from "../../../../command/commandHelp.js";
-import { getDefaultSubCommandDescriptor, getParsedCommand, resolveCommand } from "../../../../command/command.js";
+import { CommandHandlerContext } from "../../commandHandlerContext.js";
+import { systemHandlers } from "../systemAgent.js";
+import { getUsage, printAllCommandsWithUsage, printStructuredHandlerTableUsage } from "../../../command/commandHelp.js";
+import { getDefaultSubCommandDescriptor, getParsedCommand, resolveCommand } from "../../../command/command.js";
 import { displayError, displayResult } from "@typeagent/agent-sdk/helpers/display";
 
 export class HelpCommandHandler implements CommandHandler {
@@ -32,7 +32,7 @@ export class HelpCommandHandler implements CommandHandler {
     ) {
         const systemContext = context.sessionContext.agentContext;
         if (params.flags.all) {
-            printAllCommandsWithUsage(systemHandlers, context);
+            printAllCommandsWithUsage(systemHandlers, undefined, context);
             return;
         } else if (params.args.command === undefined) {
             printStructuredHandlerTableUsage(
