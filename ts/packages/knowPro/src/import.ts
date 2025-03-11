@@ -8,6 +8,8 @@ import {
 } from "./fuzzyIndex.js";
 import { RelatedTermIndexSettings } from "./relatedTermsIndex.js";
 import { MessageTextIndexSettings } from "./messageIndex.js";
+import { openai } from "aiclient";
+import { createEmbeddingCache } from "knowledge-processor";
 
 export type ConversationSettings = {
     relatedTermIndexSettings: RelatedTermIndexSettings;
@@ -15,14 +17,33 @@ export type ConversationSettings = {
     messageTextIndexSettings: MessageTextIndexSettings;
 };
 
-export function createConversationSettings(): ConversationSettings {
+export function createConversationSettings(
+    embeddingCacheSize: number = 64,
+): ConversationSettings {
+    let embeddingModel = openai.createEmbeddingModel();
+    if (embeddingCacheSize > 0) {
+        embeddingModel = createEmbeddingCache(
+            embeddingModel,
+            embeddingCacheSize,
+        );
+    }
+    const embeddingSize = 1536;
     return {
         relatedTermIndexSettings: {
-            embeddingIndexSettings: createTextEmbeddingIndexSettings(),
+            embeddingIndexSettings: createTextEmbeddingIndexSettings(
+                embeddingModel,
+                embeddingSize,
+            ),
         },
-        threadSettings: createTextEmbeddingIndexSettings(),
+        threadSettings: createTextEmbeddingIndexSettings(
+            embeddingModel,
+            embeddingSize,
+        ),
         messageTextIndexSettings: {
-            embeddingIndexSettings: createTextEmbeddingIndexSettings(),
+            embeddingIndexSettings: createTextEmbeddingIndexSettings(
+                embeddingModel,
+                embeddingSize,
+            ),
         },
     };
 }

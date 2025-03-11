@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { collections } from "typeagent";
+import { collections, NormalizedEmbedding } from "typeagent";
 import { IConversation, ListIndexingResult, Term } from "./interfaces.js";
 import { IndexingEventHandlers } from "./interfaces.js";
 import { Scored } from "./common.js";
@@ -346,6 +346,14 @@ export class TermEmbeddingIndex implements ITermEmbeddingIndex {
         }
         this.textArray = data.textItems;
         this.embeddingIndex.deserialize(data.embeddings);
+    }
+
+    public getEmbedding(text: string): NormalizedEmbedding | undefined {
+        const pos = this.textArray.indexOf(text);
+        if (pos >= 0) {
+            return this.embeddingIndex.get(pos);
+        }
+        return undefined;
     }
 
     private matchesToTerms(matches: Scored[]): Term[] {

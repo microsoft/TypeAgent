@@ -11,12 +11,12 @@ import {
     indexesOfAllNearest,
     createTopNList,
 } from "typeagent";
-import { openai, TextEmbeddingModel } from "aiclient";
+import { TextEmbeddingModel } from "aiclient";
 import * as levenshtein from "fast-levenshtein";
-import { createEmbeddingCache } from "knowledge-processor";
 import { Scored } from "./common.js";
 import { ListIndexingResult, IndexingEventHandlers } from "./interfaces.js";
 import { error, Result, success } from "typechat";
+import { createEmbeddingCache } from "knowledge-processor";
 
 export class EmbeddingIndex {
     private embeddings: NormalizedEmbedding[];
@@ -385,16 +385,31 @@ export type TextEmbeddingIndexSettings = {
 };
 
 export function createTextEmbeddingIndexSettings(
-    minScore = 0.85,
+    embeddingModel: TextEmbeddingModel,
+    embeddingSize: number,
+    minScore?: number,
 ): TextEmbeddingIndexSettings {
+    minScore ??= 0.85;
     return {
-        embeddingModel: createEmbeddingCache(openai.createEmbeddingModel(), 64),
-        embeddingSize: 1536,
+        embeddingModel,
+        embeddingSize,
         minScore,
         retryMaxAttempts: 2,
         retryPauseMs: 2000,
         batchSize: 8,
     };
+}
+
+export function createTextEmbeddingCache(
+    settings: TextEmbeddingIndexSettings,
+    cacheSize: number,
+    embeddingLookup?: (text: string) => number[] | undefined,
+): void {
+    settings.embeddingModel = createEmbeddingCache(
+        settings.embeddingModel,
+        cacheSize,
+        embeddingLookup,
+    );
 }
 
 export class TextEditDistanceIndex {
