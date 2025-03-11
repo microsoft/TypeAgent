@@ -119,7 +119,7 @@ class Podcast(interfaces.IConversation[PodcastMessage]):
         result = await convindex.build_conversation_index(self, event_handler)
         # TODO
         # if not result.error:
-        #     # buildConversationIndex now automatically builds standard secondary indexes
+        #     # build_conversation_index now automatically builds standard secondary indexes
         #     # Pass false to build podcast specific secondary indexes only
         #     await self.build_secondary_indexes(False)
         #     await self.secondary_indexes.threads.build_index()
