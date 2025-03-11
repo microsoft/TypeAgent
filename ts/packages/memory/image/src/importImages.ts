@@ -19,6 +19,7 @@ import {
     writeConversationDataToFile,
     readConversationDataFromFile,
     IMessageMetadata,
+    createTermEmbeddingCache,
 } from "knowpro";
 import { conversation as kpLib, image } from "knowledge-processor";
 import fs from "node:fs";
@@ -396,6 +397,7 @@ export class ImageCollection implements IConversation {
 
         this.addMetadataToIndex();
         await buildSecondaryIndexes(this, true, eventHandler);
+        this.buildCaches();
 
         let indexingResult: IndexingResults = {
             chunksIndexedUpto: { messageIndex: this.messages.length - 1 },
@@ -432,6 +434,15 @@ export class ImageCollection implements IConversation {
             );
         }
         await buildSecondaryIndexes(this, false);
+        this.buildCaches();
+    }
+
+    private buildCaches(): void {
+        createTermEmbeddingCache(
+            this.settings.relatedTermIndexSettings.embeddingIndexSettings!,
+            this.secondaryIndexes.termToRelatedTermsIndex.fuzzyIndex!,
+            64,
+        );
     }
 
     public async writeToFile(

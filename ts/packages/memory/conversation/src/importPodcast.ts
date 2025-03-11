@@ -126,7 +126,7 @@ export class Podcast implements IConversation<PodcastMessage> {
         public tags: string[] = [],
         public semanticRefs: SemanticRef[] = [],
     ) {
-        this.settings = createConversationSettings(0);
+        this.settings = createConversationSettings();
         this.semanticRefIndex = new ConversationIndex();
         this.secondaryIndexes = new PodcastSecondaryIndexes(this.settings);
     }
