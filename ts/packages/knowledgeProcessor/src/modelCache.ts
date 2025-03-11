@@ -7,6 +7,7 @@ import { Result, success, error } from "typechat";
 
 export interface TextEmbeddingModelWithCache extends TextEmbeddingModel {
     readonly cache: collections.Cache<string, number[]>;
+    embeddingLookup?: (text: string) => number[] | undefined;
 }
 
 /**
@@ -18,6 +19,7 @@ export interface TextEmbeddingModelWithCache extends TextEmbeddingModel {
 export function createEmbeddingCache(
     model: TextEmbeddingModel,
     cacheSize: number,
+    embeddingLookup?: (text: string) => number[] | undefined,
 ): TextEmbeddingModelWithCache {
     const cache: collections.Cache<string, number[]> =
         collections.createLRUCache(cacheSize);
@@ -32,7 +34,7 @@ export function createEmbeddingCache(
     return modelWithCache;
 
     async function generateEmbedding(input: string): Promise<Result<number[]>> {
-        let embedding = cache.get(input);
+        let embedding = getFromCache(input);
         if (embedding) {
             return success(embedding);
         }
@@ -51,7 +53,7 @@ export function createEmbeddingCache(
         // First, grab any embeddings we already have
         for (let i = 0; i < inputs.length; ++i) {
             let input = inputs[i];
-            let embedding = cache.get(input);
+            let embedding = getFromCache(input);
             if (embedding === undefined) {
                 // This one needs embeddings
                 inputBatch ??= [];
@@ -79,5 +81,11 @@ export function createEmbeddingCache(
         return embeddingBatch && embeddingBatch.length > 0
             ? success(embeddingBatch)
             : error("Could not generated embeddings");
+    }
+
+    function getFromCache(text: string): number[] | undefined {
+        let embedding = embeddingLookup ? embeddingLookup(text) : undefined;
+        embedding ??= cache.get(text);
+        return embedding;
     }
 }

@@ -21,10 +21,16 @@ async function getActiveTabUrl(): Promise<string | null> {
 }
 
 async function requestSchemaUpdate(forceRefresh?: boolean) {
-    const schemaAccordion = document.getElementById(
-        "schemaAccordion",
-    ) as HTMLDivElement;
-    schemaAccordion.innerHTML = "<p>Loading...</p>";
+    const itemsList = document.getElementById(
+        "detectedSchemaItemsList",
+    ) as HTMLElement;
+
+    itemsList.innerHTML = "";
+
+    const refreshButton = document.getElementById(
+        "refreshDetectedActions",
+    ) as HTMLButtonElement;
+    const originalHtml = refreshButton.innerHTML;
 
     const currentSchema = await getStoredPageProperty(
         launchUrl!,
@@ -40,66 +46,85 @@ async function requestSchemaUpdate(forceRefresh?: boolean) {
         currentActionDefinitions === null ||
         forceRefresh
     ) {
-        const response = await chrome.runtime.sendMessage({
-            type: "refreshSchema",
-        });
-        if (chrome.runtime.lastError) {
-            console.error("Error fetching schema:", chrome.runtime.lastError);
-            return;
+        refreshButton.innerHTML =
+            '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>';
+
+        try {
+            const response = await chrome.runtime.sendMessage({
+                type: "refreshSchema",
+            });
+            if (chrome.runtime.lastError) {
+                console.error(
+                    "Error fetching schema:",
+                    chrome.runtime.lastError,
+                );
+                return;
+            }
+
+            await setStoredPageProperty(
+                launchUrl!,
+                "detectedActions",
+                response.schema,
+            );
+            await setStoredPageProperty(
+                launchUrl!,
+                "detectedActionDefinitions",
+                response.actionDefinitions,
+            );
+
+            renderSchemaResults(response.schema);
+        } finally {
+            refreshButton.innerHTML = originalHtml;
         }
-
-        await setStoredPageProperty(
-            launchUrl!,
-            "detectedActions",
-            response.schema,
-        );
-        await setStoredPageProperty(
-            launchUrl!,
-            "detectedActionDefinitions",
-            response.actionDefinitions,
-        );
-
-        renderSchemaResults(response.schema);
     } else {
         renderSchemaResults(currentSchema);
     }
+
+    registerTempSchema();
 }
 
-function renderSchemaResults(schema: any) {
-    const schemaAccordion = document.getElementById(
-        "schemaAccordion",
-    ) as HTMLDivElement;
+function renderSchemaResults(schemaActions: any) {
+    const itemsList = document.getElementById(
+        "detectedSchemaItemsList",
+    ) as HTMLElement;
+    itemsList.innerHTML = "";
 
-    if (schema && schema.actions) {
-        schemaAccordion.innerHTML = "";
-
-        schema.actions.forEach((action: any, index: number) => {
+    if (schemaActions !== undefined && schemaActions.length > 0) {
+        schemaActions.forEach((action: any, index: number) => {
             const { actionName, parameters } = action;
             const paramsText = parameters
                 ? JSON.stringify(parameters, null, 2)
                 : "{}";
 
-            const accordionItem = document.createElement("div");
-            accordionItem.classList.add("accordion-item");
+            const listItem = document.createElement("li");
+            listItem.className = "list-group-item list-item";
 
-            accordionItem.innerHTML = `
-                <h2 class="accordion-header" id="heading${index}">
-                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" 
-                        data-bs-target="#collapse${index}" aria-expanded="false" aria-controls="collapse${index}">
-                        ${actionName}
-                    </button>
-                </h2>
-                <div id="collapse${index}" class="accordion-collapse collapse" aria-labelledby="heading${index}" data-bs-parent="#schemaAccordion">
-                    <div class="accordion-body">
-                        <pre><code class="language-json">${paramsText}</code></pre>
-                    </div>
-                </div>
-            `;
+            const nameSpan = document.createElement("span");
+            nameSpan.textContent = actionName;
 
-            schemaAccordion.appendChild(accordionItem);
+            /*
+                const toggleDiv = document.createElement('div');
+                toggleDiv.className = 'form-check form-switch';
+                
+                const toggleInput = document.createElement('input');
+                toggleInput.className = 'form-check-input';
+                toggleInput.type = 'checkbox';
+                toggleInput.id = `toggle-${index}`;
+                toggleInput.checked = true;
+                
+                toggleInput.addEventListener('change', () => {
+                    // toggleOption(index);
+                });
+                
+                toggleDiv.appendChild(toggleInput);
+                */
+            listItem.appendChild(nameSpan);
+            //listItem.appendChild(toggleDiv);
+
+            itemsList.appendChild(listItem);
         });
     } else {
-        schemaAccordion.innerHTML = "<p>No schema found.</p>";
+        itemsList.innerHTML = "<p>No schema found.</p>";
     }
 }
 
@@ -116,33 +141,13 @@ function copySchemaToClipboard() {
 }
 
 async function registerTempSchema() {
-    const button = document.getElementById("trySchema") as HTMLButtonElement;
-    const originalContent = button.innerHTML;
-    const originalClass = button.className;
+    await chrome.runtime.sendMessage({
+        type: "registerTempSchema",
+    });
 
-    function showTemporaryStatus(text: string, newClass: string) {
-        button.innerHTML = text;
-        button.className = `btn btn-sm ${newClass}`;
-
-        setTimeout(() => {
-            button.innerHTML = originalContent;
-            button.className = originalClass;
-            button.disabled = false;
-        }, 5000);
-    }
-
-    button.innerHTML = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Processing...`;
-    button.disabled = true;
-    try {
-        const response = await chrome.runtime.sendMessage({
-            type: "registerTempSchema",
-        });
-    } catch {}
     if (chrome.runtime.lastError) {
         console.error("Error fetching schema:", chrome.runtime.lastError);
-        showTemporaryStatus("✖ Failed", "btn-outline-danger");
-    } else {
-        showTemporaryStatus("✔ Succeeded", "btn-outline-success");
+        return;
     }
 }
 
@@ -176,25 +181,85 @@ async function saveUserAction() {
     const screenshot = JSON.parse(stepsContainer.dataset.screenshot || "");
     const html = JSON.parse(stepsContainer.dataset.html || "");
 
-    // Retrieve existing actions from localStorage
-    const storedActions = localStorage.getItem("userActions");
-    const actions = storedActions ? JSON.parse(storedActions) : [];
+    const button = document.getElementById("saveAction") as HTMLButtonElement;
+    const originalContent = button.innerHTML;
+    const originalClass = button.className;
 
-    // Add new action
-    actions.push({
-        name: actionName,
-        description: actionDescription,
-        steps,
+    function showTemporaryStatus(text: string, newClass: string) {
+        button.innerHTML = text;
+        button.className = `btn btn-sm ${newClass}`;
+
+        setTimeout(() => {
+            button.innerHTML = originalContent;
+            button.className = originalClass;
+            button.disabled = false;
+        }, 5000);
+    }
+
+    button.innerHTML = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Saving...`;
+    button.disabled = true;
+
+    // Get schema based on the recorded action info
+    const response = await chrome.runtime.sendMessage({
+        type: "getIntentFromRecording",
+        html: [{ content: html, frameId: 0 }],
         screenshot,
-        html,
+        actionName,
+        actionDescription,
+        steps: JSON.stringify(steps),
     });
+    if (chrome.runtime.lastError) {
+        console.error("Error fetching schema:", chrome.runtime.lastError);
+        showTemporaryStatus("✖ Failed", "btn-outline-danger");
+    } else {
+        const processedActionName = response.intentJson.actionName;
+        await addEntryToStoredPageProperties(actionName!, "userActions", {
+            name: processedActionName,
+            description: actionDescription,
+            steps,
+            screenshot,
+            html,
+            intentSchema: response.intent,
+            actionsJson: response.actions,
+        });
 
-    // Save back to localStorage
-    localStorage.setItem("userActions", JSON.stringify(actions));
+        await addEntryToStoredPageProperties(
+            processedActionName,
+            "authoredActionDefinitions",
+            response.intentTypeDefinition,
+        );
+        await addEntryToStoredPageProperties(
+            processedActionName,
+            "authoredActionsJson",
+            response.actions,
+        );
+        await addEntryToStoredPageProperties(
+            processedActionName,
+            "authoredIntentJson",
+            response.intentJson,
+        );
+        showTemporaryStatus("✔ Succeeded", "btn-outline-success");
+    }
 
-    // Update UI
+    toggleActionForm();
     await updateUserActionsUI();
-    toggleActionForm(); // Hide form after saving
+    registerTempSchema();
+}
+
+async function addEntryToStoredPageProperties(
+    actionName: string,
+    key: string,
+    value: any,
+) {
+    let currentActionJson = new Map(
+        Object.entries((await getStoredPageProperty(launchUrl!, key)) ?? {}),
+    );
+    currentActionJson.set(actionName!, value);
+    await setStoredPageProperty(
+        launchUrl!,
+        key,
+        Object.fromEntries(currentActionJson),
+    );
 }
 
 // Function to update user actions display
@@ -239,13 +304,10 @@ async function stopRecording() {
         ).value.trim();
 
         renderTimelineSteps(
-            actionName,
-            actionDescription,
             response.recordedActions,
             stepsContainer,
             response.recordedActionScreenshot,
             response.recordedActionHtml,
-            true,
         );
     }
 
@@ -266,15 +328,14 @@ async function cancelRecording() {
 }
 
 async function clearRecordedUserAction() {
-    if (localStorage.getItem("userActions")) {
-        localStorage.removeItem("userActions");
-    }
-
     await chrome.runtime.sendMessage({ type: "clearRecordedActions" });
-
+    await setStoredPageProperty(launchUrl!, "userActions", null);
     await setStoredPageProperty(launchUrl!, "authoredActionDefinitions", null);
+    await setStoredPageProperty(launchUrl!, "authoredActionsJson", null);
+    await setStoredPageProperty(launchUrl!, "authoredIntentJson", null);
     // Update UI
     await updateUserActionsUI();
+    registerTempSchema();
 }
 
 async function showUserDefinedActionsList() {
@@ -283,8 +344,13 @@ async function showUserDefinedActionsList() {
     ) as HTMLDivElement;
 
     // Fetch recorded actions
-    const storedActions = localStorage.getItem("userActions");
-    const actions = storedActions ? JSON.parse(storedActions) : [];
+    const storedActions = new Map(
+        Object.entries(
+            (await getStoredPageProperty(launchUrl!, "userActions")) ?? {},
+        ),
+    );
+
+    const actions = Array.from(storedActions.values());
 
     userActionsListContainer.innerHTML = "";
 
@@ -332,9 +398,6 @@ function renderTimeline(action: any, index: number) {
                                             <a class="nav-link" data-bs-toggle="tab" href="#planTab${index}">Actions</a>
                                             </li>
                                         </ul>
-                                    <button id="processAction" class="btn btn-sm btn-outline-primary" style="border:0px" title="Process Action">
-                                        <i class="bi bi-robot"></i>
-                                    </button>
                                     </div>
 
                                     <!-- Tab Content -->
@@ -364,98 +427,46 @@ function renderTimeline(action: any, index: number) {
         "#Stepscontent",
     )! as HTMLElement;
     renderTimelineSteps(
-        action.name,
-        action.description,
         action.steps,
         stepsContainer,
         action.screenshot,
         action.html,
     );
 
-    const processActionButton = timelineHeader.querySelector(
-        "#processAction",
-    )! as HTMLElement;
-
-    const intentViewContainer = timelineHeader.querySelector(
-        "#intentContent",
-    )! as HTMLElement;
-
-    const actionsViewContainer = timelineHeader.querySelector(
-        "#planContent",
-    )! as HTMLElement;
-
-    processActionButton.style.display = "block";
-    processActionButton.addEventListener("click", () =>
-        getIntentFromRecording(
-            action.html,
-            action.screenshot,
-            action.name,
-            action.description,
-            action.steps,
-        ),
-    );
-
-    async function getIntentFromRecording(
-        html: string,
-        screenshot: string,
-        actionName: string,
-        description: string,
-        steps: any[],
-    ) {
-        const response = await chrome.runtime.sendMessage({
-            type: "getIntentFromRecording",
-            html: [{ content: html, frameId: 0 }],
-            screenshot,
-            actionName,
-            description,
-            steps: JSON.stringify(steps),
-        });
-        if (chrome.runtime.lastError) {
-            console.error("Error fetching schema:", chrome.runtime.lastError);
-            return;
-        }
-
+    if (action.intentSchema !== undefined) {
         const card = document.createElement("div");
         card.innerHTML = `        
-            <pre class="card-text"><code class="language-json">${response.intent}</code></pre>
+            <pre class="card-text"><code class="language-json">${action.intentSchema}</code></pre>
         `;
 
+        const intentViewContainer = timelineHeader.querySelector(
+            "#intentContent",
+        )! as HTMLElement;
+
         intentViewContainer.replaceChildren(card);
+    }
+
+    if (action.actionsJson !== undefined) {
+        const actionsViewContainer = timelineHeader.querySelector(
+            "#planContent",
+        )! as HTMLElement;
 
         const actionsCard = document.createElement("div");
         actionsCard.innerHTML = `        
-            <pre class="card-text"><code class="language-json">${JSON.stringify(response.actions, null, 2)}</code></pre>
+            <pre class="card-text"><code class="language-json">${JSON.stringify(action.actionsJson, null, 2)}</code></pre>
         `;
 
         actionsViewContainer.replaceChildren(actionsCard);
-
-        let currentTypeDefinitions = new Map(
-            Object.entries(
-                (await getStoredPageProperty(
-                    launchUrl!,
-                    "authoredActionDefinitions",
-                )) ?? {},
-            ),
-        );
-        currentTypeDefinitions.set(actionName, response.intentTypeDefinition);
-        await setStoredPageProperty(
-            launchUrl!,
-            "authoredActionDefinitions",
-            Object.fromEntries(currentTypeDefinitions),
-        );
     }
 
     userActionsListContainer.appendChild(timelineHeader);
 }
 
 function renderTimelineSteps(
-    actionName: string,
-    actionDescription: string,
     steps: any[],
     userActionsListContainer: HTMLElement,
     screenshotData: string,
     htmlData: string,
-    isEditingMode?: boolean,
 ) {
     userActionsListContainer.innerHTML = `
                     <div id="content">
@@ -484,10 +495,13 @@ function renderTimelineSteps(
             card.classList.add("event");
             card.dataset.date = new Date(step.timestamp).toLocaleString();
 
+            // only display a subset of fields in the UI
+            const { boundingBox, timestamp, id, ...filteredObjet } = step;
+
             card.innerHTML = `        
             <h3>${index + 1}. ${step.type}</h3>
             <p>Details.</p>
-            <pre class="card-text"><code class="language-json">${JSON.stringify(step, null, 2)}</code></pre>
+            <pre class="card-text"><code class="language-json">${JSON.stringify(filteredObjet, null, 2)}</code></pre>
         `;
 
             stepsContainer.appendChild(card);
@@ -504,10 +518,6 @@ function renderTimelineSteps(
 
     const downloadHTMLButton = userActionsListContainer.querySelector(
         "#downloadHtml",
-    )! as HTMLElement;
-
-    const processActionButton = userActionsListContainer.querySelector(
-        "#processAction",
     )! as HTMLElement;
 
     if (screenshotData) {
@@ -534,19 +544,6 @@ function renderTimelineSteps(
         );
     }
 
-    if (isEditingMode) {
-        processActionButton.classList.remove("hidden");
-        processActionButton.addEventListener("click", () =>
-            getIntentFromRecording(
-                htmlData,
-                screenshotData,
-                actionName,
-                actionDescription,
-                steps,
-            ),
-        );
-    }
-
     // Function to download the screenshot
     function downloadScreenshot(dataUrl: string) {
         const link = document.createElement("a");
@@ -566,28 +563,6 @@ function renderTimelineSteps(
         link.click();
         document.body.removeChild(link);
     }
-
-    async function getIntentFromRecording(
-        html: string,
-        screenshot: string,
-        actionName: string,
-        description: string,
-        steps: any[],
-    ) {
-        const response = await chrome.runtime.sendMessage({
-            type: "getIntentFromRecording",
-            html: [{ content: html, frameId: 0 }],
-            screenshot,
-            actionName,
-            description,
-            steps: JSON.stringify(steps),
-        });
-        if (chrome.runtime.lastError) {
-            console.error("Error fetching schema:", chrome.runtime.lastError);
-            return;
-        }
-        console.log(response.data);
-    }
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
@@ -601,10 +576,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     document
         .getElementById("refreshDetectedActions")!
         .addEventListener("click", () => requestSchemaUpdate(true));
-
-    document
-        .getElementById("trySchema")!
-        .addEventListener("click", registerTempSchema);
 
     document
         .getElementById("recordAction")!

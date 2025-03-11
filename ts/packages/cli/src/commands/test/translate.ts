@@ -6,7 +6,7 @@ import { fromJsonActions, toFullActions, FullAction } from "agent-cache";
 import { createDispatcher } from "agent-dispatcher";
 import {
     readExplanationTestData,
-    getSchemaNamesForActionConfigProvider,
+    getAllSchemaNames,
     createActionConfigProvider,
 } from "agent-dispatcher/internal";
 import { getInstanceDir } from "agent-dispatcher/helpers/data";
@@ -83,7 +83,7 @@ function summarizeResult(result: TestResultFile) {
 
 const modelNames = await getChatModelNames();
 const defaultAppAgentProviders = getDefaultAppAgentProviders(getInstanceDir());
-const schemaNames = getSchemaNamesForActionConfigProvider(
+const schemaNames = getAllSchemaNames(
     await createActionConfigProvider(defaultAppAgentProviders),
 );
 const defaultRepeat = 5;

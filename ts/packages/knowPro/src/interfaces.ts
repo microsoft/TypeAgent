@@ -10,11 +10,9 @@ export interface IKnowledgeSource {
 
 export type MessageIndex = number;
 
-export interface IMessage<TMeta extends IKnowledgeSource = any> {
+export interface IMessage extends IKnowledgeSource {
     // the text of the message, split into chunks
     textChunks: string[];
-    // for example, e-mail has a subject, from and to fields; a chat message has a sender and a recipient
-    metadata: TMeta;
     timestamp?: string | undefined;
     tags: string[];
     deletionInfo?: DeletionInfo;
@@ -50,10 +48,10 @@ export interface Tag {
     text: string;
 }
 
-export interface IConversation<TMeta extends IKnowledgeSource = any> {
+export interface IConversation<TMessage extends IKnowledgeSource = any> {
     nameTag: string;
     tags: string[];
-    messages: IMessage<TMeta>[];
+    messages: TMessage[];
     semanticRefs: SemanticRef[] | undefined;
     semanticRefIndex?: ITermToSemanticRefIndex | undefined;
     secondaryIndexes?: IConversationSecondaryIndexes | undefined;
@@ -116,6 +114,7 @@ export interface IConversationSecondaryIndexes {
     timestampIndex?: ITimestampToTextRangeIndex | undefined;
     termToRelatedTermsIndex?: ITermToRelatedTermsIndex | undefined;
     threads?: IConversationThreads | undefined;
+    messageIndex?: IMessageTextIndex | undefined;
 }
 
 /**
@@ -144,7 +143,9 @@ export type TimestampedTextRange = {
  */
 export interface ITimestampToTextRangeIndex {
     addTimestamp(messageIndex: MessageIndex, timestamp: string): boolean;
-    addTimestamps(messageTimestamps: [MessageIndex, string][]): void;
+    addTimestamps(
+        messageTimestamps: [MessageIndex, string][],
+    ): ListIndexingResult;
     lookupRange(dateRange: DateRange): TimestampedTextRange[];
 }
 
@@ -156,7 +157,7 @@ export interface ITermToRelatedTermsFuzzy {
     addTerms(
         terms: string[],
         eventHandler?: IndexingEventHandlers,
-    ): Promise<void>;
+    ): Promise<ListIndexingResult>;
     lookupTerm(
         text: string,
         maxMatches?: number,
@@ -201,6 +202,24 @@ export interface IConversationThreads {
     removeThread(threadIndex: ThreadIndex): void;
 }
 
+export interface IMessageTextIndex {
+    addMessages(
+        messages: IMessage[],
+        eventHandler?: IndexingEventHandlers,
+    ): Promise<ListIndexingResult>;
+    lookupMessages(
+        messageText: string,
+        maxMatches?: number,
+        thresholdScore?: number,
+    ): Promise<ScoredMessageIndex[]>;
+    lookupMessagesInSubset(
+        messageText: string,
+        indicesToSearch: MessageIndex[],
+        maxMatches?: number,
+        thresholdScore?: number,
+    ): Promise<ScoredMessageIndex[]>;
+}
+
 //------------------------
 // Serialization formats
 //------------------------
@@ -224,7 +243,7 @@ export interface ITermToSemanticRefIndexItem {
 }
 
 //------------------------
-// Indexing
+// Indexing events and results
 //------------------------
 
 export interface IndexingEventHandlers {
@@ -237,9 +256,31 @@ export interface IndexingEventHandlers {
         batch: string[],
         batchStartAt: number,
     ) => boolean;
+    onTextIndexed?: (
+        textAndLocations: [string, TextLocation][],
+        batch: [string, TextLocation][],
+        batchStartAt: number,
+    ) => boolean;
 }
 
 export type IndexingResults = {
-    chunksIndexedUpto?: TextLocation | undefined;
+    semanticRefs?: TextIndexingResult | undefined;
+    secondaryIndexResults?: SecondaryIndexingResults | undefined;
+};
+
+export type SecondaryIndexingResults = {
+    properties?: ListIndexingResult | undefined;
+    timestamps?: ListIndexingResult | undefined;
+    relatedTerms?: ListIndexingResult | undefined;
+    message?: TextIndexingResult | undefined;
+};
+
+export type TextIndexingResult = {
+    completedUpto?: TextLocation | undefined;
+    error?: string | undefined;
+};
+
+export type ListIndexingResult = {
+    numberCompleted: number;
     error?: string | undefined;
 };

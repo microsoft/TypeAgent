@@ -7,7 +7,7 @@ import { CorrectionRecord } from "agent-cache";
 import {
     getCacheFactory,
     readExplanationTestData,
-    getSchemaNamesForActionConfigProvider,
+    getAllSchemaNames,
     createActionConfigProvider,
 } from "agent-dispatcher/internal";
 import { getInstanceDir } from "agent-dispatcher/helpers/data";
@@ -142,7 +142,7 @@ function printStats(
     console.log();
 }
 
-const schemaNames = getSchemaNamesForActionConfigProvider(
+const schemaNames = getAllSchemaNames(
     await createActionConfigProvider(
         getDefaultAppAgentProviders(getInstanceDir()),
     ),

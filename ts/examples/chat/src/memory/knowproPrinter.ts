@@ -5,7 +5,7 @@ import * as kp from "knowpro";
 import * as knowLib from "knowledge-processor";
 import { ChatPrinter } from "../chatPrinter.js";
 import chalk from "chalk";
-import { textLocationToString } from "./knowproCommon.js";
+import { IMessageMetadata, textLocationToString } from "./knowproCommon.js";
 import * as cm from "conversation-memory";
 import * as im from "image-memory";
 
@@ -23,8 +23,12 @@ export class KnowProPrinter extends ChatPrinter {
         return this;
     }
 
-    public writeMetadata(metadata: any): KnowProPrinter {
-        this.write("Metadata: ").writeJson(metadata);
+    public writeMetadata(message: kp.IMessage): KnowProPrinter {
+        const msgMetadata: IMessageMetadata =
+            message as any as IMessageMetadata;
+        if (msgMetadata) {
+            this.write("Metadata: ").writeJson(msgMetadata.metadata);
+        }
         return this;
     }
 
@@ -33,7 +37,7 @@ export class KnowProPrinter extends ChatPrinter {
         try {
             this.writeNameValue("Timestamp", message.timestamp);
             this.writeList(message.tags, { type: "csv", title: "Tags" });
-            this.writeMetadata(message.metadata);
+            this.writeMetadata(message);
         } finally {
             this.setForeColor(prevColor);
         }
@@ -371,13 +375,63 @@ export class KnowProPrinter extends ChatPrinter {
     }
 
     public writeIndexingResults(results: kp.IndexingResults) {
-        if (results.chunksIndexedUpto) {
+        if (results.semanticRefs) {
+            this.writeTextIndexingResult(results.semanticRefs, "Semantic Refs");
+        }
+        if (results.secondaryIndexResults) {
+            if (results.secondaryIndexResults.properties) {
+                this.writeListIndexingResult(
+                    results.secondaryIndexResults.properties,
+                    "Properties",
+                );
+                this;
+            }
+            if (results.secondaryIndexResults.timestamps) {
+                this.writeListIndexingResult(
+                    results.secondaryIndexResults.timestamps,
+                    "Timestamps",
+                );
+                this;
+            }
+            if (results.secondaryIndexResults.relatedTerms) {
+                this.writeListIndexingResult(
+                    results.secondaryIndexResults.relatedTerms,
+                    "Related Terms",
+                );
+                this;
+            }
+        }
+        return this;
+    }
+
+    public writeTextIndexingResult(
+        result: kp.TextIndexingResult,
+        label?: string,
+    ) {
+        if (label) {
+            this.write(label + ": ");
+        }
+        if (result.completedUpto) {
             this.writeLine(
-                `Indexed upto: ${textLocationToString(results.chunksIndexedUpto)}`,
+                `Completed upto ${textLocationToString(result.completedUpto)}`,
             );
         }
-        if (results.error) {
-            this.writeError(results.error);
+        if (result.error) {
+            this.writeError(result.error);
+        }
+        return this;
+    }
+
+    public writeListIndexingResult(
+        result: kp.ListIndexingResult,
+        label?: string,
+    ) {
+        if (label) {
+            this.write(label + ": ");
+        }
+        this.writeLine(`Indexed ${result.numberCompleted} items`);
+        if (result.error) {
+            this.writeError(result.error);
         }
         return this;
     }
@@ -391,6 +445,7 @@ export class KnowProPrinter extends ChatPrinter {
         );
         this.writeLine();
         this.writeJson(action.parameters.filters);
+        return this;
     }
 }
 

@@ -24,9 +24,7 @@ export { getFullSchemaText } from "./translation/agentTranslators.js";
 
 export { getAppAgentName } from "./translation/agentTranslators.js";
 export { createSchemaInfoProvider } from "./translation/actionSchemaFileCache.js";
-export {
-    createActionConfigProvider,
-    getSchemaNamesForActionConfigProvider,
-} from "./agentProvider/agentProviderUtils.js";
+export { createActionConfigProvider } from "./agentProvider/agentProviderUtils.js";
+export { getAllSchemaNames } from "./context/inlineAgentProvider.js";
 
 export type { ChatHistoryInput } from "./context/system/handlers/historyCommandHandler.js";

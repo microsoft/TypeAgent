@@ -7,7 +7,7 @@ import { getDefaultAppAgentProviders } from "default-agent-provider";
 import { getChatModelNames } from "aiclient";
 import {
     createActionConfigProvider,
-    getSchemaNamesForActionConfigProvider,
+    getAllSchemaNames,
 } from "agent-dispatcher/internal";
 import { withConsoleClientIO } from "agent-dispatcher/helpers/console";
 import { getClientId, getInstanceDir } from "agent-dispatcher/helpers/data";
@@ -15,7 +15,7 @@ import { getClientId, getInstanceDir } from "agent-dispatcher/helpers/data";
 const modelNames = await getChatModelNames();
 const instanceDir = getInstanceDir();
 const defaultAppAgentProviders = getDefaultAppAgentProviders(instanceDir);
-const schemaNames = getSchemaNamesForActionConfigProvider(
+const schemaNames = getAllSchemaNames(
     await createActionConfigProvider(defaultAppAgentProviders),
 );
 

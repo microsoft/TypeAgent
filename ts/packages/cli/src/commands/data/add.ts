@@ -12,7 +12,7 @@ import {
     getEmptyExplanationTestData,
     getCacheFactory,
     createActionConfigProvider,
-    getSchemaNamesForActionConfigProvider,
+    getAllSchemaNames,
 } from "agent-dispatcher/internal";
 import { getInstanceDir } from "agent-dispatcher/helpers/data";
 import chalk from "chalk";
@@ -25,7 +25,7 @@ const modelNames = await getChatModelNames();
 const provider = await createActionConfigProvider(
     getDefaultAppAgentProviders(getInstanceDir()),
 );
-const schemaNames = getSchemaNamesForActionConfigProvider(provider);
+const schemaNames = getAllSchemaNames(provider);
 export default class ExplanationDataAddCommand extends Command {
     static args = {
         request: Args.string({

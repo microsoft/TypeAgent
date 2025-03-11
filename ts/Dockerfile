@@ -49,8 +49,8 @@ COPY ./ /usr/src/app
 WORKDIR /usr/src/app
 RUN pnpm install --frozen-lockfile
 RUN pnpm run -r build
-RUN pnpm deploy --filter=agent-api --prod /prod/api
-RUN pnpm deploy --filter=tools-scripts --prod /prod/tools
+RUN pnpm deploy --legacy --filter=agent-api --prod /prod/api
+RUN pnpm deploy --legacy --filter=tools-scripts --prod /prod/tools
 
 # image with api and tool bits only 
 FROM base AS api

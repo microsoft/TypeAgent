@@ -2,13 +2,16 @@
 // Licensed under the MIT License.
 
 import { IConversationThreadData } from "./conversationThread.js";
+import { ConversationSettings } from "./import.js";
 import {
     IConversation,
     IConversationData,
     IConversationSecondaryIndexes,
     IndexingEventHandlers,
+    SecondaryIndexingResults,
     Term,
 } from "./interfaces.js";
+import { buildMessageIndex, IMessageTextIndexData } from "./messageIndex.js";
 import { PropertyIndex, buildPropertyIndex } from "./propertyIndex.js";
 import {
     buildRelatedTermsIndex,
@@ -22,15 +25,46 @@ import {
 
 export async function buildSecondaryIndexes(
     conversation: IConversation,
-    buildRelated: boolean,
+    conversationSettings: ConversationSettings,
     eventHandler?: IndexingEventHandlers,
-): Promise<void> {
+): Promise<SecondaryIndexingResults> {
     conversation.secondaryIndexes ??= new ConversationSecondaryIndexes();
-    buildPropertyIndex(conversation);
-    buildTimestampIndex(conversation);
-    if (buildRelated) {
-        await buildRelatedTermsIndex(conversation, eventHandler);
+    let result: SecondaryIndexingResults = buildTransientSecondaryIndexes(
+        conversation,
+        conversationSettings,
+    );
+    result.relatedTerms = await buildRelatedTermsIndex(
+        conversation,
+        conversationSettings,
+        eventHandler,
+    );
+    if (!result.relatedTerms?.error) {
+        result.message = await buildMessageIndex(
+            conversation,
+            conversationSettings.messageTextIndexSettings,
+            eventHandler,
+        );
     }
+
+    return result;
+}
+
+/**
+ * Some indexes are not persisted because they are cheap to rebuild on the fly
+ * - Property index
+ * - Timestamp index
+ * @param conversation
+ * @returns
+ */
+export function buildTransientSecondaryIndexes(
+    conversation: IConversation,
+    conversationSettings: ConversationSettings,
+): SecondaryIndexingResults {
+    conversation.secondaryIndexes ??= new ConversationSecondaryIndexes();
+    const result: SecondaryIndexingResults = {};
+    result.properties = buildPropertyIndex(conversation);
+    result.timestamps = buildTimestampIndex(conversation);
+    return result;
 }
 
 export class ConversationSecondaryIndexes
@@ -69,5 +103,6 @@ export interface ITextEmbeddingIndexData {
 export interface IConversationDataWithIndexes<TMessage = any>
     extends IConversationData<TMessage> {
     relatedTermsIndexData?: ITermsToRelatedTermsIndexData | undefined;
-    threadData?: IConversationThreadData;
+    threadData?: IConversationThreadData | undefined;
+    messageIndexData?: IMessageTextIndexData | undefined;
 }

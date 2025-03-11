@@ -4,6 +4,7 @@
 import {
     ActionContext,
     CommandDescriptor,
+    CommandDescriptors,
     CommandDescriptorTable,
 } from "@typeagent/agent-sdk";
 import chalk from "chalk";
@@ -118,6 +119,35 @@ export function getHandlerTableUsage(
         output.push(`  ${subcommand.padEnd(20)}: ${handler.description}`);
     }
     return output.join("\n");
+}
+
+export function printAllCommandsWithUsage(
+    table: CommandDescriptors,
+    command: string | undefined,
+    context: ActionContext<CommandHandlerContext>,
+) {
+    const cmdTable: CommandDescriptorTable = table as CommandDescriptorTable;
+    const cmdHandler: CommandDescriptor = table as CommandDescriptor;
+
+    if (cmdTable.commands !== undefined) {
+        Object.keys(cmdTable.commands).map((cmd) => {
+            if (command === undefined) {
+                printAllCommandsWithUsage(cmdTable.commands[cmd], cmd, context);
+            } else {
+                printAllCommandsWithUsage(
+                    cmdTable.commands[cmd],
+                    `${command} ${cmd}`,
+                    context,
+                );
+            }
+        });
+    } else {
+        displayResult(
+            getUsage(command === undefined ? "" : command, cmdHandler),
+            context,
+        );
+        displayResult("\n", context);
+    }
 }
 
 export function printStructuredHandlerTableUsage(
