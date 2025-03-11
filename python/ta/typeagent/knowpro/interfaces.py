@@ -53,7 +53,7 @@ class ScoredSemanticRefOrdinal:
 
 
 @dataclass
-class ScoredMessageIndex:
+class ScoredMessageOrdinal:
     message_ordinal: MessageOrdinal
     score: float
 
@@ -291,7 +291,7 @@ class IMessageTextIndex(Protocol):
         message_text: str,
         max_matches: int | None = None,
         threshold_score: float | None = None,
-    ) -> list[ScoredMessageIndex]:
+    ) -> list[ScoredMessageOrdinal]:
         raise NotImplementedError
 
     async def lookup_messages_in_subset(
@@ -300,7 +300,7 @@ class IMessageTextIndex(Protocol):
         indices_to_search: list[MessageOrdinal],
         max_matches: int | None = None,
         threshold_score: float | None = None,
-    ) -> list[ScoredMessageIndex]:
+    ) -> list[ScoredMessageOrdinal]:
         raise NotImplementedError
 
 
