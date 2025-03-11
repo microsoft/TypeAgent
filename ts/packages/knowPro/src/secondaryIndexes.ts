@@ -2,11 +2,13 @@
 // Licensed under the MIT License.
 
 import { IConversationThreadData } from "./conversationThread.js";
+import { ConversationSettings } from "./import.js";
 import {
     IConversation,
     IConversationData,
     IConversationSecondaryIndexes,
     IndexingEventHandlers,
+    SecondaryIndexingResults,
     Term,
 } from "./interfaces.js";
 import { IMessageTextIndexData } from "./messageIndex.js";
@@ -23,15 +25,22 @@ import {
 
 export async function buildSecondaryIndexes(
     conversation: IConversation,
+    conversationSettings: ConversationSettings,
     buildRelated: boolean,
     eventHandler?: IndexingEventHandlers,
-): Promise<void> {
+): Promise<SecondaryIndexingResults> {
     conversation.secondaryIndexes ??= new ConversationSecondaryIndexes();
-    buildPropertyIndex(conversation);
-    buildTimestampIndex(conversation);
+    const result: SecondaryIndexingResults = {};
+    result.properties = buildPropertyIndex(conversation);
+    result.timestamps = buildTimestampIndex(conversation);
     if (buildRelated) {
-        await buildRelatedTermsIndex(conversation, eventHandler);
+        result.relatedTerms = await buildRelatedTermsIndex(
+            conversation,
+            conversationSettings,
+            eventHandler,
+        );
     }
+    return result;
 }
 
 export class ConversationSecondaryIndexes

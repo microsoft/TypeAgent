@@ -153,13 +153,15 @@ export class Podcast implements IConversation<PodcastMessage> {
         eventHandler?: IndexingEventHandlers,
     ): Promise<IndexingResults> {
         this.addMetadataToIndex();
-        const result = await buildConversationIndex(this, eventHandler);
-        if (!result.error) {
-            // buildConversationIndex now automatically builds standard secondary indexes
-            // Pass false to build podcast specific secondary indexes only
-            await this.buildSecondaryIndexes(false);
-            await this.secondaryIndexes.threads.buildIndex();
-        }
+        const result = await buildConversationIndex(
+            this,
+            this.settings,
+            eventHandler,
+        );
+        // buildConversationIndex now automatically builds standard secondary indexes
+        // Pass false to build podcast specific secondary indexes only
+        await this.buildSecondaryIndexes(false);
+        await this.secondaryIndexes.threads.buildIndex();
         return result;
     }
 
@@ -267,7 +269,7 @@ export class Podcast implements IConversation<PodcastMessage> {
 
     private async buildSecondaryIndexes(all: boolean) {
         if (all) {
-            await buildSecondaryIndexes(this, false);
+            await buildSecondaryIndexes(this, this.settings, false);
         }
         this.buildParticipantAliases();
         this.buildCaches();

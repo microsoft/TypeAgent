@@ -674,7 +674,11 @@ export async function createKnowproCommands(
         }
         // Build partial index
         context.podcast.secondaryIndexes.termToRelatedTermsIndex.fuzzyIndex?.clear();
-        await kp.buildRelatedTermsIndex(context.podcast, eventHandler);
+        await kp.buildRelatedTermsIndex(
+            context.podcast,
+            context.podcast.settings,
+            eventHandler,
+        );
         progress.complete();
     }
 

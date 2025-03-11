@@ -147,7 +147,9 @@ export type TimestampedTextRange = {
  */
 export interface ITimestampToTextRangeIndex {
     addTimestamp(messageIndex: MessageIndex, timestamp: string): boolean;
-    addTimestamps(messageTimestamps: [MessageIndex, string][]): void;
+    addTimestamps(
+        messageTimestamps: [MessageIndex, string][],
+    ): ListIndexingResult;
     lookupRange(dateRange: DateRange): TimestampedTextRange[];
 }
 
@@ -245,7 +247,7 @@ export interface ITermToSemanticRefIndexItem {
 }
 
 //------------------------
-// Indexing
+// Indexing events and results
 //------------------------
 
 export interface IndexingEventHandlers {
@@ -266,7 +268,19 @@ export interface IndexingEventHandlers {
 }
 
 export type IndexingResults = {
-    semanticRefsIndexedUpto?: TextLocation | undefined;
+    semanticRefs?: TextIndexingResult | undefined;
+    secondaryIndexResults?: SecondaryIndexingResults | undefined;
+};
+
+export type SecondaryIndexingResults = {
+    properties?: ListIndexingResult | undefined;
+    timestamps?: ListIndexingResult | undefined;
+    relatedTerms?: ListIndexingResult | undefined;
+    messagesIndexedUpto?: TextLocation | undefined;
+};
+
+export type TextIndexingResult = {
+    completedUpto?: TextLocation | undefined;
     error?: string | undefined;
 };
 

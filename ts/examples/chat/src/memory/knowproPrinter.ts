@@ -375,22 +375,65 @@ export class KnowProPrinter extends ChatPrinter {
     }
 
     public writeIndexingResults(results: kp.IndexingResults) {
-        if (results.semanticRefsIndexedUpto) {
-            this.writeLine(
-                `Indexed upto: ${textLocationToString(results.semanticRefsIndexedUpto)}`,
-            );
+        if (results.semanticRefs) {
+            this.writeTextIndexingResult(results.semanticRefs, "Semantic Refs");
         }
-        if (results.error) {
-            this.writeError(results.error);
+        if (results.secondaryIndexResults) {
+            if (results.secondaryIndexResults.properties) {
+                this.writeListIndexingResult(
+                    results.secondaryIndexResults.properties,
+                    "Properties",
+                );
+                this;
+            }
+            if (results.secondaryIndexResults.timestamps) {
+                this.writeListIndexingResult(
+                    results.secondaryIndexResults.timestamps,
+                    "Timestamps",
+                );
+                this;
+            }
+            if (results.secondaryIndexResults.relatedTerms) {
+                this.writeListIndexingResult(
+                    results.secondaryIndexResults.relatedTerms,
+                    "Related Terms",
+                );
+                this;
+            }
         }
         return this;
     }
 
-    public writeListIndexingResult(result: kp.ListIndexingResult) {
+    public writeTextIndexingResult(
+        result: kp.TextIndexingResult,
+        label?: string,
+    ) {
+        if (label) {
+            this.write(label + ": ");
+        }
+        if (result.completedUpto) {
+            this.writeLine(
+                `Completed upto ${textLocationToString(result.completedUpto)}`,
+            );
+        }
+        if (result.error) {
+            this.writeError(result.error);
+        }
+        return this;
+    }
+
+    public writeListIndexingResult(
+        result: kp.ListIndexingResult,
+        label?: string,
+    ) {
+        if (label) {
+            this.write(label + ": ");
+        }
         this.writeLine(`Indexed ${result.numberCompleted} items`);
         if (result.error) {
             this.writeError(result.error);
         }
+        return this;
     }
 
     public writeSearchFilter(
@@ -402,6 +445,7 @@ export class KnowProPrinter extends ChatPrinter {
         );
         this.writeLine();
         this.writeJson(action.parameters.filters);
+        return this;
     }
 }
 
