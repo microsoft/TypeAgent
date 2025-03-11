@@ -75,18 +75,18 @@ export function createPdfDocumenter(model: ChatModel): PdfFileDocumenter {
         // Organize chunks by page
         const pageChunksMap: Record<
             string,
-            { pageChunk: Chunk; chunks: Chunk[] }
+            { pageRootChunk: Chunk; pageChunks: Chunk[] }
         > = {};
 
         for (const chunk of chunks) {
             if (!chunk.parentId) {
-                pageChunksMap[chunk.pageid] = { pageChunk: chunk, chunks: [] };
+                pageChunksMap[chunk.pageid] = { pageRootChunk: chunk, pageChunks: [] };
             }
         }
         // Associate child chunks with pages
         for (const chunk of chunks) {
             if (chunk.parentId && pageChunksMap[chunk.pageid]) {
-                pageChunksMap[chunk.pageid].chunks.push(chunk);
+                pageChunksMap[chunk.pageid].pageChunks.push(chunk);
             }
         }
 
@@ -96,16 +96,16 @@ export function createPdfDocumenter(model: ChatModel): PdfFileDocumenter {
         for (const pageid in pageChunksMap) {
             let content: MultimodalPromptContent[] = [];
             pageCount++;
-            const { pageChunk, chunks } = pageChunksMap[pageid];
+            const { pageRootChunk, pageChunks } = pageChunksMap[pageid];
 
             // Build the prompt text for this page
             content.push({
                 type: "text",
-                text: `***: Document chunks of Page (Id: ${pageChunk.id}, Page: ${pageChunk.pageid}):\n`,
+                text: `***: Document chunks of Page (Id: ${pageRootChunk.id}, Page: ${pageRootChunk.pageid}):\n`,
             });
 
             // Summarize each child chunk
-            for (const chunk of chunks) {
+            for (const chunk of pageChunks) {
                 const chunkIdentifier = chunk.id;
                 content.push({
                     type: "text",
@@ -201,33 +201,17 @@ export function createPdfDocumenter(model: ChatModel): PdfFileDocumenter {
                 const fileDocs: PdfFileDocumentation = result.data;
                 const chunkDocs = fileDocs.chunkDocs ?? [];
 
-                // Every page has a pageChunk and its children
-                // Assign the docs to the pageChunk and its children
-                // The first chunk is the pageChunk
-                const pageAndBlocks = [pageChunk, ...chunks];
-
-                let iDoc = 0;
-                for (const c of pageAndBlocks) {
-                    if (iDoc >= chunkDocs.length) break;
-                    c.fileName = fileName;
-                    if (
-                        (c.parentId === "" && !c.parentId) ||
-                        (c.children && c.children.length === 0)
-                    ) {
-                        c.chunkDoc = chunkDocs[iDoc++];
-                    } else if (c.children && c.children.length > 0) {
-                        // assign docs to its children
-                        for (const childId of c.children) {
-                            if (iDoc >= chunkDocs.length) break;
-                            const childChunk = pageAndBlocks.find(
-                                (blk) => blk.id === childId,
-                            );
-                            if (childChunk) {
-                                childChunk.chunkDoc = chunkDocs[iDoc++];
-                            }
-                        }
-                    }
-                }
+                const { pageChunks } = pageChunksMap[pageid];
+                for(const pageChunk of pageChunks) {
+                    pageChunk.fileName = fileName;
+                    // get the doc for the pageChunk from chunkDocs
+                    const chunkDoc = chunkDocs.find(
+                        (doc) => doc.chunkid === pageChunk.id,
+                    );
+                    if (chunkDoc) {
+                        pageChunk.chunkDoc = chunkDoc;
+                    }                
+                }  
             } else {
                 console.error(
                     `Error in documenter: ${result.message} for pageId: ${pageid}`,
