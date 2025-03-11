@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { collections } from "typeagent";
+import { collections, NormalizedEmbedding } from "typeagent";
 import { IConversation, ListIndexingResult, Term } from "./interfaces.js";
 import { IndexingEventHandlers } from "./interfaces.js";
 import { Scored } from "./common.js";
@@ -20,10 +20,12 @@ import { SearchTerm } from "./search.js";
 import { isSearchTermWildcard } from "./common.js";
 import { TermSet } from "./collections.js";
 import {
+    serializeEmbedding,
     TextEditDistanceIndex,
     TextEmbeddingIndex,
     TextEmbeddingIndexSettings,
 } from "./fuzzyIndex.js";
+import { createEmbeddingCache } from "knowledge-processor";
 
 export class TermToRelatedTermsMap implements ITermToRelatedTerms {
     public map: collections.MultiMap<string, Term> = new collections.MultiMap();
@@ -348,11 +350,37 @@ export class TermEmbeddingIndex implements ITermEmbeddingIndex {
         this.embeddingIndex.deserialize(data.embeddings);
     }
 
+    public getEmbedding(text: string): NormalizedEmbedding | undefined {
+        const pos = this.textArray.indexOf(text);
+        if (pos >= 0) {
+            return this.embeddingIndex.get(pos);
+        }
+        return undefined;
+    }
+
     private matchesToTerms(matches: Scored[]): Term[] {
         return matches.map((m) => {
             return { text: this.textArray[m.item], weight: m.score };
         });
     }
+}
+
+export function createTermEmbeddingCache(
+    settings: TextEmbeddingIndexSettings,
+    termEmbeddingIndex: TermEmbeddingIndex,
+    cacheSize: number,
+): void {
+    settings.embeddingModel = createEmbeddingCache(
+        settings.embeddingModel,
+        cacheSize,
+        (term) => {
+            const embedding = termEmbeddingIndex.getEmbedding(term);
+            if (embedding) {
+                return serializeEmbedding(embedding);
+            }
+            return undefined;
+        },
+    );
 }
 
 export class TermEditDistanceIndex

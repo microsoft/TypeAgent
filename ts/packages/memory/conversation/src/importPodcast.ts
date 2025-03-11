@@ -25,6 +25,7 @@ import {
     MessageTextIndex,
     ListIndexingResult,
     IMessageMetadata,
+    createTermEmbeddingCache,
 } from "knowpro";
 import { conversation as kpLib, split } from "knowledge-processor";
 import { collections, dateTime, getFileName, readAllText } from "typeagent";
@@ -154,7 +155,8 @@ export class Podcast implements IConversation<PodcastMessage> {
         this.addMetadataToIndex();
         const result = await buildConversationIndex(this, eventHandler);
         if (!result.error) {
-            // false: only build additional none base indexes
+            // buildConversationIndex now automatically builds standard secondary indexes
+            // Pass false to build podcast specific secondary indexes only
             await this.buildSecondaryIndexes(false);
             await this.secondaryIndexes.threads.buildIndex();
         }
@@ -268,6 +270,7 @@ export class Podcast implements IConversation<PodcastMessage> {
             await buildSecondaryIndexes(this, false);
         }
         this.buildParticipantAliases();
+        this.buildCaches();
     }
 
     private buildParticipantAliases(): void {
@@ -307,6 +310,14 @@ export class Podcast implements IConversation<PodcastMessage> {
             }
         }
         return aliases;
+    }
+
+    private buildCaches(): void {
+        createTermEmbeddingCache(
+            this.settings.relatedTermIndexSettings.embeddingIndexSettings!,
+            this.secondaryIndexes.termToRelatedTermsIndex.fuzzyIndex!,
+            64,
+        );
     }
 }
 
