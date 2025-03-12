@@ -25,7 +25,6 @@ from .interfaces import (
     Topic,
 )
 from . import kplib
-from .knowledge import facet_value_to_string
 
 
 def text_range_from_location(
@@ -88,7 +87,7 @@ def add_facet(
     if facet is not None:
         semantic_ref_index.add_term(facet.name, ref_ordinal)
         if facet.value is not None:
-            semantic_ref_index.add_term(facet_value_to_string(facet), ref_ordinal)
+            semantic_ref_index.add_term(str(facet), ref_ordinal)
 
 
 def add_topic_to_index(
