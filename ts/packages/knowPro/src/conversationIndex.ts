@@ -361,8 +361,8 @@ export class ConversationIndex implements ITermToSemanticRefIndex {
 
     serialize(): ITermToSemanticRefIndexData {
         const items: ITermToSemanticRefIndexItem[] = [];
-        for (const [term, semanticRefIndices] of this.map) {
-            items.push({ term, semanticRefOrdinals: semanticRefIndices });
+        for (const [term, semanticRefOrdinals] of this.map) {
+            items.push({ term, semanticRefOrdinals });
         }
         return { items };
     }
