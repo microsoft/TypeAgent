@@ -7,19 +7,35 @@ import {
     TextEmbeddingIndexSettings,
 } from "./fuzzyIndex.js";
 import { RelatedTermIndexSettings } from "./relatedTermsIndex.js";
+import { MessageTextIndexSettings } from "./messageIndex.js";
+import { openai } from "aiclient";
 
 export type ConversationSettings = {
     relatedTermIndexSettings: RelatedTermIndexSettings;
     threadSettings: TextEmbeddingIndexSettings;
+    messageTextIndexSettings: MessageTextIndexSettings;
 };
 
 export function createConversationSettings(): ConversationSettings {
-    const embeddingIndexSettings = createTextEmbeddingIndexSettings();
+    let embeddingModel = openai.createEmbeddingModel();
+    const embeddingSize = 1536;
     return {
         relatedTermIndexSettings: {
-            embeddingIndexSettings,
+            embeddingIndexSettings: createTextEmbeddingIndexSettings(
+                embeddingModel,
+                embeddingSize,
+            ),
         },
-        threadSettings: embeddingIndexSettings,
+        threadSettings: createTextEmbeddingIndexSettings(
+            embeddingModel,
+            embeddingSize,
+        ),
+        messageTextIndexSettings: {
+            embeddingIndexSettings: createTextEmbeddingIndexSettings(
+                embeddingModel,
+                embeddingSize,
+            ),
+        },
     };
 }
 

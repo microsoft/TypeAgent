@@ -33,7 +33,7 @@ export async function matchFilterToConversation(
     }
     let when: kp.WhenFilter = termFilterToWhenFilter(filter);
     when.knowledgeType = knowledgeType;
-    let searchResults = await kp.searchConversation(
+    let searchResults = await kp.searchConversationKnowledge(
         conversation,
         termGroup,
         when,
@@ -42,7 +42,7 @@ export async function matchFilterToConversation(
     if (useAnd && (!searchResults || searchResults.size === 0)) {
         // Try again with OR
         termGroup = termFilterToSearchGroup(filter, false);
-        searchResults = await kp.searchConversation(
+        searchResults = await kp.searchConversationKnowledge(
             conversation,
             termGroup,
             when,
@@ -108,4 +108,8 @@ export function actionFilterToSearchGroup(
         searchTermGroup.terms.push(kp.createSearchTerm(action.object));
     }
     return searchTermGroup;
+}
+
+export interface IMessageMetadata<TMeta = any> {
+    metadata: TMeta;
 }

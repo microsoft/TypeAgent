@@ -55,7 +55,42 @@ export type LocationInStore = {
 };
 
 export type NavigationLink = {
-    // CSS Selector for the link
     title: string;
+    // CSS Selector for the link
+    linkCssSelector: string;
+};
+
+export type DropdownControl = {
+    title: string;
+    // CSS Selector for the selection element
+    cssSelector: string;
+
+    values: {
+        text: string;
+        value: string;
+    }[];
+};
+
+export type TextInput = {
+    title: string;
+    // CSS Selector for the text input area
+    cssSelector: string;
+};
+
+export type Button = {
+    title: string;
+    // CSS Selector for the button
+    cssSelector: string;
+};
+
+export type Element = {
+    title: string;
+    // CSS Selector for the element
+    cssSelector: string;
+};
+
+export type Link = {
+    title: string;
+    // CSS Selector for the link
     linkCssSelector: string;
 };

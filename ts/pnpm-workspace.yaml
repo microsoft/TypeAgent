@@ -1,8 +1,18 @@
 packages:
-  - "packages/*"
-  - "packages/memory/*"
-  - "packages/agents/*"
-  - "packages/agents/agentUtils/*"
-  - "examples/*"
-  - "examples/agentExamples/*"
-  - "tools"
+  - packages/*
+  - packages/memory/*
+  - packages/agents/*
+  - packages/agents/agentUtils/*
+  - examples/*
+  - examples/agentExamples/*
+  - tools
+onlyBuiltDependencies:
+  - "@azure/msal-node-extensions"
+  - "@azure/msal-node-runtime"
+  - "@vscode/vsce-sign"
+  - better-sqlite3
+  - electron
+  - esbuild
+  - exifreader
+  - keytar
+  - puppeteer

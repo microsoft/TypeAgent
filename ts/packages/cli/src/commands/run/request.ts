@@ -6,7 +6,7 @@ import { createDispatcher } from "agent-dispatcher";
 import {
     createActionConfigProvider,
     getCacheFactory,
-    getSchemaNamesForActionConfigProvider,
+    getAllSchemaNames,
 } from "agent-dispatcher/internal";
 import { getClientId, getInstanceDir } from "agent-dispatcher/helpers/data";
 import { getDefaultAppAgentProviders } from "default-agent-provider";
@@ -17,7 +17,7 @@ import { readFileSync, existsSync } from "fs";
 const modelNames = await getChatModelNames();
 const instanceDir = getInstanceDir();
 const defaultAppAgentProviders = getDefaultAppAgentProviders(instanceDir);
-const schemaNames = getSchemaNamesForActionConfigProvider(
+const schemaNames = getAllSchemaNames(
     await createActionConfigProvider(defaultAppAgentProviders),
 );
 export default class RequestCommand extends Command {

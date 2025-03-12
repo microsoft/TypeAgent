@@ -18,12 +18,13 @@ import {
 import {
     KnowledgePropertyName,
     PropertySearchTerm,
-    SearchResult,
+    SemanticRefSearchResult,
     SearchTerm,
 } from "./search.js";
 import {
     Match,
     MatchAccumulator,
+    MessageAccumulator,
     PropertyTermSet,
     SemanticRefAccumulator,
     TermSet,
@@ -459,7 +460,10 @@ export class MatchTermsOrExpr extends MatchTermsBooleanExpr {
         super.beginMatch(context);
         const allMatches = new SemanticRefAccumulator();
         for (const matchExpr of this.termExpressions) {
-            matchExpr.accumulateMatches(context, allMatches);
+            const termMatches = matchExpr.eval(context);
+            if (termMatches && termMatches.size > 0) {
+                allMatches.addUnion(termMatches);
+            }
         }
         allMatches.calculateTotalScore();
         return allMatches;
@@ -523,7 +527,7 @@ export class MatchTermExpr extends QueryOpExpr<
         return undefined;
     }
 
-    public accumulateMatches(
+    protected accumulateMatches(
         context: QueryEvalContext,
         matches: SemanticRefAccumulator,
     ) {
@@ -601,8 +605,12 @@ export class MatchSearchTermExpr extends MatchTermExpr {
             }
         } else {
             if (!context.matchedTerms.has(relatedTerm)) {
+                // If this related term had not already matched as a related term for some other term
+                // Minimize over counting
                 const semanticRefs = this.lookupTerm(context, relatedTerm);
-                matches.addTermMatches(
+                // This will only consider semantic refs that have not already matched this expression. In other words, if a semantic
+                // ref already matched due to the term 'novel', don't also match it because it matched the related term 'book'
+                matches.addTermMatchesIfNew(
                     term,
                     semanticRefs,
                     false,
@@ -710,6 +718,8 @@ export class MatchPropertySearchTermExpr extends MatchTermExpr {
                 context.matchedPropertyTerms.add(propertyName, propertyValue);
             }
         } else {
+            // To prevent over-counting, ensure this relatedPropValue was not already used to match
+            // terms earlier
             if (
                 !context.matchedPropertyTerms.has(propertyName, relatedPropVal)
             ) {
@@ -718,7 +728,9 @@ export class MatchPropertySearchTermExpr extends MatchTermExpr {
                     propertyName,
                     relatedPropVal.text,
                 );
-                matches.addTermMatches(
+                // This will only consider semantic refs that were not already matched by this expression.
+                // In other words, if a semantic ref already matched due to the term 'novel', don't also match it because it matched the related term 'book'
+                matches.addTermMatchesIfNew(
                     propertyValue,
                     semanticRefs,
                     false,
@@ -824,7 +836,7 @@ export class SelectTopNKnowledgeGroupExpr extends QueryOpExpr<
 }
 
 export class GroupSearchResultsExpr extends QueryOpExpr<
-    Map<KnowledgeType, SearchResult>
+    Map<KnowledgeType, SemanticRefSearchResult>
 > {
     constructor(
         public srcExpr: IQueryOpExpr<
@@ -834,7 +846,9 @@ export class GroupSearchResultsExpr extends QueryOpExpr<
         super();
     }
 
-    public eval(context: QueryEvalContext): Map<KnowledgeType, SearchResult> {
+    public eval(
+        context: QueryEvalContext,
+    ): Map<KnowledgeType, SemanticRefSearchResult> {
         return toGroupedSearchResults(this.srcExpr.eval(context));
     }
 }
@@ -1065,8 +1079,11 @@ export class ThreadSelector implements IQueryTextRangeSelector {
 
 export function toGroupedSearchResults(
     evalResults: Map<KnowledgeType, SemanticRefAccumulator>,
-): Map<KnowledgeType, SearchResult> {
-    const semanticRefMatches = new Map<KnowledgeType, SearchResult>();
+): Map<KnowledgeType, SemanticRefSearchResult> {
+    const semanticRefMatches = new Map<
+        KnowledgeType,
+        SemanticRefSearchResult
+    >();
     for (const [type, accumulator] of evalResults) {
         if (accumulator.size > 0) {
             semanticRefMatches.set(type, {
@@ -1076,4 +1093,33 @@ export function toGroupedSearchResults(
         }
     }
     return semanticRefMatches;
+}
+
+export function messageMatchesFromKnowledgeMatches(
+    semanticRefs: SemanticRef[],
+    knowledgeMatches: Map<KnowledgeType, SemanticRefSearchResult>,
+): MessageAccumulator {
+    let messageMatches = new MessageAccumulator();
+    let expectedHitCount = 0;
+    for (const knowledgeType of knowledgeMatches.keys()) {
+        const matchesByType = knowledgeMatches.get(knowledgeType);
+        if (matchesByType && matchesByType.semanticRefMatches.length > 0) {
+            expectedHitCount++;
+            for (const match of matchesByType.semanticRefMatches) {
+                messageMatches.addMessagesForSemanticRef(
+                    semanticRefs[match.semanticRefIndex],
+                    match.score,
+                );
+            }
+        }
+    }
+    if (expectedHitCount > 0) {
+        const relevantMessages =
+            messageMatches.getWithHitCount(expectedHitCount);
+        if (relevantMessages.length > 0) {
+            messageMatches = new MessageAccumulator(relevantMessages);
+        }
+    }
+    //messageMatches.smoothScores();
+    return messageMatches;
 }

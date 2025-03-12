@@ -3,7 +3,6 @@
 
 import {
     IConversation,
-    IKnowledgeSource,
     IMessage,
     IndexingResults,
     ITermToSemanticRefIndex,
@@ -15,6 +14,7 @@ import {
     ScoredSemanticRef,
     SemanticRef,
     SemanticRefIndex,
+    TextIndexingResult,
     TextRange,
     Topic,
 } from "./interfaces.js";
@@ -24,6 +24,7 @@ import { ChatModel, openai } from "aiclient";
 import { async } from "typeagent";
 import { facetValueToString } from "./knowledge.js";
 import { buildSecondaryIndexes } from "./secondaryIndexes.js";
+import { ConversationSettings } from "./import.js";
 
 export function textRangeFromLocation(
     messageIndex: MessageIndex,
@@ -49,7 +50,7 @@ export function addMetadataToIndex(
     knowledgeValidator ??= defaultKnowledgeValidator;
     for (let i = 0; i < messages.length; i++) {
         const msg = messages[i];
-        const knowledgeResponse = msg.metadata.getKnowledge();
+        const knowledgeResponse = msg.getKnowledge();
         if (semanticRefIndex !== undefined) {
             for (const entity of knowledgeResponse.entities) {
                 if (knowledgeValidator("entity", entity)) {
@@ -61,7 +62,8 @@ export function addMetadataToIndex(
                     addActionToIndex(action, semanticRefs, semanticRefIndex, i);
                 }
             }
-            for (const topic of knowledgeResponse.topics) {
+            for (const topicResponse of knowledgeResponse.topics) {
+                const topic: Topic = { text: topicResponse };
                 if (knowledgeValidator("topic", topic)) {
                     addTopicToIndex(topic, semanticRefs, semanticRefIndex, i);
                 }
@@ -199,11 +201,11 @@ export function addKnowledgeToIndex(
     }
 }
 
-export async function buildSemanticRefIndex<TMeta extends IKnowledgeSource>(
-    conversation: IConversation<TMeta>,
+export async function buildSemanticRefIndex(
+    conversation: IConversation,
     extractor?: kpLib.KnowledgeExtractor,
     eventHandler?: IndexingEventHandlers,
-): Promise<IndexingResults> {
+): Promise<TextIndexingResult> {
     conversation.semanticRefIndex ??= new ConversationIndex();
     const semanticRefIndex = conversation.semanticRefIndex;
     conversation.semanticRefIndex = semanticRefIndex;
@@ -213,7 +215,7 @@ export async function buildSemanticRefIndex<TMeta extends IKnowledgeSource>(
     const semanticRefs = conversation.semanticRefs;
     extractor ??= createKnowledgeProcessor();
     const maxRetries = 4;
-    let indexingResult: IndexingResults = {};
+    let indexingResult: TextIndexingResult = {};
     for (let i = 0; i < conversation.messages.length; i++) {
         let messageIndex: MessageIndex = i;
         const chunkIndex = 0;
@@ -237,7 +239,7 @@ export async function buildSemanticRefIndex<TMeta extends IKnowledgeSource>(
             );
         }
         const completedChunk = { messageIndex, chunkIndex };
-        indexingResult.chunksIndexedUpto = completedChunk;
+        indexingResult.completedUpto = completedChunk;
         if (
             eventHandler?.onKnowledgeExtracted &&
             !eventHandler.onKnowledgeExtracted(completedChunk, knowledge)
@@ -248,9 +250,9 @@ export async function buildSemanticRefIndex<TMeta extends IKnowledgeSource>(
     return indexingResult;
 }
 
-export function addToConversationIndex<TMeta extends IKnowledgeSource>(
-    conversation: IConversation<TMeta>,
-    messages: IMessage<TMeta>[],
+export function addToConversationIndex(
+    conversation: IConversation,
+    messages: IMessage[],
     knowledgeResponses: kpLib.KnowledgeResponse[],
 ): void {
     if (conversation.semanticRefIndex === undefined) {
@@ -386,15 +388,21 @@ export function createKnowledgeProcessor(
 
 export async function buildConversationIndex(
     conversation: IConversation,
+    conversationSettings: ConversationSettings,
     eventHandler?: IndexingEventHandlers,
 ): Promise<IndexingResults> {
-    const result = await buildSemanticRefIndex(
+    const indexingResult: IndexingResults = {};
+    indexingResult.semanticRefs = await buildSemanticRefIndex(
         conversation,
         undefined,
         eventHandler,
     );
-    if (!result.error && conversation.semanticRefIndex) {
-        await buildSecondaryIndexes(conversation, true, eventHandler);
+    if (!indexingResult.semanticRefs?.error && conversation.semanticRefIndex) {
+        indexingResult.secondaryIndexResults = await buildSecondaryIndexes(
+            conversation,
+            conversationSettings,
+            eventHandler,
+        );
     }
-    return result;
+    return indexingResult;
 }

@@ -69,8 +69,10 @@ export async function createKnowproCommands(
     commands.kpSearchTerms = searchTerms;
     commands.kpSearchV1 = searchV1;
     commands.kpSearch = search;
+    commands.kpPodcastRag = podcastRag;
     commands.kpEntities = entities;
     commands.kpPodcastBuildIndex = podcastBuildIndex;
+    commands.kpPodcastBuildMessageIndex = podcastBuildMessageIndex;
 
     commands.kpImages = showImages;
     commands.kpImagesImport = imagesImport;
@@ -134,6 +136,7 @@ export async function createKnowproCommands(
         cm.timestampMessages(context.podcast.messages, startAt, endAt);
 
         context.conversation = context.podcast;
+        context.printer.conversation = context.conversation;
         context.printer.writeLine("Imported podcast:");
         context.printer.writePodcastInfo(context.podcast);
         if (!namedArgs.buildIndex) {
@@ -276,6 +279,7 @@ export async function createKnowproCommands(
             },
         );
         context.conversation = context.images;
+        context.printer.conversation = context.conversation;
         progress.complete();
 
         context.printer.writeLine("Imported images:");
@@ -415,7 +419,7 @@ export async function createKnowproCommands(
 
             const timer = new StopWatch();
             timer.start();
-            const matches = await kp.searchConversation(
+            const matches = await kp.searchConversationKnowledge(
                 conversation,
                 createSearchGroup(
                     termArgs,
@@ -433,7 +437,7 @@ export async function createKnowproCommands(
             timer.stop();
             if (matches && matches.size > 0) {
                 context.printer.writeLine();
-                context.printer.writeSearchResults(
+                context.printer.writeKnowledgeSearchResults(
                     conversation,
                     matches,
                     namedArgs.maxToDisplay,
@@ -451,7 +455,7 @@ export async function createKnowproCommands(
     function searchDef(): CommandMetadata {
         return {
             description:
-                "Search using natural language and knowlege-processor search filters",
+                "Search using natural language and old knowlege-processor search filters",
             args: {
                 query: arg("Search query"),
             },
@@ -459,6 +463,7 @@ export async function createKnowproCommands(
                 maxToDisplay: argNum("Maximum matches to display", 25),
                 exact: argBool("Exact match only. No related terms", false),
                 ktype: arg("Knowledge type"),
+                distinct: argBool("Show distinct results", false),
             },
         };
     }
@@ -471,7 +476,7 @@ export async function createKnowproCommands(
         const query = namedArgs.query;
         const result = await context.knowledgeActions.translateSearchTermsV2(
             query,
-            kp.getTimeRangeSectionForConversation(context.conversation!),
+            kp.getTimeRangePromptSectionForConversation(context.conversation!),
         );
         if (!result.success) {
             context.printer.writeError(result.message);
@@ -493,10 +498,11 @@ export async function createKnowproCommands(
                 },
             );
             if (searchResults) {
-                context.printer.writeSearchResults(
+                context.printer.writeKnowledgeSearchResults(
                     context.conversation!,
                     searchResults,
                     namedArgs.maxToDisplay,
+                    namedArgs.distinct,
                 );
             } else {
                 context.printer.writeLine("No matches");
@@ -508,9 +514,11 @@ export async function createKnowproCommands(
         const def = searchDef();
         def.description =
             "Search using natural language and new knowpro filter";
+        def.options ??= {};
+        def.options.showKnowledge = argBool("Show knowledge matches", true);
+        def.options.showMessages = argBool("Show message matches", false);
         return def;
     }
-
     commands.kpSearch.metadata = searchDefNew();
     async function search(args: string[]): Promise<void> {
         if (!ensureConversationLoaded()) {
@@ -518,39 +526,249 @@ export async function createKnowproCommands(
         }
         const namedArgs = parseNamedArguments(args, searchDefNew());
         const query = namedArgs.query;
-        const result = await context.searchTranslator.translate(
+        const result = await kp.searchConversationWithNaturalLanguage(
+            context.conversation!,
+            context.searchTranslator,
             query,
-            kp.getTimeRangeSectionForConversation(context.conversation!),
+            namedArgs.ktype,
+            {
+                exactMatch: namedArgs.exact,
+            },
         );
         if (!result.success) {
             context.printer.writeError(result.message);
             return;
         }
-
-        const filter = result.data;
+        const [searchResults, filter] = result.data;
         if (filter) {
             context.printer.writeJson(filter, true);
         }
-        const terms = kp.createSearchGroupFromSearchFilter(filter);
-        const when = kp.createWhenFromSearchFilter(filter);
-        const searchResults = await kp.searchConversation(
-            context.conversation!,
-            terms,
-            when,
-            {
-                exactMatch: namedArgs.exact,
+        if (searchResults && searchResults.messageMatches.length > 0) {
+            if (namedArgs.showKnowledge) {
+                context.printer.writeKnowledgeSearchResults(
+                    context.conversation!,
+                    searchResults.knowledgeMatches,
+                    namedArgs.maxToDisplay,
+                    namedArgs.distinct,
+                );
+            }
+            if (namedArgs.showMessages) {
+                context.printer.writeScoredMessages(
+                    searchResults.messageMatches,
+                    context.conversation!.messages,
+                    namedArgs.maxToDisplay,
+                );
+            }
+        } else {
+            context.printer.writeLine("No matches");
+        }
+    }
+
+    function ragDef(): CommandMetadata {
+        return {
+            description: "Classic rag",
+            args: {
+                query: arg("Search query"),
             },
+            options: {
+                maxToDisplay: argNum("Maximum matches to display", 25),
+                minScore: argNum("Min threshold score"),
+            },
+        };
+    }
+    commands.kpPodcastRag.metadata = ragDef();
+    async function podcastRag(args: string[]): Promise<void> {
+        if (!ensureConversationLoaded()) {
+            return;
+        }
+        const messageIndex =
+            context.conversation?.secondaryIndexes?.messageIndex;
+        if (!messageIndex) {
+            context.printer.writeError(
+                "No message text index. Run kpPodcastBuildMessageIndex",
+            );
+            return;
+        }
+        const namedArgs = parseNamedArguments(args, ragDef());
+        const matches = await messageIndex.lookupMessages(
+            namedArgs.query,
+            undefined,
+            namedArgs.minScore,
         );
-        if (searchResults) {
-            context.printer.writeSearchResults(
-                context.conversation!,
-                searchResults,
+        if (matches.length > 0) {
+            context.printer.writeScoredMessages(
+                matches,
+                context.conversation?.messages!,
                 namedArgs.maxToDisplay,
             );
         } else {
             context.printer.writeLine("No matches");
         }
     }
+
+    function entitiesDef(): CommandMetadata {
+        return searchTermsDef(
+            "Search entities in current conversation",
+            "entity",
+        );
+    }
+    commands.kpEntities.metadata = entitiesDef();
+    async function entities(args: string[]): Promise<void> {
+        const conversation = ensureConversationLoaded();
+        if (!conversation) {
+            return;
+        }
+        if (args.length > 0) {
+            args.push("--ktype");
+            args.push("entity");
+            await searchTerms(args);
+        } else {
+            if (conversation.semanticRefs !== undefined) {
+                const entities = conversation.semanticRefs?.filter(
+                    (sr) => sr.knowledgeType === "entity",
+                );
+                context.printer.writeSemanticRefs(entities);
+            }
+        }
+    }
+
+    function podcastBuildIndexDef(): CommandMetadata {
+        return {
+            description: "Build index",
+            options: {
+                maxMessages: argNum("Maximum messages to index"),
+                relatedOnly: argBool("Index related terms only", false),
+            },
+        };
+    }
+    commands.kpPodcastBuildIndex.metadata = podcastBuildIndexDef();
+    async function podcastBuildIndex(
+        args: string[] | NamedArgs,
+    ): Promise<void> {
+        if (!context.podcast) {
+            context.printer.writeError("No podcast loaded");
+            return;
+        }
+        const messageCount = context.podcast.messages.length;
+        if (messageCount === 0) {
+            return;
+        }
+
+        const namedArgs = parseNamedArguments(args, podcastBuildIndexDef());
+        // Build index
+        context.printer.writeLine();
+        const maxMessages = namedArgs.maxMessages ?? messageCount;
+        context.printer.writeLine(`Building Index`);
+        let progress = new ProgressBar(context.printer, maxMessages);
+        const eventHandler = createIndexingEventHandler(
+            context,
+            progress,
+            maxMessages,
+        );
+        // Build full index?
+        if (!namedArgs.relatedOnly) {
+            const indexResult = await context.podcast.buildIndex(eventHandler);
+            progress.complete();
+            context.printer.writeIndexingResults(indexResult);
+            return;
+        }
+        // Build partial index
+        context.podcast.secondaryIndexes.termToRelatedTermsIndex.fuzzyIndex?.clear();
+        await kp.buildRelatedTermsIndex(
+            context.podcast,
+            context.podcast.settings,
+            eventHandler,
+        );
+        progress.complete();
+    }
+
+    function podcastBuildMessageIndexDef(): CommandMetadata {
+        return {
+            description: "Build fuzzy message index for the podcast",
+            options: {
+                maxMessages: argNum("Maximum messages to index"),
+                batchSize: argNum("Batch size", 4),
+            },
+        };
+    }
+    commands.kpPodcastBuildMessageIndex.metadata =
+        podcastBuildMessageIndexDef();
+    async function podcastBuildMessageIndex(args: string[]): Promise<void> {
+        if (!ensureConversationLoaded()) {
+            return;
+        }
+        const namedArgs = parseNamedArguments(
+            args,
+            podcastBuildMessageIndexDef(),
+        );
+        context.printer.writeLine(`Indexing messages`);
+
+        const podcast = context.podcast!;
+        const settings: kp.MessageTextIndexSettings = {
+            ...context.podcast!.settings.messageTextIndexSettings,
+        };
+        settings.embeddingIndexSettings.batchSize = namedArgs.batchSize;
+        let progress = new ProgressBar(context.printer, namedArgs.maxMessages);
+        podcast.secondaryIndexes.messageIndex = new kp.MessageTextIndex(
+            settings,
+        );
+        const result = await kp.buildMessageIndex(
+            podcast,
+            settings,
+            createIndexingEventHandler(
+                context,
+                progress,
+                namedArgs.maxMessages,
+            ),
+        );
+        progress.complete();
+        context.printer.writeListIndexingResult(result);
+    }
+
+    //-------------------------
+    // Index Image Building
+    //--------------------------
+    function imageCollectionBuildIndexDef(): CommandMetadata {
+        return {
+            description: "Build image collection index",
+            options: {
+                knowledge: argBool("Index knowledge", false),
+                related: argBool("Index related terms", false),
+                maxMessages: argNum("Maximum messages to index"),
+            },
+        };
+    }
+
+    commands.kpImagesBuildIndex.metadata = imageCollectionBuildIndexDef();
+    async function imagesBuildIndex(args: string[] | NamedArgs): Promise<void> {
+        if (!context.images) {
+            context.printer.writeError("No image collection loaded");
+            return;
+        }
+        const messageCount = context.images.messages.length;
+        if (messageCount === 0) {
+            return;
+        }
+
+        const namedArgs = parseNamedArguments(
+            args,
+            imageCollectionBuildIndexDef(),
+        );
+        // Build index
+        context.printer.writeLine();
+        context.printer.writeLine("Building index");
+        const maxMessages = namedArgs.maxMessages ?? messageCount;
+        let progress = new ProgressBar(context.printer, maxMessages);
+        const indexResult = await context.images?.buildIndex(
+            createIndexingEventHandler(context, progress, maxMessages),
+        );
+        progress.complete();
+        context.printer.writeIndexingResults(indexResult);
+    }
+
+    /*---------- 
+      End COMMANDS
+    ------------*/
 
     function createSearchGroup(
         termArgs: string[],
@@ -636,120 +854,6 @@ export async function createKnowproCommands(
         return filter;
     }
 
-    function entitiesDef(): CommandMetadata {
-        return searchTermsDef(
-            "Search entities in current conversation",
-            "entity",
-        );
-    }
-    commands.kpEntities.metadata = entitiesDef();
-    async function entities(args: string[]): Promise<void> {
-        const conversation = ensureConversationLoaded();
-        if (!conversation) {
-            return;
-        }
-        if (args.length > 0) {
-            args.push("--ktype");
-            args.push("entity");
-            await searchTerms(args);
-        } else {
-            if (conversation.semanticRefs !== undefined) {
-                const entities = conversation.semanticRefs?.filter(
-                    (sr) => sr.knowledgeType === "entity",
-                );
-                context.printer.writeSemanticRefs(entities);
-            }
-        }
-    }
-
-    function podcastBuildIndexDef(): CommandMetadata {
-        return {
-            description: "Build index",
-            options: {
-                maxMessages: argNum("Maximum messages to index"),
-                relatedOnly: argBool("Index related terms only", false),
-            },
-        };
-    }
-    commands.kpPodcastBuildIndex.metadata = podcastBuildIndexDef();
-    async function podcastBuildIndex(
-        args: string[] | NamedArgs,
-    ): Promise<void> {
-        if (!context.podcast) {
-            context.printer.writeError("No podcast loaded");
-            return;
-        }
-        const messageCount = context.podcast.messages.length;
-        if (messageCount === 0) {
-            return;
-        }
-
-        const namedArgs = parseNamedArguments(args, podcastBuildIndexDef());
-        // Build index
-        context.printer.writeLine();
-        const maxMessages = namedArgs.maxMessages ?? messageCount;
-        context.printer.writeLine(`Building Index`);
-        let progress = new ProgressBar(context.printer, maxMessages);
-        const eventHandler = createIndexingEventHandler(
-            context,
-            progress,
-            maxMessages,
-        );
-        // Build full index?
-        if (!namedArgs.relatedOnly) {
-            const indexResult = await context.podcast.buildIndex(eventHandler);
-            progress.complete();
-            context.printer.writeIndexingResults(indexResult);
-            return;
-        }
-        // Build partial index
-        context.podcast.secondaryIndexes.termToRelatedTermsIndex.fuzzyIndex?.clear();
-        await kp.buildRelatedTermsIndex(context.podcast, eventHandler);
-        progress.complete();
-    }
-
-    function imageCollectionBuildIndexDef(): CommandMetadata {
-        return {
-            description: "Build image collection index",
-            options: {
-                knowledge: argBool("Index knowledge", false),
-                related: argBool("Index related terms", false),
-                maxMessages: argNum("Maximum messages to index"),
-            },
-        };
-    }
-
-    commands.kpImagesBuildIndex.metadata = imageCollectionBuildIndexDef();
-    async function imagesBuildIndex(args: string[] | NamedArgs): Promise<void> {
-        if (!context.images) {
-            context.printer.writeError("No image collection loaded");
-            return;
-        }
-        const messageCount = context.images.messages.length;
-        if (messageCount === 0) {
-            return;
-        }
-
-        const namedArgs = parseNamedArguments(
-            args,
-            imageCollectionBuildIndexDef(),
-        );
-        // Build index
-        context.printer.writeLine();
-        context.printer.writeLine("Building index");
-        const maxMessages = namedArgs.maxMessages ?? messageCount;
-        let progress = new ProgressBar(context.printer, maxMessages);
-        const indexResult = await context.images?.buildIndex(
-            createIndexingEventHandler(context, progress, maxMessages),
-        );
-        progress.complete();
-        context.printer.writeIndexingResults(indexResult);
-    }
-
-    /*---------- 
-      End COMMANDS
-    ------------*/
-
     function ensureConversationLoaded(): kp.IConversation | undefined {
         if (context.conversation) {
             return context.conversation;
@@ -810,7 +914,7 @@ function createIndexingEventHandler(
 ): kp.IndexingEventHandlers {
     let startedKnowledge = false;
     let startedRelated = false;
-
+    let startedMessages = false;
     return {
         onKnowledgeExtracted() {
             if (!startedKnowledge) {
@@ -824,9 +928,20 @@ function createIndexingEventHandler(
             if (!startedRelated) {
                 progress.reset(sourceTexts.length);
                 context.printer.writeLine(
-                    `Indexing ${sourceTexts.length} related terms`,
+                    `Generating ${sourceTexts.length} embeddings`,
                 );
                 startedRelated = true;
+            }
+            progress.advance(batch.length);
+            return true;
+        },
+        onTextIndexed(textAndLocations, batch, batchStartAt) {
+            if (!startedMessages) {
+                progress.reset(textAndLocations.length);
+                context.printer.writeLine(
+                    `Indexing ${textAndLocations.length} messages`,
+                );
+                startedMessages = true;
             }
             progress.advance(batch.length);
             return true;

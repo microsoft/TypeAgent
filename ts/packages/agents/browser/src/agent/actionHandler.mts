@@ -176,7 +176,8 @@ async function updateBrowserContext(
                             break;
                         }
 
-                        case "initializePageSchema":
+                        case "detectPageActions":
+                        case "registerPageDynamicAgent":
                         case "getIntentFromRecording": {
                             const discoveryResult =
                                 await handleSchemaDiscoveryAction(

@@ -8,6 +8,7 @@ import {
     isWebAgentMessageFromDispatcher,
     WebAgentDisconnectMessage,
 } from "../../dist/common/webAgentMessageTypes.mjs";
+import { setStoredPageProperty, getStoredPageProperty } from "./storage";
 
 async function getConfigValues(): Promise<Record<string, string>> {
     const envLocation = chrome.runtime.getURL(".env");
@@ -181,20 +182,71 @@ export function reconnectWebSocket() {
     }, 5 * 1000);
 }
 
-async function getActiveTab(): Promise<chrome.tabs.Tab> {
-    let currentWindow = await chrome.windows.getCurrent();
+function getActiveTab(): Promise<chrome.tabs.Tab | undefined> {
+    return new Promise((resolve) => {
+        chrome.windows.getAll({ populate: true }, (windows) => {
+            // Filter out DevTools windows. These will sometimes intefere with automation operations
+            const contentWindows = windows.filter((window) => {
+                if (window.type === "devtools" || window.type === "panel") {
+                    return false;
+                }
 
-    const [tab] = await chrome.tabs.query({
-        active: true,
-        windowId: currentWindow.id,
+                // DevTools can also be of type 'normal' but with specific properties
+                if (window.type === "normal") {
+                    if (window.tabs && window.tabs.length > 0) {
+                        const firstTabUrl = window.tabs[0].url;
+                        if (
+                            firstTabUrl &&
+                            (firstTabUrl.startsWith("chrome-devtools://") ||
+                                (firstTabUrl.startsWith("chrome://") &&
+                                    firstTabUrl.includes("devtools")))
+                        ) {
+                            return false;
+                        }
+                    }
+                }
+
+                return true;
+            });
+
+            if (contentWindows.length === 0) {
+                resolve(undefined);
+                return;
+            }
+
+            const focusedWindow = contentWindows.find(
+                (window) => window.focused,
+            );
+            if (focusedWindow && focusedWindow.tabs) {
+                const activeTab = focusedWindow.tabs.find((tab) => tab.active);
+                if (activeTab) {
+                    resolve(activeTab);
+                    return;
+                }
+            }
+
+            // If we couldn't find a focused window or an active tab in it,
+            // fall back to the first active tab in any content window
+            for (const window of contentWindows) {
+                if (window.tabs) {
+                    const activeTab = window.tabs.find((tab) => tab.active);
+                    if (activeTab) {
+                        resolve(activeTab);
+                        return;
+                    }
+                }
+            }
+
+            resolve(undefined);
+        });
     });
-
-    return tab;
 }
 
-async function getTabByTitle(title: string): Promise<chrome.tabs.Tab | null> {
+async function getTabByTitle(
+    title: string,
+): Promise<chrome.tabs.Tab | undefined> {
     if (!title) {
-        return null;
+        return undefined;
     }
 
     const getTabAction = {
@@ -217,7 +269,7 @@ async function getTabByTitle(title: string): Promise<chrome.tabs.Tab | null> {
             return tabs[0];
         }
     }
-    return null;
+    return undefined;
 }
 
 async function awaitPageLoad(targetTab: chrome.tabs.Tab) {
@@ -324,7 +376,7 @@ async function getTabScreenshot(downloadImage: boolean) {
     //const dataUrl = await chrome.tabs.captureVisibleTab({quality:50});
     const dataUrl = await chrome.tabs.captureVisibleTab({ quality: 100 });
     if (downloadImage) {
-        await downloadImageAsFile(targetTab, dataUrl, "test.jpg");
+        await downloadImageAsFile(targetTab!, dataUrl, "test.jpg");
     }
 
     return dataUrl;
@@ -342,16 +394,16 @@ type BoundingBox = {
 async function getTabAnnotatedScreenshot(downloadImage: boolean) {
     const targetTab = await getActiveTab();
 
-    const boundingBoxes = await chrome.tabs.sendMessage(targetTab.id!, {
+    const boundingBoxes = await chrome.tabs.sendMessage(targetTab?.id!, {
         type: "get_element_bounding_boxes",
     });
 
     //const dataUrl = await chrome.tabs.captureVisibleTab({quality:50});
-    const dataUrl = await chrome.tabs.captureVisibleTab(targetTab.windowId, {
+    const dataUrl = await chrome.tabs.captureVisibleTab(targetTab?.windowId!, {
         quality: 100,
     });
     if (downloadImage) {
-        await downloadImageAsFile(targetTab, dataUrl, "tabScreenshot.jpg");
+        await downloadImageAsFile(targetTab!, dataUrl, "tabScreenshot.jpg");
     }
 
     const annotate = async (dataUrl: string, boundingBoxes: any) => {
@@ -500,7 +552,7 @@ async function getTabAnnotatedScreenshot(downloadImage: boolean) {
 
     const annotationResults = await chrome.scripting.executeScript({
         func: annotate,
-        target: { tabId: targetTab.id! },
+        target: { tabId: targetTab?.id! },
         args: [dataUrl, boundingBoxes],
     });
 
@@ -508,7 +560,7 @@ async function getTabAnnotatedScreenshot(downloadImage: boolean) {
         const annotatedScreen = annotationResults[0];
         if (downloadImage) {
             await downloadImageAsFile(
-                targetTab,
+                targetTab!,
                 annotatedScreen.result,
                 "testAnnotated.jpg",
             );
@@ -910,7 +962,7 @@ async function runBrowserAction(action: any) {
             break;
         }
         case "closeTab": {
-            let targetTab: chrome.tabs.Tab | null = null;
+            let targetTab: chrome.tabs.Tab | undefined = undefined;
             if (action.parameters?.title) {
                 targetTab = await getTabByTitle(action.parameters.title);
             } else {
@@ -946,7 +998,7 @@ async function runBrowserAction(action: any) {
         }
         case "followLinkByText": {
             const targetTab = await getActiveTab();
-            const response = await chrome.tabs.sendMessage(targetTab.id!, {
+            const response = await chrome.tabs.sendMessage(targetTab?.id!, {
                 type: "get_page_links_by_query",
                 query: action.parameters.keywords,
             });
@@ -957,7 +1009,7 @@ async function runBrowserAction(action: any) {
                         url: response.url,
                     });
                 } else {
-                    await chrome.tabs.update(targetTab.id!, {
+                    await chrome.tabs.update(targetTab?.id!, {
                         url: response.url,
                     });
                 }
@@ -969,7 +1021,7 @@ async function runBrowserAction(action: any) {
         }
         case "followLinkByPosition": {
             const targetTab = await getActiveTab();
-            const response = await chrome.tabs.sendMessage(targetTab.id!, {
+            const response = await chrome.tabs.sendMessage(targetTab?.id!, {
                 type: "get_page_links_by_position",
                 position: action.parameters.position,
             });
@@ -980,7 +1032,7 @@ async function runBrowserAction(action: any) {
                         url: response.url,
                     });
                 } else {
-                    await chrome.tabs.update(targetTab.id!, {
+                    await chrome.tabs.update(targetTab?.id!, {
                         url: response.url,
                     });
                 }
@@ -992,26 +1044,26 @@ async function runBrowserAction(action: any) {
         }
         case "scrollDown": {
             const targetTab = await getActiveTab();
-            await chrome.tabs.sendMessage(targetTab.id!, {
+            await chrome.tabs.sendMessage(targetTab?.id!, {
                 type: "scroll_down_on_page",
             });
             break;
         }
         case "scrollUp": {
             const targetTab = await getActiveTab();
-            await chrome.tabs.sendMessage(targetTab.id!, {
+            await chrome.tabs.sendMessage(targetTab?.id!, {
                 type: "scroll_up_on_page",
             });
             break;
         }
         case "goBack": {
             const targetTab = await getActiveTab();
-            await chrome.tabs.goBack(targetTab.id!);
+            await chrome.tabs.goBack(targetTab?.id!);
             break;
         }
         case "goForward": {
             const targetTab = await getActiveTab();
-            await chrome.tabs.goForward(targetTab.id!);
+            await chrome.tabs.goForward(targetTab?.id!);
             break;
         }
         case "openFromHistory": {
@@ -1023,7 +1075,7 @@ async function runBrowserAction(action: any) {
 
             if (historyItems && historyItems.length > 0) {
                 console.log(historyItems);
-                if (targetTab.id) {
+                if (targetTab?.id) {
                     chrome.tabs.update(targetTab.id, {
                         url: historyItems[0].url,
                     });
@@ -1052,7 +1104,7 @@ async function runBrowserAction(action: any) {
         }
         case "readPage": {
             const targetTab = await getActiveTab();
-            const article = await chrome.tabs.sendMessage(targetTab.id!, {
+            const article = await chrome.tabs.sendMessage(targetTab?.id!, {
                 type: "read_page_content",
             });
 
@@ -1083,7 +1135,7 @@ async function runBrowserAction(action: any) {
         }
         case "zoomIn": {
             const targetTab = await getActiveTab();
-            if (targetTab.url?.startsWith("https://paleobiodb.org/")) {
+            if (targetTab?.url?.startsWith("https://paleobiodb.org/")) {
                 const result = await chrome.tabs.sendMessage(targetTab.id!, {
                     type: "run_paleoBioDb_action",
                     action: action,
@@ -1104,7 +1156,7 @@ async function runBrowserAction(action: any) {
         }
         case "zoomOut": {
             const targetTab = await getActiveTab();
-            if (targetTab.url?.startsWith("https://paleobiodb.org/")) {
+            if (targetTab?.url?.startsWith("https://paleobiodb.org/")) {
                 const result = await chrome.tabs.sendMessage(targetTab.id!, {
                     type: "run_paleoBioDb_action",
                     action: action,
@@ -1142,14 +1194,14 @@ async function runBrowserAction(action: any) {
 
         case "getUITree": {
             const targetTab = await getActiveTab();
-            responseObject = await getTabAccessibilityTree(targetTab);
+            responseObject = await getTabAccessibilityTree(targetTab!);
             break;
         }
         case "getHTML": {
             const targetTab = await getActiveTab();
 
             responseObject = await getTabHTMLFragments(
-                targetTab,
+                targetTab!,
                 action.parameters?.fullHTML,
                 action.parameters?.downloadAsFile,
                 action.parameters?.extractText,
@@ -1162,7 +1214,7 @@ async function runBrowserAction(action: any) {
             const targetTab = await getActiveTab();
 
             responseObject = await getFilteredHTMLFragments(
-                targetTab,
+                targetTab!,
                 action.parameters.fragments,
                 action.parameters.cssSelectorsToKeep,
             );
@@ -1170,19 +1222,19 @@ async function runBrowserAction(action: any) {
         }
         case "getPageUrl": {
             const targetTab = await getActiveTab();
-            responseObject = targetTab.url;
+            responseObject = targetTab?.url;
             break;
         }
         case "awaitPageLoad": {
             const targetTab = await getActiveTab();
-            await awaitPageLoad(targetTab);
-            await awaitPageIncrementalUpdates(targetTab);
-            responseObject = targetTab.url;
+            await awaitPageLoad(targetTab!);
+            await awaitPageIncrementalUpdates(targetTab!);
+            responseObject = targetTab?.url;
             break;
         }
         case "clickOnElement": {
             const targetTab = await getActiveTab();
-            const response = await chrome.tabs.sendMessage(targetTab.id!, {
+            const response = await chrome.tabs.sendMessage(targetTab?.id!, {
                 type: "run_ui_event",
                 action: action,
             });
@@ -1190,7 +1242,7 @@ async function runBrowserAction(action: any) {
         }
         case "enterTextInElement": {
             const targetTab = await getActiveTab();
-            const response = await chrome.tabs.sendMessage(targetTab.id!, {
+            const response = await chrome.tabs.sendMessage(targetTab?.id!, {
                 type: "run_ui_event",
                 action: action,
             });
@@ -1198,7 +1250,15 @@ async function runBrowserAction(action: any) {
         }
         case "enterTextOnPage": {
             const targetTab = await getActiveTab();
-            const response = await chrome.tabs.sendMessage(targetTab.id!, {
+            const response = await chrome.tabs.sendMessage(targetTab?.id!, {
+                type: "run_ui_event",
+                action: action,
+            });
+            break;
+        }
+        case "setDropdownValue": {
+            const targetTab = await getActiveTab();
+            const response = await chrome.tabs.sendMessage(targetTab?.id!, {
                 type: "run_ui_event",
                 action: action,
             });
@@ -1206,7 +1266,7 @@ async function runBrowserAction(action: any) {
         }
         case "getPageSchema": {
             const targetTab = await getActiveTab();
-            const key = action.parameters.url ?? targetTab.url;
+            const key = action.parameters.url ?? targetTab?.url;
             const value = await chrome.storage.session.get(["pageSchema"]);
             if (value && Array.isArray(value.pageSchema)) {
                 const targetSchema = value.pageSchema.filter(
@@ -1243,6 +1303,21 @@ async function runBrowserAction(action: any) {
 
             break;
         }
+        case "getPageStoredProperty": {
+            responseObject = await getStoredPageProperty(
+                action.parameters.url,
+                action.parameters.key,
+            );
+            break;
+        }
+        case "setPageStoredProperty": {
+            await setStoredPageProperty(
+                action.parameters.url,
+                action.parameters.key,
+                action.parameters.value,
+            );
+            break;
+        }
         case "getConfiguration": {
             responseObject = await getConfigValues();
             break;
@@ -1275,7 +1350,7 @@ async function runSiteAction(schemaName: string, action: any) {
                 }
             }
 
-            const result = await chrome.tabs.sendMessage(targetTab.id!, {
+            const result = await chrome.tabs.sendMessage(targetTab?.id!, {
                 type: "run_paleoBioDb_action",
                 action: action,
             });
@@ -1286,7 +1361,7 @@ async function runSiteAction(schemaName: string, action: any) {
         case "browser.crossword": {
             const targetTab = await getActiveTab();
 
-            const result = await chrome.tabs.sendMessage(targetTab.id!, {
+            const result = await chrome.tabs.sendMessage(targetTab?.id!, {
                 type: "run_crossword_action",
                 action: action,
             });
@@ -1297,7 +1372,7 @@ async function runSiteAction(schemaName: string, action: any) {
         case "browser.commerce": {
             const targetTab = await getActiveTab();
 
-            const result = await chrome.tabs.sendMessage(targetTab.id!, {
+            const result = await chrome.tabs.sendMessage(targetTab?.id!, {
                 type: "run_commerce_action",
                 action: action,
             });
@@ -1437,7 +1512,7 @@ chrome.windows?.onFocusChanged.addListener(async (windowId) => {
     }
 
     const targetTab = await getActiveTab();
-    await toggleSiteTranslator(targetTab);
+    await toggleSiteTranslator(targetTab!);
 
     if (embeddingsInitializedWindowId !== windowId) {
         const tabs = await chrome.tabs.query({
@@ -1516,20 +1591,23 @@ chrome.runtime.onMessage.addListener(
                 }
                 case "refreshSchema": {
                     const schemaResult = await sendActionToAgent({
-                        actionName: "initializePageSchema",
+                        actionName: "detectPageActions",
                         parameters: {
                             registerAgent: false,
                         },
                     });
 
-                    sendResponse({ schema: schemaResult });
+                    sendResponse({
+                        schema: schemaResult.schema,
+                        actionDefinitions: schemaResult.typeDefinitions,
+                    });
                     break;
                 }
                 case "registerTempSchema": {
                     const schemaResult = await sendActionToAgent({
-                        actionName: "initializePageSchema",
+                        actionName: "registerPageDynamicAgent",
                         parameters: {
-                            registerAgent: true,
+                            agentName: message.agentName,
                         },
                     });
 
@@ -1550,14 +1628,16 @@ chrome.runtime.onMessage.addListener(
 
                     sendResponse({
                         intent: schemaResult.intent,
+                        intentJson: schemaResult.intentJson,
                         actions: schemaResult.actions,
+                        intentTypeDefinition: schemaResult.intentTypeDefinition,
                     });
                     break;
                 }
                 case "startRecording": {
                     const targetTab = await getActiveTab();
                     const response = await chrome.tabs.sendMessage(
-                        targetTab.id!,
+                        targetTab?.id!,
                         {
                             type: "startRecording",
                         },
@@ -1569,7 +1649,7 @@ chrome.runtime.onMessage.addListener(
                 case "stopRecording": {
                     const targetTab = await getActiveTab();
                     const response = await chrome.tabs.sendMessage(
-                        targetTab.id!,
+                        targetTab?.id!,
                         {
                             type: "stopRecording",
                         },
@@ -1588,42 +1668,44 @@ chrome.runtime.onMessage.addListener(
                     break;
                 }
                 case "saveAnnotatedScreenshot": {
-                    await chrome.storage.local.set({
+                    await chrome.storage.session.set({
                         annotatedScreenshot: message.screenshot,
                     });
                     sendResponse({});
                     break;
                 }
                 case "getAnnotatedScreenshot": {
-                    const data = await chrome.storage.local.get(
+                    const data = await chrome.storage.session.get(
                         "annotatedScreenshot",
                     );
                     sendResponse(data.annotatedScreenshot);
                     break;
                 }
                 case "saveRecordedActionPageHTML": {
-                    await chrome.storage.local.set({
+                    await chrome.storage.session.set({
                         recordedActionPageHTML: message.html,
                     });
                     sendResponse({});
                     break;
                 }
                 case "getRecordedActionPageHTML": {
-                    const data = await chrome.storage.local.get(
+                    const data = await chrome.storage.session.get(
                         "recordedActionPageHTML",
                     );
                     sendResponse(data.recordedActionPageHTML);
                     break;
                 }
                 case "saveRecordedActions": {
-                    await chrome.storage.local.set({
+                    await chrome.storage.session.set({
                         recordedActions: message.recordedActions,
+                        recordedActionPageHTML: message.recordedActionPageHTML,
+                        annotatedScreenshot: message.recordedActionScreenshot,
                     });
                     sendResponse({});
                     break;
                 }
                 case "recordingStopped": {
-                    await chrome.storage.local.set({
+                    await chrome.storage.session.set({
                         recordedActions: message.recordedActions,
                         recordedActionPageHTML: message.recordedActionPageHTML,
                         annotatedScreenshot: message.recordedActionScreenshot,
@@ -1633,17 +1715,26 @@ chrome.runtime.onMessage.addListener(
                     break;
                 }
                 case "getRecordedActions": {
-                    const data =
-                        await chrome.storage.local.get("recordedActions");
-                    sendResponse(data.recordedActions);
+                    const result = await chrome.storage.session.get([
+                        "recordedActions",
+                        "recordedActionPageHTML",
+                        "annotatedScreenshot",
+                    ]);
+
+                    sendResponse(result);
                     break;
                 }
                 case "clearRecordedActions": {
-                    const data =
-                        await chrome.storage.local.get("recordedActions");
-                    if (data) {
-                        await chrome.storage.local.remove("recordedActions");
+                    try {
+                        await chrome.storage.local.remove([
+                            "recordedActions",
+                            "recordedActionPageHTML",
+                            "annotatedScreenshot",
+                        ]);
+                    } catch (error) {
+                        console.error("Error clearing storage data:", error);
                     }
+
                     sendResponse({});
                     break;
                 }
@@ -1659,11 +1750,13 @@ chrome.runtime.onInstalled.addListener(() => {
     chrome.contextMenus.create({
         title: "Refresh crossword agent",
         id: "reInitCrosswordPage",
+        documentUrlPatterns: ["http://*/*", "https://*/*"],
     });
 
     chrome.contextMenus.create({
         title: "Clear crossword cache",
         id: "clearCrosswordPageCache",
+        documentUrlPatterns: ["http://*/*", "https://*/*"],
     });
 
     // Add separator
@@ -1675,6 +1768,14 @@ chrome.runtime.onInstalled.addListener(() => {
     chrome.contextMenus.create({
         title: "Discover page Schema",
         id: "discoverPageSchema",
+        documentUrlPatterns: ["http://*/*", "https://*/*"],
+    });
+
+    chrome.contextMenus.create({
+        id: "sidepanel-registerAgent",
+        title: "Update Page Agent",
+        contexts: ["all"],
+        documentUrlPatterns: ["chrome-extension://*/sidepanel.html"],
     });
 });
 
@@ -1725,6 +1826,13 @@ chrome.contextMenus?.onClicked.addListener(
             }
             case "discoverPageSchema": {
                 await chrome.sidePanel.open({ tabId: tab.id! });
+                break;
+            }
+            case "sidepanel-registerAgent": {
+                const schemaResult = await sendActionToAgent({
+                    actionName: "registerPageDynamicAgent",
+                    parameters: {},
+                });
                 break;
             }
         }

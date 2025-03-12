@@ -6,6 +6,7 @@ import {
     DateRange,
     IConversation,
     IMessage,
+    ListIndexingResult,
     MessageIndex,
 } from "./interfaces.js";
 import { textRangeFromLocation } from "./conversationIndex.js";
@@ -52,12 +53,15 @@ export class TimestampToTextRangeIndex implements ITimestampToTextRangeIndex {
         return this.insertTimestamp(messageIndex, timestamp, true);
     }
 
-    public addTimestamps(messageTimestamps: [MessageIndex, string][]) {
+    public addTimestamps(
+        messageTimestamps: [MessageIndex, string][],
+    ): ListIndexingResult {
         for (let i = 0; i < messageTimestamps.length; ++i) {
             const [messageIndex, timestamp] = messageTimestamps[i];
             this.insertTimestamp(messageIndex, timestamp, false);
         }
         this.ranges.sort(this.compareTimestampedRange);
+        return { numberCompleted: messageTimestamps.length };
     }
 
     private insertTimestamp(
@@ -102,23 +106,28 @@ export class TimestampToTextRangeIndex implements ITimestampToTextRangeIndex {
     }
 }
 
-export function buildTimestampIndex(conversation: IConversation): void {
+export function buildTimestampIndex(
+    conversation: IConversation,
+): ListIndexingResult {
     if (conversation.messages && conversation.secondaryIndexes) {
         conversation.secondaryIndexes.timestampIndex ??=
             new TimestampToTextRangeIndex();
-        addToTimestampIndex(
+        return addToTimestampIndex(
             conversation.secondaryIndexes.timestampIndex,
             conversation.messages,
             0,
         );
     }
+    return {
+        numberCompleted: 0,
+    };
 }
 
 export function addToTimestampIndex(
     timestampIndex: ITimestampToTextRangeIndex,
     messages: IMessage[],
     baseMessageIndex: MessageIndex,
-) {
+): ListIndexingResult {
     const messageTimestamps: [MessageIndex, string][] = [];
     for (let i = 0; i < messages.length; ++i) {
         const timestamp = messages[i].timestamp;
@@ -126,5 +135,5 @@ export function addToTimestampIndex(
             messageTimestamps.push([i + baseMessageIndex, timestamp]);
         }
     }
-    timestampIndex.addTimestamps(messageTimestamps);
+    return timestampIndex.addTimestamps(messageTimestamps);
 }

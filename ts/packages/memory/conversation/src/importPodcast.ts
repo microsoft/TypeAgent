@@ -11,7 +11,6 @@ import {
     ConversationSettings,
     createConversationSettings,
     addMetadataToIndex,
-    buildSecondaryIndexes,
     IKnowledgeSource,
     ConversationSecondaryIndexes,
     ConversationThreads,
@@ -20,6 +19,9 @@ import {
     IConversationDataWithIndexes,
     writeConversationDataToFile,
     readConversationDataFromFile,
+    MessageTextIndex,
+    createTermEmbeddingCache,
+    buildTransientSecondaryIndexes,
 } from "knowpro";
 import { conversation as kpLib, split } from "knowledge-processor";
 import { collections, dateTime, getFileName, readAllText } from "typeagent";
@@ -71,7 +73,7 @@ export class PodcastMessageMeta implements IKnowledgeSource {
 }
 
 function assignMessageListeners(
-    msgs: IMessage<PodcastMessageMeta>[],
+    msgs: PodcastMessage[],
     participants: Set<string>,
 ) {
     for (const msg of msgs) {
@@ -87,13 +89,18 @@ function assignMessageListeners(
     }
 }
 
-export class PodcastMessage implements IMessage<PodcastMessageMeta> {
-    public timestamp: string | undefined;
+export class PodcastMessage implements IMessage {
     constructor(
         public textChunks: string[],
         public metadata: PodcastMessageMeta,
         public tags: string[] = [],
+        public timestamp: string | undefined = undefined,
     ) {}
+
+    getKnowledge(): kpLib.KnowledgeResponse {
+        return this.metadata.getKnowledge();
+    }
+
     addTimestamp(timestamp: string) {
         this.timestamp = timestamp;
     }
@@ -102,7 +109,7 @@ export class PodcastMessage implements IMessage<PodcastMessageMeta> {
     }
 }
 
-export class Podcast implements IConversation<PodcastMessageMeta> {
+export class Podcast implements IConversation<PodcastMessage> {
     public settings: ConversationSettings;
     public semanticRefIndex: ConversationIndex;
     public secondaryIndexes: PodcastSecondaryIndexes;
@@ -140,12 +147,15 @@ export class Podcast implements IConversation<PodcastMessageMeta> {
         eventHandler?: IndexingEventHandlers,
     ): Promise<IndexingResults> {
         this.addMetadataToIndex();
-        const result = await buildConversationIndex(this, eventHandler);
-        if (!result.error) {
-            // buildConversationIndex already built all aliases
-            await this.buildSecondaryIndexes(false);
-            await this.secondaryIndexes.threads.buildIndex();
-        }
+        const result = await buildConversationIndex(
+            this,
+            this.settings,
+            eventHandler,
+        );
+        // buildConversationIndex now automatically builds standard secondary indexes
+        // Pass false to build podcast specific secondary indexes only
+        await this.buildTransientSecondaryIndexes(false);
+        await this.secondaryIndexes.threads.buildIndex();
         return result;
     }
 
@@ -159,13 +169,23 @@ export class Podcast implements IConversation<PodcastMessageMeta> {
             relatedTermsIndexData:
                 this.secondaryIndexes.termToRelatedTermsIndex.serialize(),
             threadData: this.secondaryIndexes.threads.serialize(),
+            messageIndexData: this.secondaryIndexes.messageIndex.serialize(),
         };
         return data;
     }
 
     public async deserialize(podcastData: PodcastData): Promise<void> {
         this.nameTag = podcastData.nameTag;
-        this.messages = podcastData.messages;
+        this.messages = podcastData.messages.map((m) => {
+            const metadata = new PodcastMessageMeta(m.metadata.speaker);
+            metadata.listeners = m.metadata.listeners;
+            return new PodcastMessage(
+                m.textChunks,
+                metadata,
+                m.tags,
+                m.timestamp,
+            );
+        });
         this.semanticRefs = podcastData.semanticRefs;
         this.tags = podcastData.tags;
         if (podcastData.semanticIndexData) {
@@ -184,7 +204,15 @@ export class Podcast implements IConversation<PodcastMessageMeta> {
             );
             this.secondaryIndexes.threads.deserialize(podcastData.threadData);
         }
-        await this.buildSecondaryIndexes(true);
+        if (podcastData.messageIndexData) {
+            this.secondaryIndexes.messageIndex = new MessageTextIndex(
+                this.settings.messageTextIndexSettings,
+            );
+            this.secondaryIndexes.messageIndex.deserialize(
+                podcastData.messageIndexData,
+            );
+        }
+        await this.buildTransientSecondaryIndexes(true);
     }
 
     public async writeToFile(
@@ -212,11 +240,15 @@ export class Podcast implements IConversation<PodcastMessageMeta> {
         return podcast;
     }
 
-    private async buildSecondaryIndexes(all: boolean) {
+    private async buildTransientSecondaryIndexes(all: boolean) {
         if (all) {
-            await buildSecondaryIndexes(this, false);
+            // Build transient secondary indexes associated with the conversation
+            // These are automatically build by calls to buildConversationIndex, but
+            // may need to get rebuilt when we deserialize persisted conversations
+            await buildTransientSecondaryIndexes(this, this.settings);
         }
         this.buildParticipantAliases();
+        this.buildCaches();
     }
 
     private buildParticipantAliases(): void {
@@ -257,14 +289,26 @@ export class Podcast implements IConversation<PodcastMessageMeta> {
         }
         return aliases;
     }
+
+    private buildCaches(): void {
+        createTermEmbeddingCache(
+            this.settings.relatedTermIndexSettings.embeddingIndexSettings!,
+            this.secondaryIndexes.termToRelatedTermsIndex.fuzzyIndex!,
+            64,
+        );
+    }
 }
 
 export class PodcastSecondaryIndexes extends ConversationSecondaryIndexes {
     public threads: ConversationThreads;
+    public messageIndex: MessageTextIndex;
 
     constructor(settings: ConversationSettings) {
         super(settings.relatedTermIndexSettings);
         this.threads = new ConversationThreads(settings.threadSettings);
+        this.messageIndex = new MessageTextIndex(
+            settings.messageTextIndexSettings,
+        );
     }
 }
 

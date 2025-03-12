@@ -180,6 +180,33 @@ export class BrowserConnector {
         return this.sendActionToBrowser(schemaAction, "browser");
     }
 
+    async getCurrentPageStoredProperty(url: string, key: string) {
+        const timeoutPromise = new Promise((f) => setTimeout(f, 3000));
+        const action = {
+            actionName: "getPageStoredProperty",
+            parameters: {
+                url: url,
+                key: key,
+            },
+        };
+
+        const actionPromise = this.getPageDataFromBrowser(action);
+        return Promise.race([actionPromise, timeoutPromise]);
+    }
+
+    async setCurrentPageStoredProperty(url: string, key: string, value: any) {
+        const schemaAction = {
+            actionName: "setPageStoredProperty",
+            parameters: {
+                url: url,
+                key: key,
+                value: value,
+            },
+        };
+
+        return this.sendActionToBrowser(schemaAction, "browser");
+    }
+
     async getPageUrl() {
         const action = {
             actionName: "getPageUrl",
@@ -198,7 +225,22 @@ export class BrowserConnector {
         return this.sendActionToBrowser(clickAction);
     }
 
-    async enterTextIn(textValue: string, cssSelector?: string) {
+    async setDropdown(cssSelector: string, optionLabel: string) {
+        const clickAction = {
+            actionName: "setDropdownValue",
+            parameters: {
+                cssSelector: cssSelector,
+                optionLabel: optionLabel,
+            },
+        };
+        return this.sendActionToBrowser(clickAction);
+    }
+
+    async enterTextIn(
+        textValue: string,
+        cssSelector?: string,
+        submitForm?: boolean,
+    ) {
         let actionName = cssSelector ? "enterTextInElement" : "enterTextOnPage";
 
         const textAction = {
@@ -206,6 +248,7 @@ export class BrowserConnector {
             parameters: {
                 value: textValue,
                 cssSelector: cssSelector,
+                submitForm: submitForm,
             },
         };
 
