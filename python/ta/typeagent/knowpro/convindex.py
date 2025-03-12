@@ -179,6 +179,7 @@ class ConversationIndex(ITermToSemanticRefIndex):
     def __len__(self) -> int:
         return len(self._map)
 
+    # Needed because otherwise an empty index would be falsy.
     def __bool__(self) -> bool:
         return True
 
@@ -201,6 +202,9 @@ class ConversationIndex(ITermToSemanticRefIndex):
         else:
             self._map[term] = [semantic_ref_ordinal]
 
+    def lookup_term(self, term: str) -> list[ScoredSemanticRefOrdinal] | None:
+        return self._map.get(self._prepare_term(term)) or []
+
     def remove_term(self, term: str, semantic_ref_ordinal: SemanticRefOrdinal) -> None:
         self._map.pop(self._prepare_term(term), None)
 
@@ -210,10 +214,8 @@ class ConversationIndex(ITermToSemanticRefIndex):
         if term in self._map and len(self._map[term]) == 0:
             self._map.pop(term)
 
-    def lookup_term(self, term: str) -> list[ScoredSemanticRefOrdinal] | None:
-        return self._map.get(self._prepare_term(term)) or []
-
     def serialize(self) -> ITermToSemanticRefIndexData:
+        # TODO: Produce propery JSON-able dicts instead of Python objects?
         items: list[ITermToSemanticRefIndexItem] = []
         for term, semantic_ref_ordinals in self._map.items():
             items.append(
@@ -225,7 +227,11 @@ class ConversationIndex(ITermToSemanticRefIndex):
         return ITermToSemanticRefIndexData(items)
 
     def deserialize(self, data: ITermToSemanticRefIndexData) -> None:
-        raise NotImplementedError
+        for term_data in data.items:
+            if term_data is not None and term_data.term:
+                self._map[self._prepare_term(term_data.term)] = (
+                    term_data.semantic_ref_ordinals
+                )
 
     def _prepare_term(self, term: str) -> str:
         return term.lower()

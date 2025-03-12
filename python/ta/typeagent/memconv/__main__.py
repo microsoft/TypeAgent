@@ -5,6 +5,9 @@
 import argparse
 from datetime import datetime as Datetime
 import sys
+from typing import Any, cast
+
+from typeagent.knowpro.convindex import ConversationIndex
 
 minver = (3, 12)
 assert sys.version_info >= minver, f"Needs Python {minver[0]}.{minver[1]}+"
@@ -51,8 +54,10 @@ async def main():
         on_text_indexed,
     )
     await pod.build_index(handler)
-    # if pod.semantic_ref_index is not None:
-    #     print(pod.semantic_ref_index.serialize())
+    if pod.semantic_ref_index is not None:
+        data = cast(Any, pod.semantic_ref_index).serialize()
+        new = ConversationIndex(data)
+        assert new.serialize() == data
 
 
 if __name__ == "__main__":

@@ -79,7 +79,7 @@ class Podcast(interfaces.IConversation[PodcastMessage]):
     # settings: ConversationSettings = field(
     #     init=False, default_factory=create_conversation_settings
     # )
-    semantic_ref_index: convindex.ConversationIndex | None = field(
+    semantic_ref_index: convindex.ITermToSemanticRefIndex | None = field(
         init=False, default_factory=convindex.ConversationIndex
     )
     secondary_indexes: interfaces.IConversationSecondaryIndexes | None = field(

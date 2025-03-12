@@ -7,28 +7,28 @@
 help:
 	@echo "Usage: make [target]"
 	@echo "make help   # Help"
-	@echo "make all    # format, test, demo, build"
+	@echo "make all    # venv, format, check, test, build"
 	@echo "make format # Run black"
-	@echo "make test   # Run pyright"
-	@echo "make demo   # Run import_podcast demo"
+	@echo "make check  # Run pyright"
+	@echo "make test   # Run import_podcast test"
 	@echo "make build  # Build the wheel (under dist/)"
 	@echo "make venv   # Create venv/"
-	@echo "make clean  # Remove build/, dist/, venv/"
+	@echo "make clean  # Remove build/, dist/, venv/, *.egg-info/"
 
 .PHONY: all
-all: format test demo build
+all: venv format check test build
 
 .PHONY: format
 format: venv
 	venv/bin/black typeagent
 
-.PHONY: test
+.PHONY: check
 # To install pyright, use `npm install -g pyright` .
-test: venv
+check: venv
 	pyright --pythonpath venv/bin/python typeagent
 
-.PHONY: demo
-demo: venv
+.PHONY: test
+test: venv
 	venv/bin/python -m typeagent.memconv testdata/npr.txt
 
 .PHONY: build

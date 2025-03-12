@@ -312,21 +312,21 @@ class IMessageTextIndex(Protocol):
 @dataclass
 class ITermToSemanticRefIndexItem:
     term: str
-    semantic_ref_ordinals: Sequence[ScoredSemanticRefOrdinal]
+    semantic_ref_ordinals: list[ScoredSemanticRefOrdinal]
 
 
 # Persistent form of a term index.
 @dataclass
 class ITermToSemanticRefIndexData:
-    items: Sequence[ITermToSemanticRefIndexItem]
+    items: list[ITermToSemanticRefIndexItem]
 
 
 @dataclass
 class IConversationData[TMessage]:
     name_tag: str
-    messages: Sequence[TMessage]
-    tags: Sequence[str]
-    semantic_refs: Sequence[SemanticRef]
+    messages: list[TMessage]
+    tags: list[str]
+    semantic_refs: list[SemanticRef]
     semantic_index_data: ITermToSemanticRefIndexData | None = None
 
 
