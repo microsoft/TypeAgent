@@ -293,7 +293,7 @@ export function lookupTermFiltered(
     const scoredRefs = semanticRefIndex.lookupTerm(term.text);
     if (scoredRefs && scoredRefs.length > 0) {
         let filtered = scoredRefs.filter((sr) => {
-            const semanticRef = semanticRefs[sr.semanticRefIndex];
+            const semanticRef = semanticRefs[sr.semanticRefOrdinal];
             const result = filter(semanticRef, sr);
             return result;
         });
@@ -583,7 +583,7 @@ export class MatchSearchTermExpr extends MatchTermExpr {
             for (let i = 0; i < matches.length; ++i) {
                 matches[i] = this.scoreBooster(
                     this.searchTerm,
-                    context.getSemanticRef(matches[i].semanticRefIndex),
+                    context.getSemanticRef(matches[i].semanticRefOrdinal),
                     matches[i],
                 );
             }
@@ -1107,7 +1107,7 @@ export function messageMatchesFromKnowledgeMatches(
             expectedHitCount++;
             for (const match of matchesByType.semanticRefMatches) {
                 messageMatches.addMessagesForSemanticRef(
-                    semanticRefs[match.semanticRefIndex],
+                    semanticRefs[match.semanticRefOrdinal],
                     match.score,
                 );
             }

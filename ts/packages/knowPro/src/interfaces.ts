@@ -34,8 +34,7 @@ export type Knowledge = kpLib.ConcreteEntity | kpLib.Action | Topic | Tag;
 export type SemanticRefOrdinal = number;
 
 export interface SemanticRef {
-    // TODO REFACTOR: rename to semanticRefOrdinal
-    semanticRefIndex: SemanticRefOrdinal;
+    semanticRefOrdinal: SemanticRefOrdinal;
     range: TextRange;
     knowledgeType: KnowledgeType;
     knowledge: Knowledge;
@@ -59,8 +58,7 @@ export interface IConversation<TMessage extends IKnowledgeSource = any> {
 }
 
 export type ScoredSemanticRef = {
-    // TODO REFACTOR: rename to semanticRefOrdinal
-    semanticRefIndex: SemanticRefOrdinal;
+    semanticRefOrdinal: SemanticRefOrdinal;
     score: number;
 };
 

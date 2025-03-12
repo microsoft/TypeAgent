@@ -187,7 +187,7 @@ export class PropertyIndex implements IPropertyToSemanticRefIndex {
         let termText = this.toPropertyTermText(propertyName, value);
         if (typeof semanticRefOrdinal === "number") {
             semanticRefOrdinal = {
-                semanticRefIndex: semanticRefOrdinal,
+                semanticRefOrdinal: semanticRefOrdinal,
                 score: 1,
             };
         }
@@ -239,7 +239,7 @@ export function lookupPropertyInPropertyIndex(
     if (scoredRefs && scoredRefs.length > 0 && rangesInScope) {
         scoredRefs = scoredRefs.filter((sr) =>
             rangesInScope.isRangeInScope(
-                semanticRefs[sr.semanticRefIndex].range,
+                semanticRefs[sr.semanticRefOrdinal].range,
             ),
         );
     }

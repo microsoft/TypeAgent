@@ -27,7 +27,7 @@ export function mergeTopics(
 ): ScoredKnowledge[] {
     let mergedTopics = new Map<string, Scored<Topic>>();
     for (let semanticRefMatch of semanticRefMatches) {
-        const semanticRef = semanticRefs[semanticRefMatch.semanticRefIndex];
+        const semanticRef = semanticRefs[semanticRefMatch.semanticRefOrdinal];
         if (semanticRef.knowledgeType !== "topic") {
             continue;
         }
@@ -209,7 +209,7 @@ function* getScoredEntities(
     semanticRefMatches: ScoredSemanticRef[],
 ): IterableIterator<Scored<kpLib.ConcreteEntity>> {
     for (let semanticRefMatch of semanticRefMatches) {
-        const semanticRef = semanticRefs[semanticRefMatch.semanticRefIndex];
+        const semanticRef = semanticRefs[semanticRefMatch.semanticRefOrdinal];
         if (semanticRef.knowledgeType === "entity") {
             yield {
                 score: semanticRefMatch.score,

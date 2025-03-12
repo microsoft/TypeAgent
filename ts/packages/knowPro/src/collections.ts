@@ -264,7 +264,7 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefOrdinal>
             weight ??= searchTerm.weight ?? 1;
             for (const scoredRef of scoredRefs) {
                 this.add(
-                    scoredRef.semanticRefIndex,
+                    scoredRef.semanticRefOrdinal,
                     scoredRef.score * weight,
                     isExactMatch,
                 );
@@ -285,9 +285,9 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefOrdinal>
         if (scoredRefs) {
             weight ??= searchTerm.weight ?? 1;
             for (const scoredRef of scoredRefs) {
-                if (!this.has(scoredRef.semanticRefIndex)) {
+                if (!this.has(scoredRef.semanticRefOrdinal)) {
                     this.add(
-                        scoredRef.semanticRefIndex,
+                        scoredRef.semanticRefOrdinal,
                         scoredRef.score * weight,
                         isExactMatch,
                     );
@@ -379,7 +379,7 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefOrdinal>
     public toScoredSemanticRefs(): ScoredSemanticRef[] {
         return this.getSortedByScore(0).map((m) => {
             return {
-                semanticRefIndex: m.value,
+                semanticRefOrdinal: m.value,
                 score: m.score,
             };
         }, 0);

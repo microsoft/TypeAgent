@@ -214,10 +214,10 @@ export class KnowProPrinter extends ChatPrinter {
         scoredRef: kp.ScoredSemanticRef,
         semanticRefs: kp.SemanticRef[],
     ) {
-        const semanticRef = semanticRefs[scoredRef.semanticRefIndex];
+        const semanticRef = semanticRefs[scoredRef.semanticRefOrdinal];
         this.writeInColor(
             chalk.green,
-            `#${matchNumber + 1} / ${totalMatches}: <${scoredRef.semanticRefIndex}> ${semanticRef.knowledgeType} [${scoredRef.score}]`,
+            `#${matchNumber + 1} / ${totalMatches}: <${scoredRef.semanticRefOrdinal}> ${semanticRef.knowledgeType} [${scoredRef.score}]`,
         );
         this.writeSemanticRef(semanticRef);
         this.writeLine();

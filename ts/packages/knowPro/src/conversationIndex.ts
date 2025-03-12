@@ -86,22 +86,22 @@ export function addEntityToIndex(
     messageIndex: number,
     chunkIndex = 0,
 ) {
-    const refIndex = semanticRefs.length;
+    const semanticRefOrdinal = semanticRefs.length;
     semanticRefs.push({
-        semanticRefIndex: refIndex,
+        semanticRefOrdinal,
         range: textRangeFromLocation(messageIndex, chunkIndex),
         knowledgeType: "entity",
         knowledge: entity,
     });
-    semanticRefIndex.addTerm(entity.name, refIndex);
+    semanticRefIndex.addTerm(entity.name, semanticRefOrdinal);
     // add each type as a separate term
     for (const type of entity.type) {
-        semanticRefIndex.addTerm(type, refIndex);
+        semanticRefIndex.addTerm(type, semanticRefOrdinal);
     }
     // add every facet name as a separate term
     if (entity.facets) {
         for (const facet of entity.facets) {
-            addFacet(facet, refIndex, semanticRefIndex);
+            addFacet(facet, semanticRefOrdinal, semanticRefIndex);
         }
     }
 }
@@ -126,14 +126,14 @@ export function addTopicToIndex(
     messageIndex: number,
     chunkIndex = 0,
 ) {
-    const refIndex = semanticRefs.length;
+    const semanticRefOrdinal = semanticRefs.length;
     semanticRefs.push({
-        semanticRefIndex: refIndex,
+        semanticRefOrdinal,
         range: textRangeFromLocation(messageIndex, chunkIndex),
         knowledgeType: "topic",
         knowledge: topic,
     });
-    semanticRefIndex.addTerm(topic.text, refIndex);
+    semanticRefIndex.addTerm(topic.text, semanticRefOrdinal);
 }
 
 export function addActionToIndex(
@@ -143,36 +143,39 @@ export function addActionToIndex(
     messageIndex: number,
     chunkIndex = 0,
 ) {
-    const refIndex = semanticRefs.length;
+    const semanticRefOrdinal = semanticRefs.length;
     semanticRefs.push({
-        semanticRefIndex: refIndex,
+        semanticRefOrdinal,
         range: textRangeFromLocation(messageIndex, chunkIndex),
         knowledgeType: "action",
         knowledge: action,
     });
-    semanticRefIndex.addTerm(action.verbs.join(" "), refIndex);
+    semanticRefIndex.addTerm(action.verbs.join(" "), semanticRefOrdinal);
     if (action.subjectEntityName !== "none") {
-        semanticRefIndex.addTerm(action.subjectEntityName, refIndex);
+        semanticRefIndex.addTerm(action.subjectEntityName, semanticRefOrdinal);
     }
     if (action.objectEntityName !== "none") {
-        semanticRefIndex.addTerm(action.objectEntityName, refIndex);
+        semanticRefIndex.addTerm(action.objectEntityName, semanticRefOrdinal);
     }
     if (action.indirectObjectEntityName !== "none") {
-        semanticRefIndex.addTerm(action.indirectObjectEntityName, refIndex);
+        semanticRefIndex.addTerm(
+            action.indirectObjectEntityName,
+            semanticRefOrdinal,
+        );
     }
     if (action.params) {
         for (const param of action.params) {
             if (typeof param === "string") {
-                semanticRefIndex.addTerm(param, refIndex);
+                semanticRefIndex.addTerm(param, semanticRefOrdinal);
             } else {
-                semanticRefIndex.addTerm(param.name, refIndex);
+                semanticRefIndex.addTerm(param.name, semanticRefOrdinal);
                 if (typeof param.value === "string") {
-                    semanticRefIndex.addTerm(param.value, refIndex);
+                    semanticRefIndex.addTerm(param.value, semanticRefOrdinal);
                 }
             }
         }
     }
-    addFacet(action.subjectEntityFacet, refIndex, semanticRefIndex);
+    addFacet(action.subjectEntityFacet, semanticRefOrdinal, semanticRefIndex);
 }
 
 export function addKnowledgeToIndex(
@@ -321,7 +324,7 @@ export class ConversationIndex implements ITermToSemanticRefIndex {
         }
         if (typeof semanticRefIndex === "number") {
             semanticRefIndex = {
-                semanticRefIndex: semanticRefIndex,
+                semanticRefOrdinal: semanticRefIndex,
                 score: 1,
             };
         }

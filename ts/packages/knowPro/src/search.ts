@@ -478,7 +478,7 @@ class SearchQueryBuilder {
             )
         ) {
             scoredRef = {
-                semanticRefIndex: scoredRef.semanticRefIndex,
+                semanticRefOrdinal: scoredRef.semanticRefOrdinal,
                 score: scoredRef.score * boostWeight,
             };
         }
