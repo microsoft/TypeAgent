@@ -5,7 +5,7 @@ import {
     IConversationThreads,
     ScoredThreadIndex,
     Thread,
-    ThreadIndex,
+    ThreadOrdinal,
 } from "./interfaces.js";
 import {
     deserializeEmbedding,
@@ -53,10 +53,10 @@ export class ConversationThreads implements IConversationThreads {
         });
     }
 
-    public removeThread(threadIndex: ThreadIndex) {
-        if (threadIndex >= 0) {
-            this.threads.splice(threadIndex, 1);
-            this.embeddingIndex.removeAt(threadIndex);
+    public removeThread(threadOrdinal: ThreadOrdinal) {
+        if (threadOrdinal >= 0) {
+            this.threads.splice(threadOrdinal, 1);
+            this.embeddingIndex.removeAt(threadOrdinal);
         }
     }
 

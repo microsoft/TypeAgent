@@ -98,6 +98,7 @@ export interface TextRange {
 export type DateRange = {
     start: Date;
     // Inclusive
+    // TODO: Make this exclusive. Impacts search code
     end?: Date | undefined;
 };
 
@@ -189,10 +190,11 @@ export type Thread = {
     ranges: TextRange[];
 };
 
-export type ThreadIndex = number;
+export type ThreadOrdinal = number;
 
 export type ScoredThreadIndex = {
-    threadIndex: ThreadIndex;
+    // TODO REFACTOR: rename to threadOrdinal
+    threadIndex: ThreadOrdinal;
     score: number;
 };
 
@@ -205,7 +207,7 @@ export interface IConversationThreads {
         maxMatches?: number,
         thresholdScore?: number,
     ): Promise<ScoredThreadIndex[] | undefined>;
-    removeThread(threadIndex: ThreadIndex): void;
+    removeThread(threadOrdinal: ThreadOrdinal): void;
 }
 
 export interface IMessageTextIndex {
