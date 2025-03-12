@@ -31,7 +31,7 @@ export function textRangeFromLocation(
     chunkIndex = 0,
 ): TextRange {
     return {
-        start: { messageIndex: messageOrdinal, chunkIndex },
+        start: { messageOrdinal: messageOrdinal, chunkIndex },
         end: undefined,
     };
 }
@@ -253,7 +253,7 @@ export async function buildSemanticRefIndex(
                 knowledge,
             );
         }
-        const completedChunk = { messageIndex: messageOrdinal, chunkIndex };
+        const completedChunk = { messageOrdinal, chunkIndex };
         indexingResult.completedUpto = completedChunk;
         if (
             eventHandler?.onKnowledgeExtracted &&

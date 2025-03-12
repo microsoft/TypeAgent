@@ -426,18 +426,18 @@ export class MessageAccumulator extends MatchAccumulator<MessageOrdinal> {
         semanticRef: SemanticRef,
         score: number,
     ): void {
-        const messageIndexStart = semanticRef.range.start.messageIndex;
+        const messageOrdinalStart = semanticRef.range.start.messageOrdinal;
         if (semanticRef.range.end) {
-            const messageIndexEnd = semanticRef.range.end.messageIndex;
+            const messageOrdinalEnd = semanticRef.range.end.messageOrdinal;
             for (
-                let messageIndex = messageIndexStart;
-                messageIndex < messageIndexEnd;
-                ++messageIndex
+                let messageOrdinal = messageOrdinalStart;
+                messageOrdinal < messageOrdinalEnd;
+                ++messageOrdinal
             ) {
-                this.add(messageIndex, score, true);
+                this.add(messageOrdinal, score, true);
             }
         } else {
-            this.add(messageIndexStart, score, true);
+            this.add(messageOrdinalStart, score, true);
         }
     }
 
@@ -451,7 +451,7 @@ export class MessageAccumulator extends MatchAccumulator<MessageOrdinal> {
     public toScoredMessageOrdinals(): ScoredMessageOrdinal[] {
         return this.getSortedByScore(0).map((m) => {
             return {
-                messageIndex: m.value,
+                messageOrdinal: m.value,
                 score: m.score,
             };
         }, 0);
@@ -514,7 +514,9 @@ export class TextRangeCollection {
         // Now loop over all text ranges that start at rangeToMatch.start.messageIndex
         for (; i < this.ranges.length; ++i) {
             const range = this.ranges[i];
-            if (range.start.messageIndex > rangeToMatch.start.messageIndex) {
+            if (
+                range.start.messageOrdinal > rangeToMatch.start.messageOrdinal
+            ) {
                 break;
             }
             if (isInTextRange(range, rangeToMatch)) {

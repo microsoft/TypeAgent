@@ -19,8 +19,7 @@ export interface IMessage extends IKnowledgeSource {
 }
 
 export type ScoredMessageOrdinal = {
-    // TODO REFACTOR: rename to messageOrdinal
-    messageIndex: MessageOrdinal;
+    messageOrdinal: MessageOrdinal;
     score: number;
 };
 
@@ -77,8 +76,7 @@ export interface ITermToSemanticRefIndex {
 
 export interface TextLocation {
     // the ordinal of the message
-    // TODO REFACTOR: rename to messageOrdinal
-    messageIndex: MessageOrdinal;
+    messageOrdinal: MessageOrdinal;
     // TODO REFACTOR: rename to chunkOrdinal
     // the ordinal of the chunk
     chunkIndex?: number;

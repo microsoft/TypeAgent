@@ -46,7 +46,7 @@ export class MessageTextIndex implements IMessageTextIndex {
         // Collect everything so we can batch efficiently
         for (let i = 0; i < messages.length; ++i) {
             const message = messages[i];
-            let messageIndex = baseMessageOrdinal + i;
+            let messageOrdinal = baseMessageOrdinal + i;
             for (
                 let chunkIndex = 0;
                 chunkIndex < message.textChunks.length;
@@ -54,7 +54,7 @@ export class MessageTextIndex implements IMessageTextIndex {
             ) {
                 allChunks.push([
                     message.textChunks[chunkIndex],
-                    { messageIndex, chunkIndex },
+                    { messageOrdinal, chunkIndex },
                 ]);
             }
         }
@@ -75,7 +75,7 @@ export class MessageTextIndex implements IMessageTextIndex {
         );
         return scoredLocations.map((sl) => {
             return {
-                messageIndex: sl.textLocation.messageIndex,
+                messageOrdinal: sl.textLocation.messageOrdinal,
                 score: sl.score,
             };
         });
@@ -95,7 +95,7 @@ export class MessageTextIndex implements IMessageTextIndex {
         );
         return scoredLocations.map((sl) => {
             return {
-                messageIndex: sl.textLocation.messageIndex,
+                messageOrdinal: sl.textLocation.messageOrdinal,
                 score: sl.score,
             };
         });

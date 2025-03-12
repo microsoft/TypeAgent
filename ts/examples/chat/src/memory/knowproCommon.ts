@@ -5,7 +5,7 @@ import * as knowLib from "knowledge-processor";
 import * as kp from "knowpro";
 
 export function textLocationToString(location: kp.TextLocation): string {
-    let text = `MessageIndex: ${location.messageIndex}`;
+    let text = `MessageIndex: ${location.messageOrdinal}`;
     if (location.chunkIndex) {
         text += `\nChunkIndex: ${location.chunkIndex}`;
     }

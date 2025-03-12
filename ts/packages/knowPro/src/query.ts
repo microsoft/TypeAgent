@@ -74,8 +74,8 @@ export function getTextRangeForDateRange(
     }
     if (rangeStartOrdinal >= 0) {
         return {
-            start: { messageIndex: rangeStartOrdinal },
-            end: { messageIndex: rangeEndOrdinal + 1 },
+            start: { messageOrdinal: rangeStartOrdinal },
+            end: { messageOrdinal: rangeEndOrdinal + 1 },
         };
     }
     return undefined;
@@ -399,7 +399,7 @@ export class QueryEvalContext {
     }
 
     public getMessageForRef(semanticRef: SemanticRef): IMessage {
-        const messageIndex = semanticRef.range.start.messageIndex;
+        const messageIndex = semanticRef.range.start.messageOrdinal;
         return this.conversation.messages[messageIndex];
     }
 

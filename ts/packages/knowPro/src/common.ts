@@ -22,7 +22,7 @@ export interface Scored<T = any> {
  */
 
 export function compareTextLocation(x: TextLocation, y: TextLocation): number {
-    let cmp = x.messageIndex - y.messageIndex;
+    let cmp = x.messageOrdinal - y.messageOrdinal;
     if (cmp !== 0) {
         return cmp;
     }

@@ -178,7 +178,7 @@ export function createPodcastCommands(
             );
             let threadRange: kp.TextRange = {
                 start: {
-                    messageIndex: podcastMessages.length,
+                    messageOrdinal: podcastMessages.length,
                 },
             };
             const messages = await messageStore.getMultiple(messageIds);
@@ -190,7 +190,7 @@ export function createPodcastCommands(
                 );
                 podcastMessage.addTimestamp(message.timestamp.toISOString());
                 threadRange.end = {
-                    messageIndex: podcastMessages.length,
+                    messageOrdinal: podcastMessages.length,
                 };
                 podcastMessages.push(podcastMessage);
                 knowledgeResponses.push(
