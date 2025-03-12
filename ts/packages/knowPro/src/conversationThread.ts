@@ -3,7 +3,7 @@
 
 import {
     IConversationThreads,
-    ScoredThreadIndex,
+    ScoredThreadOrdinal,
     Thread,
     ThreadOrdinal,
 } from "./interfaces.js";
@@ -42,7 +42,7 @@ export class ConversationThreads implements IConversationThreads {
         text: string,
         maxMatches?: number,
         thresholdScore?: number,
-    ): Promise<ScoredThreadIndex[]> {
+    ): Promise<ScoredThreadOrdinal[]> {
         const matches = await this.embeddingIndex.getIndexesOfNearest(
             text,
             maxMatches,

@@ -192,7 +192,7 @@ export type Thread = {
 
 export type ThreadOrdinal = number;
 
-export type ScoredThreadIndex = {
+export type ScoredThreadOrdinal = {
     // TODO REFACTOR: rename to threadOrdinal
     threadIndex: ThreadOrdinal;
     score: number;
@@ -206,7 +206,7 @@ export interface IConversationThreads {
         threadDescription: string,
         maxMatches?: number,
         thresholdScore?: number,
-    ): Promise<ScoredThreadIndex[] | undefined>;
+    ): Promise<ScoredThreadOrdinal[] | undefined>;
     removeThread(threadOrdinal: ThreadOrdinal): void;
 }
 
