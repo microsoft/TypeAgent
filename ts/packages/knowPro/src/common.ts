@@ -30,7 +30,7 @@ export function compareTextLocation(x: TextLocation, y: TextLocation): number {
     if (cmp !== 0) {
         return cmp;
     }
-    return (x.charIndex ?? 0) - (y.charIndex ?? 0);
+    return (x.charOrdinal ?? 0) - (y.charOrdinal ?? 0);
 }
 
 export function compareTextRange(x: TextRange, y: TextRange) {

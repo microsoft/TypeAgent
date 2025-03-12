@@ -353,7 +353,7 @@ class SearchQueryBuilder {
                 scopeSelectors.push(
                     new q.ThreadSelector(
                         threadsInScope.map(
-                            (t) => threads.threads[t.threadIndex],
+                            (t) => threads.threads[t.threadOrdinal],
                         ),
                     ),
                 );

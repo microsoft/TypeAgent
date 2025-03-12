@@ -9,8 +9,8 @@ export function textLocationToString(location: kp.TextLocation): string {
     if (location.chunkOrdinal) {
         text += `\nChunkIndex: ${location.chunkOrdinal}`;
     }
-    if (location.charIndex) {
-        text += `\nCharIndex: ${location.charIndex}`;
+    if (location.charOrdinal) {
+        text += `\nCharIndex: ${location.charOrdinal}`;
     }
     return text;
 }

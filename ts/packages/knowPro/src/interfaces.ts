@@ -79,9 +79,8 @@ export interface TextLocation {
     messageOrdinal: MessageOrdinal;
     // the ordinal of the chunk
     chunkOrdinal?: number;
-    // TODO REFACTOR: rename to charOrdinal
     // the ordinal of the character within the chunk
-    charIndex?: number;
+    charOrdinal?: number;
 }
 
 // a text range within a session
@@ -190,8 +189,7 @@ export type Thread = {
 export type ThreadOrdinal = number;
 
 export type ScoredThreadOrdinal = {
-    // TODO REFACTOR: rename to threadOrdinal
-    threadIndex: ThreadOrdinal;
+    threadOrdinal: ThreadOrdinal;
     score: number;
 };
 

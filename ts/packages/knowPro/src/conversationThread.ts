@@ -49,7 +49,7 @@ export class ConversationThreads implements IConversationThreads {
             thresholdScore,
         );
         return matches.map((m) => {
-            return { threadIndex: m.item, score: m.score };
+            return { threadOrdinal: m.item, score: m.score };
         });
     }
 
