@@ -7,7 +7,8 @@
 help:
 	@echo "Usage: make [target]"
 	@echo "make help   # Help"
-	@echo "make all    # test, demo, build"
+	@echo "make all    # format, test, demo, build"
+	@echo "make format # Run black"
 	@echo "make test   # Run pyright"
 	@echo "make demo   # Run import_podcast demo"
 	@echo "make build  # Build the wheel (under dist/)"
@@ -26,13 +27,13 @@ format: venv
 test: venv
 	pyright --pythonpath venv/bin/python typeagent
 
-.PHONY: build
-build: venv
-	venv/bin/python -m build --wheel
-
 .PHONY: demo
 demo: venv
 	venv/bin/python -m typeagent.memconv testdata/npr.txt
+
+.PHONY: build
+build: venv
+	venv/bin/python -m build --wheel
 
 # Not phony -- the venv directory is the product of this rule.
 venv:
