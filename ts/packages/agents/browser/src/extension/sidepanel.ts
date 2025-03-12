@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { htmlPrefilter } from "jquery";
 import { setStoredPageProperty, getStoredPageProperty } from "./storage";
 
 let recording = false;
@@ -165,7 +166,7 @@ function toggleActionForm() {
 
 // Function to save user-defined actions
 async function saveUserAction() {
-    const actionDescription = (
+    let actionDescription = (
         document.getElementById("actionDescription") as HTMLTextAreaElement
     ).value.trim();
 
@@ -176,10 +177,27 @@ async function saveUserAction() {
             : prompt("Enter a name for this action:");
 
     const stepsContainer = document.getElementById("stepsTimelineContainer")!;
-    const steps = JSON.parse(stepsContainer.dataset.steps || "[]");
+    const steps = JSON.parse(stepsContainer.dataset?.steps || "[]");
 
-    const screenshot = JSON.parse(stepsContainer.dataset.screenshot || "");
-    const html = JSON.parse(stepsContainer.dataset.html || "");
+    const screenshot = JSON.parse(stepsContainer.dataset?.screenshot || '""');
+    let html = JSON.parse(stepsContainer.dataset?.html || '""');
+
+    if (html === undefined || html == -"") {
+        const htmlFragments = await chrome.runtime.sendMessage({
+            type: "captureHtmlFragments",
+        });
+        if (htmlFragments !== undefined && htmlFragments.length > 0) {
+            html = htmlFragments[0].content;
+        }
+    }
+
+    const stepsDescription = (
+        document.getElementById("actionStepsDescription") as HTMLTextAreaElement
+    ).value.trim();
+
+    if (stepsDescription !== undefined && stepsDescription !== "") {
+        actionDescription += " " + stepsDescription;
+    }
 
     const button = document.getElementById("saveAction") as HTMLButtonElement;
     const originalContent = button.innerHTML;
@@ -213,15 +231,19 @@ async function saveUserAction() {
         showTemporaryStatus("✖ Failed", "btn-outline-danger");
     } else {
         const processedActionName = response.intentJson.actionName;
-        await addEntryToStoredPageProperties(actionName!, "userActions", {
-            name: processedActionName,
-            description: actionDescription,
-            steps,
-            screenshot,
-            html,
-            intentSchema: response.intent,
-            actionsJson: response.actions,
-        });
+        await addEntryToStoredPageProperties(
+            processedActionName,
+            "userActions",
+            {
+                name: processedActionName,
+                description: actionDescription,
+                steps,
+                screenshot,
+                html,
+                intentSchema: response.intent,
+                actionsJson: response.actions,
+            },
+        );
 
         await addEntryToStoredPageProperties(
             processedActionName,
@@ -260,6 +282,23 @@ async function addEntryToStoredPageProperties(
         key,
         Object.fromEntries(currentActionJson),
     );
+}
+
+async function removeEntryFromStoredPageProperties(
+    actionName: string,
+    key: string,
+) {
+    let currentActionJson = new Map(
+        Object.entries((await getStoredPageProperty(launchUrl!, key)) ?? {}),
+    );
+    if (currentActionJson.has(actionName)) {
+        currentActionJson.delete(actionName);
+        await setStoredPageProperty(
+            launchUrl!,
+            key,
+            Object.fromEntries(currentActionJson),
+        );
+    }
 }
 
 // Function to update user actions display
@@ -431,6 +470,8 @@ function renderTimeline(action: any, index: number) {
         stepsContainer,
         action.screenshot,
         action.html,
+        true,
+        actionName,
     );
 
     if (action.intentSchema !== undefined) {
@@ -467,6 +508,8 @@ function renderTimelineSteps(
     userActionsListContainer: HTMLElement,
     screenshotData: string,
     htmlData: string,
+    enableEdits?: boolean,
+    actionName?: string,
 ) {
     userActionsListContainer.innerHTML = `
                     <div id="content">
@@ -475,14 +518,17 @@ function renderTimelineSteps(
                         <div id="stepsScreenshotContainer"></div>
                     </div>
                     <div class="d-flex gap-2 mt-3 float-end">
-                        <button id="downloadScreenshot" class="btn btn-sm btn-outline-primary" title="Download Image">
+                        <button id="downloadScreenshot" class="btn btn-sm btn-outline-primary hidden" title="Download Image">
                             <i class="bi bi-file-earmark-image"></i>
                         </button>
-                        <button id="downloadHtml" class="btn btn-sm btn-outline-primary" title="Download HTML">
+                        <button id="downloadHtml" class="btn btn-sm btn-outline-primary hidden" title="Download HTML">
                             <i class="bi bi-filetype-html"></i>
                         </button>
-                        <button id="processAction" class="btn btn-sm btn-outline-primary hidden" title="Process Action">
-                            <i class="bi bi-robot"></i>
+                        <button id="editAction" class="btn btn-sm btn-outline-primary hidden" title="Edit Action">
+                            <i class="bi bi-pencil-fill"></i>
+                        </button>
+                        <button id="deleteAction" class="btn btn-sm btn-outline-danger hidden" title="Delete Action">
+                            <i class="bi bi-trash"></i>
                         </button>
                     </div>
                 `;
@@ -520,7 +566,7 @@ function renderTimelineSteps(
         "#downloadHtml",
     )! as HTMLElement;
 
-    if (screenshotData) {
+    if (screenshotData !== undefined && screenshotData !== "") {
         const img = document.createElement("img");
         img.src = screenshotData;
         img.alt = "Annotated Screenshot";
@@ -530,18 +576,30 @@ function renderTimelineSteps(
         screenshotContainer.appendChild(img);
 
         // Enable the download button
+        downloadButton.classList.remove("hidden");
         downloadButton.style.display = "block";
         downloadButton.addEventListener("click", () =>
             downloadScreenshot(screenshotData),
         );
     }
 
-    if (htmlData) {
+    if (htmlData !== undefined && htmlData !== "") {
         // Enable download button
+        downloadHTMLButton.classList.remove("hidden");
         downloadHTMLButton.style.display = "block";
         downloadHTMLButton.addEventListener("click", () =>
             downloadHTML(htmlData),
         );
+    }
+
+    if (enableEdits && actionName !== undefined && actionName !== "") {
+        const deleteButton = userActionsListContainer.querySelector(
+            "#deleteAction",
+        )! as HTMLElement;
+
+        deleteButton.classList.remove("hidden");
+        deleteButton.style.display = "block";
+        deleteButton.addEventListener("click", () => deleteAction(actionName));
     }
 
     // Function to download the screenshot
@@ -562,6 +620,19 @@ function renderTimelineSteps(
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
+    }
+
+    async function deleteAction(name: string) {
+        await removeEntryFromStoredPageProperties(name, "userActions");
+        await removeEntryFromStoredPageProperties(
+            name,
+            "authoredActionDefinitions",
+        );
+        await removeEntryFromStoredPageProperties(name, "authoredActionsJson");
+        await removeEntryFromStoredPageProperties(name, "authoredIntentJson");
+
+        await updateUserActionsUI();
+        registerTempSchema();
     }
 }
 
