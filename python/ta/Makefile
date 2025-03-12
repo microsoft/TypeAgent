@@ -15,7 +15,11 @@ help:
 	@echo "make clean  # Remove build/, dist/, venv/"
 
 .PHONY: all
-all: test demo build
+all: format test demo build
+
+.PHONY: format
+format: venv
+	venv/bin/black typeagent
 
 .PHONY: test
 # To install pyright, use `npm install -g pyright` .
