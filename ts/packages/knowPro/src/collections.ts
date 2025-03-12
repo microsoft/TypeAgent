@@ -448,7 +448,7 @@ export class MessageAccumulator extends MatchAccumulator<MessageOrdinal> {
         }
     }
 
-    public toScoredMessageIndexes(): ScoredMessageOrdinal[] {
+    public toScoredMessageOrdinals(): ScoredMessageOrdinal[] {
         return this.getSortedByScore(0).map((m) => {
             return {
                 messageIndex: m.value,

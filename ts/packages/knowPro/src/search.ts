@@ -154,7 +154,7 @@ export async function searchConversation(
         knowledgeMatches,
     );
     return {
-        messageMatches: messageMatches.toScoredMessageIndexes(),
+        messageMatches: messageMatches.toScoredMessageOrdinals(),
         knowledgeMatches,
     };
 }
