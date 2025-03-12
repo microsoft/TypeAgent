@@ -7,7 +7,7 @@ from datetime import datetime as Datetime
 import sys
 from typing import Any, cast
 
-from typeagent.knowpro.convindex import ConversationIndex
+from ..knowpro.convindex import ConversationIndex
 
 minver = (3, 12)
 assert sys.version_info >= minver, f"Needs Python {minver[0]}.{minver[1]}+"
@@ -16,8 +16,8 @@ del minver
 # TODO: Get rid of this dummy import.
 import typechat
 
-from typeagent.knowpro.interfaces import IndexingEventHandlers, TextLocation
-from typeagent.memconv.import_podcasts import import_podcast
+from ..knowpro.interfaces import IndexingEventHandlers, TextLocation
+from ..memconv.import_podcasts import import_podcast
 
 
 async def main():
@@ -53,11 +53,14 @@ async def main():
         on_embeddings_created,
         on_text_indexed,
     )
+    print()
     await pod.build_index(handler)
     if pod.semantic_ref_index is not None:
         data = cast(Any, pod.semantic_ref_index).serialize()
         new = ConversationIndex(data)
         assert new.serialize() == data
+
+    # print(pod)
 
 
 if __name__ == "__main__":

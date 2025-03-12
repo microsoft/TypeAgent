@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from datetime import datetime as Datetime, timedelta as Timedelta
 import os
 import re
-from typing import Any, Sequence
+from typing import Any, cast, Sequence
 
 from ..knowpro import convindex, interfaces, kplib
 
@@ -72,14 +72,21 @@ class PodcastMessage(interfaces.IMessage, PodcastMessageBase):
         self.text_chunks[0] += content
 
 
+# TODO: Need a concrete implementation of IConversationSecondaryIndexes
 @dataclass
-class Podcast(interfaces.IConversation[PodcastMessage]):
+class Podcast(
+    interfaces.IConversation[
+        PodcastMessage,
+        convindex.ConversationIndex,
+        interfaces.IConversationSecondaryIndexes,
+    ]
+):
     # Instance variables not passed to `__init__()`.
     # TODO
     # settings: ConversationSettings = field(
     #     init=False, default_factory=create_conversation_settings
     # )
-    semantic_ref_index: convindex.ITermToSemanticRefIndex | None = field(
+    semantic_ref_index: convindex.ConversationIndex | None = field(
         init=False, default_factory=convindex.ConversationIndex
     )
     secondary_indexes: interfaces.IConversationSecondaryIndexes | None = field(
@@ -121,7 +128,72 @@ class Podcast(interfaces.IConversation[PodcastMessage]):
         # await self.secondary_indexes.threads.build_index()
         return result
 
-    # TODO: Methods about serialization, file I/O, and indexing
+    async def serialize(self) -> dict:
+        data = {
+            "name_tag": self.name_tag,
+            "messages": self.messages,
+            "tags": self.tags,
+            "semantic_refs": self.semantic_refs,
+            "semantic_index_data": (
+                self.semantic_ref_index.serialize() if self.semantic_ref_index else None
+            ),
+            # TODO: set these only if things aren't None
+            # "related_terms_index_data": self.secondary_indexes.term_to_related_terms_index.serialize(),
+            # "thread_data": self.secondary_indexes.threads.serialize(),
+            # "message_index_data": self.secondary_indexes.message_index.serialize(),
+        }
+        return data
+
+    async def deserialize(self, podcast_data: dict) -> None:
+        self.name_tag = podcast_data["name_tag"]
+        self.messages = []
+        for m in podcast_data["messages"]:
+            # metadata = PodcastMessageMeta(m["speaker"])
+            # metadata.listeners = m["listeners"]
+            self.messages.append(
+                PodcastMessage(
+                    m.speaker,
+                    m["text_chunks"],
+                    m["tags"],
+                    m["timestamp"],
+                )
+            )
+        self.semantic_refs = podcast_data["semantic_refs"]
+        self.tags = podcast_data["tags"]
+
+        if podcast_data.get("semantic_index_data"):
+            self.semantic_ref_index = convindex.ConversationIndex(
+                podcast_data["semantic_index_data"]
+            )
+        # if podcast_data.get("related_terms_index_data"):
+        #     self.secondary_indexes.term_to_related_terms_index.deserialize(podcast_data["related_terms_index_data"])
+        # if podcast_data.get("thread_data"):
+        #     self.secondary_indexes.threads = ConversationThreads(self.settings.thread_settings)
+        #     self.secondary_indexes.threads.deserialize(podcast_data["thread_data"])
+        # if podcast_data.get("message_index_data"):
+        #     self.secondary_indexes.message_index = MessageTextIndex(self.settings.message_text_index_settings)
+        #     self.secondary_indexes.message_index.deserialize(podcast_data["message_index_data"])
+        # await self.build_transient_secondary_indexes(True)
+
+    # TODO: Implement write_conversation_data_to_file, read_conversation_data_from_file
+    # async def write_to_file(self, dir_path: str, base_file_name: str) -> None:
+    #     data = await self.serialize()
+    #     await write_conversation_data_to_file(data, dir_path, base_file_name)
+
+    # @staticmethod
+    # async def read_from_file(dir_path: str, base_file_name: str) -> Optional["Podcast"]:
+    #     podcast = Podcast()
+    #     embedding_size = (
+    #         podcast.settings.related_term_index_settings.embedding_index_settings.embedding_size
+    #         if podcast.settings.related_term_index_settings.embedding_index_settings
+    #         else None
+    #     )
+    #     data = await read_conversation_data_from_file(dir_path, base_file_name, embedding_size)
+    #     if data:
+    #         await podcast.deserialize(data)
+    #     return podcast
+
+    # TODO: Stuff about secondary indexes
 
 
 def assign_message_listeners(

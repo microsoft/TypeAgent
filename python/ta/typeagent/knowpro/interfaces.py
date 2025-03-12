@@ -267,13 +267,17 @@ class IConversationSecondaryIndexes(Protocol):
 
 
 @runtime_checkable
-class IConversation[TMessage: IMessage](Protocol):
+class IConversation[
+    TMessage: IMessage,
+    TTermToSemanticRefIndex: ITermToSemanticRefIndex,
+    TConversationSecondaryIndexes: IConversationSecondaryIndexes,
+](Protocol):
     name_tag: str
     tags: list[str]
     messages: list[TMessage]
     semantic_refs: list[SemanticRef] | None
-    semantic_ref_index: ITermToSemanticRefIndex | None
-    secondary_indexes: IConversationSecondaryIndexes | None
+    semantic_ref_index: TTermToSemanticRefIndex | None
+    secondary_indexes: TConversationSecondaryIndexes | None
 
 
 @runtime_checkable
