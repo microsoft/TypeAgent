@@ -5,12 +5,12 @@ import * as knowLib from "knowledge-processor";
 import * as kp from "knowpro";
 
 export function textLocationToString(location: kp.TextLocation): string {
-    let text = `MessageIndex: ${location.messageOrdinal}`;
+    let text = `MessageOrdinal: ${location.messageOrdinal}`;
     if (location.chunkOrdinal) {
-        text += `\nChunkIndex: ${location.chunkOrdinal}`;
+        text += `\nChunkOrdinal: ${location.chunkOrdinal}`;
     }
     if (location.charOrdinal) {
-        text += `\nCharIndex: ${location.charOrdinal}`;
+        text += `\nCharOrdinal: ${location.charOrdinal}`;
     }
     return text;
 }
