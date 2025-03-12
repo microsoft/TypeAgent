@@ -6,7 +6,7 @@ import {
     Knowledge,
     KnowledgeType,
     MessageOrdinal,
-    ScoredMessageIndex,
+    ScoredMessageOrdinal,
     ScoredSemanticRef,
     SemanticRef,
     SemanticRefIndex,
@@ -448,7 +448,7 @@ export class MessageAccumulator extends MatchAccumulator<MessageOrdinal> {
         }
     }
 
-    public toScoredMessageIndexes(): ScoredMessageIndex[] {
+    public toScoredMessageIndexes(): ScoredMessageOrdinal[] {
         return this.getSortedByScore(0).map((m) => {
             return {
                 messageIndex: m.value,

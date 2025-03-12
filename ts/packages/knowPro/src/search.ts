@@ -11,7 +11,7 @@ import {
     SemanticRef,
     Term,
     IConversationSecondaryIndexes,
-    ScoredMessageIndex,
+    ScoredMessageOrdinal,
 } from "./interfaces.js";
 import { mergedEntities, mergeTopics } from "./knowledge.js";
 import * as q from "./query.js";
@@ -122,7 +122,7 @@ export type SemanticRefSearchResult = {
 };
 
 export type ConversationSearchResult = {
-    messageMatches: ScoredMessageIndex[];
+    messageMatches: ScoredMessageOrdinal[];
     knowledgeMatches: Map<KnowledgeType, SemanticRefSearchResult>;
 };
 

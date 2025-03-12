@@ -18,7 +18,8 @@ export interface IMessage extends IKnowledgeSource {
     deletionInfo?: DeletionInfo;
 }
 
-export type ScoredMessageIndex = {
+export type ScoredMessageOrdinal = {
+    // TODO REFACTOR: renamed to messageOrdinal
     messageIndex: MessageOrdinal;
     score: number;
 };
@@ -211,13 +212,13 @@ export interface IMessageTextIndex {
         messageText: string,
         maxMatches?: number,
         thresholdScore?: number,
-    ): Promise<ScoredMessageIndex[]>;
+    ): Promise<ScoredMessageOrdinal[]>;
     lookupMessagesInSubset(
         messageText: string,
         ordinalsToSearch: MessageOrdinal[],
         maxMatches?: number,
         thresholdScore?: number,
-    ): Promise<ScoredMessageIndex[]>;
+    ): Promise<ScoredMessageOrdinal[]>;
 }
 
 //------------------------

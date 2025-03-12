@@ -7,7 +7,7 @@ import {
     IndexingEventHandlers,
     TextLocation,
     ListIndexingResult,
-    ScoredMessageIndex,
+    ScoredMessageOrdinal,
     IConversation,
     IMessageTextIndex,
 } from "./interfaces.js";
@@ -65,7 +65,7 @@ export class MessageTextIndex implements IMessageTextIndex {
         messageText: string,
         maxMatches?: number,
         thresholdScore?: number,
-    ): Promise<ScoredMessageIndex[]> {
+    ): Promise<ScoredMessageOrdinal[]> {
         maxMatches ??= this.settings.embeddingIndexSettings.maxMatches;
         thresholdScore ??= this.settings.embeddingIndexSettings.minScore;
         const scoredLocations = await this.textLocationIndex.lookupText(
@@ -86,7 +86,7 @@ export class MessageTextIndex implements IMessageTextIndex {
         ordinalsToSearch: MessageOrdinal[],
         maxMatches?: number,
         thresholdScore?: number,
-    ): Promise<ScoredMessageIndex[]> {
+    ): Promise<ScoredMessageOrdinal[]> {
         const scoredLocations = await this.textLocationIndex.lookupTextInSubset(
             messageText,
             ordinalsToSearch,

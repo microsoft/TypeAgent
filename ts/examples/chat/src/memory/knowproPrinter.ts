@@ -49,7 +49,7 @@ export class KnowProPrinter extends ChatPrinter {
     }
 
     public writeScoredMessages(
-        messageIndexMatches: kp.ScoredMessageIndex[],
+        messageIndexMatches: kp.ScoredMessageOrdinal[],
         messages: kp.IMessage[],
         maxToDisplay: number,
     ) {
@@ -76,7 +76,7 @@ export class KnowProPrinter extends ChatPrinter {
     private writeScoredMessage(
         matchNumber: number,
         totalMatches: number,
-        scoredMessage: kp.ScoredMessageIndex,
+        scoredMessage: kp.ScoredMessageOrdinal,
         messages: kp.IMessage[],
     ) {
         const message = messages[scoredMessage.messageIndex];
