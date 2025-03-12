@@ -13,7 +13,7 @@ import {
     MessageOrdinal,
     ScoredSemanticRef,
     SemanticRef,
-    SemanticRefIndex,
+    SemanticRefOrdinal,
     TextIndexingResult,
     TextRange,
     Topic,
@@ -314,7 +314,7 @@ export class ConversationIndex implements ITermToSemanticRefIndex {
 
     public addTerm(
         term: string,
-        semanticRefIndex: SemanticRefIndex | ScoredSemanticRef,
+        semanticRefIndex: SemanticRefOrdinal | ScoredSemanticRef,
     ): void {
         if (!term) {
             return;

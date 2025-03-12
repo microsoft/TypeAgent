@@ -32,10 +32,10 @@ export interface DeletionInfo {
 export type KnowledgeType = "entity" | "action" | "topic" | "tag";
 export type Knowledge = kpLib.ConcreteEntity | kpLib.Action | Topic | Tag;
 
-export type SemanticRefIndex = number;
+export type SemanticRefOrdinal = number;
 
 export interface SemanticRef {
-    semanticRefIndex: SemanticRefIndex;
+    semanticRefIndex: SemanticRefOrdinal;
     range: TextRange;
     knowledgeType: KnowledgeType;
     knowledge: Knowledge;
@@ -59,7 +59,7 @@ export interface IConversation<TMessage extends IKnowledgeSource = any> {
 }
 
 export type ScoredSemanticRef = {
-    semanticRefIndex: SemanticRefIndex;
+    semanticRefIndex: SemanticRefOrdinal;
     score: number;
 };
 
@@ -67,9 +67,9 @@ export interface ITermToSemanticRefIndex {
     getTerms(): string[];
     addTerm(
         term: string,
-        semanticRefIndex: SemanticRefIndex | ScoredSemanticRef,
+        semanticRefIndex: SemanticRefOrdinal | ScoredSemanticRef,
     ): void;
-    removeTerm(term: string, semanticRefIndex: SemanticRefIndex): void;
+    removeTerm(term: string, semanticRefIndex: SemanticRefOrdinal): void;
     lookupTerm(term: string): ScoredSemanticRef[] | undefined;
 }
 
@@ -126,7 +126,7 @@ export interface IPropertyToSemanticRefIndex {
     addProperty(
         propertyName: string,
         value: string,
-        semanticRefIndex: SemanticRefIndex | ScoredSemanticRef,
+        semanticRefIndex: SemanticRefOrdinal | ScoredSemanticRef,
     ): void;
     lookupProperty(
         propertyName: string,

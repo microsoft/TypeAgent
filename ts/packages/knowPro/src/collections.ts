@@ -9,7 +9,7 @@ import {
     ScoredMessageOrdinal,
     ScoredSemanticRef,
     SemanticRef,
-    SemanticRefIndex,
+    SemanticRefOrdinal,
     Term,
     TextRange,
 } from "./interfaces.js";
@@ -246,7 +246,7 @@ function smoothTotalScore(match: Match): void {
 
 export type KnowledgePredicate<T extends Knowledge> = (knowledge: T) => boolean;
 
-export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
+export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefOrdinal> {
     constructor(public searchTermMatches = new Set<string>()) {
         super();
     }
@@ -299,14 +299,14 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
 
     public override getSortedByScore(
         minHitCount?: number,
-    ): Match<SemanticRefIndex>[] {
+    ): Match<SemanticRefOrdinal>[] {
         return super.getSortedByScore(minHitCount);
     }
 
     public override getTopNScoring(
         maxMatches?: number,
         minHitCount?: number,
-    ): Match<SemanticRefIndex>[] {
+    ): Match<SemanticRefOrdinal>[] {
         return super.getTopNScoring(maxMatches, minHitCount);
     }
 
@@ -325,7 +325,7 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
         semanticRefs: SemanticRef[],
         knowledgeType: KnowledgeType,
         predicate?: KnowledgePredicate<T>,
-    ): IterableIterator<Match<SemanticRefIndex>> {
+    ): IterableIterator<Match<SemanticRefOrdinal>> {
         for (const match of this.getMatches()) {
             const semanticRef = semanticRefs[match.value];
             if (semanticRef.knowledgeType === knowledgeType) {

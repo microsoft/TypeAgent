@@ -10,7 +10,7 @@ import {
     MessageOrdinal,
     ScoredSemanticRef,
     SemanticRef,
-    SemanticRefIndex,
+    SemanticRefOrdinal,
     Tag,
     Term,
     TextRange,
@@ -394,7 +394,7 @@ export class QueryEvalContext {
         return this.conversation.semanticRefs!;
     }
 
-    public getSemanticRef(semanticRefIndex: SemanticRefIndex): SemanticRef {
+    public getSemanticRef(semanticRefIndex: SemanticRefOrdinal): SemanticRef {
         return this.conversation.semanticRefs![semanticRefIndex];
     }
 
@@ -877,7 +877,7 @@ export class WhereSemanticRefExpr extends QueryOpExpr<SemanticRefAccumulator> {
     private evalPredicates(
         context: QueryEvalContext,
         predicates: IQuerySemanticRefPredicate[],
-        match: Match<SemanticRefIndex>,
+        match: Match<SemanticRefOrdinal>,
     ) {
         for (let i = 0; i < predicates.length; ++i) {
             const semanticRef = context.getSemanticRef(match.value);

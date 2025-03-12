@@ -6,7 +6,7 @@ import {
     ListIndexingResult,
     ScoredSemanticRef,
     SemanticRef,
-    SemanticRefIndex,
+    SemanticRefOrdinal,
     Tag,
 } from "./interfaces.js";
 import { conversation as kpLib } from "knowledge-processor";
@@ -29,7 +29,7 @@ export enum PropertyNames {
 function addFacet(
     facet: kpLib.Facet | undefined,
     propertyIndex: IPropertyToSemanticRefIndex,
-    semanticRefIndex: SemanticRefIndex,
+    semanticRefIndex: SemanticRefOrdinal,
 ) {
     if (facet !== undefined) {
         propertyIndex.addProperty(
@@ -50,7 +50,7 @@ function addFacet(
 export function addEntityPropertiesToIndex(
     entity: kpLib.ConcreteEntity,
     propertyIndex: IPropertyToSemanticRefIndex,
-    semanticRefIndex: SemanticRefIndex,
+    semanticRefIndex: SemanticRefOrdinal,
 ) {
     propertyIndex.addProperty(
         PropertyNames.EntityName,
@@ -75,7 +75,7 @@ export function addEntityPropertiesToIndex(
 export function addActionPropertiesToIndex(
     action: kpLib.Action,
     propertyIndex: IPropertyToSemanticRefIndex,
-    semanticRefIndex: SemanticRefIndex,
+    semanticRefIndex: SemanticRefOrdinal,
 ) {
     propertyIndex.addProperty(
         PropertyNames.Verb,
@@ -123,11 +123,11 @@ export function buildPropertyIndex(
 export function addToPropertyIndex(
     propertyIndex: IPropertyToSemanticRefIndex,
     semanticRefs: SemanticRef[],
-    baseSemanticRefIndex: SemanticRefIndex,
+    baseSemanticRefIndex: SemanticRefOrdinal,
 ): ListIndexingResult {
     for (let i = 0; i < semanticRefs.length; ++i) {
         const semanticRef = semanticRefs[i];
-        const semanticRefIndex: SemanticRefIndex = i + baseSemanticRefIndex;
+        const semanticRefIndex: SemanticRefOrdinal = i + baseSemanticRefIndex;
         switch (semanticRef.knowledgeType) {
             default:
                 break;
@@ -181,7 +181,7 @@ export class PropertyIndex implements IPropertyToSemanticRefIndex {
     public addProperty(
         propertyName: string,
         value: string,
-        semanticRefIndex: SemanticRefIndex | ScoredSemanticRef,
+        semanticRefIndex: SemanticRefOrdinal | ScoredSemanticRef,
     ): void {
         let termText = this.toPropertyTermText(propertyName, value);
         if (typeof semanticRefIndex === "number") {
