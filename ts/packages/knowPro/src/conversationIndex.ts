@@ -10,7 +10,7 @@ import {
     ITermToSemanticRefIndexItem,
     Knowledge,
     KnowledgeType,
-    MessageIndex,
+    MessageOrdinal,
     ScoredSemanticRef,
     SemanticRef,
     SemanticRefIndex,
@@ -27,11 +27,11 @@ import { buildSecondaryIndexes } from "./secondaryIndexes.js";
 import { ConversationSettings } from "./import.js";
 
 export function textRangeFromLocation(
-    messageIndex: MessageIndex,
+    messageOrdinal: MessageOrdinal,
     chunkIndex = 0,
 ): TextRange {
     return {
-        start: { messageIndex, chunkIndex },
+        start: { messageIndex: messageOrdinal, chunkIndex },
         end: undefined,
     };
 }
@@ -178,26 +178,41 @@ export function addActionToIndex(
 export function addKnowledgeToIndex(
     semanticRefs: SemanticRef[],
     semanticRefIndex: ITermToSemanticRefIndex,
-    messageIndex: MessageIndex,
+    messageOrdinal: MessageOrdinal,
     knowledge: kpLib.KnowledgeResponse,
 ): void {
     for (const entity of knowledge.entities) {
-        addEntityToIndex(entity, semanticRefs, semanticRefIndex, messageIndex);
+        addEntityToIndex(
+            entity,
+            semanticRefs,
+            semanticRefIndex,
+            messageOrdinal,
+        );
     }
     for (const action of knowledge.actions) {
-        addActionToIndex(action, semanticRefs, semanticRefIndex, messageIndex);
+        addActionToIndex(
+            action,
+            semanticRefs,
+            semanticRefIndex,
+            messageOrdinal,
+        );
     }
     for (const inverseAction of knowledge.inverseActions) {
         addActionToIndex(
             inverseAction,
             semanticRefs,
             semanticRefIndex,
-            messageIndex,
+            messageOrdinal,
         );
     }
     for (const topic of knowledge.topics) {
         const topicObj: Topic = { text: topic };
-        addTopicToIndex(topicObj, semanticRefs, semanticRefIndex, messageIndex);
+        addTopicToIndex(
+            topicObj,
+            semanticRefs,
+            semanticRefIndex,
+            messageOrdinal,
+        );
     }
 }
 
@@ -217,9 +232,9 @@ export async function buildSemanticRefIndex(
     const maxRetries = 4;
     let indexingResult: TextIndexingResult = {};
     for (let i = 0; i < conversation.messages.length; i++) {
-        let messageIndex: MessageIndex = i;
+        let messageOrdinal: MessageOrdinal = i;
         const chunkIndex = 0;
-        const msg = conversation.messages[messageIndex];
+        const msg = conversation.messages[messageOrdinal];
         // only one chunk per message for now
         const text = msg.textChunks[chunkIndex];
         const knowledgeResult = await async.callWithRetry(() =>
@@ -234,11 +249,11 @@ export async function buildSemanticRefIndex(
             addKnowledgeToIndex(
                 semanticRefs,
                 semanticRefIndex,
-                messageIndex,
+                messageOrdinal,
                 knowledge,
             );
         }
-        const completedChunk = { messageIndex, chunkIndex };
+        const completedChunk = { messageIndex: messageOrdinal, chunkIndex };
         indexingResult.completedUpto = completedChunk;
         if (
             eventHandler?.onKnowledgeExtracted &&
@@ -262,14 +277,14 @@ export function addToConversationIndex(
         conversation.semanticRefs = [];
     }
     for (let i = 0; i < messages.length; i++) {
-        const messageIndex: MessageIndex = conversation.messages.length;
+        const messageOrdinal: MessageOrdinal = conversation.messages.length;
         conversation.messages.push(messages[i]);
         const knowledge = knowledgeResponses[i];
         if (knowledge) {
             addKnowledgeToIndex(
                 conversation.semanticRefs,
                 conversation.semanticRefIndex,
-                messageIndex,
+                messageOrdinal,
                 knowledge,
             );
         }

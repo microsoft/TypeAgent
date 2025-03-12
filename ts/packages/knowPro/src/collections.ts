@@ -5,7 +5,7 @@ import { collections, createTopNList } from "typeagent";
 import {
     Knowledge,
     KnowledgeType,
-    MessageIndex,
+    MessageOrdinal,
     ScoredMessageIndex,
     ScoredSemanticRef,
     SemanticRef,
@@ -391,8 +391,8 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
     }
 }
 
-export class MessageAccumulator extends MatchAccumulator<MessageIndex> {
-    constructor(matches?: Match<MessageIndex>[]) {
+export class MessageAccumulator extends MatchAccumulator<MessageOrdinal> {
+    constructor(matches?: Match<MessageOrdinal>[]) {
         super();
         if (matches && matches.length > 0) {
             this.setMatches(matches);

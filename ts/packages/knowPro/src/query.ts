@@ -7,7 +7,7 @@ import {
     IMessage,
     ITermToSemanticRefIndex,
     KnowledgeType,
-    MessageIndex,
+    MessageOrdinal,
     ScoredSemanticRef,
     SemanticRef,
     SemanticRefIndex,
@@ -55,7 +55,7 @@ export function getTextRangeForDateRange(
     dateRange: DateRange,
 ): TextRange | undefined {
     const messages = conversation.messages;
-    let rangeStartIndex: MessageIndex = -1;
+    let rangeStartIndex: MessageOrdinal = -1;
     let rangeEndIndex = rangeStartIndex;
     for (let messageIndex = 0; messageIndex < messages.length; ++messageIndex) {
         const message = messages[messageIndex];

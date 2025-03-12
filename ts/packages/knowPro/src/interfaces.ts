@@ -8,7 +8,7 @@ export interface IKnowledgeSource {
     getKnowledge(): kpLib.KnowledgeResponse;
 }
 
-export type MessageIndex = number;
+export type MessageOrdinal = number;
 
 export interface IMessage extends IKnowledgeSource {
     // the text of the message, split into chunks
@@ -19,7 +19,7 @@ export interface IMessage extends IKnowledgeSource {
 }
 
 export type ScoredMessageIndex = {
-    messageIndex: MessageIndex;
+    messageIndex: MessageOrdinal;
     score: number;
 };
 
@@ -74,7 +74,7 @@ export interface ITermToSemanticRefIndex {
 
 export interface TextLocation {
     // the index of the message
-    messageIndex: MessageIndex;
+    messageIndex: MessageOrdinal;
     // the index of the chunk
     chunkIndex?: number;
     // the index of the character within the chunk
@@ -142,9 +142,9 @@ export type TimestampedTextRange = {
  * Return text ranges in the given date range
  */
 export interface ITimestampToTextRangeIndex {
-    addTimestamp(messageIndex: MessageIndex, timestamp: string): boolean;
+    addTimestamp(messageIndex: MessageOrdinal, timestamp: string): boolean;
     addTimestamps(
-        messageTimestamps: [MessageIndex, string][],
+        messageTimestamps: [MessageOrdinal, string][],
     ): ListIndexingResult;
     lookupRange(dateRange: DateRange): TimestampedTextRange[];
 }
@@ -214,7 +214,7 @@ export interface IMessageTextIndex {
     ): Promise<ScoredMessageIndex[]>;
     lookupMessagesInSubset(
         messageText: string,
-        indicesToSearch: MessageIndex[],
+        indicesToSearch: MessageOrdinal[],
         maxMatches?: number,
         thresholdScore?: number,
     ): Promise<ScoredMessageIndex[]>;

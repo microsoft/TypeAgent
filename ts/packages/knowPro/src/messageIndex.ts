@@ -3,7 +3,7 @@
 import { TextEmbeddingIndexSettings } from "./fuzzyIndex.js";
 import {
     IMessage,
-    MessageIndex,
+    MessageOrdinal,
     IndexingEventHandlers,
     TextLocation,
     ListIndexingResult,
@@ -41,7 +41,7 @@ export class MessageTextIndex implements IMessageTextIndex {
         messages: IMessage[],
         eventHandler?: IndexingEventHandlers,
     ): Promise<ListIndexingResult> {
-        const baseMessageIndex: MessageIndex = this.size;
+        const baseMessageIndex: MessageOrdinal = this.size;
         const allChunks: [string, TextLocation][] = [];
         // Collect everything so we can batch efficiently
         for (let i = 0; i < messages.length; ++i) {
@@ -83,7 +83,7 @@ export class MessageTextIndex implements IMessageTextIndex {
 
     public async lookupMessagesInSubset(
         messageText: string,
-        indicesToSearch: MessageIndex[],
+        indicesToSearch: MessageOrdinal[],
         maxMatches?: number,
         thresholdScore?: number,
     ): Promise<ScoredMessageIndex[]> {

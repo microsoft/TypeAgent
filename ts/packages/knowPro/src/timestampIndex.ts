@@ -7,7 +7,7 @@ import {
     IConversation,
     IMessage,
     ListIndexingResult,
-    MessageIndex,
+    MessageOrdinal,
 } from "./interfaces.js";
 import { textRangeFromLocation } from "./conversationIndex.js";
 import {
@@ -47,14 +47,14 @@ export class TimestampToTextRangeIndex implements ITimestampToTextRangeIndex {
     }
 
     public addTimestamp(
-        messageIndex: MessageIndex,
+        messageIndex: MessageOrdinal,
         timestamp: string,
     ): boolean {
         return this.insertTimestamp(messageIndex, timestamp, true);
     }
 
     public addTimestamps(
-        messageTimestamps: [MessageIndex, string][],
+        messageTimestamps: [MessageOrdinal, string][],
     ): ListIndexingResult {
         for (let i = 0; i < messageTimestamps.length; ++i) {
             const [messageIndex, timestamp] = messageTimestamps[i];
@@ -65,7 +65,7 @@ export class TimestampToTextRangeIndex implements ITimestampToTextRangeIndex {
     }
 
     private insertTimestamp(
-        messageIndex: MessageIndex,
+        messageIndex: MessageOrdinal,
         timestamp: string | undefined,
         inOrder: boolean,
     ) {
@@ -126,9 +126,9 @@ export function buildTimestampIndex(
 export function addToTimestampIndex(
     timestampIndex: ITimestampToTextRangeIndex,
     messages: IMessage[],
-    baseMessageIndex: MessageIndex,
+    baseMessageIndex: MessageOrdinal,
 ): ListIndexingResult {
-    const messageTimestamps: [MessageIndex, string][] = [];
+    const messageTimestamps: [MessageOrdinal, string][] = [];
     for (let i = 0; i < messages.length; ++i) {
         const timestamp = messages[i].timestamp;
         if (timestamp) {
