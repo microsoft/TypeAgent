@@ -240,7 +240,7 @@ export interface ITermToSemanticRefIndexData {
 
 export interface ITermToSemanticRefIndexItem {
     term: string;
-    semanticRefIndices: ScoredSemanticRefOrdinal[];
+    semanticRefOrdinals: ScoredSemanticRefOrdinal[];
 }
 
 //------------------------

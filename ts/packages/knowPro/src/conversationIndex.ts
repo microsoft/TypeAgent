@@ -362,7 +362,7 @@ export class ConversationIndex implements ITermToSemanticRefIndex {
     serialize(): ITermToSemanticRefIndexData {
         const items: ITermToSemanticRefIndexItem[] = [];
         for (const [term, semanticRefIndices] of this.map) {
-            items.push({ term, semanticRefIndices });
+            items.push({ term, semanticRefOrdinals: semanticRefIndices });
         }
         return { items };
     }
@@ -372,7 +372,7 @@ export class ConversationIndex implements ITermToSemanticRefIndex {
             if (termData && termData.term) {
                 this.map.set(
                     this.prepareTerm(termData.term),
-                    termData.semanticRefIndices,
+                    termData.semanticRefOrdinals,
                 );
             }
         }
