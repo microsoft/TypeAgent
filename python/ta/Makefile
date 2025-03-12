@@ -23,9 +23,8 @@ format: venv
 	venv/bin/black typeagent
 
 .PHONY: check
-# To install pyright, use `npm install -g pyright` .
 check: venv
-	pyright --pythonpath venv/bin/python typeagent
+	venv/bin/pyright --pythonpath venv/bin/python typeagent
 
 .PHONY: test
 test: venv
