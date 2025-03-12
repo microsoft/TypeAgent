@@ -15,7 +15,7 @@ class PodcastMessageBase(interfaces.IKnowledgeSource):
     """Base class for podcast messages."""
 
     speaker: str
-    listeners: list[str] = field(init=False, default_factory=list)
+    listeners: list[str]
 
     def get_knowledge(self) -> kplib.KnowledgeResponse:
         if not self.speaker:
@@ -148,16 +148,14 @@ class Podcast(
         self.name_tag = podcast_data["name_tag"]
         self.messages = []
         for m in podcast_data["messages"]:
-            # metadata = PodcastMessageMeta(m["speaker"])
-            # metadata.listeners = m["listeners"]
-            self.messages.append(
-                PodcastMessage(
-                    m.speaker,
-                    m["text_chunks"],
-                    m["tags"],
-                    m["timestamp"],
-                )
+            msg = PodcastMessage(
+                m["speaker"],
+                m["listeners"],
+                m["text_chunks"],
+                m["tags"],
+                m["timestamp"],
             )
+            self.messages.append(msg)
         self.semantic_refs = podcast_data["semantic_refs"]
         self.tags = podcast_data["tags"]
 
@@ -255,7 +253,7 @@ def import_podcast(
             if not cur_msg:
                 if speaker:
                     participants.add(speaker)
-                cur_msg = PodcastMessage(speaker, [speech])
+                cur_msg = PodcastMessage(speaker, [], [speech])
     if cur_msg:
         msgs.append(cur_msg)
     assign_message_listeners(msgs, participants)
