@@ -6,8 +6,8 @@ import * as kp from "knowpro";
 
 export function textLocationToString(location: kp.TextLocation): string {
     let text = `MessageIndex: ${location.messageOrdinal}`;
-    if (location.chunkIndex) {
-        text += `\nChunkIndex: ${location.chunkIndex}`;
+    if (location.chunkOrdinal) {
+        text += `\nChunkIndex: ${location.chunkOrdinal}`;
     }
     if (location.charIndex) {
         text += `\nCharIndex: ${location.charIndex}`;

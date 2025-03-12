@@ -54,7 +54,7 @@ export class MessageTextIndex implements IMessageTextIndex {
             ) {
                 allChunks.push([
                     message.textChunks[chunkIndex],
-                    { messageOrdinal, chunkIndex },
+                    { messageOrdinal, chunkOrdinal: chunkIndex },
                 ]);
             }
         }

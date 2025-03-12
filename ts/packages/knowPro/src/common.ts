@@ -26,7 +26,7 @@ export function compareTextLocation(x: TextLocation, y: TextLocation): number {
     if (cmp !== 0) {
         return cmp;
     }
-    cmp = (x.chunkIndex ?? 0) - (y.chunkIndex ?? 0);
+    cmp = (x.chunkOrdinal ?? 0) - (y.chunkOrdinal ?? 0);
     if (cmp !== 0) {
         return cmp;
     }

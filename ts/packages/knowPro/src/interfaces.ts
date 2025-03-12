@@ -77,9 +77,8 @@ export interface ITermToSemanticRefIndex {
 export interface TextLocation {
     // the ordinal of the message
     messageOrdinal: MessageOrdinal;
-    // TODO REFACTOR: rename to chunkOrdinal
     // the ordinal of the chunk
-    chunkIndex?: number;
+    chunkOrdinal?: number;
     // TODO REFACTOR: rename to charOrdinal
     // the ordinal of the character within the chunk
     charIndex?: number;

@@ -31,7 +31,7 @@ export function textRangeFromLocation(
     chunkIndex = 0,
 ): TextRange {
     return {
-        start: { messageOrdinal: messageOrdinal, chunkIndex },
+        start: { messageOrdinal: messageOrdinal, chunkOrdinal: chunkIndex },
         end: undefined,
     };
 }
