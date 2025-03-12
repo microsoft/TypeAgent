@@ -145,7 +145,23 @@ def import_podcast(
         transcript_lines = f.readlines()
     if not podcast_name:
         podcast_name = os.path.splitext(os.path.basename(transcript_file_path))[0]
-    turn_parse_regex = re.compile(r"^(?P<speaker>[A-Z0-9 ]+:)?(?P<speech>.*)$")
+    regex = r"""(?x)                  # Enable verbose regex syntax
+        ^
+        (?:                           # Optional speaker part
+            \s*                       # Optional leading whitespace
+            (?P<speaker>              # Capture group for speaker
+                [A-Z0-9]+             # One or more uppercase letters/digits
+                (?:\s+[A-Z0-9]+)*     # Optional additional words
+            )
+            \s*                       # Optional whitespace after speaker
+            :                         # Colon separator
+            \s*                       # Optional whitespace after colon
+        )?
+        (?P<speech>(?:.*\S)?)         # Capture the rest as speech (ending in non-whitespace)
+        \s*                           # Optional trailing whitespace
+        $
+    """
+    turn_parse_regex = re.compile(regex)
     participants: set[str] = set()
     msgs: list[PodcastMessage] = []
     cur_msg: PodcastMessage | None = None
@@ -154,8 +170,8 @@ def import_podcast(
         if match:
             speaker = match.group("speaker")
             if speaker:
-                speaker = speaker.rstrip(":").strip().lower()
-            speech = match.group("speech").strip()
+                speaker = speaker.lower()
+            speech = match.group("speech")
             if not (speaker or speech):
                 continue
             if cur_msg:
