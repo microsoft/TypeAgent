@@ -625,18 +625,19 @@ function toPromptEntityNameMap(entities: PromptEntity[] | undefined) {
 
 function resolveEntities(
     action: TypeAgentAction<FullAction>,
+    resultEntityMap: Map<string, PromptEntity>,
     promptEntityMap: Map<string, PromptEntity> | undefined,
     promptNameEntityMap: Map<string, PromptEntity | PromptEntity[]> | undefined,
-    duplicate: boolean,
+    duplicateAction: boolean,
 ) {
     if (action.parameters === undefined) {
         return action;
     }
-    const result = duplicate ? { ...action } : action;
+    const result = duplicateAction ? { ...action } : action;
     const entities = getParameterObjectEntities(
         getAppAgentName(action.translatorName),
         action.parameters!,
-        new Map(),
+        resultEntityMap,
         promptEntityMap,
         promptNameEntityMap,
     );
@@ -670,7 +671,13 @@ export async function executeActions(
         const promptEntityMap = toPromptEntityMap(entities);
         const promptNameEntityMap = toPromptEntityNameMap(entities);
         commandResult.actions = actions.map(({ action }) =>
-            resolveEntities(action, promptEntityMap, promptNameEntityMap, true),
+            resolveEntities(
+                action,
+                new Map(),
+                promptEntityMap,
+                promptNameEntityMap,
+                true,
+            ),
         );
     }
 
@@ -706,7 +713,13 @@ export async function executeActions(
             continue;
         }
         const appAgentName = getAppAgentName(action.translatorName);
-        resolveEntities(action, promptEntityMap, promptNameEntityMap, false);
+        resolveEntities(
+            action,
+            resultEntityMap,
+            promptEntityMap,
+            promptNameEntityMap,
+            false,
+        );
         const result = await executeAction(
             executableAction,
             context,
