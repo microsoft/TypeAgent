@@ -117,12 +117,11 @@ class Podcast(interfaces.IConversation[PodcastMessage]):
     ) -> interfaces.IndexingResults:
         self.add_metadata_to_index()
         result = await convindex.build_conversation_index(self, event_handler)
-        # TODO
-        # if not result.error:
-        #     # build_conversation_index now automatically builds standard secondary indexes
-        #     # Pass false to build podcast specific secondary indexes only
-        #     await self.build_secondary_indexes(False)
-        #     await self.secondary_indexes.threads.build_index()
+        # TODO: implement secondary indexes
+        # # build_conversation_index now automatically builds standard secondary indexes.
+        # # Pass false to build podcast specific secondary indexes only.
+        # await self.build_transient_secondary_indexes(False)
+        # await self.secondary_indexes.threads.build_index()
         return result
 
     # TODO: Methods about serialization, file I/O, and indexing
@@ -149,7 +148,6 @@ def import_podcast(
         transcript_lines = f.readlines()
     if not podcast_name:
         podcast_name = os.path.splitext(os.path.basename(transcript_file_path))[0]
-    transcript_lines = [line.rstrip() for line in transcript_lines if line.strip()]
     turn_parse_regex = re.compile(r"^(?P<speaker>[A-Z0-9 ]+:)?(?P<speech>.*)$")
     participants: set[str] = set()
     msgs: list[PodcastMessage] = []
@@ -158,7 +156,11 @@ def import_podcast(
         match = turn_parse_regex.match(line)
         if match:
             speaker = match.group("speaker")
-            speech = match.group("speech")
+            if speaker:
+                speaker = speaker.rstrip(":").strip().lower()
+            speech = match.group("speech").strip()
+            if not (speaker or speech):
+                continue
             if cur_msg:
                 if not speaker:
                     cur_msg.add_content("\n" + speech)
@@ -167,10 +169,6 @@ def import_podcast(
                     cur_msg = None
             if not cur_msg:
                 if speaker:
-                    speaker = speaker.strip()
-                    if speaker.endswith(":"):
-                        speaker = speaker[:-1]
-                    speaker = speaker.lower()  # TODO: locale
                     participants.add(speaker)
                 cur_msg = PodcastMessage(speaker, [speech])
     if cur_msg:
@@ -200,8 +198,7 @@ def timestamp_messages(
     ticks_length = end_time.timestamp() - start_ticks
     if ticks_length <= 0:
         raise RuntimeError(f"{start_time} is not < {end_time}")
-    message_lengths = [sum(len(chunk) for chunk in m.text_chunks)
-                       for m in messages]
+    message_lengths = [sum(len(chunk) for chunk in m.text_chunks) for m in messages]
     text_length = sum(message_lengths)
     ticks_per_char = ticks_length / text_length
     for message, length in zip(messages, message_lengths):

@@ -297,7 +297,7 @@ class IMessageTextIndex(Protocol):
     async def lookup_messages_in_subset(
         self,
         message_text: str,
-        indices_to_search: list[MessageOrdinal],
+        ordinals_to_search: list[MessageOrdinal],
         max_matches: int | None = None,
         threshold_score: float | None = None,
     ) -> list[ScoredMessageOrdinal]:
@@ -312,7 +312,7 @@ class IMessageTextIndex(Protocol):
 @runtime_checkable
 class ITermToSemanticRefIndexItem(Protocol):
     term: str
-    semantic_ref_indices: Sequence[ScoredSemanticRefOrdinal]
+    semantic_ref_ordinals: Sequence[ScoredSemanticRefOrdinal]
 
 
 # Persistent form of a term index.
@@ -358,11 +358,22 @@ class IndexingEventHandlers:
         ]
         | None
     ) = None
+    on_text_indexed: (
+        Callable[
+            [
+                list[tuple[str, TextLocation]],  # text_and_locations
+                list[tuple[str, TextLocation]],  # batch
+                int,  # batch_start_at
+            ],
+            bool,
+        ]
+        | None
+    ) = None
 
 
 @dataclass
-class IndexingResults:
-    chunks_indexed_upto: TextLocation | None = None
+class TextIndexingResult:
+    completedUpto: TextLocation | None = None
     error: str | None = None
 
 
@@ -370,3 +381,17 @@ class IndexingResults:
 class ListIndexingResult:
     number_completed: int
     error: str | None = None
+
+
+@dataclass
+class SecondaryIndexingResults:
+    propertie: ListIndexingResult | None = None
+    timestamp: ListIndexingResult | None = None
+    related_terms: ListIndexingResult | None = None
+    message: TextIndexingResult | None = None
+
+
+@dataclass
+class IndexingResults:
+    semantic_refs: TextIndexingResult | None = None
+    secondary_index_results: SecondaryIndexingResults | None = None
