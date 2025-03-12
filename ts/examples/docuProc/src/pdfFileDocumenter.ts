@@ -80,7 +80,10 @@ export function createPdfDocumenter(model: ChatModel): PdfFileDocumenter {
 
         for (const chunk of chunks) {
             if (!chunk.parentId) {
-                pageChunksMap[chunk.pageid] = { pageRootChunk: chunk, pageChunks: [] };
+                pageChunksMap[chunk.pageid] = {
+                    pageRootChunk: chunk,
+                    pageChunks: [],
+                };
             }
         }
         // Associate child chunks with pages
@@ -182,12 +185,12 @@ export function createPdfDocumenter(model: ChatModel): PdfFileDocumenter {
 
             // Build request for the LLM
             const request = `
-                Summarize the given document sections based on text, images content and associated images.
-                For text, provide a concise summary of the main points.
-                For images, infer purpose based on the context.
-                Also fill in lists: keywords, tags, synonyms, and dependencies. Every chunk should be documented.
-                For each chunk, the summary shoube contain most five sentences that covers the main points.
-                For each image, provide a short description of the image and its purpose.`;
+                Summarize the given document chunks based on text, images content and associated images. Every chunks has a unique id.
+                Provide documentation for every chunk. For text, provide a concise summary of the main points.
+                For images, infer purpose based on the context and describe the contents of the image, with cohesive explantion.
+                Also fill in: keywords, tags, synonyms, and document information if available. 
+                The document information should be extracted from the chunk. Every chunk should be documented.
+                For each chunk, the summary should contain most five sentences that covers the main points.`;
 
             let promptSections: PromptSection[] = [
                 { role: "user", content: content },
@@ -202,7 +205,7 @@ export function createPdfDocumenter(model: ChatModel): PdfFileDocumenter {
                 const chunkDocs = fileDocs.chunkDocs ?? [];
 
                 const { pageChunks } = pageChunksMap[pageid];
-                for(const chunk of pageChunks) {
+                for (const chunk of pageChunks) {
                     chunk.fileName = fileName;
                     // get the doc for the pageChunk from chunkDocs
                     const chunkDoc = chunkDocs.find(
@@ -210,8 +213,8 @@ export function createPdfDocumenter(model: ChatModel): PdfFileDocumenter {
                     );
                     if (chunkDoc) {
                         chunk.chunkDoc = chunkDoc;
-                    }                
-                }  
+                    }
+                }
             } else {
                 console.error(
                     `Error in documenter: ${result.message} for pageId: ${pageid}`,

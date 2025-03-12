@@ -53,24 +53,18 @@ export async function importAllFiles(
     );
 }
 
-async function getLinesInChunk(
-    chunk: Chunk,
-): Promise<number> {
+async function getLinesInChunk(chunk: Chunk): Promise<number> {
     let numLines = 0;
     for (const blob of chunk.blobs) {
         if (blob.blob_type === "text" && blob.content) {
             if (Array.isArray(blob.content)) {
                 numLines += blob.content
                     .flatMap((text) => text.split(/[\n.]+/)) // Split each string and flatten the results
-                    .filter(
-                        (line) => line.trim().length > 0,
-                    ).length;
+                    .filter((line) => line.trim().length > 0).length;
             } else {
                 numLines += blob.content
                     .split(/[\n.]+/)
-                    .filter(
-                        (line) => line.trim().length > 0,
-                    ).length;
+                    .filter((line) => line.trim().length > 0).length;
             }
         }
     }

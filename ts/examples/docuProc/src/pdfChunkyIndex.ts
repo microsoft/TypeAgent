@@ -17,7 +17,7 @@ export const IndexNames = [
     "keywords",
     "tags",
     "synonyms",
-    "dependencies",
+    "docinfos",
 ];
 export type IndexType = (typeof IndexNames)[number];
 export type NamedIndex = [IndexType, knowLib.TextIndex<string, ChunkId>];
