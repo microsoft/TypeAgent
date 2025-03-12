@@ -224,14 +224,14 @@ class ConversationIndex(ITermToSemanticRefIndex):
                     semantic_ref_ordinals=semantic_ref_ordinals,
                 )
             )
-        return ITermToSemanticRefIndexData(items)
+        return ITermToSemanticRefIndexData(items=items)
 
     def deserialize(self, data: ITermToSemanticRefIndexData) -> None:
-        for term_data in data.items:
-            if term_data is not None and term_data.term:
-                self._map[self._prepare_term(term_data.term)] = (
-                    term_data.semantic_ref_ordinals
-                )
+        for term_data in data["items"]:
+            if term_data is not None and term_data["term"]:
+                self._map[self._prepare_term(term_data["term"])] = term_data[
+                    "semantic_ref_ordinals"
+                ]
 
     def _prepare_term(self, term: str) -> str:
         return term.lower()

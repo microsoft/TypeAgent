@@ -3,18 +3,6 @@
 
 # This is Guido's Makefile. Please don't make it complicated.
 
-.PHONY: help
-help:
-	@echo "Usage: make [target]"
-	@echo "make help   # Help"
-	@echo "make all    # venv, format, check, test, build"
-	@echo "make format # Run black"
-	@echo "make check  # Run pyright"
-	@echo "make test   # Run import_podcast test"
-	@echo "make build  # Build the wheel (under dist/)"
-	@echo "make venv   # Create venv/"
-	@echo "make clean  # Remove build/, dist/, venv/, *.egg-info/"
-
 .PHONY: all
 all: venv format check test build
 
@@ -42,3 +30,15 @@ venv:
 .PHONY: clean
 clean:
 	rm -rf build dist venv *.egg-info
+
+.PHONY: help
+help:
+	@echo "Usage: make [target]"
+	@echo "make help   # Help"
+	@echo "make all    # venv, format, check, test, build"
+	@echo "make format # Run black"
+	@echo "make check  # Run pyright"
+	@echo "make test   # Run import_podcast test"
+	@echo "make build  # Build the wheel (under dist/)"
+	@echo "make venv   # Create venv/"
+	@echo "make clean  # Remove build/, dist/, venv/, *.egg-info/"

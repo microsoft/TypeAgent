@@ -13,7 +13,14 @@
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import datetime as Datetime
-from typing import Any, Callable, Literal, Protocol, runtime_checkable
+from typing import (
+    Callable,
+    Literal,
+    NotRequired,
+    Protocol,
+    runtime_checkable,
+    TypedDict,
+)
 
 from . import kplib
 
@@ -308,30 +315,27 @@ class IMessageTextIndex(Protocol):
         raise NotImplementedError
 
 
-# ------------------------
-# Serialization formats
-# ------------------------
+# -----------------------------------
+# Serialization formats use TypedDict
+# -----------------------------------
 
 
-@dataclass
-class ITermToSemanticRefIndexItem:
+class ITermToSemanticRefIndexItem(TypedDict):
     term: str
     semantic_ref_ordinals: list[ScoredSemanticRefOrdinal]
 
 
 # Persistent form of a term index.
-@dataclass
-class ITermToSemanticRefIndexData:
+class ITermToSemanticRefIndexData(TypedDict):
     items: list[ITermToSemanticRefIndexItem]
 
 
-@dataclass
-class IConversationData[TMessage]:
+class IConversationData[TMessage](TypedDict):
     name_tag: str
     messages: list[TMessage]
     tags: list[str]
     semantic_refs: list[SemanticRef]
-    semantic_index_data: ITermToSemanticRefIndexData | None = None
+    semantic_index_data: NotRequired[ITermToSemanticRefIndexData | None]
 
 
 # ------------------------

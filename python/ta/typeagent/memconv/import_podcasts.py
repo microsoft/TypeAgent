@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from datetime import datetime as Datetime, timedelta as Timedelta
 import os
 import re
-from typing import Any, cast, Sequence
+from typing import cast, Sequence
 
 from ..knowpro import convindex, interfaces, kplib
 

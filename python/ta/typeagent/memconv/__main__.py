@@ -5,7 +5,7 @@
 import argparse
 from datetime import datetime as Datetime
 import sys
-from typing import Any, cast
+from typing import cast
 
 from ..knowpro.convindex import ConversationIndex
 
@@ -56,7 +56,7 @@ async def main():
     print()
     await pod.build_index(handler)
     if pod.semantic_ref_index is not None:
-        data = cast(Any, pod.semantic_ref_index).serialize()
+        data = pod.semantic_ref_index.serialize()
         new = ConversationIndex(data)
         assert new.serialize() == data
 
