@@ -19,7 +19,7 @@ export interface IMessage extends IKnowledgeSource {
 }
 
 export type ScoredMessageOrdinal = {
-    // TODO REFACTOR: renamed to messageOrdinal
+    // TODO REFACTOR: rename to messageOrdinal
     messageIndex: MessageOrdinal;
     score: number;
 };
@@ -35,6 +35,7 @@ export type Knowledge = kpLib.ConcreteEntity | kpLib.Action | Topic | Tag;
 export type SemanticRefOrdinal = number;
 
 export interface SemanticRef {
+    // TODO REFACTOR: rename to semanticRefOrdinal
     semanticRefIndex: SemanticRefOrdinal;
     range: TextRange;
     knowledgeType: KnowledgeType;
@@ -59,6 +60,7 @@ export interface IConversation<TMessage extends IKnowledgeSource = any> {
 }
 
 export type ScoredSemanticRef = {
+    // TODO REFACTOR: rename to semanticRefOrdinal
     semanticRefIndex: SemanticRefOrdinal;
     score: number;
 };
@@ -67,18 +69,21 @@ export interface ITermToSemanticRefIndex {
     getTerms(): string[];
     addTerm(
         term: string,
-        semanticRefIndex: SemanticRefOrdinal | ScoredSemanticRef,
+        semanticRefOrdinal: SemanticRefOrdinal | ScoredSemanticRef,
     ): void;
-    removeTerm(term: string, semanticRefIndex: SemanticRefOrdinal): void;
+    removeTerm(term: string, semanticRefOrdinal: SemanticRefOrdinal): void;
     lookupTerm(term: string): ScoredSemanticRef[] | undefined;
 }
 
 export interface TextLocation {
-    // the index of the message
+    // the ordinal of the message
+    // TODO REFACTOR: rename to messageOrdinal
     messageIndex: MessageOrdinal;
-    // the index of the chunk
+    // TODO REFACTOR: rename to chunkOrdinal
+    // the ordinal of the chunk
     chunkIndex?: number;
-    // the index of the character within the chunk
+    // TODO REFACTOR: rename to charOrdinal
+    // the ordinal of the character within the chunk
     charIndex?: number;
 }
 
@@ -126,7 +131,7 @@ export interface IPropertyToSemanticRefIndex {
     addProperty(
         propertyName: string,
         value: string,
-        semanticRefIndex: SemanticRefOrdinal | ScoredSemanticRef,
+        semanticRefOrdinal: SemanticRefOrdinal | ScoredSemanticRef,
     ): void;
     lookupProperty(
         propertyName: string,

@@ -394,8 +394,8 @@ export class QueryEvalContext {
         return this.conversation.semanticRefs!;
     }
 
-    public getSemanticRef(semanticRefIndex: SemanticRefOrdinal): SemanticRef {
-        return this.conversation.semanticRefs![semanticRefIndex];
+    public getSemanticRef(semanticRefOrdinal: SemanticRefOrdinal): SemanticRef {
+        return this.conversation.semanticRefs![semanticRefOrdinal];
     }
 
     public getMessageForRef(semanticRef: SemanticRef): IMessage {
