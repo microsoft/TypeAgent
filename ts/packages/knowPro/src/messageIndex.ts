@@ -41,12 +41,12 @@ export class MessageTextIndex implements IMessageTextIndex {
         messages: IMessage[],
         eventHandler?: IndexingEventHandlers,
     ): Promise<ListIndexingResult> {
-        const baseMessageIndex: MessageOrdinal = this.size;
+        const baseMessageOrdinal: MessageOrdinal = this.size;
         const allChunks: [string, TextLocation][] = [];
         // Collect everything so we can batch efficiently
         for (let i = 0; i < messages.length; ++i) {
             const message = messages[i];
-            let messageIndex = baseMessageIndex + i;
+            let messageIndex = baseMessageOrdinal + i;
             for (
                 let chunkIndex = 0;
                 chunkIndex < message.textChunks.length;
@@ -83,13 +83,13 @@ export class MessageTextIndex implements IMessageTextIndex {
 
     public async lookupMessagesInSubset(
         messageText: string,
-        indicesToSearch: MessageOrdinal[],
+        ordinalsToSearch: MessageOrdinal[],
         maxMatches?: number,
         thresholdScore?: number,
     ): Promise<ScoredMessageIndex[]> {
         const scoredLocations = await this.textLocationIndex.lookupTextInSubset(
             messageText,
-            indicesToSearch,
+            ordinalsToSearch,
             maxMatches,
             thresholdScore,
         );

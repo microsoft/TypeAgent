@@ -55,27 +55,27 @@ export function getTextRangeForDateRange(
     dateRange: DateRange,
 ): TextRange | undefined {
     const messages = conversation.messages;
-    let rangeStartIndex: MessageOrdinal = -1;
-    let rangeEndIndex = rangeStartIndex;
+    let rangeStartOrdinal: MessageOrdinal = -1;
+    let rangeEndOrdinal = rangeStartOrdinal;
     for (let messageIndex = 0; messageIndex < messages.length; ++messageIndex) {
         const message = messages[messageIndex];
         if (message.timestamp) {
             if (isInDateRange(dateRange, new Date(message.timestamp))) {
-                if (rangeStartIndex < 0) {
-                    rangeStartIndex = messageIndex;
+                if (rangeStartOrdinal < 0) {
+                    rangeStartOrdinal = messageIndex;
                 }
-                rangeEndIndex = messageIndex;
+                rangeEndOrdinal = messageIndex;
             } else {
-                if (rangeStartIndex >= 0) {
+                if (rangeStartOrdinal >= 0) {
                     break;
                 }
             }
         }
     }
-    if (rangeStartIndex >= 0) {
+    if (rangeStartOrdinal >= 0) {
         return {
-            start: { messageIndex: rangeStartIndex },
-            end: { messageIndex: rangeEndIndex + 1 },
+            start: { messageIndex: rangeStartOrdinal },
+            end: { messageIndex: rangeEndOrdinal + 1 },
         };
     }
     return undefined;

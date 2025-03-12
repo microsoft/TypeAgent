@@ -47,10 +47,10 @@ export class TimestampToTextRangeIndex implements ITimestampToTextRangeIndex {
     }
 
     public addTimestamp(
-        messageIndex: MessageOrdinal,
+        messageOrdinal: MessageOrdinal,
         timestamp: string,
     ): boolean {
-        return this.insertTimestamp(messageIndex, timestamp, true);
+        return this.insertTimestamp(messageOrdinal, timestamp, true);
     }
 
     public addTimestamps(
@@ -65,7 +65,7 @@ export class TimestampToTextRangeIndex implements ITimestampToTextRangeIndex {
     }
 
     private insertTimestamp(
-        messageIndex: MessageOrdinal,
+        messageOrdinal: MessageOrdinal,
         timestamp: string | undefined,
         inOrder: boolean,
     ) {
@@ -74,7 +74,7 @@ export class TimestampToTextRangeIndex implements ITimestampToTextRangeIndex {
         }
         const timestampDate = new Date(timestamp);
         const entry: TimestampedTextRange = {
-            range: textRangeFromLocation(messageIndex),
+            range: textRangeFromLocation(messageOrdinal),
             // This string is formatted to be lexically sortable
             timestamp: this.dateToTimestamp(timestampDate),
         };
@@ -126,13 +126,13 @@ export function buildTimestampIndex(
 export function addToTimestampIndex(
     timestampIndex: ITimestampToTextRangeIndex,
     messages: IMessage[],
-    baseMessageIndex: MessageOrdinal,
+    baseMessageOrdinal: MessageOrdinal,
 ): ListIndexingResult {
     const messageTimestamps: [MessageOrdinal, string][] = [];
     for (let i = 0; i < messages.length; ++i) {
         const timestamp = messages[i].timestamp;
         if (timestamp) {
-            messageTimestamps.push([i + baseMessageIndex, timestamp]);
+            messageTimestamps.push([i + baseMessageOrdinal, timestamp]);
         }
     }
     return timestampIndex.addTimestamps(messageTimestamps);

@@ -142,7 +142,7 @@ export type TimestampedTextRange = {
  * Return text ranges in the given date range
  */
 export interface ITimestampToTextRangeIndex {
-    addTimestamp(messageIndex: MessageOrdinal, timestamp: string): boolean;
+    addTimestamp(messageOrdinal: MessageOrdinal, timestamp: string): boolean;
     addTimestamps(
         messageTimestamps: [MessageOrdinal, string][],
     ): ListIndexingResult;
@@ -214,7 +214,7 @@ export interface IMessageTextIndex {
     ): Promise<ScoredMessageIndex[]>;
     lookupMessagesInSubset(
         messageText: string,
-        indicesToSearch: MessageOrdinal[],
+        ordinalsToSearch: MessageOrdinal[],
         maxMatches?: number,
         thresholdScore?: number,
     ): Promise<ScoredMessageIndex[]>;
