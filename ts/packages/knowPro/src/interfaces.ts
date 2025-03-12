@@ -57,7 +57,7 @@ export interface IConversation<TMessage extends IKnowledgeSource = any> {
     secondaryIndexes?: IConversationSecondaryIndexes | undefined;
 }
 
-export type ScoredSemanticRef = {
+export type ScoredSemanticRefOrdinal = {
     semanticRefOrdinal: SemanticRefOrdinal;
     score: number;
 };
@@ -66,10 +66,10 @@ export interface ITermToSemanticRefIndex {
     getTerms(): string[];
     addTerm(
         term: string,
-        semanticRefOrdinal: SemanticRefOrdinal | ScoredSemanticRef,
+        semanticRefOrdinal: SemanticRefOrdinal | ScoredSemanticRefOrdinal,
     ): void;
     removeTerm(term: string, semanticRefOrdinal: SemanticRefOrdinal): void;
-    lookupTerm(term: string): ScoredSemanticRef[] | undefined;
+    lookupTerm(term: string): ScoredSemanticRefOrdinal[] | undefined;
 }
 
 export interface TextLocation {
@@ -126,12 +126,12 @@ export interface IPropertyToSemanticRefIndex {
     addProperty(
         propertyName: string,
         value: string,
-        semanticRefOrdinal: SemanticRefOrdinal | ScoredSemanticRef,
+        semanticRefOrdinal: SemanticRefOrdinal | ScoredSemanticRefOrdinal,
     ): void;
     lookupProperty(
         propertyName: string,
         value: string,
-    ): ScoredSemanticRef[] | undefined;
+    ): ScoredSemanticRefOrdinal[] | undefined;
 }
 
 export type TimestampedTextRange = {
@@ -240,7 +240,7 @@ export interface ITermToSemanticRefIndexData {
 
 export interface ITermToSemanticRefIndexItem {
     term: string;
-    semanticRefIndices: ScoredSemanticRef[];
+    semanticRefIndices: ScoredSemanticRefOrdinal[];
 }
 
 //------------------------

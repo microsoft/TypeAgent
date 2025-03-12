@@ -6,7 +6,7 @@ import { collections, getTopK } from "typeagent";
 import { unionArrays } from "./collections.js";
 import {
     ScoredKnowledge,
-    ScoredSemanticRef,
+    ScoredSemanticRefOrdinal,
     SemanticRef,
     Topic,
 } from "./interfaces.js";
@@ -22,7 +22,7 @@ export function facetValueToString(facet: kpLib.Facet): string {
 
 export function mergeTopics(
     semanticRefs: SemanticRef[],
-    semanticRefMatches: ScoredSemanticRef[],
+    semanticRefMatches: ScoredSemanticRefOrdinal[],
     topK?: number,
 ): ScoredKnowledge[] {
     let mergedTopics = new Map<string, Scored<Topic>>();
@@ -62,7 +62,7 @@ export function mergeTopics(
 
 export function mergedEntities(
     semanticRefs: SemanticRef[],
-    semanticRefMatches: ScoredSemanticRef[],
+    semanticRefMatches: ScoredSemanticRefOrdinal[],
     topK?: number,
 ): ScoredKnowledge[] {
     return mergeScoredEntities(
@@ -206,7 +206,7 @@ function unionFacets(
 
 function* getScoredEntities(
     semanticRefs: SemanticRef[],
-    semanticRefMatches: ScoredSemanticRef[],
+    semanticRefMatches: ScoredSemanticRefOrdinal[],
 ): IterableIterator<Scored<kpLib.ConcreteEntity>> {
     for (let semanticRefMatch of semanticRefMatches) {
         const semanticRef = semanticRefs[semanticRefMatch.semanticRefOrdinal];

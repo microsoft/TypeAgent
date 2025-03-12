@@ -7,7 +7,7 @@ import {
     KnowledgeType,
     MessageOrdinal,
     ScoredMessageOrdinal,
-    ScoredSemanticRef,
+    ScoredSemanticRefOrdinal,
     SemanticRef,
     SemanticRefOrdinal,
     Term,
@@ -254,8 +254,8 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefOrdinal>
     public addTermMatches(
         searchTerm: Term,
         scoredRefs:
-            | ScoredSemanticRef[]
-            | IterableIterator<ScoredSemanticRef>
+            | ScoredSemanticRefOrdinal[]
+            | IterableIterator<ScoredSemanticRefOrdinal>
             | undefined,
         isExactMatch: boolean,
         weight?: number,
@@ -276,8 +276,8 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefOrdinal>
     public addTermMatchesIfNew(
         searchTerm: Term,
         scoredRefs:
-            | ScoredSemanticRef[]
-            | IterableIterator<ScoredSemanticRef>
+            | ScoredSemanticRefOrdinal[]
+            | IterableIterator<ScoredSemanticRefOrdinal>
             | undefined,
         isExactMatch: boolean,
         weight?: number,
@@ -376,7 +376,7 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefOrdinal>
         return intersection;
     }
 
-    public toScoredSemanticRefs(): ScoredSemanticRef[] {
+    public toScoredSemanticRefs(): ScoredSemanticRefOrdinal[] {
         return this.getSortedByScore(0).map((m) => {
             return {
                 semanticRefOrdinal: m.value,

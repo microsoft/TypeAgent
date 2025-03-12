@@ -162,7 +162,7 @@ export class KnowProPrinter extends ChatPrinter {
     }
 
     public writeScoredSemanticRefs(
-        semanticRefMatches: kp.ScoredSemanticRef[],
+        semanticRefMatches: kp.ScoredSemanticRefOrdinal[],
         semanticRefs: kp.SemanticRef[],
         maxToDisplay: number,
     ) {
@@ -211,7 +211,7 @@ export class KnowProPrinter extends ChatPrinter {
     private writeScoredRef(
         matchNumber: number,
         totalMatches: number,
-        scoredRef: kp.ScoredSemanticRef,
+        scoredRef: kp.ScoredSemanticRefOrdinal,
         semanticRefs: kp.SemanticRef[],
     ) {
         const semanticRef = semanticRefs[scoredRef.semanticRefOrdinal];

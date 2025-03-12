@@ -11,10 +11,11 @@ import {
     Knowledge,
     KnowledgeType,
     MessageOrdinal,
-    ScoredSemanticRef,
+    ScoredSemanticRefOrdinal,
     SemanticRef,
     SemanticRefOrdinal,
     TextIndexingResult,
+    TextLocation,
     TextRange,
     Topic,
 } from "./interfaces.js";
@@ -83,13 +84,13 @@ export function addEntityToIndex(
     entity: kpLib.ConcreteEntity,
     semanticRefs: SemanticRef[],
     semanticRefIndex: ITermToSemanticRefIndex,
-    messageIndex: number,
+    messageOrdinal: MessageOrdinal,
     chunkIndex = 0,
 ) {
     const semanticRefOrdinal = semanticRefs.length;
     semanticRefs.push({
         semanticRefOrdinal,
-        range: textRangeFromLocation(messageIndex, chunkIndex),
+        range: textRangeFromLocation(messageOrdinal, chunkIndex),
         knowledgeType: "entity",
         knowledge: entity,
     });
@@ -108,13 +109,16 @@ export function addEntityToIndex(
 
 function addFacet(
     facet: kpLib.Facet | undefined,
-    refIndex: number,
+    semanticRefOrdinal: SemanticRefOrdinal,
     semanticRefIndex: ITermToSemanticRefIndex,
 ) {
     if (facet !== undefined) {
-        semanticRefIndex.addTerm(facet.name, refIndex);
+        semanticRefIndex.addTerm(facet.name, semanticRefOrdinal);
         if (facet.value !== undefined) {
-            semanticRefIndex.addTerm(facetValueToString(facet), refIndex);
+            semanticRefIndex.addTerm(
+                facetValueToString(facet),
+                semanticRefOrdinal,
+            );
         }
     }
 }
@@ -123,13 +127,13 @@ export function addTopicToIndex(
     topic: Topic,
     semanticRefs: SemanticRef[],
     semanticRefIndex: ITermToSemanticRefIndex,
-    messageIndex: number,
-    chunkIndex = 0,
+    messageOrdinal: MessageOrdinal,
+    chunkOrdinal = 0,
 ) {
     const semanticRefOrdinal = semanticRefs.length;
     semanticRefs.push({
         semanticRefOrdinal,
-        range: textRangeFromLocation(messageIndex, chunkIndex),
+        range: textRangeFromLocation(messageOrdinal, chunkOrdinal),
         knowledgeType: "topic",
         knowledge: topic,
     });
@@ -140,13 +144,13 @@ export function addActionToIndex(
     action: kpLib.Action,
     semanticRefs: SemanticRef[],
     semanticRefIndex: ITermToSemanticRefIndex,
-    messageIndex: number,
-    chunkIndex = 0,
+    messageOrdinal: MessageOrdinal,
+    chunkOrdinal = 0,
 ) {
     const semanticRefOrdinal = semanticRefs.length;
     semanticRefs.push({
         semanticRefOrdinal,
-        range: textRangeFromLocation(messageIndex, chunkIndex),
+        range: textRangeFromLocation(messageOrdinal, chunkOrdinal),
         knowledgeType: "action",
         knowledge: action,
     });
@@ -236,10 +240,10 @@ export async function buildSemanticRefIndex(
     let indexingResult: TextIndexingResult = {};
     for (let i = 0; i < conversation.messages.length; i++) {
         let messageOrdinal: MessageOrdinal = i;
-        const chunkIndex = 0;
+        const chunkOrdinal = 0;
         const msg = conversation.messages[messageOrdinal];
         // only one chunk per message for now
-        const text = msg.textChunks[chunkIndex];
+        const text = msg.textChunks[chunkOrdinal];
         const knowledgeResult = await async.callWithRetry(() =>
             extractor.extractWithRetry(text, maxRetries),
         );
@@ -256,7 +260,10 @@ export async function buildSemanticRefIndex(
                 knowledge,
             );
         }
-        const completedChunk = { messageOrdinal, chunkIndex };
+        const completedChunk: TextLocation = {
+            messageOrdinal,
+            chunkOrdinal,
+        };
         indexingResult.completedUpto = completedChunk;
         if (
             eventHandler?.onKnowledgeExtracted &&
@@ -299,7 +306,7 @@ export function addToConversationIndex(
  *  Case-insensitive
  */
 export class ConversationIndex implements ITermToSemanticRefIndex {
-    private map: Map<string, ScoredSemanticRef[]> = new Map();
+    private map: Map<string, ScoredSemanticRefOrdinal[]> = new Map();
 
     constructor(data?: ITermToSemanticRefIndexData | undefined) {
         if (data !== undefined) {
@@ -317,7 +324,7 @@ export class ConversationIndex implements ITermToSemanticRefIndex {
 
     public addTerm(
         term: string,
-        semanticRefIndex: SemanticRefOrdinal | ScoredSemanticRef,
+        semanticRefIndex: SemanticRefOrdinal | ScoredSemanticRefOrdinal,
     ): void {
         if (!term) {
             return;
@@ -337,7 +344,7 @@ export class ConversationIndex implements ITermToSemanticRefIndex {
         }
     }
 
-    lookupTerm(term: string): ScoredSemanticRef[] {
+    lookupTerm(term: string): ScoredSemanticRefOrdinal[] {
         return this.map.get(this.prepareTerm(term)) ?? [];
     }
 

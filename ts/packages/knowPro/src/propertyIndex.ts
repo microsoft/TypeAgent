@@ -4,7 +4,7 @@
 import {
     IConversation,
     ListIndexingResult,
-    ScoredSemanticRef,
+    ScoredSemanticRefOrdinal,
     SemanticRef,
     SemanticRefOrdinal,
     Tag,
@@ -162,7 +162,7 @@ export function addToPropertyIndex(
 }
 
 export class PropertyIndex implements IPropertyToSemanticRefIndex {
-    private map: Map<string, ScoredSemanticRef[]> = new Map();
+    private map: Map<string, ScoredSemanticRefOrdinal[]> = new Map();
 
     constructor() {}
 
@@ -182,7 +182,7 @@ export class PropertyIndex implements IPropertyToSemanticRefIndex {
     public addProperty(
         propertyName: string,
         value: string,
-        semanticRefOrdinal: SemanticRefOrdinal | ScoredSemanticRef,
+        semanticRefOrdinal: SemanticRefOrdinal | ScoredSemanticRefOrdinal,
     ): void {
         let termText = this.toPropertyTermText(propertyName, value);
         if (typeof semanticRefOrdinal === "number") {
@@ -206,7 +206,7 @@ export class PropertyIndex implements IPropertyToSemanticRefIndex {
     lookupProperty(
         propertyName: string,
         value: string,
-    ): ScoredSemanticRef[] | undefined {
+    ): ScoredSemanticRefOrdinal[] | undefined {
         const termText = this.toPropertyTermText(propertyName, value);
         return this.map.get(this.prepareTermText(termText)) ?? [];
     }
@@ -234,7 +234,7 @@ export function lookupPropertyInPropertyIndex(
     propertyValue: string,
     semanticRefs: SemanticRef[],
     rangesInScope?: TextRangesInScope,
-): ScoredSemanticRef[] | undefined {
+): ScoredSemanticRefOrdinal[] | undefined {
     let scoredRefs = propertyIndex.lookupProperty(propertyName, propertyValue);
     if (scoredRefs && scoredRefs.length > 0 && rangesInScope) {
         scoredRefs = scoredRefs.filter((sr) =>

@@ -8,7 +8,7 @@ import {
     ITermToSemanticRefIndex,
     KnowledgeType,
     MessageOrdinal,
-    ScoredSemanticRef,
+    ScoredSemanticRefOrdinal,
     SemanticRef,
     SemanticRefOrdinal,
     Tag,
@@ -288,8 +288,11 @@ export function lookupTermFiltered(
     semanticRefIndex: ITermToSemanticRefIndex,
     term: Term,
     semanticRefs: SemanticRef[],
-    filter: (semanticRef: SemanticRef, scoredRef: ScoredSemanticRef) => boolean,
-): ScoredSemanticRef[] | undefined {
+    filter: (
+        semanticRef: SemanticRef,
+        scoredRef: ScoredSemanticRefOrdinal,
+    ) => boolean,
+): ScoredSemanticRefOrdinal[] | undefined {
     const scoredRefs = semanticRefIndex.lookupTerm(term.text);
     if (scoredRefs && scoredRefs.length > 0) {
         let filtered = scoredRefs.filter((sr) => {
@@ -307,7 +310,7 @@ export function lookupTerm(
     term: Term,
     semanticRefs: SemanticRef[],
     rangesInScope?: TextRangesInScope,
-): ScoredSemanticRef[] | undefined {
+): ScoredSemanticRefOrdinal[] | undefined {
     if (rangesInScope) {
         // If rangesInScope has no actual text ranges, then lookups can't possibly match
         return lookupTermFiltered(semanticRefIndex, term, semanticRefs, (sr) =>
@@ -322,7 +325,7 @@ export function lookupProperty(
     propertySearchTerm: PropertySearchTerm,
     semanticRefs: SemanticRef[],
     rangesInScope?: TextRangesInScope,
-): ScoredSemanticRef[] | undefined {
+): ScoredSemanticRefOrdinal[] | undefined {
     if (typeof propertySearchTerm.propertyName !== "string") {
         throw new Error("Not supported");
     }
@@ -541,8 +544,8 @@ export class MatchSearchTermExpr extends MatchTermExpr {
         public scoreBooster?: (
             searchTerm: SearchTerm,
             sr: SemanticRef,
-            scored: ScoredSemanticRef,
-        ) => ScoredSemanticRef,
+            scored: ScoredSemanticRefOrdinal,
+        ) => ScoredSemanticRefOrdinal,
     ) {
         super();
     }
@@ -572,7 +575,10 @@ export class MatchSearchTermExpr extends MatchTermExpr {
     protected lookupTerm(
         context: QueryEvalContext,
         term: Term,
-    ): ScoredSemanticRef[] | IterableIterator<ScoredSemanticRef> | undefined {
+    ):
+        | ScoredSemanticRefOrdinal[]
+        | IterableIterator<ScoredSemanticRefOrdinal>
+        | undefined {
         const matches = lookupTerm(
             context.semanticRefIndex,
             term,
@@ -745,7 +751,7 @@ export class MatchPropertySearchTermExpr extends MatchTermExpr {
         context: QueryEvalContext,
         propertyName: string,
         propertyValue: string,
-    ): ScoredSemanticRef[] | undefined {
+    ): ScoredSemanticRefOrdinal[] | undefined {
         if (context.propertyIndex) {
             return lookupPropertyInPropertyIndex(
                 context.propertyIndex,
@@ -766,7 +772,7 @@ export class MatchPropertySearchTermExpr extends MatchTermExpr {
         context: QueryEvalContext,
         propertyName: string,
         propertyValue: string,
-    ): ScoredSemanticRef[] | undefined {
+    ): ScoredSemanticRefOrdinal[] | undefined {
         return lookupProperty(
             context.semanticRefIndex,
             {
@@ -786,7 +792,7 @@ export class MatchTagExpr extends MatchSearchTermExpr {
     protected override lookupTerm(
         context: QueryEvalContext,
         term: Term,
-    ): ScoredSemanticRef[] | undefined {
+    ): ScoredSemanticRefOrdinal[] | undefined {
         return lookupTermFiltered(
             context.semanticRefIndex,
             term,

@@ -7,7 +7,7 @@ import {
     IConversation,
     KnowledgeType,
     ScoredKnowledge,
-    ScoredSemanticRef,
+    ScoredSemanticRefOrdinal,
     SemanticRef,
     Term,
     IConversationSecondaryIndexes,
@@ -118,7 +118,7 @@ export type SearchOptions = {
 
 export type SemanticRefSearchResult = {
     termMatches: Set<string>;
-    semanticRefMatches: ScoredSemanticRef[];
+    semanticRefMatches: ScoredSemanticRefOrdinal[];
 };
 
 export type ConversationSearchResult = {
@@ -196,7 +196,7 @@ export async function searchConversationKnowledge(
 
 export function getDistinctEntityMatches(
     semanticRefs: SemanticRef[],
-    searchResults: ScoredSemanticRef[],
+    searchResults: ScoredSemanticRefOrdinal[],
     topK?: number,
 ): ScoredKnowledge[] {
     return mergedEntities(semanticRefs, searchResults, topK);
@@ -204,7 +204,7 @@ export function getDistinctEntityMatches(
 
 export function getDistinctTopicMatches(
     semanticRefs: SemanticRef[],
-    searchResults: ScoredSemanticRef[],
+    searchResults: ScoredSemanticRefOrdinal[],
     topK?: number,
 ): ScoredKnowledge[] {
     return mergeTopics(semanticRefs, searchResults, topK);
@@ -467,9 +467,9 @@ class SearchQueryBuilder {
     private boostEntities(
         searchTerm: SearchTerm,
         sr: SemanticRef,
-        scoredRef: ScoredSemanticRef,
+        scoredRef: ScoredSemanticRefOrdinal,
         boostWeight: number,
-    ): ScoredSemanticRef {
+    ): ScoredSemanticRefOrdinal {
         if (
             sr.knowledgeType === "entity" &&
             q.matchEntityNameOrType(
