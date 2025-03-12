@@ -79,15 +79,12 @@ class Podcast(interfaces.IConversation[PodcastMessage]):
     # settings: ConversationSettings = field(
     #     init=False, default_factory=create_conversation_settings
     # )
-    semantic_ref_index: convindex.ITermToSemanticRefIndex | None = field(
+    semantic_ref_index: convindex.ConversationIndex | None = field(
         init=False, default_factory=convindex.ConversationIndex
     )
-    # TODO
     secondary_indexes: interfaces.IConversationSecondaryIndexes | None = field(
         init=False, default=None
     )
-    # Work in progress.
-    # message_index: TextToTextLocationIndexFuzzy | None = None
 
     # __init__() parameters, in that order (via `@dataclass`).
     name_tag: str = field(default="")
@@ -96,7 +93,7 @@ class Podcast(interfaces.IConversation[PodcastMessage]):
     semantic_refs: list[interfaces.SemanticRef] | None = field(default_factory=list)
 
     def add_metadata_to_index(self) -> None:
-        if self.semantic_ref_index:
+        if self.semantic_ref_index is not None:
             assert self.semantic_refs is not None
             convindex.add_metadata_to_index(
                 self.messages,

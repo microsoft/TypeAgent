@@ -51,6 +51,8 @@ async def main():
         on_text_indexed,
     )
     await pod.build_index(handler)
+    # if pod.semantic_ref_index is not None:
+    #     print(pod.semantic_ref_index.serialize())
 
 
 if __name__ == "__main__":

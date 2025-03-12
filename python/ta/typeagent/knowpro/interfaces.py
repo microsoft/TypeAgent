@@ -309,20 +309,20 @@ class IMessageTextIndex(Protocol):
 # ------------------------
 
 
-@runtime_checkable
-class ITermToSemanticRefIndexItem(Protocol):
+@dataclass
+class ITermToSemanticRefIndexItem:
     term: str
     semantic_ref_ordinals: Sequence[ScoredSemanticRefOrdinal]
 
 
 # Persistent form of a term index.
-@runtime_checkable
-class ITermToSemanticRefIndexData(Protocol):
+@dataclass
+class ITermToSemanticRefIndexData:
     items: Sequence[ITermToSemanticRefIndexItem]
 
 
-@runtime_checkable
-class IConversationData[TMessage](Protocol):
+@dataclass
+class IConversationData[TMessage]:
     name_tag: str
     messages: Sequence[TMessage]
     tags: Sequence[str]
@@ -335,6 +335,7 @@ class IConversationData[TMessage](Protocol):
 # ------------------------
 
 
+# TODO: Should the callables become methods with a default implementation?
 @dataclass
 class IndexingEventHandlers:
     on_knowledge_extracted: (

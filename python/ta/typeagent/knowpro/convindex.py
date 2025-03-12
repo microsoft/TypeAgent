@@ -22,6 +22,7 @@ from .interfaces import (
     SemanticRef,
     TextLocation,
     TextRange,
+    Topic,
 )
 from . import kplib
 from .knowledge import facet_value_to_string
@@ -79,11 +80,68 @@ def add_entity_to_index(
             add_facet(facet, ref_ordinal, semantic_ref_index)
 
 
-def add_facet(facet, ref_index, semantic_ref_index):
+def add_facet(
+    facet: kplib.Facet | None,
+    ref_ordinal: int,
+    semantic_ref_index: ITermToSemanticRefIndex,
+) -> None:
     if facet is not None:
-        semantic_ref_index.add_term(facet.name, ref_index)
+        semantic_ref_index.add_term(facet.name, ref_ordinal)
         if facet.value is not None:
-            semantic_ref_index.add_term(facet_value_to_string(facet), ref_index)
+            semantic_ref_index.add_term(facet_value_to_string(facet), ref_ordinal)
+
+
+def add_topic_to_index(
+    topic: Topic,
+    semantic_refs: list[SemanticRef],
+    semantic_ref_index: ITermToSemanticRefIndex,
+    message_ordinal: MessageOrdinal,
+    chunk_ordinal: int = 0,
+) -> None:
+    ref_ordinal = len(semantic_refs)
+    semantic_refs.append(
+        SemanticRef(
+            semantic_ref_ordinal=ref_ordinal,
+            range=text_range_from_location(message_ordinal, chunk_ordinal),
+            knowledge_type="topic",
+            knowledge=topic,
+        )
+    )
+    semantic_ref_index.add_term(topic.text, ref_ordinal)
+
+
+def add_action_to_index(
+    action: kplib.Action,
+    semantic_refs: list[SemanticRef],
+    semantic_ref_index: ITermToSemanticRefIndex,
+    message_ordinal: int,
+    chunk_ordinal=0,
+) -> None:
+    ref_ordinal = len(semantic_refs)
+    semantic_refs.append(
+        SemanticRef(
+            semantic_ref_ordinal=ref_ordinal,
+            range=text_range_from_location(message_ordinal, chunk_ordinal),
+            knowledge_type="action",
+            knowledge=action,
+        )
+    )
+    semantic_ref_index.add_term(" ".join(action.verbs), ref_ordinal)
+    if action.subject_entity_name != "none":
+        semantic_ref_index.add_term(action.subject_entity_name, ref_ordinal)
+    if action.object_entity_name != "none":
+        semantic_ref_index.add_term(action.object_entity_name, ref_ordinal)
+    if action.indirect_object_entity_name != "none":
+        semantic_ref_index.add_term(action.indirect_object_entity_name, ref_ordinal)
+    if action.params:
+        for param in action.params:
+            if isinstance(param, str):
+                semantic_ref_index.add_term(param, ref_ordinal)
+            else:
+                semantic_ref_index.add_term(param.name, ref_ordinal)
+                if isinstance(param.value, str):
+                    semantic_ref_index.add_term(param.value, ref_ordinal)
+    add_facet(action.subject_entity_facet, ref_ordinal, semantic_ref_index)
 
 
 def add_metadata_to_index[TMessage: IMessage](
@@ -94,11 +152,19 @@ def add_metadata_to_index[TMessage: IMessage](
 ) -> None:
     if knowledge_validator is None:
         knowledge_validator = default_knowledge_validator
+    # TODO: if semantic_ref_index is not None: ???
     for i, msg in enumerate(messages):
         knowledge_response = msg.get_knowledge()
         for entity in knowledge_response.entities:
             if knowledge_validator("entity", entity):
                 add_entity_to_index(entity, semantic_refs, semantic_ref_index, i)
+        for action in knowledge_response.actions:
+            if knowledge_validator("action", action):
+                add_action_to_index(action, semantic_refs, semantic_ref_index, i)
+        for topic_response in knowledge_response.topics:
+            topic = Topic(text=topic_response)
+            if knowledge_validator("topic", topic):
+                add_topic_to_index(topic, semantic_refs, semantic_ref_index, i)
 
 
 @dataclass
@@ -112,6 +178,9 @@ class ConversationIndex(ITermToSemanticRefIndex):
 
     def __len__(self) -> int:
         return len(self._map)
+
+    def __bool__(self) -> bool:
+        return True
 
     def get_terms(self) -> list[str]:
         return list(self._map)
@@ -139,14 +208,14 @@ class ConversationIndex(ITermToSemanticRefIndex):
         """Clean up a term if it has lost its last semantic reference."""
         term = self._prepare_term(term)
         if term in self._map and len(self._map[term]) == 0:
-            self.map.pop(term)
+            self._map.pop(term)
 
     def lookup_term(self, term: str) -> list[ScoredSemanticRefOrdinal] | None:
         return self._map.get(self._prepare_term(term)) or []
 
     def serialize(self) -> ITermToSemanticRefIndexData:
         items: list[ITermToSemanticRefIndexItem] = []
-        for term, semantic_ref_ordinals in self._map:
+        for term, semantic_ref_ordinals in self._map.items():
             items.append(
                 ITermToSemanticRefIndexItem(
                     term=term,
