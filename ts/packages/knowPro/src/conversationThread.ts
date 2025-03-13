@@ -76,11 +76,15 @@ export class ConversationThreads implements IConversationThreads {
     public serialize(): IConversationThreadData {
         const threadData: IThreadDataItem[] = [];
         const embeddingIndex = this.embeddingIndex;
+
         for (let i = 0; i < this.threads.length; ++i) {
             const thread = this.threads[i];
             threadData.push({
                 thread,
-                embedding: serializeEmbedding(embeddingIndex.get(i)),
+                embedding:
+                    embeddingIndex.size > 0
+                        ? serializeEmbedding(embeddingIndex.get(i))
+                        : [],
             });
         }
         return {
@@ -95,10 +99,12 @@ export class ConversationThreads implements IConversationThreads {
             const embeddings: NormalizedEmbedding[] = [];
             for (let i = 0; i < data.threads.length; ++i) {
                 this.threads.push(data.threads[i].thread);
-                const embedding = deserializeEmbedding(
-                    data.threads[i].embedding,
-                );
-                embeddings.push(embedding);
+                if (data.threads[i].embedding.length > 0) {
+                    const embedding = deserializeEmbedding(
+                        data.threads[i].embedding,
+                    );
+                    embeddings.push(embedding);
+                }
             }
             this.embeddingIndex.deserialize(embeddings);
         }

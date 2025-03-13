@@ -60,7 +60,7 @@ export async function createKnowproCommands(
                 knowledgeModel,
             ),
         searchTranslator: kp.createSearchTranslator(knowledgeModel),
-        basePath: "/data/testChat/knowpro_test",
+        basePath: "/data/testChat/knowpro",
         printer: new KnowProPrinter(),
     };
     await ensureDir(context.basePath);

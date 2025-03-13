@@ -156,6 +156,7 @@ export function createPodcastCommands(
             },
             options: {
                 threads: argBool("Export threads", true),
+                maxThreads: argNum("Max threads"),
             },
         };
     }
@@ -175,7 +176,10 @@ export function createPodcastCommands(
         const knowledgeStore = context.podcastMemory.conversation.knowledge;
         const knowledgeResponses: conversation.KnowledgeResponse[] = [];
 
-        const allThreads = await asyncArray.toArray(threads.entries());
+        let allThreads = await asyncArray.toArray(threads.entries());
+        if (namedArgs.maxThreads && namedArgs.maxThreads > 0) {
+            allThreads = allThreads.slice(0, namedArgs.maxThreads);
+        }
         context.printer.writeLine(`Exporting ${allThreads.length} threads`);
         const podcastMessages: cm.PodcastMessage[] = [];
         const podcastThreads: kp.Thread[] = [];
