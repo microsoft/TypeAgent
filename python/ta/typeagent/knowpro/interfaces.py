@@ -61,13 +61,13 @@ class ScoredSemanticRefOrdinal:
 
     def serialize(self) -> "ScoredSemanticRefOrdinalData":
         return ScoredSemanticRefOrdinalData(
-            semantic_ref_ordinal=self.semantic_ref_ordinal, score=self.score
+            semanticRefOrdinal=self.semantic_ref_ordinal, score=self.score
         )
 
     @staticmethod
     def deserialize(data: "ScoredSemanticRefOrdinalData") -> "ScoredSemanticRefOrdinal":
         return ScoredSemanticRefOrdinal(
-            semantic_ref_ordinal=data["semantic_ref_ordinal"],
+            semantic_ref_ordinal=data["semanticRefOrdinal"],
             score=data["score"],
         )
 
@@ -328,19 +328,19 @@ class IMessageTextIndex(Protocol):
         raise NotImplementedError
 
 
-# -----------------------------------
-# Serialization formats use TypedDict
-# -----------------------------------
+# --------------------------------------------------
+# Serialization formats use TypedDict and camelCase
+# --------------------------------------------------
 
 
 class ScoredSemanticRefOrdinalData(TypedDict):
-    semantic_ref_ordinal: SemanticRefOrdinal
+    semanticRefOrdinal: SemanticRefOrdinal
     score: float
 
 
 class TermToSemanticRefIndexItemData(TypedDict):
     term: str
-    scored_semantic_ref_ordinals: list[ScoredSemanticRefOrdinalData]
+    scoredSemanticRefOrdinals: list[ScoredSemanticRefOrdinalData]
 
 
 # Persistent form of a term index.
@@ -352,8 +352,8 @@ class IConversationData[TMessage](TypedDict):
     name_tag: str
     messages: list[TMessage]
     tags: list[str]
-    semantic_refs: list[SemanticRef]
-    semantic_index_data: NotRequired[TermToSemanticRefIndexData | None]
+    semanticRefs: list[SemanticRef]
+    semanticIndexData: NotRequired[TermToSemanticRefIndexData | None]
 
 
 # ------------------------

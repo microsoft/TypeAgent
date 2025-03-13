@@ -220,7 +220,7 @@ class ConversationIndex(ITermToSemanticRefIndex):
             items.append(
                 TermToSemanticRefIndexItemData(
                     term=term,
-                    scored_semantic_ref_ordinals=[
+                    scoredSemanticRefOrdinals=[
                         s.serialize() for s in scored_semantic_ref_ordinals
                     ],
                 )
@@ -232,7 +232,7 @@ class ConversationIndex(ITermToSemanticRefIndex):
             if term_data is not None and term_data["term"]:
                 self._map[self._prepare_term(term_data["term"])] = [
                     ScoredSemanticRefOrdinal.deserialize(s)
-                    for s in term_data["scored_semantic_ref_ordinals"]
+                    for s in term_data["scoredSemanticRefOrdinals"]
                 ]
 
     def _prepare_term(self, term: str) -> str:
