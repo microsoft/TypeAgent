@@ -20,11 +20,6 @@ function setupSiteAgent() {
         const pageUrl = window.location.href;
         const host = new URL(pageUrl).host;
 
-        if (host === "paleobiodb.org" || host === "www.paleobiodb.org") {
-            siteAgent = "browser.paleoBioDb";
-            window.browserConnect.enableSiteAgent(siteAgent);
-        }
-
         if (
             pageUrl.startsWith("https://embed.universaluclick.com/") ||
             pageUrl.startsWith("https://data.puzzlexperts.com/puzzleapp") ||

@@ -1,7 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-export {};
+import {
+    AppAgentManifest,
+    AppAgent,
+    TypeAgentAction,
+} from "@typeagent/agent-sdk";
+import { PaleoBioDbActions } from "./paleobiodbSchema.mjs";
 
 declare var taxaBrowser: any;
 declare var timeScale: any;
@@ -106,10 +111,133 @@ function getPrevalentTaxons() {
     return taxonNames;
 }
 
+interface Coordinates {
+    latitude: number;
+    longitude: number;
+}
+
+interface NominatimResponse {
+    lat: string;
+    lon: string;
+    display_name?: string;
+    place_id?: number;
+    // Add other properties as needed
+}
+
+async function getLatLong(locationName: string): Promise<Coordinates> {
+    const encodedLocation: string = encodeURIComponent(locationName);
+    const url: string = `https://nominatim.openstreetmap.org/search?q=${encodedLocation}&format=json&limit=1`;
+
+    try {
+        const response: Response = await fetch(url);
+        const data: NominatimResponse[] = await response.json();
+
+        if (data && data.length > 0) {
+            const { lat, lon } = data[0];
+            return {
+                latitude: parseFloat(lat),
+                longitude: parseFloat(lon),
+            };
+        } else {
+            throw new Error("Location not found");
+        }
+    } catch (error) {
+        console.error(
+            "Error fetching coordinates:",
+            error instanceof Error ? error.message : String(error),
+        );
+        throw error;
+    }
+}
+
+function getExtensionFilePath(fileName: string): Promise<string> {
+    return new Promise((resolve, reject) => {
+        // Set up a one-time listener for the response
+        const messageHandler = (event: any) => {
+            if (event.data.type === "FILE_PATH_RESULT") {
+                window.removeEventListener("message", messageHandler);
+                resolve(event.data.result);
+            }
+        };
+
+        window.addEventListener("message", messageHandler);
+
+        // Send request
+        window.postMessage({ type: "GET_FILE_PATH", fileName }, "*");
+
+        // Add timeout
+        setTimeout(() => {
+            window.removeEventListener("message", messageHandler);
+            reject(new Error("Timeout waiting for file path response"));
+        }, 5000);
+    });
+}
+
 function sendResponse(data: any) {
     document.dispatchEvent(
         new CustomEvent("fromPaleoDbAutomation", { detail: data }),
     );
+}
+
+export function createPaleoBioDbAgent(): AppAgent {
+    return {
+        async executeAction(
+            action: TypeAgentAction<PaleoBioDbActions>,
+            context,
+        ): Promise<undefined> {
+            console.log(`Executing action: ${action.actionName}`);
+            const actionName = action.actionName;
+            switch (actionName) {
+                case "setTaxonomicGroup": {
+                    enablePaleoBioDbFilter("", action.parameters.taxa);
+                    break;
+                }
+
+                case "setGeologicTimescale": {
+                    enablePaleoBioDbFilter(action.parameters.geologicTime, "");
+                    break;
+                }
+
+                case "clearFilters": {
+                    clearPaleoBioDbFilter(
+                        action.parameters.geologicTime,
+                        action.parameters.taxa,
+                        action.parameters.all,
+                    );
+                    break;
+                }
+
+                case "zoomIn": {
+                    zoomInOnPaleoBioDb();
+                    break;
+                }
+
+                case "zoomOut": {
+                    zoomOutOnPaleoBioDb();
+                    break;
+                }
+
+                case "panMap": {
+                    panMapOnPaleoBioDb(action.parameters.direction);
+                    break;
+                }
+
+                case "setMapLocation": {
+                    let locationData: any = {};
+                    locationData = await getLatLong(
+                        action.parameters.locationName,
+                    );
+                    if (locationData !== undefined) {
+                        setMapLocation(
+                            locationData.latitude,
+                            locationData.longitude,
+                        );
+                    }
+                    break;
+                }
+            }
+        },
+    };
 }
 
 document.addEventListener("toPaleoDbAutomation", function (e: any) {
@@ -118,28 +246,6 @@ document.addEventListener("toPaleoDbAutomation", function (e: any) {
     const actionName =
         message.actionName ?? message.fullActionName.split(".").at(-1);
     switch (actionName) {
-        case "setTaxonomicGroup": {
-            enablePaleoBioDbFilter("", message.parameters.taxa);
-            sendResponse({});
-            break;
-        }
-
-        case "setGeologicTimescale": {
-            enablePaleoBioDbFilter(message.parameters.geologicTime, "");
-            sendResponse({});
-            break;
-        }
-
-        case "clearFilters": {
-            clearPaleoBioDbFilter(
-                message.parameters.geologicTime,
-                message.parameters.taxa,
-                message.parameters.all,
-            );
-            sendResponse({});
-            break;
-        }
-
         case "zoomIn": {
             zoomInOnPaleoBioDb();
             sendResponse({});
@@ -151,20 +257,46 @@ document.addEventListener("toPaleoDbAutomation", function (e: any) {
             sendResponse({});
             break;
         }
+    }
+});
 
-        case "panMap": {
-            panMapOnPaleoBioDb(message.parameters.direction);
-            sendResponse({});
-            break;
-        }
-
-        case "setMapLocation": {
-            setMapLocation(
-                message.parameters.latitude,
-                message.parameters.longitude,
+async function readFileContent(fileName: string): Promise<string> {
+    const fileUrl = await getExtensionFilePath(fileName);
+    return fetch(fileUrl).then((response) => {
+        if (!response.ok) {
+            throw new Error(
+                `Failed to load file: ${response.status} ${response.statusText}`,
             );
-            sendResponse({});
-            break;
         }
+        return response.text();
+    });
+}
+
+let registered = false;
+document.addEventListener("DOMContentLoaded", async () => {
+    const schemaTs = await readFileContent("/sites/paleobiodbSchema.mts");
+    const agent = createPaleoBioDbAgent();
+    const manifest: AppAgentManifest = {
+        emojiChar: "🦖",
+        description:
+            "This enables users to explore paleological data. Users can filter fossil data by location, by geological time and by taxon.",
+        schema: {
+            description:
+                "This enables users to explore paleological data. Users can filter fossil data by location, by geological time and by taxon.",
+            schemaType: "PaleoBioDbActions",
+            schemaFile: { content: schemaTs, type: "ts" },
+        },
+    };
+
+    if (!registered) {
+        (window as any)
+            .registerTypeAgent("paleoBioDb", manifest, agent)
+            .then(() => {
+                console.log("PaleoBioDB agent registered");
+            })
+            .catch((e: any) => {
+                console.error("Failed to register PaleoBioDB agent", e);
+            });
+        registered = true;
     }
 });
