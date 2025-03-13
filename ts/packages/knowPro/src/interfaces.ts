@@ -92,7 +92,6 @@ export interface TextRange {
 export type DateRange = {
     start: Date;
     // Inclusive
-    // TODO: Make this exclusive. Impacts search code
     end?: Date | undefined;
 };
 
