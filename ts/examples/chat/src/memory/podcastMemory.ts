@@ -185,6 +185,7 @@ export function createPodcastCommands(
         const podcastThreads: kp.Thread[] = [];
         for (const threadEntry of allThreads) {
             const thread = threadEntry.value;
+            context.printer.writeInColor(chalk.cyan, thread.description);
             const range = conversation.toDateRange(thread.timeRange);
             const messageIds = await messageStore.getIdsInRange(
                 range.startDate,
