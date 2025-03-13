@@ -1279,10 +1279,6 @@ async function runBrowserAction(action: any) {
             );
             break;
         }
-        case "getConfiguration": {
-            responseObject = await getConfigValues();
-            break;
-        }
     }
 
     return {
