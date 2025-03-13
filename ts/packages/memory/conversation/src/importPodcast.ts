@@ -22,6 +22,8 @@ import {
     MessageTextIndex,
     createTermEmbeddingCache,
     buildTransientSecondaryIndexes,
+    buildSecondaryIndexes,
+    SecondaryIndexingResults,
 } from "knowpro";
 import { conversation as kpLib, split } from "knowledge-processor";
 import { collections, dateTime, getFileName, readAllText } from "typeagent";
@@ -154,6 +156,20 @@ export class Podcast implements IConversation<PodcastMessage> {
         );
         // buildConversationIndex now automatically builds standard secondary indexes
         // Pass false to build podcast specific secondary indexes only
+        await this.buildTransientSecondaryIndexes(false);
+        await this.secondaryIndexes.threads.buildIndex();
+        return result;
+    }
+
+    public async buildSecondaryIndexes(
+        eventHandler?: IndexingEventHandlers,
+    ): Promise<SecondaryIndexingResults> {
+        this.secondaryIndexes = new PodcastSecondaryIndexes(this.settings);
+        const result = await buildSecondaryIndexes(
+            this,
+            this.settings,
+            eventHandler,
+        );
         await this.buildTransientSecondaryIndexes(false);
         await this.secondaryIndexes.threads.buildIndex();
         return result;

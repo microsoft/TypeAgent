@@ -3,9 +3,9 @@
 
 import {
     IConversationThreads,
-    ScoredThreadIndex,
+    ScoredThreadOrdinal,
     Thread,
-    ThreadIndex,
+    ThreadOrdinal,
 } from "./interfaces.js";
 import {
     deserializeEmbedding,
@@ -42,21 +42,21 @@ export class ConversationThreads implements IConversationThreads {
         text: string,
         maxMatches?: number,
         thresholdScore?: number,
-    ): Promise<ScoredThreadIndex[]> {
+    ): Promise<ScoredThreadOrdinal[]> {
         const matches = await this.embeddingIndex.getIndexesOfNearest(
             text,
             maxMatches,
             thresholdScore,
         );
         return matches.map((m) => {
-            return { threadIndex: m.item, score: m.score };
+            return { threadOrdinal: m.item, score: m.score };
         });
     }
 
-    public removeThread(threadIndex: ThreadIndex) {
-        if (threadIndex >= 0) {
-            this.threads.splice(threadIndex, 1);
-            this.embeddingIndex.removeAt(threadIndex);
+    public removeThread(threadOrdinal: ThreadOrdinal) {
+        if (threadOrdinal >= 0) {
+            this.threads.splice(threadOrdinal, 1);
+            this.embeddingIndex.removeAt(threadOrdinal);
         }
     }
 
@@ -76,11 +76,15 @@ export class ConversationThreads implements IConversationThreads {
     public serialize(): IConversationThreadData {
         const threadData: IThreadDataItem[] = [];
         const embeddingIndex = this.embeddingIndex;
+
         for (let i = 0; i < this.threads.length; ++i) {
             const thread = this.threads[i];
             threadData.push({
                 thread,
-                embedding: serializeEmbedding(embeddingIndex.get(i)),
+                embedding:
+                    embeddingIndex.size > 0
+                        ? serializeEmbedding(embeddingIndex.get(i))
+                        : [],
             });
         }
         return {
@@ -95,10 +99,12 @@ export class ConversationThreads implements IConversationThreads {
             const embeddings: NormalizedEmbedding[] = [];
             for (let i = 0; i < data.threads.length; ++i) {
                 this.threads.push(data.threads[i].thread);
-                const embedding = deserializeEmbedding(
-                    data.threads[i].embedding,
-                );
-                embeddings.push(embedding);
+                if (data.threads[i].embedding.length > 0) {
+                    const embedding = deserializeEmbedding(
+                        data.threads[i].embedding,
+                    );
+                    embeddings.push(embedding);
+                }
             }
             this.embeddingIndex.deserialize(embeddings);
         }

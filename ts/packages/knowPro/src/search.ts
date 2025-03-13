@@ -7,11 +7,11 @@ import {
     IConversation,
     KnowledgeType,
     ScoredKnowledge,
-    ScoredSemanticRef,
+    ScoredSemanticRefOrdinal,
     SemanticRef,
     Term,
     IConversationSecondaryIndexes,
-    ScoredMessageIndex,
+    ScoredMessageOrdinal,
 } from "./interfaces.js";
 import { mergedEntities, mergeTopics } from "./knowledge.js";
 import * as q from "./query.js";
@@ -118,11 +118,11 @@ export type SearchOptions = {
 
 export type SemanticRefSearchResult = {
     termMatches: Set<string>;
-    semanticRefMatches: ScoredSemanticRef[];
+    semanticRefMatches: ScoredSemanticRefOrdinal[];
 };
 
 export type ConversationSearchResult = {
-    messageMatches: ScoredMessageIndex[];
+    messageMatches: ScoredMessageOrdinal[];
     knowledgeMatches: Map<KnowledgeType, SemanticRefSearchResult>;
 };
 
@@ -154,7 +154,7 @@ export async function searchConversation(
         knowledgeMatches,
     );
     return {
-        messageMatches: messageMatches.toScoredMessageIndexes(),
+        messageMatches: messageMatches.toScoredMessageOrdinals(),
         knowledgeMatches,
     };
 }
@@ -196,7 +196,7 @@ export async function searchConversationKnowledge(
 
 export function getDistinctEntityMatches(
     semanticRefs: SemanticRef[],
-    searchResults: ScoredSemanticRef[],
+    searchResults: ScoredSemanticRefOrdinal[],
     topK?: number,
 ): ScoredKnowledge[] {
     return mergedEntities(semanticRefs, searchResults, topK);
@@ -204,7 +204,7 @@ export function getDistinctEntityMatches(
 
 export function getDistinctTopicMatches(
     semanticRefs: SemanticRef[],
-    searchResults: ScoredSemanticRef[],
+    searchResults: ScoredSemanticRefOrdinal[],
     topK?: number,
 ): ScoredKnowledge[] {
     return mergeTopics(semanticRefs, searchResults, topK);
@@ -353,7 +353,7 @@ class SearchQueryBuilder {
                 scopeSelectors.push(
                     new q.ThreadSelector(
                         threadsInScope.map(
-                            (t) => threads.threads[t.threadIndex],
+                            (t) => threads.threads[t.threadOrdinal],
                         ),
                     ),
                 );
@@ -467,9 +467,9 @@ class SearchQueryBuilder {
     private boostEntities(
         searchTerm: SearchTerm,
         sr: SemanticRef,
-        scoredRef: ScoredSemanticRef,
+        scoredRef: ScoredSemanticRefOrdinal,
         boostWeight: number,
-    ): ScoredSemanticRef {
+    ): ScoredSemanticRefOrdinal {
         if (
             sr.knowledgeType === "entity" &&
             q.matchEntityNameOrType(
@@ -478,7 +478,7 @@ class SearchQueryBuilder {
             )
         ) {
             scoredRef = {
-                semanticRefIndex: scoredRef.semanticRefIndex,
+                semanticRefOrdinal: scoredRef.semanticRefOrdinal,
                 score: scoredRef.score * boostWeight,
             };
         }
