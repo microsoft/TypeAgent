@@ -60,30 +60,6 @@ function sendToBrowserAgent(message: any) {
     ipcRenderer.send("send-to-browser-ipc", message);
 }
 
-export async function getLatLongForLocation(locationName: string) {
-    const mapsApiKey = process.env["BING_MAPS_API_KEY"];
-    const response = await fetch(
-        `https://dev.virtualearth.net/REST/v1/Locations/${locationName}?key=${mapsApiKey}`,
-        {
-            method: "GET",
-            headers: {
-                "Content-Type": "application/json",
-            },
-        },
-    );
-    if (response.ok) {
-        const json = await response.json();
-        const coordinates = json.resourceSets[0].resources[0].point.coordinates;
-        return {
-            lat: coordinates[0],
-            long: coordinates[1],
-        };
-    } else {
-        console.log(response.statusText);
-        return undefined;
-    }
-}
-
 export async function awaitPageLoad() {
     /*
     return new Promise<string | undefined>((resolve, reject) => {
@@ -385,29 +361,6 @@ async function runBrowserAction(action: any) {
 async function runSiteAction(schemaName: string, action: any) {
     let confirmationMessage = "OK";
     switch (schemaName) {
-        case "browser.paleoBioDb": {
-            const actionName =
-                action.actionName ?? action.fullActionName.split(".").at(-1);
-            if (
-                actionName == "setMapLocation" &&
-                action.parameters.locationName
-            ) {
-                const latLong = await getLatLongForLocation(
-                    action.parameters.locationName,
-                );
-                if (latLong) {
-                    action.parameters.latitude = latLong.lat;
-                    action.parameters.longitude = latLong.long;
-                }
-            }
-
-            sendScriptAction({
-                type: "run_paleoBioDb_action",
-                action: action,
-            });
-
-            break;
-        }
         case "browser.crossword": {
             sendScriptAction({
                 type: "run_crossword_action",
@@ -450,7 +403,7 @@ contextBridge.exposeInMainWorld("browserConnect", {
     },
 });
 
-window.addEventListener("message", (event) => {
+window.addEventListener("message", async (event) => {
     if (event.data !== undefined && event.data.source === "webAgent") {
         sendToBrowserAgent(event.data);
     }
