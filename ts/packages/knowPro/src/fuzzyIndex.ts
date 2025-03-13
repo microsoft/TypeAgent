@@ -387,12 +387,14 @@ export function createTextEmbeddingIndexSettings(
     embeddingModel: TextEmbeddingModel,
     embeddingSize: number,
     minScore?: number,
+    maxMatches?: number,
 ): TextEmbeddingIndexSettings {
     minScore ??= 0.85;
     return {
         embeddingModel,
         embeddingSize,
         minScore,
+        maxMatches,
         retryMaxAttempts: 2,
         retryPauseMs: 2000,
         batchSize: 8,

@@ -1083,7 +1083,7 @@ export class ThreadSelector implements IQueryTextRangeSelector {
     }
 }
 
-export function toGroupedSearchResults(
+function toGroupedSearchResults(
     evalResults: Map<KnowledgeType, SemanticRefAccumulator>,
 ): Map<KnowledgeType, SemanticRefSearchResult> {
     const semanticRefMatches = new Map<
@@ -1099,6 +1099,24 @@ export function toGroupedSearchResults(
         }
     }
     return semanticRefMatches;
+}
+
+export class MessagesFromKnowledgeExpr extends QueryOpExpr<MessageAccumulator> {
+    constructor(
+        public srcExpr: IQueryOpExpr<
+            Map<KnowledgeType, SemanticRefSearchResult>
+        >,
+    ) {
+        super();
+    }
+
+    public override eval(context: QueryEvalContext): MessageAccumulator {
+        const knowledge = this.srcExpr.eval(context);
+        return messageMatchesFromKnowledgeMatches(
+            context.semanticRefs,
+            knowledge,
+        );
+    }
 }
 
 export function messageMatchesFromKnowledgeMatches(
