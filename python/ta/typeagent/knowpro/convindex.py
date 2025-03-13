@@ -9,8 +9,6 @@ from .interfaces import (
     IConversation,
     IMessage,
     ITermToSemanticRefIndex,
-    ITermToSemanticRefIndexData,
-    ITermToSemanticRefIndexItem,
     # Other imports.
     IndexingEventHandlers,
     IndexingResults,
@@ -20,6 +18,8 @@ from .interfaces import (
     SemanticRefOrdinal,
     ScoredSemanticRefOrdinal,
     SemanticRef,
+    TermToSemanticRefIndexItemData,
+    TermToSemanticRefIndexData,
     TextLocation,
     TextRange,
     Topic,
@@ -170,7 +170,7 @@ def add_metadata_to_index[TMessage: IMessage](
 class ConversationIndex(ITermToSemanticRefIndex):
     _map: dict[str, list[ScoredSemanticRefOrdinal]]
 
-    def __init__(self, data: ITermToSemanticRefIndexData | None = None):
+    def __init__(self, data: TermToSemanticRefIndexData | None = None):
         self._map = {}
         if data:
             self.deserialize(data)
@@ -213,23 +213,26 @@ class ConversationIndex(ITermToSemanticRefIndex):
         if term in self._map and len(self._map[term]) == 0:
             self._map.pop(term)
 
-    def serialize(self) -> ITermToSemanticRefIndexData:
+    def serialize(self) -> TermToSemanticRefIndexData:
         # TODO: Produce propery JSON-able dicts instead of Python objects?
-        items: list[ITermToSemanticRefIndexItem] = []
-        for term, semantic_ref_ordinals in self._map.items():
+        items: list[TermToSemanticRefIndexItemData] = []
+        for term, scored_semantic_ref_ordinals in self._map.items():
             items.append(
-                ITermToSemanticRefIndexItem(
+                TermToSemanticRefIndexItemData(
                     term=term,
-                    semantic_ref_ordinals=semantic_ref_ordinals,
+                    scored_semantic_ref_ordinals=[
+                        s.serialize() for s in scored_semantic_ref_ordinals
+                    ],
                 )
             )
-        return ITermToSemanticRefIndexData(items=items)
+        return TermToSemanticRefIndexData(items=items)
 
-    def deserialize(self, data: ITermToSemanticRefIndexData) -> None:
+    def deserialize(self, data: TermToSemanticRefIndexData) -> None:
         for term_data in data["items"]:
             if term_data is not None and term_data["term"]:
-                self._map[self._prepare_term(term_data["term"])] = term_data[
-                    "semantic_ref_ordinals"
+                self._map[self._prepare_term(term_data["term"])] = [
+                    ScoredSemanticRefOrdinal.deserialize(s)
+                    for s in term_data["scored_semantic_ref_ordinals"]
                 ]
 
     def _prepare_term(self, term: str) -> str:

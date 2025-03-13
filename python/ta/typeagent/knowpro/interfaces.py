@@ -19,6 +19,7 @@ from typing import (
     NotRequired,
     Protocol,
     runtime_checkable,
+    Self,
     TypedDict,
 )
 
@@ -57,6 +58,18 @@ type SemanticRefOrdinal = int
 class ScoredSemanticRefOrdinal:
     semantic_ref_ordinal: SemanticRefOrdinal
     score: float
+
+    def serialize(self) -> "ScoredSemanticRefOrdinalData":
+        return ScoredSemanticRefOrdinalData(
+            semantic_ref_ordinal=self.semantic_ref_ordinal, score=self.score
+        )
+
+    @staticmethod
+    def deserialize(data: "ScoredSemanticRefOrdinalData") -> "ScoredSemanticRefOrdinal":
+        return ScoredSemanticRefOrdinal(
+            semantic_ref_ordinal=data["semantic_ref_ordinal"],
+            score=data["score"],
+        )
 
 
 @dataclass
@@ -320,14 +333,19 @@ class IMessageTextIndex(Protocol):
 # -----------------------------------
 
 
-class ITermToSemanticRefIndexItem(TypedDict):
+class ScoredSemanticRefOrdinalData(TypedDict):
+    semantic_ref_ordinal: SemanticRefOrdinal
+    score: float
+
+
+class TermToSemanticRefIndexItemData(TypedDict):
     term: str
-    semantic_ref_ordinals: list[ScoredSemanticRefOrdinal]
+    scored_semantic_ref_ordinals: list[ScoredSemanticRefOrdinalData]
 
 
 # Persistent form of a term index.
-class ITermToSemanticRefIndexData(TypedDict):
-    items: list[ITermToSemanticRefIndexItem]
+class TermToSemanticRefIndexData(TypedDict):
+    items: list[TermToSemanticRefIndexItemData]
 
 
 class IConversationData[TMessage](TypedDict):
@@ -335,7 +353,7 @@ class IConversationData[TMessage](TypedDict):
     messages: list[TMessage]
     tags: list[str]
     semantic_refs: list[SemanticRef]
-    semantic_index_data: NotRequired[ITermToSemanticRefIndexData | None]
+    semantic_index_data: NotRequired[TermToSemanticRefIndexData | None]
 
 
 # ------------------------

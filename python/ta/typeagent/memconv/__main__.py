@@ -4,6 +4,7 @@
 
 import argparse
 from datetime import datetime as Datetime
+import json
 import sys
 from typing import cast
 
@@ -56,11 +57,13 @@ async def main():
     print()
     await pod.build_index(handler)
     if pod.semantic_ref_index is not None:
+
         data = pod.semantic_ref_index.serialize()
         new = ConversationIndex(data)
         assert new.serialize() == data
+        # print(json.dumps(data, indent=2))
 
-    # print(pod)
+    # print(await pod.serialize())
 
 
 if __name__ == "__main__":
