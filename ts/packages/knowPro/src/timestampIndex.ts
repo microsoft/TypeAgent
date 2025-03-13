@@ -7,7 +7,7 @@ import {
     IConversation,
     IMessage,
     ListIndexingResult,
-    MessageIndex,
+    MessageOrdinal,
 } from "./interfaces.js";
 import { textRangeFromLocation } from "./conversationIndex.js";
 import {
@@ -47,14 +47,14 @@ export class TimestampToTextRangeIndex implements ITimestampToTextRangeIndex {
     }
 
     public addTimestamp(
-        messageIndex: MessageIndex,
+        messageOrdinal: MessageOrdinal,
         timestamp: string,
     ): boolean {
-        return this.insertTimestamp(messageIndex, timestamp, true);
+        return this.insertTimestamp(messageOrdinal, timestamp, true);
     }
 
     public addTimestamps(
-        messageTimestamps: [MessageIndex, string][],
+        messageTimestamps: [MessageOrdinal, string][],
     ): ListIndexingResult {
         for (let i = 0; i < messageTimestamps.length; ++i) {
             const [messageIndex, timestamp] = messageTimestamps[i];
@@ -65,7 +65,7 @@ export class TimestampToTextRangeIndex implements ITimestampToTextRangeIndex {
     }
 
     private insertTimestamp(
-        messageIndex: MessageIndex,
+        messageOrdinal: MessageOrdinal,
         timestamp: string | undefined,
         inOrder: boolean,
     ) {
@@ -74,7 +74,7 @@ export class TimestampToTextRangeIndex implements ITimestampToTextRangeIndex {
         }
         const timestampDate = new Date(timestamp);
         const entry: TimestampedTextRange = {
-            range: textRangeFromLocation(messageIndex),
+            range: textRangeFromLocation(messageOrdinal),
             // This string is formatted to be lexically sortable
             timestamp: this.dateToTimestamp(timestampDate),
         };
@@ -126,13 +126,13 @@ export function buildTimestampIndex(
 export function addToTimestampIndex(
     timestampIndex: ITimestampToTextRangeIndex,
     messages: IMessage[],
-    baseMessageIndex: MessageIndex,
+    baseMessageOrdinal: MessageOrdinal,
 ): ListIndexingResult {
-    const messageTimestamps: [MessageIndex, string][] = [];
+    const messageTimestamps: [MessageOrdinal, string][] = [];
     for (let i = 0; i < messages.length; ++i) {
         const timestamp = messages[i].timestamp;
         if (timestamp) {
-            messageTimestamps.push([i + baseMessageIndex, timestamp]);
+            messageTimestamps.push([i + baseMessageOrdinal, timestamp]);
         }
     }
     return timestampIndex.addTimestamps(messageTimestamps);

@@ -7,10 +7,10 @@ import {
     IMessage,
     ITermToSemanticRefIndex,
     KnowledgeType,
-    MessageIndex,
-    ScoredSemanticRef,
+    MessageOrdinal,
+    ScoredSemanticRefOrdinal,
     SemanticRef,
-    SemanticRefIndex,
+    SemanticRefOrdinal,
     Tag,
     Term,
     TextRange,
@@ -55,27 +55,27 @@ export function getTextRangeForDateRange(
     dateRange: DateRange,
 ): TextRange | undefined {
     const messages = conversation.messages;
-    let rangeStartIndex: MessageIndex = -1;
-    let rangeEndIndex = rangeStartIndex;
+    let rangeStartOrdinal: MessageOrdinal = -1;
+    let rangeEndOrdinal = rangeStartOrdinal;
     for (let messageIndex = 0; messageIndex < messages.length; ++messageIndex) {
         const message = messages[messageIndex];
         if (message.timestamp) {
             if (isInDateRange(dateRange, new Date(message.timestamp))) {
-                if (rangeStartIndex < 0) {
-                    rangeStartIndex = messageIndex;
+                if (rangeStartOrdinal < 0) {
+                    rangeStartOrdinal = messageIndex;
                 }
-                rangeEndIndex = messageIndex;
+                rangeEndOrdinal = messageIndex;
             } else {
-                if (rangeStartIndex >= 0) {
+                if (rangeStartOrdinal >= 0) {
                     break;
                 }
             }
         }
     }
-    if (rangeStartIndex >= 0) {
+    if (rangeStartOrdinal >= 0) {
         return {
-            start: { messageIndex: rangeStartIndex },
-            end: { messageIndex: rangeEndIndex + 1 },
+            start: { messageOrdinal: rangeStartOrdinal },
+            end: { messageOrdinal: rangeEndOrdinal + 1 },
         };
     }
     return undefined;
@@ -288,12 +288,15 @@ export function lookupTermFiltered(
     semanticRefIndex: ITermToSemanticRefIndex,
     term: Term,
     semanticRefs: SemanticRef[],
-    filter: (semanticRef: SemanticRef, scoredRef: ScoredSemanticRef) => boolean,
-): ScoredSemanticRef[] | undefined {
+    filter: (
+        semanticRef: SemanticRef,
+        scoredRef: ScoredSemanticRefOrdinal,
+    ) => boolean,
+): ScoredSemanticRefOrdinal[] | undefined {
     const scoredRefs = semanticRefIndex.lookupTerm(term.text);
     if (scoredRefs && scoredRefs.length > 0) {
         let filtered = scoredRefs.filter((sr) => {
-            const semanticRef = semanticRefs[sr.semanticRefIndex];
+            const semanticRef = semanticRefs[sr.semanticRefOrdinal];
             const result = filter(semanticRef, sr);
             return result;
         });
@@ -307,7 +310,7 @@ export function lookupTerm(
     term: Term,
     semanticRefs: SemanticRef[],
     rangesInScope?: TextRangesInScope,
-): ScoredSemanticRef[] | undefined {
+): ScoredSemanticRefOrdinal[] | undefined {
     if (rangesInScope) {
         // If rangesInScope has no actual text ranges, then lookups can't possibly match
         return lookupTermFiltered(semanticRefIndex, term, semanticRefs, (sr) =>
@@ -322,7 +325,7 @@ export function lookupProperty(
     propertySearchTerm: PropertySearchTerm,
     semanticRefs: SemanticRef[],
     rangesInScope?: TextRangesInScope,
-): ScoredSemanticRef[] | undefined {
+): ScoredSemanticRefOrdinal[] | undefined {
     if (typeof propertySearchTerm.propertyName !== "string") {
         throw new Error("Not supported");
     }
@@ -394,12 +397,12 @@ export class QueryEvalContext {
         return this.conversation.semanticRefs!;
     }
 
-    public getSemanticRef(semanticRefIndex: SemanticRefIndex): SemanticRef {
-        return this.conversation.semanticRefs![semanticRefIndex];
+    public getSemanticRef(semanticRefOrdinal: SemanticRefOrdinal): SemanticRef {
+        return this.conversation.semanticRefs![semanticRefOrdinal];
     }
 
     public getMessageForRef(semanticRef: SemanticRef): IMessage {
-        const messageIndex = semanticRef.range.start.messageIndex;
+        const messageIndex = semanticRef.range.start.messageOrdinal;
         return this.conversation.messages[messageIndex];
     }
 
@@ -541,8 +544,8 @@ export class MatchSearchTermExpr extends MatchTermExpr {
         public scoreBooster?: (
             searchTerm: SearchTerm,
             sr: SemanticRef,
-            scored: ScoredSemanticRef,
-        ) => ScoredSemanticRef,
+            scored: ScoredSemanticRefOrdinal,
+        ) => ScoredSemanticRefOrdinal,
     ) {
         super();
     }
@@ -572,7 +575,10 @@ export class MatchSearchTermExpr extends MatchTermExpr {
     protected lookupTerm(
         context: QueryEvalContext,
         term: Term,
-    ): ScoredSemanticRef[] | IterableIterator<ScoredSemanticRef> | undefined {
+    ):
+        | ScoredSemanticRefOrdinal[]
+        | IterableIterator<ScoredSemanticRefOrdinal>
+        | undefined {
         const matches = lookupTerm(
             context.semanticRefIndex,
             term,
@@ -583,7 +589,7 @@ export class MatchSearchTermExpr extends MatchTermExpr {
             for (let i = 0; i < matches.length; ++i) {
                 matches[i] = this.scoreBooster(
                     this.searchTerm,
-                    context.getSemanticRef(matches[i].semanticRefIndex),
+                    context.getSemanticRef(matches[i].semanticRefOrdinal),
                     matches[i],
                 );
             }
@@ -745,7 +751,7 @@ export class MatchPropertySearchTermExpr extends MatchTermExpr {
         context: QueryEvalContext,
         propertyName: string,
         propertyValue: string,
-    ): ScoredSemanticRef[] | undefined {
+    ): ScoredSemanticRefOrdinal[] | undefined {
         if (context.propertyIndex) {
             return lookupPropertyInPropertyIndex(
                 context.propertyIndex,
@@ -766,7 +772,7 @@ export class MatchPropertySearchTermExpr extends MatchTermExpr {
         context: QueryEvalContext,
         propertyName: string,
         propertyValue: string,
-    ): ScoredSemanticRef[] | undefined {
+    ): ScoredSemanticRefOrdinal[] | undefined {
         return lookupProperty(
             context.semanticRefIndex,
             {
@@ -786,7 +792,7 @@ export class MatchTagExpr extends MatchSearchTermExpr {
     protected override lookupTerm(
         context: QueryEvalContext,
         term: Term,
-    ): ScoredSemanticRef[] | undefined {
+    ): ScoredSemanticRefOrdinal[] | undefined {
         return lookupTermFiltered(
             context.semanticRefIndex,
             term,
@@ -877,7 +883,7 @@ export class WhereSemanticRefExpr extends QueryOpExpr<SemanticRefAccumulator> {
     private evalPredicates(
         context: QueryEvalContext,
         predicates: IQuerySemanticRefPredicate[],
-        match: Match<SemanticRefIndex>,
+        match: Match<SemanticRefOrdinal>,
     ) {
         for (let i = 0; i < predicates.length; ++i) {
             const semanticRef = context.getSemanticRef(match.value);
@@ -1107,7 +1113,7 @@ export function messageMatchesFromKnowledgeMatches(
             expectedHitCount++;
             for (const match of matchesByType.semanticRefMatches) {
                 messageMatches.addMessagesForSemanticRef(
-                    semanticRefs[match.semanticRefIndex],
+                    semanticRefs[match.semanticRefOrdinal],
                     match.score,
                 );
             }

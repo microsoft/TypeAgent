@@ -19,6 +19,7 @@ import {
     InteractiveIo,
     NamedArgs,
     parseNamedArguments,
+    ProgressBar,
 } from "interactive-app";
 import {
     argClean,
@@ -38,12 +39,12 @@ import {
     isFilePath,
     NameValue,
     removeDir,
-    writeJsonFile,
 } from "typeagent";
 import { runImportQueue } from "./importer.js";
 import chalk from "chalk";
 import * as kp from "knowpro";
 import * as cm from "conversation-memory";
+import { createIndexingEventHandler } from "./knowproCommon.js";
 
 export async function createPodcastMemory(
     models: Models,
@@ -155,22 +156,36 @@ export function createPodcastCommands(
             },
             options: {
                 threads: argBool("Export threads", true),
+                maxThreads: argNum("Max threads"),
             },
         };
     }
     commands.podcastExport.metadata = podcastExportDef();
     async function podcastExport(args: string[]) {
         const namedArgs = parseNamedArguments(args, podcastExportDef());
+        const dirName = path.dirname(namedArgs.filePath);
+        const baseFileName = getFileName(namedArgs.filePath);
+        context.printer.writeLine(
+            `Exporting to ${dirName} with base file name ${baseFileName}`,
+        );
+        await ensureDir(dirName);
+
         const messageStore = context.podcastMemory.conversation.messages;
         const threads =
             await context.podcastMemory.conversation.getThreadIndex();
         const knowledgeStore = context.podcastMemory.conversation.knowledge;
         const knowledgeResponses: conversation.KnowledgeResponse[] = [];
 
+        let allThreads = await asyncArray.toArray(threads.entries());
+        if (namedArgs.maxThreads && namedArgs.maxThreads > 0) {
+            allThreads = allThreads.slice(0, namedArgs.maxThreads);
+        }
+        context.printer.writeLine(`Exporting ${allThreads.length} threads`);
         const podcastMessages: cm.PodcastMessage[] = [];
         const podcastThreads: kp.Thread[] = [];
-        for await (const threadEntry of threads.entries()) {
+        for (const threadEntry of allThreads) {
             const thread = threadEntry.value;
+            context.printer.writeInColor(chalk.cyan, thread.description);
             const range = conversation.toDateRange(thread.timeRange);
             const messageIds = await messageStore.getIdsInRange(
                 range.startDate,
@@ -178,10 +193,11 @@ export function createPodcastCommands(
             );
             let threadRange: kp.TextRange = {
                 start: {
-                    messageIndex: podcastMessages.length,
+                    messageOrdinal: podcastMessages.length,
                 },
             };
             const messages = await messageStore.getMultiple(messageIds);
+            const progress = new ProgressBar(context.printer, messages.length);
             for (let i = 0; i < messageIds.length; ++i) {
                 const messageId = messageIds[i];
                 const message = messages[i]!;
@@ -190,7 +206,7 @@ export function createPodcastCommands(
                 );
                 podcastMessage.addTimestamp(message.timestamp.toISOString());
                 threadRange.end = {
-                    messageIndex: podcastMessages.length,
+                    messageOrdinal: podcastMessages.length,
                 };
                 podcastMessages.push(podcastMessage);
                 knowledgeResponses.push(
@@ -198,7 +214,9 @@ export function createPodcastCommands(
                         await knowledgeStore.get(messageId),
                     ),
                 );
+                progress.advance();
             }
+            progress.complete();
             podcastThreads.push({
                 description: thread.description,
                 ranges: [threadRange],
@@ -212,11 +230,25 @@ export function createPodcastCommands(
             knowledgeResponses,
         );
         kpPodcast.secondaryIndexes.threads.threads.push(...podcastThreads);
-        await kpPodcast.buildIndex();
+        const progress = new ProgressBar(
+            context.printer,
+            podcastMessages.length,
+        );
 
-        const podcastData = kpPodcast.serialize();
-        await ensureDir(path.dirname(namedArgs.filePath));
-        await writeJsonFile(namedArgs.filePath, podcastData);
+        context.printer.writeLine("Building secondary indexes");
+        await kp.buildSecondaryIndexes(
+            kpPodcast,
+            kpPodcast.settings,
+            createIndexingEventHandler(
+                context.printer,
+                progress,
+                podcastMessages.length,
+            ),
+        );
+        progress.complete();
+
+        context.printer.writeLine("Saving index");
+        await kpPodcast.writeToFile(dirName, baseFileName);
     }
 
     // Eventually we should unite these functions with their

@@ -3,11 +3,11 @@
 import { TextEmbeddingIndexSettings } from "./fuzzyIndex.js";
 import {
     IMessage,
-    MessageIndex,
+    MessageOrdinal,
     IndexingEventHandlers,
     TextLocation,
     ListIndexingResult,
-    ScoredMessageIndex,
+    ScoredMessageOrdinal,
     IConversation,
     IMessageTextIndex,
 } from "./interfaces.js";
@@ -41,12 +41,12 @@ export class MessageTextIndex implements IMessageTextIndex {
         messages: IMessage[],
         eventHandler?: IndexingEventHandlers,
     ): Promise<ListIndexingResult> {
-        const baseMessageIndex: MessageIndex = this.size;
+        const baseMessageOrdinal: MessageOrdinal = this.size;
         const allChunks: [string, TextLocation][] = [];
         // Collect everything so we can batch efficiently
         for (let i = 0; i < messages.length; ++i) {
             const message = messages[i];
-            let messageIndex = baseMessageIndex + i;
+            let messageOrdinal = baseMessageOrdinal + i;
             for (
                 let chunkIndex = 0;
                 chunkIndex < message.textChunks.length;
@@ -54,7 +54,7 @@ export class MessageTextIndex implements IMessageTextIndex {
             ) {
                 allChunks.push([
                     message.textChunks[chunkIndex],
-                    { messageIndex, chunkIndex },
+                    { messageOrdinal, chunkOrdinal: chunkIndex },
                 ]);
             }
         }
@@ -65,7 +65,7 @@ export class MessageTextIndex implements IMessageTextIndex {
         messageText: string,
         maxMatches?: number,
         thresholdScore?: number,
-    ): Promise<ScoredMessageIndex[]> {
+    ): Promise<ScoredMessageOrdinal[]> {
         maxMatches ??= this.settings.embeddingIndexSettings.maxMatches;
         thresholdScore ??= this.settings.embeddingIndexSettings.minScore;
         const scoredLocations = await this.textLocationIndex.lookupText(
@@ -75,7 +75,7 @@ export class MessageTextIndex implements IMessageTextIndex {
         );
         return scoredLocations.map((sl) => {
             return {
-                messageIndex: sl.textLocation.messageIndex,
+                messageOrdinal: sl.textLocation.messageOrdinal,
                 score: sl.score,
             };
         });
@@ -83,19 +83,19 @@ export class MessageTextIndex implements IMessageTextIndex {
 
     public async lookupMessagesInSubset(
         messageText: string,
-        indicesToSearch: MessageIndex[],
+        ordinalsToSearch: MessageOrdinal[],
         maxMatches?: number,
         thresholdScore?: number,
-    ): Promise<ScoredMessageIndex[]> {
+    ): Promise<ScoredMessageOrdinal[]> {
         const scoredLocations = await this.textLocationIndex.lookupTextInSubset(
             messageText,
-            indicesToSearch,
+            ordinalsToSearch,
             maxMatches,
             thresholdScore,
         );
         return scoredLocations.map((sl) => {
             return {
-                messageIndex: sl.textLocation.messageIndex,
+                messageOrdinal: sl.textLocation.messageOrdinal,
                 score: sl.score,
             };
         });

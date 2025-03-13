@@ -31,10 +31,13 @@ import chalk from "chalk";
 import { KnowProPrinter } from "./knowproPrinter.js";
 import * as cm from "conversation-memory";
 import * as im from "image-memory";
-import { matchFilterToConversation } from "./knowproCommon.js";
+import {
+    createIndexingEventHandler,
+    matchFilterToConversation,
+} from "./knowproCommon.js";
 import { TypeChatJsonTranslator } from "typechat";
 
-type KnowProContext = {
+export type KnowProContext = {
     knowledgeModel: ChatModel;
     knowledgeActions: knowLib.conversation.KnowledgeActionTranslator;
     basePath: string;
@@ -661,7 +664,7 @@ export async function createKnowproCommands(
         context.printer.writeLine(`Building Index`);
         let progress = new ProgressBar(context.printer, maxMessages);
         const eventHandler = createIndexingEventHandler(
-            context,
+            context.printer,
             progress,
             maxMessages,
         );
@@ -716,7 +719,7 @@ export async function createKnowproCommands(
             podcast,
             settings,
             createIndexingEventHandler(
-                context,
+                context.printer,
                 progress,
                 namedArgs.maxMessages,
             ),
@@ -760,7 +763,7 @@ export async function createKnowproCommands(
         const maxMessages = namedArgs.maxMessages ?? messageCount;
         let progress = new ProgressBar(context.printer, maxMessages);
         const indexResult = await context.images?.buildIndex(
-            createIndexingEventHandler(context, progress, maxMessages),
+            createIndexingEventHandler(context.printer, progress, maxMessages),
         );
         progress.complete();
         context.printer.writeIndexingResults(indexResult);
@@ -905,46 +908,4 @@ function splitTermValues(term: string): string[] {
         removeEmpty: true,
     });
     return allTermStrings;
-}
-
-function createIndexingEventHandler(
-    context: KnowProContext,
-    progress: ProgressBar,
-    maxMessages: number,
-): kp.IndexingEventHandlers {
-    let startedKnowledge = false;
-    let startedRelated = false;
-    let startedMessages = false;
-    return {
-        onKnowledgeExtracted() {
-            if (!startedKnowledge) {
-                context.printer.writeLine("Indexing knowledge");
-                startedKnowledge = true;
-            }
-            progress.advance();
-            return progress.count < maxMessages;
-        },
-        onEmbeddingsCreated(sourceTexts, batch, batchStartAt) {
-            if (!startedRelated) {
-                progress.reset(sourceTexts.length);
-                context.printer.writeLine(
-                    `Generating ${sourceTexts.length} embeddings`,
-                );
-                startedRelated = true;
-            }
-            progress.advance(batch.length);
-            return true;
-        },
-        onTextIndexed(textAndLocations, batch, batchStartAt) {
-            if (!startedMessages) {
-                progress.reset(textAndLocations.length);
-                context.printer.writeLine(
-                    `Indexing ${textAndLocations.length} messages`,
-                );
-                startedMessages = true;
-            }
-            progress.advance(batch.length);
-            return true;
-        },
-    };
 }

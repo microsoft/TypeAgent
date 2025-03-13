@@ -169,13 +169,13 @@ function markInvisibleNodesForCleanup() {
 }
 
 function getPageHTML(
-    fullSize: boolean,
-    documentHtml: string,
-    frameId: number,
-    useTimestampIds: boolean,
+    fullSize?: boolean,
+    documentHtml?: string,
+    frameId?: number,
+    useTimestampIds?: boolean,
 ) {
     if (!documentHtml) {
-        setIdsOnAllElements(frameId, useTimestampIds);
+        setIdsOnAllElements(frameId!, useTimestampIds);
         markInvisibleNodesForCleanup();
         documentHtml = document.children[0].outerHTML;
     }

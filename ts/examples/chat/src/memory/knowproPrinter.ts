@@ -49,7 +49,7 @@ export class KnowProPrinter extends ChatPrinter {
     }
 
     public writeScoredMessages(
-        messageIndexMatches: kp.ScoredMessageIndex[],
+        messageIndexMatches: kp.ScoredMessageOrdinal[],
         messages: kp.IMessage[],
         maxToDisplay: number,
     ) {
@@ -76,13 +76,13 @@ export class KnowProPrinter extends ChatPrinter {
     private writeScoredMessage(
         matchNumber: number,
         totalMatches: number,
-        scoredMessage: kp.ScoredMessageIndex,
+        scoredMessage: kp.ScoredMessageOrdinal,
         messages: kp.IMessage[],
     ) {
-        const message = messages[scoredMessage.messageIndex];
+        const message = messages[scoredMessage.messageOrdinal];
         this.writeInColor(
             chalk.green,
-            `#${matchNumber + 1} / ${totalMatches}: <${scoredMessage.messageIndex}> [${scoredMessage.score}]`,
+            `#${matchNumber + 1} / ${totalMatches}: <${scoredMessage.messageOrdinal}> [${scoredMessage.score}]`,
         );
         if (message) {
             this.writeMessage(message);
@@ -162,7 +162,7 @@ export class KnowProPrinter extends ChatPrinter {
     }
 
     public writeScoredSemanticRefs(
-        semanticRefMatches: kp.ScoredSemanticRef[],
+        semanticRefMatches: kp.ScoredSemanticRefOrdinal[],
         semanticRefs: kp.SemanticRef[],
         maxToDisplay: number,
     ) {
@@ -211,13 +211,13 @@ export class KnowProPrinter extends ChatPrinter {
     private writeScoredRef(
         matchNumber: number,
         totalMatches: number,
-        scoredRef: kp.ScoredSemanticRef,
+        scoredRef: kp.ScoredSemanticRefOrdinal,
         semanticRefs: kp.SemanticRef[],
     ) {
-        const semanticRef = semanticRefs[scoredRef.semanticRefIndex];
+        const semanticRef = semanticRefs[scoredRef.semanticRefOrdinal];
         this.writeInColor(
             chalk.green,
-            `#${matchNumber + 1} / ${totalMatches}: <${scoredRef.semanticRefIndex}> ${semanticRef.knowledgeType} [${scoredRef.score}]`,
+            `#${matchNumber + 1} / ${totalMatches}: <${scoredRef.semanticRefOrdinal}> ${semanticRef.knowledgeType} [${scoredRef.score}]`,
         );
         this.writeSemanticRef(semanticRef);
         this.writeLine();

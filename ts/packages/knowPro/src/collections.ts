@@ -5,11 +5,11 @@ import { collections, createTopNList } from "typeagent";
 import {
     Knowledge,
     KnowledgeType,
-    MessageIndex,
-    ScoredMessageIndex,
-    ScoredSemanticRef,
+    MessageOrdinal,
+    ScoredMessageOrdinal,
+    ScoredSemanticRefOrdinal,
     SemanticRef,
-    SemanticRefIndex,
+    SemanticRefOrdinal,
     Term,
     TextRange,
 } from "./interfaces.js";
@@ -246,7 +246,7 @@ function smoothTotalScore(match: Match): void {
 
 export type KnowledgePredicate<T extends Knowledge> = (knowledge: T) => boolean;
 
-export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
+export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefOrdinal> {
     constructor(public searchTermMatches = new Set<string>()) {
         super();
     }
@@ -254,8 +254,8 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
     public addTermMatches(
         searchTerm: Term,
         scoredRefs:
-            | ScoredSemanticRef[]
-            | IterableIterator<ScoredSemanticRef>
+            | ScoredSemanticRefOrdinal[]
+            | IterableIterator<ScoredSemanticRefOrdinal>
             | undefined,
         isExactMatch: boolean,
         weight?: number,
@@ -264,7 +264,7 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
             weight ??= searchTerm.weight ?? 1;
             for (const scoredRef of scoredRefs) {
                 this.add(
-                    scoredRef.semanticRefIndex,
+                    scoredRef.semanticRefOrdinal,
                     scoredRef.score * weight,
                     isExactMatch,
                 );
@@ -276,8 +276,8 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
     public addTermMatchesIfNew(
         searchTerm: Term,
         scoredRefs:
-            | ScoredSemanticRef[]
-            | IterableIterator<ScoredSemanticRef>
+            | ScoredSemanticRefOrdinal[]
+            | IterableIterator<ScoredSemanticRefOrdinal>
             | undefined,
         isExactMatch: boolean,
         weight?: number,
@@ -285,9 +285,9 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
         if (scoredRefs) {
             weight ??= searchTerm.weight ?? 1;
             for (const scoredRef of scoredRefs) {
-                if (!this.has(scoredRef.semanticRefIndex)) {
+                if (!this.has(scoredRef.semanticRefOrdinal)) {
                     this.add(
-                        scoredRef.semanticRefIndex,
+                        scoredRef.semanticRefOrdinal,
                         scoredRef.score * weight,
                         isExactMatch,
                     );
@@ -299,14 +299,14 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
 
     public override getSortedByScore(
         minHitCount?: number,
-    ): Match<SemanticRefIndex>[] {
+    ): Match<SemanticRefOrdinal>[] {
         return super.getSortedByScore(minHitCount);
     }
 
     public override getTopNScoring(
         maxMatches?: number,
         minHitCount?: number,
-    ): Match<SemanticRefIndex>[] {
+    ): Match<SemanticRefOrdinal>[] {
         return super.getTopNScoring(maxMatches, minHitCount);
     }
 
@@ -325,7 +325,7 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
         semanticRefs: SemanticRef[],
         knowledgeType: KnowledgeType,
         predicate?: KnowledgePredicate<T>,
-    ): IterableIterator<Match<SemanticRefIndex>> {
+    ): IterableIterator<Match<SemanticRefOrdinal>> {
         for (const match of this.getMatches()) {
             const semanticRef = semanticRefs[match.value];
             if (semanticRef.knowledgeType === knowledgeType) {
@@ -376,10 +376,10 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
         return intersection;
     }
 
-    public toScoredSemanticRefs(): ScoredSemanticRef[] {
+    public toScoredSemanticRefs(): ScoredSemanticRefOrdinal[] {
         return this.getSortedByScore(0).map((m) => {
             return {
-                semanticRefIndex: m.value,
+                semanticRefOrdinal: m.value,
                 score: m.score,
             };
         }, 0);
@@ -391,8 +391,8 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
     }
 }
 
-export class MessageAccumulator extends MatchAccumulator<MessageIndex> {
-    constructor(matches?: Match<MessageIndex>[]) {
+export class MessageAccumulator extends MatchAccumulator<MessageOrdinal> {
+    constructor(matches?: Match<MessageOrdinal>[]) {
         super();
         if (matches && matches.length > 0) {
             this.setMatches(matches);
@@ -426,18 +426,18 @@ export class MessageAccumulator extends MatchAccumulator<MessageIndex> {
         semanticRef: SemanticRef,
         score: number,
     ): void {
-        const messageIndexStart = semanticRef.range.start.messageIndex;
+        const messageOrdinalStart = semanticRef.range.start.messageOrdinal;
         if (semanticRef.range.end) {
-            const messageIndexEnd = semanticRef.range.end.messageIndex;
+            const messageOrdinalEnd = semanticRef.range.end.messageOrdinal;
             for (
-                let messageIndex = messageIndexStart;
-                messageIndex < messageIndexEnd;
-                ++messageIndex
+                let messageOrdinal = messageOrdinalStart;
+                messageOrdinal < messageOrdinalEnd;
+                ++messageOrdinal
             ) {
-                this.add(messageIndex, score, true);
+                this.add(messageOrdinal, score, true);
             }
         } else {
-            this.add(messageIndexStart, score, true);
+            this.add(messageOrdinalStart, score, true);
         }
     }
 
@@ -448,10 +448,10 @@ export class MessageAccumulator extends MatchAccumulator<MessageIndex> {
         }
     }
 
-    public toScoredMessageIndexes(): ScoredMessageIndex[] {
+    public toScoredMessageOrdinals(): ScoredMessageOrdinal[] {
         return this.getSortedByScore(0).map((m) => {
             return {
-                messageIndex: m.value,
+                messageOrdinal: m.value,
                 score: m.score,
             };
         }, 0);
@@ -514,7 +514,9 @@ export class TextRangeCollection {
         // Now loop over all text ranges that start at rangeToMatch.start.messageIndex
         for (; i < this.ranges.length; ++i) {
             const range = this.ranges[i];
-            if (range.start.messageIndex > rangeToMatch.start.messageIndex) {
+            if (
+                range.start.messageOrdinal > rangeToMatch.start.messageOrdinal
+            ) {
                 break;
             }
             if (isInTextRange(range, rangeToMatch)) {
