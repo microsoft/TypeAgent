@@ -666,11 +666,10 @@ async function getTabHTML(
 
 async function getTabHTMLFragments(
     targetTab: chrome.tabs.Tab,
-    fullSize: boolean,
-    downloadAsFile: boolean,
-    extractText: boolean,
-    useTimestampIds: boolean,
-    maxFragmentSize: 16000,
+    fullSize?: boolean,
+    downloadAsFile?: boolean,
+    extractText?: boolean,
+    useTimestampIds?: boolean,
 ) {
     const frames = await chrome.webNavigation.getAllFrames({
         tabId: targetTab.id!,
@@ -1206,7 +1205,6 @@ async function runBrowserAction(action: any) {
                 action.parameters?.downloadAsFile,
                 action.parameters?.extractText,
                 action.parameters?.useTimestampIds,
-                16000,
             );
             break;
         }
@@ -1665,6 +1663,13 @@ chrome.runtime.onMessage.addListener(
                     });
 
                     sendResponse(screenshotUrl);
+                    break;
+                }
+                case "captureHtmlFragments": {
+                    const targetTab = await getActiveTab();
+
+                    const htmlFragments = await getTabHTMLFragments(targetTab!);
+                    sendResponse(htmlFragments);
                     break;
                 }
                 case "saveAnnotatedScreenshot": {
