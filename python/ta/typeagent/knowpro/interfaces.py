@@ -113,7 +113,7 @@ class Tag:
 type Knowledge = kplib.ConcreteEntity | kplib.Action | Topic | Tag
 
 
-@dataclass
+@dataclass(order=True)
 class TextLocation:
     # The index of the message.
     message_ordinal: MessageOrdinal
@@ -124,12 +124,17 @@ class TextLocation:
 
 
 # A text range within a session.
-@dataclass
+@dataclass(order=True)
 class TextRange:
     # The start of the range.
     start: TextLocation
-    # The end of the range (exclusive).
+    # The end of the range (exclusive). If None, the range is a single point.
     end: TextLocation | None = None
+
+    def __contains__(self, other: Self) -> bool:
+        otherend = other.end or other.start
+        selfend = self.end or self.start
+        return self.start <= other.start and otherend <= selfend
 
 
 @dataclass
@@ -143,8 +148,13 @@ class SemanticRef:
 @dataclass
 class DateRange:
     start: Datetime
-    # Inclusive.  # TODO: Really? Shouldn't this be exclusive?
+    # Inclusive. If None, the range is unbounded.
     end: Datetime | None = None
+
+    def __contains__(self, datetime: Datetime) -> bool:
+        if self.end is None:
+            return self.start <= datetime
+        return self.start <= datetime <= self.end
 
 
 @dataclass
