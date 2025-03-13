@@ -1,8 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { ProgressBar } from "interactive-app";
 import * as knowLib from "knowledge-processor";
 import * as kp from "knowpro";
+import { ChatPrinter } from "../chatPrinter.js";
 
 export function textLocationToString(location: kp.TextLocation): string {
     let text = `MessageOrdinal: ${location.messageOrdinal}`;
@@ -112,4 +114,45 @@ export function actionFilterToSearchGroup(
 
 export interface IMessageMetadata<TMeta = any> {
     metadata: TMeta;
+}
+export function createIndexingEventHandler(
+    printer: ChatPrinter,
+    progress: ProgressBar,
+    maxMessages: number,
+): kp.IndexingEventHandlers {
+    let startedKnowledge = false;
+    let startedRelated = false;
+    let startedMessages = false;
+    return {
+        onKnowledgeExtracted() {
+            if (!startedKnowledge) {
+                printer.writeLine("Indexing knowledge");
+                startedKnowledge = true;
+            }
+            progress.advance();
+            return progress.count < maxMessages;
+        },
+        onEmbeddingsCreated(sourceTexts, batch, batchStartAt) {
+            if (!startedRelated) {
+                progress.reset(sourceTexts.length);
+                printer.writeLine(
+                    `Indexing ${sourceTexts.length} related terms`,
+                );
+                startedRelated = true;
+            }
+            progress.advance(batch.length);
+            return true;
+        },
+        onTextIndexed(textAndLocations, batch, batchStartAt) {
+            if (!startedMessages) {
+                progress.reset(textAndLocations.length);
+                printer.writeLine(
+                    `Indexing ${textAndLocations.length} messages`,
+                );
+                startedMessages = true;
+            }
+            progress.advance(batch.length);
+            return true;
+        },
+    };
 }
