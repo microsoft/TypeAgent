@@ -288,29 +288,6 @@ class IConversationThreads(Protocol):
 
 
 @runtime_checkable
-class IConversationSecondaryIndexes(Protocol):
-    property_to_semantic_ref_index: IPropertyToSemanticRefIndex | None
-    timestamp_index: ITimestampToTextRangeIndex | None
-    term_to_related_terms_index: ITermToRelatedTermsIndex | None
-    threads: IConversationThreads | None
-    message_index: "IMessageTextIndex | None" = None
-
-
-@runtime_checkable
-class IConversation[
-    TMessage: IMessage,
-    TTermToSemanticRefIndex: ITermToSemanticRefIndex,
-    TConversationSecondaryIndexes: IConversationSecondaryIndexes,
-](Protocol):
-    name_tag: str
-    tags: list[str]
-    messages: list[TMessage]
-    semantic_refs: list[SemanticRef] | None
-    semantic_ref_index: TTermToSemanticRefIndex | None
-    secondary_indexes: TConversationSecondaryIndexes | None
-
-
-@runtime_checkable
 class IMessageTextIndex(Protocol):
 
     async def add_messages(
@@ -336,6 +313,29 @@ class IMessageTextIndex(Protocol):
         threshold_score: float | None = None,
     ) -> list[ScoredMessageOrdinal]:
         raise NotImplementedError
+
+
+@runtime_checkable
+class IConversationSecondaryIndexes(Protocol):
+    property_to_semantic_ref_index: IPropertyToSemanticRefIndex | None
+    timestamp_index: ITimestampToTextRangeIndex | None
+    term_to_related_terms_index: ITermToRelatedTermsIndex | None
+    threads: IConversationThreads | None
+    message_index: IMessageTextIndex | None = None
+
+
+@runtime_checkable
+class IConversation[
+    TMessage: IMessage,
+    TTermToSemanticRefIndex: ITermToSemanticRefIndex,
+    TConversationSecondaryIndexes: IConversationSecondaryIndexes,
+](Protocol):
+    name_tag: str
+    tags: list[str]
+    messages: list[TMessage]
+    semantic_refs: list[SemanticRef] | None
+    semantic_ref_index: TTermToSemanticRefIndex | None
+    secondary_indexes: TConversationSecondaryIndexes | None
 
 
 # --------------------------------------------------

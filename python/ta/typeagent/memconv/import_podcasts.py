@@ -7,6 +7,8 @@ import os
 import re
 from typing import cast, Sequence
 
+from ..knowpro.importing import ConversationSettings, create_conversation_settings
+
 from ..knowpro import convindex, interfaces, kplib
 
 
@@ -82,10 +84,9 @@ class Podcast(
     ]
 ):
     # Instance variables not passed to `__init__()`.
-    # TODO
-    # settings: ConversationSettings = field(
-    #     init=False, default_factory=create_conversation_settings
-    # )
+    settings: ConversationSettings = field(
+        init=False, default_factory=create_conversation_settings
+    )
     semantic_ref_index: convindex.ConversationIndex | None = field(
         init=False, default_factory=convindex.ConversationIndex
     )
