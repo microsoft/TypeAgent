@@ -37,7 +37,7 @@ export interface IMessageTextEmbeddingIndex extends IMessageTextIndex {
     ): ScoredMessageOrdinal[];
 }
 
-export class MessageTextIndex implements IMessageTextIndex {
+export class MessageTextIndex implements IMessageTextEmbeddingIndex {
     public textLocationIndex: TextToTextLocationIndex;
 
     constructor(public settings: MessageTextIndexSettings) {
