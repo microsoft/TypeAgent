@@ -37,8 +37,8 @@
     "shell": "pnpm -C packages/shell run dev",
     "shell:test": "npx --prefix packages/shell playwright test simple.spec.ts",
     "test": "pnpm run test:local && pnpm run test:live",
-    "test:live": "pnpm -r --no-sort --stream --workspace-concurrency=0 run test:live",
-    "test:local": "pnpm -r --no-sort --stream --workspace-concurrency=0 run test:local"
+    "test:live": "pnpm -r --no-sort --stream --workspace-concurrency=1 run test:live",
+    "test:local": "pnpm -r --no-sort --stream --workspace-concurrency=1 run test:local"
   },
   "devDependencies": {
     "@fluidframework/build-tools": "^0.54.0",
@@ -48,7 +48,7 @@
     "prettier": "^3.2.5",
     "shx": "^0.3.4"
   },
-  "packageManager": "pnpm@10.6.3",
+  "packageManager": "pnpm@10.5.2+sha512.da9dc28cd3ff40d0592188235ab25d3202add8a207afbedc682220e4a0029ffbff4562102b9e6e46b4e3f9e8bd53e6d05de48544b0c57d4b0179e22c76d1199b",
   "engines": {
     "node": ">=18",
     "pnpm": ">=9"
