@@ -410,7 +410,7 @@ class IndexingEventHandlers:
 
 @dataclass
 class TextIndexingResult:
-    completedUpto: TextLocation | None = None
+    completed_upto: TextLocation | None = None
     error: str | None = None
 
 

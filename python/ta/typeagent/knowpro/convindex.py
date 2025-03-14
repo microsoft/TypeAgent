@@ -20,11 +20,12 @@ from .interfaces import (
     SemanticRef,
     TermToSemanticRefIndexItemData,
     TermToSemanticRefIndexData,
+    TextIndexingResult,
     TextLocation,
     TextRange,
     Topic,
 )
-from . import kplib
+from . import kplib, convindex, convknowledge
 
 
 def text_range_from_location(
@@ -248,10 +249,24 @@ async def build_conversation_index(
     event_handler: IndexingEventHandlers | None = None,
 ) -> IndexingResults:
     result = IndexingResults()
+    result.semantic_refs = await build_semantic_ref_index(
+        conversation, None, event_handler
+    )
     # TODO
-    # result.semantic_refs = await build_semantic_ref_index(conversation, None, event_handler)
     # if result.semantic_refs and not result.semantic_refs.error and conversation.semantic_ref_index:
     #     result.secondary_index_results = await build_secondary_indexes(
     #         conversation, conversation_settings, event_handler
     #     )
     return result
+
+
+async def build_semantic_ref_index(
+    conversation: IConversation,
+    extractor: convknowledge.KnowledgeExtractor | None = None,
+    event_handler: IndexingEventHandlers | None = None,
+) -> TextIndexingResult:
+    assert conversation.semantic_ref_index
+    assert conversation.semantic_refs
+    indexing_result = TextIndexingResult()
+    # TODO
+    return indexing_result

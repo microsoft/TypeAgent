@@ -14,7 +14,10 @@ from . import kplib
 class KnowledgeExtractor:
 
     def __init__(self, model: typechat.TypeChatLanguageModel | None = None):
-        self.model = model or typechat.create_language_model(os.environ)
+        if model is None:
+            model = typechat.create_language_model(dict(os.environ))
+        assert model is not None
+        self.model = model
         self.translator = self.create_translator(self.model)
 
     async def extract(self, message: str) -> kplib.KnowledgeResponse | None:
@@ -28,7 +31,7 @@ class KnowledgeExtractor:
 
     async def extract_knowledge(
         self, message: str
-    ) -> typechat.Result[kplib.KnowledgeResponse] | None:
+    ) -> typechat.Result[kplib.KnowledgeResponse]:
         result = await self.translator.translate(message)
         # TODO
         # if isinstance(result, typechat.Success):
@@ -46,12 +49,12 @@ class KnowledgeExtractor:
         )
         schema_text = translator._schema_str
 
-        def create_request_prompt(request: str) -> str:
+        def create_request_prompt(intent: str) -> str:
             return (
                 f'You are a service that translates user messages in a conversation into JSON objects of type "{type_name}" according to the following TypeScript definitions:\n'
                 + f"```\n{schema_text}```\n"
                 + f"The following are messages in a conversation:\n"
-                + f'"""\n{request}\n"""\n'
+                + f'"""\n{intent}\n"""\n'
                 + f"The following is the user request translated into a JSON object with 2 spaces of indentation and no properties with the value undefined:\n"
             )
 
