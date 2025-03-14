@@ -307,31 +307,6 @@ async function awaitPageIncrementalUpdates(targetTab: chrome.tabs.Tab) {
     }
 }
 
-async function getLatLongForLocation(locationName: string) {
-    const vals = await getConfigValues();
-    const mapsApiKey = vals["BING_MAPS_API_KEY"];
-    const response = await fetch(
-        `http://dev.virtualearth.net/REST/v1/Locations/${locationName}?key=${mapsApiKey}`,
-        {
-            method: "GET",
-            headers: {
-                "Content-Type": "application/json",
-            },
-        },
-    );
-    if (response.ok) {
-        const json = await response.json();
-        const coordinates = json.resourceSets[0].resources[0].point.coordinates;
-        return {
-            lat: coordinates[0],
-            long: coordinates[1],
-        };
-    } else {
-        console.log(response.statusText);
-        return undefined;
-    }
-}
-
 async function downloadStringAsFile(
     targetTab: chrome.tabs.Tab,
     data: string,
@@ -816,18 +791,6 @@ async function toggleSiteTranslator(targetTab: chrome.tabs.Tab) {
     await ensureWebsocketConnected();
     if (targetTab.url) {
         const host = new URL(targetTab.url).host;
-
-        if (host === "paleobiodb.org" || host === "www.paleobiodb.org") {
-            method = "enableSiteTranslator";
-            translatorName = "browser.paleoBioDb";
-            currentSiteTranslator = "browser.paleoBioDb";
-        } else {
-            if (currentSiteTranslator == "browser.paleoBioDb") {
-                method = "disableSiteTranslator";
-                translatorName = "browser.paleoBioDb";
-                currentSiteTranslator = "";
-            }
-        }
 
         if (
             targetTab.url.startsWith("https://embed.universaluclick.com/") ||
@@ -1316,10 +1279,6 @@ async function runBrowserAction(action: any) {
             );
             break;
         }
-        case "getConfiguration": {
-            responseObject = await getConfigValues();
-            break;
-        }
     }
 
     return {
@@ -1331,31 +1290,6 @@ async function runBrowserAction(action: any) {
 async function runSiteAction(schemaName: string, action: any) {
     let confirmationMessage = "OK";
     switch (schemaName) {
-        case "browser.paleoBioDb": {
-            const targetTab = await getActiveTab();
-            const actionName =
-                action.actionName ?? action.fullActionName.split(".").at(-1);
-            if (
-                actionName == "setMapLocation" &&
-                action.parameters.locationName
-            ) {
-                const latLong = await getLatLongForLocation(
-                    action.parameters.locationName,
-                );
-                if (latLong) {
-                    action.parameters.latitude = latLong.lat;
-                    action.parameters.longitude = latLong.long;
-                }
-            }
-
-            const result = await chrome.tabs.sendMessage(targetTab?.id!, {
-                type: "run_paleoBioDb_action",
-                action: action,
-            });
-
-            // to do: update confirmation to include current page screenshot.
-            break;
-        }
         case "browser.crossword": {
             const targetTab = await getActiveTab();
 

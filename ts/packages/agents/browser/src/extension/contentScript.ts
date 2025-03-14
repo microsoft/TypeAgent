@@ -1068,6 +1068,17 @@ window.addEventListener(
                 );
             });
         }
+
+        if (event.data.type === "GET_FILE_PATH" && event.data.fileName) {
+            const fileUrl = chrome.runtime.getURL(event.data.fileName);
+            window.postMessage(
+                {
+                    type: "FILE_PATH_RESULT",
+                    result: fileUrl,
+                },
+                "*",
+            );
+        }
     },
     false,
 );

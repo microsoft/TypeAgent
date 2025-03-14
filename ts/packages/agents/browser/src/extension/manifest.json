@@ -39,12 +39,13 @@
     {
       "matches": ["https://paleobiodb.org/*"],
       "js": ["sites/paleobiodb.js"],
+      "run_at": "document_start",
       "world": "MAIN"
     }
   ],
   "web_accessible_resources": [
     {
-      "resources": ["sites/paleobiodb.js"],
+      "resources": ["sites/paleobiodb.js", "sites/paleobiodbSchema.mts"],
       "matches": ["https://paleobiodb.org/*"]
     },
     {
