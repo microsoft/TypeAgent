@@ -4,6 +4,7 @@
 from dataclasses import dataclass, field
 import os
 
+import pydantic
 import typechat
 
 from . import kplib
@@ -17,13 +18,17 @@ class KnowledgeExtractor:
         self.translator = self.create_translator(self.model)
 
     async def extract(self, message: str) -> kplib.KnowledgeResponse | None:
-        result: typechat.Result[kplib.KnowledgeResponse] = await self.extract_knowledge(message)
+        result: typechat.Result[kplib.KnowledgeResponse] = await self.extract_knowledge(
+            message
+        )
         if isinstance(result, typechat.Success):
             return result.value
         else:
             return None
 
-    async def extract_knowledge(self, message: str) -> typechat.Result[kplib.KnowledgeResponse] | None:
+    async def extract_knowledge(
+        self, message: str
+    ) -> typechat.Result[kplib.KnowledgeResponse] | None:
         result = await self.translator.translate(message)
         # TODO
         # if isinstance(result, typechat.Success):
@@ -35,21 +40,20 @@ class KnowledgeExtractor:
     ) -> typechat.TypeChatJsonTranslator[kplib.KnowledgeResponse]:
         schema = kplib.KnowledgeResponse
         type_name = "KnowledgeResponse"
-        validator = typechat.TypeChatValidator[kplib.KnowledgeResponse](
-            schema
-        )
+        validator = typechat.TypeChatValidator[kplib.KnowledgeResponse](schema)
         translator = typechat.TypeChatJsonTranslator[kplib.KnowledgeResponse](
             model, validator, kplib.KnowledgeResponse
         )
-        translator.create_request_prompt = lambda request: self.create_request_prompt(schema, type_name, request)
+        schema_text = translator._schema_str
+
+        def create_request_prompt(request: str) -> str:
+            return (
+                f'You are a service that translates user messages in a conversation into JSON objects of type "{type_name}" according to the following TypeScript definitions:\n'
+                + f"```\n{schema_text}```\n"
+                + f"The following are messages in a conversation:\n"
+                + f'"""\n{request}\n"""\n'
+                + f"The following is the user request translated into a JSON object with 2 spaces of indentation and no properties with the value undefined:\n"
+            )
+
+        translator._create_request_prompt = create_request_prompt
         return translator
-
-    def create_request_prompt(schema: type, type_name: str, request: str) -> str:
-        return (
-            f'You are a service that translates user messages in a conversation into JSON objects of type "{type_name}" according to the following TypeScript definitions:\n'
-            + f"```\n{schema}```\n"
-            + f"The following are messages in a conversation:\n"
-            + f'"""\n{request}\n"""\n'
-            + f"The following is the user request translated into a JSON object with 2 spaces of indentation and no properties with the value undefined:\n"
-        )
-

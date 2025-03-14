@@ -1,11 +1,7 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-# TODO:
-# - What does the comment "Very concise values" in class Facet mean?
-# - Should the field names be camelCase to match the JSON schema?
-# - For things of type float, should we add `| int` to emphasize that int is okay?
-#   (Some users think float means float only.)
+# TODO: Convert docs that TypeChat should see to Annotated[T, Doc("blah")]
 
 from pydantic.dataclasses import dataclass
 from typing import Literal
