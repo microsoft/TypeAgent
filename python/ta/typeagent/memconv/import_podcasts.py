@@ -121,7 +121,9 @@ class Podcast(
         event_handler: interfaces.IndexingEventHandlers | None = None,
     ) -> interfaces.IndexingResults:
         self.add_metadata_to_index()
-        result = await convindex.build_conversation_index(self, event_handler)
+        result = await convindex.build_conversation_index(
+            self, self.settings, event_handler
+        )
         # TODO: implement secondary indexes
         # # build_conversation_index now automatically builds standard secondary indexes.
         # # Pass false to build podcast specific secondary indexes only.
