@@ -4,10 +4,13 @@
 from dataclasses import dataclass, field
 import os
 
-import pydantic
 import typechat
 
 from . import kplib
+
+
+def create_typechat_model() -> typechat.TypeChatLanguageModel:
+    return typechat.create_language_model(dict(os.environ))
 
 
 @dataclass
@@ -15,7 +18,7 @@ class KnowledgeExtractor:
 
     def __init__(self, model: typechat.TypeChatLanguageModel | None = None):
         if model is None:
-            model = typechat.create_language_model(dict(os.environ))
+            model = create_typechat_model()
         assert model is not None
         self.model = model
         self.translator = self.create_translator(self.model)
