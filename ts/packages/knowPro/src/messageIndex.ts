@@ -1,5 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
+import { MessageAccumulator } from "./collections.js";
 import { TextEmbeddingIndexSettings } from "./fuzzyIndex.js";
 import {
     IMessage,
@@ -13,6 +14,7 @@ import {
 } from "./interfaces.js";
 import {
     ITextToTextLocationIndexData,
+    ScoredTextLocation,
     TextToTextLocationIndex,
 } from "./textLocationIndex.js";
 
@@ -25,7 +27,7 @@ export interface IMessageTextIndexData {
 }
 
 export class MessageTextIndex implements IMessageTextIndex {
-    private textLocationIndex: TextToTextLocationIndex;
+    public textLocationIndex: TextToTextLocationIndex;
 
     constructor(public settings: MessageTextIndexSettings) {
         this.textLocationIndex = new TextToTextLocationIndex(
@@ -68,17 +70,12 @@ export class MessageTextIndex implements IMessageTextIndex {
     ): Promise<ScoredMessageOrdinal[]> {
         maxMatches ??= this.settings.embeddingIndexSettings.maxMatches;
         thresholdScore ??= this.settings.embeddingIndexSettings.minScore;
-        const scoredLocations = await this.textLocationIndex.lookupText(
+        const scoredTextLocations = await this.textLocationIndex.lookupText(
             messageText,
             maxMatches,
             thresholdScore,
         );
-        return scoredLocations.map((sl) => {
-            return {
-                messageOrdinal: sl.textLocation.messageOrdinal,
-                score: sl.score,
-            };
-        });
+        return this.toScoredMessageOrdinals(scoredTextLocations);
     }
 
     public async lookupMessagesInSubset(
@@ -87,18 +84,14 @@ export class MessageTextIndex implements IMessageTextIndex {
         maxMatches?: number,
         thresholdScore?: number,
     ): Promise<ScoredMessageOrdinal[]> {
-        const scoredLocations = await this.textLocationIndex.lookupTextInSubset(
-            messageText,
-            ordinalsToSearch,
-            maxMatches,
-            thresholdScore,
-        );
-        return scoredLocations.map((sl) => {
-            return {
-                messageOrdinal: sl.textLocation.messageOrdinal,
-                score: sl.score,
-            };
-        });
+        const scoredTextLocations =
+            await this.textLocationIndex.lookupTextInSubset(
+                messageText,
+                ordinalsToSearch,
+                maxMatches,
+                thresholdScore,
+            );
+        return this.toScoredMessageOrdinals(scoredTextLocations);
     }
 
     public serialize(): IMessageTextIndexData {
@@ -112,6 +105,17 @@ export class MessageTextIndex implements IMessageTextIndex {
             this.textLocationIndex.clear();
             this.textLocationIndex.deserialize(data.indexData);
         }
+    }
+
+    // Since a message has multiple chunks, each of which is indexed individually, we can end up
+    // with a message matching multiple times. The message accumulator dedupes those and also
+    // supports smoothing the scores if needed
+    private toScoredMessageOrdinals(
+        scoredLocations: ScoredTextLocation[],
+    ): ScoredMessageOrdinal[] {
+        const messageMatches = new MessageAccumulator();
+        messageMatches.addMessagesFromLocations(scoredLocations);
+        return messageMatches.toScoredMessageOrdinals();
     }
 }
 
@@ -131,4 +135,12 @@ export async function buildMessageIndex(
     return {
         numberCompleted: 0,
     };
+}
+
+export async function selectMessagesMostSimilarToText(
+    messageIndex: IMessageTextIndex,
+    messageOrdinals: MessageOrdinal[],
+    text: string,
+): Promise<ScoredMessageOrdinal[]> {
+    return messageIndex.lookupMessagesInSubset(text, messageOrdinals);
 }

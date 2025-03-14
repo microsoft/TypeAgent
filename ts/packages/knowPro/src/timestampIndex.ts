@@ -9,7 +9,7 @@ import {
     ListIndexingResult,
     MessageOrdinal,
 } from "./interfaces.js";
-import { textRangeFromLocation } from "./conversationIndex.js";
+import { textRangeFromMessageChunk } from "./conversationIndex.js";
 import {
     ITimestampToTextRangeIndex,
     TimestampedTextRange,
@@ -74,7 +74,7 @@ export class TimestampToTextRangeIndex implements ITimestampToTextRangeIndex {
         }
         const timestampDate = new Date(timestamp);
         const entry: TimestampedTextRange = {
-            range: textRangeFromLocation(messageOrdinal),
+            range: textRangeFromMessageChunk(messageOrdinal),
             // This string is formatted to be lexically sortable
             timestamp: this.dateToTimestamp(timestampDate),
         };

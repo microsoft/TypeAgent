@@ -10,6 +10,9 @@ export interface IKnowledgeSource {
 
 export type MessageOrdinal = number;
 
+/**
+ * A Message contains one or more text chunks
+ */
 export interface IMessage extends IKnowledgeSource {
     // the text of the message, split into chunks
     textChunks: string[];
@@ -72,20 +75,30 @@ export interface ITermToSemanticRefIndex {
     lookupTerm(term: string): ScoredSemanticRefOrdinal[] | undefined;
 }
 
+/**
+ * Represents a specific location of within a text {@link IMessage}.
+ * A message can contain one or more text chunks
+ */
 export interface TextLocation {
     // the ordinal of the message
     messageOrdinal: MessageOrdinal;
-    // the ordinal of the chunk
+
+    // [Optional] The ordinal index of the chunk within the message.
     chunkOrdinal?: number;
-    // the ordinal of the character within the chunk
+
+    // [Optional] The ordinal index of the character within the chunk.
     charOrdinal?: number;
 }
 
-// a text range within a session
+/**
+ * A text range within a conversation
+ * TextRange can represent both a text range and a point location
+ * If 'end' is undefined, the text range represents a point location, identified by 'start'
+ */
 export interface TextRange {
     // the start of the range
     start: TextLocation;
-    // the end of the range  (exclusive)
+    // the (optional)end of the range  (exclusive)
     end?: TextLocation | undefined;
 }
 

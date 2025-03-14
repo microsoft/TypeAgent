@@ -111,10 +111,12 @@ export type WhenFilter = {
 };
 
 export type SearchOptions = {
-    maxMatches?: number | undefined;
+    maxKnowledgeMatches?: number | undefined;
     exactMatch?: boolean | undefined;
     usePropertyIndex?: boolean | undefined;
     useTimestampIndex?: boolean | undefined;
+    maxMessageMatches?: number | undefined;
+    maxMessageCharsInBudget?: number | undefined;
 };
 
 export type SemanticRefSearchResult = {
@@ -150,12 +152,19 @@ export async function searchConversation(
     if (!knowledgeMatches) {
         return undefined;
     }
-    const messageMatches = q.messageMatchesFromKnowledgeMatches(
-        conversation.semanticRefs!,
-        knowledgeMatches,
+    // Future: Combine knowledge and message query into single query expr tree
+    const queryBuilder = new SearchQueryBuilder(
+        conversation,
+        conversation.secondaryIndexes ?? {},
+    );
+    const query = queryBuilder.compileMessageQuery(knowledgeMatches, options);
+    const messageMatches: ScoredMessageOrdinal[] = runQuery(
+        conversation,
+        options,
+        query,
     );
     return {
-        messageMatches: messageMatches.toScoredMessageOrdinals(),
+        messageMatches,
         knowledgeMatches,
     };
 }
@@ -177,22 +186,16 @@ export async function searchConversationKnowledge(
     if (!q.isConversationSearchable(conversation)) {
         return undefined;
     }
-    const secondaryIndexes: IConversationSecondaryIndexes =
-        conversation.secondaryIndexes ?? {};
-    const queryBuilder = new SearchQueryBuilder(conversation, secondaryIndexes);
-    const query = await queryBuilder.compile(searchTermGroup, filter, options);
-    const queryResults = query.eval(
-        new q.QueryEvalContext(
-            conversation,
-            options?.usePropertyIndex
-                ? secondaryIndexes.propertyToSemanticRefIndex
-                : undefined,
-            options?.useTimestampIndex
-                ? secondaryIndexes.timestampIndex
-                : undefined,
-        ),
+    const queryBuilder = new SearchQueryBuilder(
+        conversation,
+        conversation.secondaryIndexes ?? {},
     );
-    return queryResults;
+    const query = await queryBuilder.compileKnowledgeQuery(
+        searchTermGroup,
+        filter,
+        options,
+    );
+    return runQuery(conversation, options, query);
 }
 
 export function getDistinctEntityMatches(
@@ -211,6 +214,26 @@ export function getDistinctTopicMatches(
     return mergeTopics(semanticRefs, searchResults, topK);
 }
 
+function runQuery<T = any>(
+    conversation: IConversation,
+    options: SearchOptions | undefined,
+    query: IQueryOpExpr<T>,
+): T {
+    const secondaryIndexes: IConversationSecondaryIndexes =
+        conversation.secondaryIndexes ?? {};
+    return query.eval(
+        new q.QueryEvalContext(
+            conversation,
+            options?.usePropertyIndex
+                ? secondaryIndexes.propertyToSemanticRefIndex
+                : undefined,
+            options?.useTimestampIndex
+                ? secondaryIndexes.timestampIndex
+                : undefined,
+        ),
+    );
+}
+
 class SearchQueryBuilder {
     // All SearchTerms used which compiling the 'select' portion of the query
     private allSearchTerms: SearchTerm[] = [];
@@ -226,7 +249,7 @@ class SearchQueryBuilder {
         public relatedIsExactThreshold: number = 0.95,
     ) {}
 
-    public async compile(
+    public async compileKnowledgeQuery(
         terms: SearchTermGroup,
         filter?: WhenFilter,
         options?: SearchOptions,
@@ -244,7 +267,35 @@ class SearchQueryBuilder {
         return new q.GroupSearchResultsExpr(query);
     }
 
-    public async compileQuery(
+    public compileMessageQuery(
+        knowledge:
+            | IQueryOpExpr<Map<KnowledgeType, SemanticRefSearchResult>>
+            | Map<KnowledgeType, SemanticRefSearchResult>,
+        options?: SearchOptions,
+    ): IQueryOpExpr {
+        let query: IQueryOpExpr = new q.MessagesFromKnowledgeExpr(knowledge);
+        if (options) {
+            if (
+                options.maxKnowledgeMatches &&
+                options.maxKnowledgeMatches > 0
+            ) {
+                query = new q.SelectTopNExpr(query);
+            }
+            if (
+                options.maxMessageCharsInBudget &&
+                options.maxMessageCharsInBudget > 0
+            ) {
+                query = new q.SelectMessagesInCharBudget(
+                    query,
+                    options.maxMessageCharsInBudget,
+                );
+            }
+        }
+        query = new q.GetScoredMessages(query);
+        return query;
+    }
+
+    private async compileQuery(
         searchTermGroup: SearchTermGroup,
         filter?: WhenFilter,
         options?: SearchOptions,
@@ -266,7 +317,7 @@ class SearchQueryBuilder {
         // And lastly, select 'TopN' and group knowledge by type
         return new q.SelectTopNKnowledgeGroupExpr(
             new q.GroupByKnowledgeTypeExpr(selectExpr),
-            options?.maxMatches,
+            options?.maxKnowledgeMatches,
         );
     }
 

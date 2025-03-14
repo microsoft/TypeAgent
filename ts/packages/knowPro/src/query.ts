@@ -8,6 +8,7 @@ import {
     ITermToSemanticRefIndex,
     KnowledgeType,
     MessageOrdinal,
+    ScoredMessageOrdinal,
     ScoredSemanticRefOrdinal,
     SemanticRef,
     SemanticRefOrdinal,
@@ -357,7 +358,7 @@ export function lookupProperty(
 
 // Query eval expressions
 
-export interface IQueryOpExpr<T> {
+export interface IQueryOpExpr<T = any> {
     eval(context: QueryEvalContext): T;
 }
 
@@ -395,6 +396,10 @@ export class QueryEvalContext {
 
     public get semanticRefs() {
         return this.conversation.semanticRefs!;
+    }
+
+    public get messages() {
+        return this.conversation.messages;
     }
 
     public getSemanticRef(semanticRefOrdinal: SemanticRefOrdinal): SemanticRef {
@@ -1103,15 +1108,18 @@ function toGroupedSearchResults(
 
 export class MessagesFromKnowledgeExpr extends QueryOpExpr<MessageAccumulator> {
     constructor(
-        public srcExpr: IQueryOpExpr<
-            Map<KnowledgeType, SemanticRefSearchResult>
-        >,
+        public srcExpr:
+            | IQueryOpExpr<Map<KnowledgeType, SemanticRefSearchResult>>
+            | Map<KnowledgeType, SemanticRefSearchResult>,
     ) {
         super();
     }
 
     public override eval(context: QueryEvalContext): MessageAccumulator {
-        const knowledge = this.srcExpr.eval(context);
+        const knowledge =
+            this.srcExpr instanceof Map
+                ? this.srcExpr
+                : this.srcExpr.eval(context);
         return messageMatchesFromKnowledgeMatches(
             context.semanticRefs,
             knowledge,
@@ -1119,16 +1127,43 @@ export class MessagesFromKnowledgeExpr extends QueryOpExpr<MessageAccumulator> {
     }
 }
 
+export class SelectMessagesInCharBudget extends QueryOpExpr<MessageAccumulator> {
+    constructor(
+        public srcExpr: IQueryOpExpr<MessageAccumulator>,
+        public maxCharsInBudget: number,
+    ) {
+        super();
+    }
+
+    public override eval(context: QueryEvalContext): MessageAccumulator {
+        const matches = this.srcExpr.eval(context);
+        matches.selectMessagesInBudget(context.messages, this.maxCharsInBudget);
+        return matches;
+    }
+}
+
+export class GetScoredMessages extends QueryOpExpr<ScoredMessageOrdinal[]> {
+    constructor(public srcExpr: IQueryOpExpr<MessageAccumulator>) {
+        super();
+    }
+
+    public override eval(context: QueryEvalContext): ScoredMessageOrdinal[] {
+        const matches = this.srcExpr.eval(context);
+        return matches.toScoredMessageOrdinals();
+    }
+}
+
 export function messageMatchesFromKnowledgeMatches(
     semanticRefs: SemanticRef[],
     knowledgeMatches: Map<KnowledgeType, SemanticRefSearchResult>,
+    intersectAcrossKnowledgeTypes: boolean = true,
 ): MessageAccumulator {
     let messageMatches = new MessageAccumulator();
-    let expectedHitCount = 0;
+    let knowledgeTypeHitCount = 0; // How many types of knowledge matched? (e.g. entity, topic, action)
     for (const knowledgeType of knowledgeMatches.keys()) {
         const matchesByType = knowledgeMatches.get(knowledgeType);
         if (matchesByType && matchesByType.semanticRefMatches.length > 0) {
-            expectedHitCount++;
+            knowledgeTypeHitCount++;
             for (const match of matchesByType.semanticRefMatches) {
                 messageMatches.addMessagesForSemanticRef(
                     semanticRefs[match.semanticRefOrdinal],
@@ -1137,13 +1172,16 @@ export function messageMatchesFromKnowledgeMatches(
             }
         }
     }
-    if (expectedHitCount > 0) {
-        const relevantMessages =
-            messageMatches.getWithHitCount(expectedHitCount);
+    if (intersectAcrossKnowledgeTypes && knowledgeTypeHitCount > 0) {
+        // This basically intersects the sets of messages that matched each knowledge type
+        // E.g. if topics and entities matched, then a relevant message must have both matching topics and entities
+        const relevantMessages = messageMatches.getWithHitCount(
+            knowledgeTypeHitCount,
+        );
         if (relevantMessages.length > 0) {
             messageMatches = new MessageAccumulator(relevantMessages);
         }
     }
-    //messageMatches.smoothScores();
+
     return messageMatches;
 }

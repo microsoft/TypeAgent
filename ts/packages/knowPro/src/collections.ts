@@ -3,6 +3,7 @@
 
 import { collections, createTopNList } from "typeagent";
 import {
+    IMessage,
     Knowledge,
     KnowledgeType,
     MessageOrdinal,
@@ -14,6 +15,8 @@ import {
     TextRange,
 } from "./interfaces.js";
 import { compareTextRange, isInTextRange } from "./common.js";
+import { ScoredTextLocation } from "./textLocationIndex.js";
+import { getCountOfMessagesInCharBudget } from "./message.js";
 
 export interface Match<T = any> {
     value: T;
@@ -185,6 +188,10 @@ export class MatchAccumulator<T = any> {
         return [...this.matchesWithMinHitCount(minHitCount)];
     }
 
+    /**
+     * Iterate over all matches
+     * @param predicate
+     */
     public *getMatches(
         predicate?: (match: Match<T>) => boolean,
     ): IterableIterator<Match<T>> {
@@ -195,10 +202,25 @@ export class MatchAccumulator<T = any> {
         }
     }
 
+    /**
+     * Iterate over all matched values
+     */
+    public *getMatchedValues(): IterableIterator<T> {
+        for (const match of this.matches.values()) {
+            yield match.value;
+        }
+    }
+
     public clearMatches(): void {
         this.matches.clear();
     }
 
+    /**
+     * Selects and retains only top N scoring items.
+     * @param maxMatches
+     * @param minHitCount
+     * @returns
+     */
     public selectTopNScoring(
         maxMatches?: number,
         minHitCount?: number,
@@ -208,6 +230,11 @@ export class MatchAccumulator<T = any> {
         return topN.length;
     }
 
+    /**
+     * Selects and retains only items with hitCount >= minHitCount.
+     * @param minHitCount
+     * @returns
+     */
     public selectWithHitCount(minHitCount: number): number {
         const matches = this.getWithHitCount(minHitCount);
         this.setMatches(matches, true);
@@ -228,12 +255,10 @@ function addSmoothAvgRelatedScore(match: Match): void {
         // Smooth the impact of multiple related term matches
         // If we just add up scores, a larger number of moderately related
         // but noisy matches can overwhelm a small # of highly related matches... etc
-        //const avgScore = match.relatedScore / match.relatedHitCount;
-        //const normalizedScore = Math.log(1 + avgScore);
-        const normalizedRelatedScore =
+        const normalizedAvgRelatedScore =
             match.relatedScore / Math.log(match.relatedHitCount + 1);
 
-        match.score += normalizedRelatedScore;
+        match.score += normalizedAvgRelatedScore;
     }
 }
 
@@ -402,7 +427,7 @@ export class MessageAccumulator extends MatchAccumulator<MessageOrdinal> {
     public override add(
         value: number,
         score: number,
-        isExactMatch: boolean,
+        isExactMatch: boolean = true,
     ): void {
         if (isExactMatch) {
             let match = this.getMatch(value);
@@ -419,6 +444,20 @@ export class MessageAccumulator extends MatchAccumulator<MessageOrdinal> {
                 match.score = score;
                 match.hitCount++;
             }
+        } else {
+            throw new Error("Related matches not supported");
+        }
+    }
+
+    /**
+     * Add the message ordinals of the given text location
+     * @param scoredTextLocations
+     */
+    public addMessagesFromLocations(
+        scoredTextLocations: ScoredTextLocation[],
+    ): void {
+        for (const sl of scoredTextLocations) {
+            this.add(sl.textLocation.messageOrdinal, sl.score);
         }
     }
 
@@ -442,7 +481,7 @@ export class MessageAccumulator extends MatchAccumulator<MessageOrdinal> {
     }
 
     public smoothScores() {
-        // Normalize the score relative to # of hits. Use log to reduce impact of very high score
+        // Normalize the score relative to # of hits.
         for (const match of this.getMatches()) {
             smoothTotalScore(match);
         }
@@ -455,6 +494,24 @@ export class MessageAccumulator extends MatchAccumulator<MessageOrdinal> {
                 score: m.score,
             };
         }, 0);
+    }
+
+    public selectMessagesInBudget(
+        messages: IMessage[],
+        maxCharsInBudget: number,
+    ): void {
+        let scoredMatches = this.getSortedByScore();
+        const rankedOrdinals = scoredMatches.map((m) => m.value);
+        const messageCountInBudget = getCountOfMessagesInCharBudget(
+            messages,
+            rankedOrdinals,
+            maxCharsInBudget,
+        );
+        this.clearMatches();
+        if (messageCountInBudget > 0) {
+            scoredMatches = scoredMatches.slice(0, messageCountInBudget);
+            this.setMatches(scoredMatches);
+        }
     }
 }
 
