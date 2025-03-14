@@ -837,9 +837,9 @@ async function toggleSiteTranslator(targetTab: chrome.tabs.Tab) {
         }
 
         if (translatorName === "") {
-            // default to schemaFinder
+            // default to schemaAuthor
             method = "enableSiteTranslator";
-            translatorName = "browser.schemaFinder";
+            translatorName = "browser.schemaAuthor";
             currentSiteTranslator = translatorName;
         }
 
