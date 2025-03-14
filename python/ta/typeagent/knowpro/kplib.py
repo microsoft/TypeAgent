@@ -7,7 +7,7 @@
 # - For things of type float, should we add `| int` to emphasize that int is okay?
 #   (Some users think float means float only.)
 
-from dataclasses import dataclass
+from pydantic.dataclasses import dataclass
 from typing import Literal
 
 
