@@ -68,21 +68,21 @@ export class EmbeddingIndex {
      * Finds the indexes of the nearest embeddings within a specified subset.
      *
      * This function searches for the nearest embeddings to a given embedding
-     * within a subset of the embeddings array, defined by the provided indices.
+     * within a subset of the embeddings array, defined by the provided ordinals.
      *
      * @param {NormalizedEmbedding} embedding - The embedding to compare against.
-     * @param {number[]} indicesToSearch - An array of indices specifying the subset of embeddings to search.
+     * @param {number[]} ordinalsOfSubset - An array of ordinal specifying the subset of embeddings to search.
      * @param {number} [maxMatches] - Optional. The maximum number of matches to return. If not specified, all matches are returned.
      * @param {number} [minScore] - Optional. The minimum similarity score required for a match to be considered valid.
      * @returns {Scored[]} An array of objects, each containing the index of a matching embedding and its similarity score.
      */
     public getIndexesOfNearestInSubset(
         embedding: NormalizedEmbedding,
-        indicesToSearch: number[],
+        ordinalsOfSubset: number[],
         maxMatches?: number,
         minScore?: number,
     ): Scored[] {
-        const embeddingsToSearch = indicesToSearch.map(
+        const embeddingsToSearch = ordinalsOfSubset.map(
             (i) => this.embeddings[i],
         );
         // This gives us the offsets within in the embeddingsToSearch array
@@ -95,7 +95,7 @@ export class EmbeddingIndex {
         // We need to map back to actual positions
         return nearestInSubset.map((match) => {
             return {
-                item: indicesToSearch[match.item],
+                item: ordinalsOfSubset[match.item],
                 score: match.score,
             };
         });
@@ -232,14 +232,14 @@ export async function indexOfNearestTextInIndexSubset(
     embeddingIndex: EmbeddingIndex,
     embeddingModel: TextEmbeddingModel,
     text: string,
-    indicesToSearch: number[],
+    ordinalsToSearch: number[],
     maxMatches?: number,
     minScore?: number,
 ): Promise<Scored[]> {
     const textEmbedding = await generateEmbedding(embeddingModel, text);
     return embeddingIndex.getIndexesOfNearestInSubset(
         textEmbedding,
-        indicesToSearch,
+        ordinalsToSearch,
         maxMatches,
         minScore,
     );

@@ -11,6 +11,7 @@ import {
     indexOfNearestTextInIndexSubset,
     TextEmbeddingIndexSettings,
 } from "./fuzzyIndex.js";
+import { NormalizedEmbedding } from "typeagent";
 
 export type ScoredTextLocation = {
     score: number;
@@ -119,9 +120,18 @@ export class TextToTextLocationIndex implements ITextToTextLocationIndex {
         });
     }
 
+    /**
+     * Find text locations nearest to the provided text.
+     * But only search over the subset of text locations in this index identified by ordinalsToSearch
+     * @param text
+     * @param ordinalsToSearch
+     * @param maxMatches
+     * @param thresholdScore
+     * @returns
+     */
     public async lookupTextInSubset(
         text: string,
-        indicesToSearch: number[],
+        ordinalsToSearch: number[],
         maxMatches?: number,
         thresholdScore?: number,
     ): Promise<ScoredTextLocation[]> {
@@ -129,7 +139,27 @@ export class TextToTextLocationIndex implements ITextToTextLocationIndex {
             this.embeddingIndex,
             this.settings.embeddingModel,
             text,
-            indicesToSearch,
+            ordinalsToSearch,
+            maxMatches,
+            thresholdScore,
+        );
+        return matches.map((m) => {
+            return {
+                textLocation: this.textLocations[m.item],
+                score: m.score,
+            };
+        });
+    }
+
+    public lookupInSubsetByEmbedding(
+        textEmbedding: NormalizedEmbedding,
+        ordinalsToSearch: number[],
+        maxMatches?: number,
+        thresholdScore?: number,
+    ): ScoredTextLocation[] {
+        const matches = this.embeddingIndex.getIndexesOfNearestInSubset(
+            textEmbedding,
+            ordinalsToSearch,
             maxMatches,
             thresholdScore,
         );

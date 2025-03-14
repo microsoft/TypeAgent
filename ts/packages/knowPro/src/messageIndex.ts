@@ -1,5 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
+import { generateEmbeddingWithRetry, NormalizedEmbedding } from "typeagent";
 import { MessageAccumulator } from "./collections.js";
 import { TextEmbeddingIndexSettings } from "./fuzzyIndex.js";
 import {
@@ -24,6 +25,16 @@ export type MessageTextIndexSettings = {
 
 export interface IMessageTextIndexData {
     indexData?: ITextToTextLocationIndexData | undefined;
+}
+
+export interface IMessageTextEmbeddingIndex extends IMessageTextIndex {
+    generateEmbedding(text: string): Promise<NormalizedEmbedding>;
+    lookupInSubsetByEmbedding(
+        textEmbedding: NormalizedEmbedding,
+        ordinalsToSearch: MessageOrdinal[],
+        maxMatches?: number,
+        thresholdScore?: number,
+    ): ScoredMessageOrdinal[];
 }
 
 export class MessageTextIndex implements IMessageTextIndex {
@@ -94,6 +105,29 @@ export class MessageTextIndex implements IMessageTextIndex {
         return this.toScoredMessageOrdinals(scoredTextLocations);
     }
 
+    public generateEmbedding(text: string): Promise<NormalizedEmbedding> {
+        return generateEmbeddingWithRetry(
+            this.settings.embeddingIndexSettings.embeddingModel,
+            text,
+        );
+    }
+
+    public lookupInSubsetByEmbedding(
+        textEmbedding: NormalizedEmbedding,
+        ordinalsToSearch: MessageOrdinal[],
+        maxMatches?: number,
+        thresholdScore?: number,
+    ): ScoredMessageOrdinal[] {
+        const scoredTextLocations =
+            this.textLocationIndex.lookupInSubsetByEmbedding(
+                textEmbedding,
+                ordinalsToSearch,
+                maxMatches,
+                thresholdScore,
+            );
+        return this.toScoredMessageOrdinals(scoredTextLocations);
+    }
+
     public serialize(): IMessageTextIndexData {
         return {
             indexData: this.textLocationIndex.serialize(),
@@ -137,10 +171,8 @@ export async function buildMessageIndex(
     };
 }
 
-export async function selectMessagesMostSimilarToText(
+export function isMessageTextEmbeddingIndex(
     messageIndex: IMessageTextIndex,
-    messageOrdinals: MessageOrdinal[],
-    text: string,
-): Promise<ScoredMessageOrdinal[]> {
-    return messageIndex.lookupMessagesInSubset(text, messageOrdinals);
+): messageIndex is IMessageTextEmbeddingIndex {
+    return messageIndex.hasOwnProperty("getEmbedding");
 }

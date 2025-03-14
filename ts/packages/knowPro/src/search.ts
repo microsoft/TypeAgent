@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { SemanticRefAccumulator } from "./collections.js";
+import { MessageAccumulator, SemanticRefAccumulator } from "./collections.js";
 import {
     DateRange,
     IConversation,
@@ -14,7 +14,7 @@ import {
     ScoredMessageOrdinal,
 } from "./interfaces.js";
 import { mergedEntities, mergeTopics } from "./knowledge.js";
-import { isKnownProperty, PropertyNames } from "./propertyIndex.js";
+import { isMessageTextEmbeddingIndex } from "./messageIndex.js";
 import * as q from "./query.js";
 import { IQueryOpExpr } from "./query.js";
 import { resolveRelatedTerms } from "./relatedTermsIndex.js";
@@ -130,11 +130,11 @@ export type ConversationSearchResult = {
 };
 
 /**
- * Search a conversation for matching messages and knowledge
- * @param conversation
- * @param searchTermGroup
- * @param filter
- * @param options
+ * Search a conversation for messages and knowledge that match the supplied search terms
+ * @param conversation Conversation to search
+ * @param searchTermGroup a group of search terms to match
+ * @param filter conditional filter to scope what messages and knowledge are matched
+ * @param options search options
  * @returns
  */
 export async function searchConversation(
@@ -142,6 +142,7 @@ export async function searchConversation(
     searchTermGroup: SearchTermGroup,
     filter?: WhenFilter,
     options?: SearchOptions,
+    rawSearchQuery?: string,
 ): Promise<ConversationSearchResult | undefined> {
     const knowledgeMatches = await searchConversationKnowledge(
         conversation,
@@ -152,12 +153,16 @@ export async function searchConversation(
     if (!knowledgeMatches) {
         return undefined;
     }
-    // Future: Combine knowledge and message query into single query expr tree
+    // Future: Combine knowledge and message queries into single query tree
     const queryBuilder = new SearchQueryBuilder(
         conversation,
         conversation.secondaryIndexes ?? {},
     );
-    const query = queryBuilder.compileMessageQuery(knowledgeMatches, options);
+    const query = await queryBuilder.compileMessageQuery(
+        knowledgeMatches,
+        options,
+        rawSearchQuery,
+    );
     const messageMatches: ScoredMessageOrdinal[] = runQuery(
         conversation,
         options,
@@ -170,11 +175,11 @@ export async function searchConversation(
 }
 
 /**
- * Search a conversation for matching knowledge
- * @param conversation
- * @param searchTermGroup
- * @param filter
- * @param options
+ * Search a conversation for knowledge that matches the given search terms
+ * @param conversation Conversation to search
+ * @param searchTermGroup a group of search terms to match
+ * @param filter conditional filter to scope what messages and knowledge are matched
+ * @param options search options
  * @returns
  */
 export async function searchConversationKnowledge(
@@ -267,19 +272,21 @@ class SearchQueryBuilder {
         return new q.GroupSearchResultsExpr(query);
     }
 
-    public compileMessageQuery(
+    public async compileMessageQuery(
         knowledge:
             | IQueryOpExpr<Map<KnowledgeType, SemanticRefSearchResult>>
             | Map<KnowledgeType, SemanticRefSearchResult>,
         options?: SearchOptions,
-    ): IQueryOpExpr {
+        rawQueryText?: string,
+    ): Promise<IQueryOpExpr> {
         let query: IQueryOpExpr = new q.MessagesFromKnowledgeExpr(knowledge);
         if (options) {
-            if (
-                options.maxKnowledgeMatches &&
-                options.maxKnowledgeMatches > 0
-            ) {
-                query = new q.SelectTopNExpr(query);
+            if (options.maxMessageMatches && options.maxMessageMatches > 0) {
+                query = await this.compileSelectMessageTopN(
+                    query,
+                    options.maxMessageMatches,
+                    rawQueryText,
+                );
             }
             if (
                 options.maxMessageCharsInBudget &&
@@ -422,6 +429,30 @@ class SearchQueryBuilder {
         return predicates;
     }
 
+    private async compileSelectMessageTopN(
+        srcExpr: IQueryOpExpr<MessageAccumulator>,
+        maxMessageMatches: number,
+        rawQueryText?: string,
+    ): Promise<IQueryOpExpr> {
+        const messageIndex = this.conversation.secondaryIndexes?.messageIndex;
+        if (
+            messageIndex &&
+            rawQueryText &&
+            isMessageTextEmbeddingIndex(messageIndex)
+        ) {
+            // If embeddings supported, and there are too many matches, try to re-rank using similarity matching
+            const embedding =
+                await messageIndex.generateEmbedding(rawQueryText);
+            return new q.RankMessagesBySimilarity(
+                srcExpr,
+                embedding,
+                maxMessageMatches,
+            );
+        } else {
+            return new q.SelectTopNExpr(srcExpr, maxMessageMatches);
+        }
+    }
+
     private getActionTermsFromSearchGroup(
         searchGroup: SearchTermGroup,
     ): SearchTermGroup | undefined {
@@ -449,13 +480,14 @@ class SearchQueryBuilder {
                 this.secondaryIndexes.termToRelatedTermsIndex,
                 searchTerms,
                 dedupe,
-                (term) => this.shouldFuzzyMatchRelatedTerms(term, filter),
+                //(term) => this.shouldFuzzyMatchRelatedTerms(term, filter),
             );
             // Ensure that the resolved terms are valid etc.
             this.validateAndPrepareSearchTerms(searchTerms);
         }
     }
 
+    /*
     private shouldFuzzyMatchRelatedTerms(
         term: SearchTerm,
         filter?: WhenFilter,
@@ -472,6 +504,7 @@ class SearchQueryBuilder {
             term.term.text,
         );
     }
+    */
 
     private validateAndPrepareSearchTerms(searchTerms: SearchTerm[]): void {
         for (const searchTerm of searchTerms) {
