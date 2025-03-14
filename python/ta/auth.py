@@ -1,9 +1,10 @@
+#!/usr/bin/env python
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
 """Utility to set AZURE_OPENAI_API_KEY to a valid token.
 
-Usage: eval `python auth.py`
+Usage: eval `./auth.py`
 
 NOTE: The token is only valid for a short time.
 """
