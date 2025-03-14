@@ -27,12 +27,18 @@ import { facetValueToString } from "./knowledge.js";
 import { buildSecondaryIndexes } from "./secondaryIndexes.js";
 import { ConversationSettings } from "./import.js";
 
-export function textRangeFromLocation(
+/**
+ * Returns the text range represented by a message (and an optional chunk ordinal)
+ * @param messageOrdinal
+ * @param chunkOrdinal
+ * @returns {TextRange}
+ */
+export function textRangeFromMessageChunk(
     messageOrdinal: MessageOrdinal,
-    chunkIndex = 0,
+    chunkOrdinal = 0,
 ): TextRange {
     return {
-        start: { messageOrdinal: messageOrdinal, chunkOrdinal: chunkIndex },
+        start: { messageOrdinal: messageOrdinal, chunkOrdinal: chunkOrdinal },
         end: undefined,
     };
 }
@@ -90,7 +96,7 @@ export function addEntityToIndex(
     const semanticRefOrdinal = semanticRefs.length;
     semanticRefs.push({
         semanticRefOrdinal,
-        range: textRangeFromLocation(messageOrdinal, chunkIndex),
+        range: textRangeFromMessageChunk(messageOrdinal, chunkIndex),
         knowledgeType: "entity",
         knowledge: entity,
     });
@@ -133,7 +139,7 @@ export function addTopicToIndex(
     const semanticRefOrdinal = semanticRefs.length;
     semanticRefs.push({
         semanticRefOrdinal,
-        range: textRangeFromLocation(messageOrdinal, chunkOrdinal),
+        range: textRangeFromMessageChunk(messageOrdinal, chunkOrdinal),
         knowledgeType: "topic",
         knowledge: topic,
     });
@@ -150,7 +156,7 @@ export function addActionToIndex(
     const semanticRefOrdinal = semanticRefs.length;
     semanticRefs.push({
         semanticRefOrdinal,
-        range: textRangeFromLocation(messageOrdinal, chunkOrdinal),
+        range: textRangeFromMessageChunk(messageOrdinal, chunkOrdinal),
         knowledgeType: "action",
         knowledge: action,
     });
@@ -241,9 +247,9 @@ export async function buildSemanticRefIndex(
     for (let i = 0; i < conversation.messages.length; i++) {
         let messageOrdinal: MessageOrdinal = i;
         const chunkOrdinal = 0;
-        const msg = conversation.messages[messageOrdinal];
+        const message = conversation.messages[messageOrdinal];
         // only one chunk per message for now
-        const text = msg.textChunks[chunkOrdinal];
+        const text = message.textChunks[chunkOrdinal];
         const knowledgeResult = await async.callWithRetry(() =>
             extractor.extractWithRetry(text, maxRetries),
         );
