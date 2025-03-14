@@ -22,6 +22,9 @@ class Facet:
     # Very concise values.
     value: Value
 
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}({self.name!r}, {self.value!r})"
+
     def __str__(self) -> str:
         value = self.value
         if isinstance(value, Quantity):
@@ -45,6 +48,9 @@ class ConcreteEntity:
     # Trivial actions or state changes are not facets.
     # Facets are concise "properties".
     facets: list[Facet] | None = None
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}({self.name!r}, {self.type}, {self.facets})"
 
 
 @dataclass
