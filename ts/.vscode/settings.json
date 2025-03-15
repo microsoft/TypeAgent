@@ -27,7 +27,8 @@
         {"name": "defaultAgentProvider", "rootPath": "packages/defaultAgentProvider"},
         {"name": "knowledgeProcessor", "rootPath": "packages/knowledgeProcessor"},
         {"name": "memoryProviders", "rootPath": "examples/memoryProviders"},
-        {"name": "typeagent", "rootPath": "packages/typeagent"}
+        {"name": "typeagent", "rootPath": "packages/typeagent"},
+        {"name": "knowpro", "rootPath": "packages/knowpro"},
     ],
     "jest.runMode": "on-demand",
     "[json]": {

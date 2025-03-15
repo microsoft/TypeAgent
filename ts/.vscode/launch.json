@@ -304,6 +304,26 @@
       "console": "integratedTerminal",
       "internalConsoleOptions": "neverOpen",
       "disableOptimisticBPs": true
-    }
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "vscode-jest-tests.v2.knowpro",
+      "skipFiles": ["<node_internals>/**"],
+      "args": [
+        "--no-warnings",
+        "--experimental-vm-modules",
+        "./node_modules/jest/bin/jest.js",
+        "--runInBand",
+        "--watchAll=false",
+        "--testNamePattern",
+        "${jest.testNamePattern}",
+        "--runTestsByPath",
+        "${jest.testFile}"
+      ],
+      "cwd": "${workspaceFolder}/packages/knowpro",
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen"
+    }    
   ]
 }

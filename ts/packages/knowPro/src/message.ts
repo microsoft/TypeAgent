@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { IMessage, MessageOrdinal } from "./interfaces.js";
+import { IMessage, IMessageCollection, MessageOrdinal } from "./interfaces.js";
 
 /**
  * Get the total number of a characters in a message.
@@ -42,4 +42,28 @@ export function getCountOfMessagesInCharBudget(
         totalCharCount += messageCharCount;
     }
     return i;
+}
+
+export class MessageCollection implements IMessageCollection {
+    private messages: IMessage[];
+
+    constructor() {
+        this.messages = [];
+    }
+
+    public get length(): number {
+        return this.messages.length;
+    }
+
+    public getMessage(ordinal: number): IMessage | undefined {
+        return this.messages[ordinal];
+    }
+
+    public addMessage(message: IMessage): void {
+        this.messages.push(message);
+    }
+
+    public *[Symbol.iterator](): Iterator<IMessage, any, any> {
+        return this.messages[Symbol.iterator]();
+    }
 }
