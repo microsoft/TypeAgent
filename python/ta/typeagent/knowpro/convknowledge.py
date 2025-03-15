@@ -23,18 +23,7 @@ class KnowledgeExtractor:
         self.model = model
         self.translator = self.create_translator(self.model)
 
-    async def extract(self, message: str) -> kplib.KnowledgeResponse | None:
-        result: typechat.Result[kplib.KnowledgeResponse] = await self.extract_knowledge(
-            message
-        )
-        if isinstance(result, typechat.Success):
-            return result.value
-        else:
-            return None
-
-    async def extract_knowledge(
-        self, message: str
-    ) -> typechat.Result[kplib.KnowledgeResponse]:
+    async def extract(self, message: str) -> typechat.Result[kplib.KnowledgeResponse]:
         result = await self.translator.translate(message)
         # TODO
         # if isinstance(result, typechat.Success):
