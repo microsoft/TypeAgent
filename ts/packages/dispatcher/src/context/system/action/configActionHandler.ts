@@ -43,6 +43,20 @@ export async function executeConfigAction(
             );
             break;
 
+        case "enterAgentFocusMode":
+            await processCommandNoLock(
+                `@config agent --focus ${configAction.parameters.agentName}`,
+                context.sessionContext.agentContext,
+            );            
+            break;
+
+        case "exitAgentFocusMode":
+            await processCommandNoLock(
+                `@config agent --unfocus`,
+                context.sessionContext.agentContext,
+            );            
+            break;
+
         default:
             throw new Error(`Invalid action name: ${action.actionName}`);
     }

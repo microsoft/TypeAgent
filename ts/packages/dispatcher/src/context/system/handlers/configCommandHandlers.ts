@@ -297,6 +297,16 @@ class AgentToggleCommandHandler implements CommandHandler {
                 multiple: true,
                 char: "x",
             },
+            focus: {
+                description: "puts the agents in focus mode disabling all other agents",
+                multiple: false,
+                char: "f",
+            },
+            unfocus: {
+                description: "removes focus mode for any focused agents",
+                multiple: false,
+                char: "u",
+            }
         },
         args: {
             agentNames: {
@@ -330,6 +340,7 @@ class AgentToggleCommandHandler implements CommandHandler {
             existingNameType = "schema";
         }
 
+        // reset specified agents
         let hasParams = false;
         if (params.flags.reset) {
             hasParams = true;
@@ -338,27 +349,41 @@ class AgentToggleCommandHandler implements CommandHandler {
             }
         }
 
-        if (params.flags.off) {
-            hasParams = true;
-            setAgentToggleOption(
-                existingNames,
-                existingNameType,
-                options,
-                params.flags.off,
-                false,
-            );
-        }
-        if (params.args.agentNames) {
-            hasParams = true;
-            setAgentToggleOption(
-                existingNames,
-                existingNameType,
-                options,
-                params.args.agentNames,
-                true,
-            );
+        // if focus mode is requested we need to turn off all agents
+        // and then enable just the one that we are supposed to focus on
+        if (params.flags.focus) {
+            // TODO: implement
+            // TODO: save active agents
+        } else if (params.flags.unfocus) {
+            // TODO: implement
+            // TODO: restore previously active agents
+        } else {
+            // turn off the agents specified by the off parameter
+            if (params.flags.off) {
+                hasParams = true;
+                setAgentToggleOption(
+                    existingNames,
+                    existingNameType,
+                    options,
+                    params.flags.off,
+                    false,
+                );
+            }
+
+            // turn on supplied agents by name
+            if (params.args.agentNames) {
+                hasParams = true;
+                setAgentToggleOption(
+                    existingNames,
+                    existingNameType,
+                    options,
+                    params.args.agentNames,
+                    true,
+                );
+            }
         }
 
+        // report modified agent status
         if (!hasParams) {
             showAgentStatus(this.toggle, context);
             return;

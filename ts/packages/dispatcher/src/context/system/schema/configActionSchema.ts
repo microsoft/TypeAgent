@@ -5,7 +5,9 @@ export type ConfigAction =
     | ListAgents
     | ToggleAgent
     | ToggleExplanationAction
-    | ToggleDeveloperModeAction;
+    | ToggleDeveloperModeAction
+    | EnterAgentFocusModeAction
+    | ExitAgentFocusModeAction;
 
 // Shows the list of available agents
 export type ListAgents = {
@@ -36,3 +38,19 @@ export type ToggleDeveloperModeAction = {
         enable: boolean;
     };
 };
+
+// Puts a specific agent into focus mode
+export type EnterAgentFocusModeAction = {
+    actionName: "enterAgentFocusMode";
+    parameters: {
+        // the agent name or wildcard match string (* to match all agents)
+        agentName: string;
+    }
+}
+
+// Leaves agent focus mode
+export type ExitAgentFocusModeAction = {
+    actionName: "exitAgentFocusMode";
+    parameters: {
+    }
+}
