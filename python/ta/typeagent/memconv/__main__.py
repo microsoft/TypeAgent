@@ -17,7 +17,6 @@ from typing import cast
 import dotenv
 
 from typeagent.knowpro.convindex import ConversationIndex
-
 from typeagent.knowpro.interfaces import IndexingEventHandlers, TextLocation
 from typeagent.memconv.import_podcasts import import_podcast
 
@@ -62,6 +61,8 @@ async def main():
     )
     indexing_result = await pod.build_index(handler)
     print(indexing_result)
+    if error := indexing_result.semantic_refs.error:
+        raise SystemExit(error)
     if pod.semantic_ref_index is not None:
         data = pod.semantic_ref_index.serialize()
         new = ConversationIndex(data)
