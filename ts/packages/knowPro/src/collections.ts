@@ -766,3 +766,44 @@ function* union<T>(
         yield value;
     }
 }
+
+export class Collection<T> implements Iterable<T> {
+    protected items: T[];
+    constructor() {
+        this.items = [];
+    }
+
+    public get length(): number {
+        return this.items.length;
+    }
+
+    public get(ordinal: number): T | undefined {
+        return this.items[ordinal];
+    }
+
+    protected getMultiple(ordinals: number[]): (T | undefined)[] {
+        const items = new Array<T | undefined>(ordinals.length);
+        for (let i = 0; i < ordinals.length; ++i) {
+            items[i] = this.get(ordinals[i]);
+        }
+        return items;
+    }
+
+    protected add(item: T): number {
+        const ordinal = this.items.length;
+        this.items.push(item);
+        return ordinal;
+    }
+
+    public addMultiple(items: T[]): number[] {
+        const ordinals = new Array<number>(items.length);
+        for (let i = 0; i < items.length; ++i) {
+            ordinals[i] = this.add(items[i]);
+        }
+        return ordinals;
+    }
+
+    public *[Symbol.iterator](): Iterator<T, any, any> {
+        return this.items[Symbol.iterator]();
+    }
+}

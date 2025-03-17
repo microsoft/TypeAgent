@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { Collection } from "./collections.js";
 import { IMessage, IMessageCollection, MessageOrdinal } from "./interfaces.js";
 
 /**
@@ -44,26 +45,29 @@ export function getCountOfMessagesInCharBudget(
     return i;
 }
 
-export class MessageCollection implements IMessageCollection {
-    private messages: IMessage[];
-
+export class MessageCollection
+    extends Collection<IMessage>
+    implements IMessageCollection
+{
     constructor() {
-        this.messages = [];
+        super();
     }
 
-    public get length(): number {
-        return this.messages.length;
+    public getMessage(messageOrdinal: MessageOrdinal): IMessage | undefined {
+        return this.get(messageOrdinal);
     }
 
-    public getMessage(ordinal: number): IMessage | undefined {
-        return this.messages[ordinal];
+    public getMessages(
+        messageOrdinals: MessageOrdinal[],
+    ): (IMessage | undefined)[] {
+        return this.getMultiple(messageOrdinals);
     }
 
-    public addMessage(message: IMessage): void {
-        this.messages.push(message);
+    public addMessage(message: IMessage): number {
+        return this.add(message);
     }
 
-    public *[Symbol.iterator](): Iterator<IMessage, any, any> {
-        return this.messages[Symbol.iterator]();
+    public addMessages(messages: IMessage[]): number[] {
+        return this.addMultiple(messages);
     }
 }

@@ -31,7 +31,10 @@ export interface IMessageCollection<TMessage extends IMessage = IMessage>
     extends Iterable<TMessage> {
     readonly length: number;
     getMessage(messageOrdinal: MessageOrdinal): IMessage | undefined;
-    addMessage(message: IMessage): void;
+    getMessages(messageOrdinals: MessageOrdinal[]): (IMessage | undefined)[];
+    addMessage(message: IMessage): number;
+
+    addMessages(messages: IMessage[]): number[];
 }
 
 export interface DeletionInfo {
