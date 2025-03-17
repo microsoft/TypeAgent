@@ -436,6 +436,8 @@ class SearchQueryBuilder {
         if (
             messageIndex &&
             rawQueryText &&
+            maxMessageMatches &&
+            maxMessageMatches > 0 &&
             isMessageTextEmbeddingIndex(messageIndex)
         ) {
             // If embeddings supported, and there are too many matches, try to re-rank using similarity matching
