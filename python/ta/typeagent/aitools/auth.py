@@ -33,4 +33,4 @@ class TokenProvider:
 
 
 if __name__ == "__main__":
-    print(f"export AZURE_OPENAI_API_TOKEN={TokenProvider().get_token()}")
+    print(f"export AZURE_OPENAI_API_KEY={TokenProvider().get_token()}")
