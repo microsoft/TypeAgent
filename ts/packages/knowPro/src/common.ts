@@ -22,15 +22,15 @@ export interface Scored<T = any> {
  */
 
 export function compareTextLocation(x: TextLocation, y: TextLocation): number {
-    let cmp = x.messageIndex - y.messageIndex;
+    let cmp = x.messageOrdinal - y.messageOrdinal;
     if (cmp !== 0) {
         return cmp;
     }
-    cmp = (x.chunkIndex ?? 0) - (y.chunkIndex ?? 0);
+    cmp = (x.chunkOrdinal ?? 0) - (y.chunkOrdinal ?? 0);
     if (cmp !== 0) {
         return cmp;
     }
-    return (x.charIndex ?? 0) - (y.charIndex ?? 0);
+    return (x.charOrdinal ?? 0) - (y.charOrdinal ?? 0);
 }
 
 export function compareTextRange(x: TextRange, y: TextRange) {

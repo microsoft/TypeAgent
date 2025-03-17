@@ -114,6 +114,10 @@ module.exports = {
                     to: "./extension",
                 },
                 {
+                    from: path.join(srcDir, "/sites/paleobiodbSchema.mts"),
+                    to: "./extension/sites",
+                },
+                {
                     from: "node_modules/bootstrap/dist/css/bootstrap.min.css",
                     to: "./extension/vendor/bootstrap/bootstrap.min.css",
                 },

@@ -7,10 +7,11 @@ import {
     IMessage,
     ITermToSemanticRefIndex,
     KnowledgeType,
-    MessageIndex,
-    ScoredSemanticRef,
+    MessageOrdinal,
+    ScoredMessageOrdinal,
+    ScoredSemanticRefOrdinal,
     SemanticRef,
-    SemanticRefIndex,
+    SemanticRefOrdinal,
     Tag,
     Term,
     TextRange,
@@ -38,10 +39,11 @@ import {
 import { ITimestampToTextRangeIndex } from "./interfaces.js";
 import { IPropertyToSemanticRefIndex } from "./interfaces.js";
 import { conversation as kpLib } from "knowledge-processor";
-import { collections } from "typeagent";
+import { collections, NormalizedEmbedding } from "typeagent";
 import { Thread } from "./interfaces.js";
 import { facetValueToString } from "./knowledge.js";
 import { isInDateRange, isSearchTermWildcard } from "./common.js";
+import { isMessageTextEmbeddingIndex } from "./messageIndex.js";
 
 export function isConversationSearchable(conversation: IConversation): boolean {
     return (
@@ -55,27 +57,27 @@ export function getTextRangeForDateRange(
     dateRange: DateRange,
 ): TextRange | undefined {
     const messages = conversation.messages;
-    let rangeStartIndex: MessageIndex = -1;
-    let rangeEndIndex = rangeStartIndex;
+    let rangeStartOrdinal: MessageOrdinal = -1;
+    let rangeEndOrdinal = rangeStartOrdinal;
     for (let messageIndex = 0; messageIndex < messages.length; ++messageIndex) {
         const message = messages[messageIndex];
         if (message.timestamp) {
             if (isInDateRange(dateRange, new Date(message.timestamp))) {
-                if (rangeStartIndex < 0) {
-                    rangeStartIndex = messageIndex;
+                if (rangeStartOrdinal < 0) {
+                    rangeStartOrdinal = messageIndex;
                 }
-                rangeEndIndex = messageIndex;
+                rangeEndOrdinal = messageIndex;
             } else {
-                if (rangeStartIndex >= 0) {
+                if (rangeStartOrdinal >= 0) {
                     break;
                 }
             }
         }
     }
-    if (rangeStartIndex >= 0) {
+    if (rangeStartOrdinal >= 0) {
         return {
-            start: { messageIndex: rangeStartIndex },
-            end: { messageIndex: rangeEndIndex + 1 },
+            start: { messageOrdinal: rangeStartOrdinal },
+            end: { messageOrdinal: rangeEndOrdinal + 1 },
         };
     }
     return undefined;
@@ -288,12 +290,15 @@ export function lookupTermFiltered(
     semanticRefIndex: ITermToSemanticRefIndex,
     term: Term,
     semanticRefs: SemanticRef[],
-    filter: (semanticRef: SemanticRef, scoredRef: ScoredSemanticRef) => boolean,
-): ScoredSemanticRef[] | undefined {
+    filter: (
+        semanticRef: SemanticRef,
+        scoredRef: ScoredSemanticRefOrdinal,
+    ) => boolean,
+): ScoredSemanticRefOrdinal[] | undefined {
     const scoredRefs = semanticRefIndex.lookupTerm(term.text);
     if (scoredRefs && scoredRefs.length > 0) {
         let filtered = scoredRefs.filter((sr) => {
-            const semanticRef = semanticRefs[sr.semanticRefIndex];
+            const semanticRef = semanticRefs[sr.semanticRefOrdinal];
             const result = filter(semanticRef, sr);
             return result;
         });
@@ -307,7 +312,7 @@ export function lookupTerm(
     term: Term,
     semanticRefs: SemanticRef[],
     rangesInScope?: TextRangesInScope,
-): ScoredSemanticRef[] | undefined {
+): ScoredSemanticRefOrdinal[] | undefined {
     if (rangesInScope) {
         // If rangesInScope has no actual text ranges, then lookups can't possibly match
         return lookupTermFiltered(semanticRefIndex, term, semanticRefs, (sr) =>
@@ -322,7 +327,7 @@ export function lookupProperty(
     propertySearchTerm: PropertySearchTerm,
     semanticRefs: SemanticRef[],
     rangesInScope?: TextRangesInScope,
-): ScoredSemanticRef[] | undefined {
+): ScoredSemanticRefOrdinal[] | undefined {
     if (typeof propertySearchTerm.propertyName !== "string") {
         throw new Error("Not supported");
     }
@@ -354,7 +359,7 @@ export function lookupProperty(
 
 // Query eval expressions
 
-export interface IQueryOpExpr<T> {
+export interface IQueryOpExpr<T = any> {
     eval(context: QueryEvalContext): T;
 }
 
@@ -394,12 +399,16 @@ export class QueryEvalContext {
         return this.conversation.semanticRefs!;
     }
 
-    public getSemanticRef(semanticRefIndex: SemanticRefIndex): SemanticRef {
-        return this.conversation.semanticRefs![semanticRefIndex];
+    public get messages() {
+        return this.conversation.messages;
+    }
+
+    public getSemanticRef(semanticRefOrdinal: SemanticRefOrdinal): SemanticRef {
+        return this.conversation.semanticRefs![semanticRefOrdinal];
     }
 
     public getMessageForRef(semanticRef: SemanticRef): IMessage {
-        const messageIndex = semanticRef.range.start.messageIndex;
+        const messageIndex = semanticRef.range.start.messageOrdinal;
         return this.conversation.messages[messageIndex];
     }
 
@@ -541,8 +550,8 @@ export class MatchSearchTermExpr extends MatchTermExpr {
         public scoreBooster?: (
             searchTerm: SearchTerm,
             sr: SemanticRef,
-            scored: ScoredSemanticRef,
-        ) => ScoredSemanticRef,
+            scored: ScoredSemanticRefOrdinal,
+        ) => ScoredSemanticRefOrdinal,
     ) {
         super();
     }
@@ -572,7 +581,10 @@ export class MatchSearchTermExpr extends MatchTermExpr {
     protected lookupTerm(
         context: QueryEvalContext,
         term: Term,
-    ): ScoredSemanticRef[] | IterableIterator<ScoredSemanticRef> | undefined {
+    ):
+        | ScoredSemanticRefOrdinal[]
+        | IterableIterator<ScoredSemanticRefOrdinal>
+        | undefined {
         const matches = lookupTerm(
             context.semanticRefIndex,
             term,
@@ -583,7 +595,7 @@ export class MatchSearchTermExpr extends MatchTermExpr {
             for (let i = 0; i < matches.length; ++i) {
                 matches[i] = this.scoreBooster(
                     this.searchTerm,
-                    context.getSemanticRef(matches[i].semanticRefIndex),
+                    context.getSemanticRef(matches[i].semanticRefOrdinal),
                     matches[i],
                 );
             }
@@ -745,7 +757,7 @@ export class MatchPropertySearchTermExpr extends MatchTermExpr {
         context: QueryEvalContext,
         propertyName: string,
         propertyValue: string,
-    ): ScoredSemanticRef[] | undefined {
+    ): ScoredSemanticRefOrdinal[] | undefined {
         if (context.propertyIndex) {
             return lookupPropertyInPropertyIndex(
                 context.propertyIndex,
@@ -766,7 +778,7 @@ export class MatchPropertySearchTermExpr extends MatchTermExpr {
         context: QueryEvalContext,
         propertyName: string,
         propertyValue: string,
-    ): ScoredSemanticRef[] | undefined {
+    ): ScoredSemanticRefOrdinal[] | undefined {
         return lookupProperty(
             context.semanticRefIndex,
             {
@@ -786,7 +798,7 @@ export class MatchTagExpr extends MatchSearchTermExpr {
     protected override lookupTerm(
         context: QueryEvalContext,
         term: Term,
-    ): ScoredSemanticRef[] | undefined {
+    ): ScoredSemanticRefOrdinal[] | undefined {
         return lookupTermFiltered(
             context.semanticRefIndex,
             term,
@@ -877,7 +889,7 @@ export class WhereSemanticRefExpr extends QueryOpExpr<SemanticRefAccumulator> {
     private evalPredicates(
         context: QueryEvalContext,
         predicates: IQuerySemanticRefPredicate[],
-        match: Match<SemanticRefIndex>,
+        match: Match<SemanticRefOrdinal>,
     ) {
         for (let i = 0; i < predicates.length; ++i) {
             const semanticRef = context.getSemanticRef(match.value);
@@ -1077,7 +1089,7 @@ export class ThreadSelector implements IQueryTextRangeSelector {
     }
 }
 
-export function toGroupedSearchResults(
+function toGroupedSearchResults(
     evalResults: Map<KnowledgeType, SemanticRefAccumulator>,
 ): Map<KnowledgeType, SemanticRefSearchResult> {
     const semanticRefMatches = new Map<
@@ -1095,31 +1107,114 @@ export function toGroupedSearchResults(
     return semanticRefMatches;
 }
 
-export function messageMatchesFromKnowledgeMatches(
+export class MessagesFromKnowledgeExpr extends QueryOpExpr<MessageAccumulator> {
+    constructor(
+        public srcExpr:
+            | IQueryOpExpr<Map<KnowledgeType, SemanticRefSearchResult>>
+            | Map<KnowledgeType, SemanticRefSearchResult>,
+    ) {
+        super();
+    }
+
+    public override eval(context: QueryEvalContext): MessageAccumulator {
+        const knowledge =
+            this.srcExpr instanceof Map
+                ? this.srcExpr
+                : this.srcExpr.eval(context);
+        return messageMatchesFromKnowledgeMatches(
+            context.semanticRefs,
+            knowledge,
+        );
+    }
+}
+
+export class SelectMessagesInCharBudget extends QueryOpExpr<MessageAccumulator> {
+    constructor(
+        public srcExpr: IQueryOpExpr<MessageAccumulator>,
+        public maxCharsInBudget: number,
+    ) {
+        super();
+    }
+
+    public override eval(context: QueryEvalContext): MessageAccumulator {
+        const matches = this.srcExpr.eval(context);
+        matches.selectMessagesInBudget(context.messages, this.maxCharsInBudget);
+        return matches;
+    }
+}
+
+export class RankMessagesBySimilarity extends QueryOpExpr<MessageAccumulator> {
+    constructor(
+        public srcExpr: IQueryOpExpr<MessageAccumulator>,
+        public embedding: NormalizedEmbedding,
+        public maxMessages: number,
+    ) {
+        super();
+    }
+
+    public override eval(context: QueryEvalContext): MessageAccumulator {
+        const matches = this.srcExpr.eval(context);
+        if (matches.size <= this.maxMessages) {
+            return matches;
+        }
+        const messageIndex =
+            context.conversation.secondaryIndexes?.messageIndex;
+        if (messageIndex && isMessageTextEmbeddingIndex(messageIndex)) {
+            const messageOrdinals = [...matches.getMatchedValues()];
+            const rankedMessages = messageIndex.lookupInSubsetByEmbedding(
+                this.embedding,
+                messageOrdinals,
+                this.maxMessages,
+            );
+            matches.clearMatches();
+            for (const match of rankedMessages) {
+                matches.add(match.messageOrdinal, match.score);
+            }
+        }
+        return matches;
+    }
+}
+
+export class GetScoredMessages extends QueryOpExpr<ScoredMessageOrdinal[]> {
+    constructor(public srcExpr: IQueryOpExpr<MessageAccumulator>) {
+        super();
+    }
+
+    public override eval(context: QueryEvalContext): ScoredMessageOrdinal[] {
+        const matches = this.srcExpr.eval(context);
+        return matches.toScoredMessageOrdinals();
+    }
+}
+
+function messageMatchesFromKnowledgeMatches(
     semanticRefs: SemanticRef[],
     knowledgeMatches: Map<KnowledgeType, SemanticRefSearchResult>,
+    intersectAcrossKnowledgeTypes: boolean = true,
 ): MessageAccumulator {
     let messageMatches = new MessageAccumulator();
-    let expectedHitCount = 0;
+    let knowledgeTypeHitCount = 0; // How many types of knowledge matched? (e.g. entity, topic, action)
     for (const knowledgeType of knowledgeMatches.keys()) {
         const matchesByType = knowledgeMatches.get(knowledgeType);
         if (matchesByType && matchesByType.semanticRefMatches.length > 0) {
-            expectedHitCount++;
+            knowledgeTypeHitCount++;
             for (const match of matchesByType.semanticRefMatches) {
                 messageMatches.addMessagesForSemanticRef(
-                    semanticRefs[match.semanticRefIndex],
+                    semanticRefs[match.semanticRefOrdinal],
                     match.score,
                 );
             }
         }
     }
-    if (expectedHitCount > 0) {
-        const relevantMessages =
-            messageMatches.getWithHitCount(expectedHitCount);
+    if (intersectAcrossKnowledgeTypes && knowledgeTypeHitCount > 0) {
+        // This basically intersects the sets of messages that matched each knowledge type
+        // E.g. if topics and entities matched, then a relevant message must have both matching topics and entities
+        const relevantMessages = messageMatches.getWithHitCount(
+            knowledgeTypeHitCount,
+        );
         if (relevantMessages.length > 0) {
             messageMatches = new MessageAccumulator(relevantMessages);
         }
     }
-    //messageMatches.smoothScores();
+
     return messageMatches;
 }

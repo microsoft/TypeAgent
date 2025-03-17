@@ -8,8 +8,11 @@ export interface IKnowledgeSource {
     getKnowledge(): kpLib.KnowledgeResponse;
 }
 
-export type MessageIndex = number;
+export type MessageOrdinal = number;
 
+/**
+ * A Message contains one or more text chunks
+ */
 export interface IMessage extends IKnowledgeSource {
     // the text of the message, split into chunks
     textChunks: string[];
@@ -18,8 +21,8 @@ export interface IMessage extends IKnowledgeSource {
     deletionInfo?: DeletionInfo;
 }
 
-export type ScoredMessageIndex = {
-    messageIndex: MessageIndex;
+export type ScoredMessageOrdinal = {
+    messageOrdinal: MessageOrdinal;
     score: number;
 };
 
@@ -31,10 +34,10 @@ export interface DeletionInfo {
 export type KnowledgeType = "entity" | "action" | "topic" | "tag";
 export type Knowledge = kpLib.ConcreteEntity | kpLib.Action | Topic | Tag;
 
-export type SemanticRefIndex = number;
+export type SemanticRefOrdinal = number;
 
 export interface SemanticRef {
-    semanticRefIndex: SemanticRefIndex;
+    semanticRefOrdinal: SemanticRefOrdinal;
     range: TextRange;
     knowledgeType: KnowledgeType;
     knowledge: Knowledge;
@@ -57,8 +60,8 @@ export interface IConversation<TMessage extends IKnowledgeSource = any> {
     secondaryIndexes?: IConversationSecondaryIndexes | undefined;
 }
 
-export type ScoredSemanticRef = {
-    semanticRefIndex: SemanticRefIndex;
+export type ScoredSemanticRefOrdinal = {
+    semanticRefOrdinal: SemanticRefOrdinal;
     score: number;
 };
 
@@ -66,26 +69,36 @@ export interface ITermToSemanticRefIndex {
     getTerms(): string[];
     addTerm(
         term: string,
-        semanticRefIndex: SemanticRefIndex | ScoredSemanticRef,
+        semanticRefOrdinal: SemanticRefOrdinal | ScoredSemanticRefOrdinal,
     ): void;
-    removeTerm(term: string, semanticRefIndex: SemanticRefIndex): void;
-    lookupTerm(term: string): ScoredSemanticRef[] | undefined;
+    removeTerm(term: string, semanticRefOrdinal: SemanticRefOrdinal): void;
+    lookupTerm(term: string): ScoredSemanticRefOrdinal[] | undefined;
 }
 
+/**
+ * Represents a specific location of within a text {@link IMessage}.
+ * A message can contain one or more text chunks
+ */
 export interface TextLocation {
-    // the index of the message
-    messageIndex: MessageIndex;
-    // the index of the chunk
-    chunkIndex?: number;
-    // the index of the character within the chunk
-    charIndex?: number;
+    // the ordinal of the message
+    messageOrdinal: MessageOrdinal;
+
+    // [Optional] The ordinal index of the chunk within the message.
+    chunkOrdinal?: number;
+
+    // [Optional] The ordinal index of the character within the chunk.
+    charOrdinal?: number;
 }
 
-// a text range within a session
+/**
+ * A text range within a conversation
+ * TextRange can represent both a text range and a point location
+ * If 'end' is undefined, the text range represents a point location, identified by 'start'
+ */
 export interface TextRange {
     // the start of the range
     start: TextLocation;
-    // the end of the range  (exclusive)
+    // the (optional)end of the range  (exclusive)
     end?: TextLocation | undefined;
 }
 
@@ -125,12 +138,12 @@ export interface IPropertyToSemanticRefIndex {
     addProperty(
         propertyName: string,
         value: string,
-        semanticRefIndex: SemanticRefIndex | ScoredSemanticRef,
+        semanticRefOrdinal: SemanticRefOrdinal | ScoredSemanticRefOrdinal,
     ): void;
     lookupProperty(
         propertyName: string,
         value: string,
-    ): ScoredSemanticRef[] | undefined;
+    ): ScoredSemanticRefOrdinal[] | undefined;
 }
 
 export type TimestampedTextRange = {
@@ -142,9 +155,9 @@ export type TimestampedTextRange = {
  * Return text ranges in the given date range
  */
 export interface ITimestampToTextRangeIndex {
-    addTimestamp(messageIndex: MessageIndex, timestamp: string): boolean;
+    addTimestamp(messageOrdinal: MessageOrdinal, timestamp: string): boolean;
     addTimestamps(
-        messageTimestamps: [MessageIndex, string][],
+        messageTimestamps: [MessageOrdinal, string][],
     ): ListIndexingResult;
     lookupRange(dateRange: DateRange): TimestampedTextRange[];
 }
@@ -183,10 +196,10 @@ export type Thread = {
     ranges: TextRange[];
 };
 
-export type ThreadIndex = number;
+export type ThreadOrdinal = number;
 
-export type ScoredThreadIndex = {
-    threadIndex: ThreadIndex;
+export type ScoredThreadOrdinal = {
+    threadOrdinal: ThreadOrdinal;
     score: number;
 };
 
@@ -198,8 +211,8 @@ export interface IConversationThreads {
         threadDescription: string,
         maxMatches?: number,
         thresholdScore?: number,
-    ): Promise<ScoredThreadIndex[] | undefined>;
-    removeThread(threadIndex: ThreadIndex): void;
+    ): Promise<ScoredThreadOrdinal[] | undefined>;
+    removeThread(threadOrdinal: ThreadOrdinal): void;
 }
 
 export interface IMessageTextIndex {
@@ -211,13 +224,13 @@ export interface IMessageTextIndex {
         messageText: string,
         maxMatches?: number,
         thresholdScore?: number,
-    ): Promise<ScoredMessageIndex[]>;
+    ): Promise<ScoredMessageOrdinal[]>;
     lookupMessagesInSubset(
         messageText: string,
-        indicesToSearch: MessageIndex[],
+        ordinalsToSearch: MessageOrdinal[],
         maxMatches?: number,
         thresholdScore?: number,
-    ): Promise<ScoredMessageIndex[]>;
+    ): Promise<ScoredMessageOrdinal[]>;
 }
 
 //------------------------
@@ -239,7 +252,7 @@ export interface ITermToSemanticRefIndexData {
 
 export interface ITermToSemanticRefIndexItem {
     term: string;
-    semanticRefIndices: ScoredSemanticRef[];
+    semanticRefOrdinals: ScoredSemanticRefOrdinal[];
 }
 
 //------------------------

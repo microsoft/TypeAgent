@@ -53,19 +53,26 @@ export class HelpCommandHandler implements CommandHandler {
             const agentNames: string[] =
                 context.sessionContext.agentContext.agents.getAppAgentNames();
             for (let i = 0; i < agentNames.length; i++) {
-                const agent =
-                    context.sessionContext.agentContext.agents.getAppAgent(
-                        agentNames[i],
-                    );
+                try {
+                    const agent =
+                        context.sessionContext.agentContext.agents.getAppAgent(
+                            agentNames[i],
+                        );
 
-                if (
-                    agent !== undefined &&
-                    agent.getCommands &&
-                    agentNames[i] == "system"
-                ) {
-                    printAllCommandsWithUsage(
-                        await agent.getCommands!(context.sessionContext),
-                        agentNames[i],
+                    if (
+                        agent !== undefined &&
+                        agent.getCommands &&
+                        agentNames[i] !== "system"
+                    ) {
+                        printAllCommandsWithUsage(
+                            await agent.getCommands!(context.sessionContext),
+                            agentNames[i],
+                            context,
+                        );
+                    }
+                } catch {
+                    displayResult(
+                        `Can't get commands for agent '${agentNames[i]}' because it is not enabled.`,
                         context,
                     );
                 }

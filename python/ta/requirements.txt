@@ -1,2 +1,12 @@
+# Runtime deps
+
 typechat @ git+https://github.com/microsoft/TypeChat#subdirectory=python
+python-dotenv
+pydantic
+azure-identity
+
+# Build deps
+
 build
+black
+pyright

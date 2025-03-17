@@ -1,18 +1,21 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
+import { generateEmbeddingWithRetry, NormalizedEmbedding } from "typeagent";
+import { MessageAccumulator } from "./collections.js";
 import { TextEmbeddingIndexSettings } from "./fuzzyIndex.js";
 import {
     IMessage,
-    MessageIndex,
+    MessageOrdinal,
     IndexingEventHandlers,
     TextLocation,
     ListIndexingResult,
-    ScoredMessageIndex,
+    ScoredMessageOrdinal,
     IConversation,
     IMessageTextIndex,
 } from "./interfaces.js";
 import {
     ITextToTextLocationIndexData,
+    ScoredTextLocation,
     TextToTextLocationIndex,
 } from "./textLocationIndex.js";
 
@@ -24,8 +27,18 @@ export interface IMessageTextIndexData {
     indexData?: ITextToTextLocationIndexData | undefined;
 }
 
-export class MessageTextIndex implements IMessageTextIndex {
-    private textLocationIndex: TextToTextLocationIndex;
+export interface IMessageTextEmbeddingIndex extends IMessageTextIndex {
+    generateEmbedding(text: string): Promise<NormalizedEmbedding>;
+    lookupInSubsetByEmbedding(
+        textEmbedding: NormalizedEmbedding,
+        ordinalsToSearch: MessageOrdinal[],
+        maxMatches?: number,
+        thresholdScore?: number,
+    ): ScoredMessageOrdinal[];
+}
+
+export class MessageTextIndex implements IMessageTextEmbeddingIndex {
+    public textLocationIndex: TextToTextLocationIndex;
 
     constructor(public settings: MessageTextIndexSettings) {
         this.textLocationIndex = new TextToTextLocationIndex(
@@ -41,12 +54,12 @@ export class MessageTextIndex implements IMessageTextIndex {
         messages: IMessage[],
         eventHandler?: IndexingEventHandlers,
     ): Promise<ListIndexingResult> {
-        const baseMessageIndex: MessageIndex = this.size;
+        const baseMessageOrdinal: MessageOrdinal = this.size;
         const allChunks: [string, TextLocation][] = [];
         // Collect everything so we can batch efficiently
         for (let i = 0; i < messages.length; ++i) {
             const message = messages[i];
-            let messageIndex = baseMessageIndex + i;
+            let messageOrdinal = baseMessageOrdinal + i;
             for (
                 let chunkIndex = 0;
                 chunkIndex < message.textChunks.length;
@@ -54,7 +67,7 @@ export class MessageTextIndex implements IMessageTextIndex {
             ) {
                 allChunks.push([
                     message.textChunks[chunkIndex],
-                    { messageIndex, chunkIndex },
+                    { messageOrdinal, chunkOrdinal: chunkIndex },
                 ]);
             }
         }
@@ -65,40 +78,54 @@ export class MessageTextIndex implements IMessageTextIndex {
         messageText: string,
         maxMatches?: number,
         thresholdScore?: number,
-    ): Promise<ScoredMessageIndex[]> {
+    ): Promise<ScoredMessageOrdinal[]> {
         maxMatches ??= this.settings.embeddingIndexSettings.maxMatches;
         thresholdScore ??= this.settings.embeddingIndexSettings.minScore;
-        const scoredLocations = await this.textLocationIndex.lookupText(
+        const scoredTextLocations = await this.textLocationIndex.lookupText(
             messageText,
             maxMatches,
             thresholdScore,
         );
-        return scoredLocations.map((sl) => {
-            return {
-                messageIndex: sl.textLocation.messageIndex,
-                score: sl.score,
-            };
-        });
+        return this.toScoredMessageOrdinals(scoredTextLocations);
     }
 
     public async lookupMessagesInSubset(
         messageText: string,
-        indicesToSearch: MessageIndex[],
+        ordinalsToSearch: MessageOrdinal[],
         maxMatches?: number,
         thresholdScore?: number,
-    ): Promise<ScoredMessageIndex[]> {
-        const scoredLocations = await this.textLocationIndex.lookupTextInSubset(
-            messageText,
-            indicesToSearch,
-            maxMatches,
-            thresholdScore,
+    ): Promise<ScoredMessageOrdinal[]> {
+        const scoredTextLocations =
+            await this.textLocationIndex.lookupTextInSubset(
+                messageText,
+                ordinalsToSearch,
+                maxMatches,
+                thresholdScore,
+            );
+        return this.toScoredMessageOrdinals(scoredTextLocations);
+    }
+
+    public generateEmbedding(text: string): Promise<NormalizedEmbedding> {
+        return generateEmbeddingWithRetry(
+            this.settings.embeddingIndexSettings.embeddingModel,
+            text,
         );
-        return scoredLocations.map((sl) => {
-            return {
-                messageIndex: sl.textLocation.messageIndex,
-                score: sl.score,
-            };
-        });
+    }
+
+    public lookupInSubsetByEmbedding(
+        textEmbedding: NormalizedEmbedding,
+        ordinalsToSearch: MessageOrdinal[],
+        maxMatches?: number,
+        thresholdScore?: number,
+    ): ScoredMessageOrdinal[] {
+        const scoredTextLocations =
+            this.textLocationIndex.lookupInSubsetByEmbedding(
+                textEmbedding,
+                ordinalsToSearch,
+                maxMatches,
+                thresholdScore,
+            );
+        return this.toScoredMessageOrdinals(scoredTextLocations);
     }
 
     public serialize(): IMessageTextIndexData {
@@ -112,6 +139,17 @@ export class MessageTextIndex implements IMessageTextIndex {
             this.textLocationIndex.clear();
             this.textLocationIndex.deserialize(data.indexData);
         }
+    }
+
+    // Since a message has multiple chunks, each of which is indexed individually, we can end up
+    // with a message matching multiple times. The message accumulator dedupes those and also
+    // supports smoothing the scores if needed
+    private toScoredMessageOrdinals(
+        scoredLocations: ScoredTextLocation[],
+    ): ScoredMessageOrdinal[] {
+        const messageMatches = new MessageAccumulator();
+        messageMatches.addMessagesFromLocations(scoredLocations);
+        return messageMatches.toScoredMessageOrdinals();
     }
 }
 
@@ -131,4 +169,10 @@ export async function buildMessageIndex(
     return {
         numberCompleted: 0,
     };
+}
+
+export function isMessageTextEmbeddingIndex(
+    messageIndex: IMessageTextIndex,
+): messageIndex is IMessageTextEmbeddingIndex {
+    return messageIndex.hasOwnProperty("getEmbedding");
 }

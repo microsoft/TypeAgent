@@ -13,3 +13,4 @@ pnpm-lock.yaml               merge=binary
 *.jpg -text
 *.gif -text
 *.pdf -text
+*.bin -text

@@ -398,7 +398,7 @@ export class ImageCollection implements IConversation {
         this.addMetadataToIndex();
         const indexingResult: IndexingResults = {
             semanticRefs: {
-                completedUpto: { messageIndex: this.messages.length - 1 },
+                completedUpto: { messageOrdinal: this.messages.length - 1 },
             },
         };
         indexingResult.secondaryIndexResults = await buildSecondaryIndexes(

@@ -169,13 +169,13 @@ function markInvisibleNodesForCleanup() {
 }
 
 function getPageHTML(
-    fullSize: boolean,
-    documentHtml: string,
-    frameId: number,
-    useTimestampIds: boolean,
+    fullSize?: boolean,
+    documentHtml?: string,
+    frameId?: number,
+    useTimestampIds?: boolean,
 ) {
     if (!documentHtml) {
-        setIdsOnAllElements(frameId, useTimestampIds);
+        setIdsOnAllElements(frameId!, useTimestampIds);
         markInvisibleNodesForCleanup();
         documentHtml = document.children[0].outerHTML;
     }
@@ -1067,6 +1067,17 @@ window.addEventListener(
                     "*",
                 );
             });
+        }
+
+        if (event.data.type === "GET_FILE_PATH" && event.data.fileName) {
+            const fileUrl = chrome.runtime.getURL(event.data.fileName);
+            window.postMessage(
+                {
+                    type: "FILE_PATH_RESULT",
+                    result: fileUrl,
+                },
+                "*",
+            );
         }
     },
     false,
