@@ -520,6 +520,11 @@ export async function createKnowproCommands(
         def.options ??= {};
         def.options.showKnowledge = argBool("Show knowledge matches", true);
         def.options.showMessages = argBool("Show message matches", false);
+        def.options.knowledgeTopK = argNum(
+            "How many top K knowledge matches",
+            50,
+        );
+        def.options.charBudget = argNum("Maximum characters in budget", 4096);
         return def;
     }
     commands.kpSearch.metadata = searchDefNew();
@@ -536,6 +541,8 @@ export async function createKnowproCommands(
             namedArgs.ktype,
             {
                 exactMatch: namedArgs.exact,
+                maxKnowledgeMatches: namedArgs.knowledgeTopK,
+                maxMessageCharsInBudget: namedArgs.charBudget,
             },
         );
         if (!result.success) {
