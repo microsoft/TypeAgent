@@ -4,6 +4,7 @@
 import { collections, createTopNList } from "typeagent";
 import {
     IMessage,
+    IMessageCollection,
     Knowledge,
     KnowledgeType,
     MessageOrdinal,
@@ -805,5 +806,32 @@ export class Collection<T> implements Iterable<T> {
 
     public *[Symbol.iterator](): Iterator<T, any, any> {
         return this.items[Symbol.iterator]();
+    }
+}
+
+export class MessageCollection
+    extends Collection<IMessage>
+    implements IMessageCollection
+{
+    constructor() {
+        super();
+    }
+
+    public getMessage(messageOrdinal: MessageOrdinal): IMessage | undefined {
+        return this.get(messageOrdinal);
+    }
+
+    public getMessages(
+        messageOrdinals: MessageOrdinal[],
+    ): (IMessage | undefined)[] {
+        return this.getMultiple(messageOrdinals);
+    }
+
+    public addMessage(message: IMessage): number {
+        return this.add(message);
+    }
+
+    public addMessages(messages: IMessage[]): number[] {
+        return this.addMultiple(messages);
     }
 }
