@@ -106,6 +106,7 @@ export class MessageTextIndex implements IMessageTextEmbeddingIndex {
     }
 
     public generateEmbedding(text: string): Promise<NormalizedEmbedding> {
+        // Note: if you rename generateEmbedding, be sure to also fix isMessageTextEmbeddingIndex
         return generateEmbeddingWithRetry(
             this.settings.embeddingIndexSettings.embeddingModel,
             text,
@@ -174,5 +175,6 @@ export async function buildMessageIndex(
 export function isMessageTextEmbeddingIndex(
     messageIndex: IMessageTextIndex,
 ): messageIndex is IMessageTextEmbeddingIndex {
-    return messageIndex.hasOwnProperty("getEmbedding");
+    const fn = typeof (messageIndex as any).generateEmbedding;
+    return fn !== undefined;
 }

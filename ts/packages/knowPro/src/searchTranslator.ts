@@ -158,12 +158,12 @@ export function getTimeRangePromptSectionForConversation(
 export async function searchConversationWithNaturalLanguage(
     conversation: IConversation,
     searchTranslator: SearchTranslator,
-    query: string,
+    naturalLanguageQuery: string,
     knowledgeType?: KnowledgeType,
     options?: SearchOptions,
 ): Promise<Result<[ConversationSearchResult | undefined, SearchFilter]>> {
     const result = await searchTranslator.translate(
-        query,
+        naturalLanguageQuery,
         getTimeRangePromptSectionForConversation(conversation),
     );
     if (!result.success) {
@@ -178,6 +178,7 @@ export async function searchConversationWithNaturalLanguage(
         terms,
         when,
         options,
+        naturalLanguageQuery,
     );
     return success([searchResults, filter]);
 }

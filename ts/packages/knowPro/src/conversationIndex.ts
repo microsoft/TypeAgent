@@ -58,6 +58,9 @@ export function addMetadataToIndex(
     for (let i = 0; i < messages.length; i++) {
         const msg = messages[i];
         const knowledgeResponse = msg.getKnowledge();
+        if (knowledgeResponse === undefined) {
+            continue;
+        }
         if (semanticRefIndex !== undefined) {
             for (const entity of knowledgeResponse.entities) {
                 if (knowledgeValidator("entity", entity)) {
