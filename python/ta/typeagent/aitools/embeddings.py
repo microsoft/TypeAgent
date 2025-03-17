@@ -6,6 +6,7 @@ import re
 
 import dotenv
 import numpy as np
+from numpy.typing import NDArray
 from openai import AsyncOpenAI, AsyncAzureOpenAI
 
 dotenv.load_dotenv(os.path.expanduser("~/TypeAgent/ts/.env"))
@@ -20,7 +21,6 @@ class AsyncEmbeddingModel:
             if m:
                 api_version = m.group(1)
             else:
-                print(endpoint)
                 raise ValueError("Endpoint URL doesn't end in version=<version>")
             self.async_client = AsyncAzureOpenAI(
                 api_version=api_version,
@@ -30,22 +30,25 @@ class AsyncEmbeddingModel:
             print("Using OpenAI")
             async_client = AsyncOpenAI()
 
-    async def get_embedding(self, input: str) -> list[float]:
+    async def get_embedding(self, input: str) -> NDArray[np.float32]:
         return self.get_embeddings([input])[0]
 
-    async def get_embeddings(self, input: list[str]) -> list[list[float]]:
+    async def get_embeddings(self, input: list[str]) -> NDArray[np.float32]:
         data = (
             await self.async_client.embeddings.create(
-                input=input, model="text-embedding-3-small", encoding_format="float"
+                input=input,
+                model="text-embedding-3-small",  ##encoding_format="float"
             )
         ).data
-        return [d.embedding for d in data]
+        return np.array([d.embedding for d in data], dtype=np.float32)
 
 
 async def main():
     async_model = AsyncEmbeddingModel()
-    result = await async_model.get_embeddings(["Hello, world", "Foo bar baz"])
-    print(result)
+    inputs = ["Hello, world", "Foo bar baz"]
+    embeddings = await async_model.get_embeddings(inputs)
+    for input, embedding in zip(inputs, embeddings, strict=True):
+        print(f"{input}: {len(embedding)} {embedding[:5]}...{embedding[-5:]}")
 
 
 if __name__ == "__main__":
