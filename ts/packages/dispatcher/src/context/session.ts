@@ -331,10 +331,18 @@ export class Session {
     public getSettings(): Readonly<SessionSettings> {
         return this.settings;
     }
-    public updateSettings(options: SessionOptions): SessionChanged {
+    /**
+     * 
+     * @param options The session options to apply
+     * @param skipSave A flag indicating if the session updates should NOT be saved to disk
+     * @returns The merged configuration
+     */
+    public updateSettings(options: SessionOptions, skipSave?: boolean): SessionChanged {
         const changed = mergeConfig(this.settings, options, true);
         if (changed) {
-            this.save();
+            if (skipSave === undefined || skipSave === false) {
+                this.save();
+            }
         }
         return mergeConfig(
             this.config,
