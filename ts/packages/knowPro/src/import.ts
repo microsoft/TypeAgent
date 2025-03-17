@@ -19,21 +19,26 @@ export type ConversationSettings = {
 export function createConversationSettings(): ConversationSettings {
     let embeddingModel = openai.createEmbeddingModel();
     const embeddingSize = 1536;
+    const minCosineSimilarity = 0.85;
     return {
         relatedTermIndexSettings: {
             embeddingIndexSettings: createTextEmbeddingIndexSettings(
                 embeddingModel,
                 embeddingSize,
+                minCosineSimilarity,
+                50,
             ),
         },
         threadSettings: createTextEmbeddingIndexSettings(
             embeddingModel,
             embeddingSize,
+            minCosineSimilarity,
         ),
         messageTextIndexSettings: {
             embeddingIndexSettings: createTextEmbeddingIndexSettings(
                 embeddingModel,
                 embeddingSize,
+                minCosineSimilarity,
             ),
         },
     };

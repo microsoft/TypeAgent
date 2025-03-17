@@ -3,6 +3,12 @@
 
 import { IConversation, DateRange } from "./interfaces.js";
 
+/**
+ * Returns the time range for a conversation: the timestamps of the first and last messages
+ * If messages have no timestamps (which are optional), returns undefined
+ * @param conversation
+ * @returns {DateRange}
+ */
 export function getTimeRangeForConversation(
     conversation: IConversation,
 ): DateRange | undefined {

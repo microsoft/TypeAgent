@@ -27,6 +27,13 @@ import { conversation as kpLib } from "knowledge-processor";
 import { getTimeRangeForConversation } from "./conversation.js";
 import { IConversation, KnowledgeType } from "./interfaces.js";
 
+/*-------------------------------
+
+    EXPERIMENTAL CODE
+    Frequent changes
+
+---------------------------------*/
+
 export type SearchTranslator = TypeChatJsonTranslator<SearchFilter>;
 
 export function createSearchTranslator(
