@@ -95,10 +95,14 @@ export function createTypeAgentRequestPrompt(
             "If parameter values refers to an entity, use entities' id as parameter values when referring to entities instead of the entities' name",
             "If there are multiple possible resolution, choose the most likely resolution based on conversation context, bias toward the newest.",
             "Avoid clarifying unless absolutely necessary. Infer the user's intent based on conversation context.",
+            `Based primarily on the current user request with references and pronouns resolved with recent entities in the chat history, but considering the context of the whole chat history, the following is the current user request translated into a JSON object with 2 spaces of indentation and no properties with the value undefined:`,
+        );
+    } else {
+        prompts.push(
+            "Avoid clarifying unless absolutely necessary.",
+            "Based on the current user request, the following is the current user request translated into a JSON object with 2 spaces of indentation and no properties with the value undefined:",
         );
     }
-    prompts.push(
-        `Based primarily on the current user request with references and pronouns resolved with recent entities in the chat history, but considering the context of the whole chat history, the following is the current user request translated into a JSON object with 2 spaces of indentation and no properties with the value undefined:`,
-    );
+
     return prompts.join("\n");
 }
