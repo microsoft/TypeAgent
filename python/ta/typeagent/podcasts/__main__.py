@@ -16,9 +16,9 @@ from typing import cast
 
 import dotenv
 
-from typeagent.knowpro.convindex import ConversationIndex
-from typeagent.knowpro.interfaces import IndexingEventHandlers, TextLocation
-from typeagent.memconv.import_podcasts import import_podcast
+from ..knowpro.convindex import ConversationIndex
+from ..knowpro.interfaces import IndexingEventHandlers, TextLocation
+from .import_podcasts import import_podcast
 
 
 async def main():
