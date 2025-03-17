@@ -4,6 +4,7 @@
 import { collections, createTopNList } from "typeagent";
 import {
     IMessage,
+    IMessageCollection,
     Knowledge,
     KnowledgeType,
     MessageOrdinal,
@@ -252,21 +253,36 @@ export class MatchAccumulator<T = any> {
 
 function addSmoothAvgRelatedScore(match: Match): void {
     if (match.relatedHitCount > 0) {
-        // Smooth the impact of multiple related term matches
-        // If we just add up scores, a larger number of moderately related
-        // but noisy matches can overwhelm a small # of highly related matches... etc
-        const normalizedAvgRelatedScore =
-            match.relatedScore / Math.log(match.relatedHitCount + 1);
+        const smoothRelatedScore = smoothAverageScore(
+            match.relatedScore,
+            match.relatedHitCount,
+        );
 
-        match.score += normalizedAvgRelatedScore;
+        match.score += smoothRelatedScore;
     }
 }
 
 function smoothTotalScore(match: Match): void {
     if (match.hitCount > 0) {
-        const normalizedScore = match.score / Math.log(match.hitCount + 1);
-        match.score = normalizedScore;
+        match.score = smoothAverageScore(match.score, match.hitCount);
     }
+}
+
+// Return an average score that also smoothens the impact of multiple matches
+// If we just add up scores, a larger number of moderately related but noisy matches can overwhelm
+// a small # of very good matches merely by having a larger total score...
+// We also want diminishing returns for too many matches, which can also be indicative of noise...as the
+// they can indicate low entropy.. prevents runaway scores
+function smoothAverageScore(totalScore: number, hitCount: number): number {
+    if (hitCount > 0) {
+        if (hitCount === 1) {
+            return totalScore;
+        }
+        const avg = totalScore / hitCount;
+        const smoothAvg = Math.log(hitCount + 1) * avg;
+        return smoothAvg;
+    }
+    return 0;
 }
 
 export type KnowledgePredicate<T extends Knowledge> = (knowledge: T) => boolean;
@@ -749,5 +765,73 @@ function* union<T>(
     }
     for (const value of unionSet.values()) {
         yield value;
+    }
+}
+
+export class Collection<T> implements Iterable<T> {
+    protected items: T[];
+    constructor() {
+        this.items = [];
+    }
+
+    public get length(): number {
+        return this.items.length;
+    }
+
+    public get(ordinal: number): T | undefined {
+        return this.items[ordinal];
+    }
+
+    protected getMultiple(ordinals: number[]): (T | undefined)[] {
+        const items = new Array<T | undefined>(ordinals.length);
+        for (let i = 0; i < ordinals.length; ++i) {
+            items[i] = this.get(ordinals[i]);
+        }
+        return items;
+    }
+
+    protected add(item: T): number {
+        const ordinal = this.items.length;
+        this.items.push(item);
+        return ordinal;
+    }
+
+    public addMultiple(items: T[]): number[] {
+        const ordinals = new Array<number>(items.length);
+        for (let i = 0; i < items.length; ++i) {
+            ordinals[i] = this.add(items[i]);
+        }
+        return ordinals;
+    }
+
+    public *[Symbol.iterator](): Iterator<T, any, any> {
+        return this.items[Symbol.iterator]();
+    }
+}
+
+export class MessageCollection
+    extends Collection<IMessage>
+    implements IMessageCollection
+{
+    constructor() {
+        super();
+    }
+
+    public getMessage(messageOrdinal: MessageOrdinal): IMessage | undefined {
+        return this.get(messageOrdinal);
+    }
+
+    public getMessages(
+        messageOrdinals: MessageOrdinal[],
+    ): (IMessage | undefined)[] {
+        return this.getMultiple(messageOrdinals);
+    }
+
+    public addMessage(message: IMessage): number {
+        return this.add(message);
+    }
+
+    public addMessages(messages: IMessage[]): number[] {
+        return this.addMultiple(messages);
     }
 }
