@@ -73,6 +73,10 @@ export function setupMiddlewares(
         // }
     });
 
+    app.get("/cmd", async (req, res) => {
+        console.debug(req);
+    });
+
     // Send events to all clients
     function sendEvent(event: string, data: any) {
         clients.forEach((client) => {

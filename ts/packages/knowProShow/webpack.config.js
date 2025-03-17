@@ -42,7 +42,7 @@ export default {
         new CopyPlugin({
             patterns: [
                 { from: path.join(srcDir, "site", "index.html"), to: "." },
-                // { from: path.join(srcDir, "site", "styles.css"), to: "." },
+                { from: path.join(srcDir, "site", "styles.css"), to: "." },
             ],
         }),
     ],

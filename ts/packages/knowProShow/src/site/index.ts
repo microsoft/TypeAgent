@@ -1,10 +1,15 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-const eventSource = new EventSource("/events");
+import { SearchInput } from "./searchInput";
 
-// document.addEventListener("DOMContentLoaded", function () {
-//     const mainContainer = document.getElementById("mainContainer");
+//const eventSource = new EventSource("/events");
+
+document.addEventListener("DOMContentLoaded", function () {
+    const mainContainer = document.getElementById("mainContainer");
+    const searchInput = new SearchInput();
+
+    mainContainer.append(searchInput.container);
 //     const listsContainer: CollapsableContainer = new CollapsableContainer(
 //         "Lists",
 //     );
@@ -62,4 +67,4 @@ const eventSource = new EventSource("/events");
 //     );
 
 //     fetch("/initializeData");
-// });
+});
