@@ -12,8 +12,9 @@ export interface PdfChunkDocumentation {
     // Document title
     title?: string;
 
-    // If the chunk contains a text blob with a title, this is the title.
-    // or come up with a section name
+    // Extract the section name from the chunk if possible.
+    // or come up with a section name, some document section names are of the form e.g,[1 Introduction]:
+    // [section name]: [sub-section name]:
     sectionName?: string;
 
     // One paragraph summary of the chunk.
@@ -37,8 +38,11 @@ export interface PdfChunkDocumentation {
 }
 export interface PdfDocumentInfo {
     title?: string; // title of the document
-    authorInfos?: PdfAuthorInfo[]; // author(s) of the document
-    references?: PdfReference[]; // these are the links from the document. The references can occur in a different chunk/page
+    authorInfos?: PdfAuthorInfo[]; // author(s) of the document, only include if non-empty
+    // The references can occur in a different chunk/page (only include if non-empty), e.g., "see [1]" or entire reference like "[1] Author1, Author2, Title, Journal, Paper link, Year"
+    // The references are typically in the format "[1] Author1, Author2, Title, Journal, Paper link, Year"
+    references?: PdfReference[];
+     // These are the links from the document (only include if non-empty), e.g., "https://doi.org/10.1000/xyz123"
     links?: string[]; // these are the links from the document
 }
 

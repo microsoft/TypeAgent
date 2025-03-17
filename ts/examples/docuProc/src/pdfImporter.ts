@@ -222,6 +222,11 @@ export async function embedChunkedFile(
         log(io, `[Skipping empty file ${chunkedFile.fileName}]`, chalk.yellow);
         return;
     }
+
+    // First consolidate the document info from all the chunks.
+    // The first chunk of a file is a root chunk of the first page.
+    
+
     const t0 = Date.now();
     for (const chunk of chunkedFile.chunks) {
         await embedChunk(chunk, chunkyIndex, io, verbose);

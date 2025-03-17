@@ -183,14 +183,23 @@ export function createPdfDocumenter(model: ChatModel): PdfFileDocumenter {
                 }
             }
 
+            // Append request to summarize entire page based on the chunks above
+            content.push({
+                type: "text",
+                text: `Summarize the entire page (${pageRootChunk.pageid}) based on the chunks above. Page root chunk id:(${pageRootChunk.id}).\n
+                Create the summary based on the text and image contents of chunks of the page above. Extract the summary, keywords, tags and document information which
+                should be a union of the documnent info(s) of other child chunks\n`,
+            });
+
             // Build request for the LLM
             const request = `
-                Summarize the given document chunks based on text, images content and associated images. Every chunks has a unique id.
-                Provide documentation for every chunk. For text, provide a concise summary of the main points.
-                For images, infer purpose based on the context and describe the contents of the image, with cohesive explantion.
-                Also fill in: keywords, tags, synonyms, and document information if available. 
-                The document information should be extracted from the chunk. Every chunk should be documented.
-                For each chunk, the summary should contain most five sentences that covers the main points.`;
+Summarize the given document chunks based on text, images content and associated images. Every chunks has a unique id.
+Provide documentation for every chunk. For text, provide a concise summary of the main points.
+For images, infer purpose based on the context and describe the contents of the image, with cohesive explantion.
+Also fill in: section name, keywords, tags, synonyms, and document information of the chunk if available. 
+The document information should be extracted from the chunk. Every chunk should be documented.
+For each chunk, the summary should contain most five sentences that covers the main points.
+Also document the root chunk which is for page. The root chunk doesn't have any content and no parentId.`;
 
             let promptSections: PromptSection[] = [
                 { role: "user", content: content },
@@ -204,7 +213,13 @@ export function createPdfDocumenter(model: ChatModel): PdfFileDocumenter {
                 const fileDocs: PdfFileDocumentation = result.data;
                 const chunkDocs = fileDocs.chunkDocs ?? [];
 
-                const { pageChunks } = pageChunksMap[pageid];
+                const pageDoc = chunkDocs.find(
+                    (doc) => doc.chunkid === pageRootChunk.id,
+                );
+                if(pageDoc !== undefined) {
+                    pageRootChunk.chunkDoc = pageDoc;
+                }
+
                 for (const chunk of pageChunks) {
                     chunk.fileName = fileName;
                     // get the doc for the pageChunk from chunkDocs
