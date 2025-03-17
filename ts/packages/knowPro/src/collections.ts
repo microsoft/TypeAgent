@@ -4,7 +4,6 @@
 import { collections, createTopNList } from "typeagent";
 import {
     IMessage,
-    IMessageCollection,
     Knowledge,
     KnowledgeType,
     MessageOrdinal,
@@ -768,21 +767,22 @@ function* union<T>(
     }
 }
 
-export class Collection<T> implements Iterable<T> {
+export class Collection<T, TOrdinal extends number> implements Iterable<T> {
     protected items: T[];
-    constructor() {
-        this.items = [];
+
+    constructor(items?: T[] | undefined) {
+        this.items = items ?? [];
     }
 
     public get length(): number {
         return this.items.length;
     }
 
-    public get(ordinal: number): T | undefined {
+    public get(ordinal: TOrdinal): T | undefined {
         return this.items[ordinal];
     }
 
-    protected getMultiple(ordinals: number[]): (T | undefined)[] {
+    public getMultiple(ordinals: TOrdinal[]): (T | undefined)[] {
         const items = new Array<T | undefined>(ordinals.length);
         for (let i = 0; i < ordinals.length; ++i) {
             items[i] = this.get(ordinals[i]);
@@ -790,18 +790,16 @@ export class Collection<T> implements Iterable<T> {
         return items;
     }
 
-    protected add(item: T): number {
-        const ordinal = this.items.length;
-        this.items.push(item);
-        return ordinal;
+    public getAll(): T[] {
+        return this.items;
     }
 
-    public addMultiple(items: T[]): number[] {
-        const ordinals = new Array<number>(items.length);
-        for (let i = 0; i < items.length; ++i) {
-            ordinals[i] = this.add(items[i]);
+    public push(items: T | T[]): void {
+        if (Array.isArray(items)) {
+            this.items.push(...items);
+        } else {
+            this.items.push(items);
         }
-        return ordinals;
     }
 
     public *[Symbol.iterator](): Iterator<T, any, any> {
@@ -809,29 +807,11 @@ export class Collection<T> implements Iterable<T> {
     }
 }
 
-export class MessageCollection
-    extends Collection<IMessage>
-    implements IMessageCollection
-{
-    constructor() {
-        super();
-    }
+export class MessageCollection<
+    TMessage extends IMessage = IMessage,
+> extends Collection<TMessage, MessageOrdinal> {}
 
-    public getMessage(messageOrdinal: MessageOrdinal): IMessage | undefined {
-        return this.get(messageOrdinal);
-    }
-
-    public getMessages(
-        messageOrdinals: MessageOrdinal[],
-    ): (IMessage | undefined)[] {
-        return this.getMultiple(messageOrdinals);
-    }
-
-    public addMessage(message: IMessage): number {
-        return this.add(message);
-    }
-
-    public addMessages(messages: IMessage[]): number[] {
-        return this.addMultiple(messages);
-    }
-}
+export class SemanticRefCollection extends Collection<
+    SemanticRef,
+    SemanticRefOrdinal
+> {}
