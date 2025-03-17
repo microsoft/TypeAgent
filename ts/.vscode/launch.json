@@ -308,7 +308,7 @@
     {
       "type": "node",
       "request": "launch",
-      "name": "vscode-jest-tests.v2.knowpro",
+      "name": "vscode-jest-tests.v2",
       "skipFiles": ["<node_internals>/**"],
       "args": [
         "--no-warnings",
