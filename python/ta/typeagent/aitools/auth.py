@@ -4,25 +4,32 @@
 
 from dataclasses import dataclass
 import time
-from typing import Any, NamedTuple
+from typing import Any, Protocol
 
 from azure.identity import DefaultAzureCredential
 
 
+class IAccessToken(Protocol):
+    @property
+    def token(self) -> str: ...
+    @property
+    def expires_on(self) -> int:  # Posix timestamp
+        ...
+
+
 @dataclass
-class TokenProvider:
+class AzureTokenProvider:
     # Note that the Python library has no async support!
 
     def __init__(self):
         self.credential = DefaultAzureCredential()
-        self.access_token: Any | None = (
-            None  # AccessToken | None, but pyright complains.
-        )
+        self.access_token: IAccessToken | None = None
 
     def get_token(self) -> str:
         if self.access_token and self.access_token.expires_on >= time.time() + 300:
             return self.access_token.token
-        return self.refresh_token()
+        else:
+            return self.refresh_token()
 
     def refresh_token(self) -> str:
         self.access_token = self.credential.get_token(
@@ -31,6 +38,23 @@ class TokenProvider:
         assert self.access_token is not None
         return self.access_token.token
 
+    def needs_refresh(self) -> bool:
+        return (
+            self.access_token is None
+            or self.access_token.expires_on >= time.time() + 300
+        )
+
+
+_shared_token_provider: AzureTokenProvider | None = None
+
+
+def get_shared_token_provider() -> AzureTokenProvider:
+    global _shared_token_provider
+    if _shared_token_provider is None:
+        _shared_token_provider = AzureTokenProvider()
+    return _shared_token_provider
+
 
 if __name__ == "__main__":
-    print(f"export AZURE_OPENAI_API_KEY={TokenProvider().get_token()}")
+    # Usage: eval `./typeagent/aitools/aith.py`
+    print(f"export AZURE_OPENAI_API_KEY={AzureTokenProvider().get_token()}")
