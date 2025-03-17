@@ -8,6 +8,14 @@ export interface IKnowledgeSource {
     getKnowledge(): kpLib.KnowledgeResponse | undefined;
 }
 
+export interface ICollection<T, TOrdinal> {
+    readonly length: number;
+    get(ordinal: TOrdinal): T | undefined;
+    getMultiple(ordinals: TOrdinal[]): (T | undefined)[];
+    getAll(): T[];
+    push(items: T | T[]): void;
+}
+
 export type MessageOrdinal = number;
 
 /**
@@ -28,14 +36,7 @@ export type ScoredMessageOrdinal = {
 };
 
 export interface IMessageCollection<TMessage extends IMessage = IMessage>
-    extends Iterable<TMessage> {
-    readonly length: number;
-    getMessage(messageOrdinal: MessageOrdinal): IMessage | undefined;
-    getMessages(messageOrdinals: MessageOrdinal[]): (IMessage | undefined)[];
-    addMessage(message: IMessage): number;
-
-    addMessages(messages: IMessage[]): number[];
-}
+    extends ICollection<TMessage, MessageOrdinal> {}
 
 export interface DeletionInfo {
     timestamp: string;
@@ -61,6 +62,9 @@ export interface Topic {
 export interface Tag {
     text: string;
 }
+
+export interface ISemanticRefCollection
+    extends ICollection<SemanticRef, SemanticRefOrdinal> {}
 
 export interface IConversation<TMessage extends IMessage = IMessage> {
     nameTag: string;
