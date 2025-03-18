@@ -11,7 +11,7 @@ import {
     TextInput,
 } from "./schema/pageComponents.mjs";
 import {
-    PageManipulationActionsList,
+    PageActionsPlan,
     UserIntent,
 } from "./schema/recordedActions.mjs";
 import { createActionResultNoDisplay } from "@typeagent/agent-sdk/helpers/action";
@@ -140,7 +140,7 @@ export function createSchemaAuthoringAgent(
         const targetIntent = intentJson.get(action.actionName) as UserIntent;
         const targetPlan = actionsJson.get(
             action.actionName,
-        ) as PageManipulationActionsList;
+        ) as PageActionsPlan;
 
         console.log(`Running ${targetPlan.planName}`);
 
