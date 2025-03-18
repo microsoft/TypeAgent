@@ -20,12 +20,10 @@ import { createTypeScriptJsonValidator } from "typechat/ts";
 import { loadSchema } from "typeagent";
 import {
     createPropertySearchTerm,
-    createSearchFilterExpr,
     createSearchTerm,
-    SearchFilterExpr,
     SearchTermGroup,
     createWhenFilterForDateTimeRange,
-    SearchQueryExpr,
+    WhenFilter,
 } from "./search.js";
 import { PropertyNames } from "./propertyIndex.js";
 import { PropertyTermSet } from "./collections.js";
@@ -56,6 +54,22 @@ export function createSearchQueryTranslator(
         ),
     );
 }
+
+export type SearchFilterExpr = {
+    searchTermGroup: SearchTermGroup;
+    filter?: WhenFilter | undefined;
+};
+
+export function createSearchFilterExpr(): SearchFilterExpr {
+    return {
+        searchTermGroup: { booleanOp: "or", terms: [] },
+    };
+}
+
+export type SearchQueryExpr = {
+    filters: SearchFilterExpr[];
+    rawQuery?: string | undefined;
+};
 
 export async function translateTextToSearchQueryExpr(
     queryTranslator: SearchQueryTranslator,

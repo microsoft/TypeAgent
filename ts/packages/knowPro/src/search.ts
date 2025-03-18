@@ -622,19 +622,3 @@ function isActionPropertyTerm(term: PropertySearchTerm): boolean {
 
     return false;
 }
-
-export type SearchFilterExpr = {
-    searchTermGroup: SearchTermGroup;
-    filter?: WhenFilter | undefined;
-};
-
-export function createSearchFilterExpr(): SearchFilterExpr {
-    return {
-        searchTermGroup: { booleanOp: "or", terms: [] },
-    };
-}
-
-export type SearchQueryExpr = {
-    filters: SearchFilterExpr[];
-    rawQuery?: string | undefined;
-};
