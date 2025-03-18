@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { PromptSection } from "typechat";
 import { IConversation, DateRange } from "./interfaces.js";
 
 /**
@@ -22,4 +23,19 @@ export function getTimeRangeForConversation(
         };
     }
     return undefined;
+}
+
+export function getTimeRangePromptSectionForConversation(
+    conversation: IConversation,
+): PromptSection[] {
+    const timeRange = getTimeRangeForConversation(conversation);
+    if (timeRange) {
+        return [
+            {
+                role: "system",
+                content: `ONLY IF user request explicitly asks for time ranges, THEN use the CONVERSATION TIME RANGE: "${timeRange.start} to ${timeRange.end}"`,
+            },
+        ];
+    }
+    return [];
 }
