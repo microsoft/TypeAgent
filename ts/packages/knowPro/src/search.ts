@@ -281,13 +281,11 @@ class SearchQueryBuilder {
     ): Promise<IQueryOpExpr> {
         let query: IQueryOpExpr = new q.MessagesFromKnowledgeExpr(knowledge);
         if (options) {
-            if (options.maxMessageMatches && options.maxMessageMatches > 0) {
-                query = await this.compileSelectMessageTopN(
-                    query,
-                    options.maxMessageMatches,
-                    rawQueryText,
-                );
-            }
+            query = await this.compileMessageReRank(
+                query,
+                rawQueryText,
+                options.maxMessageMatches,
+            );
             if (
                 options.maxMessageCharsInBudget &&
                 options.maxMessageCharsInBudget > 0
@@ -429,15 +427,17 @@ class SearchQueryBuilder {
         return predicates;
     }
 
-    private async compileSelectMessageTopN(
+    private async compileMessageReRank(
         srcExpr: IQueryOpExpr<MessageAccumulator>,
-        maxMessageMatches: number,
-        rawQueryText?: string,
+        rawQueryText?: string | undefined,
+        maxMessageMatches?: number | undefined,
     ): Promise<IQueryOpExpr> {
         const messageIndex = this.conversation.secondaryIndexes?.messageIndex;
         if (
             messageIndex &&
             rawQueryText &&
+            maxMessageMatches &&
+            maxMessageMatches > 0 &&
             isMessageTextEmbeddingIndex(messageIndex)
         ) {
             // If embeddings supported, and there are too many matches, try to re-rank using similarity matching
@@ -448,8 +448,10 @@ class SearchQueryBuilder {
                 embedding,
                 maxMessageMatches,
             );
-        } else {
+        } else if (maxMessageMatches && maxMessageMatches > 0) {
             return new q.SelectTopNExpr(srcExpr, maxMessageMatches);
+        } else {
+            return new q.NoOpExpr(srcExpr);
         }
     }
 
