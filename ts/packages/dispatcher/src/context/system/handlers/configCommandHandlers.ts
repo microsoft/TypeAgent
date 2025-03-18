@@ -108,6 +108,7 @@ function setAgentToggleOption(
     options: any,
     nameOrPattern: string[],
     enable: boolean,
+    allowOverride: boolean = false,
 ) {
     for (const name of nameOrPattern) {
         if (name.includes("*")) {
@@ -132,7 +133,7 @@ function setAgentToggleOption(
             if (!existingNames.includes(name)) {
                 throw new Error(`Invalid ${existingNameType} name '${name}'`);
             }
-            if (options[name] === !enable) {
+            if (options[name] === !enable && !allowOverride) {
                 throw new Error(
                     `Conflicting setting for ${existingNameType} name '${name}'`,
                 );
@@ -297,6 +298,11 @@ class AgentToggleCommandHandler implements CommandHandler {
                 multiple: true,
                 char: "x",
             },
+            priority: {
+                description: "priority pattern",
+                multiple: true,
+                char: "f",
+            },
         },
         args: {
             agentNames: {
@@ -330,6 +336,7 @@ class AgentToggleCommandHandler implements CommandHandler {
             existingNameType = "schema";
         }
 
+        // reset specified agents
         let hasParams = false;
         if (params.flags.reset) {
             hasParams = true;
@@ -338,6 +345,32 @@ class AgentToggleCommandHandler implements CommandHandler {
             }
         }
 
+        // if priority mode is requested we need to turn off all agents
+        // and then enable just the one that we are supposed to prioritize
+        if (params.flags.priority) {
+            hasParams = true;
+
+            // disable all agents except system agents
+            setAgentToggleOption(
+                existingNames.slice(2), // agents except dispatcher (0) & system (1)
+                existingNameType,
+                options,
+                ["*"],
+                false,
+            );
+
+            // enable flagged agent
+            setAgentToggleOption(
+                existingNames,
+                existingNameType,
+                options,
+                params.flags.priority,
+                true,
+                true,
+            );
+        }
+
+        // turn off the agents specified by the off parameter
         if (params.flags.off) {
             hasParams = true;
             setAgentToggleOption(
@@ -348,6 +381,8 @@ class AgentToggleCommandHandler implements CommandHandler {
                 false,
             );
         }
+
+        // turn on supplied agents by name
         if (params.args.agentNames) {
             hasParams = true;
             setAgentToggleOption(
@@ -359,6 +394,7 @@ class AgentToggleCommandHandler implements CommandHandler {
             );
         }
 
+        // report modified agent status
         if (!hasParams) {
             showAgentStatus(this.toggle, context);
             return;
