@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { MessageAccumulator, SemanticRefAccumulator } from "./collections.js";
+import { DateTimeRange } from "./dateTimeSchema.js";
 import {
     DateRange,
     IConversation,
@@ -110,6 +111,25 @@ export type WhenFilter = {
     threadDescription?: string | undefined;
 };
 
+export function whenFilterFromDateTimeRange(
+    dateTimeRange?: DateTimeRange | undefined,
+): WhenFilter {
+    const when: WhenFilter = {};
+    if (dateTimeRange) {
+        when.dateRange = dateRangeFromDateTimeRange(dateTimeRange);
+    }
+    return when;
+}
+
+export function dateRangeFromDateTimeRange(
+    dateTimeRange: DateTimeRange,
+): DateRange {
+    return {
+        start: kpLib.toStartDate(dateTimeRange.startDate),
+        end: kpLib.toStopDate(dateTimeRange.stopDate),
+    };
+}
+
 export type SearchOptions = {
     maxKnowledgeMatches?: number | undefined;
     exactMatch?: boolean | undefined;
@@ -154,7 +174,7 @@ export async function searchConversation(
         return undefined;
     }
     // Future: Combine knowledge and message queries into single query tree
-    const queryBuilder = new SearchQueryBuilder(
+    const queryBuilder = new QueryCompiler(
         conversation,
         conversation.secondaryIndexes ?? {},
     );
@@ -191,7 +211,7 @@ export async function searchConversationKnowledge(
     if (!q.isConversationSearchable(conversation)) {
         return undefined;
     }
-    const queryBuilder = new SearchQueryBuilder(
+    const queryBuilder = new QueryCompiler(
         conversation,
         conversation.secondaryIndexes ?? {},
     );
@@ -239,7 +259,7 @@ function runQuery<T = any>(
     );
 }
 
-class SearchQueryBuilder {
+class QueryCompiler {
     // All SearchTerms used which compiling the 'select' portion of the query
     private allSearchTerms: SearchTerm[] = [];
     // All search terms used while compiling predicates in the query

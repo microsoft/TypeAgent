@@ -45,11 +45,13 @@ export function createSearchTranslator(
         import.meta.url,
     );
 
-    const validator = createTypeScriptJsonValidator<SearchFilter>(
-        searchActionSchema,
-        typeName,
+    return createJsonTranslator<SearchFilter>(
+        model,
+        createTypeScriptJsonValidator<SearchFilter>(
+            searchActionSchema,
+            typeName,
+        ),
     );
-    return createJsonTranslator<SearchFilter>(model, validator);
 }
 
 export function createSearchGroupFromSearchFilter(

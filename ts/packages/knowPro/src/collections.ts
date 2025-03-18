@@ -4,6 +4,7 @@
 import { collections, createTopNList } from "typeagent";
 import {
     IMessage,
+    IReadonlyCollection,
     Knowledge,
     KnowledgeType,
     MessageOrdinal,
@@ -708,7 +709,7 @@ export class PropertyTermSet {
         }
     }
 
-    public has(propertyName: string, propertyValue: Term): boolean {
+    public has(propertyName: string, propertyValue: Term | string): boolean {
         const key = this.makeKey(propertyName, propertyValue);
         return this.terms.has(key);
     }
@@ -717,8 +718,17 @@ export class PropertyTermSet {
         this.terms.clear();
     }
 
-    private makeKey(propertyName: string, propertyValue: Term): string {
-        return propertyName + ":" + propertyValue.text;
+    private makeKey(
+        propertyName: string,
+        propertyValue: Term | string,
+    ): string {
+        return (
+            propertyName +
+            ":" +
+            (typeof propertyValue === "string"
+                ? propertyValue
+                : propertyValue.text)
+        );
     }
 }
 
@@ -767,7 +777,14 @@ function* union<T>(
     }
 }
 
-export class Collection<T, TOrdinal extends number> implements Iterable<T> {
+export interface ICollection<T, TOrdinal>
+    extends IReadonlyCollection<T, TOrdinal> {
+    push(...items: T[]): void;
+}
+
+export class Collection<T, TOrdinal extends number>
+    implements ICollection<T, TOrdinal>
+{
     protected items: T[];
 
     constructor(items?: T[] | undefined) {
@@ -794,11 +811,9 @@ export class Collection<T, TOrdinal extends number> implements Iterable<T> {
         return this.items;
     }
 
-    public push(items: T | T[]): void {
-        if (Array.isArray(items)) {
-            this.items.push(...items);
-        } else {
-            this.items.push(items);
+    public push(...items: T[]): void {
+        for (const item of items) {
+            this.items.push(item);
         }
     }
 
