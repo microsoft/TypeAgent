@@ -135,8 +135,6 @@ export type CommandHandlerContext = {
     commandProfiler?: Profiler | undefined;
 
     instanceDirLock: (() => Promise<void>) | undefined;
-
-    focusMode: boolean;
 };
 
 async function getAgentCache(
@@ -428,7 +426,6 @@ export async function initializeCommandHandlerContext(
             instanceDirLock,
             constructionProvider,
             collectCommandResult: options?.collectCommandResult ?? false,
-            focusMode: false
         };
 
         await addAppAgentProviders(context, options?.appAgentProviders);
@@ -570,7 +567,7 @@ export async function changeContextConfig(
 ) {
     const systemContext = context.sessionContext.agentContext;
     const session = systemContext.session;
-    const changed = session.updateSettings(options, context.sessionContext.agentContext.focusMode);
+    const changed = session.updateSettings(options);
     if (changed === undefined) {
         return undefined;
     }
