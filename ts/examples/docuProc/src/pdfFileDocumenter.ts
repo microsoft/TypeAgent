@@ -222,7 +222,6 @@ Also document the root chunk which is for page. The root chunk doesn't have any 
 
                 for (const chunk of pageChunks) {
                     chunk.fileName = fileName;
-                    // get the doc for the pageChunk from chunkDocs
                     const chunkDoc = chunkDocs.find(
                         (doc) => doc.chunkid === chunk.id,
                     );

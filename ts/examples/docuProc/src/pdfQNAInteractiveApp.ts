@@ -86,7 +86,6 @@ export async function interactiveDocQueryLoop(
         keywords,
         tags,
         synonyms,
-        dependencies,
         files,
         purgeFile,
     };
@@ -224,9 +223,9 @@ export async function interactiveDocQueryLoop(
         for (const chunkId of splitArgs) {
             const chunk = await chunkyIndex.chunkFolder.get(chunkId);
             if (chunk) {
-                //const chunkDocs = chunk.docs ?? [];
+                const chunkDocs = Array.isArray(chunk.chunkDoc) ? chunk.chunkDoc : [chunk.chunkDoc];
                 writeNote(io, `\nCHUNK ID: ${chunkId}`);
-                /*for (const chunkDoc of chunkDocs) {
+                for (const chunkDoc of chunkDocs) {
                     for (const [name, _] of chunkyIndex.allIndexes()) {
                         if (name == "summaries") {
                             if (chunkDoc.summary) {
@@ -255,8 +254,7 @@ export async function interactiveDocQueryLoop(
                         }
                     }
                 }
-                writeNote(io, "CODE:");
-                writeChunkLines(chunk, io, 100);*/
+                writeChunkLines(chunk, io, 100);
             } else {
                 writeNote(io, `[Chunk ID ${chunkId} not found]`);
             }
@@ -394,20 +392,6 @@ export async function interactiveDocQueryLoop(
         io: iapp.InteractiveIo,
     ): Promise<void> {
         await _reportIndex(args, io, "synonyms");
-    }
-
-    function dependenciesDef(): iapp.CommandMetadata {
-        return {
-            description: "Show all recorded dependencies and their postings.",
-            options: commonOptions(),
-        };
-    }
-    handlers.dependencies.metadata = dependenciesDef();
-    async function dependencies(
-        args: string[] | iapp.NamedArgs,
-        io: iapp.InteractiveIo,
-    ): Promise<void> {
-        await _reportIndex(args, io, "dependencies");
     }
 
     function filesDef(): iapp.CommandMetadata {
@@ -691,7 +675,6 @@ async function processQuery(
     );
 
     // **Step 1:** Ask LLM (queryMaker) to propose queries for each index.
-
     const proposedQueries = await proposeQueries(
         input,
         recentAnswers,
@@ -716,7 +699,6 @@ async function processQuery(
     }
 
     // **Step 2:** Run those queries on the indexes.
-
     const [hitsByIndex, chunkIdScores] = await runIndexQueries(
         proposedQueries,
         chunkyIndex,
@@ -726,7 +708,6 @@ async function processQuery(
     if (!chunkIdScores) return; // Error message already printed by runIndexQueries.
 
     // **Step 3:** Ask the LLM (answerMaker) to answer the question.
-
     const answer = await generateAnswer(
         input,
         hitsByIndex,
@@ -1110,4 +1091,33 @@ export function writeChunkLines(
     // TODO: limit how much we write per blob too (if there are multiple).
     writeMain(io, `\nCHUNK ID: ${chunk.id}`);
     writeMain(io, `Content: ${chunk.blobs[0].content}`);
+}
+
+export function wordWrap(text: string, wrapLength: number = 80): string {
+    let inCodeBlock = false;
+    const lines: string[] = [];
+    const prefixRegex = /^\s*((-|\*|\d+\.)\s+)?/;
+    for (let line of text.split(/[ ]*\r?\n/)) {
+        if (line.startsWith("```")) inCodeBlock = !inCodeBlock; // TODO: Colorize code blocks.
+        if (line.length <= wrapLength || inCodeBlock) {
+            // The whole line is deemed to fit.
+            lines.push(line);
+            continue;
+        }
+        // We must try to break.
+        const prefixLength = prefixRegex.exec(line)?.[0]?.length ?? 0;
+        const indent = " ".repeat(prefixLength);
+        while (line.length > wrapLength) {
+            const shortenedLine = line.slice(0, wrapLength + 1);
+            let index = shortenedLine.lastIndexOf(" ");
+            if (index <= prefixLength) {
+                index = line.indexOf(" ", wrapLength);
+                if (index < 0) break; // The rest of the line is one "word".
+            }
+            lines.push(line.slice(0, index).trimEnd());
+            line = indent + line.slice(index + 1).trimStart();
+        }
+        lines.push(line);
+    }
+    return lines.join("\n");
 }

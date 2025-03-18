@@ -17,7 +17,7 @@ export type QuerySpecs = {
     keywords?: QuerySpec; // Short key words and phrases extracted from the text
     tags?: QuerySpec; // Optional high-level labels (e.g. "algorithmic", "scientific")
     synonyms?: QuerySpec; // Additional synonyms or related domain concepts
-    dependencies?: QuerySpec; // External dependencies
+    docinfos?: QuerySpec; // Document information like title, authors, emails, references, links
 
     // If the question can be answered based on chat history and general knowledge.
     answer?: AnswerSpecs;

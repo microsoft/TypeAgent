@@ -225,7 +225,6 @@ export async function embedChunkedFile(
 
     // First consolidate the document info from all the chunks.
     // The first chunk of a file is a root chunk of the first page.
-    
 
     const t0 = Date.now();
     for (const chunk of chunkedFile.chunks) {
@@ -248,31 +247,38 @@ async function embedChunk(
     verbose = false,
 ): Promise<void> {
     const t0 = Date.now();
-    const lineCount = chunk.blobs.reduce((acc, blob) => {
+    /*const lineCount = chunk.blobs.reduce((acc, blob) => {
         if (!blob.content) return acc;
+    
+        const countLines = (text: string) => 
+            text.split(/[\n.!?]+/).filter(Boolean).length;
+    
         if (Array.isArray(blob.content)) {
-            return (
-                acc +
-                blob.content.reduce(
-                    (sum, text) => sum + text.split("\n").length,
-                    0,
-                )
-            );
+            return acc + blob.content.reduce((sum, text) => sum + countLines(text), 0);
         }
-        return acc + blob.content.split("\n").length;
+    
+        return acc + countLines(blob.content);
     }, 0);
-    console.log("Approximate line count:", lineCount);
+    console.log("Approximate line count:", lineCount);*/
     await exponentialBackoff(io, chunkyIndex.chunkFolder.put, chunk, chunk.id);
 
     for (const indexName of IndexNames) {
-        let data: string[];
-        if (indexName == "summaries") {
+        let data: string[] | undefined;
+        if (indexName == "docinfos") {
+            if(chunk.chunkDoc !== undefined) {
+                data = [
+                    JSON.stringify(chunk.chunkDoc?.docinfo ?? {}, null, 2),
+                ];
+            }
+        }
+        else if (indexName == "summaries") {
             data = chunk.chunkDoc?.summary ? [chunk.chunkDoc.summary] : [];
         } else {
-            data = (chunk.chunkDoc as any)[indexName];
+            const possibleData = (chunk.chunkDoc as any)?.[indexName];
+            data = Array.isArray(possibleData) ? possibleData : undefined;
         }
         const index = chunkyIndex.indexes.get(indexName)!;
-        if (data && index) {
+        if (data !== undefined && index) {
             await writeToIndex(io, chunk.id, data, index);
         }
     }
