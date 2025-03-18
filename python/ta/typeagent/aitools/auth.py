@@ -26,10 +26,11 @@ class AzureTokenProvider:
         self.access_token: IAccessToken | None = None
 
     def get_token(self) -> str:
-        if self.access_token and self.access_token.expires_on >= time.time() + 300:
-            return self.access_token.token
-        else:
+        if self.needs_refresh():
             return self.refresh_token()
+        else:
+            assert self.access_token is not None
+            return self.access_token.token
 
     def refresh_token(self) -> str:
         self.access_token = self.credential.get_token(
