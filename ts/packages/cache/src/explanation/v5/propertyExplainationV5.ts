@@ -23,7 +23,7 @@ import {
     checkActionProperty,
     ensureProperties,
 } from "../validateExplanation.js";
-import { form } from "./explanationV5.js";
+import { form, requestActionToPromptString } from "./explanationV5.js";
 import { ExplainerConfig } from "../genericExplainer.js";
 
 export type PropertyExplainer = TypeChatAgent<
@@ -51,14 +51,14 @@ export function createPropertyExplainer(
         },
         (requestAction: RequestAction) => {
             return (
-                `${form} with the following value:\n${requestAction.toPromptString()}\n` +
+                `${form} with the following value:\n${requestActionToPromptString(requestAction)}\n` +
                 (enableContext
                     ? `For each property, explain which substring of the request or entities in the conversation history is used to compute the value. ${substringRequirement}\n`
                     : `For each property, explain which substring of the request is used to compute the value. ${substringRequirement}\n`) +
                 getActionDescription(requestAction)
             );
         },
-        (requestAction) => requestAction.toPromptString(),
+        (requestAction) => requestActionToPromptString(requestAction),
         validatePropertyExplanation,
     );
 }

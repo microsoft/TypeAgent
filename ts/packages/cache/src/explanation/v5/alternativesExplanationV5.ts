@@ -13,7 +13,7 @@ import { PropertyExplanation } from "./propertyExplanationSchemaV5WithContext.js
 import { SubPhraseExplanation } from "./subPhraseExplanationSchemaV5.js";
 import { getPackageFilePath } from "../../utils/getPackageFilePath.js";
 import { PromptSection } from "typechat";
-import { form } from "./explanationV5.js";
+import { form, requestActionToPromptString } from "./explanationV5.js";
 import { hasPropertyNames } from "./subPhraseExplanationV5.js";
 import { ExplainerConfig } from "../genericExplainer.js";
 
@@ -92,7 +92,7 @@ export function createAlternativesExplainer(
             );
         },
         createInstructions,
-        ([requestAction]) => requestAction.toPromptString(),
+        ([requestAction]) => requestActionToPromptString(requestAction),
         validateAlternativesExplanationV5,
     );
 }

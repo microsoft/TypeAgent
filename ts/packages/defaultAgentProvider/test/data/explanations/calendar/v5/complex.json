@@ -1,7 +1,7 @@
 {
   "version": 2,
   "schemaName": "calendar",
-  "sourceHash": "q89odXmST8U5DeqvXQL7XAkaPw0Efxj2FT391Xq3Vis=",
+  "sourceHash": "0eh5kxCn5ytPu5T9xJ+Tk3xs547AP5ncz7uiQ5mu1Lo=",
   "explainerName": "v5",
   "entries": [
     {
@@ -10,11 +10,17 @@
         "fullActionName": "calendar.addEvent",
         "parameters": {
           "event": {
-            "day": "1/24/2025",
             "timeRange": {
-              "startTime": "2:00 pm"
+              "startDateTime": {
+                "day": "today",
+                "hms": "14:00:00"
+              },
+              "endDateTime": {
+                "day": "today",
+                "hms": "14:00:00"
+              }
             },
-            "description": "meeting with team",
+            "description": "meeting",
             "participants": [
               "team"
             ]
@@ -27,28 +33,42 @@
             "name": "fullActionName",
             "value": "calendar.addEvent",
             "substrings": [
-              "Add meeting with team"
+              "Add meeting with team today at 2"
             ]
           },
           {
-            "name": "parameters.event.day",
-            "value": "1/24/2025",
+            "name": "parameters.event.timeRange.startDateTime.day",
+            "value": "today",
             "substrings": [
               "today"
             ]
           },
           {
-            "name": "parameters.event.timeRange.startTime",
-            "value": "2:00 pm",
+            "name": "parameters.event.timeRange.startDateTime.hms",
+            "value": "14:00:00",
             "substrings": [
-              "at 2"
+              "2"
+            ]
+          },
+          {
+            "name": "parameters.event.timeRange.endDateTime.day",
+            "value": "today",
+            "substrings": [
+              "today"
+            ]
+          },
+          {
+            "name": "parameters.event.timeRange.endDateTime.hms",
+            "value": "14:00:00",
+            "substrings": [
+              "2"
             ]
           },
           {
             "name": "parameters.event.description",
-            "value": "meeting with team",
+            "value": "meeting",
             "substrings": [
-              "meeting with team"
+              "meeting"
             ]
           },
           {
@@ -61,26 +81,40 @@
         ],
         "subPhrases": [
           {
-            "text": "Add meeting with team",
+            "text": "Add",
             "category": "action",
             "propertyNames": [
-              "fullActionName",
-              "parameters.event.description",
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "meeting",
+            "category": "event",
+            "propertyNames": [
+              "parameters.event.description"
+            ]
+          },
+          {
+            "text": "with team",
+            "category": "participants",
+            "propertyNames": [
               "parameters.event.participants.0"
             ]
           },
           {
             "text": "today",
-            "category": "time",
+            "category": "date",
             "propertyNames": [
-              "parameters.event.day"
+              "parameters.event.timeRange.startDateTime.day",
+              "parameters.event.timeRange.endDateTime.day"
             ]
           },
           {
             "text": "at 2",
             "category": "time",
             "propertyNames": [
-              "parameters.event.timeRange.startTime"
+              "parameters.event.timeRange.startDateTime.hms",
+              "parameters.event.timeRange.endDateTime.hms"
             ]
           }
         ],
@@ -89,52 +123,52 @@
             "propertyName": "fullActionName",
             "propertyValue": "calendar.addEvent",
             "propertySubPhrases": [
-              "Add meeting with team"
+              "Add"
             ],
             "alternatives": [
               {
-                "propertyValue": "calendar.scheduleMeeting",
-                "propertySubPhrases": [
-                  "Schedule meeting with team"
-                ]
-              },
-              {
                 "propertyValue": "calendar.createEvent",
                 "propertySubPhrases": [
-                  "Create meeting with team"
+                  "Create"
                 ]
               },
               {
-                "propertyValue": "calendar.planEvent",
+                "propertyValue": "calendar.scheduleEvent",
                 "propertySubPhrases": [
-                  "Plan meeting with team"
+                  "Schedule"
+                ]
+              },
+              {
+                "propertyValue": "calendar.insertEvent",
+                "propertySubPhrases": [
+                  "Insert"
                 ]
               }
             ]
           },
           {
             "propertyName": "parameters.event.description",
-            "propertyValue": "meeting with team",
+            "propertyValue": "meeting",
             "propertySubPhrases": [
-              "Add meeting with team"
+              "meeting"
             ],
             "alternatives": [
               {
-                "propertyValue": "discussion with team",
+                "propertyValue": "conference",
                 "propertySubPhrases": [
-                  "Add discussion with team"
+                  "conference"
                 ]
               },
               {
-                "propertyValue": "conference with team",
+                "propertyValue": "discussion",
                 "propertySubPhrases": [
-                  "Add conference with team"
+                  "discussion"
                 ]
               },
               {
-                "propertyValue": "session with team",
+                "propertyValue": "appointment",
                 "propertySubPhrases": [
-                  "Add session with team"
+                  "appointment"
                 ]
               }
             ]
@@ -143,79 +177,133 @@
             "propertyName": "parameters.event.participants.0",
             "propertyValue": "team",
             "propertySubPhrases": [
-              "Add meeting with team"
+              "with team"
             ],
             "alternatives": [
               {
                 "propertyValue": "colleagues",
                 "propertySubPhrases": [
-                  "Add meeting with colleagues"
+                  "with colleagues"
                 ]
               },
               {
                 "propertyValue": "staff",
                 "propertySubPhrases": [
-                  "Add meeting with staff"
+                  "with staff"
                 ]
               },
               {
                 "propertyValue": "group",
                 "propertySubPhrases": [
-                  "Add meeting with group"
+                  "with group"
                 ]
               }
             ]
           },
           {
-            "propertyName": "parameters.event.day",
-            "propertyValue": "1/24/2025",
+            "propertyName": "parameters.event.timeRange.startDateTime.day",
+            "propertyValue": "today",
             "propertySubPhrases": [
               "today"
             ],
             "alternatives": [
               {
-                "propertyValue": "1/25/2025",
+                "propertyValue": "tomorrow",
                 "propertySubPhrases": [
                   "tomorrow"
                 ]
               },
               {
-                "propertyValue": "1/26/2025",
+                "propertyValue": "next Monday",
                 "propertySubPhrases": [
-                  "day after tomorrow"
+                  "next Monday"
                 ]
               },
               {
-                "propertyValue": "1/31/2025",
+                "propertyValue": "next week",
                 "propertySubPhrases": [
-                  "next Friday"
+                  "next week"
                 ]
               }
             ]
           },
           {
-            "propertyName": "parameters.event.timeRange.startTime",
-            "propertyValue": "2:00 pm",
+            "propertyName": "parameters.event.timeRange.endDateTime.day",
+            "propertyValue": "today",
+            "propertySubPhrases": [
+              "today"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "tomorrow",
+                "propertySubPhrases": [
+                  "tomorrow"
+                ]
+              },
+              {
+                "propertyValue": "next Monday",
+                "propertySubPhrases": [
+                  "next Monday"
+                ]
+              },
+              {
+                "propertyValue": "next week",
+                "propertySubPhrases": [
+                  "next week"
+                ]
+              }
+            ]
+          },
+          {
+            "propertyName": "parameters.event.timeRange.startDateTime.hms",
+            "propertyValue": "14:00:00",
             "propertySubPhrases": [
               "at 2"
             ],
             "alternatives": [
               {
-                "propertyValue": "3:00 pm",
+                "propertyValue": "15:00:00",
                 "propertySubPhrases": [
                   "at 3"
                 ]
               },
               {
-                "propertyValue": "4:00 pm",
+                "propertyValue": "16:00:00",
                 "propertySubPhrases": [
                   "at 4"
                 ]
               },
               {
-                "propertyValue": "5:00 pm",
+                "propertyValue": "13:00:00",
                 "propertySubPhrases": [
-                  "at 5"
+                  "at 1"
+                ]
+              }
+            ]
+          },
+          {
+            "propertyName": "parameters.event.timeRange.endDateTime.hms",
+            "propertyValue": "14:00:00",
+            "propertySubPhrases": [
+              "at 2"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "15:00:00",
+                "propertySubPhrases": [
+                  "at 3"
+                ]
+              },
+              {
+                "propertyValue": "16:00:00",
+                "propertySubPhrases": [
+                  "at 4"
+                ]
+              },
+              {
+                "propertyValue": "13:00:00",
+                "propertySubPhrases": [
+                  "at 1"
                 ]
               }
             ]
@@ -224,14 +312,14 @@
         "politePrefixes": [
           "Could you please",
           "Would you mind",
-          "If it's not too much trouble, could you",
-          "I would appreciate it if you could"
+          "I would appreciate it if you could",
+          "Please"
         ],
         "politeSuffixes": [
-          "Thank you!",
-          "Thanks a lot!",
-          "I appreciate it!",
-          "Much appreciated!"
+          "Thank you",
+          "Thanks in advance",
+          "I appreciate your help",
+          "If you could do this, that would be great"
         ]
       }
     },
@@ -244,7 +332,9 @@
             "participants": [
               "Rosy"
             ],
-            "dayRange": "this month"
+            "timeRange": {
+              "month": "March"
+            }
           }
         }
       },
@@ -253,7 +343,7 @@
           {
             "name": "fullActionName",
             "value": "calendar.findEvents",
-            "isImplicit": true
+            "substrings": []
           },
           {
             "name": "parameters.eventReference.participants.0",
@@ -263,8 +353,8 @@
             ]
           },
           {
-            "name": "parameters.eventReference.dayRange",
-            "value": "this month",
+            "name": "parameters.eventReference.timeRange.month",
+            "value": "March",
             "substrings": [
               "this month"
             ]
@@ -272,17 +362,14 @@
         ],
         "subPhrases": [
           {
-            "text": "Do I have any plan with",
+            "text": "Do I have any plan",
             "category": "query",
-            "synonyms": [
-              "Do I have any event with",
-              "Do I have any meeting with",
-              "Do I have any appointment with"
-            ],
-            "isOptional": true
+            "propertyNames": [
+              "fullActionName"
+            ]
           },
           {
-            "text": "Rosy",
+            "text": "with Rosy",
             "category": "participant",
             "propertyNames": [
               "parameters.eventReference.participants.0"
@@ -290,150 +377,108 @@
           },
           {
             "text": "this month",
-            "category": "time period",
+            "category": "time",
             "propertyNames": [
-              "parameters.eventReference.dayRange"
+              "parameters.eventReference.timeRange.month"
             ]
-          },
-          {
-            "text": "?",
-            "category": "punctuation",
-            "synonyms": [
-              "",
-              ".",
-              "!"
-            ],
-            "isOptional": true
           }
         ],
         "propertyAlternatives": [
           {
-            "propertyName": "parameters.eventReference.participants.0",
-            "propertyValue": "Rosy",
+            "propertyName": "fullActionName",
+            "propertyValue": "calendar.findEvents",
             "propertySubPhrases": [
-              "Rosy"
+              "Do I have any plan"
             ],
             "alternatives": [
               {
-                "propertyValue": "John",
+                "propertyValue": "calendar.checkAvailability",
                 "propertySubPhrases": [
-                  "John"
+                  "Am I free"
                 ]
               },
               {
-                "propertyValue": "Alice",
+                "propertyValue": "calendar.listEvents",
                 "propertySubPhrases": [
-                  "Alice"
+                  "What events do I have"
                 ]
               },
               {
-                "propertyValue": "Michael",
+                "propertyValue": "calendar.getSchedule",
                 "propertySubPhrases": [
-                  "Michael"
+                  "Show my schedule"
                 ]
               }
             ]
           },
           {
-            "propertyName": "parameters.eventReference.dayRange",
-            "propertyValue": "this month",
+            "propertyName": "parameters.eventReference.participants.0",
+            "propertyValue": "Rosy",
+            "propertySubPhrases": [
+              "with Rosy"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "John",
+                "propertySubPhrases": [
+                  "with John"
+                ]
+              },
+              {
+                "propertyValue": "Alice",
+                "propertySubPhrases": [
+                  "with Alice"
+                ]
+              },
+              {
+                "propertyValue": "Michael",
+                "propertySubPhrases": [
+                  "with Michael"
+                ]
+              }
+            ]
+          },
+          {
+            "propertyName": "parameters.eventReference.timeRange.month",
+            "propertyValue": "March",
             "propertySubPhrases": [
               "this month"
             ],
             "alternatives": [
               {
-                "propertyValue": "next week",
+                "propertyValue": "April",
                 "propertySubPhrases": [
-                  "next week"
+                  "next month"
                 ]
               },
               {
-                "propertyValue": "today",
+                "propertyValue": "February",
                 "propertySubPhrases": [
-                  "today"
+                  "last month"
                 ]
               },
               {
-                "propertyValue": "this year",
+                "propertyValue": "May",
                 "propertySubPhrases": [
-                  "this year"
+                  "in May"
                 ]
               }
             ]
           }
         ],
         "politePrefixes": [
-          "Could you please",
-          "Would you mind"
+          "Could you please tell me,",
+          "Would you mind checking,",
+          "May I ask,",
+          "If it's not too much trouble,"
         ],
         "politeSuffixes": [
           "Thank you!",
-          "I would appreciate it."
+          "I appreciate it!",
+          "Thanks in advance!",
+          "Your help is appreciated!"
         ]
-      },
-      "corrections": [
-        {
-          "data": {
-            "properties": [
-              {
-                "name": "fullActionName",
-                "value": "calendar.findEvents",
-                "isImplicit": true
-              },
-              {
-                "name": "parameters.eventReference.participants.0",
-                "value": "Rosy",
-                "substrings": [
-                  "Rosy"
-                ]
-              },
-              {
-                "name": "parameters.eventReference.dayRange",
-                "value": "this month",
-                "substrings": [
-                  "this month"
-                ]
-              }
-            ],
-            "subPhrases": [
-              {
-                "text": "Do I have any plan with",
-                "category": "query",
-                "propertyNames": [
-                  "fullActionName"
-                ]
-              },
-              {
-                "text": "Rosy",
-                "category": "participant",
-                "propertyNames": [
-                  "parameters.eventReference.participants.0"
-                ]
-              },
-              {
-                "text": "this month",
-                "category": "time period",
-                "propertyNames": [
-                  "parameters.eventReference.dayRange"
-                ]
-              },
-              {
-                "text": "?",
-                "category": "punctuation",
-                "synonyms": [
-                  "",
-                  ".",
-                  "!"
-                ],
-                "isOptional": true
-              }
-            ]
-          },
-          "correction": [
-            "Property 'fullActionName' is expected to be implicit and should not be included as a property name in a sub-phrase"
-          ]
-        }
-      ]
+      }
     },
     {
       "request": "I need to add a meeting with my boss on Monday at 10am.",
@@ -441,12 +486,17 @@
         "fullActionName": "calendar.addEvent",
         "parameters": {
           "event": {
-            "day": "1/27/2025",
             "timeRange": {
-              "startTime": "10:00 am"
+              "startDateTime": {
+                "day": "Monday",
+                "hms": "10:00:00"
+              },
+              "endDateTime": {
+                "day": "Monday",
+                "hms": "10:00:00"
+              }
             },
-            "description": "meeting with my boss",
-            "translatedDate": "1/27/2025"
+            "description": "meeting with my boss"
           }
         }
       },
@@ -455,16 +505,34 @@
           {
             "name": "fullActionName",
             "value": "calendar.addEvent",
-            "substrings": []
+            "substrings": [
+              "I need to add a meeting"
+            ]
           },
           {
-            "name": "parameters.event.day",
-            "value": "1/27/2025",
-            "substrings": []
+            "name": "parameters.event.timeRange.startDateTime.day",
+            "value": "Monday",
+            "substrings": [
+              "Monday"
+            ]
           },
           {
-            "name": "parameters.event.timeRange.startTime",
-            "value": "10:00 am",
+            "name": "parameters.event.timeRange.startDateTime.hms",
+            "value": "10:00:00",
+            "substrings": [
+              "10am"
+            ]
+          },
+          {
+            "name": "parameters.event.timeRange.endDateTime.day",
+            "value": "Monday",
+            "substrings": [
+              "Monday"
+            ]
+          },
+          {
+            "name": "parameters.event.timeRange.endDateTime.hms",
+            "value": "10:00:00",
             "substrings": [
               "10am"
             ]
@@ -475,51 +543,37 @@
             "substrings": [
               "meeting with my boss"
             ]
-          },
-          {
-            "name": "parameters.event.translatedDate",
-            "value": "1/27/2025",
-            "substrings": []
           }
         ],
         "subPhrases": [
           {
-            "text": "I need to",
-            "category": "politeness",
-            "synonyms": [
-              "Please",
-              "Can you",
-              "Could you"
-            ],
-            "isOptional": true
-          },
-          {
-            "text": "add",
+            "text": "I need to add a meeting",
             "category": "action",
             "propertyNames": [
               "fullActionName"
             ]
           },
           {
-            "text": "a meeting with my boss",
-            "category": "event description",
+            "text": "with my boss",
+            "category": "description",
             "propertyNames": [
               "parameters.event.description"
             ]
           },
           {
             "text": "on Monday",
-            "category": "date",
+            "category": "time",
             "propertyNames": [
-              "parameters.event.day",
-              "parameters.event.translatedDate"
+              "parameters.event.timeRange.startDateTime.day",
+              "parameters.event.timeRange.endDateTime.day"
             ]
           },
           {
             "text": "at 10am",
             "category": "time",
             "propertyNames": [
-              "parameters.event.timeRange.startTime"
+              "parameters.event.timeRange.startDateTime.hms",
+              "parameters.event.timeRange.endDateTime.hms"
             ]
           }
         ],
@@ -528,25 +582,25 @@
             "propertyName": "fullActionName",
             "propertyValue": "calendar.addEvent",
             "propertySubPhrases": [
-              "add"
+              "I need to add a meeting"
             ],
             "alternatives": [
               {
+                "propertyValue": "calendar.scheduleMeeting",
+                "propertySubPhrases": [
+                  "I need to schedule a meeting"
+                ]
+              },
+              {
                 "propertyValue": "calendar.createEvent",
                 "propertySubPhrases": [
-                  "create"
+                  "I need to create an event"
                 ]
               },
               {
-                "propertyValue": "calendar.scheduleEvent",
+                "propertyValue": "calendar.bookAppointment",
                 "propertySubPhrases": [
-                  "schedule"
-                ]
-              },
-              {
-                "propertyValue": "calendar.insertEvent",
-                "propertySubPhrases": [
-                  "insert"
+                  "I need to book an appointment"
                 ]
               }
             ]
@@ -555,50 +609,50 @@
             "propertyName": "parameters.event.description",
             "propertyValue": "meeting with my boss",
             "propertySubPhrases": [
-              "a meeting with my boss"
+              "with my boss"
             ],
             "alternatives": [
               {
-                "propertyValue": "discussion with my boss",
+                "propertyValue": "meeting with the manager",
                 "propertySubPhrases": [
-                  "a discussion with my boss"
+                  "with the manager"
                 ]
               },
               {
-                "propertyValue": "appointment with my boss",
+                "propertyValue": "meeting with the team lead",
                 "propertySubPhrases": [
-                  "an appointment with my boss"
+                  "with the team lead"
                 ]
               },
               {
-                "propertyValue": "conference with my boss",
+                "propertyValue": "meeting with the supervisor",
                 "propertySubPhrases": [
-                  "a conference with my boss"
+                  "with the supervisor"
                 ]
               }
             ]
           },
           {
-            "propertyName": "parameters.event.day",
-            "propertyValue": "1/27/2025",
+            "propertyName": "parameters.event.timeRange.startDateTime.day",
+            "propertyValue": "Monday",
             "propertySubPhrases": [
               "on Monday"
             ],
             "alternatives": [
               {
-                "propertyValue": "1/28/2025",
+                "propertyValue": "Tuesday",
                 "propertySubPhrases": [
                   "on Tuesday"
                 ]
               },
               {
-                "propertyValue": "1/29/2025",
+                "propertyValue": "Wednesday",
                 "propertySubPhrases": [
                   "on Wednesday"
                 ]
               },
               {
-                "propertyValue": "1/30/2025",
+                "propertyValue": "Thursday",
                 "propertySubPhrases": [
                   "on Thursday"
                 ]
@@ -606,26 +660,26 @@
             ]
           },
           {
-            "propertyName": "parameters.event.translatedDate",
-            "propertyValue": "1/27/2025",
+            "propertyName": "parameters.event.timeRange.endDateTime.day",
+            "propertyValue": "Monday",
             "propertySubPhrases": [
               "on Monday"
             ],
             "alternatives": [
               {
-                "propertyValue": "1/28/2025",
+                "propertyValue": "Tuesday",
                 "propertySubPhrases": [
                   "on Tuesday"
                 ]
               },
               {
-                "propertyValue": "1/29/2025",
+                "propertyValue": "Wednesday",
                 "propertySubPhrases": [
                   "on Wednesday"
                 ]
               },
               {
-                "propertyValue": "1/30/2025",
+                "propertyValue": "Thursday",
                 "propertySubPhrases": [
                   "on Thursday"
                 ]
@@ -633,26 +687,53 @@
             ]
           },
           {
-            "propertyName": "parameters.event.timeRange.startTime",
-            "propertyValue": "10:00 am",
+            "propertyName": "parameters.event.timeRange.startDateTime.hms",
+            "propertyValue": "10:00:00",
             "propertySubPhrases": [
               "at 10am"
             ],
             "alternatives": [
               {
-                "propertyValue": "11:00 am",
-                "propertySubPhrases": [
-                  "at 11am"
-                ]
-              },
-              {
-                "propertyValue": "9:00 am",
+                "propertyValue": "09:00:00",
                 "propertySubPhrases": [
                   "at 9am"
                 ]
               },
               {
-                "propertyValue": "2:00 pm",
+                "propertyValue": "11:00:00",
+                "propertySubPhrases": [
+                  "at 11am"
+                ]
+              },
+              {
+                "propertyValue": "14:00:00",
+                "propertySubPhrases": [
+                  "at 2pm"
+                ]
+              }
+            ]
+          },
+          {
+            "propertyName": "parameters.event.timeRange.endDateTime.hms",
+            "propertyValue": "10:00:00",
+            "propertySubPhrases": [
+              "at 10am"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "09:00:00",
+                "propertySubPhrases": [
+                  "at 9am"
+                ]
+              },
+              {
+                "propertyValue": "11:00:00",
+                "propertySubPhrases": [
+                  "at 11am"
+                ]
+              },
+              {
+                "propertyValue": "14:00:00",
                 "propertySubPhrases": [
                   "at 2pm"
                 ]
@@ -663,11 +744,11 @@
         "politePrefixes": [
           "Could you please",
           "Would you mind",
-          "If it's not too much trouble, could you",
-          "May I kindly ask you to"
+          "May I kindly ask",
+          "If it's not too much trouble"
         ],
         "politeSuffixes": [
-          "Thank you.",
+          "Thank you!",
           "I would appreciate it.",
           "Thanks in advance.",
           "Your help is appreciated."
@@ -680,12 +761,21 @@
         "fullActionName": "calendar.addEvent",
         "parameters": {
           "event": {
-            "day": "March 15, 2024",
             "timeRange": {
-              "startTime": "12:00 pm",
-              "endTime": "2:00 pm"
+              "startDateTime": {
+                "year": "2024",
+                "month": "March",
+                "day": "15",
+                "hms": "12:00:00"
+              },
+              "endDateTime": {
+                "year": "2024",
+                "month": "March",
+                "day": "15",
+                "hms": "14:00:00"
+              }
             },
-            "description": "Get my tires changed"
+            "description": "get my tires changed"
           }
         }
       },
@@ -697,29 +787,64 @@
             "substrings": []
           },
           {
-            "name": "parameters.event.day",
-            "value": "March 15, 2024",
+            "name": "parameters.event.timeRange.startDateTime.year",
+            "value": "2024",
             "substrings": [
-              "March 15, 2024"
+              "2024"
             ]
           },
           {
-            "name": "parameters.event.timeRange.startTime",
-            "value": "12:00 pm",
+            "name": "parameters.event.timeRange.startDateTime.month",
+            "value": "March",
+            "substrings": [
+              "March"
+            ]
+          },
+          {
+            "name": "parameters.event.timeRange.startDateTime.day",
+            "value": "15",
+            "substrings": [
+              "15"
+            ]
+          },
+          {
+            "name": "parameters.event.timeRange.startDateTime.hms",
+            "value": "12:00:00",
             "substrings": [
               "12:00"
             ]
           },
           {
-            "name": "parameters.event.timeRange.endTime",
-            "value": "2:00 pm",
+            "name": "parameters.event.timeRange.endDateTime.year",
+            "value": "2024",
             "substrings": [
-              "2:00 pm"
+              "2024"
+            ]
+          },
+          {
+            "name": "parameters.event.timeRange.endDateTime.month",
+            "value": "March",
+            "substrings": [
+              "March"
+            ]
+          },
+          {
+            "name": "parameters.event.timeRange.endDateTime.day",
+            "value": "15",
+            "substrings": [
+              "15"
+            ]
+          },
+          {
+            "name": "parameters.event.timeRange.endDateTime.hms",
+            "value": "14:00:00",
+            "substrings": [
+              "2:00"
             ]
           },
           {
             "name": "parameters.event.description",
-            "value": "Get my tires changed",
+            "value": "get my tires changed",
             "substrings": [
               "get my tires changed"
             ]
@@ -730,9 +855,11 @@
             "text": "I need to",
             "category": "politeness",
             "synonyms": [
-              "I would like to",
-              "I want to",
-              "I have to"
+              "please",
+              "could you",
+              "would you mind",
+              "can you",
+              "I would like to"
             ],
             "isOptional": true
           },
@@ -747,129 +874,279 @@
             "text": "from 12:00",
             "category": "time",
             "propertyNames": [
-              "parameters.event.timeRange.startTime"
+              "parameters.event.timeRange.startDateTime.hms"
             ]
           },
           {
             "text": "to 2:00 pm",
             "category": "time",
             "propertyNames": [
-              "parameters.event.timeRange.endTime"
+              "parameters.event.timeRange.endDateTime.hms"
             ]
           },
           {
-            "text": "on Friday March 15, 2024",
+            "text": "on Friday",
+            "category": "day",
+            "synonyms": [
+              "this Friday",
+              "next Friday",
+              "Friday"
+            ],
+            "isOptional": true
+          },
+          {
+            "text": "March 15, 2024",
             "category": "date",
             "propertyNames": [
-              "parameters.event.day"
+              "parameters.event.timeRange.startDateTime.year",
+              "parameters.event.timeRange.startDateTime.month",
+              "parameters.event.timeRange.startDateTime.day",
+              "parameters.event.timeRange.endDateTime.year",
+              "parameters.event.timeRange.endDateTime.month",
+              "parameters.event.timeRange.endDateTime.day"
             ]
           }
         ],
         "propertyAlternatives": [
           {
             "propertyName": "parameters.event.description",
-            "propertyValue": "Get my tires changed",
+            "propertyValue": "get my tires changed",
             "propertySubPhrases": [
               "get my tires changed"
             ],
             "alternatives": [
               {
-                "propertyValue": "Get my oil changed",
+                "propertyValue": "get my oil changed",
                 "propertySubPhrases": [
                   "get my oil changed"
                 ]
               },
               {
-                "propertyValue": "Get my car washed",
+                "propertyValue": "get my brakes checked",
                 "propertySubPhrases": [
-                  "get my car washed"
+                  "get my brakes checked"
                 ]
               },
               {
-                "propertyValue": "Get my brakes checked",
+                "propertyValue": "get my car washed",
                 "propertySubPhrases": [
-                  "get my brakes checked"
+                  "get my car washed"
                 ]
               }
             ]
           },
           {
-            "propertyName": "parameters.event.timeRange.startTime",
-            "propertyValue": "12:00 pm",
+            "propertyName": "parameters.event.timeRange.startDateTime.hms",
+            "propertyValue": "12:00:00",
             "propertySubPhrases": [
               "from 12:00"
             ],
             "alternatives": [
               {
-                "propertyValue": "10:00 am",
+                "propertyValue": "10:00:00",
                 "propertySubPhrases": [
                   "from 10:00"
                 ]
               },
               {
-                "propertyValue": "1:00 pm",
+                "propertyValue": "11:00:00",
                 "propertySubPhrases": [
-                  "from 1:00"
+                  "from 11:00"
                 ]
               },
               {
-                "propertyValue": "3:00 pm",
+                "propertyValue": "13:00:00",
                 "propertySubPhrases": [
-                  "from 3:00"
+                  "from 1:00 pm"
                 ]
               }
             ]
           },
           {
-            "propertyName": "parameters.event.timeRange.endTime",
-            "propertyValue": "2:00 pm",
+            "propertyName": "parameters.event.timeRange.endDateTime.hms",
+            "propertyValue": "14:00:00",
             "propertySubPhrases": [
               "to 2:00 pm"
             ],
             "alternatives": [
               {
-                "propertyValue": "1:00 pm",
-                "propertySubPhrases": [
-                  "to 1:00 pm"
-                ]
-              },
-              {
-                "propertyValue": "3:00 pm",
+                "propertyValue": "15:00:00",
                 "propertySubPhrases": [
                   "to 3:00 pm"
                 ]
               },
               {
-                "propertyValue": "4:00 pm",
+                "propertyValue": "16:00:00",
                 "propertySubPhrases": [
                   "to 4:00 pm"
+                ]
+              },
+              {
+                "propertyValue": "13:00:00",
+                "propertySubPhrases": [
+                  "to 1:00 pm"
                 ]
               }
             ]
           },
           {
-            "propertyName": "parameters.event.day",
-            "propertyValue": "March 15, 2024",
+            "propertyName": "parameters.event.timeRange.startDateTime.year",
+            "propertyValue": "2024",
             "propertySubPhrases": [
-              "on Friday March 15, 2024"
+              "March 15, 2024"
             ],
             "alternatives": [
               {
-                "propertyValue": "March 16, 2024",
+                "propertyValue": "2023",
                 "propertySubPhrases": [
-                  "on Saturday March 16, 2024"
+                  "March 15, 2023"
                 ]
               },
               {
-                "propertyValue": "March 17, 2024",
+                "propertyValue": "2025",
                 "propertySubPhrases": [
-                  "on Sunday March 17, 2024"
+                  "March 15, 2025"
                 ]
               },
               {
-                "propertyValue": "March 18, 2024",
+                "propertyValue": "2022",
                 "propertySubPhrases": [
-                  "on Monday March 18, 2024"
+                  "March 15, 2022"
+                ]
+              }
+            ]
+          },
+          {
+            "propertyName": "parameters.event.timeRange.startDateTime.month",
+            "propertyValue": "March",
+            "propertySubPhrases": [
+              "March 15, 2024"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "April",
+                "propertySubPhrases": [
+                  "April 15, 2024"
+                ]
+              },
+              {
+                "propertyValue": "February",
+                "propertySubPhrases": [
+                  "February 15, 2024"
+                ]
+              },
+              {
+                "propertyValue": "May",
+                "propertySubPhrases": [
+                  "May 15, 2024"
+                ]
+              }
+            ]
+          },
+          {
+            "propertyName": "parameters.event.timeRange.startDateTime.day",
+            "propertyValue": "15",
+            "propertySubPhrases": [
+              "March 15, 2024"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "16",
+                "propertySubPhrases": [
+                  "March 16, 2024"
+                ]
+              },
+              {
+                "propertyValue": "14",
+                "propertySubPhrases": [
+                  "March 14, 2024"
+                ]
+              },
+              {
+                "propertyValue": "17",
+                "propertySubPhrases": [
+                  "March 17, 2024"
+                ]
+              }
+            ]
+          },
+          {
+            "propertyName": "parameters.event.timeRange.endDateTime.year",
+            "propertyValue": "2024",
+            "propertySubPhrases": [
+              "March 15, 2024"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "2023",
+                "propertySubPhrases": [
+                  "March 15, 2023"
+                ]
+              },
+              {
+                "propertyValue": "2025",
+                "propertySubPhrases": [
+                  "March 15, 2025"
+                ]
+              },
+              {
+                "propertyValue": "2022",
+                "propertySubPhrases": [
+                  "March 15, 2022"
+                ]
+              }
+            ]
+          },
+          {
+            "propertyName": "parameters.event.timeRange.endDateTime.month",
+            "propertyValue": "March",
+            "propertySubPhrases": [
+              "March 15, 2024"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "April",
+                "propertySubPhrases": [
+                  "April 15, 2024"
+                ]
+              },
+              {
+                "propertyValue": "February",
+                "propertySubPhrases": [
+                  "February 15, 2024"
+                ]
+              },
+              {
+                "propertyValue": "May",
+                "propertySubPhrases": [
+                  "May 15, 2024"
+                ]
+              }
+            ]
+          },
+          {
+            "propertyName": "parameters.event.timeRange.endDateTime.day",
+            "propertyValue": "15",
+            "propertySubPhrases": [
+              "March 15, 2024"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "16",
+                "propertySubPhrases": [
+                  "March 16, 2024"
+                ]
+              },
+              {
+                "propertyValue": "14",
+                "propertySubPhrases": [
+                  "March 14, 2024"
+                ]
+              },
+              {
+                "propertyValue": "17",
+                "propertySubPhrases": [
+                  "March 17, 2024"
                 ]
               }
             ]
@@ -878,14 +1155,14 @@
         "politePrefixes": [
           "Could you please",
           "Would you mind",
-          "If it's not too much trouble, could you",
-          "May I kindly ask you to"
+          "I would appreciate it if you could",
+          "If possible, could you"
         ],
         "politeSuffixes": [
           "Thank you!",
-          "I would appreciate it.",
-          "Thanks in advance.",
-          "Your help is much appreciated."
+          "Thanks in advance!",
+          "I appreciate your help!",
+          "Your assistance is appreciated!"
         ]
       }
     },
@@ -895,13 +1172,19 @@
         "fullActionName": "calendar.addEvent",
         "parameters": {
           "event": {
-            "day": "1/24/2025",
             "timeRange": {
-              "startTime": "3:30 pm",
-              "duration": "1 hour"
+              "startDateTime": {
+                "day": "17",
+                "hms": "15:30:00"
+              },
+              "endDateTime": {
+                "day": "17",
+                "hms": "16:30:00"
+              }
             },
             "description": "Go to the dry cleaner",
-            "translatedDate": "1/24/2025"
+            "location": "",
+            "participants": []
           }
         }
       },
@@ -913,22 +1196,27 @@
             "substrings": []
           },
           {
-            "name": "parameters.event.day",
-            "value": "1/24/2025",
-            "isImplicit": true
+            "name": "parameters.event.timeRange.startDateTime.day",
+            "value": "17",
+            "substrings": []
           },
           {
-            "name": "parameters.event.timeRange.startTime",
-            "value": "3:30 pm",
+            "name": "parameters.event.timeRange.startDateTime.hms",
+            "value": "15:30:00",
             "substrings": [
               "starting at 3:30"
             ]
           },
           {
-            "name": "parameters.event.timeRange.duration",
-            "value": "1 hour",
+            "name": "parameters.event.timeRange.endDateTime.day",
+            "value": "17",
+            "substrings": []
+          },
+          {
+            "name": "parameters.event.timeRange.endDateTime.hms",
+            "value": "16:30:00",
             "substrings": [
-              "Leave an hour"
+              "Leave an hour for that starting at 3:30"
             ]
           },
           {
@@ -939,9 +1227,9 @@
             ]
           },
           {
-            "name": "parameters.event.translatedDate",
-            "value": "1/24/2025",
-            "isImplicit": true
+            "name": "parameters.event.location",
+            "value": "",
+            "substrings": []
           }
         ],
         "subPhrases": [
@@ -958,27 +1246,11 @@
             "propertyNames": []
           },
           {
-            "text": "Leave an hour",
-            "category": "duration",
+            "text": "Leave an hour for that starting at 3:30",
+            "category": "time",
             "propertyNames": [
-              "parameters.event.timeRange.duration"
-            ]
-          },
-          {
-            "text": "for that",
-            "category": "filler",
-            "synonyms": [
-              "for it",
-              "for the task",
-              "for the event"
-            ],
-            "isOptional": true
-          },
-          {
-            "text": "starting at 3:30",
-            "category": "startTime",
-            "propertyNames": [
-              "parameters.event.timeRange.startTime"
+              "parameters.event.timeRange.startDateTime.hms",
+              "parameters.event.timeRange.endDateTime.hms"
             ]
           }
         ],
@@ -991,75 +1263,75 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "Pick up laundry",
+                "propertyValue": "Visit the dry cleaner",
                 "propertySubPhrases": [
-                  "I need to pick up laundry"
+                  "I need to visit the dry cleaner"
                 ]
               },
               {
-                "propertyValue": "Visit the tailor",
+                "propertyValue": "Drop off clothes at the dry cleaner",
                 "propertySubPhrases": [
-                  "I need to visit the tailor"
+                  "I need to drop off clothes at the dry cleaner"
                 ]
               },
               {
-                "propertyValue": "Drop off clothes",
+                "propertyValue": "Pick up clothes from the dry cleaner",
                 "propertySubPhrases": [
-                  "I need to drop off clothes"
+                  "I need to pick up clothes from the dry cleaner"
                 ]
               }
             ]
           },
           {
-            "propertyName": "parameters.event.timeRange.duration",
-            "propertyValue": "1 hour",
+            "propertyName": "parameters.event.timeRange.startDateTime.hms",
+            "propertyValue": "15:30:00",
             "propertySubPhrases": [
-              "Leave an hour"
+              "Leave an hour for that starting at 3:30"
             ],
             "alternatives": [
               {
-                "propertyValue": "30 minutes",
+                "propertyValue": "14:30:00",
                 "propertySubPhrases": [
-                  "Leave 30 minutes"
+                  "Leave an hour for that starting at 2:30"
                 ]
               },
               {
-                "propertyValue": "2 hours",
+                "propertyValue": "16:00:00",
                 "propertySubPhrases": [
-                  "Leave 2 hours"
+                  "Leave an hour for that starting at 4:00"
                 ]
               },
               {
-                "propertyValue": "45 minutes",
+                "propertyValue": "17:00:00",
                 "propertySubPhrases": [
-                  "Leave 45 minutes"
+                  "Leave an hour for that starting at 5:00"
                 ]
               }
             ]
           },
           {
-            "propertyName": "parameters.event.timeRange.startTime",
-            "propertyValue": "3:30 pm",
+            "propertyName": "parameters.event.timeRange.endDateTime.hms",
+            "propertyValue": "16:30:00",
             "propertySubPhrases": [
-              "starting at 3:30"
+              "Leave an hour for that starting at 3:30"
             ],
             "alternatives": [
               {
-                "propertyValue": "4:00 pm",
+                "propertyValue": "15:30:00",
                 "propertySubPhrases": [
-                  "starting at 4:00"
+                  "Leave an hour for that starting at 2:30"
                 ]
               },
               {
-                "propertyValue": "3:00 pm",
+                "propertyValue": "17:00:00",
                 "propertySubPhrases": [
-                  "starting at 3:00"
+                  "Leave an hour for that starting at 4:00"
                 ]
               },
               {
-                "propertyValue": "2:30 pm",
+                "propertyValue": "18:00:00",
                 "propertySubPhrases": [
-                  "starting at 2:30"
+                  "Leave an hour for that starting at 5:00"
                 ]
               }
             ]
@@ -1068,13 +1340,13 @@
         "politePrefixes": [
           "Could you please",
           "Would you mind",
-          "If it's not too much trouble, could you",
-          "I would appreciate it if you could"
+          "I would appreciate it if you could",
+          "If it's not too much trouble"
         ],
         "politeSuffixes": [
           "Thank you!",
-          "Thanks a lot!",
-          "I appreciate it!",
+          "Thanks in advance!",
+          "I appreciate your help!",
           "Much appreciated!"
         ]
       }
@@ -1085,11 +1357,18 @@
         "fullActionName": "calendar.addEvent",
         "parameters": {
           "event": {
-            "day": "1/24/2025",
             "timeRange": {
-              "startTime": "2:00 pm"
+              "startDateTime": {
+                "day": "17",
+                "hms": "14:00:00"
+              },
+              "endDateTime": {
+                "day": "17",
+                "hms": "15:00:00"
+              }
             },
             "description": "Meeting with Jenny",
+            "location": "",
             "participants": [
               "Jenny"
             ]
@@ -1104,16 +1383,26 @@
             "substrings": []
           },
           {
-            "name": "parameters.event.day",
-            "value": "1/24/2025",
-            "isImplicit": true
+            "name": "parameters.event.timeRange.startDateTime.day",
+            "value": "17",
+            "substrings": []
           },
           {
-            "name": "parameters.event.timeRange.startTime",
-            "value": "2:00 pm",
+            "name": "parameters.event.timeRange.startDateTime.hms",
+            "value": "14:00:00",
             "substrings": [
               "2pm"
             ]
+          },
+          {
+            "name": "parameters.event.timeRange.endDateTime.day",
+            "value": "17",
+            "substrings": []
+          },
+          {
+            "name": "parameters.event.timeRange.endDateTime.hms",
+            "value": "15:00:00",
+            "substrings": []
           },
           {
             "name": "parameters.event.description",
@@ -1121,6 +1410,11 @@
             "substrings": [
               "meet with Jenny"
             ]
+          },
+          {
+            "name": "parameters.event.location",
+            "value": "",
+            "substrings": []
           },
           {
             "name": "parameters.event.participants.0",
@@ -1133,11 +1427,11 @@
         "subPhrases": [
           {
             "text": "I said I'd",
-            "category": "filler",
+            "category": "acknowledgement",
             "synonyms": [
               "I mentioned",
               "I told you",
-              "I stated"
+              "I indicated"
             ],
             "isOptional": true
           },
@@ -1150,9 +1444,9 @@
           },
           {
             "text": "this afternoon",
-            "category": "time reference",
+            "category": "time indication",
             "synonyms": [
-              "today afternoon",
+              "today",
               "later today",
               "in the afternoon"
             ],
@@ -1160,9 +1454,9 @@
           },
           {
             "text": "at 2pm",
-            "category": "time",
+            "category": "start time",
             "propertyNames": [
-              "parameters.event.timeRange.startTime"
+              "parameters.event.timeRange.startDateTime.hms"
             ]
           }
         ],
@@ -1181,42 +1475,42 @@
                 ]
               },
               {
-                "propertyValue": "Appointment with Jenny",
+                "propertyValue": "Catch up with Jenny",
                 "propertySubPhrases": [
-                  "appointment with Jenny"
+                  "catch up with Jenny"
                 ]
               },
               {
-                "propertyValue": "Catch-up with Jenny",
+                "propertyValue": "Appointment with Jenny",
                 "propertySubPhrases": [
-                  "catch-up with Jenny"
+                  "appointment with Jenny"
                 ]
               }
             ]
           },
           {
-            "propertyName": "parameters.event.timeRange.startTime",
-            "propertyValue": "2:00 pm",
+            "propertyName": "parameters.event.timeRange.startDateTime.hms",
+            "propertyValue": "14:00:00",
             "propertySubPhrases": [
               "at 2pm"
             ],
             "alternatives": [
               {
-                "propertyValue": "3:00 pm",
+                "propertyValue": "15:00:00",
                 "propertySubPhrases": [
                   "at 3pm"
                 ]
               },
               {
-                "propertyValue": "4:00 pm",
+                "propertyValue": "13:00:00",
                 "propertySubPhrases": [
-                  "at 4pm"
+                  "at 1pm"
                 ]
               },
               {
-                "propertyValue": "1:00 pm",
+                "propertyValue": "16:00:00",
                 "propertySubPhrases": [
-                  "at 1pm"
+                  "at 4pm"
                 ]
               }
             ]
@@ -1225,14 +1519,116 @@
         "politePrefixes": [
           "Could you please",
           "Would you mind",
-          "If it's not too much trouble, could you"
+          "I would appreciate it if you could",
+          "If it's not too much trouble"
         ],
         "politeSuffixes": [
-          "Thank you!",
-          "I would appreciate it.",
-          "Thanks in advance!"
+          "Thank you",
+          "Thanks in advance",
+          "I appreciate your help",
+          "Much appreciated"
         ]
-      }
+      },
+      "corrections": [
+        {
+          "data": {
+            "properties": [
+              {
+                "name": "fullActionName",
+                "value": "calendar.addEvent",
+                "substrings": []
+              },
+              {
+                "name": "parameters.event.timeRange.startDateTime.day",
+                "value": "17",
+                "substrings": []
+              },
+              {
+                "name": "parameters.event.timeRange.startDateTime.hms",
+                "value": "14:00:00",
+                "substrings": [
+                  "2pm"
+                ]
+              },
+              {
+                "name": "parameters.event.timeRange.endDateTime.day",
+                "value": "17",
+                "substrings": []
+              },
+              {
+                "name": "parameters.event.timeRange.endDateTime.hms",
+                "value": "15:00:00",
+                "substrings": []
+              },
+              {
+                "name": "parameters.event.description",
+                "value": "Meeting with Jenny",
+                "substrings": [
+                  "meet with Jenny"
+                ]
+              },
+              {
+                "name": "parameters.event.location",
+                "value": "",
+                "substrings": []
+              },
+              {
+                "name": "parameters.event.participants.0",
+                "value": "Jenny",
+                "substrings": [
+                  "Jenny"
+                ]
+              }
+            ],
+            "subPhrases": [
+              {
+                "text": "I said I'd",
+                "category": "acknowledgement",
+                "synonyms": [
+                  "I mentioned",
+                  "I told you",
+                  "I indicated"
+                ],
+                "isOptional": true
+              },
+              {
+                "text": "meet with Jenny",
+                "category": "event description",
+                "propertyNames": [
+                  "parameters.event.description"
+                ]
+              },
+              {
+                "text": "Jenny",
+                "category": "participant",
+                "propertyNames": [
+                  "parameters.event.participants.0"
+                ]
+              },
+              {
+                "text": "this afternoon",
+                "category": "time indication",
+                "synonyms": [
+                  "today",
+                  "later today",
+                  "in the afternoon"
+                ],
+                "isOptional": true
+              },
+              {
+                "text": "at 2pm",
+                "category": "start time",
+                "propertyNames": [
+                  "parameters.event.timeRange.startDateTime.hms"
+                ]
+              }
+            ]
+          },
+          "correction": [
+            "Overlapping sub-phrase: explanation has overlapping text 'Jenny'."
+          ]
+        }
+      ]
     },
     {
       "request": "make sure to schedule an appointment with Sally, May, and Boris tomorrow at 3pm.",
@@ -1240,9 +1636,15 @@
         "fullActionName": "calendar.addEvent",
         "parameters": {
           "event": {
-            "day": "1/25/2025",
             "timeRange": {
-              "startTime": "3:00 pm"
+              "startDateTime": {
+                "day": "+1d",
+                "hms": "15:00:00"
+              },
+              "endDateTime": {
+                "day": "+1d",
+                "hms": "15:00:00"
+              }
             },
             "description": "appointment",
             "participants": [
@@ -1258,16 +1660,34 @@
           {
             "name": "fullActionName",
             "value": "calendar.addEvent",
-            "isImplicit": true
+            "substrings": [
+              "make sure to schedule an appointment"
+            ]
           },
           {
-            "name": "parameters.event.day",
-            "value": "1/25/2025",
-            "isImplicit": true
+            "name": "parameters.event.timeRange.startDateTime.day",
+            "value": "+1d",
+            "substrings": [
+              "tomorrow"
+            ]
           },
           {
-            "name": "parameters.event.timeRange.startTime",
-            "value": "3:00 pm",
+            "name": "parameters.event.timeRange.startDateTime.hms",
+            "value": "15:00:00",
+            "substrings": [
+              "3pm"
+            ]
+          },
+          {
+            "name": "parameters.event.timeRange.endDateTime.day",
+            "value": "+1d",
+            "substrings": [
+              "tomorrow"
+            ]
+          },
+          {
+            "name": "parameters.event.timeRange.endDateTime.hms",
+            "value": "15:00:00",
             "substrings": [
               "3pm"
             ]
@@ -1276,7 +1696,7 @@
             "name": "parameters.event.description",
             "value": "appointment",
             "substrings": [
-              "an appointment"
+              "appointment"
             ]
           },
           {
@@ -1308,68 +1728,80 @@
             "synonyms": [
               "please",
               "kindly",
-              "ensure"
+              "ensure",
+              "be sure to"
             ],
             "isOptional": true
           },
           {
-            "text": "schedule",
+            "text": "schedule an appointment",
             "category": "action",
-            "propertyNames": []
-          },
-          {
-            "text": "an appointment",
-            "category": "description",
             "propertyNames": [
-              "parameters.event.description"
+              "fullActionName"
             ]
           },
           {
-            "text": "with Sally, May, and Boris",
-            "category": "participants",
+            "text": "with Sally",
+            "category": "participant",
             "propertyNames": [
-              "parameters.event.participants.0",
-              "parameters.event.participants.1",
+              "parameters.event.participants.0"
+            ]
+          },
+          {
+            "text": "May",
+            "category": "participant",
+            "propertyNames": [
+              "parameters.event.participants.1"
+            ]
+          },
+          {
+            "text": "and Boris",
+            "category": "participant",
+            "propertyNames": [
               "parameters.event.participants.2"
             ]
           },
           {
             "text": "tomorrow",
-            "category": "day",
-            "propertyNames": []
+            "category": "time",
+            "propertyNames": [
+              "parameters.event.timeRange.startDateTime.day",
+              "parameters.event.timeRange.endDateTime.day"
+            ]
           },
           {
             "text": "at 3pm",
             "category": "time",
             "propertyNames": [
-              "parameters.event.timeRange.startTime"
+              "parameters.event.timeRange.startDateTime.hms",
+              "parameters.event.timeRange.endDateTime.hms"
             ]
           }
         ],
         "propertyAlternatives": [
           {
-            "propertyName": "parameters.event.description",
-            "propertyValue": "appointment",
+            "propertyName": "fullActionName",
+            "propertyValue": "calendar.addEvent",
             "propertySubPhrases": [
-              "an appointment"
+              "schedule an appointment"
             ],
             "alternatives": [
               {
-                "propertyValue": "meeting",
+                "propertyValue": "calendar.createMeeting",
                 "propertySubPhrases": [
-                  "a meeting"
+                  "schedule a meeting"
                 ]
               },
               {
-                "propertyValue": "consultation",
+                "propertyValue": "calendar.setReminder",
                 "propertySubPhrases": [
-                  "a consultation"
+                  "set a reminder"
                 ]
               },
               {
-                "propertyValue": "discussion",
+                "propertyValue": "calendar.bookEvent",
                 "propertySubPhrases": [
-                  "a discussion"
+                  "book an event"
                 ]
               }
             ]
@@ -1378,25 +1810,25 @@
             "propertyName": "parameters.event.participants.0",
             "propertyValue": "Sally",
             "propertySubPhrases": [
-              "with Sally, May, and Boris"
+              "with Sally"
             ],
             "alternatives": [
               {
                 "propertyValue": "Alice",
                 "propertySubPhrases": [
-                  "with Alice, May, and Boris"
+                  "with Alice"
                 ]
               },
               {
                 "propertyValue": "John",
                 "propertySubPhrases": [
-                  "with John, May, and Boris"
+                  "with John"
                 ]
               },
               {
                 "propertyValue": "Emma",
                 "propertySubPhrases": [
-                  "with Emma, May, and Boris"
+                  "with Emma"
                 ]
               }
             ]
@@ -1405,25 +1837,25 @@
             "propertyName": "parameters.event.participants.1",
             "propertyValue": "May",
             "propertySubPhrases": [
-              "with Sally, May, and Boris"
+              "May"
             ],
             "alternatives": [
               {
-                "propertyValue": "Jane",
+                "propertyValue": "June",
                 "propertySubPhrases": [
-                  "with Sally, Jane, and Boris"
+                  "June"
                 ]
               },
               {
-                "propertyValue": "Tom",
+                "propertyValue": "April",
                 "propertySubPhrases": [
-                  "with Sally, Tom, and Boris"
+                  "April"
                 ]
               },
               {
-                "propertyValue": "Chris",
+                "propertyValue": "July",
                 "propertySubPhrases": [
-                  "with Sally, Chris, and Boris"
+                  "July"
                 ]
               }
             ]
@@ -1432,52 +1864,133 @@
             "propertyName": "parameters.event.participants.2",
             "propertyValue": "Boris",
             "propertySubPhrases": [
-              "with Sally, May, and Boris"
+              "and Boris"
             ],
             "alternatives": [
               {
-                "propertyValue": "David",
+                "propertyValue": "Tom",
                 "propertySubPhrases": [
-                  "with Sally, May, and David"
+                  "and Tom"
                 ]
               },
               {
-                "propertyValue": "Nina",
+                "propertyValue": "Jerry",
                 "propertySubPhrases": [
-                  "with Sally, May, and Nina"
+                  "and Jerry"
                 ]
               },
               {
-                "propertyValue": "Paul",
+                "propertyValue": "Sam",
                 "propertySubPhrases": [
-                  "with Sally, May, and Paul"
+                  "and Sam"
                 ]
               }
             ]
           },
           {
-            "propertyName": "parameters.event.timeRange.startTime",
-            "propertyValue": "3:00 pm",
+            "propertyName": "parameters.event.timeRange.startDateTime.day",
+            "propertyValue": "+1d",
+            "propertySubPhrases": [
+              "tomorrow"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "+2d",
+                "propertySubPhrases": [
+                  "the day after tomorrow"
+                ]
+              },
+              {
+                "propertyValue": "+3d",
+                "propertySubPhrases": [
+                  "in three days"
+                ]
+              },
+              {
+                "propertyValue": "+7d",
+                "propertySubPhrases": [
+                  "next week"
+                ]
+              }
+            ]
+          },
+          {
+            "propertyName": "parameters.event.timeRange.endDateTime.day",
+            "propertyValue": "+1d",
+            "propertySubPhrases": [
+              "tomorrow"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "+2d",
+                "propertySubPhrases": [
+                  "the day after tomorrow"
+                ]
+              },
+              {
+                "propertyValue": "+3d",
+                "propertySubPhrases": [
+                  "in three days"
+                ]
+              },
+              {
+                "propertyValue": "+7d",
+                "propertySubPhrases": [
+                  "next week"
+                ]
+              }
+            ]
+          },
+          {
+            "propertyName": "parameters.event.timeRange.startDateTime.hms",
+            "propertyValue": "15:00:00",
             "propertySubPhrases": [
               "at 3pm"
             ],
             "alternatives": [
               {
-                "propertyValue": "4:00 pm",
-                "propertySubPhrases": [
-                  "at 4pm"
-                ]
-              },
-              {
-                "propertyValue": "2:00 pm",
+                "propertyValue": "14:00:00",
                 "propertySubPhrases": [
                   "at 2pm"
                 ]
               },
               {
-                "propertyValue": "5:00 pm",
+                "propertyValue": "16:00:00",
                 "propertySubPhrases": [
-                  "at 5pm"
+                  "at 4pm"
+                ]
+              },
+              {
+                "propertyValue": "10:00:00",
+                "propertySubPhrases": [
+                  "at 10am"
+                ]
+              }
+            ]
+          },
+          {
+            "propertyName": "parameters.event.timeRange.endDateTime.hms",
+            "propertyValue": "15:00:00",
+            "propertySubPhrases": [
+              "at 3pm"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "14:00:00",
+                "propertySubPhrases": [
+                  "at 2pm"
+                ]
+              },
+              {
+                "propertyValue": "16:00:00",
+                "propertySubPhrases": [
+                  "at 4pm"
+                ]
+              },
+              {
+                "propertyValue": "10:00:00",
+                "propertySubPhrases": [
+                  "at 10am"
                 ]
               }
             ]
@@ -1486,169 +1999,16 @@
         "politePrefixes": [
           "Could you please",
           "Would you mind",
-          "If it's not too much trouble, could you"
+          "If you could",
+          "Please"
         ],
         "politeSuffixes": [
-          "Thank you!",
+          "Thank you.",
           "I would appreciate it.",
-          "Thanks in advance!"
+          "Thanks in advance.",
+          "That would be great."
         ]
-      },
-      "corrections": [
-        {
-          "data": {
-            "properties": [
-              {
-                "name": "fullActionName",
-                "value": "calendar.addEvent",
-                "isImplicit": true
-              },
-              {
-                "name": "parameters.event.timeRange.startTime",
-                "value": "3:00 pm",
-                "substrings": [
-                  "3pm"
-                ]
-              },
-              {
-                "name": "parameters.event.description",
-                "value": "appointment",
-                "substrings": [
-                  "an appointment"
-                ]
-              },
-              {
-                "name": "parameters.event.participants.0",
-                "value": "Sally",
-                "substrings": [
-                  "Sally"
-                ]
-              },
-              {
-                "name": "parameters.event.participants.1",
-                "value": "May",
-                "substrings": [
-                  "May"
-                ]
-              },
-              {
-                "name": "parameters.event.participants.2",
-                "value": "Boris",
-                "substrings": [
-                  "Boris"
-                ]
-              }
-            ]
-          },
-          "correction": [
-            "Missing parameter: parameter 'parameters.event.day' in the action is missing from explanation"
-          ]
-        },
-        {
-          "data": {
-            "properties": [
-              {
-                "name": "fullActionName",
-                "value": "calendar.addEvent",
-                "isImplicit": true
-              },
-              {
-                "name": "parameters.event.day",
-                "value": "1/25/2025",
-                "isImplicit": true
-              },
-              {
-                "name": "parameters.event.timeRange.startTime",
-                "value": "3:00 pm",
-                "substrings": [
-                  "3pm"
-                ]
-              },
-              {
-                "name": "parameters.event.description",
-                "value": "appointment",
-                "substrings": [
-                  "an appointment"
-                ]
-              },
-              {
-                "name": "parameters.event.participants.0",
-                "value": "Sally",
-                "substrings": [
-                  "Sally"
-                ]
-              },
-              {
-                "name": "parameters.event.participants.1",
-                "value": "May",
-                "substrings": [
-                  "May"
-                ]
-              },
-              {
-                "name": "parameters.event.participants.2",
-                "value": "Boris",
-                "substrings": [
-                  "Boris"
-                ]
-              }
-            ],
-            "subPhrases": [
-              {
-                "text": "make sure to",
-                "category": "politeness",
-                "synonyms": [
-                  "please",
-                  "kindly",
-                  "ensure"
-                ],
-                "isOptional": true
-              },
-              {
-                "text": "schedule",
-                "category": "action",
-                "propertyNames": [
-                  "fullActionName"
-                ]
-              },
-              {
-                "text": "an appointment",
-                "category": "description",
-                "propertyNames": [
-                  "parameters.event.description"
-                ]
-              },
-              {
-                "text": "with Sally, May, and Boris",
-                "category": "participants",
-                "propertyNames": [
-                  "parameters.event.participants.0",
-                  "parameters.event.participants.1",
-                  "parameters.event.participants.2"
-                ]
-              },
-              {
-                "text": "tomorrow",
-                "category": "day",
-                "propertyNames": [
-                  "parameters.event.day"
-                ]
-              },
-              {
-                "text": "at 3pm",
-                "category": "time",
-                "propertyNames": [
-                  "parameters.event.timeRange.startTime"
-                ]
-              }
-            ]
-          },
-          "correction": [
-            "Property 'fullActionName' is expected to be implicit and should not be included as a property name in a sub-phrase",
-            "Property 'parameters.event.day' is expected to be implicit and should not be included as a property name in a sub-phrase"
-          ]
-        }
-      ]
+      }
     },
     {
       "request": "Now just add  Jesse and Abby to the appointment with Sally",
@@ -1656,8 +2016,8 @@
         "fullActionName": "calendar.addParticipants",
         "parameters": {
           "eventReference": {
-            "description": "appointment with Sally",
-            "lookup": true
+            "lookup": true,
+            "description": "appointment with Sally"
           },
           "participants": [
             "Jesse",
@@ -1675,16 +2035,16 @@
             ]
           },
           {
+            "name": "parameters.eventReference.lookup",
+            "value": true,
+            "isImplicit": true
+          },
+          {
             "name": "parameters.eventReference.description",
             "value": "appointment with Sally",
             "substrings": [
               "appointment with Sally"
             ]
-          },
-          {
-            "name": "parameters.eventReference.lookup",
-            "value": true,
-            "isImplicit": true
           },
           {
             "name": "parameters.participants.0",
@@ -1706,9 +2066,10 @@
             "text": "Now just",
             "category": "filler",
             "synonyms": [
-              "Right now",
-              "At this moment",
-              "Currently"
+              "right now",
+              "simply",
+              "at this moment",
+              "currently"
             ],
             "isOptional": true
           },
@@ -1770,21 +2131,21 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "calendar.inviteParticipants",
+                "propertyValue": "calendar.scheduleMeeting",
                 "propertySubPhrases": [
-                  "invite"
+                  "schedule"
                 ]
               },
               {
-                "propertyValue": "calendar.includeParticipants",
+                "propertyValue": "calendar.createEvent",
                 "propertySubPhrases": [
-                  "include"
+                  "create"
                 ]
               },
               {
-                "propertyValue": "calendar.addAttendees",
+                "propertyValue": "calendar.updateEvent",
                 "propertySubPhrases": [
-                  "add attendees"
+                  "update"
                 ]
               }
             ]
@@ -1803,15 +2164,15 @@
                 ]
               },
               {
-                "propertyValue": "James",
+                "propertyValue": "Michael",
                 "propertySubPhrases": [
-                  "James"
+                  "Michael"
                 ]
               },
               {
-                "propertyValue": "Jordan",
+                "propertyValue": "David",
                 "propertySubPhrases": [
-                  "Jordan"
+                  "David"
                 ]
               }
             ]
@@ -1824,21 +2185,21 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "Alice",
+                "propertyValue": "Emily",
                 "propertySubPhrases": [
-                  "Alice"
+                  "Emily"
                 ]
               },
               {
-                "propertyValue": "Anna",
+                "propertyValue": "Sophia",
                 "propertySubPhrases": [
-                  "Anna"
+                  "Sophia"
                 ]
               },
               {
-                "propertyValue": "Amy",
+                "propertyValue": "Olivia",
                 "propertySubPhrases": [
-                  "Amy"
+                  "Olivia"
                 ]
               }
             ]
@@ -1857,15 +2218,15 @@
                 ]
               },
               {
-                "propertyValue": "appointment with Sarah",
+                "propertyValue": "call with Sally",
                 "propertySubPhrases": [
-                  "appointment with Sarah"
+                  "call with Sally"
                 ]
               },
               {
-                "propertyValue": "appointment with Sam",
+                "propertyValue": "discussion with Sally",
                 "propertySubPhrases": [
-                  "appointment with Sam"
+                  "discussion with Sally"
                 ]
               }
             ]
@@ -1874,12 +2235,14 @@
         "politePrefixes": [
           "Could you please",
           "Would you mind",
-          "If it's not too much trouble, could you"
+          "If you don't mind",
+          "Please"
         ],
         "politeSuffixes": [
-          "Thank you!",
-          "I would appreciate it.",
-          "Thanks a lot!"
+          "Thank you",
+          "Thanks",
+          "I appreciate it",
+          "If that's okay"
         ]
       }
     },
@@ -1889,12 +2252,19 @@
         "fullActionName": "calendar.addEvent",
         "parameters": {
           "event": {
-            "day": "January 24",
             "timeRange": {
-              "startTime": "6:00 pm"
+              "startDateTime": {
+                "day": "Friday",
+                "hms": "18:00:00"
+              },
+              "endDateTime": {
+                "day": "Friday",
+                "hms": "18:00:00"
+              }
             },
             "description": "Jeffs pizza party",
-            "translatedDate": "1/24/2025"
+            "location": "",
+            "participants": []
           }
         }
       },
@@ -1903,18 +2273,34 @@
           {
             "name": "fullActionName",
             "value": "calendar.addEvent",
-            "substrings": []
+            "substrings": [
+              "Set up an event"
+            ]
           },
           {
-            "name": "parameters.event.day",
-            "value": "January 24",
+            "name": "parameters.event.timeRange.startDateTime.day",
+            "value": "Friday",
             "substrings": [
               "friday"
             ]
           },
           {
-            "name": "parameters.event.timeRange.startTime",
-            "value": "6:00 pm",
+            "name": "parameters.event.timeRange.startDateTime.hms",
+            "value": "18:00:00",
+            "substrings": [
+              "6pm"
+            ]
+          },
+          {
+            "name": "parameters.event.timeRange.endDateTime.day",
+            "value": "Friday",
+            "substrings": [
+              "friday"
+            ]
+          },
+          {
+            "name": "parameters.event.timeRange.endDateTime.hms",
+            "value": "18:00:00",
             "substrings": [
               "6pm"
             ]
@@ -1927,58 +2313,40 @@
             ]
           },
           {
-            "name": "parameters.event.translatedDate",
-            "value": "1/24/2025",
-            "substrings": []
+            "name": "parameters.event.location",
+            "value": "",
+            "isImplicit": true
           }
         ],
         "subPhrases": [
           {
-            "text": "Set up an event for",
+            "text": "Set up an event",
             "category": "action",
             "propertyNames": [
               "fullActionName"
             ]
           },
           {
-            "text": "friday",
+            "text": "for friday",
             "category": "date",
             "propertyNames": [
-              "parameters.event.day"
+              "parameters.event.timeRange.startDateTime.day",
+              "parameters.event.timeRange.endDateTime.day"
             ]
           },
           {
-            "text": "named",
-            "category": "preposition",
-            "synonyms": [
-              "called",
-              "titled",
-              "labelled"
-            ],
-            "isOptional": true
-          },
-          {
-            "text": "Jeffs pizza party",
+            "text": "named Jeffs pizza party",
             "category": "description",
             "propertyNames": [
               "parameters.event.description"
             ]
           },
           {
-            "text": "at",
-            "category": "preposition",
-            "synonyms": [
-              "on",
-              "during",
-              "around"
-            ],
-            "isOptional": true
-          },
-          {
-            "text": "6pm",
+            "text": "at 6pm",
             "category": "time",
             "propertyNames": [
-              "parameters.event.timeRange.startTime"
+              "parameters.event.timeRange.startDateTime.hms",
+              "parameters.event.timeRange.endDateTime.hms"
             ]
           }
         ],
@@ -1987,52 +2355,79 @@
             "propertyName": "fullActionName",
             "propertyValue": "calendar.addEvent",
             "propertySubPhrases": [
-              "Set up an event for"
+              "Set up an event"
             ],
             "alternatives": [
               {
-                "propertyValue": "calendar.scheduleEvent",
+                "propertyValue": "calendar.scheduleMeeting",
                 "propertySubPhrases": [
-                  "Schedule an event for"
+                  "Schedule a meeting"
                 ]
               },
               {
-                "propertyValue": "calendar.createEvent",
+                "propertyValue": "calendar.createAppointment",
                 "propertySubPhrases": [
-                  "Create an event for"
+                  "Create an appointment"
                 ]
               },
               {
-                "propertyValue": "calendar.planEvent",
+                "propertyValue": "calendar.bookEvent",
                 "propertySubPhrases": [
-                  "Plan an event for"
+                  "Book an event"
                 ]
               }
             ]
           },
           {
-            "propertyName": "parameters.event.day",
-            "propertyValue": "January 24",
+            "propertyName": "parameters.event.timeRange.startDateTime.day",
+            "propertyValue": "Friday",
             "propertySubPhrases": [
-              "friday"
+              "for friday"
             ],
             "alternatives": [
               {
-                "propertyValue": "January 25",
+                "propertyValue": "Monday",
                 "propertySubPhrases": [
-                  "saturday"
+                  "for monday"
                 ]
               },
               {
-                "propertyValue": "January 26",
+                "propertyValue": "Wednesday",
                 "propertySubPhrases": [
-                  "sunday"
+                  "for wednesday"
                 ]
               },
               {
-                "propertyValue": "January 27",
+                "propertyValue": "Sunday",
                 "propertySubPhrases": [
-                  "monday"
+                  "for sunday"
+                ]
+              }
+            ]
+          },
+          {
+            "propertyName": "parameters.event.timeRange.endDateTime.day",
+            "propertyValue": "Friday",
+            "propertySubPhrases": [
+              "for friday"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "Monday",
+                "propertySubPhrases": [
+                  "for monday"
+                ]
+              },
+              {
+                "propertyValue": "Wednesday",
+                "propertySubPhrases": [
+                  "for wednesday"
+                ]
+              },
+              {
+                "propertyValue": "Sunday",
+                "propertySubPhrases": [
+                  "for sunday"
                 ]
               }
             ]
@@ -2041,52 +2436,79 @@
             "propertyName": "parameters.event.description",
             "propertyValue": "Jeffs pizza party",
             "propertySubPhrases": [
-              "Jeffs pizza party"
+              "named Jeffs pizza party"
             ],
             "alternatives": [
               {
-                "propertyValue": "Jeffs birthday party",
+                "propertyValue": "Jeffs birthday bash",
                 "propertySubPhrases": [
-                  "Jeffs birthday party"
+                  "named Jeffs birthday bash"
                 ]
               },
               {
-                "propertyValue": "Jeffs graduation party",
+                "propertyValue": "Office pizza party",
                 "propertySubPhrases": [
-                  "Jeffs graduation party"
+                  "named Office pizza party"
                 ]
               },
               {
-                "propertyValue": "Jeffs farewell party",
+                "propertyValue": "Family pizza night",
                 "propertySubPhrases": [
-                  "Jeffs farewell party"
+                  "named Family pizza night"
                 ]
               }
             ]
           },
           {
-            "propertyName": "parameters.event.timeRange.startTime",
-            "propertyValue": "6:00 pm",
+            "propertyName": "parameters.event.timeRange.startDateTime.hms",
+            "propertyValue": "18:00:00",
             "propertySubPhrases": [
-              "6pm"
+              "at 6pm"
             ],
             "alternatives": [
               {
-                "propertyValue": "7:00 pm",
+                "propertyValue": "19:00:00",
                 "propertySubPhrases": [
-                  "7pm"
+                  "at 7pm"
                 ]
               },
               {
-                "propertyValue": "8:00 pm",
+                "propertyValue": "20:00:00",
                 "propertySubPhrases": [
-                  "8pm"
+                  "at 8pm"
                 ]
               },
               {
-                "propertyValue": "5:00 pm",
+                "propertyValue": "17:00:00",
                 "propertySubPhrases": [
-                  "5pm"
+                  "at 5pm"
+                ]
+              }
+            ]
+          },
+          {
+            "propertyName": "parameters.event.timeRange.endDateTime.hms",
+            "propertyValue": "18:00:00",
+            "propertySubPhrases": [
+              "at 6pm"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "19:00:00",
+                "propertySubPhrases": [
+                  "at 7pm"
+                ]
+              },
+              {
+                "propertyValue": "20:00:00",
+                "propertySubPhrases": [
+                  "at 8pm"
+                ]
+              },
+              {
+                "propertyValue": "17:00:00",
+                "propertySubPhrases": [
+                  "at 5pm"
                 ]
               }
             ]
@@ -2095,12 +2517,14 @@
         "politePrefixes": [
           "Could you please",
           "Would you mind",
-          "If it's not too much trouble, could you"
+          "I would appreciate it if you could",
+          "Please"
         ],
         "politeSuffixes": [
-          "Thank you!",
-          "I would appreciate it.",
-          "Thanks in advance!"
+          "Thank you",
+          "Thanks in advance",
+          "I appreciate your help",
+          "If you could do this, that would be great"
         ]
       }
     },
@@ -2110,10 +2534,12 @@
         "fullActionName": "calendar.addEvent",
         "parameters": {
           "event": {
-            "day": "1/24/2025",
             "timeRange": {
-              "startTime": "9:00 am",
-              "duration": "2 hours"
+              "startDateTime": {
+                "day": "17",
+                "hms": "09:00:00"
+              },
+              "duration": "2:00:00"
             },
             "description": "appointment",
             "participants": [
@@ -2128,24 +2554,24 @@
             "name": "fullActionName",
             "value": "calendar.addEvent",
             "substrings": [
-              "Will you please add"
+              "Will you please add an appointment"
             ]
           },
           {
-            "name": "parameters.event.day",
-            "value": "1/24/2025",
-            "isImplicit": true
+            "name": "parameters.event.timeRange.startDateTime.day",
+            "value": "17",
+            "substrings": []
           },
           {
-            "name": "parameters.event.timeRange.startTime",
-            "value": "9:00 am",
+            "name": "parameters.event.timeRange.startDateTime.hms",
+            "value": "09:00:00",
             "substrings": [
               "at 9 am"
             ]
           },
           {
             "name": "parameters.event.timeRange.duration",
-            "value": "2 hours",
+            "value": "2:00:00",
             "substrings": [
               "last 2 hours"
             ]
@@ -2167,21 +2593,20 @@
         ],
         "subPhrases": [
           {
-            "text": "Will you please add",
+            "text": "Will you please",
             "category": "politeness",
-            "propertyNames": [
-              "fullActionName"
-            ],
             "synonyms": [
-              "Can you add",
-              "Could you please add",
-              "Would you add"
-            ]
+              "Could you please",
+              "Would you mind",
+              "Can you please"
+            ],
+            "isOptional": true
           },
           {
-            "text": "an appointment",
-            "category": "description",
+            "text": "add an appointment",
+            "category": "action",
             "propertyNames": [
+              "fullActionName",
               "parameters.event.description"
             ]
           },
@@ -2196,7 +2621,7 @@
             "text": "at 9 am",
             "category": "time",
             "propertyNames": [
-              "parameters.event.timeRange.startTime"
+              "parameters.event.timeRange.startDateTime.hms"
             ]
           },
           {
@@ -2212,25 +2637,25 @@
             "propertyName": "fullActionName",
             "propertyValue": "calendar.addEvent",
             "propertySubPhrases": [
-              "Will you please add"
+              "add an appointment"
             ],
             "alternatives": [
               {
+                "propertyValue": "calendar.scheduleMeeting",
+                "propertySubPhrases": [
+                  "schedule a meeting"
+                ]
+              },
+              {
                 "propertyValue": "calendar.createEvent",
                 "propertySubPhrases": [
-                  "Can you create"
+                  "create an event"
                 ]
               },
               {
-                "propertyValue": "calendar.scheduleEvent",
+                "propertyValue": "calendar.bookAppointment",
                 "propertySubPhrases": [
-                  "Please schedule"
-                ]
-              },
-              {
-                "propertyValue": "calendar.insertEvent",
-                "propertySubPhrases": [
-                  "Insert"
+                  "book an appointment"
                 ]
               }
             ]
@@ -2239,25 +2664,25 @@
             "propertyName": "parameters.event.description",
             "propertyValue": "appointment",
             "propertySubPhrases": [
-              "an appointment"
+              "add an appointment"
             ],
             "alternatives": [
               {
                 "propertyValue": "meeting",
                 "propertySubPhrases": [
-                  "a meeting"
+                  "schedule a meeting"
+                ]
+              },
+              {
+                "propertyValue": "event",
+                "propertySubPhrases": [
+                  "create an event"
                 ]
               },
               {
                 "propertyValue": "call",
                 "propertySubPhrases": [
-                  "a call"
-                ]
-              },
-              {
-                "propertyValue": "discussion",
-                "propertySubPhrases": [
-                  "a discussion"
+                  "set up a call"
                 ]
               }
             ]
@@ -2270,46 +2695,46 @@
             ],
             "alternatives": [
               {
+                "propertyValue": "John Doe",
+                "propertySubPhrases": [
+                  "with John Doe"
+                ]
+              },
+              {
+                "propertyValue": "Jane Smith",
+                "propertySubPhrases": [
+                  "with Jane Smith"
+                ]
+              },
+              {
                 "propertyValue": "Alex Johnson",
                 "propertySubPhrases": [
                   "with Alex Johnson"
-                ]
-              },
-              {
-                "propertyValue": "Taylor Smith",
-                "propertySubPhrases": [
-                  "with Taylor Smith"
-                ]
-              },
-              {
-                "propertyValue": "Jordan Lee",
-                "propertySubPhrases": [
-                  "with Jordan Lee"
                 ]
               }
             ]
           },
           {
-            "propertyName": "parameters.event.timeRange.startTime",
-            "propertyValue": "9:00 am",
+            "propertyName": "parameters.event.timeRange.startDateTime.hms",
+            "propertyValue": "09:00:00",
             "propertySubPhrases": [
               "at 9 am"
             ],
             "alternatives": [
               {
-                "propertyValue": "10:00 am",
+                "propertyValue": "10:00:00",
                 "propertySubPhrases": [
                   "at 10 am"
                 ]
               },
               {
-                "propertyValue": "11:00 am",
+                "propertyValue": "11:00:00",
                 "propertySubPhrases": [
                   "at 11 am"
                 ]
               },
               {
-                "propertyValue": "8:00 am",
+                "propertyValue": "08:00:00",
                 "propertySubPhrases": [
                   "at 8 am"
                 ]
@@ -2318,81 +2743,45 @@
           },
           {
             "propertyName": "parameters.event.timeRange.duration",
-            "propertyValue": "2 hours",
+            "propertyValue": "2:00:00",
             "propertySubPhrases": [
               "I need it to last 2 hours"
             ],
             "alternatives": [
               {
-                "propertyValue": "1 hour",
+                "propertyValue": "1:00:00",
                 "propertySubPhrases": [
                   "I need it to last 1 hour"
                 ]
               },
               {
-                "propertyValue": "3 hours",
+                "propertyValue": "3:00:00",
                 "propertySubPhrases": [
                   "I need it to last 3 hours"
                 ]
               },
               {
-                "propertyValue": "30 minutes",
+                "propertyValue": "4:00:00",
                 "propertySubPhrases": [
-                  "I need it to last 30 minutes"
+                  "I need it to last 4 hours"
                 ]
               }
             ]
           }
         ],
-        "politePrefixes": [],
-        "politeSuffixes": []
-      },
-      "corrections": [
-        {
-          "data": {
-            "properties": [
-              {
-                "name": "fullActionName",
-                "value": "calendar.addEvent",
-                "substrings": [
-                  "Will you please add"
-                ]
-              },
-              {
-                "name": "parameters.event.timeRange.startTime",
-                "value": "9:00 am",
-                "substrings": [
-                  "at 9 am"
-                ]
-              },
-              {
-                "name": "parameters.event.timeRange.duration",
-                "value": "2 hours",
-                "substrings": [
-                  "last 2 hours"
-                ]
-              },
-              {
-                "name": "parameters.event.description",
-                "value": "appointment",
-                "substrings": [
-                  "add an appointment"
-                ]
-              },
-              {
-                "name": "parameters.event.participants.0",
-                "value": "Jerri Skinner",
-                "substrings": [
-                  "with Jerri Skinner"
-                ]
-              }
-            ]
-          },
-          "correction": [
-            "Missing parameter: parameter 'parameters.event.day' in the action is missing from explanation"
-          ]
-        }
-      ]
+        "politePrefixes": [
+          "Could you kindly",
+          "Would you be so kind",
+          "May I request",
+          "If you don't mind"
+        ],
+        "politeSuffixes": [
+          "Thank you very much.",
+          "I would appreciate it.",
+          "Thanks in advance.",
+          "Your help is appreciated."
+        ]
+      }
     }
   ]
 }

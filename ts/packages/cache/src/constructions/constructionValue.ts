@@ -135,12 +135,20 @@ export function matchedValues(
 
 export function createActionProps(
     values: [string, ParamValueType][],
+    emptyArrayParameters?: string[],
     initial?: JSONAction | JSONAction[],
 ) {
     const result: any = { actionProps: structuredClone(initial) };
     for (const [name, value] of values) {
         setObjectProperty(result, "actionProps", name, value);
     }
+
+    if (emptyArrayParameters) {
+        for (const name of emptyArrayParameters) {
+            setObjectProperty(result, "actionProps", name, []);
+        }
+    }
+
     const actionProps = result.actionProps;
     // validate fullActionName
     if (Array.isArray(actionProps)) {
