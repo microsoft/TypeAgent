@@ -9,6 +9,20 @@ document.addEventListener("DOMContentLoaded", function () {
     const mainContainer = document.getElementById("mainContainer");
     //const searchInput = new SearchInput();
 
+    const eventSource = new EventSource("/events");
+    eventSource.onmessage = function (event: MessageEvent) {
+        const contentElement = document.getElementById("mainContainer");
+        if (contentElement) {
+            contentElement.innerHTML += decodeURIComponent(event.data);
+            // mermaid.init(
+            //     undefined,
+            //     contentElement.querySelectorAll(".mermaid"),
+            // );
+
+            // processGeoJson(contentElement);
+        }
+    };
+
     //mainContainer.append(searchInput.container);
     mainContainer.innerText = "Hello world";
 //     const listsContainer: CollapsableContainer = new CollapsableContainer(

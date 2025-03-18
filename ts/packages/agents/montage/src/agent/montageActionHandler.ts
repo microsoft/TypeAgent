@@ -6,37 +6,37 @@ import {
     AppAction,
     AppAgent,
     SessionContext,
-    //ActionResult,
+    ActionResult,
     //Storage,
 } from "@typeagent/agent-sdk";
-import { createActionResult } from "@typeagent/agent-sdk/helpers/action";
-//import { MarkdownAction } from "./montageActionSchema.js";
-//import { createMarkdownAgent } from "./translator.js";
 import { ChildProcess, fork } from "child_process";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import { MontageAction } from "./montageActionSchema.js";
+import { createActionResult } from "@typeagent/agent-sdk/helpers/action";
+import * as im from "image-memory";
 
 export function instantiate(): AppAgent {
     return {
         initializeAgentContext: initializeMontageContext,
         updateAgentContext: updateMontageContext,
-        executeAction: executeMarkdownAction,
+        executeAction: executeMontageAction,
         //validateWildcardMatch: markdownValidateWildcardMatch,
     };
 }
 
-type MarkdownActionContext = {
-    currentFileName: string | undefined;
+type MontageActionContext = {
+    imageIndexName: string | undefined;
+    imageCollection: im.ImageCollection | undefined;
     viewProcess: ChildProcess | undefined;
 };
 
-async function executeMarkdownAction(
+async function executeMontageAction(
     action: AppAction,
-    context: ActionContext<MarkdownActionContext>,
+    context: ActionContext<MontageActionContext>,
 ) {
-    //let result = await handleMarkdownAction(action as MarkdownAction, context);
-    //return result;
-    return createActionResult("Yay!");
+    let result = await handleMontageAction(action as MontageAction, context);
+    return result;
 }
 
 // async function markdownValidateWildcardMatch(
@@ -46,15 +46,18 @@ async function executeMarkdownAction(
 //     return true;
 // }
 
-async function initializeMontageContext() {
+async function initializeMontageContext() {    
     return {};
 }
 
 async function updateMontageContext(
     enable: boolean,
-    context: SessionContext<MarkdownActionContext>,
+    context: SessionContext<MontageActionContext>,
 ): Promise<void> {
     if (enable) {
+
+        // TODO: load image index?
+
         // if (!context.agentContext.currentFileName) {
         //     context.agentContext.currentFileName = "live.md";
         // }
@@ -65,6 +68,11 @@ async function updateMontageContext(
         // if (!(await storage?.exists(fileName))) {
         //     await storage?.write(fileName, "");
         // }
+
+        if (!context.agentContext.imageCollection) {
+            const indexPath = "f:\pictures_index";
+            context.agentContext.imageCollection = await im.ImageCollection.readFromFile(path.dirname(indexPath), path.basename(indexPath, path.extname(indexPath)));
+        }
 
         if (!context.agentContext.viewProcess) {
             //const fullPath = await getFullMarkdownFilePath(fileName, storage!);
@@ -89,80 +97,85 @@ async function updateMontageContext(
 //     return candidates ? candidates[0] : undefined;
 // }
 
-// async function handleMarkdownAction(
-//     action: MarkdownAction,
-//     actionContext: ActionContext<MarkdownActionContext>,
-// ) {
-//     let result: ActionResult | undefined = undefined;
-//     const agent = await createMarkdownAgent("GPT_4o");
-//     const storage = actionContext.sessionContext.sessionStorage;
+async function handleMontageAction(
+    action: MontageAction,
+    actionContext: ActionContext<MontageActionContext>,
+) {
+    let result: ActionResult | undefined = undefined;
+    //const agent = await createMarkdownAgent("GPT_4o");
+    //const storage = actionContext.sessionContext.sessionStorage;
 
-//     switch (action.actionName) {
-//         case "openDocument":
-//         case "createDocument": {
-//             if (!action.parameters.name) {
-//                 result = createActionResult(
-//                     "Document could not be created: no name was provided",
-//                 );
-//             } else {
-//                 result = createActionResult("Opening document ...");
+    switch (action.actionName) {
+        case "listPhotoAction": {
+            // if (!action.parameters.name) {
+            //     result = createActionResult(
+            //         "Document could not be created: no name was provided",
+            //     );
+            // } else {
+                result = createActionResult("Listing photos ...");
 
-//                 const newFileName = action.parameters.name.trim() + ".md";
-//                 actionContext.sessionContext.agentContext.currentFileName =
-//                     newFileName;
+                // const newFileName = action.parameters.name.trim() + ".md";
+                // actionContext.sessionContext.agentContext.currentFileName =
+                //     newFileName;
 
-//                 if (!(await storage?.exists(newFileName))) {
-//                     await storage?.write(newFileName, "");
-//                 }
+                // if (!(await storage?.exists(newFileName))) {
+                //     await storage?.write(newFileName, "");
+                // }
 
-//                 if (actionContext.sessionContext.agentContext.viewProcess) {
-//                     const fullPath = await getFullMarkdownFilePath(
-//                         newFileName,
-//                         storage!,
-//                     );
+                let images: string[] | undefined = [];
+                if (actionContext.sessionContext.agentContext.viewProcess) {
+                    // const fullPath = await getFullMarkdownFilePath(
+                    //     newFileName,
+                    //     storage!,
+                    // );
 
-//                     actionContext.sessionContext.agentContext.viewProcess.send({
-//                         type: "setFile",
-//                         filePath: fullPath,
-//                     });
-//                 }
-//                 result = createActionResult("Document opened");
-//             }
-//             break;
-//         }
-//         case "updateDocument": {
-//             result = createActionResult("Updating document ...");
+                    // TODO: get all image entities from knowpro, get their paths and send that across the wire
+                    images = actionContext.sessionContext.agentContext.imageCollection?.messages.map((img) => img.metadata.img.fileName);
 
-//             const filePath = `${actionContext.sessionContext.agentContext.currentFileName}`;
-//             let markdownContent;
-//             if (await storage?.exists(filePath)) {
-//                 markdownContent = await storage?.read(filePath, "utf8");
-//             }
-//             const response = await agent.updateDocument(
-//                 markdownContent,
-//                 action.parameters.originalRequest,
-//             );
+                    // TODO: update project state with this action
 
-//             if (response.success) {
-//                 const mdResult = response.data;
+                    actionContext.sessionContext.agentContext.viewProcess.send({
+                        type: "listPhotos",
+                        files: images,
+                    });
+                }
+                result = createActionResult(`Showing ${images?.length} images.`);
+            //}
+            break;
+        }
+        // case "updateDocument": {
+        //     result = createActionResult("Updating document ...");
 
-//                 // write to file
-//                 if (mdResult.content) {
-//                     await storage?.write(filePath, mdResult.content);
-//                 }
-//                 if (mdResult.operationSummary) {
-//                     result = createActionResult(mdResult.operationSummary);
-//                 } else {
-//                     result = createActionResult("Updated document");
-//                 }
-//             } else {
-//                 console.error(response.message);
-//             }
-//             break;
-//         }
-//     }
-//     return result;
-// }
+        //     const filePath = `${actionContext.sessionContext.agentContext.currentFileName}`;
+        //     let markdownContent;
+        //     if (await storage?.exists(filePath)) {
+        //         markdownContent = await storage?.read(filePath, "utf8");
+        //     }
+        //     const response = await agent.updateDocument(
+        //         markdownContent,
+        //         action.parameters.originalRequest,
+        //     );
+
+        //     if (response.success) {
+        //         const mdResult = response.data;
+
+        //         // write to file
+        //         if (mdResult.content) {
+        //             await storage?.write(filePath, mdResult.content);
+        //         }
+        //         if (mdResult.operationSummary) {
+        //             result = createActionResult(mdResult.operationSummary);
+        //         } else {
+        //             result = createActionResult("Updated document");
+        //         }
+        //     } else {
+        //         console.error(response.message);
+        //     }
+        //     break;
+        // }
+    }
+    return result;
+}
 
 export async function createViewServiceHost() {
     let timeoutHandle: NodeJS.Timeout;

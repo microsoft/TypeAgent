@@ -2,7 +2,8 @@
 // Licensed under the MIT License.
 
 export type MontageAction =
-    | FindPhotoAction;
+    | FindPhotoAction
+    | ListPhotoAction;
     // | AddPhotoAction
     // | RemovePhotoAction
     // | FinishedAction;
@@ -11,6 +12,13 @@ export type FindPhotoAction = {
     actionName: "findPhotoAction";
     parameters: {
         filters: string[];
+    }
+}
+
+// Lists all available photos
+export type ListPhotoAction = {
+    actionName: "listPhotoAction";
+    parameters: {  
     }
 }
 

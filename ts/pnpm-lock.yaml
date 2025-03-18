@@ -1184,6 +1184,9 @@ importers:
       express-rate-limit:
         specifier: ^7.5.0
         version: 7.5.0(express@4.21.2)
+      image-memory:
+        specifier: workspace:*
+        version: link:../../memory/image
       knowledge-processor:
         specifier: workspace:*
         version: link:../../knowledgeProcessor
