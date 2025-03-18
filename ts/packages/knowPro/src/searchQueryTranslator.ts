@@ -27,7 +27,7 @@ import {
 import { PropertyNames } from "./propertyIndex.js";
 import { PropertyTermSet } from "./collections.js";
 import { IConversation } from "./interfaces.js";
-import { getTimeRangePromptSectionForConversation } from "./searchTranslator.js";
+import { getTimeRangePromptSectionForConversation } from "./conversation.js";
 
 /*-------------------------------
 
@@ -228,11 +228,13 @@ export class SearchQueryExprBuilder {
                 PropertyNames.Object,
                 termGroup,
             );
+            /*
             this.addEntityNames(
                 actionTerm.targetEntities,
                 PropertyNames.IndirectObject,
                 termGroup,
             );
+            */
         }
     }
 
@@ -266,7 +268,7 @@ export class SearchQueryExprBuilder {
         propertyValue: string,
         termGroup: SearchTermGroup,
     ): void {
-        if (!isWildcard(propertyValue)) {
+        if (isWildcard(propertyValue)) {
             return;
         }
         // Dedupe

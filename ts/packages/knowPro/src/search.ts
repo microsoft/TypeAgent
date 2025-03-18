@@ -327,9 +327,7 @@ class QueryCompiler {
     ): Promise<IQueryOpExpr<Map<KnowledgeType, SemanticRefAccumulator>>> {
         let selectExpr = this.compileSelect(
             searchTermGroup,
-            filter
-                ? await this.compileScope(searchTermGroup, filter)
-                : undefined,
+            await this.compileScope(searchTermGroup, filter),
             options,
         );
         // Constrain the select with scopes and 'where'
@@ -396,11 +394,11 @@ class QueryCompiler {
 
     private async compileScope(
         searchGroup: SearchTermGroup,
-        filter: WhenFilter,
+        filter?: WhenFilter,
     ): Promise<q.GetScopeExpr | undefined> {
         let scopeSelectors: q.IQueryTextRangeSelector[] | undefined;
         // First, use any provided date ranges to select scope
-        if (filter.dateRange) {
+        if (filter && filter.dateRange) {
             scopeSelectors ??= [];
             scopeSelectors.push(
                 new q.TextRangesInDateRangeSelector(filter.dateRange),
@@ -421,7 +419,7 @@ class QueryCompiler {
         }
         // If a thread index is available...
         const threads = this.secondaryIndexes?.threads;
-        if (filter.threadDescription && threads) {
+        if (filter && filter.threadDescription && threads) {
             const threadsInScope = await threads.lookupThread(
                 filter.threadDescription,
             );

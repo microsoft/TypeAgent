@@ -547,6 +547,10 @@ export async function createKnowproCommands(
         context.printer.writeJson(searchQuery, true);
         for (const queryExpr of searchQueryExpr) {
             for (const selectExpr of queryExpr.selectExpressions) {
+                if (namedArgs.ktype) {
+                    selectExpr.when ??= {};
+                    selectExpr.when.knowledgeType = namedArgs.ktype;
+                }
                 const searchResults = await kp.searchConversation(
                     context.conversation!,
                     selectExpr.searchTermGroup,
@@ -559,7 +563,9 @@ export async function createKnowproCommands(
                     },
                     queryExpr.rawQuery,
                 );
-                context.printer.writeHeading(queryExpr.rawQuery!);
+                context.printer.writeLine("####");
+                context.printer.writeInColor(chalk.cyan, queryExpr.rawQuery!);
+                context.printer.writeLine("####");
                 if (searchResults && searchResults.messageMatches.length > 0) {
                     if (namedArgs.showKnowledge) {
                         context.printer.writeKnowledgeSearchResults(
