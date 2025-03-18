@@ -774,7 +774,7 @@ export class SchemaDiscoveryAgent<T extends object> {
         );
 
         const bootstrapTranslator = this.getBootstrapTranslator(
-            "PageManipulationActionsList",
+            "PageActionsPlan",
             resultsSchema,
         );
 
