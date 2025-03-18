@@ -59,8 +59,8 @@ function setupSiteAgent() {
         }
 
         if (siteAgent === "") {
-            // default to schemaAuthor
-            siteAgent = "browser.schemaAuthor";
+            // default to actionDiscovery
+            siteAgent = "browser.actionDiscovery";
             window.browserConnect.enableSiteAgent(siteAgent);
         }
 

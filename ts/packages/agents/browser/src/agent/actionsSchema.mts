@@ -2,21 +2,21 @@
 // Licensed under the MIT License.
 
 export type BrowserActions =
-    | OpenTabAction
-    | CloseTabAction
-    | SwitchToTabAction
-    | SwitchToTabByPositionAction
-    | CloseWindowAction
-    | GoBackAction
-    | GoForwardAction
-    | ScrollDownAction
-    | ScrollUpAction
-    | FollowLinkByTextAction
-    | FollowLinkByPositionAction
+    | OpenTab
+    | CloseTab
+    | SwitchToTabByText
+    | SwitchToTabByPosition
+    | CloseWindow
+    | GoBack
+    | GoForward
+    | ScrollDown
+    | ScrollUp
+    | FollowLinkByText
+    | FollowLinkByPosition
     | OpenFromHistory
     | OpenFromBookmarks
     | AddToBookmarks
-    | SearchAction
+    | Search
     | ReadPageContent
     | StopReadPageContent
     | ZoomIn
@@ -27,7 +27,7 @@ export type BrowserActions =
 
 // This opens a new tab in an existing browser window.
 // IMPORTANT: This does NOT launch new browser windows.
-export type OpenTabAction = {
+export type OpenTab = {
     actionName: "openTab";
     parameters: {
         url?: string; // full URL to website
@@ -37,40 +37,40 @@ export type OpenTabAction = {
 
 // This closes a tab in an existing browser window.
 // IMPORTANT: This does NOT close browser programs.
-export type CloseTabAction = {
+export type CloseTab = {
     actionName: "closeTab";
     parameters: {
         title?: string;
     };
 };
 
-export type CloseWindowAction = {
+export type CloseWindow = {
     actionName: "closeWindow";
     parameters: {
         title?: string;
     };
 };
 
-export type SearchAction = {
+export type Search = {
     actionName: "search";
     parameters: {
         query?: string;
     };
 };
 
-export type GoBackAction = {
+export type GoBack = {
     actionName: "goBack";
 };
 
-export type GoForwardAction = {
+export type GoForward = {
     actionName: "goForward";
 };
 
-export type ScrollDownAction = {
+export type ScrollDown = {
     actionName: "scrollDown";
 };
 
-export type ScrollUpAction = {
+export type ScrollUp = {
     actionName: "scrollUp";
 };
 
@@ -83,14 +83,14 @@ export type ScrollUpAction = {
 //        "keywords": "Haiti"
 //     }
 //  }
-export type SwitchToTabAction = {
+export type SwitchToTabByText = {
     actionName: "switchToTabByText";
     parameters: {
         keywords: string; // text that shows up as part of the tab title. Remove filler words such as "the", "article", "link","page" etc.
     };
 };
 
-export type SwitchToTabByPositionAction = {
+export type SwitchToTabByPosition = {
     actionName: "switchToTabByPosition";
     parameters: {
         position: number;
@@ -106,7 +106,7 @@ export type SwitchToTabByPositionAction = {
 //        "keywords": "Haiti"
 //     }
 //  }
-export type FollowLinkByTextAction = {
+export type FollowLinkByText = {
     actionName: "followLinkByText";
     parameters: {
         keywords: string; // text that shows up as part of the link. Remove filler words such as "the", "article", "link","page" etc.
@@ -114,7 +114,7 @@ export type FollowLinkByTextAction = {
     };
 };
 
-export type FollowLinkByPositionAction = {
+export type FollowLinkByPosition = {
     actionName: "followLinkByPosition";
     parameters: {
         position: number;

@@ -1,27 +1,27 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-export type AddToCartAction = {
-    actionName: "addToCartAction";
+export type AddToCart = {
+    actionName: "addToCart";
     parameters: {
         productName: string;
     };
 };
 
-export type RemoveFromCartAction = {
-    actionName: "removeFromCartAction";
+export type RemoveFromCart = {
+    actionName: "removeFromCart";
     parameters: {
         productName: string;
     };
 };
 
 // This allows you to view the shopping cart contents
-export type ViewShoppingCartAction = {
-    actionName: "viewShoppingCartAction";
+export type ViewShoppingCart = {
+    actionName: "viewShoppingCart";
 };
 
-export type FindNearbyStoreAction = {
-    actionName: "findNearbyStoreAction";
+export type FindNearbyStore = {
+    actionName: "findNearbyStore";
 };
 
 // Use this action for user queries such as "where is product X in the store"
@@ -33,8 +33,8 @@ export type GetLocationInStore = {
 };
 
 // IMPORTANT: Use this action when the user query involves search for products on an e-commerce store, such as "aaa batteries"
-export type SearchForProductAction = {
-    actionName: "searchForProductAction";
+export type SearchForProduct = {
+    actionName: "searchForProduct";
     parameters: {
         productName: string;
         selectionCriteria?: string;
@@ -57,23 +57,23 @@ export type NavigateToPage = {
     };
 };
 
-export type BrowseProductCategoriesAction = {
-    actionName: "browseProductCategoriesAction";
+export type BrowseProductCategories = {
+    actionName: "browseProductCategories";
     parameters: {
         categoryName?: string;
     };
 };
 
 // This allows users to filter products based on a criteria such as price, size, shipping options etc.
-export type FilterProductsAction = {
-    actionName: "filterProductsAction";
+export type FilterProducts = {
+    actionName: "filterProducts";
     parameters: {
         filterCriteria: string;
     };
 };
 
-export type SignUpForNewsletterAction = {
-    actionName: "signUpForNewsletterAction";
+export type SignUpForNewsletter = {
+    actionName: "signUpForNewsletter";
     parameters: {
         emailAddress: string;
     };
@@ -88,18 +88,18 @@ export type NavigateToProductPage = {
 };
 
 export type UserPageActions =
-    | AddToCartAction
-    | BrowseProductCategoriesAction
-    | FilterProductsAction
-    | FindNearbyStoreAction
+    | AddToCart
+    | BrowseProductCategories
+    | FilterProducts
+    | FindNearbyStore
     | GetLocationInStore
     | NavigateToPage
     | NavigateToProductPage
-    | RemoveFromCartAction
-    | SearchForProductAction
+    | RemoveFromCart
+    | SearchForProduct
     | SelectSearchResult
-    | SignUpForNewsletterAction
-    | ViewShoppingCartAction;
+    | SignUpForNewsletter
+    | ViewShoppingCart;
 
 export type UserActionsList = {
     actions: UserPageActions[];

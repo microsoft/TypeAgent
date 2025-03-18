@@ -10,10 +10,7 @@ import {
     NavigationLink,
     TextInput,
 } from "./schema/pageComponents.mjs";
-import {
-    PageActionsPlan,
-    UserIntent,
-} from "./schema/recordedActions.mjs";
+import { PageActionsPlan, UserIntent } from "./schema/recordedActions.mjs";
 import { createActionResultNoDisplay } from "@typeagent/agent-sdk/helpers/action";
 import { UpdateWebPlan } from "./schema/authoringActions.mjs";
 

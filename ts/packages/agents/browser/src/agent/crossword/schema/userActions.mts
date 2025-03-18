@@ -1,9 +1,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-export type CrosswordActions = EnterTextAction | GetClueAction;
+export type CrosswordActions = EnterText | GetClueValue;
 
-export type EnterTextAction = {
+export type EnterText = {
     actionName: "enterText";
     parameters: {
         value: string;
@@ -12,7 +12,7 @@ export type EnterTextAction = {
     };
 };
 
-export type GetClueAction = {
+export type GetClueValue = {
     actionName: "getClueValue";
     parameters: {
         clueNumber: number;

@@ -220,7 +220,7 @@ async function executeBrowserAction(
         | TypeAgentAction<CrosswordActions, "browser.crossword">
         | TypeAgentAction<ShoppingActions, "browser.commerce">
         | TypeAgentAction<InstacartActions, "browser.instacart">
-        | TypeAgentAction<SchemaDiscoveryActions, "browser.schemaAuthor">,
+        | TypeAgentAction<SchemaDiscoveryActions, "browser.actionDiscovery">,
 
     context: ActionContext<BrowserActionContext>,
 ) {
@@ -256,7 +256,7 @@ async function executeBrowserAction(
                 );
 
                 // return createActionResult(instacartResult);
-            } else if (action.translatorName === "browser.schemaAuthor") {
+            } else if (action.translatorName === "browser.actionDiscovery") {
                 const discoveryResult = await handleSchemaDiscoveryAction(
                     action,
                     context.sessionContext,

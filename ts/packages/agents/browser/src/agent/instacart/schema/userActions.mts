@@ -1,52 +1,52 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-export type AddToCartAction = {
-    actionName: "addToCartAction";
+export type AddToCart = {
+    actionName: "addToCart";
     parameters: {
         productName: string;
     };
 };
 
-export type RemoveFromCartAction = {
-    actionName: "removeFromCartAction";
+export type RemoveFromCart = {
+    actionName: "removeFromCart";
     parameters: {
         productName: string;
     };
 };
 
-export type GetShoppingCartAction = {
-    actionName: "getShoppingCartAction";
+export type GetShoppingCart = {
+    actionName: "getShoppingCart";
     parameters: {
         storeName?: string;
     };
 };
 
-export type BuyAllInListAction = {
-    actionName: "buyAllInListAction";
+export type BuyAllInList = {
+    actionName: "buyAllInList";
     parameters: {
         listName: string;
         storeName?: string;
     };
 };
 
-export type SaveListForLaterAction = {
-    actionName: "saveListForLaterAction";
+export type SaveListForLater = {
+    actionName: "saveListForLater";
     parameters: {
         listName: string;
     };
 };
 
-export type AddToListAction = {
-    actionName: "addToListAction";
+export type AddToList = {
+    actionName: "addToList";
     parameters: {
         listName: string;
         productName: string;
     };
 };
 
-export type BuyItAgainAction = {
-    actionName: "buyItAgainAction";
+export type BuyItAgain = {
+    actionName: "buyItAgain";
     parameters: {
         storeName: string;
         allItems?: boolean;
@@ -54,67 +54,67 @@ export type BuyItAgainAction = {
     };
 };
 
-export type BuyAllInRecipeAction = {
-    actionName: "buyAllInRecipeAction";
+export type BuyAllInRecipe = {
+    actionName: "buyAllInRecipe";
     parameters: {
         recipeName: string;
         storeName?: string;
     };
 };
 
-export type SaveRecipeAction = {
-    actionName: "saveRecipeAction";
+export type SaveRecipe = {
+    actionName: "saveRecipe";
     parameters: {
         recipeName: string;
     };
 };
 
-export type DeleteRecipeAction = {
-    actionName: "deleteRecipeAction";
+export type DeleteRecipe = {
+    actionName: "deleteRecipe";
     parameters: {
         recipeName: string;
     };
 };
 
-export type SetPreferredStoreAction = {
-    actionName: "setPreferredStoreAction";
+export type SetPreferredStore = {
+    actionName: "setPreferredStore";
     parameters: {
         storeName: string;
     };
 };
 
-export type FindNearbyStoreAction = {
-    actionName: "findNearbyStoreAction";
+export type FindNearbyStore = {
+    actionName: "findNearbyStore";
 };
 
 // IMPORTANT: Use this action when the user query involves search for products on an e-commerce store, such as "aaa batteries"
-export type SearchForProductAction = {
-    actionName: "searchForProductAction";
+export type SearchForProduct = {
+    actionName: "searchForProduct";
     parameters: {
         keyword: string;
         storeName?: string;
     };
 };
 
-export type SearchForRecipeAction = {
-    actionName: "searchForRecipeAction";
+export type SearchForRecipe = {
+    actionName: "searchForRecipe";
     parameters: {
         keyword: string;
     };
 };
 
 export type InstacartActions =
-    | AddToCartAction
-    | AddToListAction
-    | BuyAllInListAction
-    | BuyAllInRecipeAction
-    | BuyItAgainAction
-    | FindNearbyStoreAction
-    | RemoveFromCartAction
-    | SaveListForLaterAction
-    | SetPreferredStoreAction
-    | GetShoppingCartAction
-    | SaveRecipeAction
-    | DeleteRecipeAction
-    | SearchForProductAction
-    | SearchForRecipeAction;
+    | AddToCart
+    | AddToList
+    | BuyAllInList
+    | BuyAllInRecipe
+    | BuyItAgain
+    | FindNearbyStore
+    | RemoveFromCart
+    | SaveListForLater
+    | SetPreferredStore
+    | GetShoppingCart
+    | SaveRecipe
+    | DeleteRecipe
+    | SearchForProduct
+    | SearchForRecipe;

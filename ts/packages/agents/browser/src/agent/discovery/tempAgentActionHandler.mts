@@ -4,7 +4,7 @@
 import { AppAgent } from "@typeagent/agent-sdk";
 import { BrowserConnector } from "../browserConnector.mjs";
 import {
-    BrowseProductCategoriesAction,
+    BrowseProductCategories,
     NavigateToPage,
 } from "./schema/userActionsPool.mjs";
 import { handleCommerceAction } from "../commerce/actionHandler.mjs";
@@ -25,27 +25,27 @@ export function createTempAgentForSchema(
         async executeAction(action: any, tempContext: any): Promise<undefined> {
             console.log(`Executing action: ${action.actionName}`);
             switch (action.actionName) {
-                case "addToCartAction":
-                case "viewShoppingCartAction":
-                case "findNearbyStoreAction":
+                case "addToCart":
+                case "viewShoppingCart":
+                case "findNearbyStore":
                 case "getLocationInStore":
-                case "searchForProductAction":
+                case "searchForProduct":
                 case "selectSearchResult":
                     handleCommerceAction(action, context);
                     break;
-                case "browseProductCategoriesAction":
+                case "browseProductCategories":
                     handleBrowseProductCategory(action);
                     break;
-                case "filterProductsAction":
+                case "filterProducts":
                     break;
                 case "navigateToPage":
                     handleNavigateToPage(action);
                     break;
                 case "navigateToProductPage":
                     break;
-                case "removeFromCartAction":
+                case "removeFromCart":
                     break;
-                case "signUpForNewsletterAction":
+                case "signUpForNewsletter":
                     break;
                 default:
                     handleUserDefinedAction(action);
@@ -94,7 +94,7 @@ export function createTempAgentForSchema(
     }
 
     async function handleBrowseProductCategory(
-        action: BrowseProductCategoriesAction,
+        action: BrowseProductCategories,
     ) {
         let linkText = action.parameters?.categoryName
             ? `link text ${action.parameters.categoryName}`
