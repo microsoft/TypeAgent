@@ -12,6 +12,9 @@ from openai import AsyncOpenAI, AsyncAzureOpenAI
 
 from .auth import get_shared_token_provider, AzureTokenProvider
 
+NormalizedEmbedding = NDArray[np.float32]  # A single embedding
+NormalizedEmbeddings = NDArray[np.float32]  # An array of embeddings
+
 
 class AsyncEmbeddingModel:
     def __init__(self):
@@ -63,11 +66,16 @@ class AsyncEmbeddingModel:
             api_key=azure_api_key,
         )
 
-    async def get_embedding(self, input: str) -> NDArray[np.float32]:
+    async def get_embedding(self, input: str) -> NormalizedEmbedding:
         embeddings = await self.get_embeddings([input])
         return embeddings[0]
 
-    async def get_embeddings(self, input: list[str]) -> NDArray[np.float32]:
+    async def get_embeddings(self, input: list[str]) -> NormalizedEmbeddings:
+        if not input:
+            result = np.array([], dtype=np.float32)
+            result.reshape((0, 0))
+            print(repr(result))
+            return result
         if self.azure_token_provider and self.azure_token_provider.needs_refresh():
             await self.refresh_client()
         data = (
@@ -76,10 +84,18 @@ class AsyncEmbeddingModel:
                 model="text-embedding-3-small",  ##encoding_format="float"
             )
         ).data
-        return np.array([d.embedding for d in data], dtype=np.float32)
+        if not data:
+            return np.array([], dtype=np.float32).reshape((0, 0))
+        embedding_length = len(data[0].embedding)
+        result = np.array([d.embedding for d in data], dtype=np.float32)
+        return result.reshape((len(data), embedding_length))
 
 
 async def main():
+    import dotenv
+
+    dotenv.load_dotenv(os.path.expanduser("~/TypeAgent/ts/.env"))
+
     async_model = AsyncEmbeddingModel()
     inputs = ["Hello, world", "Foo bar baz"]
     embeddings = await async_model.get_embeddings(inputs)
@@ -89,7 +105,5 @@ async def main():
 
 if __name__ == "__main__":
     import asyncio
-    import dotenv
 
-    dotenv.load_dotenv(os.path.expanduser("~/TypeAgent/ts/.env"))
     asyncio.run(main())
