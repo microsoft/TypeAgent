@@ -33,6 +33,7 @@ import {
     FullAction,
     normalizeParamString,
     RequestAction,
+    toJsonActions,
 } from "../requestAction.js";
 import {
     Construction,
@@ -77,7 +78,7 @@ import { Transforms } from "../../constructions/transforms.js";
 import { getLanguageTools } from "../../utils/language.js";
 import {
     createPolitenessGeneralizer,
-    PolitenessGenerializer,
+    PolitenessGeneralizer,
 } from "./politenessGeneralizationV5.js";
 import { PolitenessGeneralization } from "./politenessGeneralizationSchemaV5.js";
 
@@ -92,12 +93,23 @@ export type ExplanationResult = GenericExplanationResult<Explanation>;
 export const form =
     "The user request is a JSON object containing a request string and the translated action";
 
+export function requestActionToPromptString(requestAction: RequestAction) {
+    return JSON.stringify(
+        {
+            request: requestAction.request,
+            actions: toJsonActions(requestAction.actions),
+        },
+        undefined,
+        2,
+    );
+}
+
 class ExplanationV5TypeChatAgent {
     private readonly propertyExplainerWithoutContext: PropertyExplainer;
     private readonly propertyExplainerWithContext: PropertyExplainer;
     private readonly subPhrasesExplainer: SubPhraseExplainer;
     private readonly alternativesExplainer: AlternativesExplainer;
-    private readonly politenessGeneralizer: PolitenessGenerializer;
+    private readonly politenessGeneralizer: PolitenessGeneralizer;
     constructor(model?: string) {
         this.propertyExplainerWithoutContext = createPropertyExplainer(
             false,

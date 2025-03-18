@@ -35,9 +35,14 @@ function getActionConfigs(
 
 export async function createActionConfigProvider(
     providers: AppAgentProvider[],
+    additionalManifests?: Record<string, AppAgentManifest>,
 ): Promise<ActionConfigProvider> {
-    const appAgentManifests = await getAppAgentManifests(providers);
-    const actionConfigs = await getActionConfigs(appAgentManifests);
+    const appAgentManifests = {
+        ...(await getAppAgentManifests(providers)),
+        ...additionalManifests,
+    };
+
+    const actionConfigs = getActionConfigs(appAgentManifests);
     const actionSchemaFileCache = new ActionSchemaFileCache();
     const actionConfigProvider: ActionConfigProvider = {
         tryGetActionConfig(schemaName: string) {
