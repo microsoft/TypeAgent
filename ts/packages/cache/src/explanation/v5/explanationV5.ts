@@ -769,6 +769,7 @@ export function createConstructionV5(
     return Construction.create(
         parts,
         transformNamespaces,
+        getEmptyArrayPropertyNames(toJsonActions(actions)),
         implicitProperties.map((e) => {
             return {
                 paramName: e.name,
@@ -776,6 +777,25 @@ export function createConstructionV5(
             };
         }),
     );
+}
+
+function getEmptyArrayPropertyNames(obj: any): string[] | undefined {
+    const names: string[] = [];
+    for (const [key, value] of Object.entries(obj)) {
+        if (typeof value === "object") {
+            if (Array.isArray(value) && value.length === 0) {
+                names.push(key);
+            } else {
+                const children = getEmptyArrayPropertyNames(value);
+                if (children !== undefined) {
+                    for (const child of children) {
+                        names.push(`${key}.${child}`);
+                    }
+                }
+            }
+        }
+    }
+    return names.length > 0 ? names : undefined;
 }
 
 function toPrettyString(explanation: Explanation) {
