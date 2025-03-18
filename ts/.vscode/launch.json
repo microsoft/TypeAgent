@@ -324,6 +324,17 @@
       "cwd": "${workspaceFolder}/packages/knowpro",
       "console": "integratedTerminal",
       "internalConsoleOptions": "neverOpen"
-    }    
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Launch montage",
+      "skipFiles": ["<node_internals>/**"],
+      "cwd": "${workspaceFolder}/packages/agents/montage",
+      "program": "${workspaceFolder}/packages/agents/montage/node_modules/webpack/bin/webpack.js", 
+      "args": ["serve", "--open"],
+      "console": "externalTerminal",
+      "outFiles": ["${workspaceFolder}/**/*.js"]
+    },   
   ]
 }

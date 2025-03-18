@@ -44,6 +44,9 @@
     "markdown": {
       "name": "markdown-agent"
     },
+    "montage": {
+      "name": "montage"
+    },
     "oracle": {
       "name": "oracle-agent"
     },

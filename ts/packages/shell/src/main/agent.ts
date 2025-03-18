@@ -213,8 +213,15 @@ class ShellOpenWebContentView implements CommandHandler {
                 targetUrl = new URL(`http://localhost:${port}/`);
 
                 break;
+            case "montage":
+                // TODO: agents should publish their port #s in manifests
+                targetUrl = new URL(`http://localhost:9012/`);
+
+                break;
             default:
                 targetUrl = new URL(params.args.site);
+                
+                break;
         }
         context.sessionContext.agentContext.settings.openInlineBrowser(
             targetUrl,

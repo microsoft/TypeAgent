@@ -1,0 +1,9 @@
+{
+  "emojiChar": "🎞",
+  "description": "Agent to create photo montages.",
+  "schema": {
+    "description": "Photo montage agent to help the user with image management.",
+    "schemaFile": "./montageActionSchema.ts",
+    "schemaType": "MontageAction"
+  }
+}
