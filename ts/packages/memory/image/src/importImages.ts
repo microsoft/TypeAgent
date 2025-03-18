@@ -512,7 +512,7 @@ export async function importImages(
             fs.mkdirSync(cachePath);
         }
     } else {
-        cachePath = path.dirname(imagePath);
+        cachePath = imagePath;
     }
 
     // create a model used to extract data from the images
