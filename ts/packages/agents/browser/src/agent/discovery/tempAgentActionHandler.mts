@@ -14,10 +14,7 @@ import {
     NavigationLink,
     TextInput,
 } from "./schema/pageComponents.mjs";
-import {
-    PageManipulationActionsList,
-    UserIntent,
-} from "./schema/recordedActions.mjs";
+import { PageActionsPlan, UserIntent } from "./schema/recordedActions.mjs";
 
 export function createTempAgentForSchema(
     browser: BrowserConnector,
@@ -144,7 +141,7 @@ export function createTempAgentForSchema(
         const targetIntent = intentJson.get(action.actionName) as UserIntent;
         const targetPlan = actionsJson.get(
             action.actionName,
-        ) as PageManipulationActionsList;
+        ) as PageActionsPlan;
 
         console.log(`Running ${targetPlan.planName}`);
 
