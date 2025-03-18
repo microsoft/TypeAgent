@@ -3,7 +3,6 @@
 
 import {
     createJsonTranslator,
-    PromptSection,
     Result,
     success,
     TypeChatJsonTranslator,
@@ -27,6 +26,8 @@ import {
 } from "./search.js";
 import { PropertyNames } from "./propertyIndex.js";
 import { PropertyTermSet } from "./collections.js";
+import { IConversation } from "./interfaces.js";
+import { getTimeRangePromptSectionForConversation } from "./searchTranslator.js";
 
 /*-------------------------------
 
@@ -55,42 +56,46 @@ export function createSearchQueryTranslator(
     );
 }
 
-export type SearchFilterExpr = {
+export type SearchSelectExpr = {
     searchTermGroup: SearchTermGroup;
-    filter?: WhenFilter | undefined;
+    when?: WhenFilter | undefined;
 };
 
-export function createSearchFilterExpr(): SearchFilterExpr {
+export function createSearchFilterExpr(): SearchSelectExpr {
     return {
         searchTermGroup: { booleanOp: "or", terms: [] },
     };
 }
 
 export type SearchQueryExpr = {
-    filters: SearchFilterExpr[];
+    selectExpressions: SearchSelectExpr[];
     rawQuery?: string | undefined;
 };
 
-export async function translateTextToSearchQueryExpr(
+export async function textQueryToSearchQueryExpr(
+    conversation: IConversation,
     queryTranslator: SearchQueryTranslator,
     textQuery: string,
-    context?: PromptSection[],
-): Promise<Result<SearchQueryExpr[]>> {
-    const result = await queryTranslator.translate(textQuery, context);
+): Promise<Result<[SearchQueryExpr[], SearchQuery]>> {
+    const result = await queryTranslator.translate(
+        textQuery,
+        getTimeRangePromptSectionForConversation(conversation),
+    );
     if (!result.success) {
         return result;
     }
+    const searchQuery = result.data;
     const queryBuilder = new SearchQueryExprBuilder();
-    const queryExpr = queryBuilder.compileQuery(result.data);
-    return success(queryExpr);
+    const queryExpr = queryBuilder.compileQuery(searchQuery);
+    return success([queryExpr, searchQuery]);
 }
 
-class SearchQueryExprBuilder {
+export class SearchQueryExprBuilder {
     private entityTermsAdded: PropertyTermSet;
     public queryExpressions: SearchQueryExpr[];
 
     constructor() {
-        this.queryExpressions = [{ filters: [] }];
+        this.queryExpressions = [{ selectExpressions: [] }];
         this.entityTermsAdded = new PropertyTermSet();
     }
 
@@ -104,11 +109,13 @@ class SearchQueryExprBuilder {
 
     private compileSearchExpr(expr: SearchExpr): SearchQueryExpr {
         const queryExpr: SearchQueryExpr = {
-            filters: [],
+            selectExpressions: [],
         };
         if (expr.filters) {
             for (const filter of expr.filters) {
-                queryExpr.filters.push(this.compileFilterExpr(filter));
+                queryExpr.selectExpressions.push(
+                    this.compileFilterExpr(filter),
+                );
             }
         }
         queryExpr.rawQuery = expr.rewrittenQuery;
@@ -117,8 +124,8 @@ class SearchQueryExprBuilder {
 
     private compileFilterExpr(
         filter: SearchFilter,
-        filterExpr?: SearchFilterExpr,
-    ): SearchFilterExpr {
+        filterExpr?: SearchSelectExpr,
+    ): SearchSelectExpr {
         filterExpr ??= createSearchFilterExpr();
         if (filter.entitySearchTerms) {
             this.addEntityTerms(
@@ -140,7 +147,7 @@ class SearchQueryExprBuilder {
             this.addSearchTerms(filter.searchTerms, filterExpr.searchTermGroup);
         }
         if (filter.timeRange) {
-            filterExpr.filter = createWhenFilterForDateTimeRange(
+            filterExpr.when = createWhenFilterForDateTimeRange(
                 filter.timeRange,
             );
         }
