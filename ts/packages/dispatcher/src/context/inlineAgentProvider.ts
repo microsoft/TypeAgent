@@ -9,7 +9,10 @@ import {
 } from "./dispatcher/dispatcherAgent.js";
 import { AppAgentProvider } from "../agentProvider/agentProvider.js";
 import { systemAgent, systemManifest } from "./system/systemAgent.js";
-import { getSchemaNamesForAppAgentManifests } from "../agentProvider/agentProviderUtils.js";
+import {
+    createActionConfigProvider,
+    getSchemaNamesForAppAgentManifests,
+} from "../agentProvider/agentProviderUtils.js";
 import { ActionConfigProvider } from "../translation/actionConfigProvider.js";
 
 const builtinAgents: Record<string, AppAgent> = {
@@ -65,4 +68,8 @@ export function getAllSchemaNames(provider: ActionConfigProvider): string[] {
             .getActionConfigs()
             .map((actionConfig) => actionConfig.schemaName),
     ];
+}
+
+export function getAllActionConfigProvider(providers: AppAgentProvider[]) {
+    return createActionConfigProvider(providers, builtinAgentManifest);
 }

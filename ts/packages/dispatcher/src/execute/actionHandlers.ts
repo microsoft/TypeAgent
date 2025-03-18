@@ -748,12 +748,17 @@ export async function validateWildcardMatch(
             continue;
         }
         const appAgentName = getAppAgentName(translatorName);
+        if (!context.agents.isActionActive(appAgentName)) {
+            // Assume validateWildcardMatch is true.
+            continue;
+        }
         const appAgent = context.agents.getAppAgent(appAgentName);
         const sessionContext = context.agents.getSessionContext(appAgentName);
-        if (
-            (await appAgent.validateWildcardMatch?.(action, sessionContext)) ===
-            false
-        ) {
+        const validate = await appAgent.validateWildcardMatch?.(
+            action,
+            sessionContext,
+        );
+        if (validate === false) {
             return false;
         }
     }
