@@ -43,6 +43,20 @@ export async function executeConfigAction(
             );
             break;
 
+        case "enterAgentPriorityMode":
+            await processCommandNoLock(
+                `@config agent --priority ${configAction.parameters.agentName}`,
+                context.sessionContext.agentContext,
+            );
+            break;
+
+        case "exitAgentPriorityMode":
+            await processCommandNoLock(
+                `@config agent --reset`,
+                context.sessionContext.agentContext,
+            );
+            break;
+
         default:
             throw new Error(`Invalid action name: ${action.actionName}`);
     }

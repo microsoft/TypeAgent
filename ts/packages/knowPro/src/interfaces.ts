@@ -5,12 +5,21 @@ import { conversation as kpLib } from "knowledge-processor";
 
 // an object that can provide a KnowledgeResponse structure
 export interface IKnowledgeSource {
-    getKnowledge(): kpLib.KnowledgeResponse;
+    getKnowledge(): kpLib.KnowledgeResponse | undefined;
+}
+
+export interface ICollection<T, TOrdinal> {
+    readonly length: number;
+    get(ordinal: TOrdinal): T | undefined;
+    getMultiple(ordinals: TOrdinal[]): (T | undefined)[];
+    getAll(): T[];
+    push(items: T | T[]): void;
 }
 
 export type MessageOrdinal = number;
 
 /**
+ * A message in a conversation
  * A Message contains one or more text chunks
  */
 export interface IMessage extends IKnowledgeSource {
@@ -18,13 +27,16 @@ export interface IMessage extends IKnowledgeSource {
     textChunks: string[];
     timestamp?: string | undefined;
     tags: string[];
-    deletionInfo?: DeletionInfo;
+    deletionInfo?: DeletionInfo | undefined;
 }
 
 export type ScoredMessageOrdinal = {
     messageOrdinal: MessageOrdinal;
     score: number;
 };
+
+export interface IMessageCollection<TMessage extends IMessage = IMessage>
+    extends ICollection<TMessage, MessageOrdinal> {}
 
 export interface DeletionInfo {
     timestamp: string;
@@ -51,10 +63,14 @@ export interface Tag {
     text: string;
 }
 
-export interface IConversation<TMessage extends IKnowledgeSource = any> {
+export interface ISemanticRefCollection
+    extends ICollection<SemanticRef, SemanticRefOrdinal> {}
+
+export interface IConversation<TMessage extends IMessage = IMessage> {
     nameTag: string;
     tags: string[];
     messages: TMessage[];
+    //messages: IMessageCollection;
     semanticRefs: SemanticRef[] | undefined;
     semanticRefIndex?: ITermToSemanticRefIndex | undefined;
     secondaryIndexes?: IConversationSecondaryIndexes | undefined;

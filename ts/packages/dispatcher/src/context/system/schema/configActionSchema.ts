@@ -5,7 +5,9 @@ export type ConfigAction =
     | ListAgents
     | ToggleAgent
     | ToggleExplanationAction
-    | ToggleDeveloperModeAction;
+    | ToggleDeveloperModeAction
+    | EnterAgentPriorityModeAction
+    | ExitAgentPriorityModeAction;
 
 // Shows the list of available agents
 export type ListAgents = {
@@ -35,4 +37,19 @@ export type ToggleDeveloperModeAction = {
     parameters: {
         enable: boolean;
     };
+};
+
+// Puts a specific agent into priority mode
+export type EnterAgentPriorityModeAction = {
+    actionName: "enterAgentPriorityMode";
+    parameters: {
+        // the agent name or wildcard match string (* to match all agents)
+        agentName: string;
+    };
+};
+
+// Leaves agent priority mode
+export type ExitAgentPriorityModeAction = {
+    actionName: "exitAgentPriorityMode";
+    parameters: {};
 };
