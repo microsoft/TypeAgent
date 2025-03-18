@@ -123,7 +123,10 @@ export class Construction {
             return [];
         }
         this.collectImplicitProperties(matchedValues.values);
-        const actionProps = createActionProps(matchedValues.values, this.emptyArrayParameters);
+        const actionProps = createActionProps(
+            matchedValues.values,
+            this.emptyArrayParameters,
+        );
         return [
             {
                 construction: this,
