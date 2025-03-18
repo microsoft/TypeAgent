@@ -6,8 +6,8 @@ export type ConfigAction =
     | ToggleAgent
     | ToggleExplanationAction
     | ToggleDeveloperModeAction
-    | EnterAgentFocusModeAction
-    | ExitAgentFocusModeAction;
+    | EnterAgentPriorityModeAction
+    | ExitAgentPriorityModeAction;
 
 // Shows the list of available agents
 export type ListAgents = {
@@ -39,18 +39,17 @@ export type ToggleDeveloperModeAction = {
     };
 };
 
-// Puts a specific agent into focus mode
-export type EnterAgentFocusModeAction = {
-    actionName: "enterAgentFocusMode";
+// Puts a specific agent into priority mode
+export type EnterAgentPriorityModeAction = {
+    actionName: "enterAgentPriorityMode";
     parameters: {
         // the agent name or wildcard match string (* to match all agents)
         agentName: string;
-    }
-}
+    };
+};
 
-// Leaves agent focus mode
-export type ExitAgentFocusModeAction = {
-    actionName: "exitAgentFocusMode";
-    parameters: {
-    }
-}
+// Leaves agent priority mode
+export type ExitAgentPriorityModeAction = {
+    actionName: "exitAgentPriorityMode";
+    parameters: {};
+};

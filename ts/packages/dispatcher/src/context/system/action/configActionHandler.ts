@@ -43,18 +43,18 @@ export async function executeConfigAction(
             );
             break;
 
-        case "enterAgentFocusMode":
+        case "enterAgentPriorityMode":
             await processCommandNoLock(
-                `@config agent --focus ${configAction.parameters.agentName}`,
+                `@config agent --priority ${configAction.parameters.agentName}`,
                 context.sessionContext.agentContext,
-            );            
+            );
             break;
 
-        case "exitAgentFocusMode":
+        case "exitAgentPriorityMode":
             await processCommandNoLock(
-                `@config agent --unfocus`,
+                `@config agent --reset`,
                 context.sessionContext.agentContext,
-            );            
+            );
             break;
 
         default:

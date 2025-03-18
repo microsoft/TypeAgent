@@ -108,7 +108,7 @@ function setAgentToggleOption(
     options: any,
     nameOrPattern: string[],
     enable: boolean,
-    allowOverride: boolean = false
+    allowOverride: boolean = false,
 ) {
     for (const name of nameOrPattern) {
         if (name.includes("*")) {
@@ -298,17 +298,11 @@ class AgentToggleCommandHandler implements CommandHandler {
                 multiple: true,
                 char: "x",
             },
-            focus: {
-                description: "focus pattern",
+            priority: {
+                description: "priority pattern",
                 multiple: true,
                 char: "f",
             },
-            unfocus: {
-                description: "removes focus mode for any focused agents",
-                multiple: false,
-                char: "u",
-                type: "boolean",
-            }
         },
         args: {
             agentNames: {
@@ -344,16 +338,16 @@ class AgentToggleCommandHandler implements CommandHandler {
 
         // reset specified agents
         let hasParams = false;
-        if (params.flags.reset || params.flags.unfocus) {
+        if (params.flags.reset) {
             hasParams = true;
-            for (const name of existingNames) {                
+            for (const name of existingNames) {
                 options[name] = null; // default value
             }
         }
 
-        // if focus mode is requested we need to turn off all agents
-        // and then enable just the one that we are supposed to focus on
-        if (params.flags.focus) {
+        // if priority mode is requested we need to turn off all agents
+        // and then enable just the one that we are supposed to prioritize
+        if (params.flags.priority) {
             hasParams = true;
 
             // disable all agents except system agents
@@ -361,7 +355,7 @@ class AgentToggleCommandHandler implements CommandHandler {
                 existingNames.slice(2), // agents except dispatcher (0) & system (1)
                 existingNameType,
                 options,
-                [ "*" ],
+                ["*"],
                 false,
             );
 
@@ -370,13 +364,12 @@ class AgentToggleCommandHandler implements CommandHandler {
                 existingNames,
                 existingNameType,
                 options,
-                params.flags.focus,
+                params.flags.priority,
                 true,
-                true
+                true,
             );
+        }
 
-        } 
-        
         // turn off the agents specified by the off parameter
         if (params.flags.off) {
             hasParams = true;
