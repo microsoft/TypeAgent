@@ -3,11 +3,7 @@
 
 import { AppAgent } from "@typeagent/agent-sdk";
 import { BrowserConnector } from "../browserConnector.mjs";
-import {
-    BrowseProductCategories,
-    NavigateToPage,
-} from "./schema/userActionsPool.mjs";
-import { handleCommerceAction } from "../commerce/actionHandler.mjs";
+
 import {
     DropdownControl,
     Element,
@@ -15,37 +11,24 @@ import {
     TextInput,
 } from "./schema/pageComponents.mjs";
 import { PageActionsPlan, UserIntent } from "./schema/recordedActions.mjs";
+import { createActionResultNoDisplay } from "@typeagent/agent-sdk/helpers/action";
+import { UpdateWebPlan } from "./schema/authoringActions.mjs";
 
-export function createTempAgentForSchema(
+export function createSchemaAuthoringAgent(
     browser: BrowserConnector,
     agent: any,
     context: any,
 ): AppAgent {
     return {
-        async executeAction(action: any, tempContext: any): Promise<undefined> {
+        async executeAction(action: any, actionContext: any): Promise<any> {
             console.log(`Executing action: ${action.actionName}`);
             switch (action.actionName) {
-                case "addToCart":
-                case "viewShoppingCart":
-                case "findNearbyStore":
-                case "getLocationInStore":
-                case "searchForProduct":
-                case "selectSearchResult":
-                    handleCommerceAction(action, context);
-                    break;
-                case "browseProductCategories":
-                    handleBrowseProductCategory(action);
-                    break;
-                case "filterProducts":
-                    break;
-                case "navigateToPage":
-                    handleNavigateToPage(action);
-                    break;
-                case "navigateToProductPage":
-                    break;
-                case "removeFromCart":
-                    break;
-                case "signUpForNewsletter":
+                case "updateWebPlan":
+                    const result = await handleUpdateWebPlan(
+                        action,
+                        actionContext,
+                    );
+                    return result;
                     break;
                 default:
                     handleUserDefinedAction(action);
@@ -83,29 +66,42 @@ export function createTempAgentForSchema(
         await browser.awaitPageLoad();
     }
 
-    async function handleNavigateToPage(action: NavigateToPage) {
-        const link = (await getComponentFromPage(
-            "NavigationLink",
-            `link text ${action.parameters.keywords}`,
-        )) as NavigationLink;
-        console.log(link);
+    async function handleUpdateWebPlan(action: any, actionContext: any) {
+        console.log(action);
 
-        await followLink(link?.linkCssSelector);
+        const question = await getCurrentStateQuestion(action);
+        actionContext.actionIO.appendDisplay({
+            type: "text",
+            speak: true,
+            content: question,
+        });
+
+        const result = createActionResultNoDisplay(question);
+        if (!action.parameters.isPlanComplete) {
+            result.additionalInstructions = [
+                `Asked the user for additional data for the web plan. Current web plan data: ${JSON.stringify({ name: action.parameters.webPlanName, description: action.parameters.webPlanDescription, steps: action.parameters.webPlanSteps })}`,
+            ];
+        }
+
+        return result;
     }
 
-    async function handleBrowseProductCategory(
-        action: BrowseProductCategories,
-    ) {
-        let linkText = action.parameters?.categoryName
-            ? `link text ${action.parameters.categoryName}`
-            : "";
-        const link = (await getComponentFromPage(
-            "NavigationLink",
-            linkText,
-        )) as NavigationLink;
-        console.log(link);
-
-        await followLink(link?.linkCssSelector);
+    async function getCurrentStateQuestion(action: UpdateWebPlan) {
+        // TODO: run assessment to figure out the current authoring state and the next question to ask.
+        let question =
+            "Check the output in the browser. Is the task completed?";
+        if (action.parameters.webPlanName === undefined) {
+            question = "What name would you like to use for the new task?";
+        } else if (action.parameters.webPlanDescription === undefined) {
+            question = "Give a short description of the what the task does";
+        } else if (action.parameters.webPlanSteps === undefined) {
+            question =
+                "How would you complete this task? Describe the steps involved.";
+        }
+        if (action.parameters.isPlanComplete) {
+            question = "The new task has been added.";
+        }
+        return question;
     }
 
     async function handleUserDefinedAction(action: any) {

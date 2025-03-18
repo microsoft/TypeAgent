@@ -14,7 +14,7 @@ import {
     GenerateDataInput,
     getEmptyExplanationTestData,
     convertTestDataToExplanationData,
-    createActionConfigProvider,
+    getAllActionConfigProvider,
     createSchemaInfoProvider,
     getAppAgentName,
 } from "agent-dispatcher/internal";
@@ -35,7 +35,7 @@ import {
     getDefaultConstructionProvider,
 } from "default-agent-provider";
 
-const provider = await createActionConfigProvider(
+const provider = await getAllActionConfigProvider(
     getDefaultAppAgentProviders(getInstanceDir()),
 );
 const schemaInfoProvider = createSchemaInfoProvider(provider);

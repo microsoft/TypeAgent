@@ -37,15 +37,6 @@ export type UserIntent = {
     parameters: UserIntentParameter[];
 };
 
-export type WebPlan = {
-    webPlanName: string;
-    description: string;
-    parameters: {
-        actionName: string;
-        stepsListId: string;
-    };
-};
-
 export type SelectElementByText = {
     actionName: "selectElementByText";
     parameters: {
@@ -113,7 +104,7 @@ export type PageManipulationActions =
     | ClickOnElement
     | ClickOnLink;
 
-export type PageManipulationActionsList = {
+export type PageActionsPlan = {
     planName: string;
     description: string;
     intentSchemaName: string;

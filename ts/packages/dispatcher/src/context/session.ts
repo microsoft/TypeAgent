@@ -331,6 +331,7 @@ export class Session {
     public getSettings(): Readonly<SessionSettings> {
         return this.settings;
     }
+
     public updateSettings(options: SessionOptions): SessionChanged {
         const changed = mergeConfig(this.settings, options, true);
         if (changed) {

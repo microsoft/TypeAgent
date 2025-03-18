@@ -17,7 +17,9 @@
           {
             "name": "fullActionName",
             "value": "player.playArtist",
-            "isImplicit": true
+            "substrings": [
+              "could you play"
+            ]
           },
           {
             "name": "parameters.artist",
@@ -34,7 +36,7 @@
             "synonyms": [
               "um",
               "uh",
-              "er"
+              "well"
             ],
             "isOptional": true
           },
@@ -42,16 +44,18 @@
             "text": "yes",
             "category": "confirmation",
             "synonyms": [
-              "yeah",
-              "yep",
-              "sure"
+              "sure",
+              "okay",
+              "alright"
             ],
             "isOptional": true
           },
           {
             "text": "could you play",
             "category": "request",
-            "propertyNames": []
+            "propertyNames": [
+              "fullActionName"
+            ]
           },
           {
             "text": "um",
@@ -59,7 +63,7 @@
             "synonyms": [
               "ah",
               "uh",
-              "er"
+              "well"
             ],
             "isOptional": true
           },
@@ -74,9 +78,9 @@
             "text": "aa...like songs",
             "category": "filler",
             "synonyms": [
-              "like",
-              "such as",
-              "for example"
+              "um...like songs",
+              "uh...like songs",
+              "well...like songs"
             ],
             "isOptional": true
           },
@@ -92,6 +96,33 @@
           }
         ],
         "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.playArtist",
+            "propertySubPhrases": [
+              "could you play"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.playSong",
+                "propertySubPhrases": [
+                  "could you play a song by"
+                ]
+              },
+              {
+                "propertyValue": "player.playAlbum",
+                "propertySubPhrases": [
+                  "could you play an album by"
+                ]
+              },
+              {
+                "propertyValue": "player.playPlaylist",
+                "propertySubPhrases": [
+                  "could you play a playlist by"
+                ]
+              }
+            ]
+          },
           {
             "propertyName": "parameters.artist",
             "propertyValue": "Paul Simon",
@@ -121,97 +152,13 @@
           }
         ],
         "politePrefixes": [],
-        "politeSuffixes": []
-      },
-      "corrections": [
-        {
-          "data": {
-            "properties": [
-              {
-                "name": "fullActionName",
-                "value": "player.playArtist",
-                "isImplicit": true
-              },
-              {
-                "name": "parameters.artist",
-                "value": "Paul Simon",
-                "substrings": [
-                  "Paul Simon"
-                ]
-              }
-            ],
-            "subPhrases": [
-              {
-                "text": "ah",
-                "category": "filler",
-                "synonyms": [
-                  "um",
-                  "uh",
-                  "er"
-                ],
-                "isOptional": true
-              },
-              {
-                "text": "yes",
-                "category": "confirmation",
-                "synonyms": [
-                  "yeah",
-                  "yep",
-                  "sure"
-                ],
-                "isOptional": true
-              },
-              {
-                "text": "could you play",
-                "category": "request",
-                "propertyNames": [
-                  "fullActionName"
-                ]
-              },
-              {
-                "text": "um",
-                "category": "filler",
-                "synonyms": [
-                  "ah",
-                  "uh",
-                  "er"
-                ],
-                "isOptional": true
-              },
-              {
-                "text": "Paul Simon",
-                "category": "artist",
-                "propertyNames": [
-                  "parameters.artist"
-                ]
-              },
-              {
-                "text": "aa...like songs",
-                "category": "filler",
-                "synonyms": [
-                  "like",
-                  "such as",
-                  "for example"
-                ],
-                "isOptional": true
-              },
-              {
-                "text": "please",
-                "category": "politeness",
-                "synonyms": [
-                  "kindly",
-                  "if you could",
-                  "would you mind"
-                ],
-                "isOptional": true
-              }
-            ]
-          },
-          "correction": [
-            "Property 'fullActionName' is expected to be implicit and should not be included as a property name in a sub-phrase"
-          ]
-        }
-      ]
+        "politeSuffixes": [
+          "if you don't mind.",
+          "thank you.",
+          "when you get a chance.",
+          "if it's not too much trouble."
+        ]
+      }
     },
     {
       "request": "all right buddy, lets hear some, ahh, I guess Debussy Preludes",
@@ -229,7 +176,9 @@
           {
             "name": "fullActionName",
             "value": "player.playTrack",
-            "isImplicit": true
+            "substrings": [
+              "lets hear"
+            ]
           },
           {
             "name": "parameters.trackName",
@@ -251,39 +200,26 @@
             "text": "all right buddy",
             "category": "acknowledgement",
             "synonyms": [
-              "okay",
-              "sure thing",
-              "alright"
+              "okay friend",
+              "sure pal",
+              "alright mate"
             ],
             "isOptional": true
           },
           {
-            "text": "lets hear some",
+            "text": "lets hear",
             "category": "command",
-            "synonyms": [
-              "play",
-              "put on",
-              "start"
-            ],
-            "isOptional": true
+            "propertyNames": [
+              "fullActionName"
+            ]
           },
           {
-            "text": "ahh",
+            "text": "some, ahh, I guess",
             "category": "filler",
             "synonyms": [
-              "um",
-              "uh",
-              "hmm"
-            ],
-            "isOptional": true
-          },
-          {
-            "text": "I guess",
-            "category": "filler",
-            "synonyms": [
-              "maybe",
-              "perhaps",
-              "I think"
+              "um, maybe",
+              "well, I think",
+              "perhaps"
             ],
             "isOptional": true
           },
@@ -304,6 +240,33 @@
         ],
         "propertyAlternatives": [
           {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.playTrack",
+            "propertySubPhrases": [
+              "lets hear"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.queueTrack",
+                "propertySubPhrases": [
+                  "queue up"
+                ]
+              },
+              {
+                "propertyValue": "player.addTrackToPlaylist",
+                "propertySubPhrases": [
+                  "add to playlist"
+                ]
+              },
+              {
+                "propertyValue": "player.shufflePlay",
+                "propertySubPhrases": [
+                  "shuffle play"
+                ]
+              }
+            ]
+          },
+          {
             "propertyName": "parameters.artists.0",
             "propertyValue": "Debussy",
             "propertySubPhrases": [
@@ -311,15 +274,15 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "Beethoven",
-                "propertySubPhrases": [
-                  "Beethoven"
-                ]
-              },
-              {
                 "propertyValue": "Mozart",
                 "propertySubPhrases": [
                   "Mozart"
+                ]
+              },
+              {
+                "propertyValue": "Beethoven",
+                "propertySubPhrases": [
+                  "Beethoven"
                 ]
               },
               {
@@ -344,15 +307,15 @@
                 ]
               },
               {
-                "propertyValue": "Moonlight Sonata",
+                "propertyValue": "Arabesque",
                 "propertySubPhrases": [
-                  "Moonlight Sonata"
+                  "Arabesque"
                 ]
               },
               {
-                "propertyValue": "Nocturnes",
+                "propertyValue": "La Mer",
                 "propertySubPhrases": [
-                  "Nocturnes"
+                  "La Mer"
                 ]
               }
             ]
@@ -360,11 +323,15 @@
         ],
         "politePrefixes": [
           "Could you please",
-          "Would you mind"
+          "Would you mind",
+          "If it's not too much trouble",
+          "I would appreciate it if you could"
         ],
         "politeSuffixes": [
-          "Thank you!",
-          "I would appreciate it."
+          "thank you",
+          "please",
+          "if you don't mind",
+          "thanks a lot"
         ]
       }
     },
@@ -382,7 +349,9 @@
           {
             "name": "fullActionName",
             "value": "player.playArtist",
-            "isImplicit": true
+            "substrings": [
+              "can I hear"
+            ]
           },
           {
             "name": "parameters.artist",
@@ -395,20 +364,17 @@
             "name": "parameters.quantity",
             "value": 2,
             "substrings": [
-              "a couple of"
+              "a couple of songs"
             ]
           }
         ],
         "subPhrases": [
           {
             "text": "can I hear",
-            "category": "politeness",
-            "synonyms": [
-              "could I listen to",
-              "may I hear",
-              "would I be able to hear"
-            ],
-            "isOptional": true
+            "category": "request",
+            "propertyNames": [
+              "fullActionName"
+            ]
           },
           {
             "text": "katie perry",
@@ -423,29 +389,47 @@
             "synonyms": [
               "um",
               "ah",
-              "well"
+              "well",
+              "like"
             ],
             "isOptional": true
           },
           {
-            "text": "like a couple of",
+            "text": "like a couple of songs",
             "category": "quantity",
             "propertyNames": [
               "parameters.quantity"
             ]
-          },
-          {
-            "text": "songs",
-            "category": "confirmation",
-            "synonyms": [
-              "tracks",
-              "tunes",
-              "pieces"
-            ],
-            "isOptional": true
           }
         ],
         "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.playArtist",
+            "propertySubPhrases": [
+              "can I hear"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.playSong",
+                "propertySubPhrases": [
+                  "can I listen to"
+                ]
+              },
+              {
+                "propertyValue": "player.playAlbum",
+                "propertySubPhrases": [
+                  "can I play"
+                ]
+              },
+              {
+                "propertyValue": "player.playPlaylist",
+                "propertySubPhrases": [
+                  "can I put on"
+                ]
+              }
+            ]
+          },
           {
             "propertyName": "parameters.artist",
             "propertyValue": "Katy Perry",
@@ -477,25 +461,25 @@
             "propertyName": "parameters.quantity",
             "propertyValue": 2,
             "propertySubPhrases": [
-              "like a couple of"
+              "like a couple of songs"
             ],
             "alternatives": [
               {
                 "propertyValue": 1,
                 "propertySubPhrases": [
-                  "one"
+                  "one song"
                 ]
               },
               {
                 "propertyValue": 3,
                 "propertySubPhrases": [
-                  "three"
+                  "a few songs"
                 ]
               },
               {
                 "propertyValue": 5,
                 "propertySubPhrases": [
-                  "five"
+                  "five songs"
                 ]
               }
             ]
@@ -503,10 +487,14 @@
         ],
         "politePrefixes": [
           "Could you please",
-          "Would you mind"
+          "Would it be possible to",
+          "May I kindly",
+          "If you don't mind,"
         ],
         "politeSuffixes": [
-          "Thank you!",
+          "thank you.",
+          "please.",
+          "if that's okay.",
           "I would appreciate it."
         ]
       }
@@ -516,7 +504,7 @@
       "action": {
         "fullActionName": "player.playArtist",
         "parameters": {
-          "artist": "Katy Perry"
+          "artist": "Katie Perry"
         }
       },
       "explanation": {
@@ -530,7 +518,7 @@
           },
           {
             "name": "parameters.artist",
-            "value": "Katy Perry",
+            "value": "Katie Perry",
             "substrings": [
               "katie perry"
             ]
@@ -539,11 +527,11 @@
         "subPhrases": [
           {
             "text": "can I",
-            "category": "filler",
+            "category": "politeness",
             "synonyms": [
               "could I",
               "may I",
-              "would I"
+              "would I be able to"
             ],
             "isOptional": true
           },
@@ -595,14 +583,14 @@
               {
                 "propertyValue": "player.playPlaylist",
                 "propertySubPhrases": [
-                  "queue up"
+                  "stream"
                 ]
               }
             ]
           },
           {
             "propertyName": "parameters.artist",
-            "propertyValue": "Katy Perry",
+            "propertyValue": "Katie Perry",
             "propertySubPhrases": [
               "katie perry"
             ],
@@ -629,12 +617,16 @@
           }
         ],
         "politePrefixes": [
-          "Could you please",
-          "Would you mind"
+          "Please, ",
+          "Could you please, ",
+          "Would you mind, ",
+          "If it's not too much trouble, "
         ],
         "politeSuffixes": [
-          "Thank you!",
-          "I would appreciate it!"
+          ", thank you.",
+          ", please.",
+          ", if you don't mind.",
+          ", I'd appreciate it."
         ]
       }
     },
@@ -651,7 +643,9 @@
           {
             "name": "fullActionName",
             "value": "player.playArtist",
-            "isImplicit": true
+            "substrings": [
+              "cue up"
+            ]
           },
           {
             "name": "parameters.artist",
@@ -663,14 +657,21 @@
         ],
         "subPhrases": [
           {
-            "text": "cue up some",
-            "category": "command",
+            "text": "cue up",
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "some",
+            "category": "filler",
             "synonyms": [
-              "play",
-              "start",
-              "put on"
+              "a bit of",
+              "any",
+              "a little"
             ],
-            "isOptional": false
+            "isOptional": true
           },
           {
             "text": "Taylor Swift",
@@ -681,6 +682,33 @@
           }
         ],
         "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.playArtist",
+            "propertySubPhrases": [
+              "cue up"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.queueArtist",
+                "propertySubPhrases": [
+                  "queue up"
+                ]
+              },
+              {
+                "propertyValue": "player.addArtistToPlaylist",
+                "propertySubPhrases": [
+                  "add to playlist"
+                ]
+              },
+              {
+                "propertyValue": "player.startArtistRadio",
+                "propertySubPhrases": [
+                  "start radio"
+                ]
+              }
+            ]
+          },
           {
             "propertyName": "parameters.artist",
             "propertyValue": "Taylor Swift",
@@ -701,9 +729,9 @@
                 ]
               },
               {
-                "propertyValue": "Beyoncé",
+                "propertyValue": "Billie Eilish",
                 "propertySubPhrases": [
-                  "Beyoncé"
+                  "Billie Eilish"
                 ]
               }
             ]
@@ -711,11 +739,15 @@
         ],
         "politePrefixes": [
           "Could you please",
-          "Would you mind"
+          "Would you mind",
+          "If it's not too much trouble,",
+          "Please"
         ],
         "politeSuffixes": [
-          "Thank you!",
-          "Thanks a lot!"
+          "thank you.",
+          "if you don't mind.",
+          "please.",
+          "thanks."
         ]
       }
     },
@@ -763,19 +795,29 @@
             ]
           },
           {
-            "text": "the Bach vibes",
+            "text": "the",
+            "category": "preposition",
+            "synonyms": [
+              "a",
+              "some",
+              "those"
+            ],
+            "isOptional": true
+          },
+          {
+            "text": "Bach",
             "category": "artist",
             "propertyNames": [
               "parameters.artist"
             ]
           },
           {
-            "text": "?",
-            "category": "punctuation",
+            "text": "vibes",
+            "category": "filler",
             "synonyms": [
-              "",
-              ".",
-              "!"
+              "music",
+              "tunes",
+              "sounds"
             ],
             "isOptional": true
           }
@@ -789,21 +831,21 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "player.startMusic",
+                "propertyValue": "player.playSong",
                 "propertySubPhrases": [
-                  "start the music"
+                  "play"
                 ]
               },
               {
-                "propertyValue": "player.beginPlayback",
+                "propertyValue": "player.playAlbum",
                 "propertySubPhrases": [
-                  "begin playback"
+                  "put on"
                 ]
               },
               {
-                "propertyValue": "player.initiateTunes",
+                "propertyValue": "player.playPlaylist",
                 "propertySubPhrases": [
-                  "initiate the tunes"
+                  "start"
                 ]
               }
             ]
@@ -812,25 +854,25 @@
             "propertyName": "parameters.artist",
             "propertyValue": "Bach",
             "propertySubPhrases": [
-              "the Bach vibes"
+              "Bach"
             ],
             "alternatives": [
               {
                 "propertyValue": "Mozart",
                 "propertySubPhrases": [
-                  "the Mozart vibes"
+                  "Mozart"
                 ]
               },
               {
                 "propertyValue": "Beethoven",
                 "propertySubPhrases": [
-                  "the Beethoven vibes"
+                  "Beethoven"
                 ]
               },
               {
                 "propertyValue": "Chopin",
                 "propertySubPhrases": [
-                  "the Chopin vibes"
+                  "Chopin"
                 ]
               }
             ]
@@ -838,11 +880,15 @@
         ],
         "politePrefixes": [
           "Could you please",
-          "Would you mind"
+          "Would you mind",
+          "If it's not too much trouble,",
+          "May I kindly ask"
         ],
         "politeSuffixes": [
-          "Thank you!",
-          "I would appreciate it."
+          "please?",
+          "if you don't mind.",
+          "thank you.",
+          "if that's okay."
         ]
       }
     },
@@ -891,7 +937,7 @@
           },
           {
             "text": "Pretzel Logic",
-            "category": "album name",
+            "category": "album",
             "propertyNames": [
               "parameters.albumName"
             ]
@@ -902,13 +948,13 @@
             "synonyms": [
               "from",
               "of",
-              "featuring"
+              "with"
             ],
             "isOptional": true
           },
           {
             "text": "Steely Dan",
-            "category": "artist name",
+            "category": "artist",
             "propertyNames": [
               "parameters.artists.0"
             ]
@@ -999,11 +1045,15 @@
         ],
         "politePrefixes": [
           "Could you please",
-          "Would you mind"
+          "Would you mind",
+          "If it's not too much trouble,",
+          "I would appreciate it if you could"
         ],
         "politeSuffixes": [
-          "Thank you!",
-          "I would appreciate it."
+          "thank you.",
+          "please.",
+          "if you don't mind.",
+          "thanks a lot."
         ]
       }
     },
@@ -1023,9 +1073,7 @@
           {
             "name": "fullActionName",
             "value": "player.playAlbum",
-            "substrings": [
-              "lets listen to"
-            ]
+            "isImplicit": true
           },
           {
             "name": "parameters.albumName",
@@ -1045,14 +1093,12 @@
         "subPhrases": [
           {
             "text": "lets listen to",
-            "category": "action",
-            "propertyNames": [
-              "fullActionName"
-            ]
+            "category": "command",
+            "propertyNames": []
           },
           {
             "text": "Pretzel Logic",
-            "category": "albumName",
+            "category": "album",
             "propertyNames": [
               "parameters.albumName"
             ]
@@ -1063,7 +1109,7 @@
             "synonyms": [
               "from",
               "performed by",
-              "sung by"
+              "created by"
             ],
             "isOptional": true
           },
@@ -1076,33 +1122,6 @@
           }
         ],
         "propertyAlternatives": [
-          {
-            "propertyName": "fullActionName",
-            "propertyValue": "player.playAlbum",
-            "propertySubPhrases": [
-              "lets listen to"
-            ],
-            "alternatives": [
-              {
-                "propertyValue": "player.playSong",
-                "propertySubPhrases": [
-                  "lets play the song"
-                ]
-              },
-              {
-                "propertyValue": "player.playPlaylist",
-                "propertySubPhrases": [
-                  "lets play the playlist"
-                ]
-              },
-              {
-                "propertyValue": "player.playPodcast",
-                "propertySubPhrases": [
-                  "lets listen to the podcast"
-                ]
-              }
-            ]
-          },
           {
             "propertyName": "parameters.albumName",
             "propertyValue": "Pretzel Logic",
@@ -1117,15 +1136,15 @@
                 ]
               },
               {
-                "propertyValue": "Gaucho",
+                "propertyValue": "Countdown to Ecstasy",
                 "propertySubPhrases": [
-                  "Gaucho"
+                  "Countdown to Ecstasy"
                 ]
               },
               {
-                "propertyValue": "The Royal Scam",
+                "propertyValue": "Katy Lied",
                 "propertySubPhrases": [
-                  "The Royal Scam"
+                  "Katy Lied"
                 ]
               }
             ]
@@ -1159,12 +1178,16 @@
           }
         ],
         "politePrefixes": [
-          "Could you please",
-          "Would you mind"
+          "Could we please",
+          "Would you mind if we",
+          "May I kindly ask to",
+          "If it's not too much trouble, let's"
         ],
         "politeSuffixes": [
-          "Thank you!",
-          "I would appreciate it."
+          "thank you",
+          "please",
+          "if you don't mind",
+          "if that's okay"
         ]
       }
     },
@@ -1195,12 +1218,22 @@
         ],
         "subPhrases": [
           {
-            "text": "ok computer",
+            "text": "ok",
             "category": "acknowledgement",
             "synonyms": [
-              "okay computer",
-              "alright computer",
-              "hey computer"
+              "alright",
+              "sure",
+              "fine"
+            ],
+            "isOptional": true
+          },
+          {
+            "text": "computer",
+            "category": "filler",
+            "synonyms": [
+              "device",
+              "machine",
+              "system"
             ],
             "isOptional": true
           },
@@ -1213,11 +1246,11 @@
           },
           {
             "text": "some pieces by",
-            "category": "filler",
+            "category": "preposition",
             "synonyms": [
-              "some music by",
-              "songs by",
-              "tracks by"
+              "works by",
+              "compositions by",
+              "music by"
             ],
             "isOptional": true
           },
@@ -1250,9 +1283,9 @@
                 ]
               },
               {
-                "propertyValue": "player.skip",
+                "propertyValue": "player.resume",
                 "propertySubPhrases": [
-                  "skip"
+                  "resume"
                 ]
               }
             ]
@@ -1271,15 +1304,15 @@
                 ]
               },
               {
-                "propertyValue": "Beethoven",
-                "propertySubPhrases": [
-                  "Beethoven"
-                ]
-              },
-              {
                 "propertyValue": "Mozart",
                 "propertySubPhrases": [
                   "Mozart"
+                ]
+              },
+              {
+                "propertyValue": "Beethoven",
+                "propertySubPhrases": [
+                  "Beethoven"
                 ]
               }
             ]
@@ -1287,11 +1320,15 @@
         ],
         "politePrefixes": [
           "Please",
-          "Could you"
+          "Could you",
+          "Would you mind",
+          "If you don't mind"
         ],
         "politeSuffixes": [
-          "Thank you",
-          "Thanks"
+          "thank you",
+          "please",
+          "if that's okay",
+          "if you could"
         ]
       }
     },
@@ -1330,45 +1367,75 @@
         ],
         "subPhrases": [
           {
-            "text": "Ok,",
+            "text": "Ok",
             "category": "acknowledgement",
             "synonyms": [
-              "Alright,",
-              "Okay,",
-              "Sure,"
+              "alright",
+              "okay",
+              "sure"
             ],
             "isOptional": true
           },
           {
-            "text": "next I wanna hear,",
+            "text": "next",
             "category": "filler",
             "synonyms": [
-              "next I want to hear,",
-              "next I would like to hear,",
-              "next I wanna listen to,"
+              "then",
+              "after that",
+              "following"
             ],
             "isOptional": true
           },
           {
-            "text": "aa, um... yeah,",
+            "text": "I wanna hear",
+            "category": "confirmation",
+            "synonyms": [
+              "I want to listen to",
+              "I would like to hear",
+              "I want to play"
+            ],
+            "isOptional": true
+          },
+          {
+            "text": "aa",
             "category": "filler",
             "synonyms": [
-              "uh, um... yeah,",
-              "uh, um... sure,",
-              "uh, um... okay,"
+              "um",
+              "uh",
+              "ah"
             ],
             "isOptional": true
           },
           {
-            "text": "some Def Leppard.",
-            "category": "property",
+            "text": "um",
+            "category": "filler",
+            "synonyms": [
+              "uh",
+              "ah",
+              "aa"
+            ],
+            "isOptional": true
+          },
+          {
+            "text": "yeah",
+            "category": "acknowledgement",
+            "synonyms": [
+              "yes",
+              "yep",
+              "sure"
+            ],
+            "isOptional": true
+          },
+          {
+            "text": "some Def Leppard",
+            "category": "confirmation",
             "propertyNames": [
               "parameters.artists.0"
             ]
           },
           {
-            "text": "Armageddon It.",
-            "category": "property",
+            "text": "Armageddon It",
+            "category": "confirmation",
             "propertyNames": [
               "parameters.trackName"
             ]
@@ -1379,25 +1446,25 @@
             "propertyName": "parameters.artists.0",
             "propertyValue": "Def Leppard",
             "propertySubPhrases": [
-              "some Def Leppard."
+              "some Def Leppard"
             ],
             "alternatives": [
               {
                 "propertyValue": "AC/DC",
                 "propertySubPhrases": [
-                  "some AC/DC."
+                  "some AC/DC"
                 ]
               },
               {
                 "propertyValue": "Queen",
                 "propertySubPhrases": [
-                  "some Queen."
+                  "some Queen"
                 ]
               },
               {
                 "propertyValue": "Led Zeppelin",
                 "propertySubPhrases": [
-                  "some Led Zeppelin."
+                  "some Led Zeppelin"
                 ]
               }
             ]
@@ -1406,25 +1473,25 @@
             "propertyName": "parameters.trackName",
             "propertyValue": "Armageddon It",
             "propertySubPhrases": [
-              "Armageddon It."
+              "Armageddon It"
             ],
             "alternatives": [
               {
                 "propertyValue": "Pour Some Sugar On Me",
                 "propertySubPhrases": [
-                  "Pour Some Sugar On Me."
-                ]
-              },
-              {
-                "propertyValue": "Hysteria",
-                "propertySubPhrases": [
-                  "Hysteria."
+                  "Pour Some Sugar On Me"
                 ]
               },
               {
                 "propertyValue": "Love Bites",
                 "propertySubPhrases": [
-                  "Love Bites."
+                  "Love Bites"
+                ]
+              },
+              {
+                "propertyValue": "Hysteria",
+                "propertySubPhrases": [
+                  "Hysteria"
                 ]
               }
             ]
@@ -1433,14 +1500,14 @@
         "politePrefixes": [
           "Could you please",
           "Would you mind",
-          "If it's not too much trouble, could you",
+          "If it's not too much trouble",
           "I would appreciate it if you could"
         ],
         "politeSuffixes": [
-          "Thank you!",
-          "Thanks a lot!",
-          "I appreciate it!",
-          "Much appreciated!"
+          "thank you",
+          "please",
+          "if you don't mind",
+          "thanks a lot"
         ]
       }
     },
@@ -1494,7 +1561,7 @@
           },
           {
             "text": "songs by",
-            "category": "filler",
+            "category": "preposition",
             "synonyms": [
               "tracks by",
               "music by",
@@ -1519,21 +1586,21 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "player.pause",
+                "propertyValue": "player.pauseArtist",
                 "propertySubPhrases": [
                   "pause"
                 ]
               },
               {
-                "propertyValue": "player.stop",
+                "propertyValue": "player.stopArtist",
                 "propertySubPhrases": [
                   "stop"
                 ]
               },
               {
-                "propertyValue": "player.skip",
+                "propertyValue": "player.resumeArtist",
                 "propertySubPhrases": [
-                  "skip"
+                  "resume"
                 ]
               }
             ]
@@ -1595,11 +1662,15 @@
         ],
         "politePrefixes": [
           "Could you please",
-          "Would you mind"
+          "Would you mind",
+          "If it's not too much trouble,",
+          "Please"
         ],
         "politeSuffixes": [
-          "Thank you",
-          "I would appreciate it"
+          "thank you.",
+          "if you don't mind.",
+          "please.",
+          "thanks."
         ]
       }
     },
@@ -1609,7 +1680,6 @@
         "fullActionName": "player.playArtist",
         "parameters": {
           "artist": "Bach",
-          "genre": "fugue",
           "quantity": 2
         }
       },
@@ -1630,17 +1700,10 @@
             ]
           },
           {
-            "name": "parameters.genre",
-            "value": "fugue",
-            "substrings": [
-              "fugues"
-            ]
-          },
-          {
             "name": "parameters.quantity",
             "value": 2,
             "substrings": [
-              "a couple of"
+              "a couple"
             ]
           }
         ],
@@ -1663,26 +1726,19 @@
             ]
           },
           {
-            "text": "a couple of",
+            "text": "a couple",
             "category": "quantity",
             "propertyNames": [
               "parameters.quantity"
             ]
           },
           {
-            "text": "fugues",
-            "category": "genre",
-            "propertyNames": [
-              "parameters.genre"
-            ]
-          },
-          {
-            "text": "by",
-            "category": "preposition",
+            "text": "of fugues by",
+            "category": "filler",
             "synonyms": [
-              "from",
-              "of",
-              "composed by"
+              "some pieces by",
+              "a few compositions by",
+              "several works by"
             ],
             "isOptional": true
           },
@@ -1715,9 +1771,9 @@
                 ]
               },
               {
-                "propertyValue": "player.skipArtist",
+                "propertyValue": "player.resumeArtist",
                 "propertySubPhrases": [
-                  "skip"
+                  "resume"
                 ]
               }
             ]
@@ -1726,7 +1782,7 @@
             "propertyName": "parameters.quantity",
             "propertyValue": 2,
             "propertySubPhrases": [
-              "a couple of"
+              "a couple"
             ],
             "alternatives": [
               {
@@ -1745,33 +1801,6 @@
                 "propertyValue": 5,
                 "propertySubPhrases": [
                   "several"
-                ]
-              }
-            ]
-          },
-          {
-            "propertyName": "parameters.genre",
-            "propertyValue": "fugue",
-            "propertySubPhrases": [
-              "fugues"
-            ],
-            "alternatives": [
-              {
-                "propertyValue": "symphony",
-                "propertySubPhrases": [
-                  "symphonies"
-                ]
-              },
-              {
-                "propertyValue": "concerto",
-                "propertySubPhrases": [
-                  "concertos"
-                ]
-              },
-              {
-                "propertyValue": "sonata",
-                "propertySubPhrases": [
-                  "sonatas"
                 ]
               }
             ]
@@ -1804,8 +1833,18 @@
             ]
           }
         ],
-        "politePrefixes": [],
-        "politeSuffixes": []
+        "politePrefixes": [
+          "Could you kindly",
+          "Would you be so kind as to",
+          "If you don't mind,",
+          "I would appreciate it if you could"
+        ],
+        "politeSuffixes": [
+          "Thank you.",
+          "I appreciate it.",
+          "Thanks a lot.",
+          "Much appreciated."
+        ]
       }
     },
     {
@@ -1911,22 +1950,32 @@
                 ]
               },
               {
-                "propertyValue": "Bob Dylan",
+                "propertyValue": "Billy Joel",
                 "propertySubPhrases": [
-                  "Bob Dylan"
+                  "Billy Joel"
                 ]
               },
               {
-                "propertyValue": "Stevie Wonder",
+                "propertyValue": "Bob Dylan",
                 "propertySubPhrases": [
-                  "Stevie Wonder"
+                  "Bob Dylan"
                 ]
               }
             ]
           }
         ],
-        "politePrefixes": [],
-        "politeSuffixes": []
+        "politePrefixes": [
+          "Could you",
+          "Would you mind",
+          "I would appreciate it if you",
+          "If you don't mind"
+        ],
+        "politeSuffixes": [
+          "thank you",
+          "please",
+          "if that's okay",
+          "if you could"
+        ]
       }
     },
     {
@@ -1970,8 +2019,8 @@
             "category": "politeness",
             "synonyms": [
               "kindly",
-              "would you",
-              "could you"
+              "could you",
+              "would you mind"
             ],
             "isOptional": true
           },
@@ -2043,21 +2092,21 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "Elton John",
-                "propertySubPhrases": [
-                  "Elton John"
-                ]
-              },
-              {
                 "propertyValue": "Bob Dylan",
                 "propertySubPhrases": [
                   "Bob Dylan"
                 ]
               },
               {
-                "propertyValue": "Stevie Wonder",
+                "propertyValue": "Elton John",
                 "propertySubPhrases": [
-                  "Stevie Wonder"
+                  "Elton John"
+                ]
+              },
+              {
+                "propertyValue": "David Bowie",
+                "propertySubPhrases": [
+                  "David Bowie"
                 ]
               }
             ]
@@ -2070,49 +2119,54 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "The Stranger",
+                "propertyValue": "The Freewheelin' Bob Dylan",
                 "propertySubPhrases": [
-                  "The Stranger"
+                  "The Freewheelin' Bob Dylan"
                 ]
               },
               {
-                "propertyValue": "Thriller",
+                "propertyValue": "Goodbye Yellow Brick Road",
                 "propertySubPhrases": [
-                  "Thriller"
+                  "Goodbye Yellow Brick Road"
                 ]
               },
               {
-                "propertyValue": "Rumours",
+                "propertyValue": "The Rise and Fall of Ziggy Stardust and the Spiders from Mars",
                 "propertySubPhrases": [
-                  "Rumours"
+                  "The Rise and Fall of Ziggy Stardust and the Spiders from Mars"
                 ]
               }
             ]
           }
         ],
         "politePrefixes": [],
-        "politeSuffixes": []
+        "politeSuffixes": [
+          "if you don't mind.",
+          "thank you.",
+          "when you have a moment.",
+          "I would appreciate it."
+        ]
       }
     },
     {
       "request": "que up some Taylor Swift",
       "action": {
-        "fullActionName": "player.playArtist",
+        "fullActionName": "player.searchTracks",
         "parameters": {
-          "artist": "Taylor Swift"
+          "query": "Taylor Swift"
         }
       },
       "explanation": {
         "properties": [
           {
             "name": "fullActionName",
-            "value": "player.playArtist",
+            "value": "player.searchTracks",
             "substrings": [
               "que up"
             ]
           },
           {
-            "name": "parameters.artist",
+            "name": "parameters.query",
             "value": "Taylor Swift",
             "substrings": [
               "Taylor Swift"
@@ -2131,30 +2185,30 @@
             "text": "some",
             "category": "filler",
             "synonyms": [
-              "a bit of",
-              "a little",
-              "some of"
+              "a few",
+              "several",
+              "a couple"
             ],
             "isOptional": true
           },
           {
             "text": "Taylor Swift",
-            "category": "artist",
+            "category": "query",
             "propertyNames": [
-              "parameters.artist"
+              "parameters.query"
             ]
           }
         ],
         "propertyAlternatives": [
           {
             "propertyName": "fullActionName",
-            "propertyValue": "player.playArtist",
+            "propertyValue": "player.searchTracks",
             "propertySubPhrases": [
               "que up"
             ],
             "alternatives": [
               {
-                "propertyValue": "player.playSong",
+                "propertyValue": "player.playTracks",
                 "propertySubPhrases": [
                   "play"
                 ]
@@ -2166,7 +2220,7 @@
                 ]
               },
               {
-                "propertyValue": "player.shuffleArtist",
+                "propertyValue": "player.shuffleTracks",
                 "propertySubPhrases": [
                   "shuffle"
                 ]
@@ -2174,7 +2228,7 @@
             ]
           },
           {
-            "propertyName": "parameters.artist",
+            "propertyName": "parameters.query",
             "propertyValue": "Taylor Swift",
             "propertySubPhrases": [
               "Taylor Swift"
@@ -2193,9 +2247,9 @@
                 ]
               },
               {
-                "propertyValue": "Drake",
+                "propertyValue": "Billie Eilish",
                 "propertySubPhrases": [
-                  "Drake"
+                  "Billie Eilish"
                 ]
               }
             ]
@@ -2204,14 +2258,14 @@
         "politePrefixes": [
           "Could you please",
           "Would you mind",
-          "If it's not too much trouble, could you",
-          "May I kindly ask you to"
+          "Can you kindly",
+          "If possible, could you"
         ],
         "politeSuffixes": [
           "thank you",
           "please",
           "if you don't mind",
-          "thanks a lot"
+          "thanks"
         ]
       }
     },
@@ -2254,7 +2308,7 @@
             "synonyms": [
               "a bit of",
               "a little",
-              "some of"
+              "some tunes"
             ],
             "isOptional": true
           },
@@ -2287,9 +2341,9 @@
                 ]
               },
               {
-                "propertyValue": "player.playMusic",
+                "propertyValue": "player.playMusicByArtist",
                 "propertySubPhrases": [
-                  "play"
+                  "play some"
                 ]
               }
             ]
@@ -2325,14 +2379,14 @@
         "politePrefixes": [
           "Could you please",
           "Would you mind",
-          "If it's not too much trouble, could you",
-          "May I kindly ask you to"
+          "Can you kindly",
+          "Please"
         ],
         "politeSuffixes": [
-          "thank you",
-          "please",
-          "if you don't mind",
-          "thanks a lot"
+          "for me?",
+          "if you don't mind.",
+          "thank you.",
+          "please."
         ]
       }
     },
@@ -2364,14 +2418,14 @@
         "subPhrases": [
           {
             "text": "start playing",
-            "category": "command",
+            "category": "action",
             "propertyNames": [
               "fullActionName"
             ]
           },
           {
             "text": "Highway to Hell",
-            "category": "trackName",
+            "category": "track",
             "propertyNames": [
               "parameters.trackName"
             ]
@@ -2392,15 +2446,15 @@
                 ]
               },
               {
-                "propertyValue": "player.resumeTrack",
+                "propertyValue": "player.playSong",
                 "propertySubPhrases": [
-                  "resume playing"
+                  "play"
                 ]
               },
               {
-                "propertyValue": "player.initiateTrack",
+                "propertyValue": "player.activateTrack",
                 "propertySubPhrases": [
-                  "initiate playing"
+                  "activate playing"
                 ]
               }
             ]
@@ -2435,11 +2489,15 @@
         ],
         "politePrefixes": [
           "Could you please",
-          "Would you mind"
+          "Would you mind",
+          "I would appreciate it if you could",
+          "Please"
         ],
         "politeSuffixes": [
-          "Thank you",
-          "I would appreciate it"
+          "thank you",
+          "if that's okay",
+          "please",
+          "thanks"
         ]
       }
     },
@@ -2481,8 +2539,8 @@
             "category": "preposition",
             "synonyms": [
               "from",
-              "featuring",
-              "with"
+              "with",
+              "featuring"
             ],
             "isOptional": true
           },
@@ -2503,15 +2561,15 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "player.playSong",
-                "propertySubPhrases": [
-                  "play a song"
-                ]
-              },
-              {
                 "propertyValue": "player.playAlbum",
                 "propertySubPhrases": [
                   "play an album"
+                ]
+              },
+              {
+                "propertyValue": "player.playSong",
+                "propertySubPhrases": [
+                  "play a song"
                 ]
               },
               {
@@ -2536,15 +2594,15 @@
                 ]
               },
               {
-                "propertyValue": "Beethoven",
-                "propertySubPhrases": [
-                  "Beethoven"
-                ]
-              },
-              {
                 "propertyValue": "Mozart",
                 "propertySubPhrases": [
                   "Mozart"
+                ]
+              },
+              {
+                "propertyValue": "Beethoven",
+                "propertySubPhrases": [
+                  "Beethoven"
                 ]
               }
             ]
@@ -2553,36 +2611,36 @@
         "politePrefixes": [
           "Could you please",
           "Would you mind",
-          "If it's not too much trouble, could you",
-          "May I kindly ask you to"
+          "If you don't mind",
+          "Please"
         ],
         "politeSuffixes": [
           "thank you",
           "please",
-          "if you don't mind",
-          "I would appreciate it"
+          "if that's okay",
+          "if you could"
         ]
       }
     },
     {
       "request": "thanks, and also queue up some Chemical Brothers",
       "action": {
-        "fullActionName": "player.playArtist",
+        "fullActionName": "player.searchTracks",
         "parameters": {
-          "artist": "Chemical Brothers"
+          "query": "Chemical Brothers"
         }
       },
       "explanation": {
         "properties": [
           {
             "name": "fullActionName",
-            "value": "player.playArtist",
+            "value": "player.searchTracks",
             "substrings": [
               "queue up"
             ]
           },
           {
-            "name": "parameters.artist",
+            "name": "parameters.query",
             "value": "Chemical Brothers",
             "substrings": [
               "Chemical Brothers"
@@ -2591,12 +2649,12 @@
         ],
         "subPhrases": [
           {
-            "text": "thanks,",
+            "text": "thanks",
             "category": "acknowledgement",
             "synonyms": [
               "thank you",
-              "thanks a lot",
-              "thank you very much"
+              "cheers",
+              "much appreciated"
             ],
             "isOptional": true
           },
@@ -2605,8 +2663,8 @@
             "category": "filler",
             "synonyms": [
               "as well",
-              "additionally",
-              "plus"
+              "plus",
+              "in addition"
             ],
             "isOptional": true
           },
@@ -2621,50 +2679,50 @@
             "text": "some",
             "category": "filler",
             "synonyms": [
+              "a few",
               "a bit of",
-              "a little",
               "some of"
             ],
             "isOptional": true
           },
           {
             "text": "Chemical Brothers",
-            "category": "artist",
+            "category": "query",
             "propertyNames": [
-              "parameters.artist"
+              "parameters.query"
             ]
           }
         ],
         "propertyAlternatives": [
           {
             "propertyName": "fullActionName",
-            "propertyValue": "player.playArtist",
+            "propertyValue": "player.searchTracks",
             "propertySubPhrases": [
               "queue up"
             ],
             "alternatives": [
               {
-                "propertyValue": "player.addToQueue",
+                "propertyValue": "player.playTracks",
                 "propertySubPhrases": [
-                  "add to queue"
+                  "play"
                 ]
               },
               {
-                "propertyValue": "player.playNext",
+                "propertyValue": "player.addToPlaylist",
                 "propertySubPhrases": [
-                  "play next"
+                  "add to playlist"
                 ]
               },
               {
-                "propertyValue": "player.shufflePlay",
+                "propertyValue": "player.shuffleTracks",
                 "propertySubPhrases": [
-                  "shuffle play"
+                  "shuffle"
                 ]
               }
             ]
           },
           {
-            "propertyName": "parameters.artist",
+            "propertyName": "parameters.query",
             "propertyValue": "Chemical Brothers",
             "propertySubPhrases": [
               "Chemical Brothers"
@@ -2692,7 +2750,12 @@
           }
         ],
         "politePrefixes": [],
-        "politeSuffixes": []
+        "politeSuffixes": [
+          "please.",
+          "if you don't mind.",
+          "thank you.",
+          "thanks!"
+        ]
       }
     },
     {
@@ -2735,7 +2798,7 @@
             "synonyms": [
               "could you please",
               "can you please",
-              "would you mind"
+              "would you kindly"
             ],
             "isOptional": true
           },
@@ -2780,12 +2843,6 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "player.playSong",
-                "propertySubPhrases": [
-                  "play a song"
-                ]
-              },
-              {
                 "propertyValue": "player.playAlbum",
                 "propertySubPhrases": [
                   "play an album"
@@ -2795,6 +2852,12 @@
                 "propertyValue": "player.playPlaylist",
                 "propertySubPhrases": [
                   "play a playlist"
+                ]
+              },
+              {
+                "propertyValue": "player.playSong",
+                "propertySubPhrases": [
+                  "play a song"
                 ]
               }
             ]
@@ -2809,7 +2872,7 @@
               {
                 "propertyValue": 1,
                 "propertySubPhrases": [
-                  "a single"
+                  "one"
                 ]
               },
               {
@@ -2840,22 +2903,27 @@
                 ]
               },
               {
-                "propertyValue": "Queen",
-                "propertySubPhrases": [
-                  "of Queen"
-                ]
-              },
-              {
                 "propertyValue": "Madonna",
                 "propertySubPhrases": [
                   "of Madonna"
+                ]
+              },
+              {
+                "propertyValue": "Queen",
+                "propertySubPhrases": [
+                  "of Queen"
                 ]
               }
             ]
           }
         ],
         "politePrefixes": [],
-        "politeSuffixes": []
+        "politeSuffixes": [
+          "if you don't mind.",
+          "thank you.",
+          "if it's not too much trouble.",
+          "I would appreciate it."
+        ]
       }
     },
     {
@@ -2874,7 +2942,9 @@
           {
             "name": "fullActionName",
             "value": "player.playAlbum",
-            "isImplicit": true
+            "substrings": [
+              "play"
+            ]
           },
           {
             "name": "parameters.albumName",
@@ -2893,23 +2963,35 @@
         ],
         "subPhrases": [
           {
-            "text": "would you please",
+            "text": "would you",
             "category": "politeness",
             "synonyms": [
-              "could you please",
-              "can you please",
-              "would you mind"
+              "could you",
+              "can you",
+              "will you"
+            ],
+            "isOptional": true
+          },
+          {
+            "text": "please",
+            "category": "politeness",
+            "synonyms": [
+              "kindly",
+              "if you don't mind",
+              "if you could"
             ],
             "isOptional": true
           },
           {
             "text": "play",
             "category": "action",
-            "propertyNames": []
+            "propertyNames": [
+              "fullActionName"
+            ]
           },
           {
             "text": "Aja",
-            "category": "albumName",
+            "category": "album",
             "propertyNames": [
               "parameters.albumName"
             ]
@@ -2920,7 +3002,7 @@
             "synonyms": [
               "from",
               "performed by",
-              "sung by"
+              "created by"
             ],
             "isOptional": true
           },
@@ -2933,6 +3015,33 @@
           }
         ],
         "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.playAlbum",
+            "propertySubPhrases": [
+              "play"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.pauseAlbum",
+                "propertySubPhrases": [
+                  "pause"
+                ]
+              },
+              {
+                "propertyValue": "player.stopAlbum",
+                "propertySubPhrases": [
+                  "stop"
+                ]
+              },
+              {
+                "propertyValue": "player.resumeAlbum",
+                "propertySubPhrases": [
+                  "resume"
+                ]
+              }
+            ]
+          },
           {
             "propertyName": "parameters.albumName",
             "propertyValue": "Aja",
@@ -2974,96 +3083,28 @@
                 ]
               },
               {
-                "propertyValue": "Fleetwood Mac",
-                "propertySubPhrases": [
-                  "Fleetwood Mac"
-                ]
-              },
-              {
                 "propertyValue": "Pink Floyd",
                 "propertySubPhrases": [
                   "Pink Floyd"
+                ]
+              },
+              {
+                "propertyValue": "Led Zeppelin",
+                "propertySubPhrases": [
+                  "Led Zeppelin"
                 ]
               }
             ]
           }
         ],
         "politePrefixes": [],
-        "politeSuffixes": []
-      },
-      "corrections": [
-        {
-          "data": {
-            "properties": [
-              {
-                "name": "fullActionName",
-                "value": "player.playAlbum",
-                "isImplicit": true
-              },
-              {
-                "name": "parameters.albumName",
-                "value": "Aja",
-                "substrings": [
-                  "Aja"
-                ]
-              },
-              {
-                "name": "parameters.artists.0",
-                "value": "Steely Dan",
-                "substrings": [
-                  "Steely Dan"
-                ]
-              }
-            ],
-            "subPhrases": [
-              {
-                "text": "would you please",
-                "category": "politeness",
-                "synonyms": [
-                  "could you please",
-                  "can you please",
-                  "would you mind"
-                ],
-                "isOptional": true
-              },
-              {
-                "text": "play",
-                "category": "action",
-                "propertyNames": [
-                  "fullActionName"
-                ]
-              },
-              {
-                "text": "Aja",
-                "category": "albumName",
-                "propertyNames": [
-                  "parameters.albumName"
-                ]
-              },
-              {
-                "text": "by",
-                "category": "preposition",
-                "synonyms": [
-                  "from",
-                  "performed by",
-                  "sung by"
-                ],
-                "isOptional": true
-              },
-              {
-                "text": "Steely Dan",
-                "category": "artist",
-                "propertyNames": [
-                  "parameters.artists.0"
-                ]
-              }
-            ]
-          },
-          "correction": [
-            "Property 'fullActionName' is expected to be implicit and should not be included as a property name in a sub-phrase"
-          ]
-        }
-      ]
+        "politeSuffixes": [
+          "if you don't mind.",
+          "thank you.",
+          "when you have a moment.",
+          "please."
+        ]
+      }
     },
     {
       "request": "would you please play Graceland by Paul Simon",
@@ -3102,12 +3143,22 @@
         ],
         "subPhrases": [
           {
-            "text": "would you please",
+            "text": "would you",
             "category": "politeness",
             "synonyms": [
-              "could you please",
-              "can you please",
-              "would you mind"
+              "could you",
+              "can you",
+              "will you"
+            ],
+            "isOptional": true
+          },
+          {
+            "text": "please",
+            "category": "politeness",
+            "synonyms": [
+              "kindly",
+              "if you don't mind",
+              "if you could"
             ],
             "isOptional": true
           },
@@ -3164,9 +3215,9 @@
                 ]
               },
               {
-                "propertyValue": "player.resumeTrack",
+                "propertyValue": "player.skipTrack",
                 "propertySubPhrases": [
-                  "resume"
+                  "skip"
                 ]
               }
             ]
@@ -3206,15 +3257,15 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "Simon & Garfunkel",
-                "propertySubPhrases": [
-                  "Simon & Garfunkel"
-                ]
-              },
-              {
                 "propertyValue": "Art Garfunkel",
                 "propertySubPhrases": [
                   "Art Garfunkel"
+                ]
+              },
+              {
+                "propertyValue": "Simon & Garfunkel",
+                "propertySubPhrases": [
+                  "Simon & Garfunkel"
                 ]
               },
               {
@@ -3226,8 +3277,18 @@
             ]
           }
         ],
-        "politePrefixes": [],
-        "politeSuffixes": []
+        "politePrefixes": [
+          "Could you kindly",
+          "If you don't mind,",
+          "Would it be possible to",
+          "May I request that you"
+        ],
+        "politeSuffixes": [
+          "Thank you.",
+          "I would appreciate it.",
+          "If that's alright.",
+          "Thanks in advance."
+        ]
       }
     },
     {
@@ -3257,12 +3318,22 @@
         ],
         "subPhrases": [
           {
-            "text": "would you please",
+            "text": "would you",
             "category": "politeness",
             "synonyms": [
-              "could you please",
-              "can you please",
-              "would you mind"
+              "could you",
+              "can you",
+              "will you"
+            ],
+            "isOptional": true
+          },
+          {
+            "text": "please",
+            "category": "politeness",
+            "synonyms": [
+              "kindly",
+              "if you don't mind",
+              "if you could"
             ],
             "isOptional": true
           },
@@ -3277,9 +3348,9 @@
             "text": "some",
             "category": "filler",
             "synonyms": [
+              "any",
               "a bit of",
-              "a little",
-              "any"
+              "a little"
             ],
             "isOptional": true
           },
@@ -3302,19 +3373,19 @@
               {
                 "propertyValue": "player.playSong",
                 "propertySubPhrases": [
-                  "play a song"
+                  "play a song by"
                 ]
               },
               {
                 "propertyValue": "player.playAlbum",
                 "propertySubPhrases": [
-                  "play an album"
+                  "play an album by"
                 ]
               },
               {
                 "propertyValue": "player.playPlaylist",
                 "propertySubPhrases": [
-                  "play a playlist"
+                  "play a playlist by"
                 ]
               }
             ]
@@ -3333,30 +3404,35 @@
                 ]
               },
               {
-                "propertyValue": "Queen",
-                "propertySubPhrases": [
-                  "Queen"
-                ]
-              },
-              {
                 "propertyValue": "Madonna",
                 "propertySubPhrases": [
                   "Madonna"
+                ]
+              },
+              {
+                "propertyValue": "Michael Jackson",
+                "propertySubPhrases": [
+                  "Michael Jackson"
                 ]
               }
             ]
           }
         ],
         "politePrefixes": [],
-        "politeSuffixes": []
+        "politeSuffixes": [
+          "if you don't mind.",
+          "thank you.",
+          "please.",
+          "if it's not too much trouble."
+        ]
       }
     },
     {
       "request": "yo, play some Metallica And Justice for All",
       "action": {
-        "fullActionName": "player.playAlbum",
+        "fullActionName": "player.playTrack",
         "parameters": {
-          "albumName": "And Justice for All",
+          "trackName": "And Justice for All",
           "artists": [
             "Metallica"
           ]
@@ -3366,11 +3442,11 @@
         "properties": [
           {
             "name": "fullActionName",
-            "value": "player.playAlbum",
+            "value": "player.playTrack",
             "isImplicit": true
           },
           {
-            "name": "parameters.albumName",
+            "name": "parameters.trackName",
             "value": "And Justice for All",
             "substrings": [
               "And Justice for All"
@@ -3390,8 +3466,8 @@
             "category": "greeting",
             "synonyms": [
               "hi",
-              "hey",
-              "hello"
+              "hello",
+              "hey"
             ],
             "isOptional": true
           },
@@ -3419,9 +3495,9 @@
           },
           {
             "text": "And Justice for All",
-            "category": "album",
+            "category": "track",
             "propertyNames": [
-              "parameters.albumName"
+              "parameters.trackName"
             ]
           }
         ],
@@ -3434,48 +3510,48 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "Nirvana",
+                "propertyValue": "Iron Maiden",
                 "propertySubPhrases": [
-                  "Nirvana"
+                  "Iron Maiden"
                 ]
               },
               {
-                "propertyValue": "AC/DC",
+                "propertyValue": "Megadeth",
                 "propertySubPhrases": [
-                  "AC/DC"
+                  "Megadeth"
                 ]
               },
               {
-                "propertyValue": "Led Zeppelin",
+                "propertyValue": "Slayer",
                 "propertySubPhrases": [
-                  "Led Zeppelin"
+                  "Slayer"
                 ]
               }
             ]
           },
           {
-            "propertyName": "parameters.albumName",
+            "propertyName": "parameters.trackName",
             "propertyValue": "And Justice for All",
             "propertySubPhrases": [
               "And Justice for All"
             ],
             "alternatives": [
               {
-                "propertyValue": "Nevermind",
+                "propertyValue": "Master of Puppets",
                 "propertySubPhrases": [
-                  "Nevermind"
+                  "Master of Puppets"
                 ]
               },
               {
-                "propertyValue": "Back in Black",
+                "propertyValue": "Enter Sandman",
                 "propertySubPhrases": [
-                  "Back in Black"
+                  "Enter Sandman"
                 ]
               },
               {
-                "propertyValue": "Led Zeppelin IV",
+                "propertyValue": "One",
                 "propertySubPhrases": [
-                  "Led Zeppelin IV"
+                  "One"
                 ]
               }
             ]
@@ -3483,11 +3559,15 @@
         ],
         "politePrefixes": [
           "Could you please",
-          "Would you mind"
+          "Would you mind",
+          "If you don't mind",
+          "Please"
         ],
         "politeSuffixes": [
-          "Thank you",
-          "Thanks a lot"
+          "thank you",
+          "please",
+          "if that's okay",
+          "thanks"
         ]
       },
       "corrections": [
@@ -3496,11 +3576,11 @@
             "properties": [
               {
                 "name": "fullActionName",
-                "value": "player.playAlbum",
+                "value": "player.playTrack",
                 "isImplicit": true
               },
               {
-                "name": "parameters.albumName",
+                "name": "parameters.trackName",
                 "value": "And Justice for All",
                 "substrings": [
                   "And Justice for All"
@@ -3520,8 +3600,8 @@
                 "category": "greeting",
                 "synonyms": [
                   "hi",
-                  "hey",
-                  "hello"
+                  "hello",
+                  "hey"
                 ],
                 "isOptional": true
               },
@@ -3551,9 +3631,9 @@
               },
               {
                 "text": "And Justice for All",
-                "category": "album",
+                "category": "track",
                 "propertyNames": [
-                  "parameters.albumName"
+                  "parameters.trackName"
                 ]
               }
             ]
@@ -3604,9 +3684,11 @@
             "text": "yo, yo",
             "category": "greeting",
             "synonyms": [
-              "hey",
               "hi",
-              "hello"
+              "hello",
+              "hey",
+              "hi there",
+              "hey there"
             ],
             "isOptional": true
           },
@@ -3695,21 +3777,21 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "Abbey Road",
+                "propertyValue": "In Utero",
                 "propertySubPhrases": [
-                  "on Abbey Road"
+                  "on In Utero"
                 ]
               },
               {
-                "propertyValue": "The Wall",
+                "propertyValue": "Bleach",
                 "propertySubPhrases": [
-                  "on The Wall"
+                  "on Bleach"
                 ]
               },
               {
-                "propertyValue": "Thriller",
+                "propertyValue": "MTV Unplugged in New York",
                 "propertySubPhrases": [
-                  "on Thriller"
+                  "on MTV Unplugged in New York"
                 ]
               }
             ]
@@ -3717,11 +3799,15 @@
         ],
         "politePrefixes": [
           "Could you please",
-          "Would you mind"
+          "Would you mind",
+          "If you don't mind",
+          "Please"
         ],
         "politeSuffixes": [
-          "Thank you!",
-          "I would appreciate it."
+          "for me?",
+          "if that's okay?",
+          "please?",
+          "thanks!"
         ]
       }
     },
@@ -3738,7 +3824,9 @@
           {
             "name": "fullActionName",
             "value": "player.playArtist",
-            "isImplicit": true
+            "substrings": [
+              "spin me some"
+            ]
           },
           {
             "name": "parameters.artist",
@@ -3755,14 +3843,17 @@
             "synonyms": [
               "hey",
               "hi",
-              "hello"
+              "hello",
+              "what's up"
             ],
             "isOptional": true
           },
           {
             "text": "spin me some",
             "category": "command",
-            "propertyNames": []
+            "propertyNames": [
+              "fullActionName"
+            ]
           },
           {
             "text": "Snoop Dogg",
@@ -3776,13 +3867,41 @@
             "category": "filler",
             "synonyms": [
               "you get me?",
+              "you understand?",
               "you feel me?",
-              "you understand?"
+              "you know?"
             ],
             "isOptional": true
           }
         ],
         "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.playArtist",
+            "propertySubPhrases": [
+              "spin me some"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.playAlbum",
+                "propertySubPhrases": [
+                  "play me the album"
+                ]
+              },
+              {
+                "propertyValue": "player.playSong",
+                "propertySubPhrases": [
+                  "play me the song"
+                ]
+              },
+              {
+                "propertyValue": "player.playPlaylist",
+                "propertySubPhrases": [
+                  "play me the playlist"
+                ]
+              }
+            ]
+          },
           {
             "propertyName": "parameters.artist",
             "propertyValue": "Snoop Dogg",
@@ -3803,76 +3922,27 @@
                 ]
               },
               {
-                "propertyValue": "Kendrick Lamar",
+                "propertyValue": "Ice Cube",
                 "propertySubPhrases": [
-                  "Kendrick Lamar"
+                  "Ice Cube"
                 ]
               }
             ]
           }
         ],
-        "politePrefixes": [],
-        "politeSuffixes": []
-      },
-      "corrections": [
-        {
-          "data": {
-            "properties": [
-              {
-                "name": "fullActionName",
-                "value": "player.playArtist",
-                "isImplicit": true
-              },
-              {
-                "name": "parameters.artist",
-                "value": "Snoop Dogg",
-                "substrings": [
-                  "Snoop Dogg"
-                ]
-              }
-            ],
-            "subPhrases": [
-              {
-                "text": "yo, yo,",
-                "category": "greeting",
-                "synonyms": [
-                  "hey",
-                  "hi",
-                  "hello"
-                ],
-                "isOptional": true
-              },
-              {
-                "text": "spin me some",
-                "category": "command",
-                "propertyNames": [
-                  "fullActionName"
-                ]
-              },
-              {
-                "text": "Snoop Dogg",
-                "category": "artist",
-                "propertyNames": [
-                  "parameters.artist"
-                ]
-              },
-              {
-                "text": "you know what I am sayin?",
-                "category": "filler",
-                "synonyms": [
-                  "you get me?",
-                  "you feel me?",
-                  "you understand?"
-                ],
-                "isOptional": true
-              }
-            ]
-          },
-          "correction": [
-            "Property 'fullActionName' is expected to be implicit and should not be included as a property name in a sub-phrase"
-          ]
-        }
-      ]
+        "politePrefixes": [
+          "Could you please",
+          "Would you mind",
+          "If you don't mind",
+          "I would appreciate it if you could"
+        ],
+        "politeSuffixes": [
+          "thank you",
+          "please",
+          "if that's okay",
+          "if you could"
+        ]
+      }
     }
   ]
 }
