@@ -52,5 +52,10 @@ export async function getTestDataFiles(
     const testDataFilePaths = extended
         ? testDataFiles
         : testDataFiles.slice(0, 1);
-    return glob(testDataFilePaths.map((f) => getPackageFilePath(f)));
+    return glob(
+        testDataFilePaths.map((f) => getPackageFilePath(f)),
+        {
+            windowsPathsNoEscape: true,
+        },
+    );
 }
