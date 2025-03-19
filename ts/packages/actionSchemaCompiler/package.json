@@ -26,16 +26,6 @@
     "prettier:fix": "prettier --write . --ignore-path ../../prettierignore",
     "tsc": "tsc -b"
   },
-  "dependencies": {
-    "@oclif/core": "^4",
-    "@oclif/plugin-help": "^5",
-    "action-schema": "workspace:*"
-  },
-  "devDependencies": {
-    "@types/node": "^18.18.7",
-    "rimraf": "^5.0.5",
-    "typescript": "^5.4.2"
-  },
   "oclif": {
     "bin": "asc",
     "commands": {
@@ -46,5 +36,15 @@
     "plugins": [
       "@oclif/plugin-help"
     ]
+  },
+  "dependencies": {
+    "@oclif/core": "^4",
+    "@oclif/plugin-help": "^5",
+    "action-schema": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^18.18.7",
+    "rimraf": "^5.0.5",
+    "typescript": "^5.4.2"
   }
 }
