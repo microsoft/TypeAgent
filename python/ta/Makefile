@@ -33,6 +33,7 @@ venv:
 .PHONY: clean
 clean:
 	rm -rf build dist venv *.egg-info
+	find . -type d -name __pycache__ | xargs rm -rf
 
 .PHONY: help
 help:
