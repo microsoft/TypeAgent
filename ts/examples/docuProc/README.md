@@ -1,6 +1,6 @@
-## Chat test app
+## document-processor test app
 
-This sample app is used to interactively test the document processor.
+This sample app is used to interactively test the processing of pdf files and querying the documents using structured schema. You can use it to download pdf files from arxiv and process them.
 
 ## Trademarks
 
