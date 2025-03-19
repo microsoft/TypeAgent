@@ -292,9 +292,7 @@ class ScoredThreadOrdinal:
 
 @runtime_checkable
 class IConversationThreads(Protocol):
-    @property
-    def threads(self) -> Sequence[Thread]:
-        raise NotImplementedError
+    threads: list[Thread]
 
     async def add_thread(self, thread: Thread) -> None:
         raise NotImplementedError
