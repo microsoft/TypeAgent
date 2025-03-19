@@ -2,14 +2,13 @@
 # Licensed under the MIT License.
 
 from dataclasses import dataclass, field
-from datetime import datetime as Datetime, timedelta as Timedelta
 import os
 import re
 from typing import cast, Sequence
 
 from ..knowpro.importing import ConversationSettings, create_conversation_settings
-
 from ..knowpro import convindex, interfaces, kplib
+from ..knowpro.interfaces import Datetime, Timedelta
 
 
 @dataclass

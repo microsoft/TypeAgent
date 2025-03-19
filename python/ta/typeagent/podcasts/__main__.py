@@ -4,20 +4,24 @@
 
 import sys
 
+# Check Python version before importing anything else
 minver = (3, 12)
-assert sys.version_info >= minver, f"Needs Python {minver[0]}.{minver[1]}+"
+if sys.version_info < minver:
+    sys.exit(f"Error: Python {minver[0]}.{minver[1]}+ required")
 del minver
 
 import argparse
-from datetime import datetime as Datetime
 import os
-import sys
-from typing import cast
 
 import dotenv
 
 from ..knowpro.convindex import ConversationIndex
-from ..knowpro.interfaces import IndexingEventHandlers, TextLocation
+from ..knowpro.interfaces import (
+    Datetime,
+    IndexingEventHandlers,
+    MessageOrdinal,
+    TextLocation,
+)
 from .import_podcasts import import_podcast
 
 
@@ -54,10 +58,15 @@ async def main():
         print("Text indexed:", text_and_locations)
         return True
 
+    def on_message_started(message_order: MessageOrdinal) -> bool:
+        print("\nMESSAGE STARTED:", message_order)
+        return True
+
     handler = IndexingEventHandlers(
         on_knowledge_extracted,
         on_embeddings_created,
         on_text_indexed,
+        on_message_started,
     )
     indexing_result = await pod.build_index(handler)
     print(indexing_result)
