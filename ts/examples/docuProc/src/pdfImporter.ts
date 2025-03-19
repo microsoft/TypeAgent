@@ -247,31 +247,31 @@ async function embedChunk(
     verbose = false,
 ): Promise<void> {
     const t0 = Date.now();
-    /*const lineCount = chunk.blobs.reduce((acc, blob) => {
+    const lineCount = chunk.blobs.reduce((acc, blob) => {
         if (!blob.content) return acc;
-    
-        const countLines = (text: string) => 
+
+        const countLines = (text: string) =>
             text.split(/[\n.!?]+/).filter(Boolean).length;
-    
+
         if (Array.isArray(blob.content)) {
-            return acc + blob.content.reduce((sum, text) => sum + countLines(text), 0);
+            return (
+                acc +
+                blob.content.reduce((sum, text) => sum + countLines(text), 0)
+            );
         }
-    
+
         return acc + countLines(blob.content);
     }, 0);
-    console.log("Approximate line count:", lineCount);*/
+    console.log(`Chunk#:(${chunk.id}) approximate line count: ${lineCount}`);
     await exponentialBackoff(io, chunkyIndex.chunkFolder.put, chunk, chunk.id);
 
     for (const indexName of IndexNames) {
         let data: string[] | undefined;
         if (indexName == "docinfos") {
-            if(chunk.chunkDoc !== undefined) {
-                data = [
-                    JSON.stringify(chunk.chunkDoc?.docinfo ?? {}, null, 2),
-                ];
+            if (chunk.chunkDoc !== undefined) {
+                data = [JSON.stringify(chunk.chunkDoc?.docinfo)];
             }
-        }
-        else if (indexName == "summaries") {
+        } else if (indexName == "summaries") {
             data = chunk.chunkDoc?.summary ? [chunk.chunkDoc.summary] : [];
         } else {
             const possibleData = (chunk.chunkDoc as any)?.[indexName];
@@ -298,7 +298,7 @@ async function embedChunk(
 export async function writeToIndex(
     io: iapp.InteractiveIo | undefined,
     chunkId: ChunkId,
-    phrases: string[] | undefined, // List of summaries, keywords, tags, etc. in chunk
+    phrases: string[] | undefined, // List of summaries, keywords, tags, docinfo, etc. in chunk
     index: knowLib.TextIndex<string, ChunkId>,
 ) {
     for (const phrase of phrases ?? []) {

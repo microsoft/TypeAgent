@@ -111,7 +111,7 @@ export async function interactiveDocQueryLoop(
         return translator;
     }
 
-    // Handle @download command.
+    // Handle @download command.// Handle @download command.
     function downloadDef(): iapp.CommandMetadata {
         return {
             description: "Download a PDF file with the query string.",
@@ -145,6 +145,7 @@ export async function interactiveDocQueryLoop(
         }
     }
 
+    // Handle @import command.
     function importDef(): iapp.CommandMetadata {
         return {
             description: "Import a single or multiple PDF files.",
@@ -199,6 +200,7 @@ export async function interactiveDocQueryLoop(
         );
     }
 
+    // Handle @clearMemory command.
     handlers.clearMemory.metadata = "Clear all memory (and all indexes)";
     async function clearMemory(
         args: string[],
@@ -213,6 +215,7 @@ export async function interactiveDocQueryLoop(
         // Actually the embeddings cache isn't. But we shouldn't have to care.
     }
 
+    // Handle @chunk command.
     handlers.chunk.metadata = "Print one or more chunks";
     async function chunk(
         args: string[],
@@ -223,7 +226,9 @@ export async function interactiveDocQueryLoop(
         for (const chunkId of splitArgs) {
             const chunk = await chunkyIndex.chunkFolder.get(chunkId);
             if (chunk) {
-                const chunkDocs = Array.isArray(chunk.chunkDoc) ? chunk.chunkDoc : [chunk.chunkDoc];
+                const chunkDocs = Array.isArray(chunk.chunkDoc)
+                    ? chunk.chunkDoc
+                    : [chunk.chunkDoc];
                 writeNote(io, `\nCHUNK ID: ${chunkId}`);
                 for (const chunkDoc of chunkDocs) {
                     for (const [name, _] of chunkyIndex.allIndexes()) {
@@ -261,6 +266,7 @@ export async function interactiveDocQueryLoop(
         }
     }
 
+    // Handle @search command.
     function searchDef(): iapp.CommandMetadata {
         return {
             description: "Search for a query string in the code index.",
@@ -338,6 +344,7 @@ export async function interactiveDocQueryLoop(
         };
     }
 
+    // Handle @summaries command.
     function summariesDef(): iapp.CommandMetadata {
         return {
             description: "Show all recorded summaries and their postings.",
@@ -352,6 +359,7 @@ export async function interactiveDocQueryLoop(
         await _reportIndex(args, io, "summaries");
     }
 
+    // Handle @keywords command.
     function keywordsDef(): iapp.CommandMetadata {
         return {
             description: "Show all recorded keywords and their postings.",
@@ -366,6 +374,7 @@ export async function interactiveDocQueryLoop(
         await _reportIndex(args, io, "keywords");
     }
 
+    // Handle @tags command.
     function tagsDef(): iapp.CommandMetadata {
         return {
             description: "Show all recorded tags and their postings.",
@@ -380,6 +389,7 @@ export async function interactiveDocQueryLoop(
         await _reportIndex(args, io, "tags");
     }
 
+    // Handle @synonyms command.
     function synonymsDef(): iapp.CommandMetadata {
         return {
             description: "Show all recorded synonyms and their postings.",
@@ -394,6 +404,7 @@ export async function interactiveDocQueryLoop(
         await _reportIndex(args, io, "synonyms");
     }
 
+    // Handle @files command.
     function filesDef(): iapp.CommandMetadata {
         return {
             description: "Show all recorded file names.",
@@ -440,6 +451,7 @@ export async function interactiveDocQueryLoop(
         }
     }
 
+    // Handle @purgeFile command.
     function purgeFileDef(): iapp.CommandMetadata {
         return {
             description: "Purge all mentions of a file.",
@@ -668,7 +680,6 @@ async function processQuery(
     queryOptions: QueryOptions,
 ): Promise<void> {
     // ** Step 0:** Find most recent answers.
-
     const recentAnswers: NameValue<AnswerSpecs>[] = await findRecentAnswers(
         input,
         chunkyIndex,
@@ -720,7 +731,6 @@ async function processQuery(
     if (!answer) return; // Error message already printed by generateAnswer.
 
     // **Step 4:** Print the answer. Also record it for posterity.
-
     await chunkyIndex.answerFolder.put(answer);
     reportQuery(hitsByIndex, chunkIdScores, answer, io, queryOptions.verbose);
 }
@@ -1039,11 +1049,11 @@ function makeQueryMakerPrompt(
     recentAnswers: NameValue<AnswerSpecs>[],
 ): PromptSection[] {
     const prompt = `
-I have a code project split up in chunks indexed on several categories.
+I have a one or more document(s) that have been split up into chunks indexed on several categories.
 Please produce suitable queries for each applicable index based on
 conversation history (especially if the query refers to a previous answer
 indirectly, e.g. via "it" or "that"), and the user question given later.
-Don't suggest "meta" queries about the conversation itself -- only the code is indexed.
+Don't suggest "meta" queries about the conversation itself -- only the document content is indexed.
 `;
     return makeAnyPrompt(recentAnswers, prompt);
 }
@@ -1090,7 +1100,24 @@ export function writeChunkLines(
 ): void {
     // TODO: limit how much we write per blob too (if there are multiple).
     writeMain(io, `\nCHUNK ID: ${chunk.id}`);
-    writeMain(io, `Content: ${chunk.blobs[0].content}`);
+    const formatContent = (content: string | string[]): string => {
+        if (Array.isArray(content)) {
+            return content
+                .map((sentence, index) =>
+                    sentence.trim().match(/[.!?;:]$/) ||
+                    index === content.length - 1
+                        ? sentence.trim()
+                        : sentence.trim() + ".",
+                )
+                .join(" ");
+        }
+        return content;
+    };
+
+    if (chunk.blobs[0].content) {
+        const content = formatContent(chunk.blobs[0].content);
+        writeMain(io, `Content: ${content}`);
+    }
 }
 
 export function wordWrap(text: string, wrapLength: number = 80): string {

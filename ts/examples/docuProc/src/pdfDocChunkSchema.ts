@@ -42,7 +42,7 @@ export interface PdfDocumentInfo {
     // The references can occur in a different chunk/page (only include if non-empty), e.g., "see [1]" or entire reference like "[1] Author1, Author2, Title, Journal, Paper link, Year"
     // The references are typically in the format "[1] Author1, Author2, Title, Journal, Paper link, Year"
     references?: PdfReference[];
-     // These are the links from the document (only include if non-empty), e.g., "https://doi.org/10.1000/xyz123"
+    // These are the links from the document (only include if non-empty), e.g., "https://doi.org/10.1000/xyz123"
     links?: string[]; // these are the links from the document
 }
 

@@ -216,7 +216,7 @@ Also document the root chunk which is for page. The root chunk doesn't have any 
                 const pageDoc = chunkDocs.find(
                     (doc) => doc.chunkid === pageRootChunk.id,
                 );
-                if(pageDoc !== undefined) {
+                if (pageDoc !== undefined) {
                     pageRootChunk.chunkDoc = pageDoc;
                 }
 
