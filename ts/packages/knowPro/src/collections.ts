@@ -151,7 +151,7 @@ export class MatchAccumulator<T = any> {
     }
 
     public calculateTotalScore(scorer?: (match: Match) => void): void {
-        scorer ??= addSmoothAvgRelatedScore;
+        scorer ??= addSmoothRelatedScoreToMatchScore;
         for (const match of this.getMatches()) {
             scorer(match);
         }
@@ -256,29 +256,24 @@ export class MatchAccumulator<T = any> {
     }
 }
 
-function addSmoothAvgRelatedScore(match: Match): void {
-    if (match.relatedHitCount > 0) {
-        const smoothRelatedScore = smoothAverageScore(
-            match.relatedScore,
-            match.relatedHitCount,
-        );
+/**
+    Return an score that also smoothens the impact of multiple matches
+    
+    1. If we just add up scores, a larger number of moderately related but noisy matches can overwhelm
+    a small # of very good matches merely by having a larger cumulative score...
+    
+    2. We also want diminishing returns for too many matches, which can also be indicative of noise...as the
+    they can indicate low entropy.. prevents runaway scores
 
-        match.score += smoothRelatedScore;
-    }
-}
-
-function smoothTotalScore(match: Match): void {
-    if (match.hitCount > 0) {
-        match.score = smoothAverageScore(match.score, match.hitCount);
-    }
-}
-
-// Return an average score that also smoothens the impact of multiple matches
-// If we just add up scores, a larger number of moderately related but noisy matches can overwhelm
-// a small # of very good matches merely by having a larger total score...
-// We also want diminishing returns for too many matches, which can also be indicative of noise...as the
-// they can indicate low entropy.. prevents runaway scores
-function smoothAverageScore(totalScore: number, hitCount: number): number {
+    We currently adopt a simple but effective approach to smooth scores. 
+    We address (1) by taking an average: this gives a cheap way of measuring the effectiveness of each hit
+    We address (2) by using a log function to get a smooth hitCount.
+    Then we return the average multiplied by the smooth hitCount, giving us a smoother growing score
+    
+    This is by no means perfect. MatchAccumulator.calculateTotalScore allows you to pass in a smoothing function.
+    As the need arises, we can make that available to code at higher layers. 
+ */
+function getSmoothScore(totalScore: number, hitCount: number): number {
     if (hitCount > 0) {
         if (hitCount === 1) {
             return totalScore;
@@ -288,6 +283,23 @@ function smoothAverageScore(totalScore: number, hitCount: number): number {
         return smoothAvg;
     }
     return 0;
+}
+
+function addSmoothRelatedScoreToMatchScore(match: Match): void {
+    if (match.relatedHitCount > 0) {
+        const smoothRelatedScore = getSmoothScore(
+            match.relatedScore,
+            match.relatedHitCount,
+        );
+
+        match.score += smoothRelatedScore;
+    }
+}
+
+function smoothMatchScore(match: Match): void {
+    if (match.hitCount > 0) {
+        match.score = getSmoothScore(match.score, match.hitCount);
+    }
 }
 
 export type KnowledgePredicate<T extends Knowledge> = (knowledge: T) => boolean;
@@ -496,7 +508,7 @@ export class MessageAccumulator extends MatchAccumulator<MessageOrdinal> {
     public smoothScores() {
         // Normalize the score relative to # of hits.
         for (const match of this.getMatches()) {
-            smoothTotalScore(match);
+            smoothMatchScore(match);
         }
     }
 
