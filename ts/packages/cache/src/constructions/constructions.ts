@@ -80,12 +80,14 @@ export class Construction {
     public static create(
         parts: ConstructionPart[],
         transformNamespaces: Map<string, Transforms>,
+        emptyArrayParameters?: string[],
         implicitParameters?: ImplicitParameter[],
         implicitActionName?: string,
     ) {
         return new Construction(
             parts,
             transformNamespaces,
+            emptyArrayParameters,
             implicitParameters,
             implicitActionName,
             -1,
@@ -95,6 +97,7 @@ export class Construction {
     constructor(
         public readonly parts: ConstructionPart[],
         public readonly transformNamespaces: Map<string, Transforms>,
+        public readonly emptyArrayParameters: string[] | undefined,
         public readonly implicitParameters: ImplicitParameter[] | undefined,
         public readonly implicitActionName: string | undefined,
         public readonly id: number, // runtime Id
@@ -120,7 +123,10 @@ export class Construction {
             return [];
         }
         this.collectImplicitProperties(matchedValues.values);
-        const actionProps = createActionProps(matchedValues.values);
+        const actionProps = createActionProps(
+            matchedValues.values,
+            this.emptyArrayParameters,
+        );
         return [
             {
                 construction: this,
@@ -263,6 +269,7 @@ export class Construction {
                 );
             }),
             transformNamespaces,
+            construction.emptyArrayParameters,
             construction.implicitParameters,
             construction.implicitActionName,
             index,
@@ -289,6 +296,7 @@ function isParsePartJSON(part: ConstructionPartJSON): part is ParsePartJSON {
 
 export type ConstructionJSON = {
     parts: ConstructionPartJSON[];
+    emptyArrayParameters?: string[];
     implicitParameters?: ImplicitParameter[];
     implicitActionName?: string;
 };

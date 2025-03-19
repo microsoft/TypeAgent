@@ -35,7 +35,6 @@ import {
     createIndexingEventHandler,
     matchFilterToConversation,
 } from "./knowproCommon.js";
-import { TypeChatJsonTranslator } from "typechat";
 
 export type KnowProContext = {
     knowledgeModel: ChatModel;
@@ -45,7 +44,7 @@ export type KnowProContext = {
     podcast?: cm.Podcast | undefined;
     images?: im.ImageCollection | undefined;
     conversation?: kp.IConversation | undefined;
-    searchTranslator: TypeChatJsonTranslator<kp.SearchFilter>;
+    searchTranslator: kp.SearchQueryTranslator;
 };
 
 export async function createKnowproCommands(
@@ -59,7 +58,7 @@ export async function createKnowproCommands(
             knowLib.conversation.createKnowledgeActionTranslator(
                 knowledgeModel,
             ),
-        searchTranslator: kp.createSearchTranslator(knowledgeModel),
+        searchTranslator: kp.createSearchQueryTranslator(knowledgeModel),
         basePath: "/data/testChat/knowpro",
         printer: new KnowProPrinter(),
     };
@@ -520,6 +519,12 @@ export async function createKnowproCommands(
         def.options ??= {};
         def.options.showKnowledge = argBool("Show knowledge matches", true);
         def.options.showMessages = argBool("Show message matches", false);
+        def.options.knowledgeTopK = argNum(
+            "How many top K knowledge matches",
+            25,
+        );
+        def.options.messageTopK = argNum("How many top K message matches", 25);
+        def.options.charBudget = argNum("Maximum characters in budget", 8192);
         return def;
     }
     commands.kpSearch.metadata = searchDefNew();
@@ -528,42 +533,59 @@ export async function createKnowproCommands(
             return;
         }
         const namedArgs = parseNamedArguments(args, searchDefNew());
-        const query = namedArgs.query;
-        const result = await kp.searchConversationWithNaturalLanguage(
+        const textQuery = namedArgs.query;
+        const result = await kp.textQueryToSearchQueryExpr(
             context.conversation!,
             context.searchTranslator,
-            query,
-            namedArgs.ktype,
-            {
-                exactMatch: namedArgs.exact,
-            },
+            textQuery,
         );
         if (!result.success) {
             context.printer.writeError(result.message);
             return;
         }
-        const [searchResults, filter] = result.data;
-        if (filter) {
-            context.printer.writeJson(filter, true);
-        }
-        if (searchResults && searchResults.messageMatches.length > 0) {
-            if (namedArgs.showKnowledge) {
-                context.printer.writeKnowledgeSearchResults(
+        const [searchQueryExpr, searchQuery] = result.data;
+        context.printer.writeJson(searchQuery, true);
+        for (const queryExpr of searchQueryExpr) {
+            for (const selectExpr of queryExpr.selectExpressions) {
+                if (namedArgs.ktype) {
+                    selectExpr.when ??= {};
+                    selectExpr.when.knowledgeType = namedArgs.ktype;
+                }
+                const searchResults = await kp.searchConversation(
                     context.conversation!,
-                    searchResults.knowledgeMatches,
-                    namedArgs.maxToDisplay,
-                    namedArgs.distinct,
+                    selectExpr.searchTermGroup,
+                    selectExpr.when,
+                    {
+                        exactMatch: namedArgs.exact,
+                        maxKnowledgeMatches: namedArgs.knowledgeTopK,
+                        maxMessageMatches: namedArgs.messageTopK,
+                        maxMessageCharsInBudget: namedArgs.charBudget,
+                    },
+                    queryExpr.rawQuery,
                 );
+                context.printer.writeLine("####");
+                context.printer.writeInColor(chalk.cyan, queryExpr.rawQuery!);
+                context.printer.writeLine("####");
+                if (searchResults && searchResults.messageMatches.length > 0) {
+                    if (namedArgs.showKnowledge) {
+                        context.printer.writeKnowledgeSearchResults(
+                            context.conversation!,
+                            searchResults.knowledgeMatches,
+                            namedArgs.maxToDisplay,
+                            namedArgs.distinct,
+                        );
+                    }
+                    if (namedArgs.showMessages) {
+                        context.printer.writeScoredMessages(
+                            searchResults.messageMatches,
+                            context.conversation!.messages,
+                            namedArgs.maxToDisplay,
+                        );
+                    }
+                } else {
+                    context.printer.writeLine("No matches");
+                }
             }
-            if (namedArgs.showMessages) {
-                context.printer.writeScoredMessages(
-                    searchResults.messageMatches,
-                    context.conversation!.messages,
-                    namedArgs.maxToDisplay,
-                );
-            }
-        } else {
-            context.printer.writeLine("No matches");
         }
     }
 

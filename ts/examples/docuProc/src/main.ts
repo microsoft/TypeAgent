@@ -65,7 +65,6 @@ async function main(): Promise<void> {
 
 function parseCommandLine(): string[] {
     let files: string[];
-    // TODO: Use a proper command-line parser?
     if (process.argv.length > 2) {
         files = process.argv.slice(2);
         if (files.length === 1 && files[0] === "-") {

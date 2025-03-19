@@ -4,6 +4,7 @@
 import { collections, createTopNList } from "typeagent";
 import {
     IMessage,
+    IReadonlyCollection,
     Knowledge,
     KnowledgeType,
     MessageOrdinal,
@@ -252,21 +253,36 @@ export class MatchAccumulator<T = any> {
 
 function addSmoothAvgRelatedScore(match: Match): void {
     if (match.relatedHitCount > 0) {
-        // Smooth the impact of multiple related term matches
-        // If we just add up scores, a larger number of moderately related
-        // but noisy matches can overwhelm a small # of highly related matches... etc
-        const normalizedAvgRelatedScore =
-            match.relatedScore / Math.log(match.relatedHitCount + 1);
+        const smoothRelatedScore = smoothAverageScore(
+            match.relatedScore,
+            match.relatedHitCount,
+        );
 
-        match.score += normalizedAvgRelatedScore;
+        match.score += smoothRelatedScore;
     }
 }
 
 function smoothTotalScore(match: Match): void {
     if (match.hitCount > 0) {
-        const normalizedScore = match.score / Math.log(match.hitCount + 1);
-        match.score = normalizedScore;
+        match.score = smoothAverageScore(match.score, match.hitCount);
     }
+}
+
+// Return an average score that also smoothens the impact of multiple matches
+// If we just add up scores, a larger number of moderately related but noisy matches can overwhelm
+// a small # of very good matches merely by having a larger total score...
+// We also want diminishing returns for too many matches, which can also be indicative of noise...as the
+// they can indicate low entropy.. prevents runaway scores
+function smoothAverageScore(totalScore: number, hitCount: number): number {
+    if (hitCount > 0) {
+        if (hitCount === 1) {
+            return totalScore;
+        }
+        const avg = totalScore / hitCount;
+        const smoothAvg = Math.log(hitCount + 1) * avg;
+        return smoothAvg;
+    }
+    return 0;
 }
 
 export type KnowledgePredicate<T extends Knowledge> = (knowledge: T) => boolean;
@@ -693,7 +709,7 @@ export class PropertyTermSet {
         }
     }
 
-    public has(propertyName: string, propertyValue: Term): boolean {
+    public has(propertyName: string, propertyValue: Term | string): boolean {
         const key = this.makeKey(propertyName, propertyValue);
         return this.terms.has(key);
     }
@@ -702,8 +718,17 @@ export class PropertyTermSet {
         this.terms.clear();
     }
 
-    private makeKey(propertyName: string, propertyValue: Term): string {
-        return propertyName + ":" + propertyValue.text;
+    private makeKey(
+        propertyName: string,
+        propertyValue: Term | string,
+    ): string {
+        return (
+            propertyName +
+            ":" +
+            (typeof propertyValue === "string"
+                ? propertyValue
+                : propertyValue.text)
+        );
     }
 }
 
@@ -751,3 +776,57 @@ function* union<T>(
         yield value;
     }
 }
+
+export interface ICollection<T, TOrdinal>
+    extends IReadonlyCollection<T, TOrdinal> {
+    push(...items: T[]): void;
+}
+
+export class Collection<T, TOrdinal extends number>
+    implements ICollection<T, TOrdinal>
+{
+    protected items: T[];
+
+    constructor(items?: T[] | undefined) {
+        this.items = items ?? [];
+    }
+
+    public get length(): number {
+        return this.items.length;
+    }
+
+    public get(ordinal: TOrdinal): T | undefined {
+        return this.items[ordinal];
+    }
+
+    public getMultiple(ordinals: TOrdinal[]): (T | undefined)[] {
+        const items = new Array<T | undefined>(ordinals.length);
+        for (let i = 0; i < ordinals.length; ++i) {
+            items[i] = this.get(ordinals[i]);
+        }
+        return items;
+    }
+
+    public getAll(): T[] {
+        return this.items;
+    }
+
+    public push(...items: T[]): void {
+        for (const item of items) {
+            this.items.push(item);
+        }
+    }
+
+    public *[Symbol.iterator](): Iterator<T, any, any> {
+        return this.items[Symbol.iterator]();
+    }
+}
+
+export class MessageCollection<
+    TMessage extends IMessage = IMessage,
+> extends Collection<TMessage, MessageOrdinal> {}
+
+export class SemanticRefCollection extends Collection<
+    SemanticRef,
+    SemanticRefOrdinal
+> {}

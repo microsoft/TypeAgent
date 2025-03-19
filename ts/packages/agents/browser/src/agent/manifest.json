@@ -35,7 +35,7 @@
         "schemaType": "InstacartActions"
       }
     },
-    "schemaFinder": {
+    "actionDiscovery": {
       "defaultEnabled": false,
       "transient": true,
       "schema": {

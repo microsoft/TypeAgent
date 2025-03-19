@@ -226,9 +226,7 @@ export async function interactiveDocQueryLoop(
         for (const chunkId of splitArgs) {
             const chunk = await chunkyIndex.chunkFolder.get(chunkId);
             if (chunk) {
-                const chunkDocs = Array.isArray(chunk.chunkDoc)
-                    ? chunk.chunkDoc
-                    : [chunk.chunkDoc];
+                const chunkDocs = Array.isArray(chunk.chunkDoc) ? chunk.chunkDoc : [chunk.chunkDoc];
                 writeNote(io, `\nCHUNK ID: ${chunkId}`);
                 for (const chunkDoc of chunkDocs) {
                     for (const [name, _] of chunkyIndex.allIndexes()) {
@@ -899,7 +897,6 @@ async function generateAnswer(
     );
 
     writeNote(io, `\n[Overall ${scoredChunkIds.length} unique chunk ids]`);
-
     scoredChunkIds.sort((a, b) => b.score - a.score);
 
     // Step 3b: Get the chunks themselves.
@@ -1103,18 +1100,17 @@ export function writeChunkLines(
     const formatContent = (content: string | string[]): string => {
         if (Array.isArray(content)) {
             return content
-                .map((sentence, index) =>
-                    sentence.trim().match(/[.!?;:]$/) ||
-                    index === content.length - 1
-                        ? sentence.trim()
-                        : sentence.trim() + ".",
+                .map((sentence, index) => 
+                    sentence.trim().match(/[.!?;:]$/) || index === content.length - 1 
+                        ? sentence.trim() 
+                        : sentence.trim() + "."
                 )
                 .join(" ");
         }
         return content;
     };
-
-    if (chunk.blobs[0].content) {
+    
+    if(chunk.blobs[0].content) {
         const content = formatContent(chunk.blobs[0].content);
         writeMain(io, `Content: ${content}`);
     }

@@ -199,6 +199,7 @@ export class ConstructionCache {
         const newConstruction = new Construction(
             mergedParts,
             this.transformNamespaces,
+            construction.emptyArrayParameters,
             construction.implicitParameters,
             construction.implicitActionName,
             constructionNamespace.maxId++,

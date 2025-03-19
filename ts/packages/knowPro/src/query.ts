@@ -1147,14 +1147,17 @@ export class RankMessagesBySimilarity extends QueryOpExpr<MessageAccumulator> {
     constructor(
         public srcExpr: IQueryOpExpr<MessageAccumulator>,
         public embedding: NormalizedEmbedding,
-        public maxMessages: number,
+        /**
+         * (Optional): Only select top maxMessages with best rank
+         */
+        public maxMessages?: number | undefined,
     ) {
         super();
     }
 
     public override eval(context: QueryEvalContext): MessageAccumulator {
         const matches = this.srcExpr.eval(context);
-        if (matches.size <= this.maxMessages) {
+        if (this.maxMessages && matches.size <= this.maxMessages) {
             return matches;
         }
         const messageIndex =
@@ -1183,6 +1186,15 @@ export class GetScoredMessages extends QueryOpExpr<ScoredMessageOrdinal[]> {
     public override eval(context: QueryEvalContext): ScoredMessageOrdinal[] {
         const matches = this.srcExpr.eval(context);
         return matches.toScoredMessageOrdinals();
+    }
+}
+
+export class NoOpExpr<T> extends QueryOpExpr<T> {
+    constructor(public srcExpr: IQueryOpExpr<T>) {
+        super();
+    }
+    public override eval(context: QueryEvalContext): T {
+        return this.srcExpr.eval(context);
     }
 }
 
@@ -1216,5 +1228,6 @@ function messageMatchesFromKnowledgeMatches(
         }
     }
 
+    messageMatches.smoothScores();
     return messageMatches;
 }
