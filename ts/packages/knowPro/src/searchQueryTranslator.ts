@@ -175,6 +175,7 @@ export class SearchQueryExprBuilder {
             termGroup,
         );
         if (entityTerm.type) {
+            // Types are not exact matched because of variability in the type ontology externalized by the model
             for (const type of entityTerm.type) {
                 this.addPropertyTerm(PropertyNames.EntityType, type, termGroup);
             }
@@ -183,6 +184,7 @@ export class SearchQueryExprBuilder {
             for (const facetTerm of entityTerm.facets) {
                 const nameWildcard = isWildcard(facetTerm.facetName);
                 const valueWildcard = isWildcard(facetTerm.facetValue);
+                // While there is variability in the facet names provided by the model.. it will use equivalent names.. exact match values if asked
                 if (!(nameWildcard && valueWildcard)) {
                     this.addPropertyTerm(
                         facetTerm.facetName,
@@ -267,6 +269,7 @@ export class SearchQueryExprBuilder {
         propertyName: string,
         propertyValue: string,
         termGroup: SearchTermGroup,
+        exactMatchValue: boolean = false,
     ): void {
         if (isWildcard(propertyValue)) {
             return;
@@ -277,6 +280,9 @@ export class SearchQueryExprBuilder {
                 propertyName,
                 propertyValue,
             );
+            if (exactMatchValue) {
+                searchTerm.propertyValue.relatedTerms = [];
+            }
             termGroup.terms.push(searchTerm);
             this.entityTermsAdded.add(
                 propertyName,

@@ -187,14 +187,14 @@ export async function resolveRelatedTerms(
         // Resolve any specific term to related term mappings
         if (
             relatedTermsIndex.aliases &&
-            (!searchTerm.relatedTerms || searchTerm.relatedTerms.length === 0)
+            searchTerm.relatedTerms === undefined
         ) {
             searchTerm.relatedTerms =
                 relatedTermsIndex.aliases.lookupTerm(termText);
         }
-        // If no hard-coded mappings to aliases
+        // If no mappings to aliases
         // Then add this to the list of things for which we do fuzzy retrieval
-        if (!searchTerm.relatedTerms || searchTerm.relatedTerms.length === 0) {
+        if (searchTerm.relatedTerms == undefined) {
             if (!shouldResolveFuzzy || shouldResolveFuzzy(searchTerm)) {
                 searchTermsNeedingRelated.push(searchTerm);
             }
@@ -238,7 +238,10 @@ function dedupeRelatedTerms(
     }
 
     for (const searchTerm of searchTerms) {
-        if (searchTerm.relatedTerms && searchTerm.relatedTerms.length > 0) {
+        if (
+            searchTerm.relatedTerms !== undefined &&
+            searchTerm.relatedTerms.length > 0
+        ) {
             let uniqueRelatedForSearchTerm: Term[] = [];
             for (const candidateRelatedTerm of searchTerm.relatedTerms) {
                 if (allSearchTerms.has(candidateRelatedTerm)) {

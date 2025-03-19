@@ -28,7 +28,10 @@ export type SearchTerm = {
     term: Term;
     /**
      * Additional terms related to term.
-     * These can be supplied from synonym tables and so on
+     * These can be supplied from synonym tables and so on.
+     *  - Zero length array: no related matches for this term
+     *  - undefined array: the search processor may try to resolve related terms from any  {@link IConversationSecondaryIndexes}
+     * related term {@link ITermToRelatedTermsIndex} indexes available to it
      */
     relatedTerms?: Term[] | undefined;
 };
@@ -537,7 +540,7 @@ class QueryCompiler {
             return false;
         }
         searchTerm.term.weight ??= this.defaultTermMatchWeight;
-        if (searchTerm.relatedTerms) {
+        if (searchTerm.relatedTerms !== undefined) {
             for (const relatedTerm of searchTerm.relatedTerms) {
                 if (!this.validateAndPrepareTerm(relatedTerm)) {
                     return false;

@@ -25,7 +25,7 @@ import { getCountOfMessagesInCharBudget } from "./message.js";
 export interface Match<T = any> {
     value: T;
     score: number; // Overall cumulative score.
-    hitCount: number; // # of hits.
+    hitCount: number; // # of hits. Always set to at least 1
     relatedScore: number; // Cumulative from matching related terms or phrases
     relatedHitCount: number; // # of hits from related term matches or phrases
 }
@@ -257,20 +257,23 @@ export class MatchAccumulator<T = any> {
 }
 
 /**
-    Return an score that also smoothens the impact of multiple matches
+    Return an score that smoothens a totalScore to compensate for multiple potentially noisy hits
     
-    1. If we just add up scores, a larger number of moderately related but noisy matches can overwhelm
-    a small # of very good matches merely by having a larger cumulative score...
+    1. A totalScore is just all the individual scores from each hit added up. 
+    Unfortunately, a larger number of moderately related but noisy matches can overwhelm
+    a small # of very good matches merely by having a larger totalScore.
     
-    2. We also want diminishing returns for too many matches, which can also be indicative of noise...as the
-    they can indicate low entropy.. prevents runaway scores
+    2. We also want diminishing returns for too many hits. Too many hits which can be indicative of noise...as the
+    they can indicate low entropy of the thing being matched: its too common-place. 
+    We want to prevent runaway scores that result from too many matches
 
     We currently adopt a simple but effective approach to smooth scores. 
-    We address (1) by taking an average: this gives a cheap way of measuring the effectiveness of each hit
-    We address (2) by using a log function to get a smooth hitCount.
-    Then we return the average multiplied by the smooth hitCount, giving us a smoother growing score
+    We address (1) by taking an average: this gives a cheap way of measuring the utility of each hit
+    We address (2) by using a log function to get a hitCount that diminishes the impact of large # of hits.
+    Then we return the average multiplied by the smooth hitCount, giving us a smoother score
     
-    This is by no means perfect. MatchAccumulator.calculateTotalScore allows you to pass in a smoothing function.
+    This is by no means perfect, but is a good default. 
+    MatchAccumulator.calculateTotalScore allows you to pass in a smoothing function.
     As the need arises, we can make that available to code at higher layers. 
  */
 function getSmoothScore(totalScore: number, hitCount: number): number {
@@ -285,8 +288,14 @@ function getSmoothScore(totalScore: number, hitCount: number): number {
     return 0;
 }
 
+/**
+ * See {@link getSmoothScore}
+ * @param match
+ */
 function addSmoothRelatedScoreToMatchScore(match: Match): void {
     if (match.relatedHitCount > 0) {
+        // Related term matches can be noisy and duplicative. Comments on getSmoothScore explain why
+        // we choose to smooth the impact of related term matches
         const smoothRelatedScore = getSmoothScore(
             match.relatedScore,
             match.relatedHitCount,
