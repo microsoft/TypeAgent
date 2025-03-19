@@ -19,12 +19,15 @@ import { compareTextRange, isInTextRange } from "./common.js";
 import { ScoredTextLocation } from "./textLocationIndex.js";
 import { getCountOfMessagesInCharBudget } from "./message.js";
 
+/**
+ * A matched value. Includes statistics for the quality and frequency of the match
+ */
 export interface Match<T = any> {
     value: T;
-    score: number;
-    hitCount: number;
-    relatedScore: number;
-    relatedHitCount: number;
+    score: number; // Overall cumulative score.
+    hitCount: number; // # of hits.
+    relatedScore: number; // Cumulative from matching related terms or phrases
+    relatedHitCount: number; // # of hits from related term matches or phrases
 }
 
 /**
@@ -35,6 +38,9 @@ export function sortMatchesByRelevance(matches: Match[]) {
     matches.sort((x, y) => y.score - x.score);
 }
 
+/**
+ * Accumulates matched values and Match statistics for each matched value
+ */
 export class MatchAccumulator<T = any> {
     private matches: Map<T, Match<T>>;
 
@@ -83,7 +89,6 @@ export class MatchAccumulator<T = any> {
     public add(value: T, score: number, isExactMatch: boolean) {
         const existingMatch = this.getMatch(value);
         if (existingMatch) {
-            //this.updateExisting(existingMatch, score, isExactMatch);
             if (isExactMatch) {
                 existingMatch.hitCount++;
                 existingMatch.score += score;
@@ -440,28 +445,20 @@ export class MessageAccumulator extends MatchAccumulator<MessageOrdinal> {
         }
     }
 
-    public override add(
-        value: number,
-        score: number,
-        isExactMatch: boolean = true,
-    ): void {
-        if (isExactMatch) {
-            let match = this.getMatch(value);
-            if (match === undefined) {
-                match = {
-                    value,
-                    score,
-                    hitCount: 1,
-                    relatedHitCount: 0,
-                    relatedScore: 0,
-                };
-                this.setMatch(match);
-            } else if (score > match.score) {
-                match.score = score;
-                match.hitCount++;
-            }
-        } else {
-            throw new Error("Related matches not supported");
+    public override add(value: number, score: number): void {
+        let match = this.getMatch(value);
+        if (match === undefined) {
+            match = {
+                value,
+                score,
+                hitCount: 1,
+                relatedHitCount: 0,
+                relatedScore: 0,
+            };
+            this.setMatch(match);
+        } else if (score > match.score) {
+            match.score = score;
+            match.hitCount++;
         }
     }
 
@@ -489,10 +486,10 @@ export class MessageAccumulator extends MatchAccumulator<MessageOrdinal> {
                 messageOrdinal < messageOrdinalEnd;
                 ++messageOrdinal
             ) {
-                this.add(messageOrdinal, score, true);
+                this.add(messageOrdinal, score);
             }
         } else {
-            this.add(messageOrdinalStart, score, true);
+            this.add(messageOrdinalStart, score);
         }
     }
 
