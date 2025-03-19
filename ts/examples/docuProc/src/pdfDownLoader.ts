@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 import { PdfDownloadQuery } from "./pdfDownloadSchema.js";
 import { XMLParser } from "fast-xml-parser";
 import { fetchWithRetry } from "aiclient";
