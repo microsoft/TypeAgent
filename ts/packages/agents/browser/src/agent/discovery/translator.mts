@@ -665,6 +665,7 @@ export class SchemaDiscoveryAgent<T extends object> {
 
     async getIntentSchemaFromRecording(
         recordedActionName: string,
+        existingActionNames: string[],
         recordedActionDescription: string,
         recordedActionSteps?: string,
         fragments?: HtmlFragments[],
@@ -716,6 +717,22 @@ export class SchemaDiscoveryAgent<T extends object> {
             Here are the recorded steps that the user went through on the webpage to complete the action.
             '''
             ${recordedActionSteps}
+            '''
+            `,
+            });
+        }
+
+        if (
+            existingActionNames !== undefined &&
+            existingActionNames.length > 0
+        ) {
+            requestSection.push({
+                type: "text",
+                text: `
+               
+            Here are existing intent names. When picking a name for the new user intent, make sure you use a unique value that is not similar to the values on this list.
+            '''
+            ${JSON.stringify(existingActionNames)}
             '''
             `,
             });
@@ -774,7 +791,7 @@ export class SchemaDiscoveryAgent<T extends object> {
         );
 
         const bootstrapTranslator = this.getBootstrapTranslator(
-            "PageManipulationActionsList",
+            "PageActionsPlan",
             resultsSchema,
         );
 
@@ -825,6 +842,81 @@ export class SchemaDiscoveryAgent<T extends object> {
                 type: "text",
                 text: `
         Examine the layout information provided as well as the user action information. Based on this
+        generate a SINGLE "${bootstrapTranslator.validator.getTypeName()}" response using the typescript schema below.
+                
+        '''
+        ${bootstrapTranslator.validator.getSchemaText()}
+        '''
+        `,
+            },
+            ...requestSection,
+            {
+                type: "text",
+                text: `
+        The following is the COMPLETE JSON response object with 2 spaces of indentation and no properties with the value undefined:            
+        `,
+            },
+        ];
+
+        const response = await bootstrapTranslator.translate("", [
+            { role: "user", content: JSON.stringify(promptSections) },
+        ]);
+        return response;
+    }
+
+    async getDetailedStepsFromDescription(
+        recordedActionName: string,
+        recordedActionDescription: string,
+        fragments?: HtmlFragments[],
+        screenshot?: string,
+    ) {
+        const packageRoot = path.join("..", "..", "..");
+        const resultsSchema = await fs.promises.readFile(
+            fileURLToPath(
+                new URL(
+                    path.join(
+                        packageRoot,
+                        "./src/agent/discovery/schema/expandDescription.mts",
+                    ),
+                    import.meta.url,
+                ),
+            ),
+            "utf8",
+        );
+
+        const bootstrapTranslator = this.getBootstrapTranslator(
+            "PageActionsList",
+            resultsSchema,
+        );
+
+        const screenshotSection = getScreenshotPromptSection(
+            screenshot,
+            fragments,
+        );
+        const htmlSection = getHtmlPromptSection(fragments);
+        const prefixSection = getBootstrapPrefixPromptSection();
+        let requestSection = [];
+        requestSection.push({
+            type: "text",
+            text: `
+               
+            The user provided an example of how they would complete the ${recordedActionName} action on the webpage. 
+            They provided a description of the task below:
+            '''
+            ${recordedActionDescription}
+            '''
+            `,
+        });
+
+        const promptSections = [
+            ...prefixSection,
+            ...screenshotSection,
+            ...htmlSection,
+            {
+                type: "text",
+                text: `
+        Examine the layout information provided as well as the user action description. Use this information to create a detailed set of steps, including
+        the HTML elements that the user would need to interact with. Based on this
         generate a SINGLE "${bootstrapTranslator.validator.getTypeName()}" response using the typescript schema below.
                 
         '''

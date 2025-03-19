@@ -14,7 +14,7 @@ describe("MessageCollection", () => {
     });
     test("addMessages", () => {
         const messageCollection = new MessageCollection();
-        messageCollection.push([createMessage("One"), createMessage("Two")]);
+        messageCollection.push(createMessage("One"), createMessage("Two"));
         expect(messageCollection).toHaveLength(2);
 
         let ordinals = [0, 1];

@@ -59,8 +59,8 @@ function setupSiteAgent() {
         }
 
         if (siteAgent === "") {
-            // default to schemaFinder
-            siteAgent = "browser.schemaFinder";
+            // default to actionDiscovery
+            siteAgent = "browser.actionDiscovery";
             window.browserConnect.enableSiteAgent(siteAgent);
         }
 

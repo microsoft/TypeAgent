@@ -837,9 +837,9 @@ async function toggleSiteTranslator(targetTab: chrome.tabs.Tab) {
         }
 
         if (translatorName === "") {
-            // default to schemaFinder
+            // default to actionDiscovery
             method = "enableSiteTranslator";
-            translatorName = "browser.schemaFinder";
+            translatorName = "browser.actionDiscovery";
             currentSiteTranslator = translatorName;
         }
 
@@ -1551,8 +1551,10 @@ chrome.runtime.onMessage.addListener(
                         actionName: "getIntentFromRecording",
                         parameters: {
                             recordedActionName: message.actionName,
-                            recordedActionDescription: message.description,
+                            recordedActionDescription:
+                                message.actionDescription,
                             recordedActionSteps: message.steps,
+                            existingActionNames: message.existingActionNames,
                             fragments: message.html,
                             screenshot: message.screenshot,
                         },

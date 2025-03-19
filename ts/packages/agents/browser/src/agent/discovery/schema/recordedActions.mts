@@ -31,19 +31,10 @@ export type UserIntentParameter = {
 };
 
 export type UserIntent = {
-    // a concise name for the action, in camelCase
+    // a concise name for the action, in camelCase. This should be based on the goal of the task the user is running.
     actionName: string;
     // a consise list of the parameters that should be captured from the user in order to implenent this action
     parameters: UserIntentParameter[];
-};
-
-export type WebPlan = {
-    webPlanName: string;
-    description: string;
-    parameters: {
-        actionName: string;
-        stepsListId: string;
-    };
 };
 
 export type SelectElementByText = {
@@ -113,9 +104,10 @@ export type PageManipulationActions =
     | ClickOnElement
     | ClickOnLink;
 
-export type PageManipulationActionsList = {
+export type PageActionsPlan = {
     planName: string;
     description: string;
+    // The actionName of the UserIntent associated with this plan
     intentSchemaName: string;
     steps: PageManipulationActions[];
 };

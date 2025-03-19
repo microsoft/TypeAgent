@@ -326,15 +326,18 @@
       "internalConsoleOptions": "neverOpen"
     },
     {
+      "name": "Launch Document Processor",
       "type": "node",
       "request": "launch",
-      "name": "Launch montage",
-      "skipFiles": ["<node_internals>/**"],
-      "cwd": "${workspaceFolder}/packages/agents/montage",
-      "program": "${workspaceFolder}/packages/agents/montage/node_modules/webpack/bin/webpack.js", 
-      "args": ["serve", "--open"],
-      "console": "externalTerminal",
-      "outFiles": ["${workspaceFolder}/**/*.js"]
-    },   
+      "skipFiles": [
+          "<node_internals>/**"
+      ],
+      "program": "${workspaceFolder}/examples/docuProc/src/main.ts",
+      "console": "integratedTerminal",
+      //"preLaunchTask": "pnpm: build",
+      "outFiles": [
+          "${workspaceFolder}/**/*.js"
+      ],
+    },
   ]
 }
