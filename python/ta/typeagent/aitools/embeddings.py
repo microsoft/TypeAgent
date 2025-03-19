@@ -51,7 +51,7 @@ class AsyncEmbeddingModel:
                 f"Neither {openai_key_name} nor {azure_key_name} found in environment."
             )
 
-    async def refresh_client(self):
+    async def refresh_auth(self):
         """Update client when using a token provider and it's nearly expired."""
         # refresh_token is synchronous and slow -- run it in a separate thread
         assert self.azure_token_provider
@@ -72,23 +72,18 @@ class AsyncEmbeddingModel:
 
     async def get_embeddings(self, input: list[str]) -> NormalizedEmbeddings:
         if not input:
-            result = np.array([], dtype=np.float32)
-            result.reshape((0, 0))
-            print(repr(result))
-            return result
+            # Save round trip and avoid error from reshape((0, N)) for N != 0.
+            return np.array([], dtype=np.float32).reshape((0, 0))
         if self.azure_token_provider and self.azure_token_provider.needs_refresh():
-            await self.refresh_client()
+            await self.refresh_auth()
         data = (
             await self.async_client.embeddings.create(
                 input=input,
-                model="text-embedding-3-small",  ##encoding_format="float"
+                model="text-embedding-3-small",
             )
         ).data
-        if not data:
-            return np.array([], dtype=np.float32).reshape((0, 0))
-        embedding_length = len(data[0].embedding)
-        result = np.array([d.embedding for d in data], dtype=np.float32)
-        return result.reshape((len(data), embedding_length))
+        assert len(data) == len(input), (len(data), "!=", len(input))
+        return np.array([d.embedding for d in data], dtype=np.float32)
 
 
 async def main():
@@ -97,8 +92,11 @@ async def main():
     dotenv.load_dotenv(os.path.expanduser("~/TypeAgent/ts/.env"))
 
     async_model = AsyncEmbeddingModel()
+    e = await async_model.get_embeddings([])
+    print(repr(e))
     inputs = ["Hello, world", "Foo bar baz"]
     embeddings = await async_model.get_embeddings(inputs)
+    print(repr(embeddings))
     for input, embedding in zip(inputs, embeddings, strict=True):
         print(f"{input}: {len(embedding)} {embedding[:5]}...{embedding[-5:]}")
 
