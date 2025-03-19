@@ -322,7 +322,8 @@ export class SearchQueryExprBuilder {
     ): void {
         if (
             !this.isSearchableString(propertyName) ||
-            !this.isSearchableString(propertyValue)
+            !this.isSearchableString(propertyValue) ||
+            this.isNoiseTerm(propertyValue)
         ) {
             return;
         }
@@ -352,6 +353,17 @@ export class SearchQueryExprBuilder {
 
     private isSearchableString(value: string): boolean {
         return !(isEmptyString(value) || isWildcard(value));
+    }
+
+    private isNoiseTerm(value: string): boolean {
+        // TODO: move hardcoded to a user configurable table
+        switch (value.toLowerCase()) {
+            default:
+                return false;
+            case "thing":
+            case "object":
+                return true;
+        }
     }
 }
 
