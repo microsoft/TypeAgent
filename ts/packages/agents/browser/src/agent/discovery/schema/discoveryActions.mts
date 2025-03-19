@@ -62,6 +62,7 @@ export type GetIntentFromRecording = {
         recordedActionName: string;
         recordedActionDescription: string;
         recordedActionSteps?: string;
+        existingActionNames: string[];
         fragments?: HtmlFragments[];
         screenshot?: string;
     };
