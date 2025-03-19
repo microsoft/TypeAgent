@@ -6,3 +6,13 @@ button {
     width: 100px;
     height: 25px;
 }
+
+img {
+    max-width: 200px;
+    max-height: 125px;
+}
+
+.title {
+    text-align: center;
+    font-size: xx-large;
+}

@@ -5,22 +5,42 @@
 
 //const eventSource = new EventSource("/events");
 
+export type Message = {
+    type: "listPhotos";
+}
+
+export type ListPhotosMessage = Message & {
+    files: string[];
+};
+
 document.addEventListener("DOMContentLoaded", function () {
     const mainContainer = document.getElementById("mainContainer");
-    //const searchInput = new SearchInput();
 
+    // setup event source from host source (shell, etc.)
     const eventSource = new EventSource("/events");
     eventSource.onmessage = function (event: MessageEvent) {
-        const contentElement = document.getElementById("mainContainer");
-        if (contentElement) {
-            contentElement.innerHTML += decodeURIComponent(event.data);
-            // mermaid.init(
-            //     undefined,
-            //     contentElement.querySelectorAll(".mermaid"),
-            // );
+        console.log(event);
+        const e = JSON.parse(event.data);
+        if (e.type === "listPhotos") {
+            const msg: ListPhotosMessage = e as ListPhotosMessage;
 
-            // processGeoJson(contentElement);
+            msg.files.forEach((f) => {
+                const img: HTMLImageElement = document.createElement("img");
+                img.src = "/image?path=" + f;
+
+                mainContainer.append(img);
+            })
         }
+        // const contentElement = document.getElementById("mainContainer");
+        // if (contentElement) {
+        //     contentElement.innerHTML += decodeURIComponent(event.data);
+        //     // mermaid.init(
+        //     //     undefined,
+        //     //     contentElement.querySelectorAll(".mermaid"),
+        //     // );
+
+        //     // processGeoJson(contentElement);
+        // }
     };
 
     //mainContainer.append(searchInput.container);

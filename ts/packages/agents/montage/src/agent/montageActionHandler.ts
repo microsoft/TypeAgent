@@ -183,7 +183,7 @@ export async function createViewServiceHost() {
     const timeoutPromise = new Promise<undefined>((_resolve, reject) => {
         timeoutHandle = setTimeout(
             () => reject(new Error("Montage view service creation timed out")),
-            60000,
+            10000,
         );
     });
 

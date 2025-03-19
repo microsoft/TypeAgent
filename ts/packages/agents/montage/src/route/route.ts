@@ -11,8 +11,8 @@ const app: Express = express();
 const port = process.env.PORT || 9012;
 
 const limiter = rateLimit({
-    windowMs: 60000,
-    max: 100, // limit each IP to 100 requests per windowMs
+    windowMs: 1000,
+    max: 1000, // limit each IP to 100 requests per windowMs
 });
 
 // Serve static content
@@ -23,6 +23,14 @@ app.use(express.static(staticPath));
 
 app.get("/", (req: Request, res: Response) => {
     res.sendFile(path.join(staticPath, "index.html"));
+});
+
+app.get("/image", (req: Request, res: Response) => {
+
+    // load the requested file
+    // BUGBUG: not secure...need to assert perms, etc. here
+    res.sendFile(req.query.path as string);
+
 });
 
 // export function setupMiddlewares(
@@ -129,11 +137,13 @@ app.get("/cmd", async (req, res) => {
     console.debug(req);
 });
 
-function sendDataToClients(files: string[]) {
+function sendDataToClients(message: any) {
     clients.forEach((client) => {
-        files.map((file) => {
-            client.write(`data: ${encodeURIComponent(file)}\n\n`);
-        });        
+        // files.map((file) => {
+        //     client.write(`data: ${encodeURIComponent(file)}\n\n`);
+        // });   
+        client.write(`data: ${JSON.stringify(message)}\n\n`);
+        //client.write(`data: test\n\n`);
     });
 }
 
@@ -141,9 +151,11 @@ process.send?.("Success");
 
 process.on("message", (message: any) => {
 
-    if (message.type == "listPhotos") {
-        sendDataToClients(message.files);
-    }
+    sendDataToClients(message);
+
+    // if (message.type == "listPhotos") {
+    //     sendDataToClients(message.files);
+    // }
 
     // if (message.type == "setFile") {
     //     if (filePath) {
