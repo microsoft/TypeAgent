@@ -1551,8 +1551,10 @@ chrome.runtime.onMessage.addListener(
                         actionName: "getIntentFromRecording",
                         parameters: {
                             recordedActionName: message.actionName,
-                            recordedActionDescription: message.description,
+                            recordedActionDescription:
+                                message.actionDescription,
                             recordedActionSteps: message.steps,
+                            existingActionNames: message.existingActionNames,
                             fragments: message.html,
                             screenshot: message.screenshot,
                         },

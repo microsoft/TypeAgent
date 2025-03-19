@@ -20,7 +20,10 @@ import { fileURLToPath } from "url";
 import { UserActionsList } from "./schema/userActionsPool.mjs";
 import { PageDescription } from "./schema/pageSummary.mjs";
 import { createTempAgentForSchema } from "./tempAgentActionHandler.mjs";
-import { SchemaDiscoveryActions } from "./schema/discoveryActions.mjs";
+import {
+    GetIntentFromRecording,
+    SchemaDiscoveryActions,
+} from "./schema/discoveryActions.mjs";
 import { UserIntent } from "./schema/recordedActions.mjs";
 import { createSchemaAuthoringAgent } from "./authoringActionHandler.mjs";
 
@@ -449,14 +452,38 @@ export async function handleSchemaDiscoveryAction(
         };
     }
 
-    async function handleGetIntentFromReccording(action: any) {
+    async function handleGetIntentFromReccording(
+        action: GetIntentFromRecording,
+    ) {
+        let recordedSteps = action.parameters.recordedActionSteps;
+        if (
+            recordedSteps === undefined ||
+            recordedSteps === "" ||
+            recordedSteps === "[]"
+        ) {
+            const descriptionResponse =
+                await agent.getDetailedStepsFromDescription(
+                    action.parameters.recordedActionName,
+                    action.parameters.recordedActionDescription,
+                    action.parameters.fragments,
+                    "",
+                );
+            if (descriptionResponse.success) {
+                console.log(descriptionResponse.data);
+                recordedSteps = JSON.stringify(
+                    (descriptionResponse.data as any).actions,
+                );
+            }
+        }
+
         const timerName = `Getting intent schema`;
         console.time(timerName);
         const intentResponse = await agent.getIntentSchemaFromRecording(
             action.parameters.recordedActionName,
+            action.parameters.existingActionNames,
             action.parameters.recordedActionDescription,
-            action.parameters.recordedActionSteps,
-            action.parameters.htmlFragments,
+            recordedSteps,
+            action.parameters.fragments,
             // action.parameters.screenshot,
             "",
         );
@@ -470,8 +497,9 @@ export async function handleSchemaDiscoveryAction(
 
         console.timeEnd(timerName);
 
+        const intentData = intentResponse.data as UserIntent;
         const { actionSchema, typeDefinition } = await getIntentSchemaFromJSON(
-            intentResponse.data as UserIntent,
+            intentData,
             action.parameters.recordedActionDescription,
         );
 
@@ -480,11 +508,11 @@ export async function handleSchemaDiscoveryAction(
         const timerName2 = `Getting action schema`;
         console.time(timerName2);
         const stepsResponse = await agent.getActionStepsSchemaFromRecording(
-            action.parameters.recordedActionName,
+            intentData.actionName,
             action.parameters.recordedActionDescription,
             intentResponse.data,
-            action.parameters.recordedActionSteps,
-            action.parameters.htmlFragments,
+            recordedSteps,
+            action.parameters.fragments,
             // action.parameters.screenshot,
             "",
         );

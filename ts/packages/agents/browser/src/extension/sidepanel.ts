@@ -182,7 +182,7 @@ async function saveUserAction() {
     const screenshot = JSON.parse(stepsContainer.dataset?.screenshot || '""');
     let html = JSON.parse(stepsContainer.dataset?.html || '""');
 
-    if (html === undefined || html == -"") {
+    if (html === undefined || html === "") {
         const htmlFragments = await chrome.runtime.sendMessage({
             type: "captureHtmlFragments",
         });
@@ -217,6 +217,28 @@ async function saveUserAction() {
     button.innerHTML = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Saving...`;
     button.disabled = true;
 
+    const detectedActions = new Map(
+        Object.entries(
+            (await getStoredPageProperty(
+                launchUrl!,
+                "detectedActionDefinitions",
+            )) ?? {},
+        ),
+    );
+    const authoredActions = new Map(
+        Object.entries(
+            (await getStoredPageProperty(
+                launchUrl!,
+                "authoredActionDefinitions",
+            )) ?? {},
+        ),
+    );
+
+    const existingActionNames: string[] = [
+        ...detectedActions.keys(),
+        ...authoredActions.keys(),
+    ];
+
     // Get schema based on the recorded action info
     const response = await chrome.runtime.sendMessage({
         type: "getIntentFromRecording",
@@ -224,6 +246,7 @@ async function saveUserAction() {
         screenshot,
         actionName,
         actionDescription,
+        existingActionNames,
         steps: JSON.stringify(steps),
     });
     if (chrome.runtime.lastError) {
