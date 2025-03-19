@@ -52,11 +52,13 @@ export async function readConversationDataFromFile(
             embeddings = deserializeEmbeddings(embeddingsBuffer, embeddingSize);
         }
     }
-    let serializationData: ConversationFileData = {
+    let fileData: ConversationFileData = {
         jsonData: jsonData,
         binaryData: { embeddings },
     };
-    return fromConversationFileData(serializationData);
+    validateFileData(fileData);
+    fileData.jsonData.fileHeader ??= createFileHeader();
+    return fromConversationFileData(fileData);
 }
 
 const DataFileSuffix = "_data.json";
@@ -69,6 +71,10 @@ type ConversationFileData = {
     binaryData: ConversationBinaryData;
 };
 
+type FileHeader = {
+    version: string;
+};
+
 type EmbeddingFileHeader = {
     relatedCount?: number | undefined;
     messageCount?: number | undefined;
@@ -79,6 +85,7 @@ type EmbeddingData = {
 };
 
 interface ConversationJsonData extends IConversationDataWithIndexes {
+    fileHeader?: FileHeader | undefined;
     embeddingFileHeader?: EmbeddingFileHeader | undefined;
 }
 
@@ -87,12 +94,19 @@ type ConversationBinaryData = {
     embeddings?: Float32Array[] | undefined;
 };
 
+function validateFileData(fileData: ConversationFileData): void {
+    if (fileData.jsonData === undefined) {
+        throw new Error(`${Error_FileCorrupt}: Missing json data`);
+    }
+}
+
 function toConversationFileData(
     conversationData: IConversationDataWithIndexes,
 ): ConversationFileData {
     let fileData: ConversationFileData = {
         jsonData: {
             ...conversationData,
+            fileHeader: createFileHeader(),
             embeddingFileHeader: {},
         },
         binaryData: {},
@@ -108,6 +122,12 @@ function toConversationFileData(
     );
 
     return fileData;
+}
+
+function createFileHeader(): FileHeader {
+    return {
+        version: "0.1",
+    };
 }
 
 function addEmbeddingsToBinaryData(
@@ -131,6 +151,7 @@ function addEmbeddingsToBinaryData(
 function fromConversationFileData(
     fileData: ConversationFileData,
 ): IConversationDataWithIndexes {
+    // TODO: Remove this temporary backward compat. All future files should have proper headers
     let embeddingFileHeader = fileData.jsonData.embeddingFileHeader ?? {
         relatedCount:
             fileData.jsonData.relatedTermsIndexData?.textEmbeddingData
@@ -154,6 +175,8 @@ function fromConversationFileData(
     return fileData.jsonData;
 }
 
+const Error_FileCorrupt = "Embedding file corrupt";
+
 function getEmbeddingsFromBinaryData(
     binaryData: ConversationBinaryData,
     embeddingData: EmbeddingData | undefined,
@@ -167,7 +190,7 @@ function getEmbeddingsFromBinaryData(
         );
         if (embeddingData.embeddings.length !== length) {
             throw new Error(
-                `Embedding file corrupt: expected ${length}, got ${embeddingData.embeddings.length}`,
+                `${Error_FileCorrupt}: expected ${length}, got ${embeddingData.embeddings.length}`,
             );
         }
         return length;
