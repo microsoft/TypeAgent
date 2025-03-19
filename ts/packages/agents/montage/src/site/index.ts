@@ -44,7 +44,7 @@ document.addEventListener("DOMContentLoaded", function () {
     };
 
     //mainContainer.append(searchInput.container);
-    mainContainer.innerText = "Hello world";
+    //mainContainer.innerText = "Hello world";
 //     const listsContainer: CollapsableContainer = new CollapsableContainer(
 //         "Lists",
 //     );

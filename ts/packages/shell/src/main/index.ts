@@ -187,7 +187,7 @@ async function createWindow() {
                 mainWindow.webContents.isDevToolsOpened();
 
             mainWindow.hide();
-            ShellSettings.getinstance().closeInlineBrowser();
+            ShellSettings.getinstance().closeInlineBrowser(false);
             ShellSettings.getinstance().size = mainWindow.getSize();
         }
     });
@@ -325,9 +325,15 @@ async function createWindow() {
         }
 
         inlineWebContentView?.webContents.loadURL(targetUrl.toString());
+
+        // indicate in the settings which canvas is open
+        ShellSettings.getinstance().canvas = targetUrl.toString().toLocaleLowerCase();
+
+        // write the settings to disk
+        ShellSettings.getinstance().save();
     };
 
-    ShellSettings.getinstance().onCloseInlineBrowser = (): void => {
+    ShellSettings.getinstance().onCloseInlineBrowser = (save: boolean = true): void => {
         const mainWindowSize = mainWindow?.getBounds();
 
         if (inlineWebContentView && mainWindowSize) {
@@ -341,6 +347,14 @@ async function createWindow() {
             });
 
             setContentSize();
+
+            // clear the canvas settings
+            if (save) {
+                ShellSettings.getinstance().canvas = undefined;
+            }
+
+            // write the settings to disk
+            ShellSettings.getinstance().save();
         }
     };
 
@@ -654,6 +668,11 @@ async function initialize() {
         // The dispatcher can be use now that dom is ready and the client is ready to receive messages
         const dispatcher = await dispatcherP;
         updateSummary(dispatcher);
+
+        // open the canvas if it was previously open
+        if (ShellSettings.getinstance().canvas !== undefined && ShellSettings.getinstance().onOpenInlineBrowser !== null) {
+            ShellSettings.getinstance().onOpenInlineBrowser!(new URL(ShellSettings.getinstance().canvas!));
+        }        
 
         // send the agent greeting if it's turned on
         if (ShellSettings.getinstance().agentGreeting) {
