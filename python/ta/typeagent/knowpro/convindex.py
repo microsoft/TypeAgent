@@ -308,14 +308,16 @@ async def build_semantic_ref_index[TM: IMessage, TC: IConversationSecondaryIndex
     indexing_result = TextIndexingResult()
 
     for message_ordinal, message in enumerate(conversation.messages):
-        print(f"\nPROCESSING MESSAGE {message_ordinal}")
+        if event_handler and event_handler.on_message_started:
+            if not event_handler.on_message_started(message_ordinal):
+                break
         chunk_ordinal = 0
-        # Only one chunk per message for now.
+        # Only one chunk per message for now. (TODO: Fix this.)
         text = message.text_chunks[chunk_ordinal]
-        # TODO: retries
+        # TODO: retries (but beware that TypeChat already retries).
         match await extractor.extract(text):
             case typechat.Failure(error):
-                indexing_result.error = f"Failed to extract knowledge from message {message_ordinal}: {error}"
+                indexing_result.error = f"Failed to extract knowledge from message {message_ordinal} ({text!r}): {error}"
                 break
             case typechat.Success(knowledge):
                 pass

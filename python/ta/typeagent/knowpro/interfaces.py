@@ -427,11 +427,12 @@ class IndexingEventHandlers:
         ]
         | None
     ) = None
+    on_message_started: Callable[[MessageOrdinal], bool] | None = None
 
 
 @dataclass
 class TextIndexingResult:
-    completed_upto: TextLocation | None = None
+    completed_upto: TextLocation | None = None  # Last message and chunk indexed
     error: str | None = None
 
 
