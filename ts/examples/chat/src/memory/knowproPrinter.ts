@@ -53,13 +53,13 @@ export class KnowProPrinter extends ChatPrinter {
         messages: kp.IMessage[],
         maxToDisplay: number,
     ) {
-        this.writeLine(
-            `Displaying ${maxToDisplay} matches of total ${messages.length}`,
-        );
         if (this.sortAsc) {
             this.writeLine(`Sorted in ascending order (lowest first)`);
         }
         const matchesToDisplay = messageIndexMatches.slice(0, maxToDisplay);
+        this.writeLine(
+            `Displaying ${matchesToDisplay.length} matches of total ${messageIndexMatches.length}`,
+        );
         for (let i = 0; i < matchesToDisplay.length; ++i) {
             let pos = this.sortAsc ? matchesToDisplay.length - (i + 1) : i;
             this.writeScoredMessage(
@@ -166,13 +166,13 @@ export class KnowProPrinter extends ChatPrinter {
         semanticRefs: kp.SemanticRef[],
         maxToDisplay: number,
     ) {
-        this.writeLine(
-            `Displaying ${maxToDisplay} matches of total ${semanticRefMatches.length}`,
-        );
         if (this.sortAsc) {
             this.writeLine(`Sorted in ascending order (lowest first)`);
         }
         const matchesToDisplay = semanticRefMatches.slice(0, maxToDisplay);
+        this.writeLine(
+            `Displaying ${matchesToDisplay.length} matches of total ${semanticRefMatches.length}`,
+        );
         for (let i = 0; i < matchesToDisplay.length; ++i) {
             let pos = this.sortAsc ? matchesToDisplay.length - (i + 1) : i;
             this.writeScoredRef(

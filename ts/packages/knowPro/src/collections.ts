@@ -19,12 +19,15 @@ import { compareTextRange, isInTextRange } from "./common.js";
 import { ScoredTextLocation } from "./textLocationIndex.js";
 import { getCountOfMessagesInCharBudget } from "./message.js";
 
+/**
+ * A matched value. Includes statistics for the quality and frequency of the match
+ */
 export interface Match<T = any> {
     value: T;
-    score: number;
-    hitCount: number;
-    relatedScore: number;
-    relatedHitCount: number;
+    score: number; // Overall cumulative score.
+    hitCount: number; // # of hits. Always set to at least 1
+    relatedScore: number; // Cumulative from matching related terms or phrases
+    relatedHitCount: number; // # of hits from related term matches or phrases
 }
 
 /**
@@ -35,6 +38,9 @@ export function sortMatchesByRelevance(matches: Match[]) {
     matches.sort((x, y) => y.score - x.score);
 }
 
+/**
+ * Accumulates matched values and Match statistics for each matched value
+ */
 export class MatchAccumulator<T = any> {
     private matches: Map<T, Match<T>>;
 
@@ -83,7 +89,6 @@ export class MatchAccumulator<T = any> {
     public add(value: T, score: number, isExactMatch: boolean) {
         const existingMatch = this.getMatch(value);
         if (existingMatch) {
-            //this.updateExisting(existingMatch, score, isExactMatch);
             if (isExactMatch) {
                 existingMatch.hitCount++;
                 existingMatch.score += score;
@@ -146,7 +151,7 @@ export class MatchAccumulator<T = any> {
     }
 
     public calculateTotalScore(scorer?: (match: Match) => void): void {
-        scorer ??= addSmoothAvgRelatedScore;
+        scorer ??= addSmoothRelatedScoreToMatchScore;
         for (const match of this.getMatches()) {
             scorer(match);
         }
@@ -251,29 +256,27 @@ export class MatchAccumulator<T = any> {
     }
 }
 
-function addSmoothAvgRelatedScore(match: Match): void {
-    if (match.relatedHitCount > 0) {
-        const smoothRelatedScore = smoothAverageScore(
-            match.relatedScore,
-            match.relatedHitCount,
-        );
+/**
+    Return an score that smoothens a totalScore to compensate for multiple potentially noisy hits
+    
+    1. A totalScore is just all the individual scores from each hit added up. 
+    Unfortunately, a larger number of moderately related but noisy matches can overwhelm
+    a small # of very good matches merely by having a larger totalScore.
+    
+    2. We also want diminishing returns for too many hits. Too many hits which can be indicative of noise...as the
+    they can indicate low entropy of the thing being matched: its too common-place. 
+    We want to prevent runaway scores that result from too many matches
 
-        match.score += smoothRelatedScore;
-    }
-}
-
-function smoothTotalScore(match: Match): void {
-    if (match.hitCount > 0) {
-        match.score = smoothAverageScore(match.score, match.hitCount);
-    }
-}
-
-// Return an average score that also smoothens the impact of multiple matches
-// If we just add up scores, a larger number of moderately related but noisy matches can overwhelm
-// a small # of very good matches merely by having a larger total score...
-// We also want diminishing returns for too many matches, which can also be indicative of noise...as the
-// they can indicate low entropy.. prevents runaway scores
-function smoothAverageScore(totalScore: number, hitCount: number): number {
+    We currently adopt a simple but effective approach to smooth scores. 
+    We address (1) by taking an average: this gives a cheap way of measuring the utility of each hit
+    We address (2) by using a log function to get a hitCount that diminishes the impact of large # of hits.
+    Then we return the average multiplied by the smooth hitCount, giving us a smoother score
+    
+    This is by no means perfect, but is a good default. 
+    MatchAccumulator.calculateTotalScore allows you to pass in a smoothing function.
+    As the need arises, we can make that available to code at higher layers. 
+ */
+function getSmoothScore(totalScore: number, hitCount: number): number {
     if (hitCount > 0) {
         if (hitCount === 1) {
             return totalScore;
@@ -283,6 +286,29 @@ function smoothAverageScore(totalScore: number, hitCount: number): number {
         return smoothAvg;
     }
     return 0;
+}
+
+/**
+ * See {@link getSmoothScore}
+ * @param match
+ */
+function addSmoothRelatedScoreToMatchScore(match: Match): void {
+    if (match.relatedHitCount > 0) {
+        // Related term matches can be noisy and duplicative. Comments on getSmoothScore explain why
+        // we choose to smooth the impact of related term matches
+        const smoothRelatedScore = getSmoothScore(
+            match.relatedScore,
+            match.relatedHitCount,
+        );
+
+        match.score += smoothRelatedScore;
+    }
+}
+
+function smoothMatchScore(match: Match): void {
+    if (match.hitCount > 0) {
+        match.score = getSmoothScore(match.score, match.hitCount);
+    }
 }
 
 export type KnowledgePredicate<T extends Knowledge> = (knowledge: T) => boolean;
@@ -440,28 +466,20 @@ export class MessageAccumulator extends MatchAccumulator<MessageOrdinal> {
         }
     }
 
-    public override add(
-        value: number,
-        score: number,
-        isExactMatch: boolean = true,
-    ): void {
-        if (isExactMatch) {
-            let match = this.getMatch(value);
-            if (match === undefined) {
-                match = {
-                    value,
-                    score,
-                    hitCount: 1,
-                    relatedHitCount: 0,
-                    relatedScore: 0,
-                };
-                this.setMatch(match);
-            } else if (score > match.score) {
-                match.score = score;
-                match.hitCount++;
-            }
-        } else {
-            throw new Error("Related matches not supported");
+    public override add(value: number, score: number): void {
+        let match = this.getMatch(value);
+        if (match === undefined) {
+            match = {
+                value,
+                score,
+                hitCount: 1,
+                relatedHitCount: 0,
+                relatedScore: 0,
+            };
+            this.setMatch(match);
+        } else if (score > match.score) {
+            match.score = score;
+            match.hitCount++;
         }
     }
 
@@ -489,17 +507,17 @@ export class MessageAccumulator extends MatchAccumulator<MessageOrdinal> {
                 messageOrdinal < messageOrdinalEnd;
                 ++messageOrdinal
             ) {
-                this.add(messageOrdinal, score, true);
+                this.add(messageOrdinal, score);
             }
         } else {
-            this.add(messageOrdinalStart, score, true);
+            this.add(messageOrdinalStart, score);
         }
     }
 
     public smoothScores() {
         // Normalize the score relative to # of hits.
         for (const match of this.getMatches()) {
-            smoothTotalScore(match);
+            smoothMatchScore(match);
         }
     }
 
