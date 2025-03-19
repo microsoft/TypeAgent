@@ -26,6 +26,9 @@ build: venv
 venv:
 	python -m venv venv || (rm -rf venv && exit 1)
 	venv/bin/pip -q install -r requirements.txt
+	@venv/bin/python --version
+	@venv/bin/pyright --version
+	@venv/bin/black --version
 
 .PHONY: clean
 clean:

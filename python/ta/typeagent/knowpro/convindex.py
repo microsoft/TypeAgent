@@ -28,7 +28,7 @@ from .interfaces import (
     TextRange,
     Topic,
 )
-from . import convknowledge, importing, kplib
+from . import convknowledge, importing, kplib, secindex
 
 
 def text_range_from_location(
@@ -282,15 +282,20 @@ async def build_conversation_index(
         conversation, None, event_handler
     )
     # TODO
-    # if result.semantic_refs and not result.semantic_refs.error and conversation.semantic_ref_index:
-    #     result.secondary_index_results = await build_secondary_indexes(
-    #         conversation, conversation_settings, event_handler
-    #     )
+    if (
+        result.semantic_refs
+        and not result.semantic_refs.error
+        and conversation.semantic_ref_index
+    ):
+        result.secondary_index_results = await secindex.build_secondary_indexes(
+            conversation, conversation_settings, event_handler
+        )
     return result
 
 
 async def build_semantic_ref_index[TM: IMessage, TC: IConversationSecondaryIndexes](
     conversation: IConversation[TM, ConversationIndex, TC],
+    # TODO: Do I like that these args are optional?
     extractor: convknowledge.KnowledgeExtractor | None = None,
     event_handler: IndexingEventHandlers | None = None,
 ) -> TextIndexingResult:
