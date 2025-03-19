@@ -538,6 +538,9 @@ importers:
       rimraf:
         specifier: ^5.0.5
         version: 5.0.5
+      typescript:
+        specifier: ^5.4.2
+        version: 5.4.5
 
   packages/agentRpc:
     dependencies:
@@ -1237,7 +1240,7 @@ importers:
         version: 7.4.2
       typechat:
         specifier: ^0.1.1
-        version: 0.1.1(typescript@5.4.3)(zod@3.23.8)
+        version: 0.1.1(typescript@5.4.5)(zod@3.23.8)
     devDependencies:
       '@types/debug':
         specifier: ^4.1.12
@@ -1259,7 +1262,7 @@ importers:
         version: 5.0.5
       typescript:
         specifier: ^5.4.2
-        version: 5.4.3
+        version: 5.4.5
 
   packages/agents/spelunker:
     dependencies:

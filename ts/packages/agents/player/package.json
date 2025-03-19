@@ -42,5 +42,18 @@
     "action-schema-compiler": "workspace:*",
     "rimraf": "^5.0.5",
     "typescript": "^5.4.2"
+  },
+  "fluidBuild": {
+    "declarativeTasks": {
+      "asc": {
+        "inputGlobs": [
+          "src/agent/playerSchema.ts",
+          "src/agent/playerSchema.json"
+        ],
+        "outputGlobs": [
+          "dist/agent/playerSchema.json"
+        ]
+      }
+    }
   }
 }
