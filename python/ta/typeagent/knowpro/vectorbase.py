@@ -14,7 +14,6 @@ class ScoredKey(NamedTuple):
     score: float
 
 
-# TODO: Cache embeddings aggressively
 class VectorBase:
     def __init__(self):
         self._model = AsyncEmbeddingModel()
@@ -22,6 +21,7 @@ class VectorBase:
         self._vectors: NDArray[np.float32] = np.array([], dtype=np.float32).reshape(
             (0, 0)
         )
+        self._embedding_cache: dict[str, NDArray[np.float32]] = {}
 
     def __len__(self) -> int:
         assert len(self._keys) == len(self._vectors), (self._keys, self._vectors)
@@ -39,13 +39,47 @@ class VectorBase:
     def __contains__(self, key: str) -> bool:
         return key in self._keys
 
+    async def get_embedding(self, key: str) -> NDArray[np.float32]:
+        """Retrieve an embedding, using the cache."""
+        if key in self._embedding_cache:
+            return self._embedding_cache[key]
+        embedding = await self._model.get_embedding(key)
+        self._embedding_cache[key] = embedding
+        return embedding
+
+    async def get_embeddings(self, keys: list[str]) -> NDArray[np.float32]:
+        """Retrieve embeddings for multiple keys, using the cache."""
+        embeddings = []
+        missing_keys = []
+
+        # Collect cached embeddings and identify missing keys
+        for key in keys:
+            if key in self._embedding_cache:
+                embeddings.append(self._embedding_cache[key])
+            else:
+                embeddings.append(None)  # Placeholder for missing keys
+                missing_keys.append(key)
+
+        # Retrieve embeddings for missing keys
+        if missing_keys:
+            new_embeddings = await self._model.get_embeddings(missing_keys)
+            for key, embedding in zip(missing_keys, new_embeddings):
+                self._embedding_cache[key] = embedding
+
+            # Replace placeholders with retrieved embeddings
+            for i, key in enumerate(keys):
+                if embeddings[i] is None:
+                    embeddings[i] = self._embedding_cache[key]
+
+        return np.array(embeddings, dtype=np.float32).reshape((len(keys), -1))
+
     async def fuzzy_lookup(
         self, key: str, max_hits: int = 10, min_score: float = 0.0
     ) -> list[ScoredKey]:
         if not len(self._vectors):
             return []
 
-        embedding = await self._model.get_embedding(key)  # This takes the most time
+        embedding = await self.get_embedding(key)
 
         scores = np.dot(self._vectors, embedding)  # This does most of the work
 
@@ -61,7 +95,7 @@ class VectorBase:
         if key in self._keys:
             return
 
-        embedding = await self._model.get_embedding(key)
+        embedding = await self.get_embedding(key)
 
         embedding = embedding.reshape((1, len(embedding)))
         if not len(self._vectors):
@@ -78,7 +112,7 @@ class VectorBase:
                 return  # They were all already there
         keys = list(s)  # Not the original order, but that's fine
 
-        embeddings = await self._model.get_embeddings(keys)
+        embeddings = await self.get_embeddings(keys)
 
         self._vectors = np.append(self._vectors, embeddings, axis=0)
         self._keys.extend(keys)
