@@ -1,8 +1,8 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-from dataclasses import dataclass, field
-from typing import Any, Callable
+from dataclasses import dataclass
+from typing import Callable
 
 import typechat
 
@@ -90,8 +90,7 @@ def add_facet(
 ) -> None:
     if facet is not None:
         semantic_ref_index.add_term(facet.name, ref_ordinal)
-        if facet.value is not None:
-            semantic_ref_index.add_term(str(facet), ref_ordinal)
+        semantic_ref_index.add_term(str(facet), ref_ordinal)
 
 
 def add_topic_to_index(
@@ -120,7 +119,7 @@ def add_action_to_index(
     semantic_refs: list[SemanticRef],
     semantic_ref_index: ITermToSemanticRefIndex,
     message_ordinal: int,
-    chunk_ordinal=0,
+    chunk_ordinal: int = 0,
 ) -> None:
     ref_ordinal = len(semantic_refs)
     semantic_refs.append(
@@ -272,8 +271,8 @@ def create_knowledge_extractor(
     return convknowledge.KnowledgeExtractor(model)
 
 
-async def build_conversation_index(
-    conversation: IConversation,
+async def build_conversation_index[TM: IMessage, TC: IConversationSecondaryIndexes](
+    conversation: IConversation[TM, ConversationIndex, TC],
     conversation_settings: importing.ConversationSettings,
     event_handler: IndexingEventHandlers | None = None,
 ) -> IndexingResults:
@@ -288,7 +287,9 @@ async def build_conversation_index(
         and conversation.semantic_ref_index
     ):
         result.secondary_index_results = await secindex.build_secondary_indexes(
-            conversation, conversation_settings, event_handler
+            conversation,  # type: ignore  # TODO
+            conversation_settings,
+            event_handler,
         )
     return result
 

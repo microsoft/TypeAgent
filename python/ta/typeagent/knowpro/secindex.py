@@ -1,29 +1,44 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
+from typing import Any
+
 from .importing import ConversationSettings
-from .interfaces import IConversation, IndexingEventHandlers, SecondaryIndexingResults
+from .interfaces import (
+    IConversation,
+    IConversationSecondaryIndexes,
+    IMessage,
+    ITermToSemanticRefIndex,
+    IndexingEventHandlers,
+    SecondaryIndexingResults,
+)
 
 
-class ConversationSecondaryIndexes:
-    def __init__(self, settings: dict = None):
+class ConversationSecondaryIndexes(IConversationSecondaryIndexes):
+    # TODO: settings is probably not a dict
+    def __init__(self, settings: dict[str, Any] | None = None):
         if settings is None:
             settings = {}
-        # TODO
-        # self.property_to_semantic_ref_index = PropertyIndex()
-        # self.timestamp_index = TimestampToTextRangeIndex()
-        # self.term_to_related_terms_index = RelatedTermsIndex(settings)
+        # TODO: Put in real values.
+        self.property_to_semantic_ref_index = None  # PropertyIndex()
+        self.timestamp_index = None  # TimestampToTextRangeIndex()
+        self.term_to_related_terms_index = None  # RelatedTermsIndex(settings)
+        self.threads = None  # ThreadIndex(settings)
+        self.message_index = None
 
 
-async def build_secondary_index(
-    conversation: IConversation,
+async def build_secondary_indexes[
+    TM: IMessage,
+    TT: ITermToSemanticRefIndex,
+](
+    conversation: IConversation[TM, TT, ConversationSecondaryIndexes],
     conversation_settings: ConversationSettings,
-    event_handler: IndexingEventHandlers,
+    event_handler: IndexingEventHandlers | None,
 ) -> SecondaryIndexingResults:
     if conversation.secondary_indexes is None:
         conversation.secondary_indexes = ConversationSecondaryIndexes()
     result: SecondaryIndexingResults = build_transient_secondary_indexes(
-        conversation,
+        conversation,  # type: ignore  # TODO
     )
     # TODO
     # result.related_terms = await build_related_terms_index(
@@ -39,15 +54,15 @@ async def build_secondary_index(
     return result
 
 
-def build_transient_secondary_indexes(
-    conversation: IConversation,
+def build_transient_secondary_indexes[
+    TM: IMessage, TT: ITermToSemanticRefIndex, TC: IConversationSecondaryIndexes
+](
+    conversation: IConversation[TM, TT, TC],
 ) -> SecondaryIndexingResults:
     if conversation.secondary_indexes is None:
-        conversation.secondary_indexes = ConversationSecondaryIndexes()
+        conversation.secondary_indexes = ConversationSecondaryIndexes()  # type: ignore  # TODO
     result = SecondaryIndexingResults()
     # TODO
     # result.properties = build_property_index(conversation)
     # result.timestamps = build_timestamp_index(conversation)
     return result
-
-

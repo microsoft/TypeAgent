@@ -2,7 +2,7 @@
 # Licensed under the MIT License.
 
 import asyncio
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 import os
 
 import typechat

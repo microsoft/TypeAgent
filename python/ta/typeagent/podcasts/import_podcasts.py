@@ -7,7 +7,7 @@ import re
 from typing import cast, Sequence
 
 from ..knowpro.importing import ConversationSettings, create_conversation_settings
-from ..knowpro import convindex, interfaces, kplib
+from ..knowpro import convindex, interfaces, kplib, secindex
 from ..knowpro.interfaces import Datetime, Timedelta
 
 
@@ -123,11 +123,12 @@ class Podcast(
         result = await convindex.build_conversation_index(
             self, self.settings, event_handler
         )
-        # TODO: implement secondary indexes
-        # # build_conversation_index now automatically builds standard secondary indexes.
-        # # Pass false to build podcast specific secondary indexes only.
-        # await self.build_transient_secondary_indexes(False)
-        # await self.secondary_indexes.threads.build_index()
+        # build_conversation_index automatically builds standard secondary indexes.
+        # Pass false here to build podcast specific secondary indexes only.
+        self._build_transient_secondary_indexes(False)
+        # TODO: Waiting for threads.
+        # if self.secondary_indexes is not None:
+        #     await self.secondary_indexes.threads.build_index()
         return result
 
     async def serialize(self) -> dict:
@@ -173,7 +174,7 @@ class Podcast(
         # if podcast_data.get("message_index_data"):
         #     self.secondary_indexes.message_index = MessageTextIndex(self.settings.message_text_index_settings)
         #     self.secondary_indexes.message_index.deserialize(podcast_data["message_index_data"])
-        # await self.build_transient_secondary_indexes(True)
+        # await self._build_transient_secondary_indexes(True)
 
     # TODO: Implement write_conversation_data_to_file, read_conversation_data_from_file
     # async def write_to_file(self, dir_path: str, base_file_name: str) -> None:
@@ -193,7 +194,20 @@ class Podcast(
     #         await podcast.deserialize(data)
     #     return podcast
 
-    # TODO: Stuff about secondary indexes
+    def _build_transient_secondary_indexes(self, all: bool) -> None:
+        if all:
+            secindex.build_transient_secondary_indexes(self)
+        self._build_participant_aliases()
+        self._build_caches()
+
+    def _build_participant_aliases(self) -> None:
+        pass  # TODO
+
+    def _collect_participant_aliases(self) -> None:
+        pass  # TODO
+
+    def _build_caches(self) -> None:
+        pass  # TODO
 
 
 # NOTE: Doesn't need to be async (Python file I/O is synchronous)
