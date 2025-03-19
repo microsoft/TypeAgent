@@ -289,7 +289,7 @@ export default class TestTranslateCommand extends Command {
             const files =
                 argv.length > 0
                     ? (argv as string[])
-                    : await getDefaultConstructionProvider().getImportTranslationFiles();
+                    : await defaultConstructionProvider.getImportTranslationFiles();
 
             const inputs = await Promise.all(
                 files.map(async (file) => {
