@@ -61,6 +61,10 @@ export default class Compile extends Command {
         console.log(
             `Parse completed: ${actionSchemaFile.actionSchemas.size} actions found`,
         );
+        const outputDir = path.dirname(flags.output);
+        if (!fs.existsSync(outputDir)) {
+            fs.mkdirSync(outputDir, { recursive: true });
+        }
         fs.writeFileSync(
             flags.output,
             saveParsedActionSchema(actionSchemaFile),
