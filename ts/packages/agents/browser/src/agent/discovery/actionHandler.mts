@@ -510,7 +510,7 @@ export async function handleSchemaDiscoveryAction(
         const stepsResponse = await agent.getActionStepsSchemaFromRecording(
             intentData.actionName,
             action.parameters.recordedActionDescription,
-            intentResponse.data,
+            intentData,
             recordedSteps,
             action.parameters.fragments,
             // action.parameters.screenshot,

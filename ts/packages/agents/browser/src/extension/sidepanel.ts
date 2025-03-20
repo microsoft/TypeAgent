@@ -8,6 +8,14 @@ let recording = false;
 let recordedActions: any[] = [];
 let launchUrl: string | null = "";
 
+declare global {
+    interface Window {
+        Prism: {
+            highlightAll: () => void;
+        };
+    }
+}
+
 async function getActiveTabUrl(): Promise<string | null> {
     try {
         const tabs = await chrome.tabs.query({
@@ -327,6 +335,9 @@ async function removeEntryFromStoredPageProperties(
 // Function to update user actions display
 async function updateUserActionsUI() {
     await showUserDefinedActionsList();
+    if (window.Prism) {
+        window.Prism.highlightAll();
+    }
 }
 
 function startRecording() {
@@ -500,7 +511,7 @@ function renderTimeline(action: any, index: number) {
     if (action.intentSchema !== undefined) {
         const card = document.createElement("div");
         card.innerHTML = `        
-            <pre class="card-text"><code class="language-json">${action.intentSchema}</code></pre>
+            <pre class="card-text"><code class="language-typescript">${action.intentSchema}</code></pre>
         `;
 
         const intentViewContainer = timelineHeader.querySelector(
@@ -623,6 +634,10 @@ function renderTimelineSteps(
         deleteButton.classList.remove("hidden");
         deleteButton.style.display = "block";
         deleteButton.addEventListener("click", () => deleteAction(actionName));
+    }
+
+    if (window.Prism) {
+        window.Prism.highlightAll();
     }
 
     // Function to download the screenshot
