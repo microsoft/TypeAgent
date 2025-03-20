@@ -30,6 +30,7 @@ export type UserIntentParameter = {
     required: boolean;
 };
 
+// IMPORTANT: The user intent type only includes the actionName and parameters properties.
 export type UserIntent = {
     // a concise name for the action, in camelCase. This should be based on the goal of the task the user is running.
     actionName: string;
@@ -57,7 +58,7 @@ export type EnterText = {
 // This is used on pages where the user can type anywhere in the document body
 // and the page captures input
 export type EnterTextAtPageScope = {
-    actionName: "EnterTextAtPageScope";
+    actionName: "enterTextAtPageScope";
     parameters: {
         // IMPORTANT: the shortName of the UserIntentParameter to use for this value
         textParameter: string;
@@ -99,6 +100,7 @@ export type ClickOnLink = {
 export type PageManipulationActions =
     | SelectElementByText
     | EnterText
+    | EnterTextAtPageScope
     | SelectValueFromDropdown
     | ClickOnButton
     | ClickOnElement

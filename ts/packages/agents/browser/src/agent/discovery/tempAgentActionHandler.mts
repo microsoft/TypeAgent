@@ -183,6 +183,7 @@ export function createTempAgentForSchema(
                     }
                     break;
                 case "enterText":
+                case "enterTextAtPageScope":
                     const textParameter = targetIntent.parameters.find(
                         (param) =>
                             param.shortName == step.parameters.textParameter,

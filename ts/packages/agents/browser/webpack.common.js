@@ -125,6 +125,22 @@ module.exports = {
                     from: "node_modules/bootstrap/dist/js/bootstrap.bundle.min.js",
                     to: "./extension/vendor/bootstrap/bootstrap.bundle.min.js",
                 },
+                {
+                    from: "node_modules/prismjs/prism.js",
+                    to: "./extension/vendor/prism/prism.js",
+                },
+                {
+                    from: "node_modules/prismjs/themes/prism.css",
+                    to: "./extension/vendor/prism/",
+                },
+                {
+                    from: "node_modules/prismjs/components/prism-typescript.js",
+                    to: "./extension/vendor/prism/",
+                },
+                {
+                    from: "node_modules/prismjs/components/prism-json.js",
+                    to: "./extension/vendor/prism/",
+                },
             ],
         }),
 
