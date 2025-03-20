@@ -14,7 +14,7 @@ import {
 import { ActionConfig } from "./actionConfig.js";
 import { ActionConfigProvider } from "./actionConfigProvider.js";
 import { getPackageFilePath } from "../utils/getPackageFilePath.js";
-import { AppAction } from "@typeagent/agent-sdk";
+import { AppAction, SchemaFormat } from "@typeagent/agent-sdk";
 import { DeepPartialUndefined, simpleStarRegex } from "common-utils";
 import fs from "node:fs";
 import crypto from "node:crypto";
@@ -63,7 +63,7 @@ export class ActionSchemaFileCache {
         source: string;
         config: string | undefined;
         fullPath: string | undefined;
-        type: "ts" | "json";
+        format: SchemaFormat;
     } {
         if (typeof actionConfig.schemaFile === "string") {
             const fullPath = getPackageFilePath(actionConfig.schemaFile);
@@ -73,22 +73,24 @@ export class ActionSchemaFileCache {
                 fullPath,
                 source,
                 config,
-                type: actionConfig.schemaFile.endsWith(".json") ? "json" : "ts",
+                format: actionConfig.schemaFile.endsWith(".pas.json")
+                    ? "pas"
+                    : "ts",
             };
         }
         if (
-            actionConfig.schemaFile.type === "ts" ||
-            actionConfig.schemaFile.type === "json"
+            actionConfig.schemaFile.format === "ts" ||
+            actionConfig.schemaFile.format === "pas"
         ) {
             return {
                 source: actionConfig.schemaFile.content,
                 config: undefined,
                 fullPath: undefined,
-                type: actionConfig.schemaFile.type,
+                format: actionConfig.schemaFile.format,
             };
         }
         throw new Error(
-            `Unsupported schema source type ${actionConfig.schemaFile.type}`,
+            `Unsupported schema source type ${actionConfig.schemaFile.format}`,
         );
     }
     public getActionSchemaFile(actionConfig: ActionConfig): ActionSchemaFile {
@@ -99,11 +101,11 @@ export class ActionSchemaFileCache {
             return actionSchemaFile;
         }
 
-        const { source, config, fullPath, type } =
+        const { source, config, fullPath, format } =
             this.getSchemaSource(actionConfig);
 
         const hash = config ? hashStrings(source, config) : hashStrings(source);
-        const cacheKey = `${type}|${actionConfig.schemaName}|${actionConfig.schemaType}|${fullPath ?? ""}`;
+        const cacheKey = `${format}|${actionConfig.schemaName}|${actionConfig.schemaType}|${fullPath ?? ""}`;
 
         const lastCached = this.prevSaved.get(cacheKey);
         if (lastCached !== undefined) {
@@ -125,7 +127,7 @@ export class ActionSchemaFileCache {
             ? JSON.parse(config)
             : undefined;
         const parsed =
-            type === "json"
+            format === "pas"
                 ? loadParsedActionSchema(
                       actionConfig.schemaName,
                       actionConfig.schemaType,

@@ -122,7 +122,7 @@ function getTranslatorSchemaDef(
         };
     }
 
-    if (actionConfig.schemaFile.type === "ts") {
+    if (actionConfig.schemaFile.format === "ts") {
         return {
             kind: "inline",
             typeName: actionConfig.schemaType,
@@ -131,7 +131,7 @@ function getTranslatorSchemaDef(
     }
 
     throw new Error(
-        `Unsupported schema source type: ${actionConfig.schemaFile.type}"`,
+        `Unsupported schema source type: ${actionConfig.schemaFile.format}"`,
     );
 }
 
