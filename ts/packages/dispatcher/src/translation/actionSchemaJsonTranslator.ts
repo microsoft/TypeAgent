@@ -3,7 +3,6 @@
 
 import { error, Result, success } from "typechat";
 import {
-    ActionSchemaFile,
     generateActionSchema,
     validateAction,
     ActionSchemaCreator as sc,
@@ -31,7 +30,10 @@ import {
     MultipleActionOptions,
 } from "./multipleActionSchema.js";
 import { ActionConfig } from "./actionConfig.js";
-import { ActionConfigProvider } from "./actionConfigProvider.js";
+import {
+    ActionConfigProvider,
+    ActionSchemaFile,
+} from "./actionConfigProvider.js";
 
 function convertJsonSchemaOutput(
     jsonObject: unknown,
@@ -124,7 +126,7 @@ class ActionSchemaBuilder {
             const actionSchemaFile =
                 this.provider.getActionSchemaFileForConfig(config);
             this.files.push(actionSchemaFile);
-            this.definitions.push(actionSchemaFile.entry);
+            this.definitions.push(actionSchemaFile.parsedActionSchema.entry);
         }
     }
 
@@ -142,9 +144,9 @@ class ActionSchemaBuilder {
         const entry = sc.type(typeName, this.getTypeUnion(), undefined, true);
         const order = new Map<string, number>();
         for (const file of this.files) {
-            if (file.order) {
+            if (file.parsedActionSchema.order) {
                 const base = order.size;
-                for (const [name, num] of file.order) {
+                for (const [name, num] of file.parsedActionSchema.order) {
                     if (order.has(name)) {
                         throw new Error(
                             `Schema Builder Error: duplicate type definition '${name}'`,

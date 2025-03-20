@@ -149,11 +149,3 @@ export type ParsedActionSchema = ActionSchemaGroup & {
     // separate the cache by action name
     actionNamespace?: boolean; // default to false
 };
-
-export type ActionSchemaFile = ParsedActionSchema & {
-    // Schema name
-    schemaName: string;
-
-    // original file source hash
-    sourceHash: string;
-};

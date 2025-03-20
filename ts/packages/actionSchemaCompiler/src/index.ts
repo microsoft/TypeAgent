@@ -5,7 +5,7 @@ import { Command, Flags } from "@oclif/core";
 import {
     parseActionSchemaSource,
     SchemaConfig,
-    saveParsedActionSchema,
+    toJSONParsedActionSchema,
 } from "action-schema";
 import path from "node:path";
 import fs from "node:fs";
@@ -51,7 +51,6 @@ export default class Compile extends Command {
         const actionSchemaFile = parseActionSchemaSource(
             fs.readFileSync(flags.input, "utf-8"),
             name,
-            "",
             flags.schemaType,
             flags.input,
             getSchemaConfig(flags.input),
@@ -67,7 +66,7 @@ export default class Compile extends Command {
         }
         fs.writeFileSync(
             flags.output,
-            saveParsedActionSchema(actionSchemaFile),
+            JSON.stringify(toJSONParsedActionSchema(actionSchemaFile)),
         );
         console.log(`Parsed action schema written: ${flags.output}`);
     }

@@ -2,19 +2,20 @@
 // Licensed under the MIT License.
 
 import {
-    ActionSchemaFile,
-    ActionSchemaFileJSON,
+    ParsedActionSchemaJSON,
     ActionSchemaTypeDefinition,
-    fromJSONActionSchemaFile,
+    fromJSONParsedActionSchema,
     parseActionSchemaSource,
     SchemaConfig,
-    toJSONActionSchemaFile,
-    loadParsedActionSchema,
+    toJSONParsedActionSchema,
 } from "action-schema";
 import { ActionConfig } from "./actionConfig.js";
-import { ActionConfigProvider } from "./actionConfigProvider.js";
+import {
+    ActionConfigProvider,
+    ActionSchemaFile,
+} from "./actionConfigProvider.js";
 import { getPackageFilePath } from "../utils/getPackageFilePath.js";
-import { AppAction } from "@typeagent/agent-sdk";
+import { AppAction, SchemaFormat } from "@typeagent/agent-sdk";
 import { DeepPartialUndefined, simpleStarRegex } from "common-utils";
 import fs from "node:fs";
 import crypto from "node:crypto";
@@ -32,11 +33,65 @@ function hashStrings(...str: string[]) {
     return hash.digest("base64");
 }
 
-const ActionSchemaFileCacheVersion = 2;
+const ActionSchemaFileCacheVersion = 3;
+
+type ActionSchemaFileJSON = {
+    schemaName: string;
+    sourceHash: string;
+    parsedActionSchema: ParsedActionSchemaJSON;
+};
+
 type ActionSchemaFileCacheJSON = {
     version: number;
     entries: [string, ActionSchemaFileJSON][];
 };
+
+function loadParsedActionSchema(
+    schemaName: string,
+    schemaType: string,
+    sourceHash: string,
+    source: string,
+): ActionSchemaFile {
+    // TODO: validate the json
+    const parsedActionSchemaJSON = JSON.parse(source) as ParsedActionSchemaJSON;
+    const parsedActionSchema = fromJSONParsedActionSchema(
+        parsedActionSchemaJSON,
+        schemaName,
+    );
+    if (parsedActionSchema.entry.name !== schemaType) {
+        throw new Error(
+            `Unable to load parsed action schema: Schema type mismatch: actual: ${parsedActionSchema.entry.name}, expected:${schemaType}`,
+        );
+    }
+    return {
+        schemaName,
+        sourceHash,
+        parsedActionSchema,
+    };
+}
+
+function loadActionSchemaFile(record: ActionSchemaFileJSON): ActionSchemaFile {
+    return {
+        schemaName: record.schemaName,
+        sourceHash: record.sourceHash,
+        parsedActionSchema: fromJSONParsedActionSchema(
+            record.parsedActionSchema,
+            record.schemaName,
+        ),
+    };
+}
+
+function saveActionSchemaFile(
+    actionSchemaFile: ActionSchemaFile,
+): ActionSchemaFileJSON {
+    return {
+        schemaName: actionSchemaFile.schemaName,
+        sourceHash: actionSchemaFile.sourceHash,
+        parsedActionSchema: toJSONParsedActionSchema(
+            actionSchemaFile.parsedActionSchema,
+        ),
+    };
+}
 
 export class ActionSchemaFileCache {
     private readonly actionSchemaFiles = new Map<string, ActionSchemaFile>();
@@ -63,7 +118,7 @@ export class ActionSchemaFileCache {
         source: string;
         config: string | undefined;
         fullPath: string | undefined;
-        type: "ts" | "json";
+        format: SchemaFormat;
     } {
         if (typeof actionConfig.schemaFile === "string") {
             const fullPath = getPackageFilePath(actionConfig.schemaFile);
@@ -73,22 +128,24 @@ export class ActionSchemaFileCache {
                 fullPath,
                 source,
                 config,
-                type: actionConfig.schemaFile.endsWith(".json") ? "json" : "ts",
+                format: actionConfig.schemaFile.endsWith(".pas.json")
+                    ? "pas"
+                    : "ts",
             };
         }
         if (
-            actionConfig.schemaFile.type === "ts" ||
-            actionConfig.schemaFile.type === "json"
+            actionConfig.schemaFile.format === "ts" ||
+            actionConfig.schemaFile.format === "pas"
         ) {
             return {
                 source: actionConfig.schemaFile.content,
                 config: undefined,
                 fullPath: undefined,
-                type: actionConfig.schemaFile.type,
+                format: actionConfig.schemaFile.format,
             };
         }
         throw new Error(
-            `Unsupported schema source type ${actionConfig.schemaFile.type}`,
+            `Unsupported schema source type ${actionConfig.schemaFile.format}`,
         );
     }
     public getActionSchemaFile(actionConfig: ActionConfig): ActionSchemaFile {
@@ -99,11 +156,11 @@ export class ActionSchemaFileCache {
             return actionSchemaFile;
         }
 
-        const { source, config, fullPath, type } =
+        const { source, config, fullPath, format } =
             this.getSchemaSource(actionConfig);
 
         const hash = config ? hashStrings(source, config) : hashStrings(source);
-        const cacheKey = `${type}|${actionConfig.schemaName}|${actionConfig.schemaType}|${fullPath ?? ""}`;
+        const cacheKey = `${format}|${actionConfig.schemaName}|${actionConfig.schemaType}|${fullPath ?? ""}`;
 
         const lastCached = this.prevSaved.get(cacheKey);
         if (lastCached !== undefined) {
@@ -112,7 +169,7 @@ export class ActionSchemaFileCache {
                 debug(`Cached action schema used: ${actionConfig.schemaName}`);
                 // Add and save the cache first before convert it back (which will modify the data)
                 this.addToCache(cacheKey, lastCached);
-                const cached = fromJSONActionSchemaFile(lastCached);
+                const cached = loadActionSchemaFile(lastCached);
                 this.actionSchemaFiles.set(actionConfig.schemaName, cached);
                 return cached;
             }
@@ -124,27 +181,30 @@ export class ActionSchemaFileCache {
         const schemaConfig: SchemaConfig | undefined = config
             ? JSON.parse(config)
             : undefined;
-        const parsed =
-            type === "json"
+        const parsed: ActionSchemaFile =
+            format === "pas"
                 ? loadParsedActionSchema(
                       actionConfig.schemaName,
                       actionConfig.schemaType,
                       hash,
                       source,
                   )
-                : parseActionSchemaSource(
-                      source,
-                      actionConfig.schemaName,
-                      hash,
-                      actionConfig.schemaType,
-                      fullPath,
-                      schemaConfig,
-                      true,
-                  );
+                : {
+                      schemaName: actionConfig.schemaName,
+                      sourceHash: hash,
+                      parsedActionSchema: parseActionSchemaSource(
+                          source,
+                          actionConfig.schemaName,
+                          actionConfig.schemaType,
+                          fullPath,
+                          schemaConfig,
+                          true,
+                      ),
+                  };
         this.actionSchemaFiles.set(actionConfig.schemaName, parsed);
 
         if (this.cacheFilePath !== undefined) {
-            this.addToCache(cacheKey, toJSONActionSchemaFile(parsed));
+            this.addToCache(cacheKey, saveActionSchemaFile(parsed));
         }
         return parsed;
     }
@@ -209,7 +269,7 @@ export function getActionSchema(
     }
 
     const actionSchemaFile = provider.getActionSchemaFileForConfig(config);
-    return actionSchemaFile.actionSchemas.get(actionName);
+    return actionSchemaFile.parsedActionSchema.actionSchemas.get(actionName);
 }
 
 export function createSchemaInfoProvider(
@@ -223,7 +283,9 @@ export function createSchemaInfoProvider(
 
     const getActionSchema = (schemaName: string, actionName: string) => {
         const actionSchema =
-            getActionSchemaFile(schemaName).actionSchemas.get(actionName);
+            getActionSchemaFile(
+                schemaName,
+            ).parsedActionSchema.actionSchemas.get(actionName);
         if (actionSchema === undefined) {
             throw new Error(
                 `Invalid action name ${actionName} for schema ${schemaName}`,
@@ -235,7 +297,7 @@ export function createSchemaInfoProvider(
         getActionSchemaFileHash: (schemaName) =>
             getActionSchemaFile(schemaName).sourceHash,
         getActionNamespace: (schemaName) =>
-            getActionSchemaFile(schemaName).actionNamespace,
+            getActionSchemaFile(schemaName).parsedActionSchema.actionNamespace,
         getActionCacheEnabled: (schemaName, actionName) =>
             getActionSchema(schemaName, actionName).paramSpecs !== false,
         getActionParamSpec: (schemaName, actionName, paramName) => {

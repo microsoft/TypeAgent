@@ -122,7 +122,7 @@ function getTranslatorSchemaDef(
         };
     }
 
-    if (actionConfig.schemaFile.type === "ts") {
+    if (actionConfig.schemaFile.format === "ts") {
         return {
             kind: "inline",
             typeName: actionConfig.schemaType,
@@ -131,7 +131,7 @@ function getTranslatorSchemaDef(
     }
 
     throw new Error(
-        `Unsupported schema source type: ${actionConfig.schemaFile.type}"`,
+        `Unsupported schema source type: ${actionConfig.schemaFile.format}"`,
     );
 }
 
@@ -224,7 +224,7 @@ function collectSchemaName(
     const schemaNameMap = new Map<string, string>();
     for (const actionConfig of actionConfigs) {
         const schemaFile = provider.getActionSchemaFileForConfig(actionConfig);
-        for (const actionName of schemaFile.actionSchemas.keys()) {
+        for (const actionName of schemaFile.parsedActionSchema.actionSchemas.keys()) {
             const existing = schemaNameMap.get(actionName);
             if (existing) {
                 throw new Error(
