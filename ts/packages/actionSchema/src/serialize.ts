@@ -121,12 +121,10 @@ function resolveTypes(
  * Clone the data before passing into this function if you want to keep the original.
  *
  * @param json JSON data to convert
- * @param schemaName Name of the schema (for error messages)
  * @returns
  */
 export function fromJSONParsedActionSchema(
     json: ParsedActionSchemaJSON,
-    schemaName: string,
 ): ParsedActionSchema {
     for (const type of Object.values(json.types)) {
         resolveTypes(json.types, type.type);
@@ -139,11 +137,5 @@ export function fromJSONParsedActionSchema(
               actionNamespace: json.actionNamespace,
           }
         : undefined;
-    return createParsedActionSchema(
-        schemaName,
-        entry,
-        order,
-        true,
-        schemaConfig,
-    );
+    return createParsedActionSchema(entry, order, true, schemaConfig);
 }

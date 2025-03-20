@@ -23,7 +23,6 @@ import registerDebug from "debug";
 const debug = registerDebug("typeagent:schema:parse");
 
 function checkParamSpecs(
-    schemaName: string,
     paramSpecs: ActionParamSpecs,
     parameterType: SchemaTypeObject<SchemaObjectFields>,
     actionName: string,
@@ -38,40 +37,42 @@ function checkParamSpecs(
                 name === "prototype"
             ) {
                 throw new Error(
-                    `Schema Config Error: ${schemaName}: Invalid parameter name '${propertyName}' for action '${actionName}': Illegal parameter property name '${name}'`,
+                    `Schema Config Error: Invalid parameter name '${propertyName}' for action '${actionName}': Illegal parameter property name '${name}'`,
                 );
             }
             const maybeIndex = parseInt(name);
             if (maybeIndex.toString() === name) {
                 throw new Error(
-                    `Schema Config Error: ${schemaName}: Invalid parameter name '${propertyName}' for action '${actionName}': paramSpec cannot be applied to specific array index ${maybeIndex}`,
+                    `Schema Config Error: Invalid parameter name '${propertyName}' for action '${actionName}': paramSpec cannot be applied to specific array index ${maybeIndex}`,
                 );
             }
             if (name === "*") {
                 if (currentType.type !== "array") {
                     throw new Error(
-                        `Schema Config Error: ${schemaName}: Invalid parameter name '${propertyName}' for action '${actionName}': '*' is only allowed for array types`,
+                        `Schema Config Error: Invalid parameter name '${propertyName}' for action '${actionName}': '*' is only allowed for array types`,
                     );
                 }
                 currentType = currentType.elementType;
-                continue;
+            } else {
+                if (currentType.type !== "object") {
+                    throw new Error(
+                        `Schema Config Error: Invalid parameter name '${propertyName}' for action '${actionName}': Access property '${name}' of non-object`,
+                    );
+                }
+
+                const field: SchemaObjectField | undefined =
+                    currentType.fields[name];
+                if (field === undefined) {
+                    throw new Error(
+                        `Schema Config Error: Invalid parameter name '${propertyName}' for action '${actionName}': property '${name}' does not exist`,
+                    );
+                }
+                currentType = field.type;
             }
-            if (currentType.type !== "object") {
-                throw new Error(
-                    `Schema Config Error: ${schemaName}: Invalid parameter name '${propertyName}' for action '${actionName}': Access property '${name}' of non-object`,
-                );
-            }
-            const field: SchemaObjectField | undefined =
-                currentType.fields[name];
-            if (field === undefined) {
-                throw new Error(
-                    `Schema Config Error: ${schemaName}: Invalid parameter name '${propertyName}' for action '${actionName}': property '${name}' does not exist`,
-                );
-            }
-            const resolvedType = resolveReference(field.type);
+            const resolvedType = resolveReference(currentType);
             if (resolvedType === undefined) {
                 throw new Error(
-                    `Schema Config Error: ${schemaName}: Invalid parameter name '${propertyName}' for action '${actionName}': unresolved type reference for property '${name}'`,
+                    `Schema Config Error: Invalid parameter name '${propertyName}' for action '${actionName}': unresolved type reference for property '${name}'`,
                 );
             }
             currentType = resolvedType;
@@ -82,7 +83,7 @@ function checkParamSpecs(
             case "time":
                 if (currentType.type !== "string") {
                     throw new Error(
-                        `Schema Config Error: ${schemaName}: Parameter '${propertyName}' for action '${actionName}' has invalid type '${currentType.type}' for paramSpec '${spec}'. `,
+                        `Schema Config Error: Parameter '${propertyName}' for action '${actionName}' has invalid type '${currentType.type}' for paramSpec '${spec}'. `,
                     );
                 }
                 break;
@@ -92,7 +93,7 @@ function checkParamSpecs(
                     currentType.type !== "string-union"
                 ) {
                     throw new Error(
-                        `Schema Config Error: ${schemaName}: Parameter '${propertyName}' for action '${actionName}' has invalid type '${currentType.type}' for paramSpec '${spec}'. `,
+                        `Schema Config Error: Parameter '${propertyName}' for action '${actionName}' has invalid type '${currentType.type}' for paramSpec '${spec}'. `,
                     );
                 }
                 break;
@@ -101,39 +102,38 @@ function checkParamSpecs(
             case "ordinal":
                 if (currentType.type !== "number") {
                     throw new Error(
-                        `Schema Config Error: ${schemaName}: Parameter '${propertyName}' for action '${actionName}' has invalid type '${currentType.type}' for paramSpec '${spec}'. `,
+                        `Schema Config Error: Parameter '${propertyName}' for action '${actionName}' has invalid type '${currentType.type}' for paramSpec '${spec}'. `,
                     );
                 }
                 break;
             default:
                 throw new Error(
-                    `Schema Config Error: ${schemaName}: Parameter '${propertyName}' for action '${actionName}' has unknown paramSpec '${spec}'. `,
+                    `Schema Config Error: Parameter '${propertyName}' for action '${actionName}' has unknown paramSpec '${spec}'. `,
                 );
         }
     }
 }
 
 function checkActionSchema(
-    schemaName: string,
     definition: SchemaTypeDefinition,
     schemaConfig: SchemaConfig | undefined,
 ): [string, ActionSchemaTypeDefinition] {
     const name = definition.name;
     if (definition.type.type !== "object") {
         throw new Error(
-            `Schema Error: ${schemaName}: object type expect in action schema type ${name}, got ${definition.type.type}`,
+            `Schema Error: object type expect in action schema type ${name}, got ${definition.type.type}`,
         );
     }
 
     const { actionName, parameters } = definition.type.fields;
     if (actionName === undefined) {
         throw new Error(
-            `Schema Error: ${schemaName}: Missing actionName field in action schema type ${name}`,
+            `Schema Error: Missing actionName field in action schema type ${name}`,
         );
     }
     if (actionName.optional) {
         throw new Error(
-            `Schema Error: ${schemaName}: actionName field must be required in action schema type ${name}`,
+            `Schema Error: actionName field must be required in action schema type ${name}`,
         );
     }
     if (
@@ -141,7 +141,7 @@ function checkActionSchema(
         actionName.type.typeEnum.length !== 1
     ) {
         throw new Error(
-            `Schema Error: ${schemaName}: actionName field must be a string literal in action schema type ${name}`,
+            `Schema Error: actionName field must be a string literal in action schema type ${name}`,
         );
     }
 
@@ -152,7 +152,7 @@ function checkActionSchema(
         parameterFieldType.type !== "object"
     ) {
         throw new Error(
-            `Schema Error: ${schemaName}: parameters field must be an object in action schema type ${name}`,
+            `Schema Error: parameters field must be an object in action schema type ${name}`,
         );
     }
 
@@ -161,12 +161,7 @@ function checkActionSchema(
     const paramSpecs = schemaConfig?.paramSpec?.[actionNameString];
     if (paramSpecs !== undefined) {
         if (paramSpecs !== false) {
-            checkParamSpecs(
-                schemaName,
-                paramSpecs,
-                parameterFieldType,
-                actionNameString,
-            );
+            checkParamSpecs(paramSpecs, parameterFieldType, actionNameString);
         }
         actionDefinition.paramSpecs = paramSpecs;
     }
@@ -174,16 +169,13 @@ function checkActionSchema(
 }
 
 export function createParsedActionSchema(
-    schemaName: string,
     entry: SchemaTypeDefinition,
     order: Map<string, number> | undefined,
     strict: boolean,
     schemaConfig?: SchemaConfig,
 ): ParsedActionSchema {
     if (strict && !entry.exported) {
-        throw new Error(
-            `Schema Error: ${schemaName}: Type '${entry.name}' must be exported`,
-        );
+        throw new Error(`Schema Error: Type '${entry.name}' must be exported`);
     }
 
     const pending: SchemaTypeDefinition[] = [entry];
@@ -193,13 +185,12 @@ export function createParsedActionSchema(
         switch (current.type.type) {
             case "object":
                 const [actionName, actionSchema] = checkActionSchema(
-                    schemaName,
                     current,
                     schemaConfig,
                 );
                 if (actionSchemas.get(actionName)) {
                     throw new Error(
-                        `Schema Error: ${schemaName}: Duplicate action name '${actionName}'`,
+                        `Schema Error: Duplicate action name '${actionName}'`,
                     );
                 }
                 actionSchemas.set(actionName, actionSchema);
@@ -207,18 +198,18 @@ export function createParsedActionSchema(
             case "type-union":
                 if (strict && current.comments) {
                     throw new Error(
-                        `Schema Error: ${schemaName}: entry type comments for '${current.name}' are not used for prompts. Remove from the action schema file.\n${current.comments.map((s) => `  - ${s}`).join("\n")}`,
+                        `Schema Error: entry type comments for '${current.name}' are not used for prompts. Remove from the action schema file.\n${current.comments.map((s) => `  - ${s}`).join("\n")}`,
                     );
                 }
                 for (const t of current.type.types) {
                     if (t.type !== "type-reference") {
                         throw new Error(
-                            `Schema Error: ${schemaName}: expected type reference in the entry type union`,
+                            `Schema Error: expected type reference in the entry type union`,
                         );
                     }
                     if (t.definition === undefined) {
                         throw new Error(
-                            `Schema Error: ${schemaName}: unresolved type reference '${t.name}' in the entry type union`,
+                            `Schema Error: unresolved type reference '${t.name}' in the entry type union`,
                         );
                     }
                     pending.push(t.definition);
@@ -228,19 +219,19 @@ export function createParsedActionSchema(
                 // Definition that references another type is the same as a union type with a single type.
                 if (strict && current.comments) {
                     throw new Error(
-                        `Schema Error: ${schemaName}: entry type comments for '${current.name}' are not used for prompts. Remove from the action schema file.\n${current.comments.map((s) => `  - ${s}`).join("\n")}`,
+                        `Schema Error: entry type comments for '${current.name}' are not used for prompts. Remove from the action schema file.\n${current.comments.map((s) => `  - ${s}`).join("\n")}`,
                     );
                 }
                 if (current.type.definition === undefined) {
                     throw new Error(
-                        `Schema Error: ${schemaName}: unresolved type reference '${current.type.name}' in the entry type union`,
+                        `Schema Error: unresolved type reference '${current.type.name}' in the entry type union`,
                     );
                 }
                 pending.push(current.type.definition);
                 break;
             default:
                 throw new Error(
-                    `Schema Error: ${schemaName}: invalid type '${current.type.type}' in action schema type ${current.name}`,
+                    `Schema Error: invalid type '${current.type.type}' in action schema type ${current.name}`,
                 );
         }
     }
@@ -275,22 +266,22 @@ export function parseActionSchemaSource(
             source,
             ts.ScriptTarget.ES5,
         );
-        return ActionParser.parseSourceFile(
+        const parsed = ActionParser.parseSourceFile(
             sourceFile,
-            schemaName,
             typeName,
             schemaConfig,
             strict,
         );
+        debug(`Parse Successful ${schemaName}`);
+        return parsed;
     } catch (e: any) {
-        throw new Error(`Error parsing ${schemaName}: ${e.message}`);
+        throw new Error(`Error parsing schema '${schemaName}': ${e.message}`);
     }
 }
 
 class ActionParser {
     static parseSourceFile(
         sourceFile: ts.SourceFile,
-        schemaName: string,
         typeName: string,
         schemaConfig: SchemaConfig | undefined,
         strict: boolean,
@@ -301,13 +292,11 @@ class ActionParser {
             throw new Error(`Type '${typeName}' not found`);
         }
         const result = createParsedActionSchema(
-            schemaName,
             definition,
             parser.typeOrder,
             strict,
             schemaConfig,
         );
-        debug(`Parse Successful ${schemaName}`);
         return result;
     }
     private constructor() {}

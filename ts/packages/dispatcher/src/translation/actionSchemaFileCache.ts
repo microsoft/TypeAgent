@@ -52,22 +52,29 @@ function loadParsedActionSchema(
     sourceHash: string,
     source: string,
 ): ActionSchemaFile {
-    // TODO: validate the json
-    const parsedActionSchemaJSON = JSON.parse(source) as ParsedActionSchemaJSON;
-    const parsedActionSchema = fromJSONParsedActionSchema(
-        parsedActionSchemaJSON,
-        schemaName,
-    );
-    if (parsedActionSchema.entry.name !== schemaType) {
+    try {
+        const parsedActionSchemaJSON = JSON.parse(
+            source,
+        ) as ParsedActionSchemaJSON;
+        // TODO: validate the json
+        const parsedActionSchema = fromJSONParsedActionSchema(
+            parsedActionSchemaJSON,
+        );
+        if (parsedActionSchema.entry.name !== schemaType) {
+            throw new Error(
+                `Schema type mismatch: actual: ${parsedActionSchema.entry.name}, expected:${schemaType}`,
+            );
+        }
+        return {
+            schemaName,
+            sourceHash,
+            parsedActionSchema,
+        };
+    } catch (e: any) {
         throw new Error(
-            `Unable to load parsed action schema: Schema type mismatch: actual: ${parsedActionSchema.entry.name}, expected:${schemaType}`,
+            `Failed to load parsed action schema '${schemaName}': ${e.message}`,
         );
     }
-    return {
-        schemaName,
-        sourceHash,
-        parsedActionSchema,
-    };
 }
 
 function loadActionSchemaFile(record: ActionSchemaFileJSON): ActionSchemaFile {
@@ -76,7 +83,6 @@ function loadActionSchemaFile(record: ActionSchemaFileJSON): ActionSchemaFile {
         sourceHash: record.sourceHash,
         parsedActionSchema: fromJSONParsedActionSchema(
             record.parsedActionSchema,
-            record.schemaName,
         ),
     };
 }

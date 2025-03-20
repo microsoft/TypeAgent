@@ -166,7 +166,6 @@ describe("Action Schema Serialization", () => {
             const serialized = toJSONParsedActionSchema(actionSchemaFile);
             const deserialized = fromJSONParsedActionSchema(
                 structuredClone(serialized),
-                schemaName,
             );
 
             expect(deserialized).toEqual(actionSchemaFile);
@@ -176,7 +175,6 @@ describe("Action Schema Serialization", () => {
 
             const deserialized2 = fromJSONParsedActionSchema(
                 structuredClone(serialized),
-                schemaName,
             );
             expect(deserialized2).toEqual(deserialized);
         },
