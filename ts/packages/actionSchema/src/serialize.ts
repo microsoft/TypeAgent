@@ -2,16 +2,24 @@
 // Licensed under the MIT License.
 
 import { createActionSchemaFile } from "./parser.js";
-import { ActionSchemaFile, SchemaType, SchemaTypeDefinition } from "./type.js";
+import {
+    ActionSchemaFile,
+    ParsedActionSchema,
+    SchemaType,
+    SchemaTypeDefinition,
+} from "./type.js";
 
-export type ActionSchemaFileJSON = {
-    schemaName: string;
-    sourceHash: string;
+export type ParsedActionSchemaGroupJSON = {
     entry: string;
     types: Record<string, SchemaTypeDefinition>;
     actionNamespace?: boolean; // default to false
     order?: Record<string, number>;
 };
+
+export type ActionSchemaFileJSON = {
+    schemaName: string;
+    sourceHash: string;
+} & ParsedActionSchemaGroupJSON;
 
 function collectTypes(
     definitions: Record<string, SchemaTypeDefinition>,
@@ -52,6 +60,27 @@ function collectTypes(
     }
 }
 
+function toJSONActionSchemaGroup(
+    parsedActionSchema: ParsedActionSchema,
+): ParsedActionSchemaGroupJSON {
+    const definitions: Record<string, SchemaTypeDefinition> = {};
+    // clone it so we can modified it.
+    const entry = structuredClone(parsedActionSchema.entry);
+    definitions[entry.name] = entry;
+    collectTypes(definitions, entry.type);
+    const result: ParsedActionSchemaGroupJSON = {
+        entry: entry.name,
+        types: definitions,
+    };
+    if (parsedActionSchema.actionNamespace) {
+        result.actionNamespace = parsedActionSchema.actionNamespace;
+    }
+    if (parsedActionSchema.order) {
+        result.order = Object.fromEntries(parsedActionSchema.order.entries());
+    }
+    return result;
+}
+
 /**
  * Convert a ActionSchemaFile to a JSON-able object
  * Data in the original ActionSchemaFile will not be modified.
@@ -62,23 +91,11 @@ function collectTypes(
 export function toJSONActionSchemaFile(
     actionSchemaFile: ActionSchemaFile,
 ): ActionSchemaFileJSON {
-    const definitions: Record<string, SchemaTypeDefinition> = {};
-    // clone it so we can modified it.
-    const entry = structuredClone(actionSchemaFile.entry);
-    definitions[entry.name] = entry;
-    collectTypes(definitions, entry.type);
     const result: ActionSchemaFileJSON = {
         schemaName: actionSchemaFile.schemaName,
         sourceHash: actionSchemaFile.sourceHash,
-        entry: entry.name,
-        types: definitions,
+        ...toJSONActionSchemaGroup(actionSchemaFile),
     };
-    if (actionSchemaFile.actionNamespace) {
-        result.actionNamespace = actionSchemaFile.actionNamespace;
-    }
-    if (actionSchemaFile.order) {
-        result.order = Object.fromEntries(actionSchemaFile.order.entries());
-    }
     return result;
 }
 
@@ -145,4 +162,30 @@ export function fromJSONActionSchemaFile(
         true,
         schemaConfig,
     );
+}
+
+export function loadParsedActionSchema(
+    schemaName: string,
+    schemaType: string,
+    sourceHash: string,
+    source: string,
+): ActionSchemaFile {
+    const json = JSON.parse(source);
+    // TODO: validate the json
+    json.schemaName = schemaName;
+    json.sourceHash = sourceHash;
+    const actionSchemaFile = fromJSONActionSchemaFile(json);
+    if (actionSchemaFile.entry.name !== schemaType) {
+        throw new Error(
+            `Schema type mismatch: ${actionSchemaFile.entry.name} != ${schemaType}`,
+        );
+    }
+    return actionSchemaFile;
+}
+
+export function saveParsedActionSchema(
+    parsedActionSchema: ParsedActionSchema,
+): string {
+    const json = toJSONActionSchemaGroup(parsedActionSchema);
+    return JSON.stringify(json);
 }

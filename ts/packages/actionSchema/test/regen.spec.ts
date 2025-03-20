@@ -32,6 +32,7 @@ const tests: {
 type Config = {
     schema?: {
         schemaFile: string;
+        originalSchemaFile?: string;
         schemaType: string;
     };
     subActionManifests?: Record<string, Config>;
@@ -57,7 +58,8 @@ function loadSchemaConfig(fileName: string) {
 function addTest(schemaName: string, config: Config, dir: string) {
     const schema = config.schema;
     if (schema) {
-        const fileName = path.resolve(dir, schema.schemaFile);
+        const schemaFile = schema.originalSchemaFile ?? schema.schemaFile;
+        const fileName = path.resolve(dir, schemaFile);
         const schemaConfig = loadSchemaConfig(fileName);
         tests.push({
             source: fs.readFileSync(fileName, "utf-8"),

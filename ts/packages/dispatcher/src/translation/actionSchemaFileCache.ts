@@ -9,6 +9,7 @@ import {
     parseActionSchemaSource,
     SchemaConfig,
     toJSONActionSchemaFile,
+    loadParsedActionSchema,
 } from "action-schema";
 import { ActionConfig } from "./actionConfig.js";
 import { ActionConfigProvider } from "./actionConfigProvider.js";
@@ -62,18 +63,28 @@ export class ActionSchemaFileCache {
         source: string;
         config: string | undefined;
         fullPath: string | undefined;
+        type: "ts" | "json";
     } {
         if (typeof actionConfig.schemaFile === "string") {
             const fullPath = getPackageFilePath(actionConfig.schemaFile);
             const source = fs.readFileSync(fullPath, "utf-8");
             const config = readSchemaConfig(fullPath);
-            return { fullPath, source, config };
+            return {
+                fullPath,
+                source,
+                config,
+                type: actionConfig.schemaFile.endsWith(".json") ? "json" : "ts",
+            };
         }
-        if (actionConfig.schemaFile.type === "ts") {
+        if (
+            actionConfig.schemaFile.type === "ts" ||
+            actionConfig.schemaFile.type === "json"
+        ) {
             return {
                 source: actionConfig.schemaFile.content,
                 config: undefined,
                 fullPath: undefined,
+                type: actionConfig.schemaFile.type,
             };
         }
         throw new Error(
@@ -88,9 +99,11 @@ export class ActionSchemaFileCache {
             return actionSchemaFile;
         }
 
-        const { source, config, fullPath } = this.getSchemaSource(actionConfig);
+        const { source, config, fullPath, type } =
+            this.getSchemaSource(actionConfig);
+
         const hash = config ? hashStrings(source, config) : hashStrings(source);
-        const cacheKey = `${actionConfig.schemaName}|${actionConfig.schemaType}|${fullPath ?? ""}`;
+        const cacheKey = `${type}|${actionConfig.schemaName}|${actionConfig.schemaType}|${fullPath ?? ""}`;
 
         const lastCached = this.prevSaved.get(cacheKey);
         if (lastCached !== undefined) {
@@ -111,15 +124,23 @@ export class ActionSchemaFileCache {
         const schemaConfig: SchemaConfig | undefined = config
             ? JSON.parse(config)
             : undefined;
-        const parsed = parseActionSchemaSource(
-            source,
-            actionConfig.schemaName,
-            hash,
-            actionConfig.schemaType,
-            fullPath,
-            schemaConfig,
-            true,
-        );
+        const parsed =
+            type === "json"
+                ? loadParsedActionSchema(
+                      actionConfig.schemaName,
+                      actionConfig.schemaType,
+                      hash,
+                      source,
+                  )
+                : parseActionSchemaSource(
+                      source,
+                      actionConfig.schemaName,
+                      hash,
+                      actionConfig.schemaType,
+                      fullPath,
+                      schemaConfig,
+                      true,
+                  );
         this.actionSchemaFiles.set(actionConfig.schemaName, parsed);
 
         if (this.cacheFilePath !== undefined) {

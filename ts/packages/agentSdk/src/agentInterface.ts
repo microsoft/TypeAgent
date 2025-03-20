@@ -19,7 +19,7 @@ export type AppAgentManifest = {
 export type SchemaManifest = {
     description: string;
     schemaType: string;
-    schemaFile: string | { type: "ts"; content: string };
+    schemaFile: string | { type: "ts" | "json"; content: string };
     injected?: boolean; // whether the translator is injected into other domains, default is false
     cached?: boolean; // whether the translator's action should be cached, default is true
     streamingActions?: string[];
