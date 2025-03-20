@@ -46,7 +46,7 @@ type EntityField<T> = T extends string
     : T extends any[]
       ? (EntityField<Required<T[number]>> | undefined)[]
       : T extends object
-        ? EntityField<T>
+        ? EntityMap<T>
         : undefined;
 
 export type EntityMap<T> = {
