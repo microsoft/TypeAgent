@@ -2,8 +2,9 @@
 // Licensed under the MIT License.
 
 import fs from "node:fs";
-import { ActionSchemaFile, ActionSchemaTypeDefinition } from "action-schema";
+import { ActionSchemaTypeDefinition } from "action-schema";
 import { ActionConfig } from "./actionConfig.js";
+import { ActionSchemaFile } from "./actionConfigProvider.js";
 import {
     generateEmbeddingWithRetry,
     generateTextEmbeddingsWithRetry,
@@ -49,7 +50,8 @@ export class ActionSchemaSemanticMap {
         const actionSemanticMap = new Map<string, Entry>();
         this.actionSemanticMaps.set(config.schemaName, actionSemanticMap);
         let reuseCount = 0;
-        for (const [name, definition] of actionSchemaFile.actionSchemas) {
+        for (const [name, definition] of actionSchemaFile.parsedActionSchema
+            .actionSchemas) {
             const key = `${config.schemaName} ${name} ${definition.comments?.[0] ?? ""}`;
             const embedding = cache?.get(key);
             if (embedding) {
@@ -66,7 +68,7 @@ export class ActionSchemaSemanticMap {
         }
 
         debug(
-            `Reused ${reuseCount}/${actionSchemaFile.actionSchemas.size} embeddings for ${config.schemaName} ${cache === undefined}`,
+            `Reused ${reuseCount}/${actionSchemaFile.parsedActionSchema.actionSchemas.size} embeddings for ${config.schemaName} ${cache === undefined}`,
         );
         const embeddings = await generateTextEmbeddingsWithRetry(
             this.model,

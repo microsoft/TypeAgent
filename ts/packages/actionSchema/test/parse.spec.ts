@@ -9,7 +9,6 @@ describe("Action Schema Strict Checks", () => {
             parseActionSchemaSource(
                 `type SomeAction = { actionName: "someAction" }`,
                 "test",
-                "",
                 "SomeAction",
                 "",
                 undefined,
@@ -24,7 +23,6 @@ describe("Action Schema Strict Checks", () => {
             parseActionSchemaSource(
                 `// comments\nexport type AllActions = SomeAction;\ntype SomeAction = { actionName: "someAction" }`,
                 "test",
-                "",
                 "AllActions",
                 "",
                 undefined,
@@ -39,7 +37,6 @@ describe("Action Schema Strict Checks", () => {
             parseActionSchemaSource(
                 `export type AllActions = SomeAction | SomeAction2;\ntype SomeAction = { actionName: "someAction" }\ntype SomeAction2 = { actionName: "someAction" }`,
                 "test",
-                "",
                 "AllActions",
                 "",
                 undefined,
@@ -54,7 +51,6 @@ describe("Action Schema Strict Checks", () => {
             parseActionSchemaSource(
                 `export type AllActions = SomeAction | { actionName: "someAction2" };\ntype SomeAction = { actionName: "someAction" }`,
                 "test",
-                "",
                 "AllActions",
                 "",
                 undefined,

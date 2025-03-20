@@ -8,7 +8,7 @@ export {
     ActionSchemaTypeDefinition,
     ActionSchemaEntryTypeDefinition,
     ActionSchemaGroup,
-    ActionSchemaFile,
+    ParsedActionSchema,
     ActionSchemaObject,
     ActionSchemaUnion,
 } from "./type.js";
@@ -31,11 +31,9 @@ export { getParameterType, getParameterNames } from "./utils.js";
 export * as ActionSchemaCreator from "./creator.js";
 
 export {
-    ActionSchemaFileJSON,
-    toJSONActionSchemaFile,
-    fromJSONActionSchemaFile,
-    loadParsedActionSchema,
-    saveParsedActionSchema,
+    ParsedActionSchemaJSON,
+    toJSONParsedActionSchema,
+    fromJSONParsedActionSchema,
 } from "./serialize.js";
 
 // Generic (non-action) Schema

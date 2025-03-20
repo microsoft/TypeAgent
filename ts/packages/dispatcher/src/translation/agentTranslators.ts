@@ -224,7 +224,7 @@ function collectSchemaName(
     const schemaNameMap = new Map<string, string>();
     for (const actionConfig of actionConfigs) {
         const schemaFile = provider.getActionSchemaFileForConfig(actionConfig);
-        for (const actionName of schemaFile.actionSchemas.keys()) {
+        for (const actionName of schemaFile.parsedActionSchema.actionSchemas.keys()) {
             const existing = schemaNameMap.get(actionName);
             if (existing) {
                 throw new Error(

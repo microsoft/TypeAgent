@@ -12,9 +12,9 @@ import {
     SchemaTypeUnion,
     SchemaTypeDefinition,
     ActionSchemaTypeDefinition,
-    ActionSchemaFile,
     ActionSchemaEntryTypeDefinition,
     SchemaObjectField,
+    ParsedActionSchema,
 } from "./type.js";
 import ts from "typescript";
 import { ActionParamSpecs, SchemaConfig } from "./schemaConfig.js";
@@ -173,14 +173,13 @@ function checkActionSchema(
     return [actionNameString, actionDefinition];
 }
 
-export function createActionSchemaFile(
+export function createParsedActionSchema(
     schemaName: string,
-    sourceHash: string,
     entry: SchemaTypeDefinition,
     order: Map<string, number> | undefined,
     strict: boolean,
     schemaConfig?: SchemaConfig,
-): ActionSchemaFile {
+): ParsedActionSchema {
     if (strict && !entry.exported) {
         throw new Error(
             `Schema Error: ${schemaName}: Type '${entry.name}' must be exported`,
@@ -248,30 +247,27 @@ export function createActionSchemaFile(
     if (actionSchemas.size === 0) {
         throw new Error("No action schema found");
     }
-    const actionSchemaFile: ActionSchemaFile = {
+    const parsedActionSchema: ParsedActionSchema = {
         entry: entry as ActionSchemaEntryTypeDefinition,
-        sourceHash,
-        schemaName,
         actionSchemas,
     };
     if (schemaConfig?.actionNamespace === true) {
-        actionSchemaFile.actionNamespace = true;
+        parsedActionSchema.actionNamespace = true;
     }
     if (order) {
-        actionSchemaFile.order = order;
+        parsedActionSchema.order = order;
     }
-    return actionSchemaFile;
+    return parsedActionSchema;
 }
 
 export function parseActionSchemaSource(
     source: string,
     schemaName: string,
-    sourceHash: string,
     typeName: string,
     fileName: string = "",
     schemaConfig?: SchemaConfig,
     strict: boolean = false,
-): ActionSchemaFile {
+): ParsedActionSchema {
     debug(`Parsing ${schemaName} for ${typeName}: ${fileName}`);
     try {
         const sourceFile = ts.createSourceFile(
@@ -282,7 +278,6 @@ export function parseActionSchemaSource(
         return ActionParser.parseSourceFile(
             sourceFile,
             schemaName,
-            sourceHash,
             typeName,
             schemaConfig,
             strict,
@@ -296,7 +291,6 @@ class ActionParser {
     static parseSourceFile(
         sourceFile: ts.SourceFile,
         schemaName: string,
-        sourceHash: string,
         typeName: string,
         schemaConfig: SchemaConfig | undefined,
         strict: boolean,
@@ -306,9 +300,8 @@ class ActionParser {
         if (definition === undefined) {
             throw new Error(`Type '${typeName}' not found`);
         }
-        const result = createActionSchemaFile(
+        const result = createParsedActionSchema(
             schemaName,
-            sourceHash,
             definition,
             parser.typeOrder,
             strict,
