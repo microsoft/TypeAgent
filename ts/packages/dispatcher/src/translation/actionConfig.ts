@@ -4,7 +4,7 @@
 import {
     ActionManifest,
     AppAgentManifest,
-    SchemaDefinition,
+    SchemaManifest,
 } from "@typeagent/agent-sdk";
 import registerDebug from "debug";
 const debugConfig = registerDebug("typeagent:dispatcher:schema:config");
@@ -17,7 +17,7 @@ export type ActionConfig = {
     actionDefaultEnabled: boolean;
     transient: boolean;
     schemaName: string;
-} & SchemaDefinition;
+} & SchemaManifest;
 
 function collectActionConfigs(
     actionConfigs: { [key: string]: ActionConfig },

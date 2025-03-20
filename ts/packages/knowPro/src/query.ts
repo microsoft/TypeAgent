@@ -98,7 +98,10 @@ function getMatchingTermForText(
     if (collections.stringEquals(text, searchTerm.term.text, false)) {
         return searchTerm.term;
     }
-    if (searchTerm.relatedTerms && searchTerm.relatedTerms.length > 0) {
+    if (
+        searchTerm.relatedTerms !== undefined &&
+        searchTerm.relatedTerms.length > 0
+    ) {
         for (const relatedTerm of searchTerm.relatedTerms) {
             if (collections.stringEquals(text, relatedTerm.text, false)) {
                 return relatedTerm;
@@ -564,7 +567,7 @@ export class MatchSearchTermExpr extends MatchTermExpr {
         this.accumulateMatchesForTerm(context, matches, this.searchTerm.term);
         // And any related terms
         if (
-            this.searchTerm.relatedTerms &&
+            this.searchTerm.relatedTerms !== undefined &&
             this.searchTerm.relatedTerms.length > 0
         ) {
             for (const relatedTerm of this.searchTerm.relatedTerms) {
@@ -695,7 +698,7 @@ export class MatchPropertySearchTermExpr extends MatchTermExpr {
             propertyValue.term,
         );
         if (
-            propertyValue.relatedTerms &&
+            propertyValue.relatedTerms !== undefined &&
             propertyValue.relatedTerms.length > 0
         ) {
             for (const relatedPropertyValue of propertyValue.relatedTerms) {

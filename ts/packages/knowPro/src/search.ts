@@ -28,7 +28,10 @@ export type SearchTerm = {
     term: Term;
     /**
      * Additional terms related to term.
-     * These can be supplied from synonym tables and so on
+     * These can be supplied from synonym tables and so on.
+     *  - Zero length array: no related matches for this term
+     *  - undefined array: the search processor may try to resolve related terms from any  {@link IConversationSecondaryIndexes}
+     * related term {@link ITermToRelatedTermsIndex} indexes available to it
      */
     relatedTerms?: Term[] | undefined;
 };
@@ -81,15 +84,24 @@ export function createSearchTerm(text: string, score?: number): SearchTerm {
     };
 }
 
+/**
+ * Create a new property search term from the given name and value
+ * @param name property name
+ * @param value property value
+ * @param exactMatchValue if true, configures propertyValue to only match exactly
+ * @returns {PropertySearchTerm}
+ */
 export function createPropertySearchTerm(
-    key: string,
+    name: string,
     value: string,
+    exactMatchValue: boolean = false,
 ): PropertySearchTerm {
     let propertyName: KnowledgePropertyName | SearchTerm;
     let propertyValue: SearchTerm;
-    switch (key) {
+    // Check if this is one of our well known predefined values
+    switch (name) {
         default:
-            propertyName = createSearchTerm(key);
+            propertyName = createSearchTerm(name);
             break;
         case "name":
         case "type":
@@ -98,28 +110,29 @@ export function createPropertySearchTerm(
         case "object":
         case "indirectObject":
         case "tag":
-            propertyName = key;
+            propertyName = name;
             break;
     }
     propertyValue = createSearchTerm(value);
+    if (exactMatchValue) {
+        // No related terms should be matched for this term
+        propertyValue.relatedTerms = [];
+    }
     return { propertyName, propertyValue };
 }
 
+/**
+ * A WhenFilter provides additional constraints on when a SemanticRef that matches a term.. is actually considered a match
+ * when:
+ *   knowledgeType == 'entity'
+ *   dateRange...(Jan 3rd to Jan 10th)
+ */
 export type WhenFilter = {
     knowledgeType?: KnowledgeType | undefined;
     dateRange?: DateRange | undefined;
     threadDescription?: string | undefined;
+    scopeDefiningTerms?: SearchTermGroup | undefined;
 };
-
-export function createWhenFilterForDateTimeRange(
-    dateTimeRange?: DateTimeRange | undefined,
-): WhenFilter {
-    const when: WhenFilter = {};
-    if (dateTimeRange) {
-        when.dateRange = dateRangeFromDateTimeRange(dateTimeRange);
-    }
-    return when;
-}
 
 export function dateRangeFromDateTimeRange(
     dateTimeRange: DateTimeRange,
@@ -394,7 +407,7 @@ class QueryCompiler {
 
     private async compileScope(
         searchGroup: SearchTermGroup,
-        filter?: WhenFilter,
+        filter?: WhenFilter | undefined,
     ): Promise<q.GetScopeExpr | undefined> {
         let scopeSelectors: q.IQueryTextRangeSelector[] | undefined;
         // First, use any provided date ranges to select scope
@@ -408,14 +421,17 @@ class QueryCompiler {
         // to restrict scope
         const actionTermsGroup =
             this.getActionTermsFromSearchGroup(searchGroup);
-        if (actionTermsGroup) {
+        if (actionTermsGroup !== undefined) {
             scopeSelectors ??= [];
-            const [searchTermsUsed, selectExpr] =
-                this.compileSearchGroup(actionTermsGroup);
-            scopeSelectors.push(
-                new q.TextRangesWithTermMatchesSelector(selectExpr),
+            this.addTermsScopeSelector(actionTermsGroup, scopeSelectors);
+        }
+        // If additional scoping terms were provided
+        if (filter && filter.scopeDefiningTerms !== undefined) {
+            scopeSelectors ??= [];
+            this.addTermsScopeSelector(
+                filter.scopeDefiningTerms,
+                scopeSelectors,
             );
-            this.allScopeSearchTerms.push(...searchTermsUsed);
         }
         // If a thread index is available...
         const threads = this.secondaryIndexes?.threads;
@@ -434,7 +450,23 @@ class QueryCompiler {
                 );
             }
         }
-        return scopeSelectors ? new q.GetScopeExpr(scopeSelectors) : undefined;
+        return scopeSelectors && scopeSelectors.length > 0
+            ? new q.GetScopeExpr(scopeSelectors)
+            : undefined;
+    }
+
+    private addTermsScopeSelector(
+        termGroup: SearchTermGroup,
+        scopeSelectors: q.IQueryTextRangeSelector[],
+    ) {
+        if (termGroup.terms.length > 0) {
+            const [searchTermsUsed, selectExpr] =
+                this.compileSearchGroup(termGroup);
+            scopeSelectors.push(
+                new q.TextRangesWithTermMatchesSelector(selectExpr),
+            );
+            this.allScopeSearchTerms.push(...searchTermsUsed);
+        }
     }
 
     private compileWhere(filter: WhenFilter): q.IQuerySemanticRefPredicate[] {
@@ -537,7 +569,7 @@ class QueryCompiler {
             return false;
         }
         searchTerm.term.weight ??= this.defaultTermMatchWeight;
-        if (searchTerm.relatedTerms) {
+        if (searchTerm.relatedTerms !== undefined) {
             for (const relatedTerm of searchTerm.relatedTerms) {
                 if (!this.validateAndPrepareTerm(relatedTerm)) {
                     return false;

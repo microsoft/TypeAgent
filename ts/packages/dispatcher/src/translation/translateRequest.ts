@@ -153,7 +153,7 @@ async function getTranslatorForSelectedActions(
     const actionSchemaFile = context.agents.tryGetActionSchemaFile(schemaName);
     if (
         actionSchemaFile === undefined ||
-        actionSchemaFile.actionSchemas.size <= numActions
+        actionSchemaFile.parsedActionSchema.actionSchemas.size <= numActions
     ) {
         return undefined;
     }

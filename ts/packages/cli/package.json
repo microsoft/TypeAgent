@@ -43,7 +43,7 @@
     }
   },
   "dependencies": {
-    "@oclif/core": "^3",
+    "@oclif/core": "^4",
     "@oclif/plugin-help": "^5",
     "@typeagent/agent-sdk": "workspace:*",
     "action-schema": "workspace:*",

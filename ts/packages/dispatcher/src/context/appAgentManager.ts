@@ -11,7 +11,10 @@ import {
     convertToActionConfig,
     ActionConfig,
 } from "../translation/actionConfig.js";
-import { ActionConfigProvider } from "../translation/actionConfigProvider.js";
+import {
+    ActionConfigProvider,
+    ActionSchemaFile,
+} from "../translation/actionConfigProvider.js";
 import { getAppAgentName } from "../translation/agentTranslators.js";
 import { createSessionContext } from "../execute/actionHandlers.js";
 import { AppAgentProvider } from "../agentProvider/agentProvider.js";
@@ -22,7 +25,6 @@ import {
     EmbeddingCache,
 } from "../translation/actionSchemaSemanticMap.js";
 import { ActionSchemaFileCache } from "../translation/actionSchemaFileCache.js";
-import { ActionSchemaFile } from "action-schema";
 import path from "path";
 import { callEnsureError } from "../utils/exceptions.js";
 
@@ -254,7 +256,7 @@ export class AppAgentManager implements ActionConfigProvider {
                     this.transientAgents[schemaName] = false;
                 }
                 if (config.injected) {
-                    for (const actionName of actionSchemaFile.actionSchemas.keys()) {
+                    for (const actionName of actionSchemaFile.parsedActionSchema.actionSchemas.keys()) {
                         this.injectedSchemaForActionName.set(
                             actionName,
                             schemaName,
