@@ -339,7 +339,7 @@ class IConversationSecondaryIndexes(Protocol):
     property_to_semantic_ref_index: IPropertyToSemanticRefIndex | None
     timestamp_index: ITimestampToTextRangeIndex | None
     term_to_related_terms_index: ITermToRelatedTermsIndex | None
-    threads: IConversationThreads | None
+    thread_index: IConversationThreads | None
     message_index: IMessageTextIndex | None = None
 
 

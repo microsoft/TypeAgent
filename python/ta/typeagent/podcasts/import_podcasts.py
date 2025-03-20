@@ -90,7 +90,7 @@ class Podcast(
         init=False, default_factory=convindex.ConversationIndex
     )
     secondary_indexes: interfaces.IConversationSecondaryIndexes | None = field(
-        init=False, default=None
+        init=False, default_factory=secindex.ConversationSecondaryIndexes
     )
 
     # __init__() parameters, in that order (via `@dataclass`).
@@ -126,9 +126,8 @@ class Podcast(
         # build_conversation_index automatically builds standard secondary indexes.
         # Pass false here to build podcast specific secondary indexes only.
         self._build_transient_secondary_indexes(False)
-        # TODO: Waiting for threads.
-        # if self.secondary_indexes is not None:
-        #     await self.secondary_indexes.threads.build_index()
+        if self.secondary_indexes is not None:
+            await self.secondary_indexes.thread_index.build_index()
         return result
 
     async def serialize(self) -> dict:

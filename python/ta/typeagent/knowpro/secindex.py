@@ -12,6 +12,7 @@ from .interfaces import (
     IndexingEventHandlers,
     SecondaryIndexingResults,
 )
+from . import convthreads
 
 
 class ConversationSecondaryIndexes(IConversationSecondaryIndexes):
@@ -23,7 +24,7 @@ class ConversationSecondaryIndexes(IConversationSecondaryIndexes):
         self.property_to_semantic_ref_index = None  # PropertyIndex()
         self.timestamp_index = None  # TimestampToTextRangeIndex()
         self.term_to_related_terms_index = None  # RelatedTermsIndex(settings)
-        self.threads = None  # ThreadIndex(settings)
+        self.thread_index = convthreads.ConversationThreads()
         self.message_index = None
 
 

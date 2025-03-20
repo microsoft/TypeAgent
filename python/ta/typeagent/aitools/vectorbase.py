@@ -9,35 +9,25 @@ from numpy.typing import NDArray
 from ..aitools.embeddings import AsyncEmbeddingModel
 
 
-class ScoredKey(NamedTuple):
-    key: str
+class ScoredOrdinal(NamedTuple):
+    ordinal: int
     score: float
 
 
 class VectorBase:
     def __init__(self):
         self._model = AsyncEmbeddingModel()
-        self._keys: list[str] = []  # Should have no duplicates
         self._vectors: NDArray[np.float32] = np.array([], dtype=np.float32).reshape(
             (0, 0)
         )
         self._embedding_cache: dict[str, NDArray[np.float32]] = {}
 
     def __len__(self) -> int:
-        assert len(self._keys) == len(self._vectors), (self._keys, self._vectors)
-        return len(self._keys)
+        return len(self._vectors)
 
     # Ensure an empty vectorbase is truthy.
     def __bool__(self) -> bool:
         return True
-
-    def keys(self) -> set[str]:
-        s = set(self._keys)
-        assert len(s) == len(self._keys), "Duplicate key present"
-        return s
-
-    def __contains__(self, key: str) -> bool:
-        return key in self._keys
 
     async def get_embedding(self, key: str) -> NDArray[np.float32]:
         """Retrieve an embedding, using the cache."""
@@ -73,51 +63,35 @@ class VectorBase:
 
         return np.array(embeddings, dtype=np.float32).reshape((len(keys), -1))
 
-    async def fuzzy_lookup(
-        self, key: str, max_hits: int = 10, min_score: float = 0.0
-    ) -> list[ScoredKey]:
-        if not len(self._vectors):
-            return []
-
-        embedding = await self.get_embedding(key)
-
-        scores = np.dot(self._vectors, embedding)  # This does most of the work
-
-        scored_keys = [
-            ScoredKey(k, score)
-            for score, k in zip(scores, self._keys)
-            if score >= min_score
-        ]
-        scored_keys.sort(key=lambda x: x.score, reverse=True)
-        return scored_keys[:max_hits]
-
     async def add_key(self, key: str) -> None:
-        if key in self._keys:
-            return
-
-        embedding = await self.get_embedding(key)
-
-        embedding = embedding.reshape((1, len(embedding)))
+        embedding = (await self.get_embedding(key)).reshape((1, -1))
         if not len(self._vectors):
             self._vectors = embedding
         else:
             self._vectors = np.append(self._vectors, embedding, axis=0)
-        self._keys.append(key)
 
     async def add_keys(self, keys: list[str]) -> None:
-        s = set(keys)
-        for key in self._keys:
-            s.discard(key)
-            if not s:
-                return  # They were all already there
-        keys = list(s)  # Not the original order, but that's fine
-
         embeddings = await self.get_embeddings(keys)
-
         self._vectors = np.append(self._vectors, embeddings, axis=0)
-        self._keys.extend(keys)
 
-    # TODO: Remove key[s]?
+    async def fuzzy_lookup(
+        self, key: str, max_hits: int | None = None, min_score: float | None = None
+    ) -> list[ScoredOrdinal]:
+        if not len(self._vectors):
+            return []
+        if max_hits is None:
+            max_hits = 10
+        if min_score is None:
+            min_score = 0.0
+        embedding = await self.get_embedding(key)
+        scores = np.dot(self._vectors, embedding)  # This does most of the work
+        scored_ordinals = [
+            ScoredOrdinal(i, score)
+            for i, score in enumerate(scores)
+            if score >= min_score
+        ]
+        scored_ordinals.sort(key=lambda x: x.score, reverse=True)
+        return scored_ordinals[:max_hits]
 
 
 async def main():
@@ -134,7 +108,7 @@ async def main():
         print(f"{stamp}:", *args, end=end)
 
     def debugv(heading):
-        log(f"{heading}: bool={bool(v)}, len={len(v)}, keys={v.keys()}")
+        log(f"{heading}: bool={bool(v)}, len={len(v)}")
 
     dotenv.load_dotenv(os.path.expanduser("~/TypeAgent/ts/.env"))
     v = VectorBase()
@@ -143,32 +117,36 @@ async def main():
     words: list[str] = (
         "Mostly about multi-agent frameworks, "
         + "but also about answering questions about podcast transcripts."
-    ).split()  # type: ignore  # pyscript complains about list[LiteralString] -> list[str]
-    for word in words[:2]:
+    ).split()  # type: ignore  # pyright complains about list[LiteralString] -> list[str]
+    cut = 2
+    for word in words[:cut]:
         log("\nAdding:", word)
         await v.add_key(word)
-        assert word in v, f"{word} did not get added"
+        scored_ordinals = await v.fuzzy_lookup(word, max_hits=1)
+        assert (
+            round(scored_ordinals[0].score, 5) == 1.0
+        ), f"{word} scores {scored_ordinals[0]}"
         debugv(word)
 
-        log("Redundant adding:", word)
-        await v.add_key(word)
-        assert word in v, f"{word} disappeared"
-        debugv(word)
-
-    log("\nAdding all words")
-    await v.add_keys(words)
+    log("\nAdding remaining words")
+    await v.add_keys(words[cut:])
     debugv("After adding all")
 
     log("\nChecking presence")
     for word in words:
-        assert word in v, f"{word} not in v"
+        scored_ordinals = await v.fuzzy_lookup(word, max_hits=1)
+        assert (
+            round(scored_ordinals[0].score, 5) == 1.0
+        ), f"{word} scores {scored_ordinals[0]}"
     log("All words are present")
-    assert "foo" not in v, "foo is present but should not be"
+    word = "pancakes"
+    scored_ordinals = await v.fuzzy_lookup(word, max_hits=1)
+    assert scored_ordinals[0].score < 0.7, f"{word} scores {scored_ordinals[0]}"
 
     log("\nFuzzy lookups:")
     for word in words + ["pancakes", "hello world", "book", "author"]:
         neighbors = await v.fuzzy_lookup(word, max_hits=3)
-        log(f"{word}:", [(nb.key, float(nb.score)) for nb in neighbors])
+        log(f"{word}:", [(nb.ordinal, nb.score) for nb in neighbors])
 
 
 if __name__ == "__main__":

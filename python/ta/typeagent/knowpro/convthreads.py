@@ -3,9 +3,9 @@
 
 from typing import Protocol
 
-from .interfaces import IConversationThreads, Thread
+from .interfaces import IConversationThreads, ScoredThreadOrdinal, Thread
 from ..aitools.embeddings import NormalizedEmbedding
-from .fuzzyindex import TextEmbeddingIndex
+from ..aitools.vectorbase import VectorBase
 
 
 class IThreadDataItem(Protocol):
@@ -21,8 +21,32 @@ class IConversationThreadData[TThreadDataItem: IThreadDataItem](Protocol):
 
 class ConversationThreads(IConversationThreads):
     threads: list[Thread]
-    embedding_index: TextEmbeddingIndex
+    vector_base: VectorBase
 
-    def __init__(self):
+    def __init__(self):  # TODO: TextEmbeddingIndexSettings
         self.threads = []
-        self.embedding_index = TextEmbeddingIndex()
+        self.vector_base = VectorBase()
+
+    async def add_thread(self, thread: Thread) -> None:
+        assert len(self.threads) == len(self.vector_base)
+        await self.vector_base.add_key(thread.description)
+        self.threads.append(thread)
+
+    async def lookup_thread(
+        self,
+        thread_description: str,
+        max_matches: int | None = None,
+        threshold_score: float | None = None,
+    ) -> list[ScoredThreadOrdinal]:
+        matches = await self.vector_base.fuzzy_lookup(
+            thread_description,
+            max_matches,
+            threshold_score,
+        )
+        return [
+            ScoredThreadOrdinal(
+                match.ordinal,
+                match.score,
+            )
+            for match in matches
+        ]
