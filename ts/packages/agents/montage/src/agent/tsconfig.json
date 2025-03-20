@@ -5,7 +5,7 @@
     "rootDir": ".",
     "outDir": "../../dist/agent",
   },
-  "include": ["./**/*"],
+  "include": ["./**/*", "montageActionSchema.ts"],
   "ts-node": {
     "esm": true
   }

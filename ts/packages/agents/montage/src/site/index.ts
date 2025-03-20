@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 //import { SearchInput } from "./searchInput";
+import { ChangeTitleAction, ListPhotosAction, SelectPhotosAction } from "../agent/montageActionSchema.js";
 
 //const eventSource = new EventSource("/events");
 
@@ -15,22 +16,89 @@ export type ListPhotosMessage = Message & {
 
 document.addEventListener("DOMContentLoaded", function () {
     const mainContainer = document.getElementById("mainContainer");
+    const imgMap: Map<string, HTMLImageElement> = new Map<string, HTMLImageElement>();
+    const selected: Set<string> = new Set<string>();
 
     // setup event source from host source (shell, etc.)
     const eventSource = new EventSource("/events");
     eventSource.onmessage = function (event: MessageEvent) {
         console.log(event);
         const e = JSON.parse(event.data);
-        if (e.type === "listPhotos") {
-            const msg: ListPhotosMessage = e as ListPhotosMessage;
+        switch (e.actionName) {
 
-            msg.files.forEach((f) => {
-                const img: HTMLImageElement = document.createElement("img");
-                img.src = "/image?path=" + f;
+            case "listPhotos": {
+                const msg: ListPhotosAction = e as ListPhotosAction;
 
-                mainContainer.append(img);
-            })
+                if (msg.parameters.files) {
+                    msg.parameters.files.forEach((f) => {
+                        const img: HTMLImageElement = document.createElement("img");
+                        img.src = "/image?path=" + f;
+                        img.setAttribute("path", f);
+
+                        mainContainer.append(img);
+
+                        imgMap.set(f, img);
+                    });
+                }
+                
+                break;
+            }
+
+            case "changeTitle": {
+                const msg: ChangeTitleAction = e as ChangeTitleAction;
+                const title: HTMLElement = document.getElementById("title");
+                title.innerHTML = msg.parameters.title;
+                break;
+            }
+
+            case "selectPhotos": {
+                const msg: SelectPhotosAction = e as SelectPhotosAction;
+                // select image by indicies first
+                if (msg.parameters.indicies) {
+                    for(let i = 0; i < msg.parameters.indicies.length; i++) {
+                        mainContainer.children[msg.parameters.indicies[i]].classList.add("selected");
+                        selected.add(mainContainer.children[msg.parameters.indicies[i]].getAttribute("path"))
+                    }
+                }
+
+                // select specifically mentioned images
+                if (msg.parameters.files) {
+                    for(let i = 0; i < msg.parameters.files.length; i++) {
+                        if (imgMap.has(msg.parameters.files[i])) {
+                            imgMap.get(msg.parameters.files[i]).classList.add("selected");
+                            selected.add(msg.parameters.files[i]);
+                        }
+                    }
+                }
+
+                // remove or add "unselected" as needed
+                if (selected.size > 0) {
+                    for (let i = 0; i < mainContainer.children.length; i++) {
+                        if (selected.has(mainContainer.children[i].getAttribute("path"))) {
+                            mainContainer.children[i].classList.remove("unselected");
+                        } else {
+                            mainContainer.children[i].classList.add("unselected");
+                        }
+                    } 
+                }
+
+                break;
+            }
+
+            case "clearSelectedPhotos": {
+
+                selected.clear();
+
+                for (let i = 0; i < mainContainer.children.length; i++) {
+                    mainContainer.children[i].classList.remove("selected");
+                    mainContainer.children[i].classList.remove("unselected");
+                }                
+                break;
+            }
         }
+
+
+
         // const contentElement = document.getElementById("mainContainer");
         // if (contentElement) {
         //     contentElement.innerHTML += decodeURIComponent(event.data);

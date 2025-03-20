@@ -16,5 +16,8 @@
     "include": ["./*"],
     "ts-node": {
       "esm": true
-    }
+    },
+    "references": [  
+      { "path": "../agent" } // Reference to the agent project  
+    ] 
   }

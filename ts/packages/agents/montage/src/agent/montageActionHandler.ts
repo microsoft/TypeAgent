@@ -13,8 +13,9 @@ import { ChildProcess, fork } from "child_process";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { MontageAction } from "./montageActionSchema.js";
-import { createActionResult } from "@typeagent/agent-sdk/helpers/action";
+import { createActionResult, createActionResultFromError } from "@typeagent/agent-sdk/helpers/action";
 import * as im from "image-memory";
+import * as kp from "knowpro";
 
 export function instantiate(): AppAgent {
     return {
@@ -25,11 +26,17 @@ export function instantiate(): AppAgent {
     };
 }
 
+// The agent context
 type MontageActionContext = {
-    imageIndexName: string | undefined;
+    montage: PhotoMontage | undefined;
     imageCollection: im.ImageCollection | undefined;
     viewProcess: ChildProcess | undefined;
 };
+
+type PhotoMontage = {
+    title: string;
+    files: string[];
+}
 
 async function executeMontageAction(
     action: AppAction,
@@ -56,31 +63,22 @@ async function updateMontageContext(
 ): Promise<void> {
     if (enable) {
 
-        // TODO: load image index?
-
-        // if (!context.agentContext.currentFileName) {
-        //     context.agentContext.currentFileName = "live.md";
-        // }
-
-        // const storage = context.sessionStorage;
-        // const fileName = context.agentContext.currentFileName;
-
-        // if (!(await storage?.exists(fileName))) {
-        //     await storage?.write(fileName, "");
-        // }
-
+        // Load the image index from disk
+        // TODO: make dynamic
         if (!context.agentContext.imageCollection) {
             const indexPath = "f:\pictures_index";
             context.agentContext.imageCollection = await im.ImageCollection.readFromFile(path.dirname(indexPath), path.basename(indexPath, path.extname(indexPath)));
         }
 
+        // Create the montage
+        // TODO: get from project memory
+        if (!context.agentContext.montage) {
+            context.agentContext.montage = { title: "Untitled Montage", files: [] };
+        }
+
         if (!context.agentContext.viewProcess) {
-            //const fullPath = await getFullMarkdownFilePath(fileName, storage!);
-            //if (fullPath) {
-            //    process.env.MARKDOWN_FILE = fullPath;
-                context.agentContext.viewProcess =
-                    await createViewServiceHost();
-            //}
+            context.agentContext.viewProcess = await createViewServiceHost();
+            // TODO: send rehydrated state
         }
     } else {
         // shut down service
@@ -90,13 +88,6 @@ async function updateMontageContext(
     }
 }
 
-// async function getFullMarkdownFilePath(fileName: string, storage: Storage) {
-//     const paths = await storage?.list("", { fullPath: true });
-//     const candidates = paths?.filter((item) => item.endsWith(fileName!));
-
-//     return candidates ? candidates[0] : undefined;
-// }
-
 async function handleMontageAction(
     action: MontageAction,
     actionContext: ActionContext<MontageActionContext>,
@@ -105,76 +96,108 @@ async function handleMontageAction(
     //const agent = await createMarkdownAgent("GPT_4o");
     //const storage = actionContext.sessionContext.sessionStorage;
 
+    if (!actionContext.sessionContext.agentContext.viewProcess) {
+        return createActionResultFromError(`Unable to perform the requeste action. Disconnected from the canvas.`);
+    }
+
     switch (action.actionName) {
-        case "listPhotoAction": {
-            // if (!action.parameters.name) {
-            //     result = createActionResult(
-            //         "Document could not be created: no name was provided",
-            //     );
-            // } else {
-                result = createActionResult("Listing photos ...");
 
-                // const newFileName = action.parameters.name.trim() + ".md";
-                // actionContext.sessionContext.agentContext.currentFileName =
-                //     newFileName;
-
-                // if (!(await storage?.exists(newFileName))) {
-                //     await storage?.write(newFileName, "");
-                // }
-
-                let images: string[] | undefined = [];
-                if (actionContext.sessionContext.agentContext.viewProcess) {
-                    // const fullPath = await getFullMarkdownFilePath(
-                    //     newFileName,
-                    //     storage!,
-                    // );
-
-                    // TODO: get all image entities from knowpro, get their paths and send that across the wire
-                    images = actionContext.sessionContext.agentContext.imageCollection?.messages.map((img) => img.metadata.img.fileName);
-
-                    // TODO: update project state with this action
-
-                    actionContext.sessionContext.agentContext.viewProcess.send({
-                        type: "listPhotos",
-                        files: images,
-                    });
-                }
-                result = createActionResult(`Showing ${images?.length} images.`);
-            //}
+        case "changeTitle": {
+            actionContext.sessionContext.agentContext.viewProcess!.send(action);
+            result = createActionResult(`Changed title to ${action.parameters.title}`)
             break;
         }
-        // case "updateDocument": {
-        //     result = createActionResult("Updating document ...");
 
-        //     const filePath = `${actionContext.sessionContext.agentContext.currentFileName}`;
-        //     let markdownContent;
-        //     if (await storage?.exists(filePath)) {
-        //         markdownContent = await storage?.read(filePath, "utf8");
-        //     }
-        //     const response = await agent.updateDocument(
-        //         markdownContent,
-        //         action.parameters.originalRequest,
-        //     );
+        case "clearSelectedPhotos": {
+            actionContext.sessionContext.agentContext.viewProcess!.send(action);
+            result = createActionResult(`Cleared the selection`)            
+            break;
+        }
 
-        //     if (response.success) {
-        //         const mdResult = response.data;
+        case "listPhotos": {
+            // provide status
+            result = createActionResult("Listing photos ...");
 
-        //         // write to file
-        //         if (mdResult.content) {
-        //             await storage?.write(filePath, mdResult.content);
-        //         }
-        //         if (mdResult.operationSummary) {
-        //             result = createActionResult(mdResult.operationSummary);
-        //         } else {
-        //             result = createActionResult("Updated document");
-        //         }
-        //     } else {
-        //         console.error(response.message);
-        //     }
-        //     break;
-        // }
+            let images: string[] | undefined = [];
+            images = actionContext.sessionContext.agentContext.imageCollection?.messages.map((img) => img.metadata.img.fileName);
+
+            // TODO: update project state with this action
+            // TODO: update montage with this data and save it's state
+
+            // add the images to the action if we have any
+            if (images !== undefined) {
+                action.parameters.files! = images
+            }
+
+            // send them to the visualizer/client
+            actionContext.sessionContext.agentContext.viewProcess!.send(action);
+            
+            // report back to the user
+            result = createActionResult(`Added ${images?.length} images.`);
+            break;
+        }
+
+        case "removePhotos": {
+            // provide status
+            result = createActionResult("Searching...");
+
+            // TODO: implement
+
+            break;
+        }
+
+        case "selectPhotos": {
+            // provide status
+            result = createActionResult("Selecting...");
+
+            if (actionContext.sessionContext.agentContext.imageCollection) {
+                if (action.parameters.search_filters) {
+                    const matches = await kp.searchConversationKnowledge(
+                        actionContext.sessionContext.agentContext.imageCollection,
+                        // search group
+                        {
+                            booleanOp: "and", // or
+                            terms: filterToSearchTerm(action.parameters.search_filters),
+                        },
+                        // when filter
+                        {
+                            knowledgeType: "entity"
+                        }
+                    );
+
+                    if (!action.parameters.files) {
+                        action.parameters.files = [];
+                    }
+
+                    matches?.forEach((value: kp.SemanticRefSearchResult) => {
+                        action.parameters.files?.push("yes!");
+                    });
+                } else {
+                    result = createActionResultFromError("Unable to search images, no image index available.")
+                }
+            }
+
+            // send select to the visualizer/client
+            actionContext.sessionContext.agentContext.viewProcess!.send(action);
+
+            // report back to the user
+            let selectedCount: number = 0;
+            selectedCount += action.parameters.files ? action.parameters.files.length : 0;
+            selectedCount += action.parameters.indicies ? action.parameters.indicies.length : 0;
+            
+            result = createActionResult(`Selected ${selectedCount} images.`);
+            break;                    
+
+        }
     }
     return result;
+}
+
+function filterToSearchTerm(filters: string[]): kp.SearchTerm[] {
+    let terms: kp.SearchTerm[] = [];
+    filters.forEach(value => terms.push({ term: { text: value }}));
+
+    return terms;
 }
 
 export async function createViewServiceHost() {

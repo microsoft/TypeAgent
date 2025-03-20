@@ -2,49 +2,69 @@
 // Licensed under the MIT License.
 
 export type MontageAction =
-    | FindPhotoAction
-    | ListPhotoAction;
-    // | AddPhotoAction
-    // | RemovePhotoAction
-    // | FinishedAction;
+    | FindPhotosAction
+    | SelectPhotosAction
+    | ListPhotosAction
+    | ChangeTitleAction
+    | RemovePhotosAction
+    | ClearSelectionAction;
 
-export type FindPhotoAction = {
-    actionName: "findPhotoAction";
+// Finds photos based on image content/description/etc.
+export type FindPhotosAction = {
+    actionName: "findPhotos";
     parameters: {
-        filters: string[];
+        // any search terms to use indicating the photos to remove
+        search_filters: string[];
+        // placeholder for images to be populated later
+        files?: string[];
     }
 }
 
-// Lists all available photos
-export type ListPhotoAction = {
-    actionName: "listPhotoAction";
-    parameters: {  
+export type SelectPhotosAction = {
+    actionName: "selectPhotos";
+    parameters: {
+        // any search terms to use indicating the photos to remove
+        search_filters?: string[];
+        // any indicies provided indicating the photos to remove from the set of available images
+        indicies?: number[];
+        // placeholder for images to be populated later
+        files?: string[];
     }
 }
 
-// // creates a new markdown document
-// export type CreateDocumentAction = {
-//     actionName: "createDocument";
-//     parameters: {
-//         // the name to use for the document
-//         name: string;
-//     };
-// };
+// Lists/adds all available photos
+export type ListPhotosAction = {
+    actionName: "listPhotos";
+    parameters: {
+        // placeholder for images to be populated later
+        files?: string[];
+    }
+}
 
-// // opens an existing markdown document
-// export type OpenDocumentAction = {
-//     actionName: "openDocument";
-//     parameters: {
-//         // the name to use for the document
-//         name: string;
-//     };
-// };
+export type ChangeTitleAction = {
+    actionName: "changeTitle";
+    parameters: {
+        title: string;
+    }
+}
 
-// // Updates the document by adding, removing or editing parts of the document.
-// export type UpdateDocumentAction = {
-//     actionName: "updateDocument";
-//     parameters: {
-//         // the original request of the user
-//         originalRequest: string;
-//     };
-// };
+export type RemovePhotosAction = {
+    actionName: "removePhotos";
+    parameters: {
+        // any search terms to use indicating the photos to remove
+        search_filters?: string[];
+        // any indicies provided indicating the photos to remove from the set of available images
+        indicies?: number[];
+        // flag indicating if we are remove selected images
+        selected?: boolean;
+        // placeholder for images to be populated later
+        files?: string[];
+    }
+}
+
+export type ClearSelectionAction = {
+    actionName: "clearSelectedPhotos";
+    parameters: {
+    }
+}
+

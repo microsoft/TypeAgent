@@ -137,44 +137,32 @@ app.get("/cmd", async (req, res) => {
     console.debug(req);
 });
 
+/**
+ * Sends data to connected clients.
+ * @param message The message to forward to the clients
+ */
 function sendDataToClients(message: any) {
     clients.forEach((client) => {
-        // files.map((file) => {
-        //     client.write(`data: ${encodeURIComponent(file)}\n\n`);
-        // });   
         client.write(`data: ${JSON.stringify(message)}\n\n`);
-        //client.write(`data: test\n\n`);
     });
 }
 
+/**
+ * Indicate to the host/parent process that we've started successfully 
+ */
 process.send?.("Success");
 
+/**
+ * Processes messages received from the host/parent process
+ */
 process.on("message", (message: any) => {
-
+    // forward the message to any clients
     sendDataToClients(message);
-
-    // if (message.type == "listPhotos") {
-    //     sendDataToClients(message.files);
-    // }
-
-    // if (message.type == "setFile") {
-    //     if (filePath) {
-    //         fs.unwatchFile(filePath);
-    //     }
-    //     if (message.filePath) {
-    //         filePath = message.filePath;
-
-    //         // initial render/reset for clients
-    //         renderFileToClients(filePath!);
-
-    //         // watch file changes and render as needed
-    //         fs.watchFile(filePath!, () => {
-    //             renderFileToClients(filePath!);
-    //         });
-    //     }
-    // }
 });
 
+/**
+ * Closes this process at the request of the host/parent process
+ */
 process.on("disconnect", () => {
     process.exit(1);
 });
