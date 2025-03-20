@@ -60,8 +60,10 @@ class VectorBase:
             for i, key in enumerate(keys):
                 if embeddings[i] is None:
                     embeddings[i] = self._embedding_cache[key]
-
-        return np.array(embeddings, dtype=np.float32).reshape((len(keys), -1))
+        if len(keys):
+            return np.array(embeddings, dtype=np.float32).reshape((len(keys), -1))
+        else:
+            return np.array([], dtype=np.float32).reshape((0, 0))
 
     async def add_key(self, key: str) -> None:
         embedding = (await self.get_embedding(key)).reshape((1, -1))
@@ -92,6 +94,12 @@ class VectorBase:
         ]
         scored_ordinals.sort(key=lambda x: x.score, reverse=True)
         return scored_ordinals[:max_hits]
+
+    def clear(self) -> None:
+        size = len(self._vectors)
+        self._vectors = np.array([], dtype=np.float32).reshape((0, 0))
+        # TODO: Should this clear the embedding cache as well?
+        # self._embedding_cache = {}
 
 
 async def main():

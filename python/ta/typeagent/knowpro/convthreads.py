@@ -50,3 +50,15 @@ class ConversationThreads(IConversationThreads):
             )
             for match in matches
         ]
+
+    def remove_thread(self, thread_ordinal: int) -> None:
+        # TODO: Requires support in vectorbase.py.
+        raise RuntimeError("Removing threads is not yet supported")
+
+    def clear(self) -> None:
+        self.threads = []
+        self.vector_base.clear()
+
+    async def build_index(self) -> None:
+        self.vector_base.clear()  # Just in case
+        await self.vector_base.add_keys([t.description for t in self.threads])

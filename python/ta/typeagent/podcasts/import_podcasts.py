@@ -127,7 +127,8 @@ class Podcast(
         # Pass false here to build podcast specific secondary indexes only.
         self._build_transient_secondary_indexes(False)
         if self.secondary_indexes is not None:
-            await self.secondary_indexes.thread_index.build_index()
+            if self.secondary_indexes.thread_index is not None:
+                await self.secondary_indexes.thread_index.build_index()  # type: ignore
         return result
 
     async def serialize(self) -> dict:
@@ -168,8 +169,8 @@ class Podcast(
         # if podcast_data.get("related_terms_index_data"):
         #     self.secondary_indexes.term_to_related_terms_index.deserialize(podcast_data["related_terms_index_data"])
         # if podcast_data.get("thread_data"):
-        #     self.secondary_indexes.threads = ConversationThreads(self.settings.thread_settings)
-        #     self.secondary_indexes.threads.deserialize(podcast_data["thread_data"])
+        #     self.secondary_indexes.thread_index = ConversationThreads(self.settings.thread_settings)
+        #     self.secondary_indexes.thread_index.deserialize(podcast_data["thread_data"])
         # if podcast_data.get("message_index_data"):
         #     self.secondary_indexes.message_index = MessageTextIndex(self.settings.message_text_index_settings)
         #     self.secondary_indexes.message_index.deserialize(podcast_data["message_index_data"])
