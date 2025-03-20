@@ -128,6 +128,11 @@ async function handleMontageAction(
 
             // add the images to the action if we have any
             if (images !== undefined) {
+
+                if (!action.parameters) {
+                    action.parameters = {};
+                }
+
                 action.parameters.files! = images
             }
 
@@ -172,8 +177,6 @@ async function handleMontageAction(
                     }
 
                     matches?.forEach((match: kp.SemanticRefSearchResult) => {
-                        action.parameters.files?.push("yes!");
-
                         match.semanticRefMatches.forEach((value: kp.ScoredSemanticRefOrdinal) => {
                             const e: kp.SemanticRef | undefined = actionContext.sessionContext.agentContext.imageCollection?.semanticRefs[value.semanticRefOrdinal];
                             if (e) {
@@ -187,12 +190,7 @@ async function handleMontageAction(
                                             action.parameters.files?.push(f?.value.toString());
                                         }
                                     }
-
-                                    //const img = e.knowledge as im.Image;
-                                    //const img2 = e.knowledge as im.ImageMeta;
                                 }
-                                //const item: im.Image = e.knowledge;
-                                //action.parameters.files?.push(e.fileName);
                             }                            
                         });
                         
