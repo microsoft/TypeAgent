@@ -15,7 +15,7 @@ describe("Action Schema Strict Checks", () => {
                 true,
             ),
         ).rejects.toThrow(
-            "Error parsing test: Schema Error: test: Type 'SomeAction' must be exported",
+            "Error parsing schema 'test': Schema Error: Type 'SomeAction' must be exported",
         ));
 
     it("Error on entry type comment", async () =>
@@ -29,7 +29,7 @@ describe("Action Schema Strict Checks", () => {
                 true,
             ),
         ).rejects.toThrow(
-            "Error parsing test: Schema Error: test: entry type comments for 'AllActions' are not used for prompts. Remove from the action schema file.",
+            "Error parsing schema 'test': Schema Error: entry type comments for 'AllActions' are not used for prompts. Remove from the action schema file.",
         ));
 
     it("Error on duplicate action name", async () =>
@@ -43,7 +43,7 @@ describe("Action Schema Strict Checks", () => {
                 true,
             ),
         ).rejects.toThrow(
-            "Error parsing test: Schema Error: test: Duplicate action name 'someAction'",
+            "Error parsing schema 'test': Schema Error: Duplicate action name 'someAction'",
         ));
 
     it("Error on anonymous types", async () =>
@@ -57,6 +57,6 @@ describe("Action Schema Strict Checks", () => {
                 true,
             ),
         ).rejects.toThrow(
-            "Error parsing test: Schema Error: test: expected type reference in the entry type union",
+            "Error parsing schema 'test': Schema Error: expected type reference in the entry type union",
         ));
 });
