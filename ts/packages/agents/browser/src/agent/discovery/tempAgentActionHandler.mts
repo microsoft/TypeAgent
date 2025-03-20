@@ -8,9 +8,7 @@ import {
     NavigateToPage,
 } from "./schema/userActionsPool.mjs";
 import { handleCommerceAction } from "../commerce/actionHandler.mjs";
-import {
-    NavigationLink,
-} from "./schema/pageComponents.mjs";
+import { NavigationLink } from "./schema/pageComponents.mjs";
 import { PageActionsPlan, UserIntent } from "./schema/recordedActions.mjs";
 import { setupAuthoringActions } from "./authoringUtilities.mjs";
 
