@@ -21,9 +21,9 @@ document.addEventListener("DOMContentLoaded", function () {
 
     // setup event source from host source (shell, etc.)
     const eventSource = new EventSource("/events");
-    eventSource.onmessage = function (event: MessageEvent) {
-        console.log(event);
+    eventSource.onmessage = function (event: MessageEvent) {        
         const e = JSON.parse(event.data);
+        console.log(e);
         switch (e.actionName) {
 
             case "listPhotos": {
@@ -63,6 +63,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
                 // select specifically mentioned images
                 if (msg.parameters.files) {
+                    console.log("Selecting images: " + msg.parameters.files);
                     for(let i = 0; i < msg.parameters.files.length; i++) {
                         if (imgMap.has(msg.parameters.files[i])) {
                             imgMap.get(msg.parameters.files[i]).classList.add("selected");

@@ -16,6 +16,8 @@ import { MontageAction } from "./montageActionSchema.js";
 import { createActionResult, createActionResultFromError } from "@typeagent/agent-sdk/helpers/action";
 import * as im from "image-memory";
 import * as kp from "knowpro";
+import { conversation as kpLib } from "knowledge-processor";
+import { Facet } from "../../../../knowledgeProcessor/dist/conversation/knowledgeSchema.js";
 
 export function instantiate(): AppAgent {
     return {
@@ -169,14 +171,38 @@ async function handleMontageAction(
                         action.parameters.files = [];
                     }
 
-                    matches?.forEach((value: kp.SemanticRefSearchResult) => {
+                    matches?.forEach((match: kp.SemanticRefSearchResult) => {
                         action.parameters.files?.push("yes!");
+
+                        match.semanticRefMatches.forEach((value: kp.ScoredSemanticRefOrdinal) => {
+                            const e: kp.SemanticRef | undefined = actionContext.sessionContext.agentContext.imageCollection?.semanticRefs[value.semanticRefOrdinal];
+                            if (e) {
+                                if (e.knowledgeType === "entity") {
+                                    const k: kpLib.ConcreteEntity = e.knowledge as kpLib.ConcreteEntity;
+
+                                    if (k.type.includes("image")) {
+                                        const f: Facet | undefined = k.facets?.find((v) => { return v.name === "File Name"; });
+
+                                        if (f?.value) {
+                                            action.parameters.files?.push(f?.value.toString());
+                                        }
+                                    }
+
+                                    //const img = e.knowledge as im.Image;
+                                    //const img2 = e.knowledge as im.ImageMeta;
+                                }
+                                //const item: im.Image = e.knowledge;
+                                //action.parameters.files?.push(e.fileName);
+                            }                            
+                        });
+                        
+
                     });
                 } else {
                     result = createActionResultFromError("Unable to search images, no image index available.")
                 }
             }
-
+            
             // send select to the visualizer/client
             actionContext.sessionContext.agentContext.viewProcess!.send(action);
 
