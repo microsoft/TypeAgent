@@ -24,7 +24,7 @@ import {
     dateRangeFromDateTimeRange,
     WhenFilter,
 } from "./search.js";
-import { PropertyNames } from "./propertyIndex.js";
+import { /*isKnownProperty,*/ PropertyNames } from "./propertyIndex.js";
 import { PropertyTermSet } from "./collections.js";
 import { IConversation } from "./interfaces.js";
 import { getTimeRangePromptSectionForConversation } from "./conversation.js";
@@ -141,10 +141,6 @@ export class SearchQueryExprBuilder {
         }
         if (filter.actionSearchTerm) {
             this.addActionTermsToGroup(filter.actionSearchTerm, termGroup);
-            this.addEntityTermsForActionToGroup(
-                filter.actionSearchTerm,
-                termGroup,
-            );
         }
         if (filter.searchTerms) {
             this.addSearchTermsToGroup(filter.searchTerms, termGroup);
@@ -264,18 +260,32 @@ export class SearchQueryExprBuilder {
             );
         }
         if (isEntityTermArray(actionTerm.targetEntities)) {
-            const hasAdditionalEntities =
-                actionTerm.additionalEntities &&
-                actionTerm.additionalEntities.length > 0;
+            const hasAdditionalEntities = isEntityTermArray(
+                actionTerm.additionalEntities,
+            );
             if (hasAdditionalEntities) {
+                // If additional entities, then assume the targetEntities represent an Object in an action
                 this.addEntityNamesToGroup(
                     actionTerm.targetEntities,
                     PropertyNames.Object,
                     termGroup,
                 );
             } else {
+                // Use entity terms lookup to apply scopes
                 this.scopingEntityTerms.push(...actionTerm.targetEntities);
+                this.addEntityTermsToGroup(
+                    actionTerm.targetEntities,
+                    termGroup,
+                );
             }
+
+            if (isEntityTermArray(actionTerm.additionalEntities)) {
+                this.addEntityTermsToGroup(
+                    actionTerm.additionalEntities,
+                    termGroup,
+                );
+            }
+
             // TODO: make IndirectObject an or?
             /*
             this.addEntityNames(
@@ -284,24 +294,6 @@ export class SearchQueryExprBuilder {
                 termGroup,
             );
             */
-        }
-    }
-
-    private addEntityTermsForActionToGroup(
-        actionTerm: ActionTerm,
-        termGroup: SearchTermGroup,
-    ): void {
-        if (isEntityTermArray(actionTerm.actorEntities)) {
-            this.addEntityTermsToGroup(actionTerm.actorEntities, termGroup);
-        }
-        if (isEntityTermArray(actionTerm.targetEntities)) {
-            this.addEntityTermsToGroup(actionTerm.targetEntities, termGroup);
-        }
-        if (isEntityTermArray(actionTerm.additionalEntities)) {
-            this.addEntityTermsToGroup(
-                actionTerm.additionalEntities,
-                termGroup,
-            );
         }
     }
 
@@ -395,11 +387,25 @@ export class SearchQueryExprBuilder {
         if (!propertyIndex) {
             return false;
         }
-        const postings = propertyIndex.lookupProperty(
-            propertyName,
-            propertyValue,
-        );
-        return postings !== undefined && postings.length > 0;
+        if (isKnownProperty(propertyIndex, propertyName, propertyValue)) {
+            return true;
+        }
+        const aliasIndex =
+            this.conversation.secondaryIndexes?.termToRelatedTermsIndex
+                ?.aliases;
+        if (aliasIndex) {
+            const propertyAliases = aliasIndex.lookupTerm(propertyValue);
+            if (propertyAliases && propertyAliases.length > 0) {
+                for (const alias of propertyAliases) {
+                    if (
+                        isKnownProperty(propertyIndex, propertyName, alias.text)
+                    ) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
     }
         */
 }
