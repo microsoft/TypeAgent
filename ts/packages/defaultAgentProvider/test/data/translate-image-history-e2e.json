@@ -4,7 +4,7 @@
       "request": "Tell me what images are in our chat history.",
       "match": "partial",
       "action": {
-        "translatorName": "chat",
+        "translatorName": "dispatcher.lookup",
         "actionName": "lookupAndAnswer",
         "parameters": {
           "originalRequest": "Tell me what images are in our chat history.",

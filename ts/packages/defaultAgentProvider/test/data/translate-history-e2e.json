@@ -72,7 +72,7 @@
     {
       "request": "look up the ingredient for shepherd's pie for me please",
       "action": {
-        "translatorName": "chat",
+        "translatorName": "dispatcher.lookup",
         "actionName": "lookupAndAnswer",
         "parameters": {
           "originalRequest": "look up the ingredient for shepherd's pie for me please",
