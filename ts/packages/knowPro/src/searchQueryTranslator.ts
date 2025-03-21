@@ -85,7 +85,7 @@ export async function textQueryToSearchQueryExpr(
         return result;
     }
     const searchQuery = result.data;
-    const queryBuilder = new SearchQueryExprBuilder();
+    const queryBuilder = new SearchQueryExprBuilder(conversation);
     const queryExpr = queryBuilder.compileQuery(searchQuery);
     return success([queryExpr, searchQuery]);
 }
@@ -93,10 +93,12 @@ export async function textQueryToSearchQueryExpr(
 export class SearchQueryExprBuilder {
     private entityTermsAdded: PropertyTermSet;
     public queryExpressions: SearchQueryExpr[];
+    private scopingEntityTerms: EntityTerm[];
 
-    constructor() {
+    constructor(public conversation: IConversation) {
         this.queryExpressions = [{ selectExpressions: [] }];
         this.entityTermsAdded = new PropertyTermSet();
+        this.scopingEntityTerms = [];
     }
 
     public compileQuery(query: SearchQuery): SearchQueryExpr[] {
@@ -157,14 +159,19 @@ export class SearchQueryExprBuilder {
                 isEntityTermArray(filter.actionSearchTerm.additionalEntities) &&
                 filter.actionSearchTerm.additionalEntities.length > 0
             ) {
-                when ??= {};
-                when.scopeDefiningTerms = { booleanOp: "and", terms: [] };
-                this.entityTermsAdded.clear();
-                this.addScopingTermsToGroup(
-                    filter.actionSearchTerm.additionalEntities,
-                    when.scopeDefiningTerms,
+                this.scopingEntityTerms.push(
+                    ...filter.actionSearchTerm.additionalEntities,
                 );
             }
+        }
+        if (this.scopingEntityTerms.length > 0) {
+            when ??= {};
+            when.scopeDefiningTerms = { booleanOp: "and", terms: [] };
+            this.entityTermsAdded.clear();
+            this.addScopingTermsToGroup(
+                this.scopingEntityTerms,
+                when.scopeDefiningTerms,
+            );
         }
         if (filter.timeRange) {
             when ??= {};
@@ -176,11 +183,15 @@ export class SearchQueryExprBuilder {
     private addEntityTermsToGroup(
         entityTerms: EntityTerm[],
         termGroup: SearchTermGroup,
-        dedupe: boolean = true,
+        exactMatchName: boolean = false,
     ): void {
         if (entityTerms && entityTerms.length > 0) {
             for (const entityTerm of entityTerms) {
-                this.addEntityTermToGroup(entityTerm, termGroup, dedupe);
+                this.addEntityTermToGroup(
+                    entityTerm,
+                    termGroup,
+                    exactMatchName,
+                );
             }
         }
     }
@@ -253,11 +264,18 @@ export class SearchQueryExprBuilder {
             );
         }
         if (isEntityTermArray(actionTerm.targetEntities)) {
-            this.addEntityNamesToGroup(
-                actionTerm.targetEntities,
-                PropertyNames.Object,
-                termGroup,
-            );
+            const hasAdditionalEntities =
+                actionTerm.additionalEntities &&
+                actionTerm.additionalEntities.length > 0;
+            if (hasAdditionalEntities) {
+                this.addEntityNamesToGroup(
+                    actionTerm.targetEntities,
+                    PropertyNames.Object,
+                    termGroup,
+                );
+            } else {
+                this.scopingEntityTerms.push(...actionTerm.targetEntities);
+            }
             // TODO: make IndirectObject an or?
             /*
             this.addEntityNames(
@@ -362,9 +380,28 @@ export class SearchQueryExprBuilder {
                 return false;
             case "thing":
             case "object":
+            case "concept":
+            case "idea":
                 return true;
         }
     }
+    /*
+    private doesPropertyExist(
+        propertyName: PropertyNames,
+        propertyValue: string,
+    ): boolean {
+        const propertyIndex =
+            this.conversation.secondaryIndexes?.propertyToSemanticRefIndex;
+        if (!propertyIndex) {
+            return false;
+        }
+        const postings = propertyIndex.lookupProperty(
+            propertyName,
+            propertyValue,
+        );
+        return postings !== undefined && postings.length > 0;
+    }
+        */
 }
 
 const Wildcard = "*";
