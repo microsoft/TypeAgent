@@ -72,7 +72,7 @@ async def main():
     print(indexing_result)
     if indexing_result.semantic_refs is not None:
         if error := indexing_result.semantic_refs.error:
-            raise SystemExit(error)
+            raise RuntimeError(error)
     if pod.semantic_ref_index is not None:
         data = pod.semantic_ref_index.serialize()
         new = ConversationIndex(data)

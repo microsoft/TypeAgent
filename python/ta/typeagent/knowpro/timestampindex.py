@@ -5,10 +5,12 @@
 import bisect
 from typing import Any, Callable
 
-from convindex import text_range_from_message_chunk
+from . import convindex
 from .interfaces import (
     DateRange,
     Datetime,
+    IConversation,
+    IMessage,
     ITimestampToTextRangeIndex,
     ListIndexingResult,
     MessageOrdinal,
@@ -56,7 +58,7 @@ class TimestampToTextRangeIndex(ITimestampToTextRangeIndex):
             return False
         timestamp_datetime = Datetime.fromisoformat(timestamp)
         entry: TimestampedTextRange = TimestampedTextRange(
-            range=text_range_from_message_chunk(message_ordinal),
+            range=convindex.text_range_from_message_chunk(message_ordinal),
             # This string is formatted to be lexically sortable.
             timestamp=timestamp_datetime.isoformat(),
         )
@@ -87,3 +89,28 @@ def get_in_range[T, S: Any](
         return values[istart : istop + 1]
     else:
         return values[istart:istop]
+
+
+def build_timestamp_index(conversation: IConversation) -> ListIndexingResult:
+    if conversation.messages and conversation.secondary_indexes:
+        if conversation.secondary_indexes.timestamp_index is None:
+            conversation.secondary_indexes.timestamp_index = TimestampToTextRangeIndex()
+        return add_to_timestamp_index(
+            conversation.secondary_indexes.timestamp_index,
+            conversation.messages,
+            0,
+        )
+    return ListIndexingResult(0)
+
+
+def add_to_timestamp_index(
+    timestamp_index: ITimestampToTextRangeIndex,
+    messages: list[IMessage],
+    base_message_ordinal: int,
+) -> ListIndexingResult:
+    message_timestamps: list[tuple[int, str]] = []
+    for i, message in enumerate(messages):
+        timestamp = message.timestamp
+        if timestamp:
+            message_timestamps.append((base_message_ordinal + i, timestamp))
+    return timestamp_index.add_timestamps(message_timestamps)

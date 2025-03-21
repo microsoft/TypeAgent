@@ -13,7 +13,7 @@ from .interfaces import (
     IndexingEventHandlers,
     SecondaryIndexingResults,
 )
-from .timestampindex import TimestampToTextRangeIndex
+from .timestampindex import TimestampToTextRangeIndex, build_timestamp_index
 from .propindex import PropertyIndex, build_property_index
 
 
@@ -66,6 +66,5 @@ def build_transient_secondary_indexes[
         conversation.secondary_indexes = ConversationSecondaryIndexes()  # type: ignore  # TODO
     result = SecondaryIndexingResults()
     result.properties = build_property_index(conversation)
-    # TODO
-    # result.timestamps = build_timestamp_index(conversation)
+    result.timestamps = build_timestamp_index(conversation)
     return result

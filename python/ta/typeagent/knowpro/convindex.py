@@ -184,7 +184,6 @@ def add_metadata_to_index[TMessage: IMessage](
 ) -> None:
     if knowledge_validator is None:
         knowledge_validator = default_knowledge_validator
-    # TODO: if semantic_ref_index is not None: ???
     for i, msg in enumerate(messages):
         knowledge_response = msg.get_knowledge()
         for entity in knowledge_response.entities:
@@ -290,7 +289,6 @@ async def build_conversation_index[TM: IMessage, TC: IConversationSecondaryIndex
     result.semantic_refs = await build_semantic_ref_index(
         conversation, None, event_handler
     )
-    # TODO
     if (
         result.semantic_refs
         and not result.semantic_refs.error
@@ -306,7 +304,6 @@ async def build_conversation_index[TM: IMessage, TC: IConversationSecondaryIndex
 
 async def build_semantic_ref_index[TM: IMessage, TC: IConversationSecondaryIndexes](
     conversation: IConversation[TM, ConversationIndex, TC],
-    # TODO: Do I like that these args are optional?
     extractor: convknowledge.KnowledgeExtractor | None = None,
     event_handler: IndexingEventHandlers | None = None,
 ) -> TextIndexingResult:
@@ -328,7 +325,7 @@ async def build_semantic_ref_index[TM: IMessage, TC: IConversationSecondaryIndex
             if not event_handler.on_message_started(message_ordinal):
                 break
         chunk_ordinal = 0
-        # Only one chunk per message for now. (TODO: Fix this.)
+        # Only one chunk per message for now.
         text = message.text_chunks[chunk_ordinal]
         # TODO: retries (but beware that TypeChat already retries).
         match await extractor.extract(text):

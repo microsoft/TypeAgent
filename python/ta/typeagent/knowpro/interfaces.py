@@ -443,7 +443,7 @@ class ListIndexingResult:
 @dataclass
 class SecondaryIndexingResults:
     properties: ListIndexingResult | None = None
-    timestamp: ListIndexingResult | None = None
+    timestamps: ListIndexingResult | None = None
     related_terms: ListIndexingResult | None = None
     message: TextIndexingResult | None = None
 

@@ -73,13 +73,12 @@ class PodcastMessage(interfaces.IMessage, PodcastMessageBase):
         self.text_chunks[0] += content
 
 
-# TODO: Need a concrete implementation of IConversationSecondaryIndexes
 @dataclass
 class Podcast(
     interfaces.IConversation[
         PodcastMessage,
         convindex.ConversationIndex,
-        interfaces.IConversationSecondaryIndexes,
+        secindex.ConversationSecondaryIndexes,
     ]
 ):
     # Instance variables not passed to `__init__()`.
@@ -89,7 +88,7 @@ class Podcast(
     semantic_ref_index: convindex.ConversationIndex | None = field(
         init=False, default_factory=convindex.ConversationIndex
     )
-    secondary_indexes: interfaces.IConversationSecondaryIndexes | None = field(
+    secondary_indexes: interfaces.IConversationSecondaryIndexes | None = field(  # type: ignore
         init=False, default_factory=secindex.ConversationSecondaryIndexes
     )
 
@@ -128,7 +127,7 @@ class Podcast(
         self._build_transient_secondary_indexes(False)
         if self.secondary_indexes is not None:
             if self.secondary_indexes.thread_index is not None:
-                await self.secondary_indexes.thread_index.build_index()  # type: ignore
+                await self.secondary_indexes.thread_index.build_index()  # type: ignore  # TODO
         return result
 
     async def serialize(self) -> dict:
