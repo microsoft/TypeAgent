@@ -113,7 +113,7 @@ export function createTempAgentForSchema(
 
         console.log(`Running ${targetPlan.planName}`);
 
-        const paramsMap = new Map(Object.entries(targetIntent.parameters));
+        const paramsMap = new Map(Object.entries(action.parameters));
 
         await actionUtils.runDynamicAction(targetIntent, targetPlan, paramsMap);
     }

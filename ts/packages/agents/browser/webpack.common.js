@@ -22,6 +22,7 @@ module.exports = {
             "agentActivation.ts",
         ),
         "electron/webTypeAgentMain": path.join(srcDir, "webTypeAgentMain.ts"),
+        "extension/options": path.join(srcDir, "options.ts"),
         "extension/serviceWorker": path.join(srcDir, "serviceWorker.ts"),
         "extension/sidepanel": path.join(srcDir, "sidepanel.ts"),
         "extension/uiEventsDispatcher": path.join(
@@ -105,12 +106,11 @@ module.exports = {
                     context: path.join(srcDir, "images"),
                 },
                 {
-                    from: "../../../.env",
+                    from: path.join(srcDir, "sidepanel.html"),
                     to: "./extension",
-                    noErrorOnMissing: true,
                 },
                 {
-                    from: path.join(srcDir, "sidepanel.html"),
+                    from: path.join(srcDir, "options.html"),
                     to: "./extension",
                 },
                 {
