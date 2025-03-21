@@ -142,6 +142,11 @@ export default class TestTranslateCommand extends Command {
         schemaOptimization: Flags.boolean({
             description: "Enable schema optimization",
         }),
+        switchFixedInitial: Flags.string({
+            description:
+                "Use fixed schema group to determine the first schema to use",
+            options: schemaNames,
+        }),
         switchEmbedding: Flags.boolean({
             description: "Use embedding to determine the first schema to use",
             default: true, // follow DispatcherOptions default
@@ -373,6 +378,7 @@ export default class TestTranslateCommand extends Command {
                         },
                     },
                     switch: {
+                        fixed: flags.switchFixedInitial,
                         embedding: flags.switchEmbedding,
                         inline: flags.switchInline,
                         search: flags.switchSearch,

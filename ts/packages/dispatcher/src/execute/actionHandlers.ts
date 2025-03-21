@@ -49,7 +49,10 @@ import {
     isUnknownAction,
 } from "../context/dispatcher/dispatcherUtils.js";
 import { isPendingRequestAction } from "../translation/pendingRequest.js";
-import { translatePendingRequestAction } from "../translation/translateRequest.js";
+import {
+    isSwitchEnabled,
+    translatePendingRequestAction,
+} from "../translation/translateRequest.js";
 
 const debugActions = registerDebug("typeagent:dispatcher:actions");
 
@@ -427,11 +430,7 @@ async function canExecute(
         );
 
         const config = systemContext.session.getConfig();
-        if (
-            !config.translation.switch.search &&
-            !config.translation.switch.embedding &&
-            !config.translation.switch.inline
-        ) {
+        if (!isSwitchEnabled(config)) {
             lines.push("");
             lines.push("Switching agents is disabled");
         } else {
