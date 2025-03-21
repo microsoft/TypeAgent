@@ -5,10 +5,14 @@
 import bisect
 from typing import Any, Callable
 
+from convindex import text_range_from_message_chunk
 from .interfaces import (
-    ITimestampToTextRangeIndex,
-    TimestampedTextRange,
     DateRange,
+    Datetime,
+    ITimestampToTextRangeIndex,
+    ListIndexingResult,
+    MessageOrdinal,
+    TimestampedTextRange,
 )
 
 
@@ -25,6 +29,45 @@ class TimestampToTextRangeIndex(ITimestampToTextRangeIndex):
             stop_at,
             key=lambda x: x.timestamp,
         )
+
+    def add_timestamp(
+        self,
+        message_ordinal: MessageOrdinal,
+        timestamp: str,
+    ) -> bool:
+        return self._insert_timestamp(message_ordinal, timestamp, True)
+
+    def add_timestamps(
+        self,
+        message_timestamps: list[tuple[MessageOrdinal, str]],
+    ) -> ListIndexingResult:
+        for message_ordinal, timestamp in message_timestamps:
+            self._insert_timestamp(message_ordinal, timestamp, False)
+        self._ranges.sort(key=lambda x: x.timestamp)
+        return ListIndexingResult(len(message_timestamps))
+
+    def _insert_timestamp(
+        self,
+        message_ordinal: MessageOrdinal,
+        timestamp: str | None,
+        in_order: bool,
+    ) -> bool:
+        if not timestamp:
+            return False
+        timestamp_datetime = Datetime.fromisoformat(timestamp)
+        entry: TimestampedTextRange = TimestampedTextRange(
+            range=text_range_from_message_chunk(message_ordinal),
+            # This string is formatted to be lexically sortable.
+            timestamp=timestamp_datetime.isoformat(),
+        )
+        if in_order:
+            where = bisect.bisect_left(
+                self._ranges, entry.timestamp, key=lambda x: x.timestamp
+            )
+            self._ranges.insert(where, entry)
+        else:
+            self._ranges.append(entry)
+        return True
 
 
 def get_in_range[T, S: Any](

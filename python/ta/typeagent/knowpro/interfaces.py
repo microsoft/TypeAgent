@@ -225,11 +225,11 @@ class ITimestampToTextRangeIndex(Protocol):
         raise NotImplementedError
 
     def add_timestamps(
-        self, message_imestamps: Sequence[tuple[MessageOrdinal, str]]
-    ) -> None:
+        self, message_timestamps: list[tuple[MessageOrdinal, str]]
+    ) -> "ListIndexingResult":
         raise NotImplementedError
 
-    def lookup_range(self, date_range: DateRange) -> Sequence[TimestampedTextRange]:
+    def lookup_range(self, date_range: DateRange) -> list[TimestampedTextRange]:
         raise NotImplementedError
 
 

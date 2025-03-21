@@ -3,8 +3,7 @@
 
 from typing import Any
 
-from .propindex import build_property_index
-
+from . import convthreads
 from .importing import ConversationSettings
 from .interfaces import (
     IConversation,
@@ -14,7 +13,8 @@ from .interfaces import (
     IndexingEventHandlers,
     SecondaryIndexingResults,
 )
-from . import convthreads
+from .timestampindex import TimestampToTextRangeIndex
+from .propindex import PropertyIndex, build_property_index
 
 
 class ConversationSecondaryIndexes(IConversationSecondaryIndexes):
@@ -22,11 +22,11 @@ class ConversationSecondaryIndexes(IConversationSecondaryIndexes):
     def __init__(self, settings: dict[str, Any] | None = None):
         if settings is None:
             settings = {}
-        # TODO: Put in real values.
-        self.property_to_semantic_ref_index = None  # PropertyIndex()
-        self.timestamp_index = None  # TimestampToTextRangeIndex()
-        self.term_to_related_terms_index = None  # RelatedTermsIndex(settings)
+        self.property_to_semantic_ref_index = PropertyIndex()
+        self.timestamp_index = TimestampToTextRangeIndex()
         self.thread_index = convthreads.ConversationThreads()
+        # These indexes are not created here.
+        self.term_to_related_terms_index = None
         self.message_index = None
 
 

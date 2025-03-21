@@ -31,6 +31,16 @@ from .interfaces import (
 from . import convknowledge, importing, kplib, secindex
 
 
+def text_range_from_message_chunk(
+    message_ordinal: MessageOrdinal,
+    chunk_ordinal: int = 0,
+) -> TextRange:
+    return TextRange(
+        start=TextLocation(message_ordinal, chunk_ordinal),
+        end=None,
+    )
+
+
 def text_range_from_location(
     message_ordinal: MessageOrdinal,
     chunk_ordinal: int = 0,
