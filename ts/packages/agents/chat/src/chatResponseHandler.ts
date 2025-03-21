@@ -8,7 +8,7 @@ import {
     ChatResponseAction,
     Entity,
     GenerateResponseAction,
-    LookupAndGenerateResponseAction,
+    LookupAndAnswerAction,
 } from "./chatResponseActionSchema.js";
 import {
     ChunkChatResponse,
@@ -22,7 +22,6 @@ import { PromptSection } from "typechat";
 import {
     ActionContext,
     AppAgent,
-    AppAction,
     ActionResult,
     ActionResultSuccess,
     TypeAgentAction,
@@ -45,23 +44,10 @@ export function instantiate(): AppAgent {
     };
 }
 
-function isChatResponseAction(action: AppAction): action is ChatResponseAction {
-    return (
-        action.actionName === "generateResponse" ||
-        action.actionName === "lookupAndGenerateResponse" ||
-        action.actionName === "chatImageResponse"
-    );
-}
-
 export async function executeChatResponseAction(
     chatAction: TypeAgentAction<ChatResponseAction>,
     context: ActionContext,
 ) {
-    if (!isChatResponseAction(chatAction)) {
-        throw new Error(
-            `Invalid chat action: ${(chatAction as TypeAgentAction).actionName}`,
-        );
-    }
     return handleChatResponse(chatAction, context);
 }
 
@@ -148,62 +134,48 @@ async function handleChatResponse(
                 return result;
             }
         }
-        case "lookupAndGenerateResponse": {
-            const lookupAction = chatAction as LookupAndGenerateResponseAction;
-            if (
-                lookupAction.parameters.internetLookups !== undefined &&
-                lookupAction.parameters.internetLookups.length > 0
-            ) {
-                console.log("Running lookups");
-                return handleLookup(
-                    lookupAction.parameters.internetLookups,
-                    context,
-                    await getLookupSettings(true),
-                );
-            }
-            if (
-                lookupAction.parameters.conversationLookupFilters !== undefined
-            ) {
-                const conversationManager: Conversation.ConversationManager = (
-                    context.sessionContext as any
-                ).conversationManager;
-                if (conversationManager !== undefined) {
-                    let searchResponse =
-                        await conversationManager.getSearchResponse(
-                            lookupAction.parameters.originalRequest,
-                            lookupAction.parameters.conversationLookupFilters,
-                        );
-                    if (searchResponse) {
-                        searchResponse.response?.hasHits()
-                            ? console.log(
-                                  `Search response has ${searchResponse.response?.messages?.length} hits`,
-                              )
-                            : console.log("No search hits");
+        case "lookupAndAnswer": {
+            const lookupAction = chatAction as LookupAndAnswerAction;
+            switch (lookupAction.parameters.lookup.source) {
+                case "internet":
+                    console.log("Running internet lookups");
+                    return handleLookup(
+                        lookupAction.parameters.question,
+                        lookupAction.parameters.lookup.internetLookups,
+                        context,
+                        await getLookupSettings(true),
+                    );
+                case "conversation":
+                    const conversationManager: Conversation.ConversationManager =
+                        (context.sessionContext as any).conversationManager;
+                    if (conversationManager !== undefined) {
+                        let searchResponse =
+                            await conversationManager.getSearchResponse(
+                                lookupAction.parameters.question,
+                                lookupAction.parameters.lookup
+                                    .conversationLookupFilters,
+                            );
+                        if (searchResponse) {
+                            searchResponse.response?.hasHits()
+                                ? console.log(
+                                      `Search response has ${searchResponse.response?.messages?.length} hits`,
+                                  )
+                                : console.log("No search hits");
 
-                        const matches =
-                            await conversationManager.generateAnswerForSearchResponse(
-                                lookupAction.parameters.originalRequest,
-                                searchResponse,
-                            );
-                        if (
-                            matches &&
-                            matches.response &&
-                            matches.response.answer
-                        ) {
-                            console.log("CONVERSATION MEMORY MATCHES:");
-                            conversation.log.logSearchResponse(
-                                matches.response,
-                            );
-                            if (
-                                lookupAction.parameters
-                                    .retrieveRelatedFilesFromStorage &&
-                                lookupAction.parameters.relatedFiles !==
-                                    undefined
-                            ) {
-                                return createActionResultFromHtmlDisplay(
-                                    `<div>${matches.response.getAnswer()} ${await rehydrateImages(context, lookupAction.parameters.relatedFiles)}</div>`,
+                            const matches =
+                                await conversationManager.generateAnswerForSearchResponse(
+                                    lookupAction.parameters.question,
+                                    searchResponse,
                                 );
-                            } else {
+                            if (
+                                matches &&
+                                matches.response &&
+                                matches.response.answer
+                            ) {
+                                console.log("CONVERSATION MEMORY MATCHES:");
+                                conversation.log.logSearchResponse(
+                                    matches.response,
+                                );
                                 console.log(
                                     "Answer: " +
                                         matches.response.answer.answer
@@ -216,28 +188,30 @@ async function handleChatResponse(
                                     undefined,
                                     matchedEntities(matches.response),
                                 );
+                            } else {
+                                console.log("bug bug");
+                                return createActionResult(
+                                    "I don't know anything about that.",
+                                );
                             }
-                        } else {
-                            console.log("bug bug");
-                            return createActionResult(
-                                "I don't know anything about that.",
-                            );
                         }
+                    } else {
+                        console.log("Conversation manager is undefined!");
                     }
-                } else {
-                    console.log("Conversation manager is undefined!");
-                }
-            } else if (
-                lookupAction.parameters.retrieveRelatedFilesFromStorage &&
-                lookupAction.parameters.relatedFiles !== undefined
-            ) {
-                return createActionResultFromHtmlDisplay(
-                    `<div>${await rehydrateImages(context, lookupAction.parameters.relatedFiles)}</div>`,
-                );
             }
+            return createActionResult("No information found");
         }
+
+        case "showImageFile":
+            return createActionResultFromHtmlDisplay(
+                `<div>${await rehydrateImages(context, chatAction.parameters.files)}</div>`,
+            );
+
+        default:
+            throw new Error(
+                `Invalid chat action: ${(chatAction as TypeAgentAction).actionName}`,
+            );
     }
-    return createActionResult("No information found");
 }
 
 function matchedEntities(response: conversation.SearchResponse): Entity[] {
@@ -360,6 +334,7 @@ async function getLookupConfig() {
 }
 
 export type LookupContext = {
+    request: string; // request to be answered
     lookups: string[]; // Lookups we are running
     answers: Map<string, ChunkChatResponse>; // lookup -> final answer for lookup
     inProgress: Map<string, LookupProgress>; // lookup -> progress for lookup
@@ -381,6 +356,7 @@ export type LookupSettings = {
 };
 
 export async function handleLookup(
+    request: string,
     lookups: string[] | undefined,
     context: ActionContext,
     settings: LookupSettings,
@@ -407,6 +383,7 @@ export async function handleLookup(
         content: lookupToHtml(lookups),
     });
     const lookupContext: LookupContext = {
+        request,
         lookups,
         answers: new Map<string, ChunkChatResponse>(),
         inProgress: new Map<string, LookupProgress>(),
@@ -542,7 +519,7 @@ async function runLookup(
         settings.fastMode ? "Speed" : "Quality",
         settings.answerGenModel,
         urls,
-        lookup,
+        lookupContext.request,
         settings.lookupOptions,
         concurrency,
         getLookupInstructions(),

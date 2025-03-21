@@ -37,7 +37,9 @@ export function createTypeAgentRequestPrompt(
         if (history !== undefined) {
             const promptSections: PromptSection[] = history.promptSections;
             if (promptSections.length > 1) {
-                prompts.push("The following is a summary of the chat history:");
+                prompts.push(
+                    "The following is a summary of the recent chat history:",
+                );
 
                 const promptEntities = history.entities;
                 if (promptEntities.length > 0) {
@@ -88,6 +90,9 @@ export function createTypeAgentRequestPrompt(
     prompts.push(`"""\n${request}\n"""`);
 
     prompts.push("###");
+    prompts.push(
+        "Parameter values should only use information in the user request or the recent chat history, unless the parameter is explicitly for generating new content.",
+    );
     if (context && history !== undefined) {
         prompts.push(
             "Resolve pronouns and references in the current user request with the recent entities in the chat history.",
