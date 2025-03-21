@@ -195,7 +195,7 @@ class ScoredKnowledge:
 # Allows for faster retrieval of name, value properties
 @runtime_checkable
 class IPropertyToSemanticRefIndex(Protocol):
-    def get_values(self) -> Sequence[str]:
+    def get_values(self) -> list[str]:
         raise NotImplementedError
 
     def add_property(
@@ -442,7 +442,7 @@ class ListIndexingResult:
 
 @dataclass
 class SecondaryIndexingResults:
-    propertie: ListIndexingResult | None = None
+    properties: ListIndexingResult | None = None
     timestamp: ListIndexingResult | None = None
     related_terms: ListIndexingResult | None = None
     message: TextIndexingResult | None = None

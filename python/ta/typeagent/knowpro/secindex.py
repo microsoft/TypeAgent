@@ -3,6 +3,8 @@
 
 from typing import Any
 
+from .propindex import build_property_index
+
 from .importing import ConversationSettings
 from .interfaces import (
     IConversation,
@@ -63,7 +65,7 @@ def build_transient_secondary_indexes[
     if conversation.secondary_indexes is None:
         conversation.secondary_indexes = ConversationSecondaryIndexes()  # type: ignore  # TODO
     result = SecondaryIndexingResults()
+    result.properties = build_property_index(conversation)
     # TODO
-    # result.properties = build_property_index(conversation)
     # result.timestamps = build_timestamp_index(conversation)
     return result

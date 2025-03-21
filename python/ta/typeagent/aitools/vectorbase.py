@@ -25,7 +25,7 @@ class VectorBase:
     def __len__(self) -> int:
         return len(self._vectors)
 
-    # Ensure an empty vectorbase is truthy.
+    # Needed because otherwise an empty index would be falsy.
     def __bool__(self) -> bool:
         return True
 
