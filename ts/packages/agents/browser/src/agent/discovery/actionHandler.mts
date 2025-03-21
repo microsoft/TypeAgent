@@ -287,7 +287,6 @@ export async function handleSchemaDiscoveryAction(
         const parsed = parseActionSchemaSource(
             userActionsPoolSchema,
             "dynamicUserActions",
-            "",
             "UserPageActions",
         );
 

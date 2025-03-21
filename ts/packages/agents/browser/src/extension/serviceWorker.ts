@@ -10,36 +10,24 @@ import {
 } from "../../dist/common/webAgentMessageTypes.mjs";
 import { setStoredPageProperty, getStoredPageProperty } from "./storage";
 
-async function getConfigValues(): Promise<Record<string, string>> {
-    const envLocation = chrome.runtime.getURL(".env");
-    const content = await fetch(envLocation);
-    var vals: Record<string, string> = {};
-    var text = await content.text();
-    var lines = text.split(/[\r\n]+/g);
-    for (var i = 0; i < lines.length; i++) {
-        var splitPoint = lines[i].indexOf("=");
-        var key = lines[i].substring(0, splitPoint).trim();
-        var value = lines[i].substring(splitPoint + 1).trim();
-        if (value.startsWith("'") || value.startsWith('"')) {
-            value = value.slice(1, -1);
-        }
-
-        vals[key] = value;
-    }
-
-    return vals;
+async function getSettings(): Promise<Record<string, string>> {
+    const settings = await chrome.storage.sync.get({
+        websocketHost: "ws://localhost:8080/",
+    });
+    return settings;
 }
 
 let webSocket: any = null;
-let configValues: Record<string, string>;
+let settings: {
+    [key: string]: any;
+};
 
 export async function createWebSocket() {
-    if (!configValues) {
-        configValues = await getConfigValues();
+    if (!settings) {
+        settings = await getSettings();
     }
 
-    let socketEndpoint =
-        configValues["WEBSOCKET_HOST"] ?? "ws://localhost:8080/";
+    let socketEndpoint = settings.websocketHost ?? "ws://localhost:8080/";
 
     socketEndpoint += `?channel=browser&role=client&clientId=${chrome.runtime.id}`;
     return new Promise<WebSocket | undefined>((resolve, reject) => {
@@ -123,18 +111,6 @@ async function ensureWebsocketConnected() {
                             }),
                         );
                     }
-                } else if (schema.startsWith("browser.")) {
-                    const message = await runSiteAction(schema, {
-                        actionName: actionName,
-                        parameters: data.params,
-                    });
-
-                    webSocket.send(
-                        JSON.stringify({
-                            id: data.id,
-                            result: message,
-                        }),
-                    );
                 }
             }
             console.log(`Browser websocket client received message: ${text}`);
@@ -347,8 +323,6 @@ async function downloadImageAsFile(
 
 async function getTabScreenshot(downloadImage: boolean) {
     const targetTab = await getActiveTab();
-
-    //const dataUrl = await chrome.tabs.captureVisibleTab({quality:50});
     const dataUrl = await chrome.tabs.captureVisibleTab({ quality: 100 });
     if (downloadImage) {
         await downloadImageAsFile(targetTab!, dataUrl, "test.jpg");
@@ -373,7 +347,6 @@ async function getTabAnnotatedScreenshot(downloadImage: boolean) {
         type: "get_element_bounding_boxes",
     });
 
-    //const dataUrl = await chrome.tabs.captureVisibleTab({quality:50});
     const dataUrl = await chrome.tabs.captureVisibleTab(targetTab?.windowId!, {
         quality: 100,
     });
@@ -547,98 +520,6 @@ async function getTabAnnotatedScreenshot(downloadImage: boolean) {
     return dataUrl;
 }
 
-async function getTabAccessibilityTree(targetTab: chrome.tabs.Tab) {
-    const debugTarget = { tabId: targetTab.id };
-    try {
-        await chrome.debugger.attach(debugTarget, "1.2");
-        await chrome.debugger.sendCommand(debugTarget, "Accessibility.enable");
-
-        const accessibilityTree = await chrome.debugger.sendCommand(
-            debugTarget,
-            "Accessibility.getFullAXTree",
-        );
-        console.log(accessibilityTree);
-
-        const rootNode = (await chrome.debugger.sendCommand(
-            debugTarget,
-            "Accessibility.getRootAXNode",
-        )) as any;
-        console.log(rootNode);
-
-        const partialTree = await chrome.debugger.sendCommand(
-            debugTarget,
-            "Accessibility.getPartialAXTree",
-            { backendNodeId: rootNode.node.backendDOMNodeId },
-        );
-        console.log(partialTree);
-    } finally {
-        await chrome.debugger.detach(debugTarget);
-    }
-}
-
-async function getTabHTML(
-    targetTab: chrome.tabs.Tab,
-    fullSize: boolean,
-    downloadAsFile: boolean,
-    useDebugAPI?: boolean,
-    useTimestampIds?: boolean,
-) {
-    if (!useDebugAPI) {
-        let outerHTML = await chrome.tabs.sendMessage(targetTab.id!, {
-            type: "get_reduced_html",
-            fullSize: fullSize,
-            frameId: 0,
-            useTimestampIds: useTimestampIds,
-        });
-
-        if (downloadAsFile) {
-            await downloadStringAsFile(targetTab, outerHTML, "tabHTML.html");
-        }
-
-        return outerHTML;
-    } else {
-        const debugTarget = { tabId: targetTab.id };
-        try {
-            await chrome.debugger.attach(debugTarget, "1.2");
-            await chrome.debugger.sendCommand(debugTarget, "DOM.enable");
-
-            const rootNode = (await chrome.debugger.sendCommand(
-                debugTarget,
-                "DOM.getDocument",
-                { depth: -1, pierce: true },
-            )) as any;
-            console.log(rootNode);
-
-            let outerHTML = (await chrome.debugger.sendCommand(
-                debugTarget,
-                "DOM.getOuterHTML",
-                { backendNodeId: rootNode.root.backendNodeId },
-            )) as any;
-
-            if (!fullSize) {
-                outerHTML = await chrome.tabs.sendMessage(targetTab.id!, {
-                    type: "get_reduced_html",
-                    inputHtml: outerHTML.outerHTML,
-                });
-            }
-
-            if (downloadAsFile) {
-                await downloadStringAsFile(
-                    targetTab,
-                    outerHTML,
-                    "tabHTML.html",
-                );
-            }
-
-            return outerHTML;
-        } finally {
-            await chrome.debugger.detach(debugTarget);
-        }
-    }
-
-    return undefined;
-}
-
 async function getTabHTMLFragments(
     targetTab: chrome.tabs.Tab,
     fullSize?: boolean,
@@ -700,52 +581,6 @@ async function getTabHTMLFragments(
                         content: frameHTML,
                         text: frameText,
                     });
-                }
-            } catch {}
-        }
-    }
-
-    return htmlFragments;
-}
-
-async function getTabHTMLFragmentsBySize(
-    targetTab: chrome.tabs.Tab,
-    fullSize: boolean,
-    downloadAsFile: boolean,
-    maxFragmentSize: 16000,
-) {
-    const frames = await chrome.webNavigation.getAllFrames({
-        tabId: targetTab.id!,
-    });
-    let htmlFragments: any[] = [];
-    if (frames) {
-        for (let i = 0; i < frames?.length; i++) {
-            if (frames[i].url == "about:blank") {
-                continue;
-            }
-            try {
-                const frameFragments = await chrome.tabs.sendMessage(
-                    targetTab.id!,
-                    {
-                        type: "get_maxSize_html_fragments",
-                        frameId: frames[i].frameId,
-                        maxFragmentSize: 16000,
-                    },
-                    { frameId: frames[i].frameId },
-                );
-
-                if (frameFragments) {
-                    if (downloadAsFile) {
-                        for (let j = 0; j < frameFragments.length; j++) {
-                            await downloadStringAsFile(
-                                targetTab,
-                                frameFragments[j].content,
-                                `tabHTML_${frames[i].frameId}_${j}.html`,
-                            );
-                        }
-                    }
-
-                    htmlFragments = htmlFragments.concat(frameFragments);
                 }
             } catch {}
         }
@@ -1154,11 +989,6 @@ async function runBrowserAction(action: any) {
             break;
         }
 
-        case "getUITree": {
-            const targetTab = await getActiveTab();
-            responseObject = await getTabAccessibilityTree(targetTab!);
-            break;
-        }
         case "getHTML": {
             const targetTab = await getActiveTab();
 
@@ -1285,36 +1115,6 @@ async function runBrowserAction(action: any) {
         message: confirmationMessage,
         data: responseObject,
     };
-}
-
-async function runSiteAction(schemaName: string, action: any) {
-    let confirmationMessage = "OK";
-    switch (schemaName) {
-        case "browser.crossword": {
-            const targetTab = await getActiveTab();
-
-            const result = await chrome.tabs.sendMessage(targetTab?.id!, {
-                type: "run_crossword_action",
-                action: action,
-            });
-
-            // to do: update confirmation to include current page screenshot.
-            break;
-        }
-        case "browser.commerce": {
-            const targetTab = await getActiveTab();
-
-            const result = await chrome.tabs.sendMessage(targetTab?.id!, {
-                type: "run_commerce_action",
-                action: action,
-            });
-
-            // to do: update confirmation to include current page screenshot.
-            break;
-        }
-    }
-
-    return confirmationMessage;
 }
 
 async function sendActionToAgent(action: AppAction) {
@@ -1487,20 +1287,6 @@ chrome.runtime.onStartup.addListener(async () => {
         reconnectWebSocket();
     }
 });
-
-chrome.runtime.onMessageExternal.addListener(
-    (message: any, sender: chrome.runtime.MessageSender, sendResponse) => {
-        async () => {
-            switch (message.type) {
-                case "crosswordAction": {
-                    const response = await runBrowserAction(message.body);
-                    sendResponse(response);
-                    break;
-                }
-            }
-        };
-    },
-);
 
 chrome.runtime.onMessage.addListener(
     (message: any, sender: chrome.runtime.MessageSender, sendResponse) => {
@@ -1718,6 +1504,22 @@ chrome.runtime.onInstalled.addListener(() => {
         contexts: ["all"],
         documentUrlPatterns: ["chrome-extension://*/sidepanel.html"],
     });
+});
+
+chrome.storage.onChanged.addListener((changes, namespace) => {
+    if (namespace === "sync" && changes.websocketHost) {
+        console.log("WebSocket host changed:", changes.websocketHost.newValue);
+
+        if (settings !== undefined && webSocket !== undefined) {
+            settings.websocketHost = changes.websocketHost.newValue;
+
+            // close the socket to force reconnect
+            try {
+                webSocket.close();
+                webSocket = undefined;
+            } catch {}
+        }
+    }
 });
 
 chrome.contextMenus?.onClicked.addListener(
