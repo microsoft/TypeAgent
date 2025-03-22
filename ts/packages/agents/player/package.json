@@ -18,7 +18,8 @@
     "./agent/handlers": "./dist/agent/playerHandlers.js"
   },
   "scripts": {
-    "build": "npm run tsc",
+    "asc": "asc -i ./src/agent/playerSchema.ts -o ./dist/agent/playerSchema.pas.json -t PlayerAction",
+    "build": "concurrently npm:tsc npm:asc",
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
     "tsc": "tsc -p src"
   },
@@ -38,7 +39,21 @@
     "@types/express": "^4.17.17",
     "@types/node": "^20.3.1",
     "@types/spotify-api": "^0.0.22",
+    "action-schema-compiler": "workspace:*",
     "rimraf": "^5.0.5",
     "typescript": "^5.4.2"
+  },
+  "fluidBuild": {
+    "declarativeTasks": {
+      "asc": {
+        "inputGlobs": [
+          "src/agent/playerSchema.ts",
+          "src/agent/playerSchema.json"
+        ],
+        "outputGlobs": [
+          "dist/agent/playerSchema.json"
+        ]
+      }
+    }
   }
 }

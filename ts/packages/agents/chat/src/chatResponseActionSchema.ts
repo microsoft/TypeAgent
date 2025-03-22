@@ -11,8 +11,9 @@ export type Entity = {
 };
 
 export type ChatResponseAction =
-    | LookupAndGenerateResponseAction
-    | GenerateResponseAction;
+    | LookupAndAnswerAction
+    | GenerateResponseAction
+    | ShowImageFileAction;
 
 export type DateVal = {
     day: number;
@@ -54,24 +55,40 @@ export type TermFilter = {
     timeRange?: DateTimeRange | undefined; // in this time range
 };
 
-// this action is used to lookup information images the user has previously shared from past conversations or the internet and generate a response based on the lookup results, for example "what did we say about the project last week?" or "what is the current price of Microsoft stock?"
-export interface LookupAndGenerateResponseAction {
-    actionName: "lookupAndGenerateResponse";
+// look up for private information from past conversations (i.e. chat history) including private events, plans, projects in progress, attachments, files, file names, and other items from discussions with team members or the assistant, use the conversation lookup filters
+type LookupConversation = {
+    source: "conversation";
+    conversationLookupFilters: TermFilter[];
+};
+
+// look up for contemporary internet information including sports scores, news events, or current commerce offerings, use the lookups parameter to request a lookup of the information on the user's behalf; the assistant will generate a response based on the lookup results
+// Lookup *facts* you don't know or if your facts are out of date.
+// E.g. stock prices, time sensitive data, etc
+// the search strings to look up on the user's behalf should be specific enough to return the correct information
+// it is recommended to include the same entities as in the user request
+type LookupInternet = {
+    source: "internet";
+    internetLookups: string[];
+};
+
+// Use this action to look up answers based on information from previous conversations or the internet,
+// for user request that is a questions (for example "what did we say about the project last week?" or "what is the current price of Microsoft stock?")
+export interface LookupAndAnswerAction {
+    actionName: "lookupAndAnswer";
     parameters: {
         // the original request from the user
         originalRequest: string;
-        // if the request is for private information from past conversations including private events, plans, projects in progress, attachments, files, file names, and other items from discussions with team members or the assistant, use the conversation lookup filters
-        conversationLookupFilters?: TermFilter[];
-        // if the request is for contemporary internet information including sports scores, news events, or current commerce offerings, use the lookups parameter to request a lookup of the information on the user's behalf; the assistant will generate a response based on the lookup results
-        // Lookup *facts* you don't know or if your facts are out of date.
-        // E.g. stock prices, time sensitive data, etc
-        // the search strings to look up on the user's behalf should be specific enough to return the correct information
-        // it is recommended to include the same entities as in the user request
-        internetLookups?: string[];
-        // Any file references to images referred to by the message
-        relatedFiles?: string[];
-        // Are the contents of the files needed at this time? (i.e. does the user want to see an image or picture)
-        retrieveRelatedFilesFromStorage?: boolean;
+        // The question to get answer for.
+        question: string;
+        lookup: LookupConversation | LookupInternet;
+    };
+}
+
+export interface ShowImageFileAction {
+    actionName: "showImageFile";
+    parameters: {
+        // file entities.
+        files: string[];
     };
 }
 

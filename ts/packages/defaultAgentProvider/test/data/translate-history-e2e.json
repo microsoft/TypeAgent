@@ -73,10 +73,14 @@
       "request": "look up the ingredient for shepherd's pie for me please",
       "action": {
         "translatorName": "chat",
-        "actionName": "lookupAndGenerateResponse",
+        "actionName": "lookupAndAnswer",
         "parameters": {
           "originalRequest": "look up the ingredient for shepherd's pie for me please",
-          "internetLookups": ["shepherd's pie ingredients"]
+          "question": "What are the ingredients for shepherd's pie?",
+          "lookup": {
+            "source": "internet",
+            "internetLookups": ["shepherd's pie ingredients"]
+          }
         }
       },
       "history": {

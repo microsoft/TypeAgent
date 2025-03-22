@@ -51,7 +51,7 @@ const manifest: AppAgentManifest = {
     schema: {
         description: "Action to control the turtle to draw on a canvas",
         schemaType: "TurtleAction",
-        schemaFile: { content: schemaTs, type: "ts" },
+        schemaFile: { content: schemaTs, format: "ts" },
     },
 };
 

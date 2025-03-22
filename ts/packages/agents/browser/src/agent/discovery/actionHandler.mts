@@ -135,7 +135,7 @@ export async function handleSchemaDiscoveryAction(
                 schema: {
                     description: schemaDescription,
                     schemaType: "DynamicUserPageActions",
-                    schemaFile: { content: schema, type: "ts" },
+                    schemaFile: { content: schema, format: "ts" },
                 },
             };
 
@@ -249,7 +249,7 @@ export async function handleSchemaDiscoveryAction(
             schema: {
                 description: schemaDescription,
                 schemaType: "DynamicUserPageActions",
-                schemaFile: { content: schema, type: "ts" },
+                schemaFile: { content: schema, format: "ts" },
             },
         };
 
@@ -287,7 +287,6 @@ export async function handleSchemaDiscoveryAction(
         const parsed = parseActionSchemaSource(
             userActionsPoolSchema,
             "dynamicUserActions",
-            "",
             "UserPageActions",
         );
 
@@ -510,7 +509,7 @@ export async function handleSchemaDiscoveryAction(
         const stepsResponse = await agent.getActionStepsSchemaFromRecording(
             intentData.actionName,
             action.parameters.recordedActionDescription,
-            intentResponse.data,
+            intentData,
             recordedSteps,
             action.parameters.fragments,
             // action.parameters.screenshot,

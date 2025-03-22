@@ -164,6 +164,17 @@ export async function interactiveDocQueryLoop(
                     type: "boolean",
                     defaultValue: verbose,
                 },
+                chunkPdfs: {
+                    description: "Chunk the PDFs",
+                    type: "boolean",
+                    defaultValue: true,
+                },
+                maxPages: {
+                    description:
+                        "Maximum number of pages to process, default is all pages.",
+                    type: "integer",
+                    defaultValue: -1,
+                },
             },
         };
     }
@@ -191,12 +202,23 @@ export async function interactiveDocQueryLoop(
             namedArgs.chunkPdfs === undefined
                 ? true
                 : namedArgs.chunkPdfs?.toString().toLowerCase() === "true";
+
+        const maxPagesToProcess =
+            namedArgs.maxPages === undefined
+                ? -1
+                : parseInt(namedArgs.maxPages as string);
+        if (isNaN(maxPagesToProcess)) {
+            writeError(io, "[Invalid maxPages value]");
+            return;
+        }
+
         await importAllFiles(
             files,
             chunkyIndex,
             io,
             namedArgs.verbose,
             chunkPdfs,
+            maxPagesToProcess,
         );
     }
 

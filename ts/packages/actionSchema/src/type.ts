@@ -144,13 +144,8 @@ export type ActionSchemaGroup = {
     order?: Map<string, number>; // for exact regen
 };
 
-export type ActionSchemaFile = ActionSchemaGroup & {
-    // Schema name
-    schemaName: string;
-
-    // original file source hash
-    sourceHash: string;
-
+// Action schema that is parsed from a file.
+export type ParsedActionSchema = ActionSchemaGroup & {
     // separate the cache by action name
     actionNamespace?: boolean; // default to false
 };

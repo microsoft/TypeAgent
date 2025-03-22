@@ -16,7 +16,11 @@ import { Blob, Chunk } from "./pdfChunker.js";
 import fs from "fs";
 
 export interface PdfFileDocumenter {
-    document(fileName: string, chunks: Chunk[]): Promise<PdfFileDocumentation>;
+    document(
+        fileName: string,
+        chunks: Chunk[],
+        maxPagesToProcess: number,
+    ): Promise<PdfFileDocumentation>;
 }
 
 export function createPdfDocumenter(model: ChatModel): PdfFileDocumenter {
@@ -71,6 +75,7 @@ export function createPdfDocumenter(model: ChatModel): PdfFileDocumenter {
     async function document(
         fileName: string,
         chunks: Chunk[],
+        maxPagesToProcess: number = -1,
     ): Promise<PdfFileDocumentation> {
         // Organize chunks by page
         const pageChunksMap: Record<
@@ -93,7 +98,6 @@ export function createPdfDocumenter(model: ChatModel): PdfFileDocumenter {
             }
         }
 
-        let maxPagesToProcess = 3;
         // Process each page
         let pageCount = 0;
         for (const pageid in pageChunksMap) {
@@ -235,7 +239,7 @@ Also document the root chunk which is for page. The root chunk doesn't have any 
                 );
             }
 
-            if (pageCount >= maxPagesToProcess) {
+            if (maxPagesToProcess > 0 && pageCount >= maxPagesToProcess) {
                 break;
             }
         }
