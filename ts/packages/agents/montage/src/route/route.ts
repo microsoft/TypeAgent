@@ -7,7 +7,7 @@ import rateLimit from "express-rate-limit";
 import { fileURLToPath } from "url";
 import path from "path";
 import sharp from "sharp";
-import { getMimeTypeFromFileExtension } from "../../../../commonUtils/dist/mimeTypes.js";
+//import { getMimeType } from "common-utils";
 import fs from "node:fs";
 
 const app: Express = express();
@@ -43,78 +43,41 @@ app.get("/image", (req: Request, res: Response) => {
 
 });
 
-// app.get("/thumbnail", async (req: Request, res: Response) => {
-
-//     const file: string = req.query.path as string;
-    
-//     const buffer: Buffer = await sharp(file) 
-//       .resize(800, 800, { fit: "inside" })
-//       .toBuffer();  
-
-//     res.setHeader("Content-Type", getMimeTypeFromFileExtension(path.extname(file)));
-//     res.setHeader("Cache-Control", "no-cache");
-//     res.setHeader("Connection", "keep-alive");
-//     res.setHeader("Content-Length", buffer.byteLength);
-//     res.flushHeaders(); 
-    
-//     res.write(buffer);
-
-// });
-
 sharp.cache({ memory: 2048, files: 250, items: 1000 });
 
-app.get("/thumbnail", (req: Request, res: Response) => {
+app.get("/thumbnail", async (req: Request, res: Response) => {
 
+    console.log(req.url);
     const file: string = req.query.path as string;
+
+    const thumbnail = `${file}.thumbnail.jpg`;
+    if (!fs.existsSync(thumbnail)) {
+        const img = sharp(file, { failOn: "error"}).resize(800, 800, { fit: "inside" }).withMetadata();
+        try {
+            await img.toFile(`${file}.thumbnail.jpg`);
+        } catch (e) {
+            console.log(e);
+        }
+    }
+
+    // send the thumbnail if it's a valid size
+    if (fs.statSync(thumbnail).size > 0) {
+        res.sendFile(thumbnail);
+    } else {
+        res.sendFile(file);
+    }
+
+    // TOOD: figure out why this fails for most images
+    // const img = sharp(file, { failOn: "error"}).resize(800, 800, { fit: "inside" }).withMetadata();
+    //  const buffer = await img.toBuffer();
     
-    sharp(file) 
-      .resize(800, 800, { fit: "inside" })
-      .toBuffer().then((buffer: Buffer) => {
-        res.setHeader("Content-Type", getMimeTypeFromFileExtension(path.extname(file)));
-        res.setHeader("Cache-Control", "no-cache");
-        res.setHeader("Connection", "keep-alive");
-        res.setHeader("Content-Length", buffer.byteLength);
-        res.flushHeaders(); 
+    // res.setHeader("Content-Type", getMimeType(path.extname(file)));
+    // res.setHeader("Cache-Control", "no-cache");
+    // res.setHeader("Connection", "keep-alive");
+    // res.setHeader("Content-Length", buffer.byteLength);
+    // res.flushHeaders(); 
         
-        res.write(buffer);
-      });  
-});
-
-// app.get("/thumbnail", async (req: Request, res: Response) => {
-
-//     const file: string = req.query.path as string;
-    
-//     const buffer: Buffer = await sharp(file) 
-//       .resize(800, 800, { fit: "inside" })
-//       .toBuffer();  
-
-//     res.setHeader("Content-Type", getMimeTypeFromFileExtension(path.extname(file)));
-//     res.setHeader("Cache-Control", "no-cache");
-//     res.setHeader("Connection", "keep-alive");
-//     res.setHeader("Content-Length", buffer.byteLength);
-//     res.flushHeaders(); 
-    
-//     res.write(buffer);
-
-// });
-
-sharp.cache({ memory: 2048, files: 250, items: 1000 });
-
-app.get("/thumbnail", (req: Request, res: Response) => {
-
-    const file: string = req.query.path as string;
-    
-    sharp(file) 
-      .resize(800, 800, { fit: "inside" })
-      .toBuffer().then((buffer: Buffer) => {
-        res.setHeader("Content-Type", getMimeTypeFromFileExtension(path.extname(file)));
-        res.setHeader("Cache-Control", "no-cache");
-        res.setHeader("Connection", "keep-alive");
-        res.setHeader("Content-Length", buffer.byteLength);
-        res.flushHeaders(); 
-        
-        res.write(buffer);
-      });  
+    // res.write(buffer);
 });
 
 /**

@@ -29,6 +29,7 @@
   "dependencies": {
     "@typeagent/agent-sdk": "workspace:*",
     "aiclient": "workspace:*",
+    "common-utils": "workspace:*",
     "d3": "^7.9.0",
     "d3-cloud": "^1.2.7",
     "debug": "^4.4.0",

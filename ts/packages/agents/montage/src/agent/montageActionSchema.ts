@@ -4,12 +4,12 @@
 export type MontageAction =
     | FindPhotosAction
     | SelectPhotosAction
-//    | ListPhotosAction
+    | ListPhotosAction
     | ChangeTitleAction
     | RemovePhotosAction
     | ClearSelectionAction;
 
-// Finds/list/shows photos/images to add to the montage.
+// Find images to add to the montage.
 export type FindPhotosAction = {
     actionName: "findPhotos";
     parameters: {
@@ -33,14 +33,16 @@ export type SelectPhotosAction = {
     }
 }
 
-// // Lists/adds all available photos
-// export type ListPhotosAction = {
-//     actionName: "listPhotos";
-//     parameters: {
-//         // placeholder for images to be populated later
-//         files?: string[];
-//     }
-// }
+// Lists/adds all available photos
+export type ListPhotosAction = {
+    actionName: "listPhotos";
+    parameters: {
+        // placeholder for images to be populated later
+        files?: string[];
+        // always empty
+        search_filters?: string[];
+    }
+}
 
 // Changes the montage title
 export type ChangeTitleAction = {

@@ -12,7 +12,7 @@ import {
 import { ChildProcess, fork } from "child_process";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
-import { FindPhotosAction, MontageAction, RemovePhotosAction, SelectPhotosAction } from "./montageActionSchema.js";
+import { FindPhotosAction, ListPhotosAction, MontageAction, RemovePhotosAction, SelectPhotosAction } from "./montageActionSchema.js";
 import { createActionResult, createActionResultFromError } from "@typeagent/agent-sdk/helpers/action";
 import * as im from "image-memory";
 import * as kp from "knowpro";
@@ -118,34 +118,6 @@ async function handleMontageAction(
             break;
         }
 
-        // case "listPhotos": {
-        //     // provide status
-        //     result = createActionResult("Listing photos ...");
-
-        //     let images: string[] | undefined = [];
-        //     images = actionContext.sessionContext.agentContext.imageCollection?.messages.map((img) => img.metadata.img.fileName);
-
-        //     // TODO: update project state with this action
-        //     // TODO: update montage with this data and save it's state
-
-        //     // add the images to the action if we have any
-        //     if (images !== undefined) {
-
-        //         if (!action.parameters) {
-        //             action.parameters = {};
-        //         }
-
-        //         action.parameters.files! = images
-        //     }
-
-        //     // send them to the visualizer/client
-        //     actionContext.sessionContext.agentContext.viewProcess!.send(action);
-            
-        //     // report back to the user
-        //     result = createActionResult(`Added ${images?.length} images.`);
-        //     break;
-        // }
-
         case "removePhotos": {
             // provide status
             result = createActionResult("Removed requested images.");
@@ -187,6 +159,7 @@ async function handleMontageAction(
             break;                    
         }
 
+        case "listPhotos":
         case "findPhotos": {
 
             // provide status
@@ -216,7 +189,7 @@ async function handleMontageAction(
     return result;
 }
 
-async function findRequestedImages(action: FindPhotosAction | SelectPhotosAction | RemovePhotosAction, imageCollection: im.ImageCollection | undefined) {
+async function findRequestedImages(action: ListPhotosAction | FindPhotosAction | SelectPhotosAction | RemovePhotosAction, imageCollection: im.ImageCollection | undefined) {
     if (imageCollection) {
         if (action.parameters.search_filters) {
             const matches = await kp.searchConversationKnowledge(
@@ -239,7 +212,7 @@ async function findRequestedImages(action: FindPhotosAction | SelectPhotosAction
             matches?.forEach((match: kp.SemanticRefSearchResult) => {
                 match.semanticRefMatches.forEach((value: kp.ScoredSemanticRefOrdinal) => {
 
-                    if (value.score > 25) {
+                    if (value.score >= 10) {
                         const semanticRef: kp.SemanticRef | undefined = imageCollection.semanticRefs[value.semanticRefOrdinal];
                         console.log(`\tMatch: ${semanticRef}`);
                         if (semanticRef) {

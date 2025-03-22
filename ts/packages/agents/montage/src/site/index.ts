@@ -26,15 +26,15 @@ document.addEventListener("DOMContentLoaded", function () {
         console.log(e);
         switch (e.actionName) {
 
-            case "findPhotos": {
-//            case "listPhotos": {
+            case "findPhotos":
+            case "listPhotos": {
                 const msg: FindPhotosAction = e as FindPhotosAction;
 
                 if (msg.parameters.files) {
                     msg.parameters.files.forEach(async (f) => {
                         if (!imgMap.has(f)) {                            
                             const img: HTMLImageElement = document.createElement("img");
-                            img.src = "/image?path=" + f;
+                            img.src = "/thumbnail?path=" + f;
                             img.setAttribute("path", f);
                             imgMap.set(f, img);
 
