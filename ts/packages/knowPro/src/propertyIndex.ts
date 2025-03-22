@@ -203,12 +203,12 @@ export class PropertyIndex implements IPropertyToSemanticRefIndex {
         this.map.clear();
     }
 
-    lookupProperty(
+    public lookupProperty(
         propertyName: string,
         value: string,
     ): ScoredSemanticRefOrdinal[] | undefined {
         const termText = this.toPropertyTermText(propertyName, value);
-        return this.map.get(this.prepareTermText(termText)) ?? [];
+        return this.map.get(this.prepareTermText(termText));
     }
 
     /**

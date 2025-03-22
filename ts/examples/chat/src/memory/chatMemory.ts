@@ -1321,7 +1321,7 @@ export async function runChatMemory(): Promise<void> {
                 printer.writeLine();
                 printer.writeResultStats(response);
                 writeTokenStats();
-                printer.writeAnswer(answer);
+                printer.writeAnswer(answer, true);
             }
             if (namedArgs.debug) {
                 printer.writeSearchResponse(response);
@@ -1469,6 +1469,8 @@ export async function runChatMemory(): Promise<void> {
 
         //searcher.answers.settings.chunking.enable = true;
         let prevStats = beginCountingTokens();
+        const clock = new StopWatch();
+        clock.start();
         try {
             const timestampQ = new Date();
             let result:
@@ -1492,11 +1494,13 @@ export async function runChatMemory(): Promise<void> {
                     searchOptions,
                 );
             }
+            clock.stop();
+            printer.writeLine();
+            printer.writeTiming(chalk.cyanBright, clock);
             if (!result) {
                 printer.writeError("No result");
                 return undefined;
             }
-            printer.writeLine();
             writeTokenStats();
             printer.writeSearchTermsResult(result, namedArgs.debug);
             if (result.response && result.response.answer) {

@@ -344,7 +344,9 @@ export class ChatMemoryPrinter extends ChatPrinter {
             let answer = response.answer;
             this.writeInColor(chalk.green, answer);
         } else if (response.whyNoAnswer) {
-            const answer = response.whyNoAnswer;
+            const answer = fallback
+                ? "The conversation history does not contain information to answer this question."
+                : response.whyNoAnswer;
             this.writeInColor(chalk.red, answer);
         }
     }
