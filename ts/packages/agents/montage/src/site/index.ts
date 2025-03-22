@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 //import { SearchInput } from "./searchInput";
-import { ChangeTitleAction, ListPhotosAction, SelectPhotosAction } from "../agent/montageActionSchema.js";
+import { ChangeTitleAction, FindPhotosAction, RemovePhotosAction, SelectPhotosAction } from "../agent/montageActionSchema.js";
 
 //const eventSource = new EventSource("/events");
 
@@ -26,18 +26,25 @@ document.addEventListener("DOMContentLoaded", function () {
         console.log(e);
         switch (e.actionName) {
 
-            case "listPhotos": {
-                const msg: ListPhotosAction = e as ListPhotosAction;
+            case "findPhotos": {
+//            case "listPhotos": {
+                const msg: FindPhotosAction = e as FindPhotosAction;
 
                 if (msg.parameters.files) {
-                    msg.parameters.files.forEach((f) => {
-                        const img: HTMLImageElement = document.createElement("img");
-                        img.src = "/image?path=" + f;
-                        img.setAttribute("path", f);
+                    msg.parameters.files.forEach(async (f) => {
+                        if (!imgMap.has(f)) {                            
+                            const img: HTMLImageElement = document.createElement("img");
+                            img.src = "/image?path=" + f;
+                            img.setAttribute("path", f);
+                            imgMap.set(f, img);
 
-                        mainContainer.append(img);
+                            // get the image caption
+                            const res = await fetch(`/knowlegeResponse?path=${f}`);
+                            const ii = await res.json();
+                            img.title = ii.altText; 
 
-                        imgMap.set(f, img);
+                            mainContainer.append(img);                            
+                        }
                     });
                 }
                 
@@ -63,7 +70,6 @@ document.addEventListener("DOMContentLoaded", function () {
 
                 // select specifically mentioned images
                 if (msg.parameters.files) {
-                    console.log("Selecting images: " + msg.parameters.files);
                     for(let i = 0; i < msg.parameters.files.length; i++) {
                         if (imgMap.has(msg.parameters.files[i])) {
                             imgMap.get(msg.parameters.files[i]).classList.add("selected");
@@ -86,8 +92,84 @@ document.addEventListener("DOMContentLoaded", function () {
                 break;
             }
 
-            case "clearSelectedPhotos": {
+            case "removePhotos": {
+                const msg: RemovePhotosAction = e as RemovePhotosAction;
 
+                // remove all selected images
+                if (msg.parameters.selected === "selected" || msg.parameters.selected === "all") {
+                    selected.forEach((value: string) => {
+                        imgMap.get(value).remove();
+                        imgMap.delete(value);                        
+                    });
+                    selected.clear();                    
+                }
+                
+                // remove unselected images
+                if (msg.parameters.selected === "inverse" || msg.parameters.selected === "all") {
+                    imgMap.forEach((value, key) => {
+                        if (!selected.has(key)) {
+                            value.remove();
+                            imgMap.delete(key);
+                        }
+                    });
+                }
+
+                // remove by index
+                if (msg.parameters.indicies) {
+                    // reverse index
+                    if (msg.parameters.selected === "inverse") {
+                        const keep: Set<string> = new Set<string>();
+                        msg.parameters.indicies.forEach((v) => {
+                            keep.add(mainContainer.children[v].getAttribute("path"));
+                        });
+
+                        keep.forEach((img) => {
+                            imgMap.get(img).remove();
+                            imgMap.delete(img);
+                        });
+
+                    } else {
+                        // have to start at the end otherwise indexes will be wrong
+                        for(let i = msg.parameters.indicies.length - 1; i >= 0 ; i--) {
+                            const index = msg.parameters.indicies[i];
+                            const file: string | undefined = mainContainer.children[index].getAttribute("path");
+                            mainContainer.children[index].remove();
+
+                            imgMap.delete(file);
+                            selected.delete(file);
+                        }       
+                    }             
+                }
+
+                // remove specific files
+                if (msg.parameters.files) {
+                    for(let i = 0; i < msg.parameters.files.length; i++) {
+
+                        if (imgMap.has(msg.parameters.files[i])) {
+                            imgMap.get(msg.parameters.files[i]).remove();
+                            imgMap.delete(msg.parameters.files[i]);
+                        }
+                        selected.delete(msg.parameters.files[i]);
+                    }                    
+                }
+
+                // remove everything
+                if (msg.parameters.indicies === undefined 
+                    && msg.parameters.files === undefined 
+                    && msg.parameters.search_filters === undefined
+                    && msg.parameters.selected === undefined) {
+                    selected.clear();
+                    imgMap.clear();
+                    mainContainer.innerHTML = "";
+                }
+
+                // Don't break because we want to clear the selection after doing a "remove"
+                if (!msg.parameters.selected) {
+                    break;
+                }
+            }
+
+            case "clearSelectedPhotos": {
                 selected.clear();
 
                 for (let i = 0; i < mainContainer.children.length; i++) {
@@ -95,80 +177,7 @@ document.addEventListener("DOMContentLoaded", function () {
                     mainContainer.children[i].classList.remove("unselected");
                 }                
                 break;
-            }
+            }            
         }
-
-
-
-        // const contentElement = document.getElementById("mainContainer");
-        // if (contentElement) {
-        //     contentElement.innerHTML += decodeURIComponent(event.data);
-        //     // mermaid.init(
-        //     //     undefined,
-        //     //     contentElement.querySelectorAll(".mermaid"),
-        //     // );
-
-        //     // processGeoJson(contentElement);
-        // }
     };
-
-    //mainContainer.append(searchInput.container);
-    //mainContainer.innerText = "Hello world";
-//     const listsContainer: CollapsableContainer = new CollapsableContainer(
-//         "Lists",
-//     );
-//     const tangledTreeContainer: CollapsableContainer = new CollapsableContainer(
-//         "Tangled Tree",
-//     );
-//     const hierarchyContainer: CollapsableContainer = new CollapsableContainer(
-//         "Knowledge Network",
-//     );
-//     const wordCloudContainer: CollapsableContainer = new CollapsableContainer(
-//         "Word Cloud",
-//     );
-//     const treeConfig: TidyTreeConfigType = defaultTidyTreeConfig;
-
-//     treeConfig.label = (d) => (d.name ? d.name : d);
-//     treeConfig.title = (_, n) => {
-//         return `${n
-//             .ancestors()
-//             .reverse()
-//             .map((d: { data: { name: any } }) => d.data.name)
-//             .join(".")}`;
-//     };
-//     treeConfig.children = (d) => d.items;
-
-//     const tidyTree: TidyTree = new TidyTree(
-//         { name: "empty list", items: [] },
-//         treeConfig,
-//     );
-
-//     const tangledTree: TangledTree = new TangledTree([]);
-//     const hierarchy: HierarchicalEdgeBundling = new HierarchicalEdgeBundling(
-//         [],
-//     );
-//     const wordCloud: WordCloud = new WordCloud("");
-
-//     mainContainer!.appendChild(listsContainer.div);
-//     mainContainer!.appendChild(tangledTreeContainer.div);
-//     mainContainer!.appendChild(hierarchyContainer.div);
-//     mainContainer!.appendChild(wordCloudContainer.div);
-
-//     listsContainer.chartContainer.append(tidyTree.tree!);
-//     tangledTreeContainer.chartContainer.append(tangledTree.tree!);
-//     hierarchyContainer.chartContainer.append(hierarchy.chart!);
-//     wordCloudContainer.chartContainer.append(wordCloud.chart!);
-
-//     addEvents(
-//         listsContainer,
-//         tangledTreeContainer,
-//         hierarchyContainer,
-//         wordCloudContainer,
-//         tidyTree,
-//         tangledTree,
-//         hierarchy,
-//         wordCloud,
-//     );
-
-//     fetch("/initializeData");
 });

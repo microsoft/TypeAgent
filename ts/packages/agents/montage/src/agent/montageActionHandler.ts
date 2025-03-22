@@ -12,12 +12,15 @@ import {
 import { ChildProcess, fork } from "child_process";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
-import { MontageAction } from "./montageActionSchema.js";
+import { FindPhotosAction, MontageAction, RemovePhotosAction, SelectPhotosAction } from "./montageActionSchema.js";
 import { createActionResult, createActionResultFromError } from "@typeagent/agent-sdk/helpers/action";
 import * as im from "image-memory";
 import * as kp from "knowpro";
 import { conversation as kpLib } from "knowledge-processor";
 import { Facet } from "../../../../knowledgeProcessor/dist/conversation/knowledgeSchema.js";
+//import registerDebug from "debug";
+
+//const debugAgent = registerDebug("typeagent:agent:montage");
 
 export function instantiate(): AppAgent {
     return {
@@ -68,8 +71,7 @@ async function updateMontageContext(
         // Load the image index from disk
         // TODO: make dynamic
         if (!context.agentContext.imageCollection) {
-            const indexPath = "f:\pictures_index";
-            context.agentContext.imageCollection = await im.ImageCollection.readFromFile(path.dirname(indexPath), path.basename(indexPath, path.extname(indexPath)));
+            context.agentContext.imageCollection = await im.ImageCollection.readFromFile("f:\\pictures_index", "index");
         }
 
         // Create the montage
@@ -116,40 +118,49 @@ async function handleMontageAction(
             break;
         }
 
-        case "listPhotos": {
-            // provide status
-            result = createActionResult("Listing photos ...");
+        // case "listPhotos": {
+        //     // provide status
+        //     result = createActionResult("Listing photos ...");
 
-            let images: string[] | undefined = [];
-            images = actionContext.sessionContext.agentContext.imageCollection?.messages.map((img) => img.metadata.img.fileName);
+        //     let images: string[] | undefined = [];
+        //     images = actionContext.sessionContext.agentContext.imageCollection?.messages.map((img) => img.metadata.img.fileName);
 
-            // TODO: update project state with this action
-            // TODO: update montage with this data and save it's state
+        //     // TODO: update project state with this action
+        //     // TODO: update montage with this data and save it's state
 
-            // add the images to the action if we have any
-            if (images !== undefined) {
+        //     // add the images to the action if we have any
+        //     if (images !== undefined) {
 
-                if (!action.parameters) {
-                    action.parameters = {};
-                }
+        //         if (!action.parameters) {
+        //             action.parameters = {};
+        //         }
 
-                action.parameters.files! = images
-            }
+        //         action.parameters.files! = images
+        //     }
 
-            // send them to the visualizer/client
-            actionContext.sessionContext.agentContext.viewProcess!.send(action);
+        //     // send them to the visualizer/client
+        //     actionContext.sessionContext.agentContext.viewProcess!.send(action);
             
-            // report back to the user
-            result = createActionResult(`Added ${images?.length} images.`);
-            break;
-        }
+        //     // report back to the user
+        //     result = createActionResult(`Added ${images?.length} images.`);
+        //     break;
+        // }
 
         case "removePhotos": {
             // provide status
-            result = createActionResult("Searching...");
+            result = createActionResult("Removed requested images.");
 
-            // TODO: implement
+            // search for the images requested by the user
+            if (action.parameters.search_filters) {
+                await findRequestedImages(action, actionContext.sessionContext.agentContext.imageCollection);
+            } else {
+                result = createActionResultFromError("Unable to search images, no image index available.");
+            }
 
+            // send select to the visualizer/client
+            actionContext.sessionContext.agentContext.viewProcess!.send(action);
+
+            result = createActionResult(`Removing requested images.`);
             break;
         }
 
@@ -157,48 +168,11 @@ async function handleMontageAction(
             // provide status
             result = createActionResult("Selecting...");
 
-            if (actionContext.sessionContext.agentContext.imageCollection) {
-                if (action.parameters.search_filters) {
-                    const matches = await kp.searchConversationKnowledge(
-                        actionContext.sessionContext.agentContext.imageCollection,
-                        // search group
-                        {
-                            booleanOp: "and", // or
-                            terms: filterToSearchTerm(action.parameters.search_filters),
-                        },
-                        // when filter
-                        {
-                            knowledgeType: "entity"
-                        }
-                    );
-
-                    if (!action.parameters.files) {
-                        action.parameters.files = [];
-                    }
-
-                    matches?.forEach((match: kp.SemanticRefSearchResult) => {
-                        match.semanticRefMatches.forEach((value: kp.ScoredSemanticRefOrdinal) => {
-                            const e: kp.SemanticRef | undefined = actionContext.sessionContext.agentContext.imageCollection?.semanticRefs[value.semanticRefOrdinal];
-                            if (e) {
-                                if (e.knowledgeType === "entity") {
-                                    const k: kpLib.ConcreteEntity = e.knowledge as kpLib.ConcreteEntity;
-
-                                    if (k.type.includes("image")) {
-                                        const f: Facet | undefined = k.facets?.find((v) => { return v.name === "File Name"; });
-
-                                        if (f?.value) {
-                                            action.parameters.files?.push(f?.value.toString());
-                                        }
-                                    }
-                                }
-                            }                            
-                        });
-                        
-
-                    });
-                } else {
-                    result = createActionResultFromError("Unable to search images, no image index available.")
-                }
+            // search for the images requested by the user
+            if (action.parameters.search_filters) {
+                await findRequestedImages(action, actionContext.sessionContext.agentContext.imageCollection);
+            } else {
+                result = createActionResultFromError("Unable to search images, no image index available.");
             }
             
             // send select to the visualizer/client
@@ -213,8 +187,83 @@ async function handleMontageAction(
             break;                    
 
         }
+
+        case "findPhotos": {
+
+            // search for the images requested by the user
+            if (actionContext.sessionContext.agentContext.imageCollection !== undefined) {
+                if (action.parameters.search_filters && action.parameters.search_filters.length > 0) {
+                    await findRequestedImages(action, actionContext.sessionContext.agentContext.imageCollection);
+                } else {
+                    (action as FindPhotosAction).parameters.files = actionContext.sessionContext.agentContext.imageCollection?.messages.map((img) => img.metadata.img.fileName);                
+                }
+            } else {
+                result = createActionResultFromError("Unable to search images, no image index available.");            
+            }
+
+            // TODO: update project state with this action
+            // TODO: update montage with this data and save it's state
+
+            // send select to the visualizer/client
+            actionContext.sessionContext.agentContext.viewProcess!.send(action);
+
+            result = createActionResult(`Found ${action.parameters.files?.length} images.`);            
+            break;
+        }
     }
     return result;
+}
+
+async function findRequestedImages(action: FindPhotosAction | SelectPhotosAction | RemovePhotosAction, imageCollection: im.ImageCollection | undefined) {
+    if (imageCollection) {
+        if (action.parameters.search_filters) {
+            const matches = await kp.searchConversationKnowledge(
+                imageCollection,
+                // search group
+                {
+                    booleanOp: "and", // or
+                    terms: filterToSearchTerm(action.parameters.search_filters),
+                },
+                // when filter
+                {
+                    knowledgeType: "entity"
+                }
+            );
+
+            const imageFiles: Set<string> = new Set<string>();
+
+            console.log(`Found ${matches?.size} matches for: ${action.parameters.search_filters}`);
+
+            matches?.forEach((match: kp.SemanticRefSearchResult) => {
+                match.semanticRefMatches.forEach((value: kp.ScoredSemanticRefOrdinal) => {                    
+                    const e: kp.SemanticRef | undefined = imageCollection.semanticRefs[value.semanticRefOrdinal];
+                    console.log(`\tMatch: ${e}`);
+                    if (e) {
+                        if (e.knowledgeType === "entity") {
+                            const k: kpLib.ConcreteEntity = e.knowledge as kpLib.ConcreteEntity;
+
+                            // did we get a direct hit on an image?
+                            if (k.type.includes("image")) {
+                                const f: Facet | undefined = k.facets?.find((v) => { return v.name === "File Name"; });
+
+                                if (f?.value) {
+                                    imageFiles.add(f?.value.toString());
+                                }
+                            } else {
+                                // for non-images trace it back to the originating image and add that
+                                const imgRange: kp.TextLocation = e.range.start;
+                                const img: im.Image = imageCollection.messages[imgRange.messageOrdinal];
+
+                                imageFiles.add(img.metadata.fileName);
+                            }
+                        }
+                    }                            
+                });
+            });
+
+            action.parameters.files = [...imageFiles];
+        }
+    }
 }
 
 function filterToSearchTerm(filters: string[]): kp.SearchTerm[] {
@@ -274,3 +323,4 @@ export async function createViewServiceHost() {
         return result;
     });
 }
+
