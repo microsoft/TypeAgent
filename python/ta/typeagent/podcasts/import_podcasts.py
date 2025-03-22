@@ -196,17 +196,49 @@ class Podcast(
     def _build_transient_secondary_indexes(self, all: bool) -> None:
         if all:
             secindex.build_transient_secondary_indexes(self)
-        self._build_participant_aliases()
-        self._build_caches()
+        # self._build_participant_aliases()  # TODO: implement term_to_related_terms_index first
+        # self._build_caches()  # TODO: term_to_related_terms_index,
 
-    def _build_participant_aliases(self) -> None:
-        pass  # TODO
+    # TODO: term_to_related_terms_index
+    # def _build_participant_aliases(self) -> None:
+    #     aliases = self.secondary_indexes.term_to_related_terms_index.aliases  # TODO
+    #     aliases.clear()
+    #     name_to_alias_map = self._collect_participant_aliases()
+    #     for name in name_to_alias_map.keys():
+    #         related_terms = [{"text": alias} for alias in name_to_alias_map[name]]
+    #         aliases.add_related_term(name, related_terms)
 
-    def _collect_participant_aliases(self) -> None:
-        pass  # TODO
+    def _collect_participant_aliases(self):
 
-    def _build_caches(self) -> None:
-        pass  # TODO
+        aliases: dict[str, set[str]] = {}
+
+        def collect_name(participant_name: str | None):
+            if participant_name:
+                participant_name = participant_name.lower()
+                parsed_name = split_participant_name(participant_name)
+                if parsed_name and parsed_name.first_name and parsed_name.last_name:
+                    # If participant_name is a full name, associate first_name with the full name.
+                    aliases.setdefault(parsed_name.first_name, set()).add(
+                        participant_name
+                    )
+                    aliases.setdefault(participant_name, set()).add(
+                        parsed_name.first_name
+                    )
+
+        for message in self.messages:
+            collect_name(message.speaker)
+            for listener in message.listeners:
+                collect_name(listener)
+
+        return aliases
+
+    # TODO: create_term_embedding_cache(), term_to_related_terms_index
+    # def _build_caches(self) -> None:
+    #     create_term_embedding_cache(
+    #         self.settings.related_term_index_settings.embedding_index_settings,
+    #         self.secondary_indexes.term_to_related_terms_index.fuzzy_index,
+    #         64,
+    #     )
 
 
 # NOTE: Doesn't need to be async (Python file I/O is synchronous)
@@ -284,9 +316,6 @@ def assign_message_listeners(
 # This text can be partitioned into blocks.
 # However, timestamps for individual blocks are not available.
 # Assigns individual timestamps to blocks proportional to their lengths.
-# @param messages The messages to assign timestamps to
-# @param start_time
-# @param end_time
 def timestamp_messages(
     messages: Sequence[interfaces.IMessage],
     start_time: Datetime,
@@ -302,3 +331,48 @@ def timestamp_messages(
     for message, length in zip(messages, message_lengths):
         message.timestamp = Datetime.fromtimestamp(start).isoformat()
         start += seconds_per_char * length
+
+
+# TODO: Move the rest to another file (or two).
+
+
+@dataclass
+class ParticipantName:
+    first_name: str
+    last_name: str | None = None
+    middle_name: str | None = None
+
+
+def split_participant_name(full_name: str) -> ParticipantName | None:
+    parts = split(full_name, r"\s+", trim=True, remove_empty=True)
+    match len(parts):
+        case 0:
+            return None
+        case 1:
+            return ParticipantName(first_name=parts[0])
+        case 2:
+            return ParticipantName(first_name=parts[0], last_name=parts[1])
+        case 3:
+            if parts[1].lower() == "van":
+                parts[1:] = [f"{parts[1]} {parts[2]}"]
+                return ParticipantName(first_name=parts[0], last_name=parts[1])
+            return ParticipantName(
+                first_name=parts[0], middle_name=parts[1], last_name=parts[2]
+            )
+        case _:
+            raise ValueError("Full name has too many parts")
+
+
+def split(
+    text: str,
+    pattern: str,
+    *,
+    trim: bool = False,
+    remove_empty: bool = False,
+) -> list[str]:
+    parts = re.split(pattern, text)
+    if trim:
+        parts = [part.strip() for part in parts]
+    if remove_empty:
+        parts = [part for part in parts if part]
+    return parts

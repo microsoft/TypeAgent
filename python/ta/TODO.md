@@ -2,7 +2,8 @@
 
 - For secindex.build_secondary_indexes():
   - build_related_terms_index()
-  - build_message_index()
+    - Requires implementing term_to_related_terms_index -- relatedtermsindex.py (500 lines)
+  - build_message_index() -- messageindex.py (180 lines)
 
 - Serialization everywhere (do this last, it is very tedious and may change)
 
@@ -11,8 +12,3 @@
 - Settings everywhere (not very important, low priority)
 
 - Various `# type: ignore` comments (usually need to make some I-interface generic in actual message/index/etc.)
-
-- In import_podcast.Podcast:
-  - _build_participant_aliases
-  - _collect_participant_aliases
-  - _build_caches

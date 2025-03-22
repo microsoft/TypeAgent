@@ -12,8 +12,8 @@ from openai import AsyncOpenAI, AsyncAzureOpenAI
 
 from .auth import get_shared_token_provider, AzureTokenProvider
 
-NormalizedEmbedding = NDArray[np.float32]  # A single embedding
-NormalizedEmbeddings = NDArray[np.float32]  # An array of embeddings
+type NormalizedEmbedding = NDArray[np.float32]  # A single embedding
+type NormalizedEmbeddings = NDArray[np.float32]  # An array of embeddings
 
 
 class AsyncEmbeddingModel:
