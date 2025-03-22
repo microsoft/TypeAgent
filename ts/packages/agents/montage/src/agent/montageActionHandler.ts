@@ -18,6 +18,7 @@ import * as im from "image-memory";
 import * as kp from "knowpro";
 import { conversation as kpLib } from "knowledge-processor";
 import { Facet } from "../../../../knowledgeProcessor/dist/conversation/knowledgeSchema.js";
+import fs from "node:fs";
 
 export function instantiate(): AppAgent {
     return {
@@ -68,8 +69,13 @@ async function updateMontageContext(
         // Load the image index from disk
         // TODO: make dynamic
         if (!context.agentContext.imageCollection) {
-            const indexPath = "f:\pictures_index";
-            context.agentContext.imageCollection = await im.ImageCollection.readFromFile(path.dirname(indexPath), path.basename(indexPath, path.extname(indexPath)));
+            let indexPath = "f:\\pictures_index";
+
+            if (!fs.existsSync(indexPath)) {
+                context.agentContext.imageCollection = await im.ImageCollection.readFromFile("c:\\temp\\pictures_index", "index");
+            } else {
+                context.agentContext.imageCollection = await im.ImageCollection.readFromFile(path.dirname(indexPath), path.basename(indexPath, path.extname(indexPath)));
+            }
         }
 
         // Create the montage

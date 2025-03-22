@@ -6,6 +6,8 @@ import express, { Express, Request, Response } from "express";
 import rateLimit from "express-rate-limit";
 import { fileURLToPath } from "url";
 import path from "path";
+import sharp from "sharp";
+import { getMimeTypeFromFileExtension } from "../../../../commonUtils/dist/mimeTypes.js";
 
 const app: Express = express();
 const port = process.env.PORT || 9012;
@@ -31,6 +33,43 @@ app.get("/image", (req: Request, res: Response) => {
     // BUGBUG: not secure...need to assert perms, etc. here
     res.sendFile(req.query.path as string);
 
+});
+
+// app.get("/thumbnail", async (req: Request, res: Response) => {
+
+//     const file: string = req.query.path as string;
+    
+//     const buffer: Buffer = await sharp(file) 
+//       .resize(800, 800, { fit: "inside" })
+//       .toBuffer();  
+
+//     res.setHeader("Content-Type", getMimeTypeFromFileExtension(path.extname(file)));
+//     res.setHeader("Cache-Control", "no-cache");
+//     res.setHeader("Connection", "keep-alive");
+//     res.setHeader("Content-Length", buffer.byteLength);
+//     res.flushHeaders(); 
+    
+//     res.write(buffer);
+
+// });
+
+sharp.cache({ memory: 2048, files: 250, items: 1000 });
+
+app.get("/thumbnail", (req: Request, res: Response) => {
+
+    const file: string = req.query.path as string;
+    
+    sharp(file) 
+      .resize(800, 800, { fit: "inside" })
+      .toBuffer().then((buffer: Buffer) => {
+        res.setHeader("Content-Type", getMimeTypeFromFileExtension(path.extname(file)));
+        res.setHeader("Cache-Control", "no-cache");
+        res.setHeader("Connection", "keep-alive");
+        res.setHeader("Content-Length", buffer.byteLength);
+        res.flushHeaders(); 
+        
+        res.write(buffer);
+      });  
 });
 
 // export function setupMiddlewares(

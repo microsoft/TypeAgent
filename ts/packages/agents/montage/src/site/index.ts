@@ -32,7 +32,7 @@ document.addEventListener("DOMContentLoaded", function () {
                 if (msg.parameters.files) {
                     msg.parameters.files.forEach((f) => {
                         const img: HTMLImageElement = document.createElement("img");
-                        img.src = "/image?path=" + f;
+                        img.src = "/thumbnail?path=" + f;
                         img.setAttribute("path", f);
 
                         mainContainer.append(img);
