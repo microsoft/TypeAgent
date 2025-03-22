@@ -13,8 +13,9 @@ button {
 }
 
 img {
-    max-width: 250px;
     max-height: 165px;
+    border-radius: 3%;
+    /*margin: 2px;*/
 }
 
 .title {
@@ -29,15 +30,20 @@ img {
 
 #mainContainer {
     position: fixed;
-    top: 30px;
+    top: 45px;
     left: 0px;
     bottom: 0px;
     right: 0px;
     overflow-y: scroll;
-}
-
-img {
-    border-radius: 5%;
+    
+    display: inline-flex;
+    /* flex-direction: row; */
+    flex-flow: wrap;
+    /* flex: auto; */
+    align-items: stretch;
+    align-content: flex-start;
+    justify-content: center;
+    gap: 2px;
 }
 
 .unselected {
@@ -46,8 +52,7 @@ img {
 
 .selected {
     border: chartreuse;
-    border-width: 3px;
+    border-width: 2px;
     border-style: dotted;
-    border-radius: 5%;
-    margin: 2px;
+    border-radius: 3%;
 }
