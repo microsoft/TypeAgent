@@ -4,12 +4,12 @@
 export type MontageAction =
     | FindPhotosAction
     | SelectPhotosAction
-    | ListPhotosAction
+//    | ListPhotosAction
     | ChangeTitleAction
     | RemovePhotosAction
     | ClearSelectionAction;
 
-// Finds photos based on image content/description/etc.
+// Finds/list/shows photos/images to add to the montage.
 export type FindPhotosAction = {
     actionName: "findPhotos";
     parameters: {
@@ -20,6 +20,7 @@ export type FindPhotosAction = {
     }
 }
 
+// Selects images in the UI that have already been found
 export type SelectPhotosAction = {
     actionName: "selectPhotos";
     parameters: {
@@ -32,15 +33,16 @@ export type SelectPhotosAction = {
     }
 }
 
-// Lists/adds all available photos
-export type ListPhotosAction = {
-    actionName: "listPhotos";
-    parameters: {
-        // placeholder for images to be populated later
-        files?: string[];
-    }
-}
+// // Lists/adds all available photos
+// export type ListPhotosAction = {
+//     actionName: "listPhotos";
+//     parameters: {
+//         // placeholder for images to be populated later
+//         files?: string[];
+//     }
+// }
 
+// Changes the montage title
 export type ChangeTitleAction = {
     actionName: "changeTitle";
     parameters: {
@@ -48,6 +50,7 @@ export type ChangeTitleAction = {
     }
 }
 
+// Removes the images the images that match the supplied criteria
 export type RemovePhotosAction = {
     actionName: "removePhotos";
     parameters: {
@@ -55,13 +58,14 @@ export type RemovePhotosAction = {
         search_filters?: string[];
         // any indicies provided indicating the photos to remove from the set of available images
         indicies?: number[];
-        // flag indicating if we are remove selected images
-        selected?: boolean;
+        // flag indicating if we are remove selected images or inverse
+        selected?: "selected" | "inverse" | "all";
         // placeholder for images to be populated later
         files?: string[];
     }
 }
 
+// Clears the currently selected images
 export type ClearSelectionAction = {
     actionName: "clearSelectedPhotos";
     parameters: {

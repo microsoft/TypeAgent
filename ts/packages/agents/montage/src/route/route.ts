@@ -8,6 +8,7 @@ import { fileURLToPath } from "url";
 import path from "path";
 import sharp from "sharp";
 import { getMimeTypeFromFileExtension } from "../../../../commonUtils/dist/mimeTypes.js";
+import fs from "node:fs";
 
 const app: Express = express();
 const port = process.env.PORT || 9012;
@@ -23,10 +24,17 @@ const staticPath = fileURLToPath(new URL("../", import.meta.url));
 app.use(limiter);
 app.use(express.static(staticPath));
 
+/**
+ * Gets the root document
+ */
 app.get("/", (req: Request, res: Response) => {
     res.sendFile(path.join(staticPath, "index.html"));
 });
 
+/**
+ * Serves up requested images
+ * TODO: secure path access to image folder only
+ */
 app.get("/image", (req: Request, res: Response) => {
 
     // load the requested file
@@ -72,89 +80,57 @@ app.get("/thumbnail", (req: Request, res: Response) => {
       });  
 });
 
-// export function setupMiddlewares(
-//     middlewares: Server.Middleware[],
-//     devServer: Server,
-// ) {
-//     const app = devServer.app!;
-//     let clients: any[] = [];
+// app.get("/thumbnail", async (req: Request, res: Response) => {
 
-//     sendEvent("startup", null);
-//     // VisualizationNotifier.getinstance().onListChanged = (
-//     //     lists: TypeAgentList,
-//     // ) => {
-//     //     sendEvent("updateListVisualization", lists);
-//     // };
+//     const file: string = req.query.path as string;
+    
+//     const buffer: Buffer = await sharp(file) 
+//       .resize(800, 800, { fit: "inside" })
+//       .toBuffer();  
 
-//     // VisualizationNotifier.getinstance().onKnowledgeUpdated = (
-//     //     graph: KnowledgeGraph[][],
-//     // ) => {
-//     //     sendEvent("updateKnowledgeVisualization", graph);
-//     // };
+//     res.setHeader("Content-Type", getMimeTypeFromFileExtension(path.extname(file)));
+//     res.setHeader("Cache-Control", "no-cache");
+//     res.setHeader("Connection", "keep-alive");
+//     res.setHeader("Content-Length", buffer.byteLength);
+//     res.flushHeaders(); 
+    
+//     res.write(buffer);
 
-//     // VisualizationNotifier.getinstance().onHierarchyUpdated = (
-//     //     hierarchy: KnowledgeHierarchy[],
-//     // ) => {
-//     //     sendEvent("updateKnowledgeHierarchyVisualization", hierarchy);
-//     // };
+// });
 
-//     // VisualizationNotifier.getinstance().onWordsUpdated = (words: string[]) => {
-//     //     sendEvent("updateWordCloud", words);
-//     // };
+sharp.cache({ memory: 2048, files: 250, items: 1000 });
 
-//     // SSE endpoint
-//     app.get("/events", (req, res) => {
-//         res.setHeader("Content-Type", "text/event-stream");
-//         res.setHeader("Cache-Control", "no-cache");
-//         res.setHeader("Connection", "keep-alive");
-//         res.flushHeaders();
+app.get("/thumbnail", (req: Request, res: Response) => {
 
-//         clients.push(res);
+    const file: string = req.query.path as string;
+    
+    sharp(file) 
+      .resize(800, 800, { fit: "inside" })
+      .toBuffer().then((buffer: Buffer) => {
+        res.setHeader("Content-Type", getMimeTypeFromFileExtension(path.extname(file)));
+        res.setHeader("Cache-Control", "no-cache");
+        res.setHeader("Connection", "keep-alive");
+        res.setHeader("Content-Length", buffer.byteLength);
+        res.flushHeaders(); 
+        
+        res.write(buffer);
+      });  
+});
 
-//         req.on("close", () => {
-//             clients = clients.filter((client) => client !== res);
-//         });
-//     });
+/**
+ * Gets the knowledge reponse file for the supplied image (if available)
+ * Used for debugging purposes only.
+ */
+app.get("/knowlegeResponse", (req: Request, res: Response) => {
 
-//     // Get all data
-//     app.get("/initializeData", async (req, res) => {
-//         // const visualizer = VisualizationNotifier.getinstance();
+    const file = `${req.query.path}.kr.json`;
+    if (fs.existsSync(file)) {
+        res.sendFile(file);
+    } else {
+        res.status(404).send("Knowledge Response file does not exist.")
+    }
 
-//         // const l = await visualizer.enumerateLists();
-
-//         // if (visualizer.onListChanged != null) {
-//         //     visualizer.onListChanged!(l);
-//         // }
-
-//         // const know = await visualizer.enumerateKnowledge();
-//         // if (visualizer.onKnowledgeUpdated != null) {
-//         //     visualizer.onKnowledgeUpdated!(know);
-//         // }
-
-//         // const h = await visualizer.enumerateKnowledgeForHierarchy();
-//         // if (visualizer.onHierarchyUpdated != null) {
-//         //     visualizer.onHierarchyUpdated!(h);
-//         // }
-
-//         // const w = await visualizer.enumerateKnowledgeForWordCloud();
-//         // if (visualizer.onWordsUpdated != null) {
-//         //     visualizer.onWordsUpdated!(w);
-//         // }
-//     });
-
-//     app.get("/cmd", async (req, res) => {
-//         console.debug(req);
-//     });
-
-//     // Send events to all clients
-//     function sendEvent(event: string, data: any) {
-//         clients.forEach((client) => {
-//             client.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
-//         });
-//     }
-
-//     return middlewares;
-// }
+});
 
 let clients: any[] = [];
 //let filePath: string;
