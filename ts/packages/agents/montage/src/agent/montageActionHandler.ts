@@ -185,10 +185,12 @@ async function handleMontageAction(
             
             result = createActionResult(`Selected ${selectedCount} images.`);
             break;                    
-
         }
 
         case "findPhotos": {
+
+            // provide status
+            result = createActionResult("Searching photos...");
 
             // search for the images requested by the user
             if (actionContext.sessionContext.agentContext.imageCollection !== undefined) {
@@ -235,29 +237,40 @@ async function findRequestedImages(action: FindPhotosAction | SelectPhotosAction
             console.log(`Found ${matches?.size} matches for: ${action.parameters.search_filters}`);
 
             matches?.forEach((match: kp.SemanticRefSearchResult) => {
-                match.semanticRefMatches.forEach((value: kp.ScoredSemanticRefOrdinal) => {                    
-                    const e: kp.SemanticRef | undefined = imageCollection.semanticRefs[value.semanticRefOrdinal];
-                    console.log(`\tMatch: ${e}`);
-                    if (e) {
-                        if (e.knowledgeType === "entity") {
-                            const k: kpLib.ConcreteEntity = e.knowledge as kpLib.ConcreteEntity;
+                match.semanticRefMatches.forEach((value: kp.ScoredSemanticRefOrdinal) => {
 
-                            // did we get a direct hit on an image?
-                            if (k.type.includes("image")) {
-                                const f: Facet | undefined = k.facets?.find((v) => { return v.name === "File Name"; });
+                    if (value.score > 25) {
+                        const semanticRef: kp.SemanticRef | undefined = imageCollection.semanticRefs[value.semanticRefOrdinal];
+                        console.log(`\tMatch: ${semanticRef}`);
+                        if (semanticRef) {
+                            if (semanticRef.knowledgeType === "entity") {
+                                const entity: kpLib.ConcreteEntity = semanticRef.knowledge as kpLib.ConcreteEntity;
 
-                                if (f?.value) {
-                                    imageFiles.add(f?.value.toString());
+                                // did we get a direct hit on an image?
+                                if (entity.type.includes("image")) {
+                                    const f: Facet | undefined = entity.facets?.find((v) => { return v.name === "File Name"; });
+
+                                    if (f?.value) {
+                                        imageFiles.add(f?.value.toString());
+                                    }
+                                } else {
+                                    // for non-images trace it back to the originating image and add that
+                                    const imgRange: kp.TextLocation = semanticRef.range.start;
+                                    const img: im.Image = imageCollection.messages[imgRange.messageOrdinal];
+
+                                    imageFiles.add(img.metadata.fileName);
                                 }
-                            } else {
-                                // for non-images trace it back to the originating image and add that
-                                const imgRange: kp.TextLocation = e.range.start;
-                                const img: im.Image = imageCollection.messages[imgRange.messageOrdinal];
+                            } else if (semanticRef.knowledgeType === "action") {
+                                // const action: kpLib.Action = semanticRef.knowledge as kpLib.Action;
+                                // action.
 
-                                imageFiles.add(img.metadata.fileName);
+                            } else if (semanticRef.knowledgeType === "tag") {
+
+                            } else if (semanticRef.knowledgeType === "topic") {
+
                             }
                         }
-                    }                            
+                    }          
                 });
             });
 
