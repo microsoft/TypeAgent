@@ -14,6 +14,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import datetime as Datetime, timedelta as Timedelta  # For export!
 from typing import (
+    Any,
     Callable,
     Literal,
     NotRequired,
@@ -27,7 +28,6 @@ from . import kplib
 
 
 # An object that can provide a KnowledgeResponse structure.
-@runtime_checkable
 class IKnowledgeSource(Protocol):
     def get_knowledge(self) -> kplib.KnowledgeResponse:
         raise NotImplementedError
@@ -42,7 +42,6 @@ class DeletionInfo:
 type MessageOrdinal = int
 
 
-@runtime_checkable
 class IMessage(IKnowledgeSource, Protocol):
     # The text of the message, split into chunks.
     text_chunks: list[str]
@@ -81,7 +80,6 @@ class ScoredMessageOrdinal:
     score: float
 
 
-@runtime_checkable
 class ITermToSemanticRefIndex(Protocol):
     def get_terms(self) -> Sequence[str]:
         raise NotImplementedError
@@ -193,7 +191,6 @@ class ScoredKnowledge:
 
 
 # Allows for faster retrieval of name, value properties
-@runtime_checkable
 class IPropertyToSemanticRefIndex(Protocol):
     def get_values(self) -> list[str]:
         raise NotImplementedError
@@ -219,7 +216,6 @@ class TimestampedTextRange:
 
 
 # Return text ranges in the given date range.
-@runtime_checkable
 class ITimestampToTextRangeIndex(Protocol):
     def add_timestamp(self, message_ordinal: MessageOrdinal, timestamp: str) -> bool:
         raise NotImplementedError
@@ -233,13 +229,11 @@ class ITimestampToTextRangeIndex(Protocol):
         raise NotImplementedError
 
 
-@runtime_checkable
 class ITermToRelatedTerms(Protocol):
     def lookup_term(self, text: str) -> Sequence[Term] | None:
         raise NotImplementedError
 
 
-@runtime_checkable
 class ITermToRelatedTermsFuzzy(Protocol):
     async def add_terms(
         self, terms: Sequence[str], event_handler: "IndexingEventHandlers | None" = None
@@ -263,14 +257,13 @@ class ITermToRelatedTermsFuzzy(Protocol):
         raise NotImplementedError
 
 
-@runtime_checkable
 class ITermToRelatedTermsIndex(Protocol):
     @property
     def aliases(self) -> ITermToRelatedTerms | None:
         raise NotImplementedError
 
     @property
-    def fuzzy_index(self) -> ITermToRelatedTermsFuzzy | None:
+    def fuzzy_index(self) -> Any | None:  # TODO: ITermToRelatedTermsFuzzy | None
         raise NotImplementedError
 
 
@@ -290,7 +283,6 @@ class ScoredThreadOrdinal:
     score: float
 
 
-@runtime_checkable
 class IConversationThreads(Protocol):
     threads: list[Thread]
 
@@ -306,7 +298,6 @@ class IConversationThreads(Protocol):
         raise NotImplementedError
 
 
-@runtime_checkable
 class IMessageTextIndex(Protocol):
 
     async def add_messages(
@@ -334,16 +325,14 @@ class IMessageTextIndex(Protocol):
         raise NotImplementedError
 
 
-@runtime_checkable
 class IConversationSecondaryIndexes(Protocol):
     property_to_semantic_ref_index: IPropertyToSemanticRefIndex | None
     timestamp_index: ITimestampToTextRangeIndex | None
     term_to_related_terms_index: ITermToRelatedTermsIndex | None
-    thread_index: IConversationThreads | None
+    threads: IConversationThreads | None = None
     message_index: IMessageTextIndex | None = None
 
 
-@runtime_checkable
 class IConversation[
     TMessage: IMessage,
     TTermToSemanticRefIndex: ITermToSemanticRefIndex,

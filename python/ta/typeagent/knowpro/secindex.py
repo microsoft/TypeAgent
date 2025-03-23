@@ -3,8 +3,11 @@
 
 from typing import Any
 
+from .messageindex import MessageTextIndex, build_message_index
+from .relatedtermsindex import RelatedTermsIndex, build_related_terms_index
+
 from . import convthreads
-from .importing import ConversationSettings
+from .importing import ConversationSettings, RelatedTermIndexSettings
 from .interfaces import (
     IConversation,
     IConversationSecondaryIndexes,
@@ -12,22 +15,20 @@ from .interfaces import (
     ITermToSemanticRefIndex,
     IndexingEventHandlers,
     SecondaryIndexingResults,
+    TextIndexingResult,
+    TextLocation,
 )
 from .timestampindex import TimestampToTextRangeIndex, build_timestamp_index
 from .propindex import PropertyIndex, build_property_index
 
 
 class ConversationSecondaryIndexes(IConversationSecondaryIndexes):
-    # TODO: settings is probably not a dict
-    def __init__(self, settings: dict[str, Any] | None = None):
+    def __init__(self, settings: RelatedTermIndexSettings | None = None):
         if settings is None:
-            settings = {}
+            settings = RelatedTermIndexSettings()
         self.property_to_semantic_ref_index = PropertyIndex()
         self.timestamp_index = TimestampToTextRangeIndex()
-        self.thread_index = convthreads.ConversationThreads()
-        # These indexes are not created here.
-        self.term_to_related_terms_index = None
-        self.message_index = None
+        self.term_to_related_terms_index: RelatedTermsIndex = RelatedTermsIndex(settings)  # type: ignore  # TODO
 
 
 async def build_secondary_indexes[
@@ -43,16 +44,18 @@ async def build_secondary_indexes[
     result: SecondaryIndexingResults = build_transient_secondary_indexes(
         conversation,  # type: ignore  # TODO
     )
-    # TODO
-    # result.related_terms = await build_related_terms_index(
-    #     conversation, conversation_settings, event_handler
-    # )
-    # if result.related_terms is not None and not result.related_terms.error:
-    #         result.message = await build_message_index(
-    #              conversation,
-    #              conversation_settings.message_text_index_settings,
-    #              event_handler,
-    #         )
+    result.related_terms = await build_related_terms_index(
+        conversation, conversation_settings, event_handler
+    )
+    if result.related_terms is not None and not result.related_terms.error:
+        res = await build_message_index(
+            conversation,
+            conversation_settings.message_text_index_settings,
+            event_handler,
+        )
+        result.message = TextIndexingResult(
+            TextLocation(res.number_completed + 1)
+        )  # TODO: Is +1 correct?
 
     return result
 

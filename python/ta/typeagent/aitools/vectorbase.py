@@ -74,7 +74,10 @@ class VectorBase:
 
     async def add_keys(self, keys: list[str]) -> None:
         embeddings = await self.get_embeddings(keys)
-        self._vectors = np.append(self._vectors, embeddings, axis=0)
+        if not len(self._vectors):
+            self._vectors = embeddings
+        else:
+            self._vectors = np.append(self._vectors, embeddings, axis=0)
 
     async def fuzzy_lookup(
         self, key: str, max_hits: int | None = None, min_score: float | None = None

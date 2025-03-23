@@ -88,7 +88,7 @@ class Podcast(
     semantic_ref_index: convindex.ConversationIndex | None = field(
         init=False, default_factory=convindex.ConversationIndex
     )
-    secondary_indexes: interfaces.IConversationSecondaryIndexes | None = field(  # type: ignore
+    secondary_indexes: interfaces.IConversationSecondaryIndexes = field(  # type: ignore
         init=False, default_factory=secindex.ConversationSecondaryIndexes
     )
 
@@ -96,7 +96,7 @@ class Podcast(
     name_tag: str = field(default="")
     messages: list[PodcastMessage] = field(default_factory=list)
     tags: list[str] = field(default_factory=list)
-    semantic_refs: list[interfaces.SemanticRef] | None = field(default_factory=list)
+    semantic_refs: list[interfaces.SemanticRef] = field(default_factory=list)
 
     def add_metadata_to_index(self) -> None:
         if self.semantic_ref_index is not None:
@@ -126,8 +126,8 @@ class Podcast(
         # Pass false here to build podcast specific secondary indexes only.
         self._build_transient_secondary_indexes(False)
         if self.secondary_indexes is not None:
-            if self.secondary_indexes.thread_index is not None:
-                await self.secondary_indexes.thread_index.build_index()  # type: ignore  # TODO
+            if self.secondary_indexes.threads is not None:
+                await self.secondary_indexes.threads.build_index()  # type: ignore  # TODO
         return result
 
     async def serialize(self) -> dict:
@@ -158,7 +158,7 @@ class Podcast(
                 m["timestamp"],
             )
             self.messages.append(msg)
-        self.semantic_refs = podcast_data["semantic_refs"]
+        self.semantic_refs = podcast_data["semantic_refs"]  # type: ignore  # TODO
         self.tags = podcast_data["tags"]
 
         if podcast_data.get("semantic_index_data"):
@@ -168,8 +168,8 @@ class Podcast(
         # if podcast_data.get("related_terms_index_data"):
         #     self.secondary_indexes.term_to_related_terms_index.deserialize(podcast_data["related_terms_index_data"])
         # if podcast_data.get("thread_data"):
-        #     self.secondary_indexes.thread_index = ConversationThreads(self.settings.thread_settings)
-        #     self.secondary_indexes.thread_index.deserialize(podcast_data["thread_data"])
+        #     self.secondary_indexes.threads```` = ConversationThreads(self.settings.thread_settings)
+        #     self.secondary_indexes.threads.deserialize(podcast_data["thread_data"])
         # if podcast_data.get("message_index_data"):
         #     self.secondary_indexes.message_index = MessageTextIndex(self.settings.message_text_index_settings)
         #     self.secondary_indexes.message_index.deserialize(podcast_data["message_index_data"])
@@ -200,13 +200,13 @@ class Podcast(
         # self._build_caches()  # TODO: term_to_related_terms_index,
 
     # TODO: term_to_related_terms_index
-    # def _build_participant_aliases(self) -> None:
-    #     aliases = self.secondary_indexes.term_to_related_terms_index.aliases  # TODO
-    #     aliases.clear()
-    #     name_to_alias_map = self._collect_participant_aliases()
-    #     for name in name_to_alias_map.keys():
-    #         related_terms = [{"text": alias} for alias in name_to_alias_map[name]]
-    #         aliases.add_related_term(name, related_terms)
+    def _build_participant_aliases(self) -> None:
+        aliases: ITermToRelatedTerms = self.secondary_indexes.term_to_related_terms_index.aliases  # type: ignore  # TODO
+        aliases.clear()
+        name_to_alias_map = self._collect_participant_aliases()
+        for name in name_to_alias_map.keys():
+            related_terms = [{"text": alias} for alias in name_to_alias_map[name]]
+            aliases.add_related_term(name, related_terms)
 
     def _collect_participant_aliases(self):
 

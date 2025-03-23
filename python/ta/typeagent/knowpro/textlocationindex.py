@@ -106,9 +106,9 @@ class TextToTextLocationIndex(ITextToTextLocationIndex):
         **kwds,
     ) -> Any:
         raise NotImplementedError
-    
+
     def serialize(self) -> Any:
         raise NotImplementedError  # TODO
-    
+
     def deserialize(self, data: Any) -> None:
         raise NotImplementedError  # TODO

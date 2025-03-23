@@ -21,9 +21,9 @@ class MessageTextIndexSettings:
 
 @dataclass
 class ConversationSettings:
-    relatedTermIndexSettings: RelatedTermIndexSettings
-    threadSettings: TextEmbeddingIndexSettings
-    messageTextIndexSettings: MessageTextIndexSettings
+    related_term_index_settings: RelatedTermIndexSettings
+    thread_settings: TextEmbeddingIndexSettings
+    message_text_index_settings: MessageTextIndexSettings
 
 
 def create_conversation_settings() -> ConversationSettings:
