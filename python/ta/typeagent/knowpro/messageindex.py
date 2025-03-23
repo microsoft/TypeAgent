@@ -13,6 +13,7 @@ from .interfaces import (
     ListIndexingResult,
     MessageOrdinal,
     ScoredMessageOrdinal,
+    TextLocation,
 )
 from .textlocationindex import TextToTextLocationIndex
 
@@ -61,7 +62,15 @@ class MessageTextIndex(IMessageTextEmbeddingIndex):
         messages: list[IMessage],
         event_handler: IndexingEventHandlers | None = None,
     ) -> ListIndexingResult:
-        raise NotImplementedError  # TODO
+        base_message_ordinal: MessageOrdinal = 0
+        all_chunks: list[tuple[str, TextLocation]] = []
+        # Collect everything so we can batch efficiently.
+        for message_ordinal, message in enumerate(messages, base_message_ordinal):
+            for chunk_ordinal, chunk in enumerate(message.text_chunks):
+                all_chunks.append((chunk, TextLocation(message_ordinal, chunk_ordinal)))
+        return await self.text_location_index.add_text_locations(
+            all_chunks, event_handler
+        )
 
     async def lookup_messages(
         self,

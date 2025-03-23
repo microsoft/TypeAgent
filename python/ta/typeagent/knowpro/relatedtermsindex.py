@@ -54,7 +54,6 @@ async def build_related_terms_index(
         fuzzy_index = csec.term_to_related_terms_index.fuzzy_index
         all_terms = csem.get_terms()
         if fuzzy_index and all_terms:
-            breakpoint()
             await fuzzy_index.add_keys(all_terms)
         return ListIndexingResult(len(all_terms))
     else:
