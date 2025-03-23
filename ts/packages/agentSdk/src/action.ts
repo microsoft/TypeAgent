@@ -22,6 +22,7 @@ export type ActionResultSuccessNoDisplay = {
     dynamicDisplayId?: string | undefined;
     dynamicDisplayNextRefreshMs?: number | undefined;
     additionalInstructions?: string[] | undefined;
+    additionalActions?: AppAction[];
     error?: undefined;
 };
 
@@ -33,6 +34,7 @@ export type ActionResultSuccess = {
     dynamicDisplayId?: string | undefined;
     dynamicDisplayNextRefreshMs?: number | undefined;
     additionalInstructions?: string[] | undefined;
+    additionalActions?: AppAction[];
     error?: undefined;
 };
 
