@@ -1,19 +1,5 @@
 [
   {
-    "request": "add the ingredients for chess pie to the grocery list",
-    "action": [
-      "dispatcher.lookup.lookupAndAnswer",
-      "dispatcher.pendingRequestAction"
-    ]
-  },
-  {
-    "request": "play this week's top 10 on the billboard chart",
-    "action": [
-      "dispatcher.lookup.lookupAndAnswer",
-      "dispatcher.pendingRequestAction"
-    ]
-  },
-  {
     "request": "play the song by Bach we talked about yesterday",
     "action": "dispatcher.clarify.clarifyUnresolvedReference"
   },

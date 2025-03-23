@@ -10,6 +10,7 @@ import { TranslateCommandHandler } from "./handlers/translateCommandHandler.js";
 import { ExplainCommandHandler } from "./handlers/explainCommandHandler.js";
 import {
     ActionContext,
+    ActionResult,
     AppAgent,
     AppAgentManifest,
     TypeAgentAction,
@@ -24,6 +25,10 @@ import {
 import { loadAgentJsonTranslator } from "../../translation/agentTranslators.js";
 import { lookupAndAnswer } from "../../search/search.js";
 import { LookupAndAnswerAction } from "./schema/lookupActionSchema.js";
+import {
+    getChatHistoryForTranslation,
+    translateRequest,
+} from "../../translation/translateRequest.js";
 
 const dispatcherHandlers: CommandHandlerTable = {
     description: "Type Agent Dispatcher Commands",
@@ -47,7 +52,9 @@ async function executeDispatcherAction(
                 case "clarifyMissingParameter":
                     return clarifyRequestAction(action, context);
                 case "clarifyUnresolvedReference":
-                    return clarifyUnresolvedReferenceAction(action, context);
+                    const result = await clarifyWithLookup(action, context);
+                    // If we fail to clarify with lookup, just ask the user.
+                    return result ?? clarifyRequestAction(action, context);
             }
             break;
         case "dispatcher.lookup":
@@ -79,17 +86,18 @@ function clarifyRequestAction(
     return result;
 }
 
-async function clarifyUnresolvedReferenceAction(
+async function clarifyWithLookup(
     action: ClarifyUnresolvedReference,
     context: ActionContext<CommandHandlerContext>,
-) {
-    const agents = context.sessionContext.agentContext.agents;
+): Promise<ActionResult | undefined> {
+    const systemContext = context.sessionContext.agentContext;
+    const agents = systemContext.agents;
     if (
         !agents.isSchemaActive("dispatcher.lookup") ||
         !agents.isActionActive("dispatcher.lookup")
     ) {
         // lookup is disabled either for translation or action. Just ask the user.
-        return clarifyRequestAction(action, context);
+        return undefined;
     }
 
     const actionConfigs = [
@@ -105,18 +113,57 @@ async function clarifyUnresolvedReferenceAction(
         false, // no multiple
     );
 
-    const result = await translator.translate(
-        `What is ${action.parameters.reference}?`,
+    const question = `What is ${action.parameters.reference}?`;
+    const result = await translator.translate(question);
+
+    if (!result.success) {
+        return undefined;
+    }
+    const lookupAction = result.data as LookupAndAnswerAction;
+    if (lookupAction.actionName !== "lookupAndAnswer") {
+        return undefined;
+    }
+    const lookupResult = await lookupAndAnswer(
+        lookupAction as LookupAndAnswerAction,
+        context,
     );
 
-    if (result.success) {
-        const action = result.data;
-        if (action.actionName === "lookupAndAnswer") {
-            return lookupAndAnswer(action as LookupAndAnswerAction, context);
-        }
+    if (
+        lookupResult.error !== undefined ||
+        lookupResult.literalText === undefined
+    ) {
+        return undefined;
     }
 
-    return clarifyRequestAction(action, context);
+    // TODO: This translation can probably more scoped based on the `actionName` field.
+    const history = getChatHistoryForTranslation(systemContext);
+
+    history.promptSections.push({
+        role: "assistant",
+        content: lookupResult.literalText,
+    });
+
+    const translationResult = await translateRequest(
+        action.parameters.request,
+        context,
+        history,
+    );
+
+    if (!translationResult) {
+        // undefined means not found or not translated
+        // null means cancelled because of replacement parse error.
+        return undefined;
+    }
+
+    if (translationResult.requestAction.actions.length > 1) {
+        // REVIEW: Expect only one action?.
+        return undefined;
+    }
+
+    return {
+        additionalActions: [translationResult.requestAction.actions[0].action],
+        entities: [],
+    };
 }
 
 export const dispatcherManifest: AppAgentManifest = {
