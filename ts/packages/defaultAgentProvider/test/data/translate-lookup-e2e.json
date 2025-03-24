@@ -1,0 +1,10 @@
+[
+  {
+    "request": "play the song by Bach we talked about yesterday",
+    "action": "dispatcher.clarify.clarifyUnresolvedReference"
+  },
+  {
+    "request": "play song from the artist that we talked about when we were discussing flower",
+    "action": "dispatcher.clarify.clarifyUnresolvedReference"
+  }
+]
