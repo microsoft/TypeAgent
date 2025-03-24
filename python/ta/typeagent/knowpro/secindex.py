@@ -53,9 +53,7 @@ async def build_secondary_indexes[
             conversation_settings.message_text_index_settings,
             event_handler,
         )
-        result.message = TextIndexingResult(
-            TextLocation(res.number_completed + 1)
-        )  # TODO: Is +1 correct?
+        result.message = TextIndexingResult(TextLocation(res.number_completed))
 
     return result
 

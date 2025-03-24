@@ -15,7 +15,8 @@ class ScoredOrdinal(NamedTuple):
 
 
 class VectorBase:
-    def __init__(self):
+    # TODO: pass TextEmbeddingIndexSettings to give the model and the embedding size.
+    def __init__(self):  # TODO: settings: TextEmbeddingIndexSettings | None = None
         self._model = AsyncEmbeddingModel()
         self._vectors: NDArray[np.float32] = np.array([], dtype=np.float32).reshape(
             (0, 0)
@@ -101,8 +102,6 @@ class VectorBase:
     def clear(self) -> None:
         size = len(self._vectors)
         self._vectors = np.array([], dtype=np.float32).reshape((0, 0))
-        # TODO: Should this clear the embedding cache as well?
-        # self._embedding_cache = {}
 
 
 async def main():

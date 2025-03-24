@@ -108,7 +108,7 @@ class TextToTextLocationIndex(ITextToTextLocationIndex):
         raise NotImplementedError
 
     def serialize(self) -> Any:
-        raise NotImplementedError  # TODO
+        raise NotImplementedError  # TODO implement TextToTextLocationIndex serialization
 
     def deserialize(self, data: Any) -> None:
-        raise NotImplementedError  # TODO
+        raise NotImplementedError  # TODO: implement TextToTextLocationIndex deserialization

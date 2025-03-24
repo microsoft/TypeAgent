@@ -1,15 +1,6 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-# TODO:
-# - See TODOs in kplib.py.
-# - Do the Protocol classes need to be @runtime_checkable?
-#
-# NOTE:
-# - I took some liberty with index types and made them int.
-# - I rearranged the order in some cases to ensure def-before-ref.
-# - I translated readonly to @property.
-
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import datetime as Datetime, timedelta as Timedelta  # For export!
@@ -19,7 +10,6 @@ from typing import (
     Literal,
     NotRequired,
     Protocol,
-    runtime_checkable,
     Self,
     TypedDict,
 )
@@ -265,7 +255,7 @@ class ITermToRelatedTermsIndex(Protocol):
         raise NotImplementedError
 
     @property
-    def fuzzy_index(self) -> Any | None:  # TODO: ITermToRelatedTermsFuzzy | None
+    def fuzzy_index(self) -> Any | None:  # TODO: ITermToRelatedTermsFuzzy | None; Or ectorBase | None?
         raise NotImplementedError
 
 

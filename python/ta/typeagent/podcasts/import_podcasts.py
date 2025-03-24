@@ -130,6 +130,7 @@ class Podcast(
                 await self.secondary_indexes.threads.build_index()  # type: ignore  # TODO
         return result
 
+    # TODO: serialize, deserialize
     # async def serialize(self) -> dict:
     #     data = {
     #         "name_tag": self.name_tag,
@@ -233,7 +234,7 @@ class Podcast(
 
         return aliases
 
-    # TODO: create_term_embedding_cache(), term_to_related_terms_index
+    # TODO: Implement create_term_embedding_cache() (where?)
     # def _build_caches(self) -> None:
     #     create_term_embedding_cache(
     #         self.settings.related_term_index_settings.embedding_index_settings,
@@ -334,9 +335,6 @@ def timestamp_messages(
         start += seconds_per_char * length
 
 
-# TODO: Move the rest to another file (or two).
-
-
 @dataclass
 class ParticipantName:
     first_name: str
@@ -345,7 +343,7 @@ class ParticipantName:
 
 
 def split_participant_name(full_name: str) -> ParticipantName | None:
-    parts = split(full_name, r"\s+", trim=True, remove_empty=True)
+    parts = full_name.split(None, 2)
     match len(parts):
         case 0:
             return None
@@ -357,23 +355,9 @@ def split_participant_name(full_name: str) -> ParticipantName | None:
             if parts[1].lower() == "van":
                 parts[1:] = [f"{parts[1]} {parts[2]}"]
                 return ParticipantName(first_name=parts[0], last_name=parts[1])
+            last_name = " ".join(parts[2].split())
             return ParticipantName(
-                first_name=parts[0], middle_name=parts[1], last_name=parts[2]
+                first_name=parts[0], middle_name=parts[1], last_name=last_name
             )
         case _:
-            raise ValueError("Full name has too many parts")
-
-
-def split(
-    text: str,
-    pattern: str,
-    *,
-    trim: bool = False,
-    remove_empty: bool = False,
-) -> list[str]:
-    parts = re.split(pattern, text)
-    if trim:
-        parts = [part.strip() for part in parts]
-    if remove_empty:
-        parts = [part for part in parts if part]
-    return parts
+            assert False, "SHOULD BE UNREACHABLE: Full name has too many parts"

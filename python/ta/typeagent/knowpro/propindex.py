@@ -210,7 +210,7 @@ def lookup_property_in_property_index(
     ranges_in_scope: None = None,  # TODO: TextRangesInScope | None
 ) -> list[ScoredSemanticRefOrdinal] | None:
     # TODO: See lookupPropertyInPropertyIndex.
-    return None
+    raise NotImplementedError
 
 
 def is_known_property(

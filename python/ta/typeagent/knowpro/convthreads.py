@@ -3,6 +3,7 @@
 
 from typing import Protocol
 
+from .importing import TextEmbeddingIndexSettings
 from .interfaces import IConversationThreads, ScoredThreadOrdinal, Thread
 from ..aitools.embeddings import NormalizedEmbedding
 from ..aitools.vectorbase import VectorBase
@@ -23,9 +24,9 @@ class ConversationThreads(IConversationThreads):
     threads: list[Thread]
     vector_base: VectorBase
 
-    def __init__(self):  # TODO: TextEmbeddingIndexSettings
+    def __init__(self, settings: TextEmbeddingIndexSettings | None = None):
         self.threads = []
-        self.vector_base = VectorBase()
+        self.vector_base = VectorBase()  # TODO: pass settings
 
     async def add_thread(self, thread: Thread) -> None:
         assert len(self.threads) == len(self.vector_base)
@@ -52,8 +53,7 @@ class ConversationThreads(IConversationThreads):
         ]
 
     def remove_thread(self, thread_ordinal: int) -> None:
-        # TODO: Requires support in vectorbase.py.
-        raise RuntimeError("Removing threads is not yet supported")
+        raise NotImplementedError  # TODO: Requires support for removal in vectorbase.py.
 
     def clear(self) -> None:
         self.threads = []
