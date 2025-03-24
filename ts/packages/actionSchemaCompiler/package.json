@@ -1,0 +1,50 @@
+{
+  "name": "action-schema-compiler",
+  "version": "0.0.1",
+  "description": "Action schema compiler",
+  "homepage": "https://github.com/microsoft/TypeAgent#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/microsoft/TypeAgent.git",
+    "directory": "ts/packages/actionSchemaCompiler"
+  },
+  "license": "MIT",
+  "author": "Microsoft",
+  "type": "module",
+  "main": "",
+  "bin": {
+    "asc": "./bin/run.js",
+    "asc-dev": "./bin/dev.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "npm run tsc",
+    "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
+    "prettier": "prettier --check . --ignore-path ../../.prettierignore",
+    "prettier:fix": "prettier --write . --ignore-path ../../prettierignore",
+    "tsc": "tsc -b"
+  },
+  "oclif": {
+    "bin": "asc",
+    "commands": {
+      "strategy": "single",
+      "target": "./dist/index.js"
+    },
+    "dirname": "asc",
+    "plugins": [
+      "@oclif/plugin-help"
+    ]
+  },
+  "dependencies": {
+    "@oclif/core": "^4",
+    "@oclif/plugin-help": "^5",
+    "action-schema": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^18.18.7",
+    "rimraf": "^5.0.5",
+    "typescript": "^5.4.2"
+  }
+}

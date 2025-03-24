@@ -8,6 +8,14 @@ let recording = false;
 let recordedActions: any[] = [];
 let launchUrl: string | null = "";
 
+declare global {
+    interface Window {
+        Prism: {
+            highlightAll: () => void;
+        };
+    }
+}
+
 async function getActiveTabUrl(): Promise<string | null> {
     try {
         const tabs = await chrome.tabs.query({
@@ -182,7 +190,7 @@ async function saveUserAction() {
     const screenshot = JSON.parse(stepsContainer.dataset?.screenshot || '""');
     let html = JSON.parse(stepsContainer.dataset?.html || '""');
 
-    if (html === undefined || html == -"") {
+    if (html === undefined || html === "") {
         const htmlFragments = await chrome.runtime.sendMessage({
             type: "captureHtmlFragments",
         });
@@ -217,6 +225,28 @@ async function saveUserAction() {
     button.innerHTML = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Saving...`;
     button.disabled = true;
 
+    const detectedActions = new Map(
+        Object.entries(
+            (await getStoredPageProperty(
+                launchUrl!,
+                "detectedActionDefinitions",
+            )) ?? {},
+        ),
+    );
+    const authoredActions = new Map(
+        Object.entries(
+            (await getStoredPageProperty(
+                launchUrl!,
+                "authoredActionDefinitions",
+            )) ?? {},
+        ),
+    );
+
+    const existingActionNames: string[] = [
+        ...detectedActions.keys(),
+        ...authoredActions.keys(),
+    ];
+
     // Get schema based on the recorded action info
     const response = await chrome.runtime.sendMessage({
         type: "getIntentFromRecording",
@@ -224,6 +254,7 @@ async function saveUserAction() {
         screenshot,
         actionName,
         actionDescription,
+        existingActionNames,
         steps: JSON.stringify(steps),
     });
     if (chrome.runtime.lastError) {
@@ -304,6 +335,9 @@ async function removeEntryFromStoredPageProperties(
 // Function to update user actions display
 async function updateUserActionsUI() {
     await showUserDefinedActionsList();
+    if (window.Prism) {
+        window.Prism.highlightAll();
+    }
 }
 
 function startRecording() {
@@ -477,7 +511,7 @@ function renderTimeline(action: any, index: number) {
     if (action.intentSchema !== undefined) {
         const card = document.createElement("div");
         card.innerHTML = `        
-            <pre class="card-text"><code class="language-json">${action.intentSchema}</code></pre>
+            <pre class="card-text"><code class="language-typescript">${action.intentSchema}</code></pre>
         `;
 
         const intentViewContainer = timelineHeader.querySelector(
@@ -600,6 +634,10 @@ function renderTimelineSteps(
         deleteButton.classList.remove("hidden");
         deleteButton.style.display = "block";
         deleteButton.addEventListener("click", () => deleteAction(actionName));
+    }
+
+    if (window.Prism) {
+        window.Prism.highlightAll();
     }
 
     // Function to download the screenshot

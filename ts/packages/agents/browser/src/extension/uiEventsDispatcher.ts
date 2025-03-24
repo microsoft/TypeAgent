@@ -82,9 +82,10 @@ function enterTextInElement(
                 !(inputElement instanceof HTMLTextAreaElement) &&
                 !inputElement.isContentEditable
             ) {
-                throw new Error(
-                    "Element must be an input, textarea, or contenteditable element",
-                );
+                // fall back to page-level scope
+                inputElement =
+                    (document.activeElement as HTMLElement) || document.body;
+                config.enterAtPageScope = true;
             }
 
             inputElement.focus();

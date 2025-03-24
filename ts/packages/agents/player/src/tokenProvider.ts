@@ -32,9 +32,7 @@ export class TokenProvider {
         private readonly tokenCachePersistence?: TokenCachePersistence,
     ) {}
 
-    private getAxiosRequestConfig(
-        authorization: boolean = false,
-    ): AxiosRequestConfig {
+    private getAxiosRequestConfig(): AxiosRequestConfig {
         const config: AxiosRequestConfig = {
             headers: {
                 "Content-Type": "application/x-www-form-urlencoded",
@@ -46,7 +44,7 @@ export class TokenProvider {
         return config;
     }
 
-    public async getAccessToken(): Promise<string> {
+    public async getAccessToken(silent: boolean = false): Promise<string> {
         if (
             this.userAccessToken !== undefined &&
             this.userAccessTokenExpiration > Date.now()
@@ -55,6 +53,9 @@ export class TokenProvider {
         }
         const refreshToken = await this.loadRefreshToken();
         if (refreshToken === undefined) {
+            if (silent) {
+                throw new Error("No refresh token");
+            }
             // request both the refresh token and the access token
             return this.requestTokens();
         }
@@ -78,6 +79,9 @@ export class TokenProvider {
                 result.data.scope.split(" ").sort().join(" ") !==
                 this.scopes.sort().join(" ")
             ) {
+                if (silent) {
+                    throw new Error("No refresh token");
+                }
                 // request both the refresh token and the access token to update the scope
                 return this.requestTokens();
             }
@@ -216,6 +220,13 @@ export class TokenProvider {
                 refreshToken: this.userRefreshToken,
             };
             await this.tokenCachePersistence.save(JSON.stringify(tokenCache));
+        }
+    }
+
+    public async clearRefreshToken() {
+        this.userRefreshToken = undefined;
+        if (this.tokenCachePersistence !== undefined) {
+            await this.tokenCachePersistence.delete();
         }
     }
 }

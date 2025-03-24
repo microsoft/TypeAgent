@@ -1,0 +1,213 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+import { BrowserConnector } from "../browserConnector.mjs";
+
+import {
+    DropdownControl,
+    Element,
+    NavigationLink,
+    TextInput,
+} from "./schema/pageComponents.mjs";
+import { PageActionsPlan, UserIntent } from "./schema/recordedActions.mjs";
+
+export function setupAuthoringActions(browser: BrowserConnector, agent: any) {
+    return {
+        getComponentFromPage: getComponentFromPage,
+        followLink: followLink,
+        getIntentFromDescription: getIntentFromDescription,
+        runDynamicAction: runDynamicAction,
+    };
+
+    async function getComponentFromPage(
+        componentType: string,
+        selectionCondition?: string,
+    ) {
+        const htmlFragments = await browser.getHtmlFragments();
+        const response = await agent.getPageComponentSchema(
+            componentType,
+            selectionCondition,
+            htmlFragments,
+            undefined,
+        );
+
+        if (!response.success) {
+            console.error(`Attempt to get ${componentType} failed`);
+            console.error(response.message);
+            return;
+        }
+
+        return response.data;
+    }
+
+    async function followLink(linkSelector: string | undefined) {
+        if (!linkSelector) return;
+
+        await browser.clickOn(linkSelector);
+        await browser.awaitPageInteraction();
+        await browser.awaitPageLoad();
+    }
+
+    async function getIntentFromDescription(
+        actionName: string,
+        description: string,
+    ) {
+        const htmlFragments = await browser.getHtmlFragments();
+        let recordedSteps = "";
+        const descriptionResponse = await agent.getDetailedStepsFromDescription(
+            actionName,
+            description,
+            htmlFragments,
+        );
+        if (descriptionResponse.success) {
+            console.log(descriptionResponse.data);
+            recordedSteps = JSON.stringify(
+                (descriptionResponse.data as any).actions,
+            );
+        }
+
+        const intentResponse = await agent.getIntentSchemaFromRecording(
+            actionName,
+            [],
+            description,
+            recordedSteps,
+            htmlFragments,
+        );
+
+        if (!intentResponse.success) {
+            console.error("Attempt to process recorded action failed");
+            console.error(intentResponse.message);
+            return;
+        }
+
+        const intentData = intentResponse.data as UserIntent;
+
+        const stepsResponse = await agent.getActionStepsSchemaFromRecording(
+            intentData.actionName,
+            description,
+            intentData,
+            recordedSteps,
+            htmlFragments,
+        );
+
+        if (!stepsResponse.success) {
+            console.error("Attempt to process recorded action failed");
+            console.error(stepsResponse.message);
+            return;
+        }
+
+        return {
+            intentJson: intentData,
+            actions: stepsResponse.data,
+        };
+    }
+
+    async function runDynamicAction(
+        targetIntent: UserIntent,
+        targetPlan: PageActionsPlan,
+        userSuppliedParameters: Map<string, any>,
+    ) {
+        console.log(`Running ${targetPlan.planName}`);
+
+        for (const step of targetPlan.steps) {
+            switch (step.actionName) {
+                case "ClickOnLink":
+                    const linkParameter = targetIntent.parameters.find(
+                        (param) =>
+                            param.shortName ==
+                            step.parameters.linkTextParameter,
+                    );
+                    const link = (await getComponentFromPage(
+                        "NavigationLink",
+                        `link text ${linkParameter?.name}`,
+                    )) as NavigationLink;
+
+                    await followLink(link?.linkCssSelector);
+                    break;
+                case "clickOnElement":
+                    const element = (await getComponentFromPage(
+                        "Element",
+                        `element text ${step.parameters?.elementText}`,
+                    )) as Element;
+                    if (element !== undefined) {
+                        await browser.clickOn(element.cssSelector);
+                        await browser.awaitPageInteraction();
+                        await browser.awaitPageLoad();
+                    }
+                    break;
+                case "clickOnButton":
+                    const button = (await getComponentFromPage(
+                        "Element",
+                        `element text ${step.parameters?.buttonText}`,
+                    )) as Element;
+                    if (button !== undefined) {
+                        await browser.clickOn(button.cssSelector);
+                        await browser.awaitPageInteraction();
+                        await browser.awaitPageLoad();
+                    }
+                    break;
+                case "enterText":
+                case "enterTextAtPageScope":
+                    const textParameter = targetIntent.parameters.find(
+                        (param) =>
+                            param.shortName == step.parameters.textParameter,
+                    );
+                    const textElement = (await getComponentFromPage(
+                        "TextInput",
+                        `input label ${textParameter?.name}`,
+                    )) as TextInput;
+
+                    const userProvidedTextValue = userSuppliedParameters.get(
+                        step.parameters.textParameter,
+                    );
+
+                    if (userProvidedTextValue !== undefined) {
+                        await browser.enterTextIn(
+                            userProvidedTextValue,
+                            textElement?.cssSelector,
+                        );
+                    }
+                    break;
+                case "selectElementByText":
+                    break;
+                case "selectValueFromDropdown":
+                    const selectParameter = targetIntent.parameters.find(
+                        (param) =>
+                            param.shortName ==
+                            step.parameters.valueTextParameter,
+                    );
+
+                    const userProvidedValue = userSuppliedParameters.get(
+                        step.parameters.valueTextParameter,
+                    );
+
+                    if (userProvidedValue !== undefined) {
+                        const selectElement = (await getComponentFromPage(
+                            "DropdownControl",
+                            `text ${selectParameter?.name}`,
+                        )) as DropdownControl;
+
+                        await browser.clickOn(selectElement.cssSelector);
+                        const selectValue = selectElement.values.find(
+                            (value) =>
+                                value.text ===
+                                userSuppliedParameters.get(
+                                    step.parameters.valueTextParameter,
+                                ),
+                        );
+                        if (selectValue) {
+                            await browser.setDropdown(
+                                selectElement.cssSelector,
+                                selectValue.text,
+                            );
+                        } else {
+                            console.error(`Could not find a dropdown option with text ${userSuppliedParameters.get(step.parameters.valueTextParameter)}) 
+                                on the ${selectElement.title} dropdown.`);
+                        }
+                    }
+
+                    break;
+            }
+        }
+    }
+}

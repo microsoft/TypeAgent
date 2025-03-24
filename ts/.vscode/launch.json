@@ -324,6 +324,20 @@
       "cwd": "${workspaceFolder}/packages/knowpro",
       "console": "integratedTerminal",
       "internalConsoleOptions": "neverOpen"
-    }    
+    },
+    {
+      "name": "Launch Document Processor",
+      "type": "node",
+      "request": "launch",
+      "skipFiles": [
+          "<node_internals>/**"
+      ],
+      "program": "${workspaceFolder}/examples/docuProc/src/main.ts",
+      "console": "integratedTerminal",
+      //"preLaunchTask": "pnpm: build",
+      "outFiles": [
+          "${workspaceFolder}/**/*.js"
+      ],
+    },
   ]
 }

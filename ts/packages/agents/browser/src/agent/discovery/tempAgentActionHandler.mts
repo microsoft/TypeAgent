@@ -8,19 +8,16 @@ import {
     NavigateToPage,
 } from "./schema/userActionsPool.mjs";
 import { handleCommerceAction } from "../commerce/actionHandler.mjs";
-import {
-    DropdownControl,
-    Element,
-    NavigationLink,
-    TextInput,
-} from "./schema/pageComponents.mjs";
+import { NavigationLink } from "./schema/pageComponents.mjs";
 import { PageActionsPlan, UserIntent } from "./schema/recordedActions.mjs";
+import { setupAuthoringActions } from "./authoringUtilities.mjs";
 
 export function createTempAgentForSchema(
     browser: BrowserConnector,
     agent: any,
     context: any,
 ): AppAgent {
+    const actionUtils = setupAuthoringActions(browser, agent);
     return {
         async executeAction(action: any, tempContext: any): Promise<undefined> {
             console.log(`Executing action: ${action.actionName}`);
@@ -54,43 +51,14 @@ export function createTempAgentForSchema(
         },
     };
 
-    async function getComponentFromPage(
-        componentType: string,
-        selectionCondition?: string,
-    ) {
-        const htmlFragments = await browser.getHtmlFragments();
-        const response = await agent.getPageComponentSchema(
-            componentType,
-            selectionCondition,
-            htmlFragments,
-            undefined,
-        );
-
-        if (!response.success) {
-            console.error(`Attempt to get ${componentType} failed`);
-            console.error(response.message);
-            return;
-        }
-
-        return response.data;
-    }
-
-    async function followLink(linkSelector: string | undefined) {
-        if (!linkSelector) return;
-
-        await browser.clickOn(linkSelector);
-        await browser.awaitPageInteraction();
-        await browser.awaitPageLoad();
-    }
-
     async function handleNavigateToPage(action: NavigateToPage) {
-        const link = (await getComponentFromPage(
+        const link = (await actionUtils.getComponentFromPage(
             "NavigationLink",
             `link text ${action.parameters.keywords}`,
         )) as NavigationLink;
         console.log(link);
 
-        await followLink(link?.linkCssSelector);
+        await actionUtils.followLink(link?.linkCssSelector);
     }
 
     async function handleBrowseProductCategory(
@@ -99,13 +67,13 @@ export function createTempAgentForSchema(
         let linkText = action.parameters?.categoryName
             ? `link text ${action.parameters.categoryName}`
             : "";
-        const link = (await getComponentFromPage(
+        const link = (await actionUtils.getComponentFromPage(
             "NavigationLink",
             linkText,
         )) as NavigationLink;
         console.log(link);
 
-        await followLink(link?.linkCssSelector);
+        await actionUtils.followLink(link?.linkCssSelector);
     }
 
     async function handleUserDefinedAction(action: any) {
@@ -145,102 +113,8 @@ export function createTempAgentForSchema(
 
         console.log(`Running ${targetPlan.planName}`);
 
-        for (const step of targetPlan.steps) {
-            switch (step.actionName) {
-                case "ClickOnLink":
-                    const linkParameter = targetIntent.parameters.find(
-                        (param) =>
-                            param.shortName ==
-                            step.parameters.linkTextParameter,
-                    );
-                    const link = (await getComponentFromPage(
-                        "NavigationLink",
-                        `link text ${linkParameter?.name}`,
-                    )) as NavigationLink;
+        const paramsMap = new Map(Object.entries(action.parameters));
 
-                    await followLink(link?.linkCssSelector);
-                    break;
-                case "clickOnElement":
-                    const element = (await getComponentFromPage(
-                        "Element",
-                        `element text ${step.parameters?.elementText}`,
-                    )) as Element;
-                    if (element !== undefined) {
-                        await browser.clickOn(element.cssSelector);
-                        await browser.awaitPageInteraction();
-                        await browser.awaitPageLoad();
-                    }
-                    break;
-                case "clickOnButton":
-                    const button = (await getComponentFromPage(
-                        "Element",
-                        `element text ${step.parameters?.buttonText}`,
-                    )) as Element;
-                    if (button !== undefined) {
-                        await browser.clickOn(button.cssSelector);
-                        await browser.awaitPageInteraction();
-                        await browser.awaitPageLoad();
-                    }
-                    break;
-                case "enterText":
-                    const textParameter = targetIntent.parameters.find(
-                        (param) =>
-                            param.shortName == step.parameters.textParameter,
-                    );
-                    const textElement = (await getComponentFromPage(
-                        "TextInput",
-                        `input label ${textParameter?.name}`,
-                    )) as TextInput;
-
-                    const userProvidedTextValue =
-                        action.parameters[step.parameters.textParameter];
-
-                    if (userProvidedTextValue !== undefined) {
-                        await browser.enterTextIn(
-                            userProvidedTextValue,
-                            textElement?.cssSelector,
-                        );
-                    }
-                    break;
-                case "selectElementByText":
-                    break;
-                case "selectValueFromDropdown":
-                    const selectParameter = targetIntent.parameters.find(
-                        (param) =>
-                            param.shortName ==
-                            step.parameters.valueTextParameter,
-                    );
-
-                    const userProvidedValue =
-                        action.parameters[step.parameters.valueTextParameter];
-
-                    if (userProvidedValue !== undefined) {
-                        const selectElement = (await getComponentFromPage(
-                            "DropdownControl",
-                            `text ${selectParameter?.name}`,
-                        )) as DropdownControl;
-
-                        await browser.clickOn(selectElement.cssSelector);
-                        const selectValue = selectElement.values.find(
-                            (value) =>
-                                value.text ===
-                                action.parameters[
-                                    step.parameters.valueTextParameter
-                                ],
-                        );
-                        if (selectValue) {
-                            await browser.setDropdown(
-                                selectElement.cssSelector,
-                                selectValue.text,
-                            );
-                        } else {
-                            console.error(`Could not find a dropdown option with text ${action.parameters[step.parameters.valueTextParameter]} 
-                                on the ${selectElement.title} dropdown.`);
-                        }
-                    }
-
-                    break;
-            }
-        }
+        await actionUtils.runDynamicAction(targetIntent, targetPlan, paramsMap);
     }
 }

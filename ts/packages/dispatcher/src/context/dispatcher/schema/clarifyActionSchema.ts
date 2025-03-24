@@ -32,7 +32,7 @@ export interface ClarifyMissingParameter {
     };
 }
 
-// Ask the user for clarification for the request that parameters are referring to unresolved pronouns or references.
+// The user request is for an action, but parameters are referring to unresolved pronouns or references that is not found in the request or recent chat context.
 export interface ClarifyUnresolvedReference {
     actionName: "clarifyUnresolvedReference";
     parameters: {

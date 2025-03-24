@@ -27,6 +27,7 @@ import {
     AppAgentManifest,
     AppAgent,
     TypeAgentAction,
+    AppAction,
 } from "@typeagent/agent-sdk";
 import {
     createActionResult,
@@ -49,7 +50,12 @@ import {
     isUnknownAction,
 } from "../context/dispatcher/dispatcherUtils.js";
 import { isPendingRequestAction } from "../translation/pendingRequest.js";
-import { translatePendingRequestAction } from "../translation/translateRequest.js";
+import {
+    isSwitchEnabled,
+    translatePendingRequestAction,
+} from "../translation/translateRequest.js";
+import { getActionSchema } from "../internal.js";
+import { validateAction } from "action-schema";
 
 const debugActions = registerDebug("typeagent:dispatcher:actions");
 
@@ -427,11 +433,7 @@ async function canExecute(
         );
 
         const config = systemContext.session.getConfig();
-        if (
-            !config.translation.switch.search &&
-            !config.translation.switch.embedding &&
-            !config.translation.switch.inline
-        ) {
+        if (!isSwitchEnabled(config)) {
             lines.push("");
             lines.push("Switching agents is disabled");
         } else {
@@ -732,9 +734,69 @@ export async function executeActions(
                     sourceAppAgentName: appAgentName,
                 });
             }
+
+            if (result.additionalActions !== undefined) {
+                try {
+                    const actions = getAdditionalExecutableActions(
+                        result.additionalActions,
+                        action.translatorName,
+                        systemContext,
+                    );
+                    // REVIEW: assume that the agent will fill the entities already?  Also, current format doesn't support resultEntityIds.
+                    actionQueue.unshift(
+                        ...toPendingActions(actions, undefined),
+                    );
+                } catch (e) {
+                    throw new Error(
+                        `${action.translatorName}.${action.actionName} returned an invalid action: ${e}`,
+                    );
+                }
+            }
         }
         actionIndex++;
     }
+}
+
+function getAdditionalExecutableActions(
+    actions: AppAction[],
+    sourceSchemaName: string,
+    context: CommandHandlerContext,
+) {
+    const appAgentName = getAppAgentName(sourceSchemaName);
+    const executableActions: ExecutableAction[] = [];
+    for (const newAction of actions) {
+        const fullAction = (
+            newAction.translatorName !== undefined
+                ? newAction
+                : {
+                      ...newAction,
+                      translatorName: sourceSchemaName,
+                  }
+        ) as FullAction;
+
+        if (appAgentName !== DispatcherName) {
+            // For non-dispatcher, action can only be trigger within the same agent.
+            const actionAppAgentName = getAppAgentName(
+                fullAction.translatorName,
+            );
+            if (actionAppAgentName !== appAgentName) {
+                throw new Error(
+                    `Cannot invoke actions from other agent '${actionAppAgentName}'.`,
+                );
+            }
+        }
+
+        const actionInfo = getActionSchema(fullAction, context.agents);
+        if (actionInfo === undefined) {
+            throw new Error(
+                `Action not found ${fullAction.translatorName}.${fullAction.actionName}`,
+            );
+        }
+        validateAction(actionInfo, fullAction);
+
+        executableActions.push({ action: fullAction });
+    }
+    return executableActions;
 }
 
 export async function validateWildcardMatch(
