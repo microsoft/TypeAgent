@@ -50,7 +50,7 @@ class ITextToTextLocationIndex(Protocol):
 
 
 class TextToTextLocationIndex(ITextToTextLocationIndex):
-    def __init__(self):
+    def __init__(self, settings: TextEmbeddingIndexSettings):
         self._text_locations: list[TextLocation] = []
         self._vector_base: VectorBase = VectorBase()
 

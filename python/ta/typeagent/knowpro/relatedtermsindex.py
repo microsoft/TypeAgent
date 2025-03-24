@@ -17,11 +17,12 @@ class TermToRelatedTermsMap(ITermToRelatedTerms):
     def __init__(self):
         self.map: dict[str, set[Term]] = {}
 
-    def add_related_term(self, text: str, related_term: Term | list[Term]) -> None:
-        if not isinstance(related_term, list):
-            related_term = [related_term]
-        for related in related_term:
-            self.map.setdefault(text, set()).add(related)
+    def add_related_term(self, text: str, related_terms: Term | list[Term]) -> None:
+        if not isinstance(related_terms, list):
+            related_terms = [related_terms]
+        for related in related_terms:
+            terms = self.map.setdefault(text, set())
+            terms.add(related)
 
     def lookup_term(self, text: str) -> list[Term] | None:
         result = self.map.get(text)

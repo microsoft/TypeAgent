@@ -6,9 +6,9 @@ import os
 import re
 from typing import cast, Sequence
 
-from ..knowpro.importing import ConversationSettings, create_conversation_settings
+from ..knowpro.importing import ConversationSettings
 from ..knowpro import convindex, interfaces, kplib, secindex
-from ..knowpro.interfaces import Datetime, Timedelta
+from ..knowpro.interfaces import Datetime, Term, Timedelta
 
 
 @dataclass
@@ -83,7 +83,7 @@ class Podcast(
 ):
     # Instance variables not passed to `__init__()`.
     settings: ConversationSettings = field(
-        init=False, default_factory=create_conversation_settings
+        init=False, default_factory=ConversationSettings
     )
     semantic_ref_index: convindex.ConversationIndex | None = field(
         init=False, default_factory=convindex.ConversationIndex
@@ -196,16 +196,17 @@ class Podcast(
     def _build_transient_secondary_indexes(self, all: bool) -> None:
         if all:
             secindex.build_transient_secondary_indexes(self)
-        # self._build_participant_aliases()  # TODO: implement term_to_related_terms_index first
+        self._build_participant_aliases()
         # self._build_caches()  # TODO: term_to_related_terms_index,
 
-    # TODO: term_to_related_terms_index
     def _build_participant_aliases(self) -> None:
         aliases: ITermToRelatedTerms = self.secondary_indexes.term_to_related_terms_index.aliases  # type: ignore  # TODO
         aliases.clear()
         name_to_alias_map = self._collect_participant_aliases()
         for name in name_to_alias_map.keys():
-            related_terms = [{"text": alias} for alias in name_to_alias_map[name]]
+            related_terms: list[Term] = [
+                Term(text=alias) for alias in name_to_alias_map[name]
+            ]
             aliases.add_related_term(name, related_terms)
 
     def _collect_participant_aliases(self):

@@ -1,6 +1,7 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
+from dataclasses import dataclass
 from typing import Any
 
 from ..aitools.embeddings import NormalizedEmbedding
@@ -41,15 +42,19 @@ class IMessageTextEmbeddingIndex(IMessageTextIndex):
         text_embedding: NormalizedEmbedding,
         ordinals_to_search: list[MessageOrdinal],
         max_matches: int | None = None,
-        threashold_score: float | None = None,
+        threshold_score: float | None = None,
     ) -> list[ScoredMessageOrdinal]:
         raise NotImplementedError  # TODO
 
 
 class MessageTextIndex(IMessageTextEmbeddingIndex):
     def __init__(self, settings: MessageTextIndexSettings | None = None):
+        if settings is None:
+            settings = MessageTextIndexSettings()
         self.settings = settings
-        self.text_location_index = TextToTextLocationIndex()
+        self.text_location_index = TextToTextLocationIndex(
+            settings.embedding_index_settings
+        )
 
     def __len__(self) -> int:
         return len(self.text_location_index)
@@ -62,7 +67,7 @@ class MessageTextIndex(IMessageTextEmbeddingIndex):
         messages: list[IMessage],
         event_handler: IndexingEventHandlers | None = None,
     ) -> ListIndexingResult:
-        base_message_ordinal: MessageOrdinal = len
+        base_message_ordinal: MessageOrdinal = len(self.text_location_index)
         all_chunks: list[tuple[str, TextLocation]] = []
         # Collect everything so we can batch efficiently.
         for message_ordinal, message in enumerate(messages, base_message_ordinal):
@@ -104,17 +109,18 @@ class MessageTextIndex(IMessageTextEmbeddingIndex):
         # TODO: Retries?
         return await self.text_location_index._vector_base.get_embedding(text)
 
-    def lookup_in_subset_by_embedding(
-        self,
-        text_embedding: NormalizedEmbedding,
-        ordinals_to_search: list[MessageOrdinal],
-        max_matches: int | None = None,
-        threshold_score: float | None = None,
-    ) -> list[ScoredMessageOrdinal]:
-        scored_text_locations = self.text_location_index.lookup_in_subset_by_embedding(
-            text_embedding, ordinals_to_search, max_matches, threshold_score
-        )
-        return self.to_scored_message_ordinals(scored_text_locations)
+    # TODO: Waiting for text_location_index.lookup_in_subset_by_embeddings.
+    # def lookup_in_subset_by_embedding(
+    #     self,
+    #     text_embedding: NormalizedEmbedding,
+    #     ordinals_to_search: list[MessageOrdinal],
+    #     max_matches: int | None = None,
+    #     threshold_score: float | None = None,
+    # ) -> list[ScoredMessageOrdinal]:
+    #     scored_text_locations = self.text_location_index.lookup_in_subset_by_embedding(
+    #         text_embedding, ordinals_to_search, max_matches, threshold_score
+    #     )
+    #     return self.to_scored_message_ordinals(scored_text_locations)
 
     def to_scored_message_ordinals(
         self, scored_locations: list[ScoredTextLocation]
@@ -124,12 +130,13 @@ class MessageTextIndex(IMessageTextEmbeddingIndex):
         return message_matches.to_scored_message_ordinals()
 
 
+@dataclass
 class Match[T]:
     value: T
     score: float
-    hitCount: int
-    relatedScore: float
-    relatedHitCount: int
+    hit_count: int
+    related_score: float
+    related_hit_ount: int
 
 
 class MessageAccumulator:
@@ -148,6 +155,25 @@ class MessageAccumulator:
     def get_match(self, key: MessageOrdinal) -> Match[MessageOrdinal] | None:
         return self._matches.get(key)
 
+    def set_match(self, match: Match[MessageOrdinal]) -> None:
+        self._matches[match.value] = match
+
+    def add(self, value: MessageOrdinal, score: float) -> None:
+        match = self.get_match(value)
+        if match is None:
+            self.set_match(
+                Match(
+                    value=value,
+                    score=score,
+                    hit_count=1,
+                    related_score=score,
+                    related_hit_ount=1,
+                )
+            )
+        else:
+            match.score = max(score, match.score)
+            match.hit_count += 1
+
     def add_messages_from_locations(
         self,
         scored_text_locations: list[ScoredTextLocation],
@@ -155,5 +181,14 @@ class MessageAccumulator:
         for sl in scored_text_locations:
             self.add(sl.text_location.message_ordinal, sl.score)
 
-    def add(self, value: MessageOrdinal, score: float) -> None:
-        match = self.get_match(value)
+    def to_scored_message_ordinals(self) -> list[ScoredMessageOrdinal]:
+        matches = sorted(
+            self._matches.values(), key=lambda match: match.score, reverse=True
+        )
+        return [
+            ScoredMessageOrdinal(
+                message_ordinal=match.value,
+                score=match.score,
+            )
+            for match in matches
+        ]

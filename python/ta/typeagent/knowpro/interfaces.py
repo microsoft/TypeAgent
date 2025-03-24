@@ -23,6 +23,7 @@ from typing import (
     Self,
     TypedDict,
 )
+from typing_extensions import ReadOnly
 
 from . import kplib
 
@@ -176,7 +177,8 @@ class DateRange:
         return self.start <= datetime <= self.end
 
 
-@dataclass
+# Term must be hashable to allow using it as a dict key or set member.
+@dataclass(unsafe_hash=True)
 class Term:
     text: str
     # Optional weighting for these matches.
