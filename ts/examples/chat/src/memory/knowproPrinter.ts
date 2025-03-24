@@ -266,15 +266,35 @@ export class KnowProPrinter extends ChatPrinter {
                 maxToDisplay,
             );
         } else {
-            this.writeResult(conversation, "tag", results, maxToDisplay);
-            this.writeResult(conversation, "topic", results, maxToDisplay);
-            this.writeResult(conversation, "action", results, maxToDisplay);
-            this.writeResult(conversation, "entity", results, maxToDisplay);
+            this.writeKnowledgeSearchResult(
+                conversation,
+                "tag",
+                results,
+                maxToDisplay,
+            );
+            this.writeKnowledgeSearchResult(
+                conversation,
+                "topic",
+                results,
+                maxToDisplay,
+            );
+            this.writeKnowledgeSearchResult(
+                conversation,
+                "action",
+                results,
+                maxToDisplay,
+            );
+            this.writeKnowledgeSearchResult(
+                conversation,
+                "entity",
+                results,
+                maxToDisplay,
+            );
         }
         return this;
     }
 
-    private writeResult(
+    private writeKnowledgeSearchResult(
         conversation: kp.IConversation,
         type: kp.KnowledgeType,
         results: Map<kp.KnowledgeType, kp.SemanticRefSearchResult>,
@@ -290,6 +310,35 @@ export class KnowProPrinter extends ChatPrinter {
             );
         }
         return this;
+    }
+
+    public writeConversationSearchResult(
+        conversation: kp.IConversation,
+        searchResult: kp.ConversationSearchResult | undefined,
+        showKnowledge: boolean,
+        showMessages: boolean,
+        maxToDisplay: number,
+        distinct: boolean,
+    ) {
+        if (searchResult && searchResult.messageMatches.length > 0) {
+            if (showKnowledge) {
+                this.writeKnowledgeSearchResults(
+                    conversation,
+                    searchResult.knowledgeMatches,
+                    maxToDisplay,
+                    distinct,
+                );
+            }
+            if (showMessages) {
+                this.writeScoredMessages(
+                    searchResult.messageMatches,
+                    conversation.messages,
+                    maxToDisplay,
+                );
+            }
+        } else {
+            this.writeLine("No matches");
+        }
     }
 
     private writeResultDistinct(

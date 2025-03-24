@@ -573,25 +573,14 @@ export async function createKnowproCommands(
                     searchQueryExpr.rawQuery!,
                 );
                 context.printer.writeLine("####");
-                if (searchResults && searchResults.messageMatches.length > 0) {
-                    if (namedArgs.showKnowledge) {
-                        context.printer.writeKnowledgeSearchResults(
-                            context.conversation!,
-                            searchResults.knowledgeMatches,
-                            namedArgs.maxToDisplay,
-                            namedArgs.distinct,
-                        );
-                    }
-                    if (namedArgs.showMessages) {
-                        context.printer.writeScoredMessages(
-                            searchResults.messageMatches,
-                            context.conversation!.messages,
-                            namedArgs.maxToDisplay,
-                        );
-                    }
-                } else {
-                    context.printer.writeLine("No matches");
-                }
+                context.printer.writeConversationSearchResult(
+                    context.conversation!,
+                    searchResults,
+                    namedArgs.showKnowledge,
+                    namedArgs.showMessages,
+                    namedArgs.maxToDisplay,
+                    namedArgs.distinct,
+                );
             }
         }
     }
