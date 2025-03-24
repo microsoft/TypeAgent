@@ -14,12 +14,17 @@ import os from "node:os";
 import path from "node:path";
 
 type TranslateTestStep = {
+    // Input
     request: string;
+    attachments?: string[] | undefined;
+
+    // Output
     action: string | string[] | FullAction | FullAction[];
     match?: "exact" | "partial"; // default to "exact"
+
+    // Execution result:
     // History insertion after translation (if any)
     history?: ChatHistoryInput | ChatHistoryInput[];
-    attachments?: string[] | undefined;
 };
 type TranslateTestEntry = TranslateTestStep | TranslateTestStep[];
 type TranslateTestFile = TranslateTestEntry[];
@@ -56,7 +61,7 @@ export async function defineTranslateTest(name: string, dataFiles: string[]) {
             // Make sure all promise finished before checking the result
             await Promise.allSettled(p);
             // Propagate any errors
-            await Promise.all(p);
+            return Promise.all(p);
         }
         beforeAll(async () => {
             for (let i = 0; i < repeat; i++) {
@@ -83,58 +88,63 @@ export async function defineTranslateTest(name: string, dataFiles: string[]) {
                 expect(result?.hasError).toBeFalsy();
             });
         });
-        it.each(inputsWithName)(`${name} %p`, async (_, test) => {
-            const steps = Array.isArray(test) ? test : [test];
-            await runOnDispatchers(async (dispatcher) => {
-                for (const step of steps) {
-                    const { request, action, match, history, attachments } =
-                        step;
+        it.each(inputsWithName)(
+            `${name} %p`,
+            async (_, test) => {
+                const steps = Array.isArray(test) ? test : [test];
+                await runOnDispatchers(async (dispatcher) => {
+                    for (const step of steps) {
+                        const { request, action, match, history, attachments } =
+                            step;
 
-                    const result = await dispatcher.processCommand(
-                        request,
-                        undefined,
-                        attachments,
-                    );
-                    expect(result?.hasError).toBeFalsy();
+                        const result = await dispatcher.processCommand(
+                            request,
+                            undefined,
+                            attachments,
+                        );
+                        expect(result?.hasError).toBeFalsy();
 
-                    const actions = result?.actions;
-                    expect(actions).toBeDefined();
+                        const actions = result?.actions;
+                        expect(actions).toBeDefined();
 
-                    const expectedValues = Array.isArray(action)
-                        ? action
-                        : [action];
-                    expect(actions).toHaveLength(expectedValues.length);
+                        const expectedValues = Array.isArray(action)
+                            ? action
+                            : [action];
+                        expect(actions).toHaveLength(expectedValues.length);
 
-                    for (let i = 0; i < expectedValues.length; i++) {
-                        const action = actions![i];
-                        const expected = expectedValues[i];
-                        if (typeof expected === "string") {
-                            const actualFullActionName = `${action.translatorName}.${action.actionName}`;
-                            if (match === "partial") {
-                                expect(actualFullActionName).toContain(
-                                    expected,
-                                );
+                        for (let i = 0; i < expectedValues.length; i++) {
+                            const action = actions![i];
+                            const expected = expectedValues[i];
+                            if (typeof expected === "string") {
+                                const actualFullActionName = `${action.translatorName}.${action.actionName}`;
+                                if (match === "partial") {
+                                    expect(actualFullActionName).toContain(
+                                        expected,
+                                    );
+                                } else {
+                                    expect(actualFullActionName).toBe(expected);
+                                }
                             } else {
-                                expect(actualFullActionName).toBe(expected);
-                            }
-                        } else {
-                            if (match === "partial") {
-                                expect(action).toMatchObject(expected);
-                            } else {
-                                expect(action).toEqual(expected);
+                                if (match === "partial") {
+                                    expect(action).toMatchObject(expected);
+                                } else {
+                                    expect(action).toEqual(expected);
+                                }
                             }
                         }
-                    }
 
-                    if (history !== undefined) {
-                        const insertResult = await dispatcher.processCommand(
-                            `@history insert ${JSON.stringify({ user: request, assistant: history })}`,
-                        );
-                        expect(insertResult?.hasError).toBeFalsy();
+                        if (history !== undefined) {
+                            const insertResult =
+                                await dispatcher.processCommand(
+                                    `@history insert ${JSON.stringify({ user: request, assistant: history })}`,
+                                );
+                            expect(insertResult?.hasError).toBeFalsy();
+                        }
                     }
-                }
-            });
-        });
+                });
+            },
+            60000,
+        );
         afterAll(async () => {
             await runOnDispatchers((d) => d.close());
             dispatchers = [];

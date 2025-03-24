@@ -20,39 +20,6 @@ function isVisible(element: HTMLElement) {
     );
 }
 
-function isClickTarget(element: HTMLElement) {
-    return !!(
-        element.offsetWidth ||
-        element.offsetHeight ||
-        element.getClientRects().length
-    );
-}
-
-function isTextInputTarget(element: HTMLElement) {
-    return !!(
-        element.offsetWidth ||
-        element.offsetHeight ||
-        element.getClientRects().length
-    );
-}
-
-function isScrollable(element: HTMLElement) {
-    var overflowY = window
-        .getComputedStyle(element)
-        .getPropertyValue("overflow-y");
-    var overflowX = window
-        .getComputedStyle(element)
-        .getPropertyValue("overflow-x");
-    return {
-        vertical:
-            (overflowY === "scroll" || overflowY === "auto") &&
-            element.scrollHeight > element.clientHeight,
-        horizontal:
-            (overflowX === "scroll" || overflowX === "auto") &&
-            element.scrollWidth > element.clientWidth,
-    };
-}
-
 function matchString(s: string, re: RegExp) {
     return s && s.match(re);
 }

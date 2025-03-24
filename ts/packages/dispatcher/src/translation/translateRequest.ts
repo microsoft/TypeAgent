@@ -96,7 +96,7 @@ function getTranslationActionConfigs(
     };
 }
 
-function isSwitchEnabled(config: DispatcherConfig) {
+export function isSwitchEnabled(config: DispatcherConfig) {
     return (
         config.translation.switch.embedding ||
         config.translation.switch.inline ||
@@ -153,7 +153,7 @@ async function getTranslatorForSelectedActions(
     const actionSchemaFile = context.agents.tryGetActionSchemaFile(schemaName);
     if (
         actionSchemaFile === undefined ||
-        actionSchemaFile.actionSchemas.size <= numActions
+        actionSchemaFile.parsedActionSchema.actionSchemas.size <= numActions
     ) {
         return undefined;
     }
@@ -187,11 +187,19 @@ async function pickInitialSchema(
     request: string,
     systemContext: CommandHandlerContext,
 ) {
+    const switchConfig = systemContext.session.getConfig().translation.switch;
+    if (switchConfig.fixed !== "") {
+        if (!systemContext.agents.isSchemaActive(switchConfig.fixed)) {
+            throw new Error("Fixed initial schema not active");
+        }
+
+        return switchConfig.fixed;
+    }
+
     // Start with the last translator used
     let schemaName = systemContext.lastActionSchemaName;
 
-    const embedding =
-        systemContext.session.getConfig().translation.switch.embedding;
+    const embedding = switchConfig.embedding;
     if (embedding && request.length > 0) {
         debugSemanticSearch(`Using embedding for schema selection`);
         // Use embedding to determine the most likely action schema and use the schema name for that.

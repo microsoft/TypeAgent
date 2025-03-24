@@ -4,7 +4,8 @@
 export {
     AppAgentManifest,
     ActionManifest,
-    SchemaManifest as SchemaDefinition,
+    SchemaFormat,
+    SchemaManifest,
     AppAgent,
     AppAgentEvent,
     SessionContext,

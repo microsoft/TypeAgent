@@ -39,11 +39,19 @@ export async function importAllFiles(
     io: iapp.InteractiveIo | undefined,
     verbose: boolean,
     fChunkPdfFiles: boolean = true,
+    maxPagesToProcess: number = -1,
 ): Promise<void> {
     log(io, `[Importing ${files.length} files]`, chalk.grey);
 
     const t0 = Date.now();
-    await importPdfFiles(files, chunkyIndex, io, verbose, fChunkPdfFiles);
+    await importPdfFiles(
+        files,
+        chunkyIndex,
+        io,
+        verbose,
+        fChunkPdfFiles,
+        maxPagesToProcess,
+    );
     const t1 = Date.now();
 
     log(
@@ -77,6 +85,7 @@ async function importPdfFiles(
     io: iapp.InteractiveIo | undefined,
     verbose = false,
     fChunkPdfFiles: boolean = true,
+    maxPagesToProcess: number = -1,
 ): Promise<void> {
     // Canonicalize filenames.
     let filenames = files.map((file) =>
@@ -158,6 +167,7 @@ async function importPdfFiles(
                     chunkyIndex.fileDocumenter.document,
                     path.basename(chunkedFile.fileName),
                     chunkedFile.chunks,
+                    maxPagesToProcess,
                 );
             } catch (error) {
                 const t1 = Date.now();

@@ -85,6 +85,7 @@ export type DispatcherConfig = {
             additionalInstructions: boolean;
         };
         switch: {
+            fixed: string; // fixed first schema to use, ignore embedding if set
             embedding: boolean; // use embedding to determine the first schema to use.
             inline: boolean;
             search: boolean;
@@ -154,6 +155,7 @@ const defaultSessionConfig: SessionConfig = {
             additionalInstructions: true,
         },
         switch: {
+            fixed: "",
             embedding: true,
             inline: true,
             search: true,

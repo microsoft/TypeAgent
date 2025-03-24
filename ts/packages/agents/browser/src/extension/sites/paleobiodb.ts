@@ -284,7 +284,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             description:
                 "This enables users to explore paleological data. Users can filter fossil data by location, by geological time and by taxon.",
             schemaType: "PaleoBioDbActions",
-            schemaFile: { content: schemaTs, type: "ts" },
+            schemaFile: { content: schemaTs, format: "ts" },
         },
     };
 

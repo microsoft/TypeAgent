@@ -10,6 +10,7 @@ import { TranslateCommandHandler } from "./handlers/translateCommandHandler.js";
 import { ExplainCommandHandler } from "./handlers/explainCommandHandler.js";
 import {
     ActionContext,
+    ActionResult,
     AppAgent,
     AppAgentManifest,
     TypeAgentAction,
@@ -17,7 +18,17 @@ import {
 import { CommandHandlerContext } from "../commandHandlerContext.js";
 import { createActionResultNoDisplay } from "@typeagent/agent-sdk/helpers/action";
 import { DispatcherActions } from "./schema/dispatcherActionSchema.js";
-import { ClarifyRequestAction } from "./schema/clarifyActionSchema.js";
+import {
+    ClarifyRequestAction,
+    ClarifyUnresolvedReference,
+} from "./schema/clarifyActionSchema.js";
+import { loadAgentJsonTranslator } from "../../translation/agentTranslators.js";
+import { lookupAndAnswer } from "../../search/search.js";
+import { LookupAndAnswerAction } from "./schema/lookupActionSchema.js";
+import {
+    getChatHistoryForTranslation,
+    translateRequest,
+} from "../../translation/translateRequest.js";
 
 const dispatcherHandlers: CommandHandlerTable = {
     description: "Type Agent Dispatcher Commands",
@@ -29,15 +40,29 @@ const dispatcherHandlers: CommandHandlerTable = {
 };
 
 async function executeDispatcherAction(
-    action: TypeAgentAction<DispatcherActions | ClarifyRequestAction>,
+    action: TypeAgentAction<
+        DispatcherActions | ClarifyRequestAction | LookupAndAnswerAction
+    >,
     context: ActionContext<CommandHandlerContext>,
 ) {
-    if (
-        action.actionName === "clarifyMultiplePossibleActionName" ||
-        action.actionName === "clarifyMissingParameter" ||
-        action.actionName === "clarifyUnresolvedReference"
-    ) {
-        return clarifyRequestAction(action, context);
+    switch (action.translatorName) {
+        case "dispatcher.clarify":
+            switch (action.actionName) {
+                case "clarifyMultiplePossibleActionName":
+                case "clarifyMissingParameter":
+                    return clarifyRequestAction(action, context);
+                case "clarifyUnresolvedReference":
+                    const result = await clarifyWithLookup(action, context);
+                    // If we fail to clarify with lookup, just ask the user.
+                    return result ?? clarifyRequestAction(action, context);
+            }
+            break;
+        case "dispatcher.lookup":
+            switch (action.actionName) {
+                case "lookupAndAnswer":
+                    return lookupAndAnswer(action, context);
+            }
+            break;
     }
 
     throw new Error(`Unknown dispatcher action: ${action.actionName}`);
@@ -61,6 +86,86 @@ function clarifyRequestAction(
     return result;
 }
 
+async function clarifyWithLookup(
+    action: ClarifyUnresolvedReference,
+    context: ActionContext<CommandHandlerContext>,
+): Promise<ActionResult | undefined> {
+    const systemContext = context.sessionContext.agentContext;
+    const agents = systemContext.agents;
+    if (
+        !agents.isSchemaActive("dispatcher.lookup") ||
+        !agents.isActionActive("dispatcher.lookup")
+    ) {
+        // lookup is disabled either for translation or action. Just ask the user.
+        return undefined;
+    }
+
+    const actionConfigs = [
+        agents.getActionConfig("dispatcher.lookup"),
+        agents.getActionConfig("dispatcher.clarify"),
+        agents.getActionConfig("dispatcher"),
+    ];
+    // TODO: cache this?
+    const translator = loadAgentJsonTranslator(
+        actionConfigs,
+        [],
+        agents,
+        false, // no multiple
+    );
+
+    const question = `What is ${action.parameters.reference}?`;
+    const result = await translator.translate(question);
+
+    if (!result.success) {
+        return undefined;
+    }
+    const lookupAction = result.data as LookupAndAnswerAction;
+    if (lookupAction.actionName !== "lookupAndAnswer") {
+        return undefined;
+    }
+    const lookupResult = await lookupAndAnswer(
+        lookupAction as LookupAndAnswerAction,
+        context,
+    );
+
+    if (
+        lookupResult.error !== undefined ||
+        lookupResult.literalText === undefined
+    ) {
+        return undefined;
+    }
+
+    // TODO: This translation can probably more scoped based on the `actionName` field.
+    const history = getChatHistoryForTranslation(systemContext);
+
+    history.promptSections.push({
+        role: "assistant",
+        content: lookupResult.literalText,
+    });
+
+    const translationResult = await translateRequest(
+        action.parameters.request,
+        context,
+        history,
+    );
+
+    if (!translationResult) {
+        // undefined means not found or not translated
+        // null means cancelled because of replacement parse error.
+        return undefined;
+    }
+
+    if (translationResult.requestAction.actions.length > 1) {
+        // REVIEW: Expect only one action?.
+        return undefined;
+    }
+
+    return {
+        additionalActions: [translationResult.requestAction.actions[0].action],
+        entities: [],
+    };
+}
+
 export const dispatcherManifest: AppAgentManifest = {
     emojiChar: "🤖",
     description: "Built-in agent to dispatch requests",
@@ -78,6 +183,17 @@ export const dispatcherManifest: AppAgentManifest = {
                 schemaFile:
                     "./src/context/dispatcher/schema/clarifyActionSchema.ts",
                 schemaType: "ClarifyRequestAction",
+                injected: true,
+                cached: false,
+            },
+        },
+        lookup: {
+            schema: {
+                description:
+                    "Action that helps you look up information to answer user questions.",
+                schemaFile:
+                    "./src/context/dispatcher/schema/lookupActionSchema.ts",
+                schemaType: "LookupAction",
                 injected: true,
                 cached: false,
             },

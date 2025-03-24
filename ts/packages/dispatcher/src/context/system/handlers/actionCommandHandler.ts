@@ -52,7 +52,8 @@ export class ActionCommandHandler implements CommandHandler {
             throw new Error(`Invalid schema name ${schemaName}`);
         }
 
-        const actionSchema = actionSchemaFile.actionSchemas.get(actionName);
+        const actionSchema =
+            actionSchemaFile.parsedActionSchema.actionSchemas.get(actionName);
         if (actionSchema === undefined) {
             throw new Error(
                 `Invalid action name ${actionName} for schema ${schemaName}`,
@@ -100,7 +101,9 @@ export class ActionCommandHandler implements CommandHandler {
                 if (actionSchemaFile === undefined) {
                     continue;
                 }
-                completions.push(...actionSchemaFile.actionSchemas.keys());
+                completions.push(
+                    ...actionSchemaFile.parsedActionSchema.actionSchemas.keys(),
+                );
                 continue;
             }
 
