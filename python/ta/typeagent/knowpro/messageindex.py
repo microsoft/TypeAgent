@@ -125,70 +125,23 @@ class MessageTextIndex(IMessageTextEmbeddingIndex):
     def to_scored_message_ordinals(
         self, scored_locations: list[ScoredTextLocation]
     ) -> list[ScoredMessageOrdinal]:
-        message_matches = MessageAccumulator()
-        message_matches.add_messages_from_locations(scored_locations)
-        return message_matches.to_scored_message_ordinals()
+        matches: dict[MessageOrdinal, ScoredMessageOrdinal] = {}
 
+        for sl in scored_locations:
+            value = sl.text_location.message_ordinal
+            score = sl.score
+            match = matches.get(value)
+            if match is None:
+                matches[value] = ScoredMessageOrdinal(value, score)
+            else:
+                match.score = max(score, match.score)
 
-@dataclass
-class Match[T]:
-    value: T
-    score: float
-    hit_count: int
-    related_score: float
-    related_hit_ount: int
-
-
-class MessageAccumulator:
-    def __init__(self):
-        self._matches: dict[MessageOrdinal, Match[MessageOrdinal]] = {}
-
-    def __len__(self) -> int:
-        return len(self._matches)
-
-    def __bool__(self) -> bool:
-        return True
-
-    def __contains__(self, key: MessageOrdinal) -> bool:
-        return key in self._matches
-
-    def get_match(self, key: MessageOrdinal) -> Match[MessageOrdinal] | None:
-        return self._matches.get(key)
-
-    def set_match(self, match: Match[MessageOrdinal]) -> None:
-        self._matches[match.value] = match
-
-    def add(self, value: MessageOrdinal, score: float) -> None:
-        match = self.get_match(value)
-        if match is None:
-            self.set_match(
-                Match(
-                    value=value,
-                    score=score,
-                    hit_count=1,
-                    related_score=score,
-                    related_hit_ount=1,
-                )
-            )
-        else:
-            match.score = max(score, match.score)
-            match.hit_count += 1
-
-    def add_messages_from_locations(
-        self,
-        scored_text_locations: list[ScoredTextLocation],
-    ) -> None:
-        for sl in scored_text_locations:
-            self.add(sl.text_location.message_ordinal, sl.score)
-
-    def to_scored_message_ordinals(self) -> list[ScoredMessageOrdinal]:
-        matches = sorted(
-            self._matches.values(), key=lambda match: match.score, reverse=True
-        )
         return [
             ScoredMessageOrdinal(
-                message_ordinal=match.value,
-                score=match.score,
+                match.message_ordinal,
+                match.score,
             )
-            for match in matches
+            for match in sorted(
+                matches.values(), key=lambda match: match.score, reverse=True
+            )
         ]

@@ -36,6 +36,7 @@ async def main():
     if not args.filename:
         args.filename = os.path.expanduser("~/TypeAgent/python/ta/testdata/npr.txt")
     pod = import_podcast(args.filename, None, Datetime.now(), 3.0)
+    print()
     print("Name-Tag:", pod.name_tag)
     print("Tags:", ", ".join(pod.tags))
     for msg in pod.messages:

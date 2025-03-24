@@ -22,10 +22,10 @@ class AsyncEmbeddingModel:
         openai_key_name = "OPENAI_API_KEY"
         azure_key_name = "AZURE_OPENAI_API_KEY"
         if os.getenv(openai_key_name):
-            print(f"Using OpenAI")
+            print(f"\nUsing OpenAI")
             self.async_client = AsyncOpenAI()
         elif azure_api_key := os.getenv(azure_key_name):
-            print("Using Azure OpenAI")
+            print("\nUsing Azure OpenAI")
             # TODO: support different endpoint names
             endpoint_name = "AZURE_OPENAI_ENDPOINT_EMBEDDING_3_SMALL"
             self.azure_endpoint = os.environ.get(endpoint_name)

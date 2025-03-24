@@ -88,7 +88,7 @@ class Podcast(
     semantic_ref_index: convindex.ConversationIndex | None = field(
         init=False, default_factory=convindex.ConversationIndex
     )
-    secondary_indexes: interfaces.IConversationSecondaryIndexes = field(  # type: ignore
+    secondary_indexes: interfaces.IConversationSecondaryIndexes = field(  # type: ignore  # TODO
         init=False, default_factory=secindex.ConversationSecondaryIndexes
     )
 
@@ -96,7 +96,7 @@ class Podcast(
     name_tag: str = field(default="")
     messages: list[PodcastMessage] = field(default_factory=list)
     tags: list[str] = field(default_factory=list)
-    semantic_refs: list[interfaces.SemanticRef] = field(default_factory=list)
+    semantic_refs: list[interfaces.SemanticRef] = field(default_factory=list)  # type: ignore  # TODO
 
     def add_metadata_to_index(self) -> None:
         if self.semantic_ref_index is not None:
@@ -130,50 +130,50 @@ class Podcast(
                 await self.secondary_indexes.threads.build_index()  # type: ignore  # TODO
         return result
 
-    async def serialize(self) -> dict:
-        data = {
-            "name_tag": self.name_tag,
-            "messages": self.messages,
-            "tags": self.tags,
-            "semantic_refs": self.semantic_refs,
-            "semantic_index_data": (
-                self.semantic_ref_index.serialize() if self.semantic_ref_index else None
-            ),
-            # TODO: set these only if things aren't None
-            # "related_terms_index_data": self.secondary_indexes.term_to_related_terms_index.serialize(),
-            # "thread_data": self.secondary_indexes.threads.serialize(),
-            # "message_index_data": self.secondary_indexes.message_index.serialize(),
-        }
-        return data
+    # async def serialize(self) -> dict:
+    #     data = {
+    #         "name_tag": self.name_tag,
+    #         "messages": self.messages,
+    #         "tags": self.tags,
+    #         "semantic_refs": self.semantic_refs,
+    #         "semantic_index_data": (
+    #             self.semantic_ref_index.serialize() if self.semantic_ref_index else None
+    #         ),
+    #         # TODO: set these only if things aren't None
+    #         # "related_terms_index_data": self.secondary_indexes.term_to_related_terms_index.serialize(),
+    #         # "thread_data": self.secondary_indexes.threads.serialize(),
+    #         # "message_index_data": self.secondary_indexes.message_index.serialize(),
+    #     }
+    #     return data
 
-    async def deserialize(self, podcast_data: dict) -> None:
-        self.name_tag = podcast_data["name_tag"]
-        self.messages = []
-        for m in podcast_data["messages"]:
-            msg = PodcastMessage(
-                m["speaker"],
-                m["listeners"],
-                m["text_chunks"],
-                m["tags"],
-                m["timestamp"],
-            )
-            self.messages.append(msg)
-        self.semantic_refs = podcast_data["semantic_refs"]  # type: ignore  # TODO
-        self.tags = podcast_data["tags"]
+    # async def deserialize(self, podcast_data: dict) -> None:
+    #     self.name_tag = podcast_data["name_tag"]
+    #     self.messages = []
+    #     for m in podcast_data["messages"]:
+    #         msg = PodcastMessage(
+    #             m["speaker"],
+    #             m["listeners"],
+    #             m["text_chunks"],
+    #             m["tags"],
+    #             m["timestamp"],
+    #         )
+    #         self.messages.append(msg)
+    #     self.semantic_refs = podcast_data["semantic_refs"]  # type: ignore  # TODO
+    #     self.tags = podcast_data["tags"]
 
-        if podcast_data.get("semantic_index_data"):
-            self.semantic_ref_index = convindex.ConversationIndex(
-                podcast_data["semantic_index_data"]
-            )
-        # if podcast_data.get("related_terms_index_data"):
-        #     self.secondary_indexes.term_to_related_terms_index.deserialize(podcast_data["related_terms_index_data"])
-        # if podcast_data.get("thread_data"):
-        #     self.secondary_indexes.threads```` = ConversationThreads(self.settings.thread_settings)
-        #     self.secondary_indexes.threads.deserialize(podcast_data["thread_data"])
-        # if podcast_data.get("message_index_data"):
-        #     self.secondary_indexes.message_index = MessageTextIndex(self.settings.message_text_index_settings)
-        #     self.secondary_indexes.message_index.deserialize(podcast_data["message_index_data"])
-        # await self._build_transient_secondary_indexes(True)
+    #     if podcast_data.get("semantic_index_data"):
+    #         self.semantic_ref_index = convindex.ConversationIndex(
+    #             podcast_data["semantic_index_data"]
+    #         )
+    #     if podcast_data.get("related_terms_index_data"):
+    #         self.secondary_indexes.term_to_related_terms_index.deserialize(podcast_data["related_terms_index_data"])
+    #     if podcast_data.get("thread_data"):
+    #         self.secondary_indexes.threads```` = ConversationThreads(self.settings.thread_settings)
+    #         self.secondary_indexes.threads.deserialize(podcast_data["thread_data"])
+    #     if podcast_data.get("message_index_data"):
+    #         self.secondary_indexes.message_index = MessageTextIndex(self.settings.message_text_index_settings)
+    #         self.secondary_indexes.message_index.deserialize(podcast_data["message_index_data"])
+    #     await self._build_transient_secondary_indexes(True)
 
     # TODO: Implement write_conversation_data_to_file, read_conversation_data_from_file
     # async def write_to_file(self, dir_path: str, base_file_name: str) -> None:
@@ -193,8 +193,8 @@ class Podcast(
     #         await podcast.deserialize(data)
     #     return podcast
 
-    def _build_transient_secondary_indexes(self, all: bool) -> None:
-        if all:
+    def _build_transient_secondary_indexes(self, build_all: bool) -> None:
+        if build_all:
             secindex.build_transient_secondary_indexes(self)
         self._build_participant_aliases()
         # self._build_caches()  # TODO: term_to_related_terms_index,
