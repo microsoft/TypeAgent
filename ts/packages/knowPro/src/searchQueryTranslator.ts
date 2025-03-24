@@ -276,6 +276,23 @@ export class SearchQueryExprBuilder {
                     PropertyNames.Object,
                     termGroup,
                 );
+                /*
+                const objectGroup: SearchTermGroup = {
+                    booleanOp: "or",
+                    terms: [],
+                };
+                this.addEntityNamesToGroup(
+                    actionTerm.targetEntities,
+                    PropertyNames.Object,
+                    objectGroup,
+                );
+                this.addEntityNamesToGroup(
+                    actionTerm.targetEntities,
+                    PropertyNames.IndirectObject,
+                    objectGroup,
+                );
+                termGroup.terms.push(objectGroup);
+                */
             } else {
                 // Use entity terms lookup to apply scopes
                 this.scopingEntityTerms.push(...actionTerm.targetEntities);

@@ -548,13 +548,13 @@ export async function createKnowproCommands(
         let retried = false;
         let exactScope = true;
         const searchQuery = result.data;
+        context.printer.writeJson(searchQuery, true);
         while (true) {
             const searchQueryExpressions = kp.compileSearchQueryForConversation(
                 context.conversation!,
                 searchQuery,
                 exactScope,
             );
-            context.printer.writeJson(searchQuery, true);
             let countSelectMatches = 0;
             for (const searchQueryExpr of searchQueryExpressions) {
                 for (const selectExpr of searchQueryExpr.selectExpressions) {
