@@ -81,8 +81,9 @@ export async function createSearchQueryForConversation(
 export function compileSearchQueryForConversation(
     conversation: IConversation,
     query: querySchema.SearchQuery,
+    exactScoping: boolean = true,
 ): SearchQueryExpr[] {
-    const queryBuilder = new SearchQueryExprBuilder(conversation);
+    const queryBuilder = new SearchQueryExprBuilder(conversation, exactScoping);
     const searchQueryExprs: SearchQueryExpr[] =
         queryBuilder.compileQuery(query);
     return searchQueryExprs;
@@ -93,7 +94,10 @@ export class SearchQueryExprBuilder {
     public queryExpressions: SearchQueryExpr[];
     private scopingEntityTerms: querySchema.EntityTerm[];
 
-    constructor(public conversation: IConversation) {
+    constructor(
+        public conversation: IConversation,
+        public exactScoping: boolean = true,
+    ) {
         this.queryExpressions = [{ selectExpressions: [] }];
         this.entityTermsAdded = new PropertyTermSet();
         this.scopingEntityTerms = [];
@@ -307,7 +311,7 @@ export class SearchQueryExprBuilder {
             this.addEntityTermToGroup(
                 entityTerm,
                 termGroup,
-                true /* exact match name */,
+                this.exactScoping /* true => exact match name */,
             );
         }
     }

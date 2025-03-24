@@ -7,8 +7,10 @@ import {
     arg,
     argBool,
     argNum,
+    askYesNo,
     CommandHandler,
     CommandMetadata,
+    InteractiveIo,
     NamedArgs,
     parseNamedArguments,
     ProgressBar,
@@ -528,7 +530,7 @@ export async function createKnowproCommands(
         return def;
     }
     commands.kpSearch.metadata = searchDefNew();
-    async function search(args: string[]): Promise<void> {
+    async function search(args: string[], io: InteractiveIo): Promise<void> {
         if (!ensureConversationLoaded()) {
             return;
         }
@@ -543,46 +545,87 @@ export async function createKnowproCommands(
             context.printer.writeError(result.message);
             return;
         }
+        let retried = false;
+        let exactScope = true;
         const searchQuery = result.data;
-        const searchQueryExpressions = kp.compileSearchQueryForConversation(
-            context.conversation!,
-            searchQuery,
-        );
-        context.printer.writeJson(searchQuery, true);
-        for (const searchQueryExpr of searchQueryExpressions) {
-            for (const selectExpr of searchQueryExpr.selectExpressions) {
-                if (namedArgs.ktype) {
-                    selectExpr.when ??= {};
-                    selectExpr.when.knowledgeType = namedArgs.ktype;
+        while (true) {
+            const searchQueryExpressions = kp.compileSearchQueryForConversation(
+                context.conversation!,
+                searchQuery,
+                exactScope,
+            );
+            context.printer.writeJson(searchQuery, true);
+            let countSelectMatches = 0;
+            for (const searchQueryExpr of searchQueryExpressions) {
+                for (const selectExpr of searchQueryExpr.selectExpressions) {
+                    if (
+                        await evalSelectQueryExpr(
+                            searchQueryExpr,
+                            selectExpr,
+                            namedArgs,
+                        )
+                    ) {
+                        countSelectMatches++;
+                    }
                 }
-                const searchResults = await kp.searchConversation(
-                    context.conversation!,
-                    selectExpr.searchTermGroup,
-                    selectExpr.when,
-                    {
-                        exactMatch: namedArgs.exact,
-                        maxKnowledgeMatches: namedArgs.knowledgeTopK,
-                        maxMessageMatches: namedArgs.messageTopK,
-                        maxMessageCharsInBudget: namedArgs.charBudget,
-                    },
-                    searchQueryExpr.rawQuery,
-                );
-                context.printer.writeLine("####");
-                context.printer.writeInColor(
-                    chalk.cyan,
-                    searchQueryExpr.rawQuery!,
-                );
-                context.printer.writeLine("####");
-                context.printer.writeConversationSearchResult(
-                    context.conversation!,
-                    searchResults,
-                    namedArgs.showKnowledge,
-                    namedArgs.showMessages,
-                    namedArgs.maxToDisplay,
-                    namedArgs.distinct,
-                );
+            }
+            if (countSelectMatches === 0) {
+                context.printer.writeLine("No matches");
+            }
+            if (countSelectMatches > 0 || retried) {
+                break;
+            }
+            retried = await askYesNo(
+                io,
+                chalk.cyan("Using exact scope. Try fuzzy instead?"),
+            );
+            if (retried) {
+                exactScope = false;
+            } else {
+                break;
             }
         }
+    }
+
+    async function evalSelectQueryExpr(
+        searchQueryExpr: kp.SearchQueryExpr,
+        selectExpr: kp.SearchSelectExpr,
+        namedArgs: NamedArgs,
+    ): Promise<boolean> {
+        if (namedArgs.ktype) {
+            selectExpr.when ??= {};
+            selectExpr.when.knowledgeType = namedArgs.ktype;
+        }
+        const searchResults = await kp.searchConversation(
+            context.conversation!,
+            selectExpr.searchTermGroup,
+            selectExpr.when,
+            {
+                exactMatch: namedArgs.exact,
+                maxKnowledgeMatches: namedArgs.knowledgeTopK,
+                maxMessageMatches: namedArgs.messageTopK,
+                maxMessageCharsInBudget: namedArgs.charBudget,
+            },
+            searchQueryExpr.rawQuery,
+        );
+        if (
+            searchResults === undefined ||
+            searchResults.messageMatches.length === 0
+        ) {
+            return false;
+        }
+        context.printer.writeLine("####");
+        context.printer.writeInColor(chalk.cyan, searchQueryExpr.rawQuery!);
+        context.printer.writeLine("####");
+        context.printer.writeConversationSearchResult(
+            context.conversation!,
+            searchResults,
+            namedArgs.showKnowledge,
+            namedArgs.showMessages,
+            namedArgs.maxToDisplay,
+            namedArgs.distinct,
+        );
+        return true;
     }
 
     function ragDef(): CommandMetadata {
