@@ -44,7 +44,7 @@ export type KnowProContext = {
     podcast?: cm.Podcast | undefined;
     images?: im.ImageCollection | undefined;
     conversation?: kp.IConversation | undefined;
-    searchTranslator: kp.SearchQueryTranslator;
+    queryTranslator: kp.SearchQueryTranslator;
 };
 
 export async function createKnowproCommands(
@@ -58,7 +58,7 @@ export async function createKnowproCommands(
             knowLib.conversation.createKnowledgeActionTranslator(
                 knowledgeModel,
             ),
-        searchTranslator: kp.createSearchQueryTranslator(knowledgeModel),
+        queryTranslator: kp.createSearchQueryTranslator(knowledgeModel),
         basePath: "/data/testChat/knowpro",
         printer: new KnowProPrinter(),
     };
@@ -534,19 +534,23 @@ export async function createKnowproCommands(
         }
         const namedArgs = parseNamedArguments(args, searchDefNew());
         const textQuery = namedArgs.query;
-        const result = await kp.textQueryToSearchQueryExpr(
+        const result = await kp.createSearchQueryForConversation(
             context.conversation!,
-            context.searchTranslator,
+            context.queryTranslator,
             textQuery,
         );
         if (!result.success) {
             context.printer.writeError(result.message);
             return;
         }
-        const [searchQueryExpr, searchQuery] = result.data;
+        const searchQuery = result.data;
+        const searchQueryExpressions = kp.compileSearchQueryForConversation(
+            context.conversation!,
+            searchQuery,
+        );
         context.printer.writeJson(searchQuery, true);
-        for (const queryExpr of searchQueryExpr) {
-            for (const selectExpr of queryExpr.selectExpressions) {
+        for (const searchQueryExpr of searchQueryExpressions) {
+            for (const selectExpr of searchQueryExpr.selectExpressions) {
                 if (namedArgs.ktype) {
                     selectExpr.when ??= {};
                     selectExpr.when.knowledgeType = namedArgs.ktype;
@@ -561,10 +565,13 @@ export async function createKnowproCommands(
                         maxMessageMatches: namedArgs.messageTopK,
                         maxMessageCharsInBudget: namedArgs.charBudget,
                     },
-                    queryExpr.rawQuery,
+                    searchQueryExpr.rawQuery,
                 );
                 context.printer.writeLine("####");
-                context.printer.writeInColor(chalk.cyan, queryExpr.rawQuery!);
+                context.printer.writeInColor(
+                    chalk.cyan,
+                    searchQueryExpr.rawQuery!,
+                );
                 context.printer.writeLine("####");
                 if (searchResults && searchResults.messageMatches.length > 0) {
                     if (namedArgs.showKnowledge) {

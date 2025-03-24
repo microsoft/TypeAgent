@@ -4,17 +4,10 @@
 import {
     createJsonTranslator,
     Result,
-    success,
     TypeChatJsonTranslator,
     TypeChatLanguageModel,
 } from "typechat";
-import {
-    ActionTerm,
-    EntityTerm,
-    SearchExpr,
-    SearchFilter,
-    SearchQuery,
-} from "./searchQuerySchema.js";
+import * as querySchema from "./searchQuerySchema.js";
 import { createTypeScriptJsonValidator } from "typechat/ts";
 import { loadSchema } from "typeagent";
 import {
@@ -36,7 +29,8 @@ import { getTimeRangePromptSectionForConversation } from "./conversation.js";
 
 ---------------------------------*/
 
-export type SearchQueryTranslator = TypeChatJsonTranslator<SearchQuery>;
+export type SearchQueryTranslator =
+    TypeChatJsonTranslator<querySchema.SearchQuery>;
 
 export function createSearchQueryTranslator(
     model: TypeChatLanguageModel,
@@ -47,9 +41,9 @@ export function createSearchQueryTranslator(
         import.meta.url,
     );
 
-    return createJsonTranslator<SearchQuery>(
+    return createJsonTranslator<querySchema.SearchQuery>(
         model,
-        createTypeScriptJsonValidator<SearchQuery>(
+        createTypeScriptJsonValidator<querySchema.SearchQuery>(
             searchActionSchema,
             typeName,
         ),
@@ -72,28 +66,32 @@ export type SearchQueryExpr = {
     rawQuery?: string | undefined;
 };
 
-export async function textQueryToSearchQueryExpr(
+export async function createSearchQueryForConversation(
     conversation: IConversation,
     queryTranslator: SearchQueryTranslator,
-    textQuery: string,
-): Promise<Result<[SearchQueryExpr[], SearchQuery]>> {
+    text: string,
+): Promise<Result<querySchema.SearchQuery>> {
     const result = await queryTranslator.translate(
-        textQuery,
+        text,
         getTimeRangePromptSectionForConversation(conversation),
     );
-    if (!result.success) {
-        return result;
-    }
-    const searchQuery = result.data;
+    return result;
+}
+
+export function compileSearchQueryForConversation(
+    conversation: IConversation,
+    query: querySchema.SearchQuery,
+): SearchQueryExpr[] {
     const queryBuilder = new SearchQueryExprBuilder(conversation);
-    const queryExpr = queryBuilder.compileQuery(searchQuery);
-    return success([queryExpr, searchQuery]);
+    const searchQueryExprs: SearchQueryExpr[] =
+        queryBuilder.compileQuery(query);
+    return searchQueryExprs;
 }
 
 export class SearchQueryExprBuilder {
     private entityTermsAdded: PropertyTermSet;
     public queryExpressions: SearchQueryExpr[];
-    private scopingEntityTerms: EntityTerm[];
+    private scopingEntityTerms: querySchema.EntityTerm[];
 
     constructor(public conversation: IConversation) {
         this.queryExpressions = [{ selectExpressions: [] }];
@@ -101,7 +99,7 @@ export class SearchQueryExprBuilder {
         this.scopingEntityTerms = [];
     }
 
-    public compileQuery(query: SearchQuery): SearchQueryExpr[] {
+    public compileQuery(query: querySchema.SearchQuery): SearchQueryExpr[] {
         const queryExpressions: SearchQueryExpr[] = [];
         for (const searchExpr of query.searchExpressions) {
             queryExpressions.push(this.compileSearchExpr(searchExpr));
@@ -109,7 +107,7 @@ export class SearchQueryExprBuilder {
         return queryExpressions;
     }
 
-    private compileSearchExpr(expr: SearchExpr): SearchQueryExpr {
+    private compileSearchExpr(expr: querySchema.SearchExpr): SearchQueryExpr {
         const queryExpr: SearchQueryExpr = {
             selectExpressions: [],
         };
@@ -124,7 +122,9 @@ export class SearchQueryExprBuilder {
         return queryExpr;
     }
 
-    private compileFilterExpr(filter: SearchFilter): SearchSelectExpr {
+    private compileFilterExpr(
+        filter: querySchema.SearchFilter,
+    ): SearchSelectExpr {
         let searchTermGroup = this.compileTermGroup(filter);
         let when = this.compileWhen(filter);
         return {
@@ -133,7 +133,9 @@ export class SearchQueryExprBuilder {
         };
     }
 
-    private compileTermGroup(filter: SearchFilter): SearchTermGroup {
+    private compileTermGroup(
+        filter: querySchema.SearchFilter,
+    ): SearchTermGroup {
         const termGroup: SearchTermGroup = { booleanOp: "or", terms: [] };
         this.entityTermsAdded.clear();
         if (filter.entitySearchTerms) {
@@ -148,7 +150,7 @@ export class SearchQueryExprBuilder {
         return termGroup;
     }
 
-    private compileWhen(filter: SearchFilter) {
+    private compileWhen(filter: querySchema.SearchFilter) {
         let when: WhenFilter | undefined;
         if (filter.actionSearchTerm) {
             if (
@@ -177,7 +179,7 @@ export class SearchQueryExprBuilder {
     }
 
     private addEntityTermsToGroup(
-        entityTerms: EntityTerm[],
+        entityTerms: querySchema.EntityTerm[],
         termGroup: SearchTermGroup,
         exactMatchName: boolean = false,
     ): void {
@@ -193,7 +195,7 @@ export class SearchQueryExprBuilder {
     }
 
     private addEntityTermToGroup(
-        entityTerm: EntityTerm,
+        entityTerm: querySchema.EntityTerm,
         termGroup: SearchTermGroup,
         exactMatchName: boolean = false,
     ): void {
@@ -240,7 +242,7 @@ export class SearchQueryExprBuilder {
     }
 
     private addActionTermsToGroup(
-        actionTerm: ActionTerm,
+        actionTerm: querySchema.ActionTerm,
         termGroup: SearchTermGroup,
     ): void {
         if (actionTerm.actionVerbs) {
@@ -298,7 +300,7 @@ export class SearchQueryExprBuilder {
     }
 
     private addScopingTermsToGroup(
-        entityTerms: EntityTerm[],
+        entityTerms: querySchema.EntityTerm[],
         termGroup: SearchTermGroup,
     ): void {
         for (const entityTerm of entityTerms) {
@@ -311,7 +313,7 @@ export class SearchQueryExprBuilder {
     }
 
     private addEntityNamesToGroup(
-        entityTerms: EntityTerm[],
+        entityTerms: querySchema.EntityTerm[],
         propertyName: PropertyNames,
         termGroup: SearchTermGroup,
     ): void {
@@ -413,8 +415,8 @@ export class SearchQueryExprBuilder {
 const Wildcard = "*";
 
 function isEntityTermArray(
-    terms: EntityTerm[] | "*" | undefined,
-): terms is EntityTerm[] {
+    terms: querySchema.EntityTerm[] | "*" | undefined,
+): terms is querySchema.EntityTerm[] {
     if (terms !== undefined) {
         if (Array.isArray(terms)) {
             return true;
