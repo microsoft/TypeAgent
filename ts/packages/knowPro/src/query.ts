@@ -462,7 +462,9 @@ export class MatchTermsBooleanExpr extends QueryOpExpr<SemanticRefAccumulator> {
  */
 export class MatchTermsOrExpr extends MatchTermsBooleanExpr {
     constructor(
-        public termExpressions: MatchTermExpr[],
+        public termExpressions: IQueryOpExpr<
+            SemanticRefAccumulator | undefined
+        >[],
         public getScopeExpr?: GetScopeExpr | undefined,
     ) {
         super(getScopeExpr);
@@ -484,7 +486,9 @@ export class MatchTermsOrExpr extends MatchTermsBooleanExpr {
 
 export class MatchTermsAndExpr extends MatchTermsBooleanExpr {
     constructor(
-        public termExpressions: MatchTermExpr[],
+        public termExpressions: IQueryOpExpr<
+            SemanticRefAccumulator | undefined
+        >[],
         public getScopeExpr?: GetScopeExpr | undefined,
     ) {
         super(getScopeExpr);

@@ -44,7 +44,7 @@ export type SearchTermGroup = {
      * And will enforce that all terms match
      */
     booleanOp: "and" | "or";
-    terms: (SearchTerm | PropertySearchTerm)[];
+    terms: (SearchTerm | PropertySearchTerm | SearchTermGroup)[];
 };
 
 /**
@@ -376,7 +376,9 @@ class QueryCompiler {
         scopeExpr?: q.GetScopeExpr,
     ): [SearchTerm[], q.IQueryOpExpr<SemanticRefAccumulator>] {
         const searchTermsUsed: SearchTerm[] = [];
-        const termExpressions: q.MatchTermExpr[] = [];
+        const termExpressions: q.IQueryOpExpr<
+            SemanticRefAccumulator | undefined
+        >[] = [];
         for (const term of searchGroup.terms) {
             if (isPropertyTerm(term)) {
                 termExpressions.push(new q.MatchPropertySearchTermExpr(term));
@@ -388,6 +390,13 @@ class QueryCompiler {
                         this.entityTermMatchWeight;
                 }
                 searchTermsUsed.push(term.propertyValue);
+            } else if (isSearchGroupTerm(term)) {
+                const [termsUsed, groupExpr] = this.compileSearchGroup(
+                    term,
+                    scopeExpr,
+                );
+                searchTermsUsed.push(...termsUsed);
+                termExpressions.push(groupExpr);
             } else {
                 termExpressions.push(
                     new q.MatchSearchTermExpr(term, (term, sr, scored) =>
@@ -623,7 +632,7 @@ class QueryCompiler {
 }
 
 function isPropertyTerm(
-    term: SearchTerm | PropertySearchTerm,
+    term: SearchTerm | PropertySearchTerm | SearchTermGroup,
 ): term is PropertySearchTerm {
     return term.hasOwnProperty("propertyName");
 }
@@ -651,4 +660,10 @@ function isActionPropertyTerm(term: PropertySearchTerm): boolean {
     }
 
     return false;
+}
+
+function isSearchGroupTerm(
+    term: SearchTerm | PropertySearchTerm | SearchTermGroup,
+): term is SearchTermGroup {
+    return term.hasOwnProperty("booleanOp");
 }
