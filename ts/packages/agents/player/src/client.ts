@@ -352,9 +352,7 @@ export async function getClientContext(
     // Make sure we can get an access token, silently.
     await tokenProvider.getAccessToken(silent);
 
-    const service = new SpotifyService(
-        await createTokenProvider(instanceStorage),
-    );
+    const service = new SpotifyService(tokenProvider);
     await service.init();
     debugSpotify("Service initialized");
     const userdata = await getUserProfile(service);

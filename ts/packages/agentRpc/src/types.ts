@@ -83,6 +83,10 @@ export type AgentContextInvokeFunctions = {
         session: boolean;
         token: string;
     }) => Promise<any>;
+    tokenCacheDelete: (param: {
+        contextId: number;
+        session: boolean;
+    }) => Promise<any>;
     toggleTransientAgent: (param: {
         contextId: number;
         name: string;

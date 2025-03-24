@@ -222,6 +222,13 @@ export class TokenProvider {
             await this.tokenCachePersistence.save(JSON.stringify(tokenCache));
         }
     }
+
+    public async clearRefreshToken() {
+        this.userRefreshToken = undefined;
+        if (this.tokenCachePersistence !== undefined) {
+            await this.tokenCachePersistence.delete();
+        }
+    }
 }
 
 interface TokenCache {

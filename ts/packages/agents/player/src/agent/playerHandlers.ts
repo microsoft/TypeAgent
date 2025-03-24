@@ -104,12 +104,19 @@ export async function enableSpotify(
 
 export async function disableSpotify(
     context: SessionContext<PlayerActionContext>,
+    clearToken: boolean = false,
 ) {
-    const timeoutId = context.agentContext.spotify?.userData?.timeoutId;
-    if (timeoutId !== undefined) {
-        clearTimeout(timeoutId);
+    const clientContext = context.agentContext.spotify;
+    if (clientContext !== undefined) {
+        const timeoutId = clientContext.userData?.timeoutId;
+        if (timeoutId !== undefined) {
+            clearTimeout(timeoutId);
+        }
+        if (clearToken) {
+            await clientContext.service.tokenProvider.clearRefreshToken();
+        }
+        context.agentContext.spotify = undefined;
     }
-    context.agentContext.spotify = undefined;
 }
 
 async function validatePlayerWildcardMatch(
