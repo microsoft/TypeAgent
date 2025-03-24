@@ -308,15 +308,6 @@ export class SearchQueryExprBuilder {
                     termGroup,
                 );
             }
-
-            // TODO: make IndirectObject an or?
-            /*
-            this.addEntityNames(
-                actionTerm.targetEntities,
-                PropertyNames.IndirectObject,
-                termGroup,
-            );
-            */
         }
     }
 
