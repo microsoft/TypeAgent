@@ -7,7 +7,10 @@ export type MontageAction =
     | ListPhotosAction
     | ChangeTitleAction
     | RemovePhotosAction
-    | ClearSelectionAction;
+    | ClearSelectionAction
+    | ShowSearchParametersAction
+    | SetSearchParametersAction
+    | StartSlideShowAction;
 
 // Find images to add to the montage.
 export type FindPhotosAction = {
@@ -70,7 +73,24 @@ export type RemovePhotosAction = {
 // Clears the currently selected images
 export type ClearSelectionAction = {
     actionName: "clearSelectedPhotos";
+    parameters: {}
+}
+
+export type ShowSearchParametersAction = {
+    actionName: "showSearchParameters";
+    parameters: {}
+}
+
+export type SetSearchParametersAction = {
+    actionName: "setSearchParameters";
     parameters: {
+        // search score value starts at 0
+        minSearchScore?: number;
     }
+}
+
+export type StartSlideShowAction = {
+    actionName: "startSlideShow";
+    parameters: {}
 }
 

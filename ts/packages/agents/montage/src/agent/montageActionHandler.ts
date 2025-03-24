@@ -9,15 +9,16 @@ import {
     ActionResult,
     //Storage,
 } from "@typeagent/agent-sdk";
-import { ChildProcess, fork } from "child_process";
+import { ChildProcess, fork, spawn } from "child_process";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
-import { FindPhotosAction, ListPhotosAction, MontageAction, RemovePhotosAction, SelectPhotosAction } from "./montageActionSchema.js";
+import { FindPhotosAction, ListPhotosAction, MontageAction, RemovePhotosAction, SelectPhotosAction, SetSearchParametersAction } from "./montageActionSchema.js";
 import { createActionResult, createActionResultFromError } from "@typeagent/agent-sdk/helpers/action";
 import * as im from "image-memory";
 import * as kp from "knowpro";
 import { conversation as kpLib } from "knowledge-processor";
 import { Facet } from "../../../../knowledgeProcessor/dist/conversation/knowledgeSchema.js";
+import { copyFileSync } from "node:fs";
 //import registerDebug from "debug";
 
 //const debugAgent = registerDebug("typeagent:agent:montage");
@@ -36,6 +37,9 @@ type MontageActionContext = {
     montage: PhotoMontage | undefined;
     imageCollection: im.ImageCollection | undefined;
     viewProcess: ChildProcess | undefined;
+    searchSettings: {
+        minScore: number,
+    }
 };
 
 type PhotoMontage = {
@@ -51,15 +55,13 @@ async function executeMontageAction(
     return result;
 }
 
-// async function markdownValidateWildcardMatch(
-//     action: AppAction,
-//     context: SessionContext<MarkdownActionContext>,
-// ) {
-//     return true;
-// }
-
 async function initializeMontageContext() {    
-    return {};
+    return {
+        // default search settings
+        searchSettings: {
+            minScore: 0,
+        }
+    };
 }
 
 async function updateMontageContext(
@@ -68,8 +70,14 @@ async function updateMontageContext(
 ): Promise<void> {
     if (enable) {
 
+        // create a new montage
+        context.agentContext.montage = {
+            title: "Untitled Montage",
+            files: []
+        }
+
         // Load the image index from disk
-        // TODO: make dynamic
+        // TODO: make dynamic, load from session storage
         if (!context.agentContext.imageCollection) {
             context.agentContext.imageCollection = await im.ImageCollection.readFromFile("f:\\pictures_index", "index");
         }
@@ -107,6 +115,8 @@ async function handleMontageAction(
     switch (action.actionName) {
 
         case "changeTitle": {
+            actionContext.sessionContext.agentContext.montage!.title = action.parameters.title;
+
             actionContext.sessionContext.agentContext.viewProcess!.send(action);
             result = createActionResult(`Changed title to ${action.parameters.title}`)
             break;
@@ -124,10 +134,14 @@ async function handleMontageAction(
 
             // search for the images requested by the user
             if (action.parameters.search_filters) {
-                await findRequestedImages(action, actionContext.sessionContext.agentContext.imageCollection);
+                await findRequestedImages(action, actionContext.sessionContext.agentContext);
             } else {
                 result = createActionResultFromError("Unable to search images, no image index available.");
             }
+
+            // remove them from the montage
+            // TODO: implement
+            //actionContext.sessionContext.agentContext.montage!.files = actionContext.sessionContext.agentContext.montage?.files.filter((value) => !action.parameters.files?.includes(value))!;
 
             // send select to the visualizer/client
             actionContext.sessionContext.agentContext.viewProcess!.send(action);
@@ -142,7 +156,7 @@ async function handleMontageAction(
 
             // search for the images requested by the user
             if (action.parameters.search_filters) {
-                await findRequestedImages(action, actionContext.sessionContext.agentContext.imageCollection);
+                await findRequestedImages(action, actionContext.sessionContext.agentContext);
             } else {
                 result = createActionResultFromError("Unable to search images, no image index available.");
             }
@@ -168,9 +182,9 @@ async function handleMontageAction(
             // search for the images requested by the user
             if (actionContext.sessionContext.agentContext.imageCollection !== undefined) {
                 if (action.parameters.search_filters && action.parameters.search_filters.length > 0) {
-                    await findRequestedImages(action, actionContext.sessionContext.agentContext.imageCollection);
+                    await findRequestedImages(action, actionContext.sessionContext.agentContext);
                 } else {
-                    (action as FindPhotosAction).parameters.files = actionContext.sessionContext.agentContext.imageCollection?.messages.map((img) => img.metadata.img.fileName);                
+                    (action as FindPhotosAction).parameters.files = actionContext.sessionContext.agentContext.imageCollection?.messages.map((img) => img.metadata.img.fileName.toLocaleLowerCase());                
                 }
             } else {
                 result = createActionResultFromError("Unable to search images, no image index available.");            
@@ -178,6 +192,7 @@ async function handleMontageAction(
 
             // TODO: update project state with this action
             // TODO: update montage with this data and save it's state
+            actionContext.sessionContext.agentContext.montage!.files = [...new Set([...actionContext.sessionContext.agentContext.montage!.files, ...action.parameters.files!])];
 
             // send select to the visualizer/client
             actionContext.sessionContext.agentContext.viewProcess!.send(action);
@@ -185,15 +200,51 @@ async function handleMontageAction(
             result = createActionResult(`Found ${action.parameters.files?.length} images.`);            
             break;
         }
+
+        case "showSearchParameters": {
+            result = createActionResult(`Search parameters:\n${JSON.stringify(actionContext.sessionContext.agentContext.searchSettings)}`);
+            break;
+        }
+
+        case "setSearchParameters": {
+
+            const settingsAction: SetSearchParametersAction = action as SetSearchParametersAction;
+
+            if (settingsAction.parameters.minSearchScore) {
+                actionContext.sessionContext.agentContext.searchSettings.minScore = settingsAction.parameters.minSearchScore;
+            }
+
+            result = createActionResult(`Updated search parameters to:\n${JSON.stringify(actionContext.sessionContext.agentContext.searchSettings)}`)
+            break;
+        }
+
+        case "startSlideShow": {
+
+            // TODO: dynamically get
+            // create slide show dir
+            actionContext.sessionContext.agentContext.montage!.files.forEach((file) => copyFileSync(file, path.join("f:\\slideshow", path.basename(file))));
+
+            // copy files into slideshow dir 
+
+            // start screen saver
+            try {
+                spawn("c:\\Windows\\System32\\PhotoScreensaver.scr", [ "/s"]);
+            } catch (e) {
+                console.log(e);
+            }
+
+            break;
+        }
     }
     return result;
 }
 
-async function findRequestedImages(action: ListPhotosAction | FindPhotosAction | SelectPhotosAction | RemovePhotosAction, imageCollection: im.ImageCollection | undefined) {
-    if (imageCollection) {
+async function findRequestedImages(action: ListPhotosAction | FindPhotosAction | SelectPhotosAction | RemovePhotosAction, 
+    context: MontageActionContext) {
+    if (context.imageCollection) {
         if (action.parameters.search_filters) {
             const matches = await kp.searchConversationKnowledge(
-                imageCollection,
+                context.imageCollection,
                 // search group
                 {
                     booleanOp: "and", // or
@@ -212,8 +263,8 @@ async function findRequestedImages(action: ListPhotosAction | FindPhotosAction |
             matches?.forEach((match: kp.SemanticRefSearchResult) => {
                 match.semanticRefMatches.forEach((value: kp.ScoredSemanticRefOrdinal) => {
 
-                    if (value.score >= 10) {
-                        const semanticRef: kp.SemanticRef | undefined = imageCollection.semanticRefs[value.semanticRefOrdinal];
+                    if (value.score >= context.searchSettings.minScore) {
+                        const semanticRef: kp.SemanticRef | undefined = context.imageCollection!.semanticRefs[value.semanticRefOrdinal];
                         console.log(`\tMatch: ${semanticRef}`);
                         if (semanticRef) {
                             if (semanticRef.knowledgeType === "entity") {
@@ -224,14 +275,14 @@ async function findRequestedImages(action: ListPhotosAction | FindPhotosAction |
                                     const f: Facet | undefined = entity.facets?.find((v) => { return v.name === "File Name"; });
 
                                     if (f?.value) {
-                                        imageFiles.add(f?.value.toString());
+                                        imageFiles.add(f?.value.toString().toLocaleLowerCase());
                                     }
                                 } else {
                                     // for non-images trace it back to the originating image and add that
                                     const imgRange: kp.TextLocation = semanticRef.range.start;
-                                    const img: im.Image = imageCollection.messages[imgRange.messageOrdinal];
+                                    const img: im.Image = context.imageCollection!.messages[imgRange.messageOrdinal];
 
-                                    imageFiles.add(img.metadata.fileName);
+                                    imageFiles.add(img.metadata.fileName.toLocaleLowerCase());
                                 }
                             } else if (semanticRef.knowledgeType === "action") {
                                 // const action: kpLib.Action = semanticRef.knowledge as kpLib.Action;
@@ -280,11 +331,6 @@ export async function createViewServiceHost() {
                 );
 
                 const childProcess = fork(expressService);
-
-                childProcess.send({
-                    type: "setFile",
-                    filePath: "",
-                });
 
                 childProcess.on("message", function (message) {
                     if (message === "Success") {

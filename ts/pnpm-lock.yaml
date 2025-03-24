@@ -783,7 +783,6 @@ importers:
       node-polyfill-webpack-plugin:
         specifier: ^3.0.0
         version: 3.0.0(webpack@5.94.0)
-        version: 3.0.0(webpack@5.94.0(webpack-cli@5.1.4))
       prismjs:
         specifier: ^1.30.0
         version: 1.30.0
@@ -1375,7 +1374,7 @@ importers:
         version: 7.4.2
       typechat:
         specifier: ^0.1.1
-        version: 0.1.1(typescript@5.4.5)(zod@3.23.8)
+        version: 0.1.1(typescript@5.4.3)(zod@3.23.8)
     devDependencies:
       '@types/debug':
         specifier: ^4.1.12
@@ -1397,7 +1396,7 @@ importers:
         version: 5.0.5
       typescript:
         specifier: ^5.4.2
-        version: 5.4.5
+        version: 5.4.3
 
   packages/agents/spelunker:
     dependencies:
@@ -11672,7 +11671,7 @@ snapshots:
       supports-color: 8.1.1
       supports-hyperlinks: 2.3.0
       ts-node: 10.9.2(@types/node@18.18.7)(typescript@5.4.3)
-      tslib: 2.8.1
+      tslib: 2.6.2
       widest-line: 3.1.0
       wordwrap: 1.0.0
       wrap-ansi: 7.0.0
@@ -11708,7 +11707,7 @@ snapshots:
       supports-color: 8.1.1
       supports-hyperlinks: 2.3.0
       ts-node: 10.9.2(@types/node@18.18.7)(typescript@5.4.5)
-      tslib: 2.8.1
+      tslib: 2.6.2
       widest-line: 3.1.0
       wordwrap: 1.0.0
       wrap-ansi: 7.0.0
@@ -17902,25 +17901,6 @@ snapshots:
       typescript: 5.4.3
       v8-compile-cache-lib: 3.0.1
       yn: 3.1.1
-
-  ts-node@10.9.2(@types/node@18.18.7)(typescript@5.4.5):
-    dependencies:
-      '@cspotcode/source-map-support': 0.8.1
-      '@tsconfig/node10': 1.0.9
-      '@tsconfig/node12': 1.0.11
-      '@tsconfig/node14': 1.0.3
-      '@tsconfig/node16': 1.0.4
-      '@types/node': 18.18.7
-      acorn: 8.11.1
-      acorn-walk: 8.3.0
-      arg: 4.1.3
-      create-require: 1.1.1
-      diff: 4.0.2
-      make-error: 1.3.6
-      typescript: 5.4.5
-      v8-compile-cache-lib: 3.0.1
-      yn: 3.1.1
-    optional: true
 
   ts-node@10.9.2(@types/node@18.18.7)(typescript@5.4.5):
     dependencies:

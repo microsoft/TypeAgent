@@ -95,6 +95,15 @@ app.get("/knowlegeResponse", (req: Request, res: Response) => {
 
 });
 
+/**
+ * Allows the client to tell us which files are currently being shown
+ */
+app.post("/files", (req: Request, res: Response) => {
+    console.log(req.body());
+    res.status(200);
+    res.send();
+});
+
 let clients: any[] = [];
 //let filePath: string;
 

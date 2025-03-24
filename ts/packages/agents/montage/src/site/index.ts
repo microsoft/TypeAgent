@@ -41,7 +41,7 @@ document.addEventListener("DOMContentLoaded", function () {
                             // get the image caption
                             const res = await fetch(`/knowlegeResponse?path=${f}`);
                             const ii = await res.json();
-                            img.title = ii.altText; 
+                            img.title = ii.fileName + " - " + ii.altText; 
 
                             mainContainer.append(img);                            
                         }
@@ -177,7 +177,16 @@ document.addEventListener("DOMContentLoaded", function () {
                     mainContainer.children[i].classList.remove("unselected");
                 }                
                 break;
-            }            
+            }
         }
+
+        // tell the server what images are being show
+        fetch("/files", {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ files: [...imgMap.keys()]})
+        });
     };
 });
