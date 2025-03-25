@@ -188,7 +188,7 @@
       "cwd": "${workspaceFolder}/examples/vscodeSchemaGen",
       "program": "./dist/main.js",
       "args": ["-dataprep"],
-      "console": "externalTerminal",
+      "console": "integratedTerminal",
       "outFiles": ["${workspaceFolder}/**/*.js"]
     },
     {
@@ -199,7 +199,7 @@
       "cwd": "${workspaceFolder}/examples/vscodeSchemaGen",
       "program": "./dist/main.js",
       "args": ["-schemagen"],
-      "console": "externalTerminal",
+      "console": "integratedTerminal",
       "outFiles": ["${workspaceFolder}/**/*.js"]
     },
     {
@@ -209,8 +209,8 @@
       "skipFiles": ["<node_internals>/**"],
       "cwd": "${workspaceFolder}/examples/vscodeSchemaGen",
       "program": "./dist/main.js",
-      "args": ["-schemagen-actionprefix=editor.action"],
-      "console": "externalTerminal",
+      "args": ["-schemagen-actionprefix=editor.action", "-maxNodesToProcess=10"],
+      "console": "integratedTerminal",
       "outFiles": ["${workspaceFolder}/**/*.js"]
     },
     {
@@ -227,7 +227,7 @@
         "-actionPrefix",
         "workbench.action"
       ],
-      "console": "externalTerminal",
+      "console": "integratedTerminal",
       "outFiles": ["${workspaceFolder}/**/*.js"]
     },
     {
@@ -246,7 +246,7 @@
         "-schemaFile",
         ""
       ],
-      "console": "externalTerminal",
+      "console": "integratedTerminal",
       "outFiles": ["${workspaceFolder}/**/*.js"]
     },
     {
