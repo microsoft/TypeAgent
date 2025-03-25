@@ -2,9 +2,19 @@
 
 ## Big functionality
 
-- Serialization and deserialization (do this before queries since fully re-indexing takes too long)
-- Queries and searches (so we can finally test everyhing)
-- Retries for embeddings (for robustness -- TypeChat already retries)
+### Serialization and deserialization
+
+Do this before queries, since fully re-indexing takes too long.
+
+### Queries and searches
+
+So we can finally do some end-to-end testing.
+
+### Retries for embeddings
+
+For robustness -- TypeChat already retries, but embeddings don't.
+
+---
 
 ## Small functionality
 
