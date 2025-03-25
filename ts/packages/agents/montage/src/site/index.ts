@@ -31,6 +31,10 @@ document.addEventListener("DOMContentLoaded", function () {
             processAction(e);
         } else {
             
+            // clear existing container
+            mainContainer.innerHTML = "";
+
+            // repopulate
             const montage = e as PhotoMontage            
             montage.selected.forEach((value) => selected.add(value));
             setTitle(montage.title);

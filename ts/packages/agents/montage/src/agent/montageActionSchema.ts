@@ -10,7 +10,12 @@ export type MontageAction =
     | ClearSelectionAction
     | ShowSearchParametersAction
     | SetSearchParametersAction
-    | StartSlideShowAction;
+    | StartSlideShowAction
+    | CreateMontageAction
+    | DeleteMontageAction
+    | SwitchMontageAction
+    | ListMontageAction;
+
 
 // Find images to add to the montage.
 export type FindPhotosAction = {
@@ -76,11 +81,13 @@ export type ClearSelectionAction = {
     parameters: {}
 }
 
+// Shows search parameters
 export type ShowSearchParametersAction = {
     actionName: "showSearchParameters";
     parameters: {}
 }
 
+// Update search parameters
 export type SetSearchParametersAction = {
     actionName: "setSearchParameters";
     parameters: {
@@ -89,8 +96,45 @@ export type SetSearchParametersAction = {
     }
 }
 
+// Starts a slide show with the images in the active montage
 export type StartSlideShowAction = {
     actionName: "startSlideShow";
     parameters: {}
+}
+
+// Creates a new montage
+export type CreateMontageAction = {
+    actionName: "createNewMontage";
+    parameters: {
+        // Montage title, defaults to "Untitled"
+        title: string 
+    }
+}
+
+// Deletes the identified montage
+export type DeleteMontageAction = {
+    actionName: "deleteMontage";
+    parameters: {
+        // The title of the montage to delete
+        title?: string;
+        // The id (if known) of the montage to delete
+        id?: number;
+    }
+}
+
+// Switches the active montage
+export type SwitchMontageAction = {
+    actionName: "switchMontage"
+    parameters: {
+        // The title of the montage to delete
+        title?: string;
+        // The id (if known) of the montage to delete
+        id?: number;
+    }
+}
+
+// Lists all montages by name
+export type ListMontageAction = {
+    actionName: "listMontages";
 }
 

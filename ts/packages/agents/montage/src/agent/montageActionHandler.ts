@@ -12,13 +12,14 @@ import {
 import { ChildProcess, fork, spawn } from "child_process";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
-import { FindPhotosAction, ListPhotosAction, MontageAction, RemovePhotosAction, SelectPhotosAction, SetSearchParametersAction } from "./montageActionSchema.js";
-import { createActionResult, createActionResultFromError } from "@typeagent/agent-sdk/helpers/action";
+import { CreateMontageAction, DeleteMontageAction, FindPhotosAction, ListPhotosAction, MontageAction, RemovePhotosAction, SelectPhotosAction, SetSearchParametersAction, SwitchMontageAction } from "./montageActionSchema.js";
+import { createActionResult, createActionResultFromError, createActionResultNoDisplay } from "@typeagent/agent-sdk/helpers/action";
 import * as im from "image-memory";
 import * as kp from "knowpro";
 import { conversation as kpLib } from "knowledge-processor";
 import { Facet } from "../../../../knowledgeProcessor/dist/conversation/knowledgeSchema.js";
 import { copyFileSync } from "node:fs";
+import { displayResult } from "@typeagent/agent-sdk/helpers/display";
 
 export function instantiate(): AppAgent {
     return {
@@ -72,22 +73,7 @@ async function initializeMontageContext() {
  * @param context The session context
  */
 async function closeMontageContext(context: SessionContext<MontageActionContext>) {
-    // merge the "working montage" into the saved montages
-    if (context.agentContext.montages.length > 0 && context.agentContext.montage !== undefined) {
-        if (context.agentContext.montages[context.agentContext.montages.length - 1].id == context.agentContext.montage.id) {
-            // replace
-            context.agentContext.montages[context.agentContext.montages.length -1] = context.agentContext.montage;
-        } else {
-            context.agentContext.montages.push(context.agentContext.montage);
-        }
-    } else {
-        if (context.agentContext.montage !== undefined) {
-            context.agentContext.montages.push(context.agentContext.montage);
-        }
-    }
-
-    // save the montage state for later
-    await context.sessionStorage?.write(montageFile, JSON.stringify(context.agentContext.montages));
+    saveMontages(context);
 }
 
 async function updateMontageContext(
@@ -256,13 +242,12 @@ async function handleMontageAction(
         }
 
         case "startSlideShow": {
-
             if (process.platform != "win32") {
-                // TODO: dynamically get
                 // create slide show dir
                 actionContext.sessionContext.agentContext.montage!.files.forEach((file) => copyFileSync(file, path.join("f:\\slideshow", path.basename(file))));
 
-                // copy files into slideshow dir 
+                // copy files into slideshow dir and start it
+                // TODO: implement
 
                 // start screen saver
                 try {
@@ -276,8 +261,103 @@ async function handleMontageAction(
 
             break;
         }
+
+        case "createNewMontage": {
+            const newMontageAction: CreateMontageAction = action as CreateMontageAction;
+            actionContext.sessionContext.agentContext.montage = createNewMontage(actionContext.sessionContext.agentContext, newMontageAction.parameters.title);
+
+            saveMontages(actionContext.sessionContext);
+
+            // update montage state
+            actionContext.sessionContext.agentContext.viewProcess?.send(actionContext.sessionContext.agentContext.montage!);
+
+            result = createActionResult("Created new montage");
+            break;
+        }
+
+        case "deleteMontage": {
+            const deleteMontageAction: DeleteMontageAction = action as DeleteMontageAction;
+            const currentMontageId: number = deleteMontageAction.parameters.id ? deleteMontageAction.parameters.id : actionContext.sessionContext.agentContext.montage!.id;
+
+            if (deleteMontageAction.parameters.title !== undefined) {
+                actionContext.sessionContext.agentContext.montages.filter((value) => {
+                    // create new active montage if that's the one we are deleting
+                    if (value.title == actionContext.sessionContext.agentContext.montage?.title) {
+                        actionContext.sessionContext.agentContext.montage = createNewMontage(actionContext.sessionContext.agentContext);            
+                    }
+
+                    return value.title == deleteMontageAction.parameters.title
+                });
+            } else {
+                // no id/title specified, delete the active montage or the one with the supplied id
+                actionContext.sessionContext.agentContext.montages.filter(value => value.id !== currentMontageId);
+
+                // create new active montage
+                actionContext.sessionContext.agentContext.montage = createNewMontage(actionContext.sessionContext.agentContext);    
+            }
+
+            saveMontages(actionContext.sessionContext);
+
+            result = createActionResult("Montage deleted.");
+
+            // update montage state
+            actionContext.sessionContext.agentContext.viewProcess?.send(actionContext.sessionContext.agentContext.montage!);
+
+            break;
+        }
+
+        case "switchMontage": {
+            const switchMontageAction: SwitchMontageAction = action as SwitchMontageAction;
+
+            if (switchMontageAction.parameters.id !== undefined) {
+                const m: PhotoMontage | undefined = actionContext.sessionContext.agentContext.montages.find(value => value.id == switchMontageAction.parameters.id);
+                
+                if (m) {
+                    actionContext.sessionContext.agentContext.montage = m;
+                    result = createActionResult(`Switch montage to ${m.title}`);
+                } else {
+                    result = createActionResultFromError(`Unable to switch montage, requested montage does not exist.`);
+                }
+            } else {
+                const m: PhotoMontage | undefined = actionContext.sessionContext.agentContext.montages.find(value => value.title == switchMontageAction.parameters.title);
+                
+                if (m) {
+                    actionContext.sessionContext.agentContext.montage = m;
+                    result = createActionResult(`Switch montage to ${m.title}`);
+                } else {
+                    result = createActionResultFromError(`Unable to switch montage, requested montage does not exist.`);     
+                }           
+            }
+
+            // update montage state
+            actionContext.sessionContext.agentContext.viewProcess?.send(actionContext.sessionContext.agentContext.montage!);
+
+            break;
+        }
+
+        case "listMontages": {
+
+            const names: string[] = [];
+            actionContext.sessionContext.agentContext.montages.forEach(value => names.push(value.title));
+
+            displayResult(names, actionContext);
+
+            result = createActionResultNoDisplay("done!");
+
+            break;
+        }
     }
     return result;
+}
+
+function createNewMontage(context: MontageActionContext, title: string = ""): PhotoMontage {
+    // create a new montage
+    return {
+        id: context.montages.length,
+        title: title.length == 0 ? "Untitled" : title,
+        files: [],
+        selected: []
+    }    
 }
 
 async function findRequestedImages(action: ListPhotosAction | FindPhotosAction | SelectPhotosAction | RemovePhotosAction, 
@@ -400,5 +480,24 @@ export async function createViewServiceHost(montageUpdatedCallback: (montage: Ph
         clearTimeout(timeoutHandle);
         return result;
     });
+}
+
+async function saveMontages(context: SessionContext<MontageActionContext>) {
+    // merge the "working montage" into the saved montages
+    if (context.agentContext.montages.length > 0 && context.agentContext.montage !== undefined) {
+        if (context.agentContext.montages[context.agentContext.montages.length - 1].id == context.agentContext.montage.id) {
+            // replace
+            context.agentContext.montages[context.agentContext.montages.length - 1] = context.agentContext.montage;
+        } else {
+            context.agentContext.montages.push(context.agentContext.montage);
+        }
+    } else {
+        if (context.agentContext.montage !== undefined) {
+            context.agentContext.montages.push(context.agentContext.montage);
+        }
+    }
+
+    // save the montage state for later
+    await context.sessionStorage?.write(montageFile, JSON.stringify(context.agentContext.montages));
 }
 
