@@ -31,7 +31,9 @@ class VectorBase:
         else:
             return await self._model.get_embedding_nocache(key)
 
-    async def get_embeddings(self, keys: list[str], cache: bool = True) -> NormalizedEmbeddings:
+    async def get_embeddings(
+        self, keys: list[str], cache: bool = True
+    ) -> NormalizedEmbeddings:
         if cache:
             return await self._model.get_embeddings(keys)
         else:

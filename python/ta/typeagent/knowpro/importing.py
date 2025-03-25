@@ -18,7 +18,13 @@ class TextEmbeddingIndexSettings:
     batch_size: int = 8
 
     # TODO: Add embedding_model, embedding_size arguments (one supported).
-    def __init__(self, embedding_model: AsyncEmbeddingModel | None = None, embedding_size: int | None = None, min_score: float | None = None, max_matches: int | None = None):
+    def __init__(
+        self,
+        embedding_model: AsyncEmbeddingModel | None = None,
+        embedding_size: int | None = None,
+        min_score: float | None = None,
+        max_matches: int | None = None,
+    ):
         if embedding_model is None:
             embedding_model = AsyncEmbeddingModel()
         self.embedding_model = embedding_model

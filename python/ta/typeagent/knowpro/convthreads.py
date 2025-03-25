@@ -58,4 +58,6 @@ class ConversationThreads(IConversationThreads):
 
     async def build_index(self) -> None:
         self.vector_base.clear()  # Just in case
-        await self.vector_base.add_keys([t.description for t in self.threads], cache=False)
+        await self.vector_base.add_keys(
+            [t.description for t in self.threads], cache=False
+        )

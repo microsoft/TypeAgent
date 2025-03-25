@@ -83,7 +83,9 @@ class TextToTextLocationIndex(ITextToTextLocationIndex):
         # TODO: Honor batch size
         # TODO: Catch errors
         # Assuming we're indexing whole text chunks, bypass the embedding cache.
-        await self._vector_base.add_keys([text for text, _ in text_and_locations], cache=False)
+        await self._vector_base.add_keys(
+            [text for text, _ in text_and_locations], cache=False
+        )
         self._text_locations.extend([location for _, location in text_and_locations])
         return ListIndexingResult(len(text_and_locations))
 
