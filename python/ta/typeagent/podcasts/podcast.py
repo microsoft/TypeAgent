@@ -84,7 +84,7 @@ class Podcast(
     name_tag: str = ""
     messages: list[PodcastMessage] = field(default_factory=list)
     tags: list[str] = field(default_factory=list)
-    semantic_refs: list[interfaces.SemanticRef] = field(default_factory=list)  # type: ignore  # TODO
+    semantic_refs: list[interfaces.SemanticRef] | None = field(default_factory=list)
     settings: ConversationSettings = field(default_factory=ConversationSettings)
     semantic_ref_index: convindex.ConversationIndex = field(default_factory=convindex.ConversationIndex)  # type: ignore  # TODO
 
@@ -237,79 +237,6 @@ class Podcast(
     #         self.secondary_indexes.term_to_related_terms_index.fuzzy_index,
     #         64,
     #     )
-
-
-# NOTE: Doesn't need to be async (Python file I/O is synchronous)
-def import_podcast(
-    transcript_file_path: str,
-    podcast_name: str | None = None,
-    start_date: Datetime | None = None,
-    length_minutes: float = 60.0,
-) -> Podcast:
-    with open(transcript_file_path, "r") as f:
-        transcript_lines = f.readlines()
-    if not podcast_name:
-        podcast_name = os.path.splitext(os.path.basename(transcript_file_path))[0]
-    # TODO: Don't use a regex, just basic string stuff
-    regex = r"""(?x)                  # Enable verbose regex syntax
-        ^
-        (?:                           # Optional speaker part
-            \s*                       # Optional leading whitespace
-            (?P<speaker>              # Capture group for speaker
-                [A-Z0-9]+             # One or more uppercase letters/digits
-                (?:\s+[A-Z0-9]+)*     # Optional additional words
-            )
-            \s*                       # Optional whitespace after speaker
-            :                         # Colon separator
-            \s*                       # Optional whitespace after colon
-        )?
-        (?P<speech>(?:.*\S)?)         # Capture the rest as speech (ending in non-whitespace)
-        \s*                           # Optional trailing whitespace
-        $
-    """
-    turn_parse_regex = re.compile(regex)
-    participants: set[str] = set()
-    msgs: list[PodcastMessage] = []
-    cur_msg: PodcastMessage | None = None
-    for line in transcript_lines:
-        match = turn_parse_regex.match(line)
-        if match:
-            speaker = match.group("speaker")
-            if speaker:
-                speaker = speaker.lower()
-            speech = match.group("speech")
-            if not (speaker or speech):
-                continue
-            if cur_msg:
-                if not speaker:
-                    cur_msg.add_content("\n" + speech)
-                else:
-                    msgs.append(cur_msg)
-                    cur_msg = None
-            if not cur_msg:
-                if speaker:
-                    participants.add(speaker)
-                cur_msg = PodcastMessage(speaker, [], [speech])
-    if cur_msg:
-        msgs.append(cur_msg)
-
-    assign_message_listeners(msgs, participants)
-
-    pod = Podcast(podcast_name, msgs, [podcast_name])
-    if start_date:
-        pod.generate_timestamps(start_date, length_minutes)
-    # TODO: Add more tags.
-    return pod
-
-
-def assign_message_listeners(
-    msgs: Sequence[PodcastMessage],
-    participants: set[str],
-) -> None:
-    for msg in msgs:
-        if msg.speaker:
-            listeners = [p for p in participants if p != msg.speaker]
-            msg.listeners = listeners
 
 
 # Text (such as a transcript) can be collected over a time range.

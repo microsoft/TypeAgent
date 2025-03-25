@@ -22,8 +22,7 @@ from ..knowpro.interfaces import (
     MessageOrdinal,
     TextLocation,
 )
-from ..knowpro.importing import ConversationSettings
-from .import_podcasts import import_podcast
+from .podcast_import import import_podcast
 
 
 async def main():
